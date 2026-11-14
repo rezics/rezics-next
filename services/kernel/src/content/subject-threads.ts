@@ -1,7 +1,6 @@
-import { deadlineClient, within, accessCheck } from './access-port.ts';
+import { accessCheck } from './access-port.ts';
 import type { AccessCheck, Actor } from '../request/access.ts';
 import { CommandUnavailableError } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
@@ -20,6 +19,7 @@ import type { ReactionCountFreshness } from './reads.ts';
 import { selectSubjectThreadConversationActivity } from './subject-threads-conversation-activity.ts';
 import type { ContentCommandDependencies } from './commands.ts';
 import { prepareSubjectThreadEntry, type SubjectThreadEntry } from './subject-entry.ts';
+import { withSubjectDiscussionReadSnapshot } from './subject-discussion-read-connection.ts';
 
 export type SubjectThreadKind = 'discussion' | 'review';
 export type SubjectThreadPageInput = {
@@ -118,49 +118,36 @@ async function pageCandidates(
     { pool: dependencies.pool, deadline: context.deadline },
   );
 
-  return within(context.deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        await client.query("SET LOCAL statement_timeout = '3000ms'");
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition) throw new CommandUnavailableError('deadline', partitionOf(route));
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionOf(route), partition.movedTo);
-        if (!(await subject(client))) throw new ContentNotFoundError();
+  const snapshot = await withSubjectDiscussionReadSnapshot(dependencies.pool, context.deadline, async (client) => {
+    await client.query("SET LOCAL statement_timeout = '3000ms'");
+    const partition = await readPartition(client, partitionOf(route));
+    if (!partition) throw new CommandUnavailableError('deadline', partitionOf(route));
+    if (partition.writeState === 'moved')
+      throw new CommandUnavailableError('moved', partitionOf(route), partition.movedTo);
+    if (!(await subject(client))) throw new ContentNotFoundError();
 
-        const after =
-          input.cursor === undefined ? null : decodeKey(dependencies.tokens, scope, input.cursor, partition.epoch, now);
-        const parameters = {
-          route,
-          subject_id: subjectId,
-          place_id: input.place,
-          kind: input.kind,
-          has_after: after !== null,
-          after_at: after?.lastActivityAt ?? '-infinity',
-          after_thread_id: after?.threadId ?? '00000000-0000-0000-0000-000000000000',
-          limit,
-        };
-        const rows = await client.query<(typeof page)['~reylo']['element']>(
-          page.sql,
-          page.params.map((name) => parameters[name as keyof typeof parameters]),
-        );
-        await client.query('COMMIT');
-        return {
-          candidates: rows.rows.map((row) => ({ threadId: row.thread_id, lastActivityAt: row.last_activity_at! })),
-          anchor: { partition, epoch: partition.epoch, position: partition.position },
-        };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+    const after =
+      input.cursor === undefined ? null : decodeKey(dependencies.tokens, scope, input.cursor, partition.epoch, now);
+    const parameters = {
+      route,
+      subject_id: subjectId,
+      place_id: input.place,
+      kind: input.kind,
+      has_after: after !== null,
+      after_at: after?.lastActivityAt ?? '-infinity',
+      after_thread_id: after?.threadId ?? '00000000-0000-0000-0000-000000000000',
+      limit,
+    };
+    const rows = await client.query<(typeof page)['~reylo']['element']>(
+      page.sql,
+      page.params.map((name) => parameters[name as keyof typeof parameters]),
+    );
+    return { partition, rows };
+  });
+  return {
+    candidates: snapshot.rows.rows.map((row) => ({ threadId: row.thread_id, lastActivityAt: row.last_activity_at! })),
+    anchor: { partition: snapshot.partition, epoch: snapshot.partition.epoch, position: snapshot.partition.position },
+  };
 }
 
 /** Pages a bounded subject/place/kind index range and discloses every candidate before returning it. */

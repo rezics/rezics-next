@@ -2332,6 +2332,9 @@ in this producer task. The source candidate API remains available to existing in
 
 ## Subject threads
 
+Decision: Subject entry and candidate reads use one owner-local repeatable-read wrapper bounded by the original deadline; it discards uncertain or expired clients without queuing rollback after expiry.
+`subject-discussion-read-connection.test.ts` covers late checkout with no SQL, blocked BEGIN/read/COMMIT, uncertain-client discard, a successful next visit and original-error retention when rollback fails. Existing Subject entry and listing acceptance retains current authority, cursor, sparse selection and disclosure assertions.
+
 Decision: Subject reviews and discussions use the existing native Board disclosure batch for candidate selection,
 reaction revalidation, selected-card observations and final context observations. Each batch checks the original
 Subject reference on the current opening revision and the requested Global/Realm placement in its authoritative

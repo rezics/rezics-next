@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from 'node:util';
 import { deadlineClient, within } from './access-port.ts';
 import type { RealmParticipationReadDecision } from '../community/participation.ts';
 import { CommandUnavailableError } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { Actor } from '../request/access.ts';
@@ -10,6 +9,7 @@ import { readPartition } from '../partition/partition.ts';
 import type { AnchoredPosition, BoardView, ReadContext } from './model.ts';
 import type { ContentCommandDependencies } from './commands.ts';
 import { ContentNotFoundError, readBoard, readBoardPageActionEvidence, type ContentReadDependencies } from './reads.ts';
+import { withSubjectDiscussionReadSnapshot } from './subject-discussion-read-connection.ts';
 import type { SubjectThreadContext } from './subject-threads-context.ts';
 import readSelectedBoard from './subject-entry-board.sql';
 
@@ -157,42 +157,29 @@ async function readSelectedBoardSource(
   const route = routeOf(boardId);
   if (route === null) return null;
   const partitionNo = partitionOf(route);
-  return await within(context.deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        await client.query("SET LOCAL statement_timeout = '3000ms'");
-        const partition = await readPartition(client, partitionNo);
-        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        const parameters = { route, board_id: boardId };
-        const rows = await client.query<(typeof readSelectedBoard)['~reylo']['element']>(
-          readSelectedBoard.sql,
-          readSelectedBoard.params.map((name) => parameters[name as keyof typeof parameters]),
-        );
-        await client.query('COMMIT');
-        const row = rows.rows[0];
-        return row
-          ? {
-              boardId: row.board_id,
-              subjectId: row.subject_id,
-              realmId: row.realm_id,
-              purpose: row.purpose,
-              anchor: { partition, epoch: partition.epoch, position: partition.position },
-            }
-          : null;
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
+  const snapshot = await withSubjectDiscussionReadSnapshot(dependencies.pool, context.deadline, async (client) => {
+    await client.query("SET LOCAL statement_timeout = '3000ms'");
+    const partition = await readPartition(client, partitionNo);
+    if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+    if (partition.writeState === 'moved')
+      throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+    const parameters = { route, board_id: boardId };
+    const rows = await client.query<(typeof readSelectedBoard)['~reylo']['element']>(
+      readSelectedBoard.sql,
+      readSelectedBoard.params.map((name) => parameters[name as keyof typeof parameters]),
+    );
+    return { partition, row: rows.rows[0] };
+  });
+  const { partition, row } = snapshot;
+  return row
+    ? {
+        boardId: row.board_id,
+        subjectId: row.subject_id,
+        realmId: row.realm_id,
+        purpose: row.purpose,
+        anchor: { partition, epoch: partition.epoch, position: partition.position },
       }
-    }),
-  );
+    : null;
 }
 
 function request(
