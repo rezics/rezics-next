@@ -126,7 +126,7 @@ function makePort(): MalImportPort {
                   id: question.id,
                   revision: 1,
                   label: question.label,
-                  meaning: question.meaning,
+                  meaning: question.meaning ?? null,
                   grain: 'work',
                   lifecycleState: 'active',
                   scale: { minimumUnits: 0, maximumUnits: 20, stepUnits: 1 },

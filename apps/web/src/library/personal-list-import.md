@@ -146,8 +146,9 @@ review ownership survive returning; label confirmation remains a separate native
 per bounded render, without row hydration or refill. Preserve replacement/privacy warnings and unknown-command
 custody at confirmation. Empty pages and unacknowledged results offer review and Library return.
 
-Verification decision: author focused composition acceptance for the dev verifier and run the changed Web workspace's
-installed typecheck; test execution, native mounted journeys and keyboard/eight-locale phone/desktop review are deferred.
+Verification decision: deliver source and focused composition acceptance for the dev verifier. Compiler, test, native
+mounted journey and keyboard/eight-locale phone/desktop checks remain unverified. Repair defects established by earlier
+check results without submitting a new optional check under the current source-only policy.
 Design sources: this owner; the AniList, MAL and Bangumi presentation owners; and each provider's existing page,
 review, row, confirmation and results components. Installed Impeccable `reference/craft-floor.md` was absent from the
 available skill/reference directories; it is guidance, not a prerequisite.
@@ -166,7 +167,7 @@ Focused acceptance adds AniList mounted label-search retention, MAL explicit ass
 cancelled inspection; existing target retirement, zero/clear and exact-retry assertions remain unchanged. The necessary
 additional source path is `personal-bangumi-import/controller.ts`; acceptance files are the existing provider tests.
 
-The required Web typecheck also exposed existing fixture drift in `kernel/fake/a-collection-review.ts`,
+An earlier Web typecheck exposed existing fixture drift in `kernel/fake/a-collection-review.ts`,
 `kernel/fake/anime-showcase.ts` and `kernel/fixtures/collection-showcase.ts`. The coordinated repair narrows known
 fixture values to their current public types and removes a collection cursor access absent from the read contract;
 provider behavior and native consent protocols are unchanged.
