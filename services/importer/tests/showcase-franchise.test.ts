@@ -513,7 +513,6 @@ test('current graph identities recover after reopen while current siblings keep 
           };
         },
       });
-    };
 
     const first = await deliver();
     expect(first.proposed.some((edge) => edge.vndbRelation)).toBe(false);
