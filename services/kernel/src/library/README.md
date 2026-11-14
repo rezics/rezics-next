@@ -96,7 +96,7 @@ The ordinary page formula is `c = min(600, 6L + 3)`: a fixed 64-row/16-point/16-
 
 Decision: hosted Book resume is a private `hosted_reading` checkpoint, not Progress. Save/get/clear are
 owner-private CAS facts at `PUT|GET /v1/libraryHostedReading` and `POST /v1/libraryHostedReading:clear`.
-They store catalogueId, publication revision, occurrenceId, exact target revision/digest and optional
+They store catalogueId, publication revision, occurrenceId, optional exact body-language key, exact target Post/revision/digest and optional
 bounded document position (block id plus offset). Content validates the selection before save and
 rechecks current catalogue/target Access on get. Get returns the saved address and an explicit
 unavailable resume when current authority withholds bytes; it never silently changes the selection.
@@ -104,9 +104,19 @@ TOC withdrawal removes current `for_subject` discovery; historical exact reads r
 resolve. Ordinary Entry/Progress keep Book page units. Private facts grant no read access and join
 account erasure. Canonical Library export includes private checkpoints through
 `readHostedReadingExportPage`; required exact Post/revision/SHA and optional nullable `bodyLanguage` remain retained
-recovery evidence. The archive field is `target_post_id`; omission never infers a Post from the occurrence.
-Fewest tests: current discovery
+recovery evidence even when current disclosure withholds the body. The archive field is `target_post_id`;
+omission never infers a Post from the occurrence. Fewest tests: current discovery
 and empty TOC, CAS save/get/clear, withheld resume keeping the address, position bounds.
+
+The canonical checkpoint requires `targetPostId`. Save validates the supplied Post, revision, digest and language
+against Content's bounded exact frozen publication/occurrence selection; client operands never establish the Post.
+Stored Post identity remains available to the owner and export even when current disclosure withholds the body.
+Earlier development checkpoints require a bounded exact-binding conversion; unresolved rows remain unsupported
+evidence rather than entering the canonical reader with a guessed or nullable Post.
+Conversion keyset-pages 100 owner rows at a time and joins the immutable occurrence and exact revision/digest by
+their native keys. `hosted_reading_unsupported` retains unresolved metadata only; its checkpoint-fence foreign key
+cascades account erasure, and it supplies no reader or archive checkpoint. Downgrade restores retained evidence
+only when the original unique owner/Subject slot remains available.
 
 Acceptance choice: focused source fixtures pin those states; native/browser acceptance stays in the
 dev verifier.

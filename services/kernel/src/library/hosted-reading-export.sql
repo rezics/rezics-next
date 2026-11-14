@@ -1,4 +1,4 @@
--- Owner-private checkpoint page for a later export format. v4 Web decoder stays frozen.
+-- Owner-private checkpoint page retains exact body identity independently of current disclosure.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route,
          :account_id::uuid AS account_id,
@@ -10,6 +10,8 @@ SELECT subject_id::text AS key,
        catalogue_id,
        publication_revision_id,
        occurrence_id,
+       target_post_id,
+       body_language AS "bodyLanguage",
        target_revision_id,
        encode(target_sha256, 'hex') AS target_sha256,
        document_block_id,

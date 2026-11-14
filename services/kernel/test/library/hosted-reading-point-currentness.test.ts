@@ -211,6 +211,7 @@ test('point resume and metadata bind saved and empty results to the current owne
       catalogueId: f.catalogueId,
       publicationRevisionId: publication.value.revisionId,
       occurrenceId,
+      targetPostId: target.postId,
       targetRevisionId: target.revisionId,
       targetSha256: target.sha256,
       documentPosition: { blockId: 'keep-this-position', offset: 27 },

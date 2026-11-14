@@ -357,6 +357,8 @@ function writeParams(route: number, accountId: string, input: HostedReadingSaveI
     catalogue_id: address.catalogueId,
     publication_revision_id: address.publicationRevisionId,
     occurrence_id: address.occurrenceId,
+    body_language: address.bodyLanguage ?? null,
+    target_post_id: address.targetPostId,
     target_revision_id: address.targetRevisionId,
     target_sha256: address.targetSha256,
     document_block_id: address.documentPosition?.blockId ?? null,
@@ -390,6 +392,8 @@ export function createHostedReadingCommands(dependencies: HostedReadingDependenc
               validated.address.catalogueId !== value.catalogueId ||
               validated.address.publicationRevisionId !== value.publicationRevisionId ||
               validated.address.occurrenceId !== value.occurrenceId ||
+              validated.address.bodyLanguage !== value.bodyLanguage ||
+              validated.address.targetPostId !== value.targetPostId ||
               validated.address.targetRevisionId !== value.targetRevisionId ||
               validated.address.targetSha256 !== value.targetSha256
             )

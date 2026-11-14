@@ -279,6 +279,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     catalogueId: f.catalogueId,
     publicationRevisionId: publication.value.revisionId,
     occurrenceId: firstOccurrence,
+    targetPostId: firstTarget.postId,
     targetRevisionId: firstTarget.revisionId,
     targetSha256: firstTarget.sha256,
     documentPosition: { blockId: 'opening-block', offset: 12 },
@@ -288,6 +289,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     ...saveOne,
     subjectId: subjectTwo,
     occurrenceId: secondOccurrence,
+    targetPostId: secondTarget.postId,
     targetRevisionId: secondTarget.revisionId,
     targetSha256: secondTarget.sha256,
     documentPosition: null,
@@ -918,6 +920,7 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   const concealedPage = await f.native.call('GET', '/v1/libraryHostedReading/checkpoints', undefined, { other: true });
   const concealed = concealedPage.value.items[0];
   expect(concealed.address).toMatchObject({
+    targetPostId: firstTarget.postId,
     targetRevisionId: firstTarget.revisionId,
     targetSha256: firstTarget.sha256,
   });
@@ -959,4 +962,170 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     100,
   );
   expect(exported.map((item: { subject_id: string }) => item.subject_id)).not.toContain(subjectOne);
+});
+
+test('checkpoint languages retain the exact published body and advance the existing owner source fence', async () => {
+  const opening = await f.native.thread('published', fromPlainText('Language catalogue'));
+  const catalogueId = opening.firstPost.id;
+  const subjectId = await subjectOnRoute(routeOf(catalogueId)!);
+  const association = await f.native.revise(opening.firstPost, { subjectIds: [subjectId] });
+  expect(association.status, JSON.stringify(association.value)).toBe(200);
+  const canonical = await f.native.thread('published', fromPlainText('Canonical chapter'));
+  const alternative = await f.native.thread('published', fromPlainText('Published alternate chapter'));
+  const canonicalTarget = f.target(canonical);
+  const alternativeTarget = f.target(alternative);
+  const occurrenceId = f.newOccurrenceIdFor(catalogueId);
+  const path = `/v1/hostedCatalogues/${catalogueId}`;
+  const created = await f.native.call('POST', '/v1/hostedCatalogues', {
+    postId: catalogueId,
+    threadId: opening.id,
+    placements: [],
+  });
+  expect(created.status, JSON.stringify(created.value)).toBe(201);
+  const inserted = await f.native.call('POST', `${path}:insertDraftPoint`, {
+    expectedRevisionId: created.value.revisionId,
+    occurrenceId,
+    parentId: null,
+    beforeOccurrenceId: null,
+    title: 'Canonical chapter',
+    placement: { kind: 'chapter', target: canonicalTarget },
+  });
+  expect(inserted.status, JSON.stringify(inserted.value)).toBe(200);
+  const english = await f.native.call('POST', `${path}/occurrences/${occurrenceId}:bindLanguage`, {
+    expectedRevisionId: inserted.value.revisionId,
+    language: 'en',
+    title: 'Canonical chapter',
+    target: canonicalTarget,
+    makeDefault: true,
+  });
+  expect(english.status, JSON.stringify(english.value)).toBe(200);
+  const chinese = await f.native.call('POST', `${path}/occurrences/${occurrenceId}:bindLanguage`, {
+    expectedRevisionId: english.value.revisionId,
+    language: 'zh-Hans',
+    title: 'Published alternate title',
+    target: alternativeTarget,
+  });
+  expect(chinese.status, JSON.stringify(chinese.value)).toBe(200);
+  const publication = await f.native.call('POST', `${path}:publish`, {
+    expectedRevisionId: chinese.value.revisionId,
+    expectedPublicationId: null,
+    occurrenceIds: [occurrenceId],
+  });
+  expect(publication.status, JSON.stringify(publication.value)).toBe(200);
+  const ownerId = f.native.system.actors.other.actor.accountId;
+  const sourceFence = async () => {
+    const result = await f.native.pool.query<{ generation: string }>(
+      `SELECT generation::text FROM library.native_source_fence WHERE route=$1 AND kind='account' AND owner_id=$2`,
+      [routeOf(ownerId), ownerId],
+    );
+    return BigInt(result.rows[0]?.generation ?? '0');
+  };
+  const before = await sourceFence();
+  const input = {
+    subjectId,
+    catalogueId,
+    publicationRevisionId: publication.value.revisionId,
+    occurrenceId,
+    bodyLanguage: 'zh-Hans',
+    targetPostId: alternativeTarget.postId,
+    targetRevisionId: alternativeTarget.revisionId,
+    targetSha256: alternativeTarget.sha256,
+    documentPosition: { blockId: 'alternate-block', offset: 9 },
+    expectedRevision: null,
+  };
+  const saved = await ownerCall('PUT', '/v1/libraryHostedReading', input, crypto.randomUUID());
+  expect(saved.status, JSON.stringify(saved.value)).toBe(200);
+  expect(saved.value.address).toMatchObject({
+    bodyLanguage: 'zh-Hans',
+    targetPostId: alternativeTarget.postId,
+    targetRevisionId: alternativeTarget.revisionId,
+  });
+  const afterSave = await sourceFence();
+  expect(afterSave > before).toBe(true);
+  const laterRevision = await f.native.revise(alternative.firstPost, {
+    body: fromPlainText('Later unselected alternate'),
+  });
+  expect(laterRevision.status, JSON.stringify(laterRevision.value)).toBe(200);
+  const resumed = await ownerCall('GET', `/v1/libraryHostedReading?subjectId=${subjectId}`, undefined);
+  expect(resumed.status, JSON.stringify(resumed.value)).toBe(200);
+  expect(resumed.value.address).toEqual(saved.value.address);
+  expect(resumed.value.resume).toMatchObject({
+    availability: 'available',
+    bodyLanguage: 'zh-Hans',
+    title: 'Published alternate title',
+    target: alternativeTarget,
+    document: { sha256: alternativeTarget.sha256 },
+  });
+  const metadata = await ownerCall('GET', `/v1/libraryHostedReading/metadata?subjectId=${subjectId}`, undefined);
+  expect(metadata.value.metadata).toMatchObject({ bodyLanguage: 'zh-Hans', target: alternativeTarget });
+  expect(metadata.value.metadata).not.toHaveProperty('document');
+  const exported = await readHostedReadingExportPage(
+    f.native.pool,
+    routeOf(ownerId)!,
+    ownerId,
+    '00000000-0000-0000-0000-000000000000',
+    100,
+  );
+  expect(exported.find((row) => row.subject_id === subjectId)).toMatchObject({
+    target_post_id: alternativeTarget.postId,
+    bodyLanguage: 'zh-Hans',
+  });
+  const page = await ownerCall('GET', '/v1/libraryHostedReading/checkpoints', undefined);
+  expect(page.value.items.find((item: { subjectId: string }) => item.subjectId === subjectId)).toMatchObject({
+    address: saved.value.address,
+    metadata: { bodyLanguage: 'zh-Hans', target: alternativeTarget },
+  });
+  const invalid = await ownerCall(
+    'PUT',
+    '/v1/libraryHostedReading',
+    {
+      ...input,
+      expectedRevision: saved.value.revision,
+      bodyLanguage: 'en',
+      documentPosition: null,
+    },
+    crypto.randomUUID(),
+  );
+  expect(invalid.status).toBe(404);
+  const wrongPost = await ownerCall(
+    'PUT',
+    '/v1/libraryHostedReading',
+    {
+      ...input,
+      expectedRevision: saved.value.revision,
+      targetPostId: canonicalTarget.postId,
+    },
+    crypto.randomUUID(),
+  );
+  expect(wrongPost.status).toBe(404);
+  const updated = await ownerCall(
+    'PUT',
+    '/v1/libraryHostedReading',
+    {
+      ...input,
+      bodyLanguage: undefined,
+      targetPostId: canonicalTarget.postId,
+      targetRevisionId: canonicalTarget.revisionId,
+      targetSha256: canonicalTarget.sha256,
+      expectedRevision: saved.value.revision,
+      documentPosition: null,
+    },
+    crypto.randomUUID(),
+  );
+  expect(updated.status, JSON.stringify(updated.value)).toBe(200);
+  expect(updated.value.address).not.toHaveProperty('bodyLanguage');
+  expect(updated.value.address.documentPosition).toBeNull();
+  const afterUpdate = await sourceFence();
+  expect(afterUpdate > afterSave).toBe(true);
+  const cleared = await ownerCall(
+    'POST',
+    '/v1/libraryHostedReading/$clear',
+    {
+      subjectId,
+      expectedRevision: updated.value.revision,
+    },
+    crypto.randomUUID(),
+  );
+  expect(cleared.status, JSON.stringify(cleared.value)).toBe(200);
+  expect((await sourceFence()) > afterUpdate).toBe(true);
 });

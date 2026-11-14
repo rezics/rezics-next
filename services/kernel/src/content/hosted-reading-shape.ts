@@ -34,6 +34,7 @@ export function hostedReadingSelectionShape(selection: HostedReadingAddress): bo
     typeof selection.catalogueId === 'string' &&
     typeof selection.publicationRevisionId === 'string' &&
     typeof selection.occurrenceId === 'string' &&
+    typeof selection.targetPostId === 'string' &&
     typeof selection.targetRevisionId === 'string' &&
     digest(selection.targetSha256) &&
     hostedReadingPositionIsBounded(selection.documentPosition)

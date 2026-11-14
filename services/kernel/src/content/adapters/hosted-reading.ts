@@ -42,6 +42,7 @@ async function resolve(
     if (occurrence.availability !== 'available' || occurrence.kind !== 'chapter' || !result.value.document)
       return unavailable(address.occurrenceId, occurrence.kind);
     if (
+      occurrence.target.postId !== address.targetPostId ||
       occurrence.target.revisionId !== address.targetRevisionId ||
       occurrence.target.sha256 !== address.targetSha256 ||
       result.value.document.sha256 !== address.targetSha256
@@ -89,6 +90,7 @@ export function createNativeHostedReadingPort(deps: HostedDependencies): HostedR
           catalogueId: selection.catalogueId,
           publicationRevisionId: selection.publicationRevisionId,
           occurrenceId: selection.occurrenceId,
+          targetPostId: resume.target.postId,
           targetRevisionId: resume.target.revisionId,
           targetSha256: resume.target.sha256,
           documentPosition: selection.documentPosition,
@@ -116,6 +118,7 @@ export function createNativeHostedReadingPort(deps: HostedDependencies): HostedR
           return hostedReadingUnavailable(address.occurrenceId, occurrence.kind);
         if (occurrence.kind !== 'chapter') return hostedReadingUnavailable(address.occurrenceId, 'part');
         if (
+          occurrence.target.postId !== address.targetPostId ||
           occurrence.target.revisionId !== address.targetRevisionId ||
           occurrence.target.sha256 !== address.targetSha256
         )
