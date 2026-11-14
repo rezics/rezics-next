@@ -8933,11 +8933,6 @@ CREATE UNIQUE INDEX collection_builtin_state_identity ON library.collection USIN
 
 CREATE INDEX collection_curator_listing ON library.collection USING btree (route, curator_account_id, collection_id);
 
--- Name: collection_listing_history_owner; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX collection_listing_history_owner ON library.collection_listing_history USING btree (route, curator_account_id, collection_id) WHERE (curator_account_id IS NOT NULL);
-
 
 --
 -- Name: collection_curator_page; Type: INDEX; Schema: library; Owner: -
@@ -9042,6 +9037,13 @@ CREATE INDEX collection_kind_subject_account ON library.collection_kind_subject 
 --
 
 CREATE INDEX collection_kind_winner ON library.collection_kind_count USING btree (route, collection_id, audience, generation, votes DESC, type_id);
+
+
+--
+-- Name: collection_listing_history_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_listing_history_owner ON library.collection_listing_history USING btree (route, curator_account_id, collection_id) WHERE (curator_account_id IS NOT NULL);
 
 
 --
