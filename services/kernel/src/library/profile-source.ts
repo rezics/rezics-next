@@ -6,7 +6,7 @@ import {
   requireAccessDeadline,
   throwAccessUnavailable,
 } from '../access/unavailable.ts';
-import { withBoundedReadConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { accessCheck } from '../request/access-check.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -72,7 +72,24 @@ async function readSource(
   const { acceptingType, identityEpoch: _identityEpoch, ...source } = anchor;
   // The source RR has ended before Global's independently anchored observation.
   requireAccessDeadline(deps.deadline);
-  const active = await definitions.active(deps.pool);
+  const active = await withBoundedReadOnlyTransaction(
+    deps.pool,
+    deps.deadline,
+    (client) => definitions.active(client),
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error) {
+        try {
+          throwAccessUnavailable(error, deps.deadline);
+        } catch (mapped) {
+          return mapped;
+        }
+        return error;
+      },
+      isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+      isUncertainSettledQueryError: () => true,
+    },
+  );
   requireAccessDeadline(deps.deadline);
   if (!active) throw new ProblemError('semantic_not_ready');
   const profile = selectLibraryProfile(active.release, acceptingType);
