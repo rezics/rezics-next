@@ -20,62 +20,8 @@ Completion requires revision-bound native persona, growth, installation and rece
 
 Semantic owns Definitions, shared filters, native Semantic and Zones, their current consumer contracts, Concept policy, identity, names and qualified-credit meaning. Public inclusion and deferral follow [first public scope](../scope.md). Personal dynamic queries, custom catalogue publication and advanced identity remain deferred behind their existing grants. Library facts, profiles and common Collection storage remain with Commerce; rendering and navigation remain with Web.
 
-Decision: Kernel typecheck repairs update fixtures and call forms to current contracts while preserving assertions;
-production changes are limited to code that violates those contracts.
-
-Decision: Materialize pinned historical publication modules under `.temp/` and route only historical publication to
-that graph; current Definitions imports retain their live module identities.
-
-Decision: Semantic cold publication children receive the exact serialized native test receipt ring from the parent
-runtime snapshot, preserving required production key validation and pinned historical module identities.
-
-Decision: the installed Character read contract admits includeDocuments and reuses Content's public document type;
-preserve native preview bounds and exact bindings, with typed anonymous and signed-in readback coverage.
-
-Decision: Character API fixtures compile routes at startup, drain the native link consumer before timed reads and
-erase authored documents through Content's command under an exact document grant. Authored bodies remain immutable;
-HTTP fallback retains its actual language and mounted exact-binding cases cover unreadable previews without rewriting
-stored bodies.
-
-Decision: Zone lifecycle through custody is pinned by native kernel journeys (delete/hide/restore, pointer takedown,
-hold/purge) and two web mapping tests; no Storybook stories.
-
-Decision: Semantic issues Zone cleanup admission after the parent lock, then Access grant pages and the existing
-Content, Library, Auth and Search participant reads share that command; a missing owner stays incomplete. Editor
-delete/restore uses the catalogue mapping client. No Storybook stories.
-
-Decision: Zone owner mutations keep compiled page authorization; derived Access forwards preparePage.
-Platform inverse records identity_epoch_native_commit or erasure_source_commit, not fabricated write_basis.
-Source-commit validation accepts that native commit. Account-agent tests use the request deadline, not
-authenticate's short identity expiry. Page coverage rebinds by identity while routes stay in canonical
-order. The rebind journey publishes first so anonymous 404 is withholding, not an unpublished private Zone.
-Native kernel journeys and two web mapping tests pin lifecycle; no Storybook stories or expanded
-served walks. Catalogue commands live in lifecycle-zone-commands.ts; lifecycle-zone.tsx re-exports them
-so bun --no-bundle landing transpile does not map a .ts/.tsx pair onto one .js path.
-collection-source.ts keeps the current Library contract; Collection restore stays Commerce's HTTP.
-
-Decision: live takedown keys are JSON pointers; `custody` is the retained-original bag and is excluded from
-pointer-key assertions. Internal Zone purge pages bind mechanical history evidence from the owner, the same
-way library entry due-purge does, because they never enter Access admission.
-
-Decision: Cross-module Zone cleanup, history evidence and web session edges use declared public entries.
-New deletion helpers and the account-erasure Zone writer are import-acyclic leaves so they do not join the
-command/history value cycle. Content lifecycle resolution falls back to the native adapter like hashing
-and routing, so HTTP tests that skip worker composition still project covers. Zone configure keeps the
-current locale map when renaming one label. Platform hold/purge bind operator history evidence before
-enrollment. Internal Zone purge pages use a unique `zone.purge` receipt and idle history on no-effect
-paths. Account-agent tests use a wall-clock request budget and prepare Access evidence at authorize time.
-Decision: Subject source pages compose mapping source/control collects and Source fence children, including
-hidden write_basis and outbox writes, before effects, and persist continuation so an affordable call finishes
-the native all-home walk. Empty sealed homes charge a page/seek read then one hold and one transfer command;
-the independent terminal proof is walked after the page cursor.
-
-Decision: fewest tests pin the 31 first-public catalogue and Zone paths: one kernel native suite over the bundled
-release plus one admitted seeded walk that marks each row from execution. Fixtures and typing are not native or
-browser passes. Web owns rendering and navigation; Semantic owns native meaning, decisions and static Zone pages.
-Walk Kernel GET `/v1/definitions` is the public active-release producer (same digest as `/v1/definitions/active`);
-start waits for HTTP 200, then starts the worker so discovery reads the bootstrapped release. Seed 503 names the
-problem code. Canonical Auth/JWKS stays with Accounts.
+Detailed native fixture, lifecycle and receiving constraints belong to the
+[capability acceptance map](semantic.capabilities.md#native-fixture-and-lifecycle-acceptance-constraints).
 
 ## Ownership
 
