@@ -99,6 +99,7 @@ function fakeAdmission(label: string, calls: string[]): NativeIdentityCapabiliti
 function capabilities(overrides: Partial<NativeIdentityCapabilities> = {}): NativeIdentityCapabilities {
   const base: NativeIdentityCapabilities = {
     read: {
+      requestDeadline: () => Date.now() + 5_000,
       async withReadTransaction(_pool, read) {
         return read({
           query: async () => ({ rows: [] }),
@@ -177,6 +178,7 @@ test('ordinary identity, reviewed Person and Rating participant use the same con
   const agentReads: string[] = [];
   const caps = capabilities({
     read: {
+      requestDeadline: () => Date.now() + 5_000,
       async withReadTransaction(_pool, read) {
         reads.push('mapping');
         return read({ query: async () => ({ rows: [] }) } as never);
@@ -294,6 +296,7 @@ function witnessingLeaves(
   const home = partitionOf(routeOf(original)!);
   return {
     read: {
+      requestDeadline: () => Date.now() + 5_000,
       async withReadTransaction(_pool, read) {
         calls.push(`${label}:read`);
         if (options.beforeRead) await options.beforeRead();
