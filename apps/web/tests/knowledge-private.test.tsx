@@ -289,6 +289,7 @@ test('private outline lives in the main navigation while branches, retry and dir
     await view.setInput(title, 'Retain this unsaved draft');
     title.setSelectionRange(2, 9);
     const editor = document.querySelector('[contenteditable="true"]');
+    expect(editor).not.toBeNull();
     const canvas = document.querySelector('[data-private-knowledge-visit]')!;
     expect(requests).toHaveLength(0);
     const navigation = document.querySelector('nav[aria-label="Main navigation"]')!;
@@ -303,6 +304,11 @@ test('private outline lives in the main navigation while branches, retry and dir
     await view.click(view.button('Retry this page'));
     expect(requests.at(-1)).toEqual(requests.at(-2));
     expect(requests.at(-1)?.cursor).toBe('exact-child-cursor');
+    view.expectText('Revealed child');
+    const revealedRequests = requests.length;
+    await view.click(view.button('Browse documents'));
+    await view.click(view.button('Browse documents'));
+    expect(requests).toHaveLength(revealedRequests);
     view.expectText('Revealed child');
     expect(document.querySelector('[contenteditable="true"]')).toBe(editor);
     expect(await view.findInput('Document title')).toBe(title);
@@ -338,7 +344,8 @@ test('private outline lives in the main navigation while branches, retry and dir
     });
     await page.flush();
     view.expectMissingText('Retired private child');
-    view.expectMissingText('Retain this unsaved draft');
+    expect(title.isConnected).toBe(false);
+    expect((await view.findInput('Document title')).value).toBe('A private field note');
     expect(document.querySelectorAll('[data-shell-context-navigation]')).toHaveLength(1);
   } finally {
     await page.close();

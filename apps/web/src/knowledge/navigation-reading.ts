@@ -73,7 +73,29 @@ export class KnowledgeOutlineReading {
   private conceal(state: 'changed' | 'denied' | 'signed-out' | 'retired') {
     this.pending.clear();
     const root = this.snapshot.branches.get(this.snapshot.root)!;
-    this.publish(new Map([[this.snapshot.root, { ...root, state, rows: [], next: null }]]));
+    if (state === 'changed') {
+      this.publish(new Map([[this.snapshot.root, { ...root, state, rows: [], next: null }]]));
+    } else {
+      this.structureRevisionId = undefined;
+      this.snapshot = { root: null, branches: new Map() };
+      this.publish(
+        new Map([
+          [
+            null,
+            {
+              state,
+              frontier: {
+                request: { kind: 'outline', notebookId: root.frontier.request.notebookId, parentPlacementId: null },
+                breadcrumbs: [],
+              },
+              rows: [],
+              next: null,
+              expanded: true,
+            },
+          ],
+        ]),
+      );
+    }
   }
   async open(parent = this.snapshot.root) {
     const branch = this.snapshot.branches.get(parent)!;
@@ -148,6 +170,30 @@ export class KnowledgeOutlineReading {
           ]),
         );
         void this.open(root);
+      },
+      root: () => {
+        if (!active()) return;
+        this.pending.clear();
+        this.structureRevisionId = undefined;
+        this.snapshot = { root: null, branches: new Map() };
+        this.publish(
+          new Map([
+            [
+              null,
+              {
+                state: 'preparing',
+                frontier: {
+                  request: { kind: 'outline', notebookId: branch.frontier.request.notebookId, parentPlacementId: null },
+                  breadcrumbs: [],
+                },
+                rows: [],
+                next: null,
+                expanded: true,
+              },
+            ],
+          ]),
+        );
+        void this.open(null);
       },
       toggle: (row: KnowledgePlacementRow) => {
         if (!active()) return;

@@ -19,6 +19,7 @@ const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query
 const { createRootRoute, createRoute, createRouter, createMemoryHistory, RouterProvider, Outlet } =
   await import('@tanstack/react-router');
 const { KnowledgeNavigationEntry } = await import('../src/knowledge/navigation-page');
+const { KnowledgeOutlineReading } = await import('../src/knowledge/navigation-reading');
 const { KnowledgeNavigationReturnLink, knowledgeNavigationReturn } =
   await import('../src/knowledge/navigation-return-link');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -369,6 +370,11 @@ for (const organization of [false, true]) {
       expect(document.activeElement).toBe(view.host.querySelector('a[aria-current="page"]'));
       expect(view.host.textContent).toContain('First child page');
       expect(view.host.textContent).not.toContain('Later child page');
+      await view.key('Notebook root');
+      expect(calls[4]).toEqual(rootAddress);
+      await act(async () => readmit(outline(rootAddress)));
+      expect(document.activeElement).toBe(view.boundary());
+      expect(view.host.textContent).toContain('Private supplied note');
     } finally {
       await view.dispose();
     }
@@ -549,3 +555,20 @@ for (const organization of [false, true]) {
     }
   });
 }
+
+test('retiring a returned branch discards its private breadcrumb labels and cursor', async () => {
+  const reading = new KnowledgeOutlineReading(async () => ({ state: 'denied' }), {
+    request: { ...rootAddress, parentPlacementId: placementId, cursor: 'private-return-cursor' },
+    breadcrumbs: [{ placementId, title: 'Private ancestor label' }],
+    structureRevisionId,
+  });
+  await reading.open();
+  const closed = reading.getSnapshot();
+  expect(closed.root).toBeNull();
+  expect([...closed.branches.values()].map((branch) => branch.frontier)).toEqual([
+    { request: rootAddress, breadcrumbs: [] },
+  ]);
+  expect([...closed.branches.values()].flatMap((branch) => branch.rows)).toEqual([]);
+  reading.retire();
+  expect(reading.getSnapshot().branches.get(null)?.state).toBe('retired');
+});

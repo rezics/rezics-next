@@ -189,13 +189,15 @@ hosting; [Book reading](../books/reader/README.md) owns its in-place reading con
 transport nor its occurrence state is imported here. No route-navigation outline consumer remains to migrate;
 organization destination selection and explicit historical/compare readers are independent secondary journeys.
 
+An explicit Notebook root action freshly reads root from a returned child/page. The Browse documents disclosure retains its already revealed branches while hidden; closing the shell phone Menu retires its mounted outline according to Shell ownership.
+
 A branch keeps supplied order and native placement identity, including repeated document IDs. Expand reads only
 that placement's first page. More appends only its parent's supplied page, including sparse continuation; an
 unavailable read retains revealed siblings and its exact attempted cursor. Collapse retains revealed state and
 reopen makes no duplicate read. A pending explicit read may finish while collapsed, without moving focus. Storage
 is O(revealed rows), with no prefetch, refill, body read or reconstructed whole notebook. Structure replacement
-conceals the outline and requires explicit Restart; permission or lifetime retirement removes all branches.
-Document return stores one supplying frontier, selected document and placement, never rows, and freshly admits that page. A missing returned placement falls back to the branch boundary for deliberate keyboard return. An acknowledged move or definite structure conflict conceals the browsing outline until explicit Restart, without altering the command intent or starting another read.
+conceals the outline and requires explicit Restart; permission or lifetime retirement removes all branches, private breadcrumb labels and cursors.
+Root omits the native parent parameter; children use placement identity. Direct notebook entry starts at root. Document return lasts at most fifteen minutes in one in-memory slot, then requires explicit Restart. It stores one supplying frontier, selected document and placement, never rows, and freshly admits that page. A missing returned placement falls back to the branch boundary for deliberate keyboard return. An acknowledged move or definite structure conflict conceals the browsing outline until explicit Restart, without altering the command intent or starting another read.
 Disclosure, continuation and retry do not replace or remount the editor; document links retain its existing dirty
 and uncertain-command departure protection. Account, credential, exposure, locale and source replacement retire
 all old branch callbacks and pending responses.

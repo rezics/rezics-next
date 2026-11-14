@@ -30,6 +30,7 @@ export function KnowledgeWorkspaceNavigation({
   current: () => boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [opened, setOpened] = useState(false);
   const regionId = useId();
   const options = { locale: locale as never };
   const currentVisit = useRef(current);
@@ -59,11 +60,9 @@ export function KnowledgeWorkspaceNavigation({
   return (
     <ShellContextNavigation label={m.knowledge_workspace_documents({}, options)}>
       <div className="min-w-0 space-y-4">
-        {!open && (
-          <p aria-current="page" className="border-l-2 border-primary py-2 pl-3 text-sm font-medium">
-            {title}
-          </p>
-        )}
+        <p aria-current="page" className="border-l-2 border-primary py-2 pl-3 text-sm font-medium">
+          {title}
+        </p>
         <div className="flex flex-wrap gap-x-4 lg:flex-col lg:items-start">
           {notebookReturn ?? (
             <Link
@@ -85,12 +84,15 @@ export function KnowledgeWorkspaceNavigation({
           className={knowledgeControl}
           aria-expanded={open}
           aria-controls={regionId}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            setOpened(true);
+            setOpen((value) => !value);
+          }}
         >
           {m.knowledge_workspace_navigation_open({}, options)}
         </Button>
         <div id={regionId} hidden={!open}>
-          {open && (
+          {opened && (
             <KnowledgeNavigationEntry
               address={{ kind: 'outline', notebookId: address.notebookId, parentPlacementId: null }}
               locale={locale}

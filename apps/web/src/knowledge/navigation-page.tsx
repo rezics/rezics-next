@@ -471,7 +471,11 @@ function KnowledgeOutlineBranchRows({
   const branch = snapshot.branches.get(parent)!;
   const root = parent === snapshot.root;
   const options = { locale: locale as never };
-  const getBranch = useCallback(() => reading.getSnapshot().branches.get(parent) ?? branch, [reading, parent]);
+  const branchIdentity = root ? null : parent;
+  const getBranch = useCallback(() => {
+    const latest = reading.getSnapshot();
+    return latest.branches.get(root ? latest.root : branchIdentity) ?? branch;
+  }, [reading, root, branchIdentity]);
   const { boundary, selected, activate } = useKnowledgeNavigationOrientation<KnowledgeOutlineBranch>(
     branch,
     getBranch,
@@ -495,6 +499,18 @@ function KnowledgeOutlineBranchRows({
         <Link to="/knowledge" preload={false} className={knowledgeNavigationLink}>
           {m.knowledge_navigation_heading({}, options)}
         </Link>
+      )}
+      {root && (branch.frontier.request.parentPlacementId !== null || branch.frontier.request.cursor !== undefined) && (
+        <nav aria-label={m.knowledge_navigation_breadcrumbs({}, options)}>
+          <Button
+            variant="ghost"
+            className={knowledgeNavigationControl}
+            disabled={branch.state === 'preparing'}
+            onClick={(event) => activate(event, actions.root)}
+          >
+            {m.knowledge_navigation_root({}, options)}
+          </Button>
+        </nav>
       )}
       {root && branch.frontier.breadcrumbs.length > 0 && (
         <p className="text-sm text-muted-foreground">
