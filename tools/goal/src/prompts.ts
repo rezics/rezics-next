@@ -346,6 +346,7 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false, source
   const research = brief.kind === 'research';
   const product = devProductBrief(brief);
   const manager = brief.manager ?? brief.goal ?? '<your manager>';
+  const decisionInbox = `\`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\``;
   const owned = brief.acceptance?.workerOwned === true && brief.goal !== 'control-plane';
   const { runner, local } = wrapperRunner(task.worktree, brief);
   const command = brief.acceptance?.command;
@@ -392,8 +393,8 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false, source
       : `Write missing acceptance tests the contract names${product ? ' or implies' : ''}. Update and list tests if a contract change alters asserted behaviour; keep unchanged assertions. Use the fewest tests that pin user-visible behaviour and edge cases (fewer test lines than product lines); add stories only for named states.`,
     decisionFollowThrough: product
       ? research
-        ? `, record this choice in one line in your summary and owner doc, send \`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\`, and continue.`
-        : `Record this choice in one summary line and the owner doc, send \`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\`, and continue.`
+        ? `; fixture-only choices get one summary line and a manager inbox handoff through ${decisionInbox}; continue the declared source without an owner-doc edit. For adopted contract changes, record one summary line and edit the owner doc if its path is in your brief; otherwise send the owner the exact proposed change through that inbox and continue independent source.`
+        : `Fixture-only choices get one summary line and a manager inbox handoff through ${decisionInbox}; continue the declared source without an owner-doc edit. For adopted contract changes, record one summary line and edit the owner doc if its path is in your brief; otherwise send the owner the exact proposed change through that inbox and continue independent source.`
       : research
         ? ', record it in one line in your summary, and continue.'
         : 'Record it in one summary line and continue.',

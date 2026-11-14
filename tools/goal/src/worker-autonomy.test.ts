@@ -36,7 +36,7 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   expect(prompt).toContain('Check premises against your base first.');
   expect(prompt).toContain('Write missing acceptance tests the contract names or implies');
   expect(prompt).toContain(
-    'Record this choice in one summary line and the owner doc, send `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.',
+    'Fixture-only choices get one summary line and a manager inbox handoff through `bun tools/goal/src/cli.ts inbox send web info "<decision>"`; continue the declared source without an owner-doc edit.',
   );
   expect(prompt).toContain('return success and name the file.');
   expect(prompt).not.toContain('receipt');
