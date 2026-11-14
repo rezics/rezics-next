@@ -34,10 +34,12 @@ test('the walk retains the original native host suites and does not import Auth 
 
 test('historical web.capabilities evidence retains every original active path', () => {
   const text = readFileSync(capabilities, 'utf8');
+  const rows = text.split('\n').map((line) => line.split('|').map((cell) => cell.trim()));
   for (const path of FIRST_PUBLIC_SCOPE_PATHS) {
     if ('nativeHost' in path) continue;
-    expect(text).toMatch(new RegExp(`\\| ${path.id} \\|`));
-    expect(text).toMatch(new RegExp(`\\| ${path.id} \\|[^\\n]*\\| (PASS|FAIL-unreached|FAIL) \\|`));
+    const matches = rows.filter((cells) => cells[1] === path.id);
+    expect(matches).toHaveLength(1);
+    expect(['PASS', 'FAIL-unreached', 'FAIL']).toContain(matches[0]![5]);
   }
 });
 
