@@ -19,6 +19,13 @@ import type { BangumiLabelPanelState } from './contract';
 import { BangumiApplying, BangumiCancelledNotice, BangumiRemovedNotice, BangumiSignedOut } from './states';
 import { BangumiUploadForm } from './upload';
 import { useBangumiVisit, type BangumiVisit } from './visit';
+import {
+  captureStageFocusHandoff,
+  consumeStageFocusHandoff,
+  createStageFocusTracker,
+  watchStageFocusMovement,
+  type StageFocusTracker,
+} from '../personal-import-stage-focus';
 
 function noticeText(notice: BangumiJourneySnapshot['notice']): string | null {
   if (!notice) return null;
@@ -26,6 +33,10 @@ function noticeText(notice: BangumiJourneySnapshot['notice']): string | null {
   if (notice.kind === 'too-large') return m.library_bangumi_too_large();
   if (notice.kind === 'empty') return m.library_bangumi_invalid_empty();
   return bangumiFailureLabel(notice.kind, 'detail' in notice ? notice.detail : undefined);
+}
+
+function clickedButton(target: EventTarget | null): HTMLButtonElement | null {
+  return target instanceof Element ? target.closest('button') : null;
 }
 
 export function PersonalBangumiImportPage({ visit }: { visit?: BangumiVisit | null }) {
@@ -80,18 +91,76 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
   }
 
   const [inspectCancelled, setInspectCancelled] = useState(false);
-  const stageFocus = useRef<HTMLDivElement>(null);
+  const visibleStage = snap.stage === 'cancelled' && inspectCancelled ? 'review' : snap.stage;
+  const stageFocus = useRef<StageFocusTracker>(createStageFocusTracker());
+  const uploadFocus = useRef<HTMLDivElement>(null);
+  const reviewFocus = useRef<HTMLDivElement>(null);
+  const confirmFocus = useRef<HTMLDivElement>(null);
+  const resultsFocus = useRef<HTMLDivElement>(null);
+  const cancelledFocus = useRef<HTMLDivElement>(null);
+  const removedFocus = useRef<HTMLDivElement>(null);
+  useEffect(() => watchStageFocusMovement(stageFocus.current), []);
   useEffect(() => {
-    if (snap.stage !== 'cleanup') stageFocus.current?.focus({ preventScroll: true });
-  }, [snap.stage]);
+    const target =
+      visibleStage === 'upload' || visibleStage === 'cleanup'
+        ? uploadFocus.current
+        : visibleStage === 'review'
+          ? reviewFocus.current
+          : visibleStage === 'confirm'
+            ? confirmFocus.current
+            : visibleStage === 'results'
+              ? resultsFocus.current
+              : visibleStage === 'cancelled'
+                ? cancelledFocus.current
+                : visibleStage === 'removed'
+                  ? removedFocus.current
+                  : null;
+    consumeStageFocusHandoff(
+      stageFocus.current,
+      visibleStage,
+      target,
+      () => visit.current() && !!journey.current?.live(),
+    );
+  }, [visibleStage]);
   const labelPending = Object.values(labelPanels).some((panel) => panel.busy || panel.command !== null);
-  const locked = snap.busy || snap.notice?.kind === 'unknown' || snap.cleanupPending || labelPending;
+  const locked = snap.busy || snap.notice?.kind === 'unknown' || snap.cleanupPending || labelPending || inspectCancelled;
+
+  function captureStageAction(target: EventTarget | null) {
+    const button = clickedButton(target);
+    const label = button?.textContent?.replace(/\s+/g, ' ').trim();
+    if (!button || !label) return;
+
+    let next: string | null = null;
+    let restoreOpener = true;
+    if (visibleStage === 'review' && label === m.library_bangumi_continue_confirm()) next = 'confirm';
+    else if (visibleStage === 'confirm' && label === m.library_bangumi_return_review()) next = 'review';
+    else if (visibleStage === 'confirm' && label === m.library_bangumi_confirm()) next = 'results';
+    else if (visibleStage === 'results' && label === m.library_bangumi_return_review()) next = 'review';
+    else if (snap.stage === 'cancelled' && !inspectCancelled && label === m.library_bangumi_return_review()) {
+      next = 'review';
+      restoreOpener = false;
+    } else if (
+      (snap.stage === 'applying' || snap.stage === 'review' || snap.stage === 'confirm') &&
+      label === m.library_bangumi_cancel()
+    ) {
+      next = snap.outcomes.length ? 'results' : 'cancelled';
+    } else if (label === m.library_bangumi_retry_command() && snap.notice?.kind === 'unknown') {
+      if (snap.notice.command.kind === 'apply' && visibleStage !== 'results') next = 'results';
+      else if (snap.notice.command.kind === 'cancel') next = 'cancelled';
+    } else if (snap.stage !== 'removed' && label === m.library_bangumi_discard()) next = 'removed';
+
+    if (next && next !== visibleStage) {
+      captureStageFocusHandoff(stageFocus.current, visibleStage, next, button, restoreOpener);
+    }
+  }
+
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
+    <main
+      className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6"
+      onClickCapture={(event) => captureStageAction(event.target)}
+    >
       <PageHeading>{m.library_bangumi_title()}</PageHeading>
-      <div ref={stageFocus} tabIndex={-1}>
-        <ImportJourney stage={snap.stage} />
-      </div>
+      <ImportJourney stage={visibleStage} />
       {noticeText(snap.notice) ? (
         <p role="status" aria-live="polite">
           {noticeText(snap.notice)}
@@ -115,20 +184,33 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
         />
       ) : null}
       {snap.stage === 'upload' || snap.stage === 'cleanup' ? (
-        <BangumiUploadForm
-          busy={snap.cleanupPending ? false : snap.busy}
-          disabled={!snap.cleanupPending && locked}
-          onEdit={() => void act((current) => current.editReplacement())}
-          onUpload={(upload) => void act((current) => current.preview(upload))}
-          onReopen={
-            snap.cleanupPending || snap.uploadId
-              ? undefined
-              : (uploadId) => void act((current) => current.loadPage(uploadId, -1))
-          }
-        />
+        <div ref={uploadFocus} tabIndex={-1} role="region" aria-label={m.library_import_upload()}>
+          <BangumiUploadForm
+            busy={snap.cleanupPending ? false : snap.busy}
+            disabled={!snap.cleanupPending && locked}
+            onEdit={() => void act((current) => current.editReplacement())}
+            onUpload={(upload) => void act((current) => current.preview(upload))}
+            onReopen={
+              snap.cleanupPending || snap.uploadId
+                ? undefined
+                : (uploadId) => void act((current) => current.loadPage(uploadId, -1))
+            }
+          />
+        </div>
+      ) : null}
+      {snap.stage === 'cancelled' && !inspectCancelled ? (
+        <div ref={cancelledFocus} tabIndex={-1} role="region" aria-label={m.library_bangumi_canceled()}>
+          <BangumiCancelledNotice onReturn={() => setInspectCancelled(true)} />
+        </div>
       ) : null}
       {snap.uploadId && !snap.cleanupPending && snap.stage !== 'upload' && snap.stage !== 'removed' ? (
-        <div hidden={snap.stage !== 'review' && !(snap.stage === 'cancelled' && inspectCancelled)}>
+        <div
+          ref={reviewFocus}
+          tabIndex={-1}
+          role="region"
+          aria-label={m.library_import_review()}
+          hidden={snap.stage !== 'review' && !(snap.stage === 'cancelled' && inspectCancelled)}
+        >
           <BangumiReviewPage
             key={snap.uploadId}
             snap={snap}
@@ -152,36 +234,51 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
         </div>
       ) : null}
       {snap.stage === 'confirm' ? (
-        <BangumiConfirmPage
-          rows={snap.meta}
-          busy={locked}
-          confirmPrivacy={snap.confirmPrivacy}
-          confirmTimestamps={snap.confirmTimestamps}
-          onBack={() => act((current) => current.backToReview())}
-          onConfirm={() => void act((current) => current.confirm())}
-          onConfirmSource={(choice) => act((current) => current.confirmSource(choice))}
-          onScoreConsent={(ordinal, consent) => act((current) => current.confirmScore(ordinal, consent))}
-        />
+        <div ref={confirmFocus} tabIndex={-1} role="region" aria-label={m.library_import_confirm()}>
+          <BangumiConfirmPage
+            rows={snap.meta}
+            busy={locked}
+            confirmPrivacy={snap.confirmPrivacy}
+            confirmTimestamps={snap.confirmTimestamps}
+            onBack={() => act((current) => current.backToReview())}
+            onConfirm={() => void act((current) => current.confirm())}
+            onConfirmSource={(choice) => act((current) => current.confirmSource(choice))}
+            onScoreConsent={(ordinal, consent) => act((current) => current.confirmScore(ordinal, consent))}
+          />
+        </div>
       ) : null}
-      {snap.stage === 'applying' ? <BangumiApplying applied={snap.applied} applying={snap.applying} /> : null}
+      {snap.stage === 'applying' ? (
+        <div
+          tabIndex={-1}
+          role="region"
+          aria-label={m.library_bangumi_applying({ applied: snap.applied, applying: snap.applying })}
+        >
+          <BangumiApplying applied={snap.applied} applying={snap.applying} />
+        </div>
+      ) : null}
       {snap.stage === 'results' ? (
-        <BangumiResultPage
-          outcomes={snap.outcomes}
-          uploadId={snap.uploadId}
-          labelPanels={labelPanels}
-          remaining={snap.remaining}
-          meta={snap.meta}
-          busy={locked}
-          cancelled={snap.cancelled}
-          canRetry={snap.outcomes.some((item) => item.status === 'failed')}
-          onRetry={() => void act((current) => current.retryFailed())}
-          onReview={() => act((current) => current.backToReview())}
-          onRefresh={() => void act((current) => current.refresh())}
-          onInspect={(ordinal) => void act((current) => current.inspectCurrent(ordinal))}
-        />
+        <div ref={resultsFocus} tabIndex={-1} role="region" aria-label={m.library_import_results()}>
+          <BangumiResultPage
+            outcomes={snap.outcomes}
+            uploadId={snap.uploadId}
+            labelPanels={labelPanels}
+            remaining={snap.remaining}
+            meta={snap.meta}
+            busy={locked}
+            cancelled={snap.cancelled}
+            canRetry={snap.outcomes.some((item) => item.status === 'failed')}
+            onRetry={() => void act((current) => current.retryFailed())}
+            onReview={() => act((current) => current.backToReview())}
+            onRefresh={() => void act((current) => current.refresh())}
+            onInspect={(ordinal) => void act((current) => current.inspectCurrent(ordinal))}
+          />
+        </div>
       ) : null}
-      {snap.stage === 'cancelled' ? <BangumiCancelledNotice onReturn={() => setInspectCancelled(true)} /> : null}
-      {snap.stage === 'removed' ? <BangumiRemovedNotice /> : null}
+      {snap.stage === 'removed' ? (
+        <div ref={removedFocus} tabIndex={-1} role="region" aria-label={m.library_bangumi_removed()}>
+          <BangumiRemovedNotice />
+        </div>
+      ) : null}
       {snap.uploadId && !snap.cleanupPending && snap.stage !== 'upload' && snap.stage !== 'removed' ? (
         <div className="flex flex-wrap gap-3">
           {snap.stage !== 'applying' ? (
@@ -242,7 +339,9 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
           {m.library_bangumi_discard()}
         </BangumiAction>
       ) : null}
-      {snap.stage !== 'results' && snap.stage !== 'cancelled' && snap.stage !== 'removed' ? <ImportReturn /> : null}
+      {snap.stage !== 'results' && (snap.stage !== 'cancelled' || inspectCancelled) && snap.stage !== 'removed' ? (
+        <ImportReturn />
+      ) : null}
       <BangumiDeparture
         active={!!snap.uploadId && snap.stage !== 'removed'}
         locked={locked}

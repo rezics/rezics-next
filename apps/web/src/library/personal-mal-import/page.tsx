@@ -6,6 +6,13 @@ import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { sourceAdmissionBlock, sourceAdmissionBody } from '../rich-private-entry/admission';
 import {
+  captureStageFocusHandoff,
+  consumeStageFocusHandoff,
+  createStageFocusTracker,
+  watchStageFocusMovement,
+  type StageFocusTracker,
+} from '../personal-import-stage-focus';
+import {
   MAL_UPLOAD_BYTES,
   newCommandKey,
   sameCommand,
@@ -59,6 +66,10 @@ function commandStage(command: MalCommand | null): Stage {
   return command.kind === 'apply' || command.kind === 'admit-source' ? 'results' : 'review';
 }
 
+function clickedButton(target: EventTarget | null): HTMLButtonElement | null {
+  return target instanceof Element ? target.closest('button') : null;
+}
+
 export function PersonalMalImportPage({ visit }: { visit?: MalVisit | null }) {
   const observed = useMalVisit();
   const current = visit === undefined ? observed : visit;
@@ -86,6 +97,12 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   const [page, setPage] = useState<MalPage | null>(null);
   const [after, setAfter] = useState(0);
   const [pageRevision, setPageRevision] = useState(0);
+  // Keep page-read focus for new pages; a remounted review stage uses the shell handoff.
+  const lastFocusPageRevision = useRef(0);
+  const reviewPageFocusRevision = pageRevision === lastFocusPageRevision.current ? 0 : pageRevision;
+  useEffect(() => {
+    lastFocusPageRevision.current = pageRevision;
+  }, [pageRevision]);
   const coordinates = useRef(new ImportPageCoordinates(0));
   const [position, setPosition] = useState(() => coordinates.current.position());
   const pageRequest = useRef<PageRequest | null>(null);
@@ -123,6 +140,26 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     privacy: restored?.sourceConsent.privacy ?? false,
     timestamps: restored?.sourceConsent.timestamps ?? false,
   });
+  const stageFocus = useRef<StageFocusTracker>(createStageFocusTracker());
+  const uploadFocus = useRef<HTMLDivElement>(null);
+  const reviewFocus = useRef<HTMLDivElement>(null);
+  const confirmFocus = useRef<HTMLDivElement>(null);
+  const resultsFocus = useRef<HTMLDivElement>(null);
+
+  useEffect(() => watchStageFocusMovement(stageFocus.current), []);
+  useEffect(() => {
+    const target =
+      stage === 'upload'
+        ? uploadFocus.current
+        : stage === 'review'
+          ? reviewFocus.current
+          : stage === 'confirm'
+            ? confirmFocus.current
+            : stage === 'results'
+              ? resultsFocus.current
+              : null;
+    consumeStageFocusHandoff(stageFocus.current, stage, target, live);
+  }, [stage, result]);
 
   useEffect(
     () => () => {
@@ -679,8 +716,50 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     void loadPage(command.id, command.after, switchToReview, preserveFields, true, command);
   }
 
+  function captureStageAction(target: EventTarget | null) {
+    const button = clickedButton(target);
+    const label = button?.textContent?.replace(/\s+/g, ' ').trim();
+    if (!button || !label) return;
+
+    let next: Stage | null = null;
+    if (stage === 'review' && label === m.library_mal_continue_confirm()) next = 'confirm';
+    else if (stage === 'review' && label === m.library_mal_label_results()) next = 'results';
+    else if (stage === 'confirm' && label === m.library_mal_return_review()) next = 'review';
+    else if (stage === 'confirm' && label === m.library_mal_confirm()) next = 'results';
+    else if (stage === 'results' && label === m.library_mal_return_review()) next = 'review';
+    else if (
+      stage === 'results' &&
+      !result &&
+      unknownCommand?.kind === 'apply' &&
+      label === m.library_mal_retry_command()
+    ) {
+      next = 'results';
+    } else if (stage !== 'upload' && label === m.library_mal_discard()) next = 'upload';
+    else if (
+      stage !== 'upload' &&
+      unknownCommand?.kind === 'delete' &&
+      label === m.library_mal_retry_command()
+    ) {
+      next = 'upload';
+    } else if (
+      stage === 'confirm' &&
+      unknownCommand?.kind === 'apply' &&
+      label === m.library_mal_retry_command()
+    ) {
+      next = 'results';
+    }
+
+    const recoveryResult = next === 'results' && stage === 'results' && !result && unknownCommand?.kind === 'apply';
+    if (next && (next !== stage || recoveryResult)) {
+      captureStageFocusHandoff(stageFocus.current, stage, next, button);
+    }
+  }
+
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
+    <main
+      className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6"
+      onClickCapture={(event) => captureStageAction(event.target)}
+    >
       <PageHeading>{m.library_mal_title()}</PageHeading>
       <ImportJourney stage={stage} />
       {noticeText(notice) ? <p role="status">{noticeText(notice)}</p> : null}
@@ -695,7 +774,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       {pageFailure && !unknownCommand ? <ImportPageReadRecovery busy={locked} onRetry={retryPage} /> : null}
       {stage === 'upload' ? (
         <>
-          <MalUploadForm busy={busy} disabled={locked} onUpload={(xml) => void upload(xml)} />
+          <div ref={uploadFocus} tabIndex={-1} role="region" aria-label={m.library_import_upload()}>
+            <MalUploadForm busy={busy} disabled={locked} onUpload={(xml) => void upload(xml)} />
+          </div>
           <MalRetainedUpload
             busy={locked}
             onOpen={(id) => {
@@ -705,120 +786,130 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
           />
         </>
       ) : null}
-      {page ? (
-        <>
-          <ImportDetails title={m.library_import_retained()}>
-            <p>{m.library_import_reopen_help()}</p>
-            <p className="break-all">
-              {m.library_mal_label_upload_id()}: {page.id}
-            </p>
-            <MalRetainedSource key={page.id} id={page.id} />
-          </ImportDetails>
-        </>
-      ) : null}
       {stage === 'review' && page ? (
-        <MalReviewPage
-          page={page}
-          drafts={drafts}
-          question={question}
-          questionLoading={questionLoading}
-          questionUnavailable={questionUnavailable}
-          voteReadbacks={voteReadbacks}
-          after={after}
-          pageRevision={pageRevision}
-          position={position}
-          busy={locked}
-          onReadQuestion={() => void readQuestion()}
-          onReadVote={(row, draft) => void readVote(row, draft.target)}
-          onChangeDraft={(draft) => {
-            const previous = drafts[draft.row] ?? draftFromRow(rowByIndex.get(draft.row)!);
-            if (previous.target !== draft.target) {
-              setVoteReadbacks(new Map());
-              setDrafts((current) => ({ ...current, [draft.row]: { ...draft, score: undefined } }));
-            } else {
-              setDrafts((current) => ({ ...current, [draft.row]: draft }));
-            }
-          }}
-          onSave={(draft) => void saveReview(draft)}
-          onNext={() => movePage(page.next)}
-          onPrevious={() => movePage(position.previous)}
-          onFirst={() => movePage(position.canFirst ? coordinates.current.first : null)}
-          onConfirm={() => {
-            confirmFlags.current = { privacy: false, timestamps: false };
-            setConfirmPrivacy(false);
-            setConfirmTimestamps(false);
-            setStage('confirm');
-          }}
-        />
+        <div ref={reviewFocus} tabIndex={-1} role="region" aria-label={m.library_import_review()}>
+          <MalReviewPage
+            page={page}
+            drafts={drafts}
+            question={question}
+            questionLoading={questionLoading}
+            questionUnavailable={questionUnavailable}
+            voteReadbacks={voteReadbacks}
+            after={after}
+            pageRevision={reviewPageFocusRevision}
+            position={position}
+            busy={locked}
+            onReadQuestion={() => void readQuestion()}
+            onReadVote={(row, draft) => void readVote(row, draft.target)}
+            onChangeDraft={(draft) => {
+              const previous = drafts[draft.row] ?? draftFromRow(rowByIndex.get(draft.row)!);
+              if (previous.target !== draft.target) {
+                setVoteReadbacks(new Map());
+                setDrafts((current) => ({ ...current, [draft.row]: { ...draft, score: undefined } }));
+              } else {
+                setDrafts((current) => ({ ...current, [draft.row]: draft }));
+              }
+            }}
+            onSave={(draft) => void saveReview(draft)}
+            onNext={() => movePage(page.next)}
+            onPrevious={() => movePage(position.previous)}
+            onFirst={() => movePage(position.canFirst ? coordinates.current.first : null)}
+            onConfirm={() => {
+              confirmFlags.current = { privacy: false, timestamps: false };
+              setConfirmPrivacy(false);
+              setConfirmTimestamps(false);
+              setStage('confirm');
+            }}
+          />
+        </div>
       ) : null}
       {stage === 'review' && !page && uploadId.current ? (
-        <p role="status">{m.library_mal_retry_original_help()}</p>
+        <div ref={reviewFocus} tabIndex={-1} role="region" aria-label={m.library_import_review()}>
+          <p role="status">{m.library_mal_retry_original_help()}</p>
+        </div>
       ) : null}
       {stage === 'confirm' && page ? (
-        <MalConfirmPage
-          rows={page.rows}
-          drafts={drafts}
-          busy={locked}
-          confirmPrivacy={confirmPrivacy}
-          confirmTimestamps={confirmTimestamps}
-          question={question}
-          voteReadbacks={voteReadbacks}
-          onBack={() => setStage('review')}
-          onConfirm={(consents) => void confirm(consents)}
-          onConfirmSource={(choice) => {
-            if (choice.privacy !== undefined) {
-              confirmFlags.current.privacy = choice.privacy;
-              setConfirmPrivacy(choice.privacy);
-            }
-            if (choice.timestamps !== undefined) {
-              confirmFlags.current.timestamps = choice.timestamps;
-              setConfirmTimestamps(choice.timestamps);
-            }
-          }}
-        />
+        <div ref={confirmFocus} tabIndex={-1} role="region" aria-label={m.library_import_confirm()}>
+          <MalConfirmPage
+            rows={page.rows}
+            drafts={drafts}
+            busy={locked}
+            confirmPrivacy={confirmPrivacy}
+            confirmTimestamps={confirmTimestamps}
+            question={question}
+            voteReadbacks={voteReadbacks}
+            onBack={() => setStage('review')}
+            onConfirm={(consents) => void confirm(consents)}
+            onConfirmSource={(choice) => {
+              if (choice.privacy !== undefined) {
+                confirmFlags.current.privacy = choice.privacy;
+                setConfirmPrivacy(choice.privacy);
+              }
+              if (choice.timestamps !== undefined) {
+                confirmFlags.current.timestamps = choice.timestamps;
+                setConfirmTimestamps(choice.timestamps);
+              }
+            }}
+          />
+        </div>
       ) : null}
       {stage === 'results' && result ? (
-        <MalResultPage
-          result={result}
-          titles={titles.current}
-          admissions={admissions}
-          rows={currentRows}
-          questionId={question?.id ?? null}
-          voteReadbacks={voteReadbacks}
-          busy={locked}
-          canRetry={
-            !!applyCommand.current &&
-            result.outcomes.some(
-              (item) =>
-                item.status === 'failed' ||
-                item.score?.status === 'failed' ||
-                item.labels?.some((label) => label.status === 'failed'),
-            )
-          }
-          canRetrySource={admitQueue.current.length > 0 && !unknownCommand && notice !== null}
-          onRetrySource={() => void admitQueued()}
-          onRetry={() => {
-            const command = applyCommand.current;
-            if (!command || unknownCommand) return;
-            void run(command, () => port.apply(command), delivery.current?.sourceConsent).then(async (response) => {
-              if (response?.kind === 'applied' && live()) {
-                clearCurrentScoreReadings();
-                lastResult.current = response.result;
-                setResult(response.result);
-                if (page) queueSourceAdmissions(page, response.result.outcomes);
-                await admitQueued();
-              }
-            });
-          }}
-          onReview={() => setStage('review')}
-          onReadVote={(row) => void readVote(row)}
-        />
+        <div ref={resultsFocus} tabIndex={-1} role="region" aria-label={m.library_import_results()}>
+          <MalResultPage
+            result={result}
+            titles={titles.current}
+            admissions={admissions}
+            rows={currentRows}
+            questionId={question?.id ?? null}
+            voteReadbacks={voteReadbacks}
+            busy={locked}
+            canRetry={
+              !!applyCommand.current &&
+              result.outcomes.some(
+                (item) =>
+                  item.status === 'failed' ||
+                  item.score?.status === 'failed' ||
+                  item.labels?.some((label) => label.status === 'failed'),
+              )
+            }
+            canRetrySource={admitQueue.current.length > 0 && !unknownCommand && notice !== null}
+            onRetrySource={() => void admitQueued()}
+            onRetry={() => {
+              const command = applyCommand.current;
+              if (!command || unknownCommand) return;
+              void run(command, () => port.apply(command), delivery.current?.sourceConsent).then(async (response) => {
+                if (response?.kind === 'applied' && live()) {
+                  clearCurrentScoreReadings();
+                  lastResult.current = response.result;
+                  setResult(response.result);
+                  if (page) queueSourceAdmissions(page, response.result.outcomes);
+                  await admitQueued();
+                }
+              });
+            }}
+            onReview={() => setStage('review')}
+            onReadVote={(row) => void readVote(row)}
+          />
+        </div>
       ) : null}
-      {stage === 'results' && !result ? <p role="status">{m.library_mal_retry_original_help()}</p> : null}
+      {stage === 'results' && !result ? (
+        <div ref={resultsFocus} tabIndex={-1} role="region" aria-label={m.library_import_results()}>
+          <p role="status">{m.library_mal_retry_original_help()}</p>
+        </div>
+      ) : null}
       {stage === 'review' && result ? (
         <MalAction type="button" onClick={() => setStage('results')}>
           {m.library_mal_label_results()}
         </MalAction>
+      ) : null}
+      {page ? (
+        <ImportDetails title={m.library_import_retained()}>
+          <p>{m.library_import_reopen_help()}</p>
+          <p className="break-all">
+            {m.library_mal_label_upload_id()}: {page.id}
+          </p>
+          <MalRetainedSource key={page.id} id={page.id} />
+        </ImportDetails>
       ) : null}
       {uploadId.current ? (
         <MalAction
