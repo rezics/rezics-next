@@ -453,7 +453,8 @@ export function advanceHostedPublicationPreparation(
         result = preparationResult(progress(catalogueId, stage), stageRead.expired);
       }
 
-      if (retainPreparationReceipt)
+      // Source ingestion owns receipts for these three phases itself.
+      if (retainPreparationReceipt && phase !== 'whole' && phase !== 'selection' && phase !== 'closure')
         await retainHostedPublicationAdvanceReceipt(tx as AccessClient, actor, stageLocator, stepId, {
           phase,
           processed,
