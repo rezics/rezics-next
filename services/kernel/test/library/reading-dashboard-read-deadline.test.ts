@@ -55,14 +55,10 @@ for (const phase of ['BEGIN', 'SELECT pending', 'COMMIT'])
     const next = connection();
     const clients = [held.client, next.client];
     const sharedPool = pool(async () => clients.shift()!);
-    const read = withReadingDashboardReadConnection(
-      sharedPool,
-      { deadline: Date.now() + 100 },
-      async (client) => {
-        if (phase !== 'BEGIN') await client.query('BEGIN');
-        await client.query(phase);
-      },
-    );
+    const read = withReadingDashboardReadConnection(sharedPool, { deadline: Date.now() + 100 }, async (client) => {
+      if (phase !== 'BEGIN') await client.query('BEGIN');
+      await client.query(phase);
+    });
 
     await expect(read).rejects.toBeInstanceOf(Error);
     await held.released;

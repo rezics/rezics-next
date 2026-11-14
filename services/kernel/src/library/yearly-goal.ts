@@ -86,53 +86,49 @@ export function createYearlyCompletionGoalReads(dependencies: { pool: Pool }) {
       };
       alive();
       try {
-        return await withReadingDashboardReadConnection(
-          dependencies.pool,
-          { deadline, signal },
-          async (client) => {
-            await client.query('BEGIN');
-            await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
-              route,
-              actor.accountId,
-            ]);
-            const authorize = async () => {
-              const owner = await readAccount(client, route, actor.accountId);
-              if (
-                !owner ||
-                owner.kind !== 'actor' ||
-                owner.state !== 'active' ||
-                owner.fenced ||
-                !Number.isSafeInteger(actor.authnEpoch) ||
-                actor.authnEpoch < 1 ||
-                owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-              )
-                throw new ProblemError('forbidden');
-            };
-            await authorize();
-            alive();
-            let row: { target: number | null; revision: string } | undefined;
-            try {
-              row = (
-                await client.query<{ target: number | null; revision: string }>(
-                  `SELECT target,revision::text FROM library.yearly_completion_goal
+        return await withReadingDashboardReadConnection(dependencies.pool, { deadline, signal }, async (client) => {
+          await client.query('BEGIN');
+          await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+            route,
+            actor.accountId,
+          ]);
+          const authorize = async () => {
+            const owner = await readAccount(client, route, actor.accountId);
+            if (
+              !owner ||
+              owner.kind !== 'actor' ||
+              owner.state !== 'active' ||
+              owner.fenced ||
+              !Number.isSafeInteger(actor.authnEpoch) ||
+              actor.authnEpoch < 1 ||
+              owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+            )
+              throw new ProblemError('forbidden');
+          };
+          await authorize();
+          alive();
+          let row: { target: number | null; revision: string } | undefined;
+          try {
+            row = (
+              await client.query<{ target: number | null; revision: string }>(
+                `SELECT target,revision::text FROM library.yearly_completion_goal
                    WHERE route=$1 AND account_id=$2 AND year=$3`,
-                  [route, actor.accountId, year],
-                )
-              ).rows[0];
-            } catch (error) {
-              if (isMissingInstallation(error)) throw new TargetInstallationUnavailableError();
-              throw error;
-            }
-            await authorize();
-            alive();
-            await client.query('COMMIT');
-            alive();
-            if (!row) return { state: 'none', revision: null };
-            return row.target === null
-              ? { state: 'none', revision: row.revision }
-              : { state: 'set', target: row.target, revision: row.revision };
-          },
-        );
+                [route, actor.accountId, year],
+              )
+            ).rows[0];
+          } catch (error) {
+            if (isMissingInstallation(error)) throw new TargetInstallationUnavailableError();
+            throw error;
+          }
+          await authorize();
+          alive();
+          await client.query('COMMIT');
+          alive();
+          if (!row) return { state: 'none', revision: null };
+          return row.target === null
+            ? { state: 'none', revision: row.revision }
+            : { state: 'set', target: row.target, revision: row.revision };
+        });
       } catch (error) {
         if (error instanceof TargetInstallationUnavailableError)
           return { state: 'unavailable', reason: 'not_installed' };

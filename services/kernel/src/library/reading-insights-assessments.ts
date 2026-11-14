@@ -197,8 +197,7 @@ export function createReadingInsightsAssessmentReads(deps: { pool: Pool }) {
       await authorize();
       if (installed && snapshot) {
         const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
-        if (JSON.stringify(latest) !== JSON.stringify(snapshot.head))
-          throw new ProblemError('dependency_unavailable');
+        if (JSON.stringify(latest) !== JSON.stringify(snapshot.head)) throw new ProblemError('dependency_unavailable');
       }
       alive();
       await client.query('COMMIT');

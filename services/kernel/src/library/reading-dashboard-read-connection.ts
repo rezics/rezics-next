@@ -42,10 +42,7 @@ function isPostgresError(error: unknown): boolean {
   const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
   const message = error instanceof Error ? error.message : '';
   return (
-    typeof code === 'string' &&
-    /^[0-9A-Z]{5}$/.test(code) &&
-    code !== '57014' &&
-    !/query read timeout/i.test(message)
+    typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) && code !== '57014' && !/query read timeout/i.test(message)
   );
 }
 
@@ -111,13 +108,7 @@ export function withReadingDashboardReadConnection<T>(
             try {
               return await within(deadline, () => deadlineRace(observed, cleaningUp ? undefined : signal));
             } catch (error) {
-              if (
-                !settled ||
-                control === 'begin' ||
-                control === 'commit' ||
-                control === 'rollback' ||
-                !knownOutcome
-              )
+              if (!settled || control === 'begin' || control === 'commit' || control === 'rollback' || !knownOutcome)
                 uncertain = true;
               throw error;
             }
