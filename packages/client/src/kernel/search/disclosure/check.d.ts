@@ -35,6 +35,8 @@ export declare function checkHits<NativeHit extends Hit>(source: SubjectSource, 
     spoilerThreshold?: SpoilerThreshold;
     observeRelationRelease?: () => Promise<CurrentRelationRelease | null>;
     conceptFilter?: ConceptFilterExecution;
+    /** Return aligned three-valued matches for bounded internal preparation. */
+    includeOutcomes?: boolean;
     /** Re-evaluate a stale indexed text hint against the current native Subject projection. */
     currentText?: (subject: IndexedSubject) => Promise<RelationFacetMatch>;
 }): Promise<{
@@ -43,6 +45,8 @@ export declare function checkHits<NativeHit extends Hit>(source: SubjectSource, 
         subject: IndexedSubject;
     }[];
     dropped: number;
+    /** Aligned current predicate results for internal preparation consumers; false is definitive. */
+    outcomes?: readonly RelationFacetMatch[];
     relationRejected?: true;
     /** An eligible candidate has undecidable text; it cannot certify counts or a consumed continuation. */
     textRejected?: true;
