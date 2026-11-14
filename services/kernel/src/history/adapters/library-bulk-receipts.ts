@@ -335,8 +335,7 @@ async function readiness(
       !isDeepStrictEqual(source.evidence, coreReceipt.response)
     )
       return pending('library-bulk-receipt-source-acknowledgement-changed');
-    if (source.state !== sourceEvidence.outcome)
-      return pending('library-bulk-receipt-source-acknowledgement-changed');
+    if (source.state !== sourceEvidence.outcome) return pending('library-bulk-receipt-source-acknowledgement-changed');
     return { ready: true };
   }
 
