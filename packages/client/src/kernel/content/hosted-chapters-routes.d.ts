@@ -19935,7 +19935,7 @@ export declare function hostedChapterRoutes(app: ReturnType<typeof contentRoutes
                         body: {
                             expectedRevisionId: string;
                             occurrenceId: string;
-                            parentId: string;
+                            parentId: string | null;
                             beforeOccurrenceId: string | null;
                         };
                         params: {

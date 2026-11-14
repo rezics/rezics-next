@@ -19935,7 +19935,7 @@ export declare function hostedDraftConversionRoutes(app: ReturnType<typeof knowl
                         body: {
                             expectedRevisionId: string;
                             occurrenceId: string;
-                            parentId: string;
+                            parentId: string | null;
                             beforeOccurrenceId: string | null;
                         };
                         params: {
