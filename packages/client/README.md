@@ -60,6 +60,29 @@ Decision: `RealmPublicationPreparation` and `PublicationCommand` alias the gener
 from the Kernel owner. The installed `realms({realmId}).publications({subjectId}).preparation.get` method is present
 in the generated route tree, and Web derives its reader contract from that callable directly.
 
+Decision: `HostedPublicationActivationProgress` aliases Content's emitted
+`HostedPublicationActivationProgressSchema`. The hosted catalogue group fills missing preparation/activation
+methods from the emitted `hostedPublicationActivationRoutes` factory; every existing mounted method takes
+precedence through `SharedRoutes`. The ordinary Client transport supplies authentication, session rotation and
+custom-method suffixes:
+
+```ts
+const stage = client.hostedCatalogues({ id: catalogueId }).publicationPreparations({ stageId });
+await stage.$startActivation.post({}, startOptions); // :startActivation
+await stage.$advanceActivation.post({}, advanceOptions); // :advanceActivation
+await stage.$activate.post({}, activateOptions); // :activate
+```
+
+Each options object carries the command's `idempotency-key` header. An unknown outcome requires retrying the same
+method, catalogue/stage IDs, body and key; a new logical command uses a new key. Preserve the returned progress,
+error/status unions and private/no-store response headers. `ready` still requires activation; only `activated`
+confirms completion. Decimal counts remain strings and `publicationId` can be null.
+
+These imports require `src/kernel/content/hosted-publication-preparation-routes.d.ts` and
+`src/kernel/content/hosted-publication-preparation-schemas.d.ts` plus their emitted declaration closure. The normal
+generator follows both type-only imports from this public entry; no additional runtime module is needed. Editing
+this source does not emit or install those declarations. Publication remains with the managed generator above.
+
 Decision: client assertions follow [Content's authoring contract](../../services/kernel/src/content/README.md):
 post creation accepts protected visibility; revisions accept only published or draft visibility.
 
