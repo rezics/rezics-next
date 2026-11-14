@@ -69,3 +69,19 @@ test('name fallback is deterministic over disclosed labels without inventing a t
   expect(pickZoneName({ labels: { ja: '本棚', es: 'Libros' } }, 'fr')).toEqual({ text: '本棚', lang: 'ja' });
   expect(pickZoneName({ labels: {} }, 'en')).toEqual({ text: '' });
 });
+
+test('withholding an explicit primary language or name never enables legacy fallback', () => {
+  const metadataOnly = { primaryLanguage: null, labels: { ja: '本棚', en: 'Books' } };
+  const both = { primaryLanguage: null, labels: { en: 'Books' } };
+  for (const shell of [metadataOnly, both, { primaryLanguage: 'ja' as const, labels: { en: 'Books' } }]) {
+    expect(pickZoneName(shell, 'de')).toEqual({ text: '' });
+    expect(pickZoneName(shell, 'en')).toEqual({ text: 'Books', lang: 'en' });
+  }
+  expect(pickZoneName(metadataOnly, 'ja')).toEqual({ text: '本棚', lang: 'ja' });
+  expect(pickZoneName(both, 'ja')).toEqual({ text: '' });
+  expect(pickZoneName({ primaryLanguage: null, labels: {} }, 'en')).toEqual({ text: '' });
+
+  const legacy = { labels: Object.fromEntries([...UI_LOCALES].reverse().map((language) => [language, language])) };
+  expect(pickZoneName(legacy, 'it')).toEqual({ text: 'en', lang: 'en' });
+  expect(pickZoneName(legacy, 'de')).toEqual({ text: 'de', lang: 'de' });
+});
