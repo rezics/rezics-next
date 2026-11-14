@@ -1,3 +1,4 @@
+import { useEffect, useId, useRef } from 'react';
 import { m } from '../paraglide/messages.js';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
 import { undoOperand, type UndoAttempt, type UndoState } from './bulk-operation-undo';
@@ -35,7 +36,159 @@ export function BulkOperationUndoView({
   onRetryRead,
   onRestore,
 }: Props) {
-  const operation = state?.read === 'ready' ? state.operation : undefined;
+  const operation = state?.operation;
+  const visibleOutcomes = state?.read === 'ready' ? (state.page?.outcomes ?? []) : [];
+  const visibleOrdinals = new Set(visibleOutcomes.map((outcome) => outcome.ordinal));
+  const detachedAttempts = [...attempts].filter(([ordinal]) => !visibleOrdinals.has(ordinal));
+  const idPrefix = useId().replace(/:/g, '');
+  const windowHeadingId = `${idPrefix}-window`;
+  const effectsHeadingId = `${idPrefix}-effects`;
+  const windowHeading = useRef<HTMLHeadingElement | null>(null);
+  const outcomeTargets = useRef(new Map<string, HTMLLIElement>());
+  const attemptTargets = useRef(new Map<string, HTMLElement>());
+  const focusIntent = useRef<FocusIntent | undefined>(undefined);
+  const restoreFailureOrdinal = useRef<string | undefined>(undefined);
+
+  const outcomeTargetId = (ordinal: string) => `${idPrefix}-outcome-${stableToken(ordinal)}`;
+  const outcomeLabelId = (ordinal: string) => `${idPrefix}-outcome-label-${stableToken(ordinal)}`;
+  const attemptTargetId = (ordinal: string) => `${idPrefix}-attempt-${stableToken(ordinal)}`;
+
+  function captureOrigin(fallback: HTMLElement) {
+    const active = document.activeElement;
+    return active instanceof HTMLElement && active !== document.body && fallback.contains(active) ? active : fallback;
+  }
+
+  function beginWindowAction(callback: () => void, origin: HTMLElement) {
+    const element = captureOrigin(origin);
+    restoreFailureOrdinal.current = undefined;
+    focusIntent.current = { kind: 'window', origin: element, owner: element };
+    callback();
+  }
+
+  function beginRestore(ordinal: string, callback: () => void, origin: HTMLElement) {
+    const element = captureOrigin(origin);
+    restoreFailureOrdinal.current = ordinal;
+    focusIntent.current = { kind: 'restore', ordinal, origin: element, owner: element };
+    callback();
+  }
+
+  useEffect(() => {
+    function trackFocus(event: FocusEvent) {
+      const intent = focusIntent.current;
+      const target = event.target;
+      if (!intent || !(target instanceof HTMLElement) || target === document.body) return;
+      if (intent.origin === target || intent.owner === target) return;
+      focusIntent.current = undefined;
+    }
+
+    document.addEventListener('focusin', trackFocus);
+    return () => document.removeEventListener('focusin', trackFocus);
+  }, []);
+
+  useEffect(() => {
+    const intent = focusIntent.current;
+    if (!intent) return;
+
+    if (intent.kind === 'window') {
+      if (!state) return;
+      const stage =
+        state.read === 'loading'
+          ? 'window:loading'
+          : `window:${state.read}:${state.operation?.id ?? ''}:${state.cursor ?? ''}`;
+      if (intent.stage !== stage) {
+        const target = windowHeading.current;
+        if (!target) return;
+        intent.stage = stage;
+        intent.owner = target;
+        target.focus({ preventScroll: true });
+      }
+      if (state.read !== 'loading') focusIntent.current = undefined;
+      return;
+    }
+
+    const attempt = attempts.get(intent.ordinal);
+    if (state?.preparing === intent.ordinal) {
+      if (intent.stage !== 'preparing') {
+        const target = outcomeTargets.current.get(intent.ordinal);
+        if (!target) return;
+        intent.stage = 'preparing';
+        intent.owner = target;
+        target.focus({ preventScroll: true });
+      }
+      return;
+    }
+
+    if (attempt) {
+      const stage = `attempt:${attempt.status}:${attempt.result ? 'result' : ''}`;
+      if (intent.stage !== stage) {
+        const target = attemptTargets.current.get(intent.ordinal) ?? outcomeTargets.current.get(intent.ordinal);
+        if (!target) return;
+        intent.stage = stage;
+        intent.owner = target;
+        target.focus({ preventScroll: true });
+      }
+      if (attempt.status !== 'sending') focusIntent.current = undefined;
+      return;
+    }
+
+    if (intent.stage === 'preparing') {
+      const stage = `outcome:${state?.failure ?? 'settled'}`;
+      if (intent.stage !== stage) {
+        const target = outcomeTargets.current.get(intent.ordinal);
+        if (!target) return;
+        intent.stage = stage;
+        intent.owner = target;
+        target.focus({ preventScroll: true });
+      }
+      focusIntent.current = undefined;
+    }
+  });
+
+  function renderAttempt(ordinal: string, attempt: UndoAttempt) {
+    const headingId = attemptTargetId(ordinal);
+    return (
+      <section
+        key={ordinal}
+        className="min-w-0 max-w-full space-y-2 [overflow-wrap:anywhere]"
+        aria-labelledby={headingId}
+      >
+        <h3
+          id={headingId}
+          ref={(node) => {
+            if (node) attemptTargets.current.set(ordinal, node);
+            else attemptTargets.current.delete(ordinal);
+          }}
+          tabIndex={-1}
+          className="text-lg font-semibold [overflow-wrap:anywhere]"
+        >
+          {m.library_bulk_undo_restore_attempts()} · <code className="break-all">{ordinal}</code> ·{' '}
+          <code className="break-all">{attempt.command.subjectId}</code>
+        </h3>
+        {attempt.status === 'sending' ? (
+          <p role="status">{m.library_bulk_undo_sending()}</p>
+        ) : attempt.status === 'uncertain' ? (
+          <>
+            <p role="status">{m.library_bulk_undo_uncertain()}</p>
+            <EntryUndoForm
+              undo={attempt.command}
+              retry
+              locale={locale}
+              returnTo={href}
+              csrfToken={attempt.headers.get('x-csrf-token')}
+              disabled={busy || !writeAvailable}
+              onSubmit={(event) => {
+                event.preventDefault();
+                beginRestore(ordinal, () => onRestore(ordinal, true), event.currentTarget);
+              }}
+            />
+          </>
+        ) : null}
+        {attempt.result && <EntryRestoreFeedback restore={attempt.result} locale={locale} />}
+        {attempt.result?.ok && <p role="status">{m.library_bulk_undo_restored()}</p>}
+      </section>
+    );
+  }
+
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-4 py-8 [overflow-wrap:anywhere]">
       <h1 className="text-2xl font-semibold">{m.library_bulk_undo_title()}</h1>
@@ -56,7 +209,7 @@ export function BulkOperationUndoView({
           type="button"
           className="min-h-11 underline"
           disabled={!authorized || state?.read === 'loading' || busy}
-          onClick={onRead}
+          onClick={(event) => beginWindowAction(onRead, event.currentTarget)}
         >
           {m.managed_refresh()}
         </button>
@@ -64,7 +217,7 @@ export function BulkOperationUndoView({
           type="button"
           className="min-h-11 underline"
           disabled={!authorized || state?.read === 'loading' || busy || !state?.previous}
-          onClick={onPrevious}
+          onClick={(event) => beginWindowAction(onPrevious, event.currentTarget)}
         >
           {m.library_window_previous()}
         </button>
@@ -72,121 +225,161 @@ export function BulkOperationUndoView({
           type="button"
           className="min-h-11 underline"
           disabled={!authorized || state?.read === 'loading' || busy}
-          onClick={onFirst}
+          onClick={(event) => beginWindowAction(onFirst, event.currentTarget)}
         >
           {m.library_window_first()}
         </button>
         {state?.readRetry && (
-          <button type="button" className="min-h-11 underline" disabled={!authorized || busy} onClick={onRetryRead}>
+          <button
+            type="button"
+            className="min-h-11 underline"
+            disabled={!authorized || busy}
+            onClick={(event) => beginWindowAction(onRetryRead, event.currentTarget)}
+          >
             {m.library_window_retry()}
           </button>
         )}
-        {state?.page?.next && (
-          <button type="button" className="min-h-11 underline" disabled={!authorized || busy} onClick={onMore}>
+        {state?.read === 'ready' && state.page?.next && (
+          <button
+            type="button"
+            className="min-h-11 underline"
+            disabled={!authorized || busy}
+            onClick={(event) => beginWindowAction(onMore, event.currentTarget)}
+          >
             {m.bulk_operation_more()}
           </button>
         )}
       </nav>
       {state?.failure && <p role="status">{readMessage(state.failure)}</p>}
-      {operation && (
-        <>
-          <p>
-            <code>{operation.id}</code>
-          </p>
-          <dl className="space-y-2">
-            <dt>{m.bulk_operation_phase()}</dt>
-            <dd>{operation.phase}</dd>
-            <dt>{m.bulk_operation_deadline()}</dt>
-            <dd>
-              <time dateTime={operation.expiresAt}>{operation.expiresAt}</time>
-            </dd>
-            <dt>{m.bulk_operation_results_deadline()}</dt>
-            <dd>
-              <time dateTime={operation.resultsExpireAt}>{operation.resultsExpireAt}</time>
-            </dd>
-          </dl>
-          {operation.action !== 'remove_from_library' ? (
-            <p>{m.library_bulk_undo_other_action()}</p>
-          ) : (
-            <section aria-label={m.library_bulk_undo_native_effects()}>
-              <h2 className="text-xl font-semibold">{m.library_bulk_undo_native_effects()}</h2>
-              <p className="text-sm text-muted-foreground">{m.bulk_operation_results()}</p>
-              {state?.page?.outcomes.length === 0 && <p>{m.bulk_operation_empty_page()}</p>}
-              <ul className="space-y-4">
-                {state?.page?.outcomes.map((outcome) => {
-                  const attempt = attempts.get(outcome.ordinal);
-                  const operand = undoOperand(operation, outcome);
-                  return (
-                    <li key={outcome.ordinal} className="space-y-2">
-                      <p>
-                        <code>{outcome.subjectId}</code>
-                        {' · '}
-                        {m.bulk_operation_value({ value: outcome.state })}
-                        {outcome.reason && <> · {m.bulk_operation_value({ value: outcome.reason })}</>}
-                      </p>
-                      {outcome.deletion && (
-                        <p>
-                          {m.library_bulk_undo_deadline()}{' '}
-                          <time dateTime={outcome.deletion.restoreUntil}>{outcome.deletion.restoreUntil}</time>
+      <section className="min-w-0 max-w-full space-y-4 [overflow-wrap:anywhere]" aria-labelledby={windowHeadingId}>
+        <h2
+          id={windowHeadingId}
+          ref={windowHeading}
+          tabIndex={-1}
+          className="text-xl font-semibold [overflow-wrap:anywhere]"
+        >
+          {m.bulk_operation_results()}
+        </h2>
+        {operation && (
+          <>
+            <p>
+              <code className="break-all">{operation.id}</code>
+            </p>
+            <dl className="space-y-2">
+              <dt>{m.bulk_operation_phase()}</dt>
+              <dd>{operation.phase}</dd>
+              <dt>{m.bulk_operation_deadline()}</dt>
+              <dd>
+                <time dateTime={operation.expiresAt}>{operation.expiresAt}</time>
+              </dd>
+              <dt>{m.bulk_operation_results_deadline()}</dt>
+              <dd>
+                <time dateTime={operation.resultsExpireAt}>{operation.resultsExpireAt}</time>
+              </dd>
+            </dl>
+            {operation.action !== 'remove_from_library' ? (
+              <p>{m.library_bulk_undo_other_action()}</p>
+            ) : (
+              <section
+                className="min-w-0 max-w-full space-y-4 [overflow-wrap:anywhere]"
+                aria-labelledby={effectsHeadingId}
+              >
+                <h3 id={effectsHeadingId} className="text-xl font-semibold">
+                  {m.library_bulk_undo_native_effects()}
+                </h3>
+                <p className="text-sm text-muted-foreground">{m.bulk_operation_results()}</p>
+                {state?.read === 'ready' && visibleOutcomes.length === 0 && <p>{m.bulk_operation_empty_page()}</p>}
+                <ul className="space-y-4">
+                  {visibleOutcomes.map((outcome) => {
+                    const attempt = attempts.get(outcome.ordinal);
+                    const operand = undoOperand(operation, outcome);
+                    const targetId = outcomeTargetId(outcome.ordinal);
+                    const labelId = outcomeLabelId(outcome.ordinal);
+                    const preparationFailure =
+                      state?.failure && restoreFailureOrdinal.current === outcome.ordinal && !attempt
+                        ? state.failure
+                        : undefined;
+                    return (
+                      <li
+                        key={outcome.ordinal}
+                        id={targetId}
+                        ref={(node) => {
+                          if (node) outcomeTargets.current.set(outcome.ordinal, node);
+                          else outcomeTargets.current.delete(outcome.ordinal);
+                        }}
+                        tabIndex={-1}
+                        aria-labelledby={labelId}
+                        className="min-w-0 max-w-full space-y-2 [overflow-wrap:anywhere]"
+                      >
+                        <p id={labelId}>
+                          <code className="break-all">{outcome.ordinal}</code>
+                          {' · '}
+                          <code className="break-all">{outcome.subjectId}</code>
+                          {' · '}
+                          {m.bulk_operation_value({ value: outcome.state })}
+                          {outcome.reason && <> · {m.bulk_operation_value({ value: outcome.reason })}</>}
                         </p>
-                      )}
-                      {state.preparing === outcome.ordinal ? (
-                        <p role="status">{m.library_bulk_undo_sending()}</p>
-                      ) : !attempt && operand && writeAvailable ? (
-                        <button
-                          type="button"
-                          className="min-h-11 underline"
-                          disabled={busy || !csrfToken}
-                          onClick={() => onRestore(outcome.ordinal)}
-                        >
-                          {m.editor_undo()}
-                        </button>
-                      ) : !attempt && outcome.deletion && !operand ? (
-                        <p>{m.library_bulk_undo_expired()}</p>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
-        </>
-      )}
-      {authorized && attempts.size ? (
+                        {outcome.deletion && (
+                          <p>
+                            {m.library_bulk_undo_deadline()}{' '}
+                            <time dateTime={outcome.deletion.restoreUntil}>{outcome.deletion.restoreUntil}</time>
+                          </p>
+                        )}
+                        {preparationFailure && <p>{readMessage(preparationFailure)}</p>}
+                        {state?.preparing === outcome.ordinal ? (
+                          <p role="status">{m.library_bulk_undo_sending()}</p>
+                        ) : attempt ? (
+                          renderAttempt(outcome.ordinal, attempt)
+                        ) : !attempt && operand && writeAvailable ? (
+                          <button
+                            type="button"
+                            className="min-h-11 underline"
+                            disabled={busy || !csrfToken}
+                            onClick={(event) =>
+                              beginRestore(outcome.ordinal, () => onRestore(outcome.ordinal), event.currentTarget)
+                            }
+                          >
+                            {m.editor_undo()}
+                          </button>
+                        ) : !attempt && outcome.deletion && !operand ? (
+                          <p>{m.library_bulk_undo_expired()}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+          </>
+        )}
+      </section>
+      {authorized && detachedAttempts.length ? (
         <section className="space-y-4" aria-label={m.library_bulk_undo_restore_attempts()}>
           <h2 className="text-xl font-semibold">{m.library_bulk_undo_restore_attempts()}</h2>
-          {[...attempts].map(([ordinal, attempt]) => (
-            <section key={ordinal} className="space-y-2" aria-label={attempt.command.subjectId}>
-              <p>
-                <code>{attempt.command.subjectId}</code>
-              </p>
-              {attempt.status === 'sending' ? (
-                <p role="status">{m.library_bulk_undo_sending()}</p>
-              ) : attempt.status === 'uncertain' && writeAvailable ? (
-                <>
-                  <p role="status">{m.library_bulk_undo_uncertain()}</p>
-                  <EntryUndoForm
-                    undo={attempt.command}
-                    retry
-                    locale={locale}
-                    returnTo={href}
-                    csrfToken={attempt.headers.get('x-csrf-token')}
-                    disabled={busy}
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      onRestore(ordinal, true);
-                    }}
-                  />
-                </>
-              ) : null}
-              {attempt.result && <EntryRestoreFeedback restore={attempt.result} locale={locale} />}
-              {attempt.result?.ok && <p role="status">{m.library_bulk_undo_restored()}</p>}
-            </section>
-          ))}
+          {detachedAttempts.map(([ordinal, attempt]) => renderAttempt(ordinal, attempt))}
         </section>
       ) : null}
     </main>
   );
+}
+
+type FocusIntent =
+  | {
+      kind: 'window';
+      origin: HTMLElement;
+      owner: HTMLElement;
+      stage?: string;
+    }
+  | {
+      kind: 'restore';
+      ordinal: string;
+      origin: HTMLElement;
+      owner: HTMLElement;
+      stage?: string;
+    };
+
+function stableToken(value: string) {
+  return [...value].map((character) => character.codePointAt(0)!.toString(16)).join('-') || 'empty';
 }
 
 function readMessage(state: string) {
