@@ -531,6 +531,10 @@ multi-value Analyze API in 4 KiB analyzed-text batches; an admitted value larger
 Cumulative UTF-16 offsets are mapped back to each input and token positions restart per value, so phrases stay within
 their original value. A 32 KiB current scan plus the 512-byte query limit needs at most nine requests per analyzer
 per Subject; each response keeps the 4,096-token cap and concurrency stays 16.
+Decision: the existing engine-analysis, current-text and disclosure-application tests are the minimal acceptance set
+for multi-value grouping, local offsets and positions, duplicate/empty values, batching and the invocation cache; no
+story is added because this interface change introduces no public state. Engine fixtures use OpenSearch's one-unit
+offset gap between array values.
 `cjk_bigram_v2` and `name_prefix` omit empty terms: an empty returned token is unavailable, since accepting it
 would let an empty prefix match every current name. This boundary rule does not reject empty normalized keys.
 The native CJK case independently re-reads current source text before the writer catches up, checks that retired

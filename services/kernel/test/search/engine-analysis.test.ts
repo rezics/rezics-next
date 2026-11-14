@@ -109,10 +109,10 @@ test('multi-value analysis restores each duplicate and empty value with local UT
           tokens: [
             { token: 'x', position: 5, start_offset: 0, end_offset: 1 },
             { token: 'fox', position: 6, start_offset: 1, end_offset: 3 },
-            { token: 'r', position: 9, start_offset: 6, end_offset: 7 },
-            { token: 'u', position: 10, start_offset: 7, end_offset: 8 },
-            { token: 'x', position: 20, start_offset: 9, end_offset: 10 },
-            { token: 'fox', position: 21, start_offset: 10, end_offset: 12 },
+            { token: 'r', position: 9, start_offset: 5, end_offset: 6 },
+            { token: 'u', position: 10, start_offset: 6, end_offset: 7 },
+            { token: 'x', position: 20, start_offset: 8, end_offset: 9 },
+            { token: 'fox', position: 21, start_offset: 9, end_offset: 11 },
           ],
         },
       };
