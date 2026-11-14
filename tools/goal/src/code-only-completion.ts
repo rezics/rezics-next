@@ -63,8 +63,7 @@ export function deliverCodeOnlyCompletion(path: string, settings = loadSettings(
            AND (substr(summary, 1, ?) = ? OR substr(summary, 1, ?) = ? OR substr(summary, 1, ?) = ?)
          ORDER BY id ASC LIMIT 1`,
       ).get(completionPrefix.length, completionPrefix, legacyPrefix.length, legacyPrefix,
-        plainLegacyPrefix.length, plainLegacyPrefix)
-        as { id: number; manager: string } | null;
+        plainLegacyPrefix.length, plainLegacyPrefix) as { id: number; manager: string } | null;
       // No time window: a committed native row resolves a restart before the local marker,
       // even after the ordinary inbox fold has expired or the manager has consumed the message.
       // The stable id prefix and legacy prefix resolve wording revisions and Goal transfers before retrying.
