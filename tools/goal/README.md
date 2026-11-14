@@ -3834,6 +3834,17 @@ integration, not rollout into an already queued client.
 
 ## Measurements and historical imports
 
+Registered native execution units participate in the existing hourly report without importing active work as
+historical worker attempts. The report follows exact subagent identities emitted by each registered rollout, verifies
+their native parent-thread records, and resolves each rollout through its native SQLite primary key. It observes at
+most 256 distinct sessions in one report and marks missing or incomplete evidence as unknown. Raw response-ledger
+records are deduplicated by response identity across copied parent/subagent history; an indexed managed-session lookup
+excludes overlap with managed attempt accounting. Cumulative native Goal token totals are never added.
+
+Native run observations retain their actual argv, source checkpoint and native exit, separate from current local
+source and accepted journeys. A missing old source measurement stays unknown. Product additions remain the existing
+integrated-source measure; an exit-zero check or active native Goal does not create an accepted-journey count.
+
 Records contain task/class/profile/pool, routing version and experiment, timing, steps, critical-path flag, input,
 cached and output tokens, before/after quota, outcome, first failure, escalation, consultation, fix round, diff size,
 changed files, host gate time and the fixed classifier version. Step classes are decision, read, edit, wait, check and

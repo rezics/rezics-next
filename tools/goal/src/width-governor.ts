@@ -14,10 +14,6 @@ import {
   type StoppedRecoveryReceivingAction,
 } from './stopped-action.ts';
 
-// Compatibility exports for synthetic callers; production reads its own loaded policy.
-export const WIDTH_WORKER_THRESHOLD = defaultPolicy.width.workerThreshold;
-export const WIDTH_BUCKET_MS = defaultPolicy.width.bucketMs;
-
 export const widthGovernorMigrations = [
   {
     module: 'width-governor',

@@ -24,6 +24,7 @@ import { WorkerStore, workerRecordEndedAtExpression, workerRecordEndedAtMigratio
 import { guardEndingCounts } from './guards.ts';
 import type { AttemptRecord } from './types.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import { nativeUnitReportLines } from './native-unit-report.ts';
 type ReportPolicy = ControlPolicy['hourlyReport'];
 
 export const PRODUCT_LINE_FILTER_VERSION = 'rezics-product-code-v3';
@@ -1020,6 +1021,7 @@ function buildHourlyEfficiencyReport(
       ? `Urgent worker starts / finishes in bucket (excluded from throughput): ${bucketSummary.urgentStarts} / ${bucketSummary.urgentFinishes}.`
       : 'Urgent worker starts / finishes in bucket: unknown (task or flow history unavailable).',
     workSummary(db, openWorkAvailable, policy),
+    ...nativeUnitReportLines(db, bucket),
     landingQueueAge(metrics, landingQueueAvailable),
     waitIdentities(metrics, waitsAvailable, policy),
     checkWaitLine,
