@@ -224,7 +224,12 @@ test('status shows checks used per running attempt', async () => {
     expect(admitWorkerCheckHostRun({ directory: budget, limit: 2 })).toEqual({ ok: true, used: 1, stamp: '1' });
     const output: string[] = [];
     const code = await runWorkerCommand('status', [task.id], {
-      settings: { stateDirectory: directory.path, mainCheckout: directory.path, integrationBranch: 'dev' } as Settings,
+      settings: {
+        stateDirectory: directory.path,
+        mainCheckout: directory.path,
+        integrationBranch: 'dev',
+        integration: { supermanager: 'fixture' },
+      } as Settings,
       tasks: { settings: { stateDirectory: directory.path }, store: live } as unknown as WorkerTasks,
       store: live,
       env: {},
