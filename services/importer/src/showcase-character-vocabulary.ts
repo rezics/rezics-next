@@ -298,11 +298,14 @@ function emptyBindings(): SourceVocabularyBindings {
 }
 
 function adoptedValues(read: unknown, property: string): string[] {
-  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
-    .subject?.statements?.[property];
+  const statements = (read as {
+    subject?: { statements?: Record<string, { rank?: string; value?: { content?: unknown } }[]> };
+  }).subject?.statements?.[property];
   if (!Array.isArray(statements)) return [];
   return statements.flatMap((statement) =>
-    typeof statement.value?.content === 'string' ? [statement.value.content] : [],
+    (statement.rank === 'normal' || statement.rank === 'preferred') && typeof statement.value?.content === 'string'
+      ? [statement.value.content]
+      : [],
   );
 }
 

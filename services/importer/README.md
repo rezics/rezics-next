@@ -161,6 +161,8 @@ Decision: Keep source-specific reviewed Schemes and Concepts, independently adop
 
 Decision: Only a reviewed-subject 404 is treated as an absent binding; authorization refusals and other read failures stop the import before dependent work tags can publish.
 
+Decision: Character trait, appearance-role and blood-type readback counts only `normal` or `preferred` native statements and scans every value; a deprecated-only URI, `skos:inScheme` membership or `skos:broader` edge withholds only dependent bindings, preserving current siblings for unchanged-source recovery.
+
 VNDB weights need the exact current Kana `/vn` response for the same selected work/tag, retaining decimal rating, endpoint and response digest. Exclude user IDs, notes and votes; COPY aggregates never supply weights or statistics. Character traits and appearances use the exact selected rows, source-supported parents and separate taxonomy Schemes. `lie=true`, unsupported role codes, unavailable parents or missing current identities cannot fabricate shared Concepts or memberships. Preserve VNDB spoiler levels and character roles as distinct qualifiers. The one mapper/publisher remains the shared vocabulary flow.
 
 ### Bangumi facts, books and sites
