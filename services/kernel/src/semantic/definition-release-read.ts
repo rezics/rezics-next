@@ -34,29 +34,38 @@ export async function readRelease(
   options: { composed?: boolean } = {},
 ): Promise<Release | null> {
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
-  const cached = releases.get(digest);
-  if (cached) return (await nativeSourceQuery(pool, releaseExists, { route: 0, digest })) ? cached : null;
-  const row = await nativeSourceQuery(pool, releaseRead, { route: 0, digest });
-  if (!row) return options.composed === false ? null : readComposedRelease(pool, digest);
-  const release = validated(row.body);
-  if (releaseDigest(release) !== digest) throw new Error('Stored definition release digest mismatch');
-  freeze(release);
-  releases.set(digest, release);
-  return release;
+  return definitionRead(pool, async (db) => {
+    const cached = releases.get(digest);
+    if (cached) return (await nativeSourceQuery(db, releaseExists, { route: 0, digest })) ? cached : null;
+    const row = await nativeSourceQuery(db, releaseRead, { route: 0, digest });
+    if (!row) return options.composed === false ? null : readComposedRelease(db, digest);
+    const release = validated(row.body);
+    if (releaseDigest(release) !== digest) throw new Error('Stored definition release digest mismatch');
+    freeze(release);
+    releases.set(digest, release);
+    return release;
+  });
 }
 
 export async function activeRelease(
   pool: Pool | CommandTransaction,
 ): Promise<{ digest: string; head: number; release: Release } | null> {
-  const active = await releasePointer.run(pool, { route: 0 });
-  if (!active) return null;
-  const release = releases.get(active.digest) ?? (await readRelease(pool, active.digest));
-  if (!release) throw new Error('Active definition release is missing');
-  return { ...active, release };
+  return definitionRead(pool, async (db) => {
+    const active = await releasePointer.run(db, { route: 0 });
+    if (!active) return null;
+    const release = releases.get(active.digest) ?? (await readRelease(db, active.digest));
+    if (!release) throw new Error('Active definition release is missing');
+    return { ...active, release };
+  });
 }
 
 type Layer = { digest: string; release: Release };
 type Db = Pool | CommandTransaction;
+/** Pool reads inherit one deadline and snapshot; caller-owned transactions and clients keep their custody. */
+function definitionRead<T>(db: Db, read: (client: Db) => Promise<T>, deadline?: number): Promise<T> {
+  return db instanceof Pool ? withReadTransaction(db, read, deadline) : read(db);
+}
+
 /** Extension bodies by digest; a body embeds its Context and is immutable. */
 const extensions = new Map<string, Extension>();
 /** Composed releases by their own digest, and the digest each (parent, extension) pair composes to. */
@@ -90,8 +99,10 @@ async function loadExtension(db: Db, route: number, context: string, digest: str
 export async function readPublishedExtension(db: Db, context: string, digest: string): Promise<Extension | null> {
   const route = contextRoute(context);
   if (route === null || DIGEST.exec(digest)?.[0] !== digest) return null;
-  if (context !== GLOBAL_CONTEXT && !(await readCommunity.run(db, { route, context_id: context }))) return null;
-  return loadExtension(db, route, context, digest);
+  return definitionRead(db, async (client) => {
+    if (context !== GLOBAL_CONTEXT && !(await readCommunity.run(client, { route, context_id: context }))) return null;
+    return loadExtension(client, route, context, digest);
+  });
 }
 
 /** Current availability and head are point probes; the immutable body is read once per digest per process. */
@@ -100,22 +111,27 @@ export async function activeExtension(
   context: string,
 ): Promise<{ digest: string; head: number; extension: Extension } | null> {
   const route = contextRoute(context);
-  if (route === null || (context !== GLOBAL_CONTEXT && !(await readCommunity.run(db, { route, context_id: context }))))
-    throw new ProblemError('not_found');
-  if (context !== GLOBAL_CONTEXT && !(await readContextOwner.run(db, { route, context_id: context })))
-    throw new ProblemError('not_found');
-  return storedActiveExtension(db, route, context);
+  if (route === null) throw new ProblemError('not_found');
+  return definitionRead(db, async (client) => {
+    if (context !== GLOBAL_CONTEXT && !(await readCommunity.run(client, { route, context_id: context })))
+      throw new ProblemError('not_found');
+    if (context !== GLOBAL_CONTEXT && !(await readContextOwner.run(client, { route, context_id: context })))
+      throw new ProblemError('not_found');
+    return storedActiveExtension(client, route, context);
+  });
 }
 
 /** Retained definition meaning/birth evidence, never current Context read eligibility. */
 export async function storedActiveExtension(db: Db, route: number, context: string) {
-  const active = await pointer.run(db, { route, context_id: context });
-  // A table function types its columns as nullable; the statement returns no row when there is no head.
-  if (!active || active.digest === null || active.head === null) return null;
-  const { digest, head } = active;
-  const extension = extensions.get(digest) ?? (await loadExtension(db, route, context, digest));
-  if (!extension) throw new Error('Active definition extension is missing');
-  return { digest, head, extension };
+  return definitionRead(db, async (client) => {
+    const active = await pointer.run(client, { route, context_id: context });
+    // A table function types its columns as nullable; the statement returns no row when there is no head.
+    if (!active || active.digest === null || active.head === null) return null;
+    const { digest, head } = active;
+    const extension = extensions.get(digest) ?? (await loadExtension(client, route, context, digest));
+    if (!extension) throw new Error('Active definition extension is missing');
+    return { digest, head, extension };
+  });
 }
 
 async function compose(db: Db, parent: Layer, digest: string, extension: Extension, persist: boolean): Promise<Layer> {
@@ -170,6 +186,7 @@ async function compose(db: Db, parent: Layer, digest: string, extension: Extensi
  * unchanged, so a warm request pays each Context's current availability and extension head probes.
  */
 export async function layeredRelease(db: Db, base: Layer, context: string, persist = false): Promise<Layer> {
+  if (db instanceof Pool && !persist) return definitionRead(db, (client) => layeredRelease(client, base, context));
   let layer = base;
   const global = await activeExtension(db, GLOBAL_CONTEXT);
   if (global) layer = await compose(db, layer, global.digest, global.extension, persist);
@@ -196,8 +213,8 @@ export async function effectiveRelease(
     const layer = await layeredRelease(db, active, context, persist);
     return { ...active, digest: layer.digest, release: layer.release };
   };
-  if (deadline === undefined || persist) return resolve(pool);
-  return withReadTransaction(pool, (client) => resolve(client), deadline);
+  if (persist) return resolve(pool);
+  return definitionRead(pool, resolve, deadline);
 }
 
 /** The Context whose extension a statement on `property` would use, when the property is a Context term. */
@@ -215,36 +232,38 @@ export function baseOf(digest: string): string {
 
 /** Resolve a stored composed digest again, in a process that has not composed it yet. */
 export async function readComposedRelease(db: Db, digest: string): Promise<Release | null> {
-  const row = await composite.run(db, { digest });
-  if (!row) return null;
-  const parent = await readRelease(db, row.parent_digest);
-  if (!parent) return null;
-  const context = row.extension_context_id;
-  if (context !== GLOBAL_CONTEXT) {
-    if (!(await readContextOwner.run(db, { route: row.extension_route, context_id: context }))) return null;
-    // A warm body is not current authority. Retain the current communal extension; an older private body
-    // needs its actual live source, even while physical minimization is paused.
-    const eligible = await db.query(
-      `SELECT 1 FROM semantic.context_extension e WHERE e.route=$1 AND e.context_id=$2 AND e.digest=$3 AND (
+  return definitionRead(db, async (client) => {
+    const row = await composite.run(client, { digest });
+    if (!row) return null;
+    const parent = await readRelease(client, row.parent_digest);
+    if (!parent) return null;
+    const context = row.extension_context_id;
+    if (context !== GLOBAL_CONTEXT) {
+      if (!(await readContextOwner.run(client, { route: row.extension_route, context_id: context }))) return null;
+      // A warm body is not current authority. Retain the current communal extension; an older private body
+      // needs its actual live source, even while physical minimization is paused.
+      const eligible = await client.query(
+        `SELECT 1 FROM semantic.context_extension e WHERE e.route=$1 AND e.context_id=$2 AND e.digest=$3 AND (
         EXISTS (SELECT 1 FROM semantic.context_extension_head(e.route,e.context_id) h WHERE h.digest=e.digest)
         OR EXISTS (SELECT 1 FROM editorial.write_basis b JOIN access.account a
           ON a.route=((get_byte(uuid_send(b.principal_id),10)*256)+get_byte(uuid_send(b.principal_id),11))
           AND a.account_id=b.principal_id AND a.state='active' AND NOT a.authn_fenced
           WHERE b.partition_no=e.route/16 AND b.transaction_id=e.recorded_transaction_id AND b.principal_kind='account'))`,
-      [row.extension_route, context, row.extension_digest],
-    );
-    if (!eligible.rowCount) return null;
-  }
-  const cached = composed.get(digest);
-  if (cached) return cached;
-  const extension =
-    extensions.get(row.extension_digest) ??
-    (await loadExtension(db, row.extension_route, context, row.extension_digest));
-  if (!extension) return null;
-  const release = applyExtension(parent, extension);
-  if (releaseDigest(release) !== digest) throw new Error('Stored composed release digest mismatch');
-  freeze(release);
-  composed.set(digest, release);
-  bases.set(digest, bases.get(row.parent_digest) ?? row.parent_digest);
-  return release;
+        [row.extension_route, context, row.extension_digest],
+      );
+      if (!eligible.rowCount) return null;
+    }
+    const cached = composed.get(digest);
+    if (cached) return cached;
+    const extension =
+      extensions.get(row.extension_digest) ??
+      (await loadExtension(client, row.extension_route, context, row.extension_digest));
+    if (!extension) return null;
+    const release = applyExtension(parent, extension);
+    if (releaseDigest(release) !== digest) throw new Error('Stored composed release digest mismatch');
+    freeze(release);
+    composed.set(digest, release);
+    bases.set(digest, bases.get(row.parent_digest) ?? row.parent_digest);
+    return release;
+  });
 }

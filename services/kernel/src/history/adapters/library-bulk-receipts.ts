@@ -9,7 +9,6 @@ import {
 } from '../../command/command.ts';
 import { nativeReceiptKeyCandidates } from '../../command/receipt-key.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
-import type { TargetEvidence } from '../../library/bulk-contract.ts';
 import type {
   HistoryArtifact,
   HistoryBarrier,
@@ -36,14 +35,22 @@ type SourceRow = Readonly<{
   target: Record<string, unknown>;
   receipt: LibraryBulkReceiptLocator;
   state: string;
-  evidence: TargetEvidence | null;
+  evidence: unknown;
 }>;
 type CoreReceipt = Readonly<{
   idempotencyKey: string;
   digest: Buffer;
   transactionId: string | null;
   payloadState: 'present' | 'minimized';
-  response: TargetEvidence | null;
+  response: unknown;
+}>;
+type LibraryBulkReceiptEvidence = Readonly<{
+  operationId: string;
+  ordinal: string;
+  sourceDigest: string;
+  receipt: LibraryBulkReceiptLocator;
+  transactionId: string | null;
+  outcome: 'applied' | 'no_effect' | 'conflict' | 'denied' | 'failed' | 'cancelled';
 }>;
 type DispositionBinding = Readonly<{
   source: LibraryBulkReceiptBinding;
@@ -53,6 +60,61 @@ type DispositionBinding = Readonly<{
 }>;
 
 const dispositions = new WeakMap<LibraryBulkReceiptDisposition, DispositionBinding>();
+const terminalOutcomes: ReadonlySet<string> = new Set([
+  'applied',
+  'no_effect',
+  'conflict',
+  'denied',
+  'failed',
+  'cancelled',
+]);
+
+function isTerminalOutcome(value: unknown): value is LibraryBulkReceiptEvidence['outcome'] {
+  return typeof value === 'string' && terminalOutcomes.has(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function receiptEvidence(value: unknown): LibraryBulkReceiptEvidence | null {
+  if (!isRecord(value) || !isRecord(value.receipt)) return null;
+  const operationId = value.operationId;
+  const ordinal = value.ordinal;
+  const sourceDigest = value.sourceDigest;
+  const transactionId = value.transactionId;
+  const outcome = value.outcome;
+  const receipt = value.receipt;
+  if (
+    typeof operationId !== 'string' ||
+    typeof ordinal !== 'string' ||
+    typeof sourceDigest !== 'string' ||
+    (transactionId !== null && typeof transactionId !== 'string') ||
+    !isTerminalOutcome(outcome) ||
+    typeof receipt.partition !== 'number' ||
+    typeof receipt.principalId !== 'string' ||
+    receipt.principalKind !== 'account' ||
+    receipt.commandKind !== LIBRARY_BULK_TARGET_COMMAND_KIND ||
+    typeof receipt.key !== 'string' ||
+    typeof receipt.digest !== 'string'
+  )
+    return null;
+  return {
+    operationId,
+    ordinal,
+    sourceDigest,
+    receipt: {
+      partition: receipt.partition,
+      principalKind: 'account',
+      principalId: receipt.principalId,
+      commandKind: LIBRARY_BULK_TARGET_COMMAND_KIND,
+      key: receipt.key,
+      digest: receipt.digest,
+    },
+    transactionId,
+    outcome,
+  };
+}
 
 function validBinding(binding: LibraryBulkReceiptBinding): boolean {
   return (
@@ -143,11 +205,6 @@ function receiptToken(locator: HistoryArtifact['locator']): string {
   return `rk1.${locator.keyVersion}.${Buffer.from(locator.keyToken, 'hex').toString('base64url')}`;
 }
 
-function asEvidence(value: unknown): TargetEvidence | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-  return value as TargetEvidence;
-}
-
 async function readReceipt(
   tx: CommandTransaction,
   binding: LibraryBulkReceiptBinding,
@@ -180,14 +237,15 @@ async function readReceipt(
     keyVersion: version,
     keyToken: Buffer.from(token[2]!, 'base64url').toString('hex'),
   };
-  return { locator, receipt: { ...receipt, response: asEvidence(receipt.response) } };
+  return { locator, receipt };
 }
 
 function evidenceMatches(
-  evidence: TargetEvidence | null,
+  value: unknown,
   receipt: CoreReceipt,
   binding: LibraryBulkReceiptBinding,
-): evidence is TargetEvidence {
+): value is LibraryBulkReceiptEvidence {
+  const evidence = receiptEvidence(value);
   return (
     evidence !== null &&
     evidence.transactionId !== null &&
@@ -196,7 +254,8 @@ function evidenceMatches(
     evidence.operationId === binding.operationId &&
     evidence.ordinal === binding.ordinal &&
     evidence.sourceDigest === binding.sourceDigest &&
-    isDeepStrictEqual(evidence.receipt, binding.receipt) &&
+    isRecord(value) &&
+    isDeepStrictEqual(value.receipt, binding.receipt) &&
     Buffer.from(binding.receipt.digest, 'hex').equals(Buffer.from(receipt.digest))
   );
 }
@@ -231,7 +290,7 @@ async function readiness(
     )
   ).rows[0];
   if (!exact) return pending('library-bulk-receipt-source-unavailable');
-  const coreReceipt: CoreReceipt = { ...exact, response: asEvidence(exact.response) };
+  const coreReceipt: CoreReceipt = exact;
 
   if (coreReceipt.payloadState === 'minimized') {
     const sourceErasure = await sourceBarrier(tx, sourceAccount, sourceRoute);
@@ -247,7 +306,7 @@ async function readiness(
       : pending('library-bulk-receipt-minimized-source-proof-unavailable');
   }
 
-  const evidence = coreReceipt.response;
+  const evidence = receiptEvidence(coreReceipt.response);
   if (!evidence || evidence.transactionId === null || coreReceipt.transactionId === null)
     return pending('library-bulk-receipt-response-unavailable');
   const binding: LibraryBulkReceiptBinding = {
@@ -256,9 +315,9 @@ async function readiness(
     operationId: evidence.operationId,
     sourceDigest: evidence.sourceDigest,
     ordinal: evidence.ordinal,
-    receipt: evidence.receipt as LibraryBulkReceiptLocator,
+    receipt: evidence.receipt,
   };
-  if (!validBinding(binding) || !evidenceMatches(evidence, coreReceipt, binding))
+  if (!validBinding(binding) || !evidenceMatches(coreReceipt.response, coreReceipt, binding))
     return pending('library-bulk-receipt-response-unavailable');
   if (
     !nativeReceiptKeyCandidates(tx, LIBRARY_BULK_TARGET_COMMAND_KIND, sourceAccount, binding.receipt.key).includes(
@@ -268,10 +327,17 @@ async function readiness(
     return pending('library-bulk-receipt-locator-mismatch');
   const source = await sourceRow(tx, binding, 'share');
   if (!source) return pending('library-bulk-receipt-source-manifest-unavailable');
-  if (!evidenceMatches(source.evidence, coreReceipt, binding) && source.evidence !== null)
-    return pending('library-bulk-receipt-source-acknowledgement-changed');
-  if (source.evidence && source.state === source.evidence.outcome && isDeepStrictEqual(source.evidence, evidence))
+  if (source.evidence !== null) {
+    const sourceEvidence = receiptEvidence(source.evidence);
+    if (
+      !sourceEvidence ||
+      !evidenceMatches(source.evidence, coreReceipt, binding) ||
+      !isDeepStrictEqual(source.evidence, coreReceipt.response)
+    )
+      return pending('library-bulk-receipt-source-acknowledgement-changed');
+    if (source.state !== sourceEvidence.outcome) return pending('library-bulk-receipt-source-acknowledgement-changed');
     return { ready: true };
+  }
 
   const sourceErasure = await sourceBarrier(tx, sourceAccount, sourceRoute);
   if (

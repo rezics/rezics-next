@@ -44,15 +44,18 @@ export function sameAdoptionSelection(
   return sorted(left) === sorted(right);
 }
 
-/** Rebuild the live selection from candidate ranks only after the complete listing is available. */
+/** Rebuild the writable local selection only after the complete listing is available. */
 export function currentCandidateSelection(
   candidates: readonly { id: string; rank?: CandidateRank | null }[],
-): { candidate: string; rank: CandidateRank }[] {
+  mode: AdoptionMode = 'replace',
+): { candidate: string; rank: 'normal' | 'preferred' }[] {
+  if (mode !== 'replace') return [];
+  // Deprecated Global rows expose rejected competitors for review, not effective selections.
   return candidates
     .flatMap((candidate) =>
-      candidate.rank === null || candidate.rank === undefined
-        ? []
-        : [{ candidate: candidate.id, rank: candidate.rank }],
+      candidate.rank === 'normal' || candidate.rank === 'preferred'
+        ? [{ candidate: candidate.id, rank: candidate.rank }]
+        : [],
     )
     .sort((left, right) => left.candidate.localeCompare(right.candidate));
 }
@@ -136,7 +139,7 @@ export function safeCandidatePage(value: unknown): CandidatePage {
           // A continuation cannot certify the complete selection for a replacement write.
           ...(page.next === null
             ? {
-                selection: currentCandidateSelection(candidates),
+                selection: currentCandidateSelection(candidates, page.adoption.mode as AdoptionMode),
               }
             : {}),
         }
@@ -328,7 +331,7 @@ export async function readCurrentCandidatePages(
             ? {
                 mode: adoption.mode,
                 head: adoption.head,
-                selection: currentCandidateSelection(currentCandidates),
+                selection: currentCandidateSelection(currentCandidates, adoption.mode),
               }
             : null,
         };

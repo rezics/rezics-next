@@ -1,5 +1,6 @@
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { remaining, within } from '../access/deadline.ts';
+import type { NativeReadQueryConfig } from '../database/bounded-read-lifetime.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { AccessClient } from '../request/access.ts';
 
@@ -28,6 +29,7 @@ export async function withReadConnection<T>(
 ): Promise<T> {
   let connection: PoolClient | undefined;
   let active = false;
+  let activeQueries = 0;
   let uncertain = false;
   let failure: unknown;
   let retainedError: unknown;
@@ -52,22 +54,50 @@ export async function withReadConnection<T>(
         connection = raw;
         active = true;
         const client = Object.create(raw) as AccessClient;
-        client.query = ((query: QueryConfig | string, values?: unknown[]) => {
-          if (uncertain) return Promise.reject(failure);
+        client.query = ((query: QueryConfig | string, valuesOrCallback?: unknown, callbackArgument?: unknown) => {
+          const callback = typeof valuesOrCallback === 'function' ? valuesOrCallback : callbackArgument;
+          const completeWithCallback = (completion: Promise<unknown>) => {
+            if (typeof callback !== 'function') return completion;
+            void completion.then(
+              (result) => Reflect.apply(callback, undefined, [null, result]),
+              (error: unknown) => Reflect.apply(callback, undefined, [error]),
+            );
+            return undefined;
+          };
+          if (uncertain) return completeWithCallback(Promise.reject(failure));
           let dispatched = false;
           let settled = false;
           let nativeFailure: unknown;
-          const statement = typeof query === 'string' ? { text: query, values: values ?? [] } : query;
-          return within(deadline, () => {
+          const values = Array.isArray(valuesOrCallback) ? valuesOrCallback : undefined;
+          const statement: NativeReadQueryConfig =
+            typeof query === 'string'
+              ? { text: query, ...(values === undefined ? {} : { values }) }
+              : { ...query, ...(values === undefined ? {} : { values }) };
+          const completion = within(deadline, () => {
             const queryTimeout = remaining(deadline);
             dispatched = true;
-            return raw.query({ ...statement, query_timeout: queryTimeout }).then(
+            activeQueries += 1;
+            if (statement.query_timeout === undefined) statement.query_timeout = queryTimeout;
+            else if (statement.query_timeout > 0)
+              statement.query_timeout = Math.min(statement.query_timeout, queryTimeout);
+            let request: Promise<unknown>;
+            try {
+              request = Promise.resolve(Reflect.apply(raw.query, raw, [statement]));
+            } catch (error) {
+              settled = true;
+              activeQueries -= 1;
+              nativeFailure = error;
+              throw error;
+            }
+            return request.then(
               (result) => {
                 settled = true;
+                activeQueries -= 1;
                 return result;
               },
               (error) => {
                 settled = true;
+                activeQueries -= 1;
                 nativeFailure = error;
                 throw error;
               },
@@ -76,10 +106,11 @@ export async function withReadConnection<T>(
             if (dispatched && (!settled || !isSettledServerError(nativeFailure))) discard(error);
             throw error;
           });
+          return completeWithCallback(completion);
         }) as AccessClient['query'];
 
         try {
-          return await work({
+          const result = await work({
             client,
             get uncertain() {
               return uncertain;
@@ -87,6 +118,12 @@ export async function withReadConnection<T>(
             discard,
             retain,
           });
+          if (activeQueries > 0) {
+            const error = new Error('A content read returned with a native query still running');
+            discard(error);
+            throw error;
+          }
+          return result;
         } finally {
           active = false;
           connection = undefined;

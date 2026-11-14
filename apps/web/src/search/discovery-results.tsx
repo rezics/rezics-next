@@ -23,6 +23,7 @@ import {
 } from './discovery';
 import { DiscoveryPublicRow } from './discovery-public-rows';
 import { creditRoles } from './character-person';
+import { WorkContextView } from './work-context/view';
 
 function messageOptions(locale?: string) {
   return locale === undefined ? {} : { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -370,6 +371,9 @@ export function DiscoveryResults({
                 factDefinitions={factDefinitions}
                 subjectHrefFor={subjectHrefFor}
               />
+              {summary.creativeWork ? (
+                <WorkContextView context={hit.workContext} locale={locale} subjectHrefFor={subjectHrefFor} />
+              ) : null}
               {hit.creditMatch ? (
                 <CreditMatchRow
                   match={hit.creditMatch}

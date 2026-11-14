@@ -31,7 +31,7 @@ import {
   requireAccessDeadline,
 } from '../access/unavailable.ts';
 import { cataloguePageMetadata } from './catalogue-page-metadata/index.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError, type FieldError } from '../http/problem-error.ts';
 import { SESSION_HEADER } from '../http/request.ts';
 import { createBuiltinRuntime } from '../library/builtin-runtime.ts';
@@ -81,6 +81,11 @@ const peopleProducerCorrectionActions = [
 ] as const;
 const quotationTextProperties = ['schema:text', 'schema:abstract'] as const;
 const recipeInstructionProperties = ['schema:recipeInstructions'] as const;
+/** Page authority reads share the original deadline and retire timed-out native queries. */
+const pageReadLifetimeOptions = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  isUncertainSettledQueryError: (error: unknown) => classifyUnavailability(error) === 'deadline',
+};
 export const characterWorkType = 'wd:Q95074';
 export const appearanceProperty = 'schema:character';
 export const identityProperty = 'rezics:relatedCharacterIdentity';
@@ -472,7 +477,12 @@ async function readQuotationPageAuthority(deps: {
       { route: 0, id: PAGE_GLOBAL_CONTEXT },
       { pool: deps.pool, deadline: deps.deadline },
     );
-    const allowed = await withConnection(deps.pool, (client) => check(client));
+    const allowed = await withBoundedReadConnection(
+      deps.pool,
+      deps.deadline,
+      (client) => check(client),
+      pageReadLifetimeOptions,
+    );
     return {
       viewer,
       actions: [{ action: propose.action, operationId: propose.operationId, state: allowed ? 'allowed' : 'denied' }],
@@ -994,8 +1004,13 @@ async function readConfiguredPage(
   const captured = execution.capturedProfile;
   const includeEligibility = execution.includeEligibility;
   const active = await execution.run(async () => {
-    if (!(await withConnection(pool, (client) => execution.admit(client))))
-      throw new ProblemError(draftPreview ? 'forbidden' : 'not_found');
+    const admitted = await withBoundedReadConnection(
+      pool,
+      execution.deadline,
+      (client) => execution.admit(client),
+      pageReadLifetimeOptions,
+    );
+    if (!admitted) throw new ProblemError(draftPreview ? 'forbidden' : 'not_found');
     if (!captured) return application.activeProfile(pool);
     const readResource = {
       ...resource(),
@@ -1008,7 +1023,13 @@ async function readConfiguredPage(
         pool,
         deadline: execution.deadline,
       });
-      if (!(await withConnection(pool, (client) => readCheck(client)))) throw new ProblemError('forbidden');
+      const allowed = await withBoundedReadConnection(
+        pool,
+        execution.deadline,
+        (client) => readCheck(client),
+        pageReadLifetimeOptions,
+      );
+      if (!allowed) throw new ProblemError('forbidden');
     }
     const release = await ports.semantic.activeRelease(pool);
     const violations = validateProfileFilters(
@@ -1079,8 +1100,11 @@ async function readConfiguredPage(
       subjectTarget = target.subject;
       if (target.realm) {
         const types = await execution.run(() =>
-          withConnection(pool, (client) =>
-            ports.semantic.readItemTypes(deadlineClient(client, execution.deadline), [target.subject]),
+          withBoundedReadConnection(
+            pool,
+            execution.deadline,
+            (client) => ports.semantic.readItemTypes(deadlineClient(client, execution.deadline), [target.subject]),
+            pageReadLifetimeOptions,
           ),
         );
         const roots = new Set(['schema:Person', 'schema:Organization', 'schema:SoftwareApplication']);
@@ -1164,11 +1188,13 @@ async function readConfiguredPage(
               pool,
               deadline: execution.deadline,
             });
-            statementPropose = (await execution.run(() => withConnection(pool, (client) => check(client))))
+            statementPropose = (await execution.run(() =>
+              withBoundedReadConnection(pool, execution.deadline, (client) => check(client), pageReadLifetimeOptions),
+            ))
               ? 'allowed'
               : 'denied';
           } catch (error) {
-            if (!(error instanceof AccessUnavailableError)) throw error;
+            if (!classifyUnavailability(error)) throw error;
             statementPropose = 'unavailable';
           }
           return {

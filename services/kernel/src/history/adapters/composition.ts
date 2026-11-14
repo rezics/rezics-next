@@ -1,4 +1,4 @@
-import { installLibraryBulkReceiptDispositionPort } from '../application/library-bulk-receipts.ts';
+import { installLibraryBulkReceiptDispositionPort } from '../application/index.ts';
 import type { CommandTransaction } from '../../command/command.ts';
 import type { HistoryRegistry } from '../contract/index.ts';
 import { createLibraryBulkReceiptDispositionPort, libraryBulkReceiptReadiness } from './library-bulk-receipts.ts';

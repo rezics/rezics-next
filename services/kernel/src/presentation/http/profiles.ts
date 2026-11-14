@@ -3,7 +3,7 @@ import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
-import { withConnection } from '../../database/pool.ts';
+import { withBoundedReadConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
@@ -170,7 +170,8 @@ export function profileRoutes(
           ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
         });
         const profile = await admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          if (!(await withBoundedReadConnection(pool, job.deadline, (client) => check(client))))
+            throw new ProblemError('not_found');
           return presentationApplication().readProfile(pool, params.digest);
         });
         if (!profile) throw new ProblemError('not_found');
@@ -201,7 +202,8 @@ export function profileRoutes(
           ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
         });
         const active = await admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          if (!(await withBoundedReadConnection(pool, job.deadline, (client) => check(client))))
+            throw new ProblemError('not_found');
           return presentationApplication().activeProfile(pool);
         });
         if (!active) throw new ProblemError('not_found');
@@ -232,7 +234,8 @@ export function profileRoutes(
           ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
         });
         return admission.run('normal', job, async () => {
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          if (!(await withBoundedReadConnection(pool, job.deadline, (client) => check(client))))
+            throw new ProblemError('not_found');
           const opening = await readCurationOpening({
             viewer: actor.kind,
             readActive: () => presentationApplication().activeProfile(pool),
@@ -256,7 +259,8 @@ export function profileRoutes(
             },
           });
           if (opening.state === 'stale') throw new ProblemError('stale_editorial_head');
-          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          if (!(await withBoundedReadConnection(pool, job.deadline, (client) => check(client))))
+            throw new ProblemError('not_found');
           return opening;
         });
       },

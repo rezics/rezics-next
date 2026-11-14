@@ -53,7 +53,8 @@ export function createConsumptionStatisticsReads(deps: { pool: Pool }) {
         if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
       };
       alive();
-      return withReadingDashboardReadConnection(deps.pool, { deadline, signal }, async (client) => {
+      const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
+      return withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
         try {
           await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           alive();

@@ -614,6 +614,12 @@ epoch restarts these authority pages against a fresh vector while preserving the
 release. The final command locks and compares only those homes in ascending order on the catalogue command client;
 it holds them through the immutable descriptor write, root selection, publication-pointer CAS, receipt, event and
 COMMIT. It performs no per-target metadata/body reads and does no foreign checkout while those locks are held.
+
+Decision: authority advances settle current author authority and exact receipt replay before preparing and observing
+one exact target page outside the command checkout. The stage-locked command rechecks the pass, cursor, candidate,
+opening and staged page before retaining observations against that pass's fixed vector; stale concurrent pages
+conflict and cancellation keeps the stage-row serialization order.
+
 Ordinary partition log position is not an authority epoch; home movement changes its generation. The 4,096-home
 vector bounds topology work, not Book size. This fixed-home vector supersedes the proposed universal singleton lock.
 

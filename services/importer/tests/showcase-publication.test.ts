@@ -128,6 +128,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
   >();
   const synopsisDocuments = new Map<string, { document: string; digest: string; language: string }>();
   const accepted = new Set<string>();
+  const rejected = new Set<string>();
   type NativeRank = 'normal' | 'preferred' | 'deprecated';
   type AdoptionSelection = { candidate: string; rank: NativeRank }[];
   type AdoptionBody = {
@@ -350,16 +351,35 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       statement: graphUnrelatedStatement,
       head: null,
     });
-    accepted.add(graphParentCandidateId);
-    accepted.add(graphUnrelatedId);
+    rejected.add(graphUnrelatedId);
     seededAcceptedCandidates.add(graphParentCandidateId);
-    seededAcceptedCandidates.add(graphUnrelatedId);
+    const retainedGraphSelection: AdoptionSelection = (['normal', 'preferred'] as const).map((rank) => {
+      const id = randomUUID();
+      candidates.set(id, {
+        id,
+        source: null,
+        statement: {
+          ...graphUnrelatedStatement,
+          references: [
+            {
+              parts: [
+                {
+                  property: { id: 'schema:url' },
+                  value: { type: 'value', content: `https://fixture.test/parent/${rank}` },
+                },
+              ],
+            },
+          ],
+        },
+        head: null,
+      });
+      accepted.add(id);
+      seededAcceptedCandidates.add(id);
+      return { candidate: id, rank };
+    });
     adopted.set(`${tagConceptId}\0skos:broader`, {
       head: 2,
-      selection: [
-        { candidate: graphParentCandidateId, rank: 'deprecated' },
-        { candidate: graphUnrelatedId, rank: 'deprecated' },
-      ],
+      selection: retainedGraphSelection,
     });
     const seed = () =>
       seedShowcaseVndbReleases({
@@ -414,15 +434,20 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
                 (retainedAbstractCandidates.has(candidate.id) &&
                   id === workId &&
                   query.property === 'schema:abstract') ||
-                (candidate.id === graphUnrelatedId && id === tagConceptId && query.property === 'skos:broader') ||
+                ((candidate.id === graphUnrelatedId ||
+                  retainedGraphSelection.some((item) => item.candidate === candidate.id)) &&
+                  id === tagConceptId &&
+                  query.property === 'skos:broader') ||
                 (candidate.source?.external_id === graphParentBinding.path &&
                   id === tagConceptId &&
                   query.property === 'skos:broader'),
             )
             .map((candidate) => ({
               ...candidate,
-              decision: accepted.has(candidate.id) ? 'accepted' : null,
-              rank: adoption?.selection.find((selection) => selection.candidate === candidate.id)?.rank ?? null,
+              decision: rejected.has(candidate.id) ? 'rejected' : accepted.has(candidate.id) ? 'accepted' : null,
+              rank: rejected.has(candidate.id)
+                ? 'deprecated'
+                : adoption?.selection.find((selection) => selection.candidate === candidate.id)?.rank ?? null,
             }))
             .concat([{ id: randomUUID(), deleted: true }] as never),
           next: null,
@@ -431,7 +456,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       },
       async acceptReviewedCandidate(_id, candidateId, body, idempotencyKey) {
         acceptanceCalls.push({ candidateId, body, idempotencyKey });
-        if (refuseAcceptance) {
+        if (refuseAcceptance && candidateId !== graphParentCandidateId) {
           const error = new Error('refused') as Error & { status: number };
           error.status = acceptanceRefusalStatus;
           throw error;
@@ -451,6 +476,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
           selection: AdoptionSelection;
         };
         adoptionWrites.push({ subjectId: id, body: structuredClone(action) });
+        if (action.selection.some((item) => item.rank === 'deprecated' || rejected.has(item.candidate)))
+          throw Object.assign(new Error('Unsupported adoption selection'), { status: 422 });
         const key = `${id}\0${action.property}`;
         const next = { head: (adopted.get(key)?.head ?? 0) + 1, selection: action.selection };
         adopted.set(key, next);
@@ -649,8 +676,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       (write) => write.subjectId === tagConceptId && write.body.property === 'skos:broader',
     );
     const expectedGraphSelection: AdoptionSelection = [
+      ...retainedGraphSelection,
       { candidate: graphParentCandidateId, rank: 'normal' },
-      { candidate: graphUnrelatedId, rank: 'deprecated' },
     ].sort((left, right) => left.candidate.localeCompare(right.candidate));
     expect(graphReplacement?.body).toEqual({
       context: globalContext,
@@ -662,6 +689,12 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(adopted.get(`${tagConceptId}\0skos:broader`)?.selection).toEqual(expectedGraphSelection);
     expect(subjects.get(tagConceptId)!.statements['skos:broader']).toEqual(
       expectedGraphSelection.map(({ candidate }) => candidates.get(candidate)!.statement),
+    );
+    expect(acceptanceCalls.some((call) => call.candidateId === graphParentCandidateId)).toBe(true);
+    expect(publicReads.get(tagConceptId)?.subject?.statements?.['skos:broader']).toEqual(
+      expect.arrayContaining(
+        expectedGraphSelection.map(({ candidate, rank }) => expect.objectContaining({ id: candidate, rank })),
+      ),
     );
     const graphReadback = await review.reviewedCandidates(tagConceptId, {
       context: globalContext,
@@ -805,12 +838,12 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     journal = new ShowcaseJournal(journalPath);
     refuseAcceptance = false;
     const sourceSynopsis = synopses.find((candidate) => candidate.source?.external_id === '101')!;
+    const rejectedAbstractId = randomUUID();
     const retainedAbstractSelection: AdoptionSelection = [
       { candidate: randomUUID(), rank: 'normal' },
       { candidate: randomUUID(), rank: 'preferred' },
-      { candidate: randomUUID(), rank: 'deprecated' },
     ];
-    for (const selection of retainedAbstractSelection) {
+    for (const selection of [...retainedAbstractSelection, { candidate: rejectedAbstractId, rank: 'deprecated' }]) {
       const statement: BatchStatement = {
         ...sourceSynopsis.statement,
         value: {
@@ -828,8 +861,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         statement,
         head: null,
       });
-      accepted.add(selection.candidate);
-      seededAcceptedCandidates.add(selection.candidate);
+      if (selection.rank === 'deprecated') rejected.add(selection.candidate);
+      else {
+        accepted.add(selection.candidate);
+        seededAcceptedCandidates.add(selection.candidate);
+      }
       retainedAbstractCandidates.add(selection.candidate);
     }
     adopted.set(`${workId}\0schema:abstract`, { head: 1, selection: retainedAbstractSelection });
@@ -931,6 +967,13 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         ),
       ),
     );
+    expect(abstractReadback.candidates).toContainEqual(
+      expect.objectContaining({ id: rejectedAbstractId, decision: 'rejected', rank: 'deprecated' }),
+    );
+    expect(acceptanceCalls.some((call) => rejected.has(call.candidateId))).toBe(false);
+    expect(adoptionWrites.flatMap((write) => write.body.selection).some((item) => rejected.has(item.candidate))).toBe(
+      false,
+    );
     expect(accepted).toEqual(
       new Set([...acknowledged.map((entry) => entry.candidateId!), ...seededAcceptedCandidates]),
     );
@@ -1018,6 +1061,40 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(publicReads.get(membership.command.subject)?.subject?.statements?.['schema:genre']).toContainEqual(
       expect.objectContaining({ value: { type: 'value', content: tagConceptId } }),
     );
+
+    // A later rejection keeps the acknowledged proposal reviewable without selecting it again.
+    rejected.add(membershipCandidateId);
+    accepted.delete(membershipCandidateId);
+    const beforeRejectedRefresh = adoptionWrites.length;
+    const rejectedRefresh = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(rejectedRefresh.omissions).toContainEqual({
+      provider: 'vndb',
+      sourceKey: 'v2',
+      code: 'candidate-currently-rejected',
+    });
+    expect(adoptionWrites.slice(beforeRejectedRefresh).flatMap((write) => write.body.selection)).not.toContainEqual(
+      expect.objectContaining({ candidate: membershipCandidateId }),
+    );
+    expect(adopted.get(`${membership.command.subject}\0schema:genre`)?.selection).not.toContainEqual(
+      expect.objectContaining({ candidate: membershipCandidateId }),
+    );
+    const rejectedMembershipPage = await review.reviewedCandidates(membership.command.subject, {
+      context: globalContext,
+      property: 'schema:genre',
+    });
+    expect(rejectedMembershipPage.candidates).toContainEqual(
+      expect.objectContaining({ id: membershipCandidateId, decision: 'rejected', rank: 'deprecated' }),
+    );
+    rejected.delete(membershipCandidateId);
+    accepted.add(membershipCandidateId);
 
     omitSelectedSynopsisOperands = true;
     const absentCurrentSlot = await publishShowcase({

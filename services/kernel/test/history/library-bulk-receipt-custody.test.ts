@@ -61,7 +61,14 @@ const barrier: HistoryBarrier = {
   at: '2026-11-14T10:00:00.000Z',
 };
 
-function transaction(input: { sourceEvidence: TargetEvidence | null; sourceState: string; barrierVersion?: number }) {
+function transaction(input: {
+  sourceEvidence: TargetEvidence | null;
+  sourceState: string;
+  barrierVersion?: number;
+  sourceBarrier?: null;
+  receiptTransactionId?: string | null;
+  response?: unknown;
+}) {
   const source = {
     sourceDigest,
     request: { action: 'add_to_collection', collectionId },
@@ -73,14 +80,15 @@ function transaction(input: { sourceEvidence: TargetEvidence | null; sourceState
   const exactReceipt = {
     idempotencyKey: targetReceiptToken,
     digest: Buffer.from(receipt.digest, 'hex'),
-    transactionId,
+    transactionId: input.receiptTransactionId === undefined ? transactionId : input.receiptTransactionId,
     payloadState: 'present' as const,
-    response: evidence,
+    response: input.response === undefined ? evidence : input.response,
   };
   const tx = {
     async query(sql: string) {
       if (sql.includes('FROM core.receipt')) return { rows: [exactReceipt] };
       if (sql.includes('FROM library.bulk_operation')) return { rows: [source] };
+      if (sql.includes('FROM access.erasure') && input.sourceBarrier === null) return { rows: [] };
       if (sql.includes('FROM access.erasure'))
         return { rows: [{ version: input.barrierVersion ?? barrier.version, at: barrier.at }] };
       throw new Error(`Unexpected custody query: ${sql}`);
@@ -105,10 +113,39 @@ test('History accepts the exact committed source acknowledgement and tombstone-b
   );
   expect(tombstonedBeforeAck).toEqual({ ready: true });
 
+  const pendingConsumer = await libraryBulkReceiptReadiness(
+    transaction({ sourceEvidence: null, sourceState: 'pending', sourceBarrier: null }),
+    artifact,
+    barrier,
+  );
+  expect(pendingConsumer).toMatchObject({ ready: false });
+
   const changedBarrier = await libraryBulkReceiptReadiness(
     transaction({ sourceEvidence: null, sourceState: 'pending', barrierVersion: barrier.version + 1 }),
     artifact,
     barrier,
   );
   expect(changedBarrier).toMatchObject({ ready: false });
+
+  const changedAcknowledgement = await libraryBulkReceiptReadiness(
+    transaction({
+      sourceEvidence: { ...evidence, resultingMemberId: newId(targetRoute) },
+      sourceState: 'applied',
+    }),
+    artifact,
+    barrier,
+  );
+  expect(changedAcknowledgement).toMatchObject({ ready: false });
+
+  const missingTransaction = await libraryBulkReceiptReadiness(
+    transaction({
+      sourceEvidence: null,
+      sourceState: 'pending',
+      receiptTransactionId: null,
+      response: { ...evidence, transactionId: null },
+    }),
+    artifact,
+    barrier,
+  );
+  expect(missingTransaction).toMatchObject({ ready: false });
 });

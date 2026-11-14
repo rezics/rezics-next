@@ -1,11 +1,11 @@
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient } from '../access/authenticate.ts';
 import { permissionEvidenceDeadline } from '../access/permission.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccessClient, Actor, Resource } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -29,26 +29,12 @@ export type ConceptSchemeRead = Readonly<{
 
 /** One native home at a time, including transaction control under the fixed ceiling. */
 async function snapshot<T>(pool: Pool, route: number, deadline: number, read: (client: AccessClient) => Promise<T>) {
-  return within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition || partition.writeState === 'moved') throw new AccessUnavailableError('contention');
-        const result = await read(client);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+  return withBoundedReadOnlyTransaction(pool, deadline, async (connection) => {
+    const client = deadlineClient(connection, deadline);
+    const partition = await readPartition(client, partitionOf(route));
+    if (!partition || partition.writeState === 'moved') throw new AccessUnavailableError('contention');
+    return read(client);
+  });
 }
 
 /** Prove current readable Concept identity/type and effective Global inScheme truth.

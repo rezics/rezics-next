@@ -5,7 +5,7 @@ import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { problemSchema } from '../http/problem.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { createKnowledgeDiscoverySource } from './native-bindings.ts';
@@ -64,7 +64,8 @@ export function knowledgeDiscoveryRoutes<App>(
         eligibility: subjectReadEligibility({ route, id: params.id }),
       });
       return admission.run('normal', job, async () => {
-        if (!(await withConnection(options.pool, (client) => check(client)))) throw new ProblemError('not_found');
+        if (!(await withBoundedReadConnection(options.pool, job.deadline, (client) => check(client))))
+          throw new ProblemError('not_found');
         const access = options.access();
         if (!access || !options.tokens || !createKnowledgeDiscoverySource)
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });

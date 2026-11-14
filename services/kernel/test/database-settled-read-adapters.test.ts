@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { Pool, PoolClient, QueryConfig } from 'pg';
+import type { Pool, PoolClient, QueryArrayResult, QueryResult, QueryResultRow } from 'pg';
 import { AccessUnavailableError } from '../src/access/unavailable.ts';
 import { CommandUnavailableError } from '../src/command/command.ts';
 import {
@@ -26,9 +26,22 @@ import { withCopyReadConnection } from '../src/library/copy-read-connection.ts';
 import { withEntryPersonalReadSnapshot } from '../src/library/entry-personal-read-connection.ts';
 import { withFollowDiscoveryReadConnection } from '../src/library/follow-discovery-read-connection.ts';
 import { withQueryAccounting, type QueryAccounting } from '../src/database/pool.ts';
+import type { NativeReadQueryArrayConfig, NativeReadQueryConfig } from '../src/database/bounded-read-lifetime.ts';
+import { withReadConnection } from '../src/content/read-connection.ts';
+import { withReadingDashboardReadConnection } from '../src/library/reading-dashboard-read-connection.ts';
 
 const begin = 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY';
 const select = 'SELECT matrix';
+
+type FakeQueryResult = QueryResult<Record<string, unknown>> | QueryArrayResult<unknown[]>;
+
+function queryResult<Row extends QueryResultRow>(rows: Row[]): QueryResult<Row> {
+  return { command: 'SELECT', rowCount: rows.length, oid: 0, fields: [], rows };
+}
+
+function queryArrayResult<Row extends unknown[]>(rows: Row[]): QueryArrayResult<Row> {
+  return { command: 'SELECT', rowCount: rows.length, oid: 0, fields: [], rows };
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -37,18 +50,23 @@ function deferred<T>() {
 }
 
 function connection(partitionState: 'active' | 'moved' = 'active') {
-  const queries: QueryConfig[] = [];
+  const queries: NativeReadQueryConfig[] = [];
   const releases: (Error | boolean | undefined)[] = [];
   const released = deferred<void>();
   let checkouts = 0;
   const client = {
-    query(input: QueryConfig | string, values?: unknown[]) {
-      const config = typeof input === 'string' ? { text: input, ...(values === undefined ? {} : { values }) } : input;
+    query(input: NativeReadQueryConfig | string, values?: unknown[]) {
+      const config: NativeReadQueryConfig =
+        typeof input === 'string' ? { text: input, ...(values === undefined ? {} : { values }) } : input;
       queries.push(config);
       const text = config.text ?? '';
+      if (text === 'SELECT native array') {
+        const row: [string] = ['native'];
+        return Promise.resolve(queryArrayResult([row]));
+      }
       if (text.includes('FROM core.partition'))
-        return Promise.resolve({
-          rows: [
+        return Promise.resolve(
+          queryResult([
             {
               partitionNo: 1,
               node: 'node-a',
@@ -57,21 +75,21 @@ function connection(partitionState: 'active' | 'moved' = 'active') {
               epoch: 3,
               position: '9',
             },
-          ],
-        });
-      return Promise.resolve({ rows: [] });
+          ]),
+        );
+      return Promise.resolve(queryResult([]));
     },
     release(error?: Error | boolean) {
       releases.push(error);
       released.resolve();
     },
-  } as unknown as PoolClient;
+  } as PoolClient;
   const pool = {
     async connect() {
       checkouts += 1;
       return client;
     },
-  } as unknown as Pool;
+  } as Pool;
   return { pool, queries, releases, released: released.promise, checkouts: () => checkouts };
 }
 
@@ -352,6 +370,47 @@ test('settled read adapters preserve plain and snapshot modes with one accountin
   expect(accountedQueries).toEqual(physicalQueries);
 });
 
+test('settled read wrappers preserve native array rows and a stricter caller timeout', async () => {
+  const request: NativeReadQueryArrayConfig = {
+    text: 'SELECT native array',
+    values: ['route'],
+    rowMode: 'array',
+    query_timeout: 25,
+  };
+
+  const content = connection();
+  const contentRows = await withReadConnection(
+    content.pool,
+    Date.now() + 2_000,
+    async ({ client }) => (await client.query<[string]>(request)).rows,
+  );
+  expect(contentRows).toEqual([['native']]);
+  expect(content.queries[0]?.rowMode).toBe('array');
+  expect(content.queries[0]?.query_timeout).toBe(25);
+  expect(content.queries[0]?.values).toBe(request.values);
+  expect(content.queries[0]).not.toBe(request);
+  expect(request.query_timeout).toBe(25);
+
+  const dashboard = connection();
+  const dashboardRows = await withReadingDashboardReadConnection(
+    dashboard.pool,
+    { deadline: Date.now() + 2_000 },
+    async (client) => {
+      await client.query('BEGIN');
+      const rows = (await client.query<[string]>(request)).rows;
+      await client.query('COMMIT');
+      return rows;
+    },
+  );
+  expect(dashboardRows).toEqual([['native']]);
+  expect(dashboard.queries[1]?.rowMode).toBe('array');
+  expect(dashboard.queries[1]?.query_timeout).toBe(25);
+  expect(dashboard.queries[1]?.values).toBe(request.values);
+  expect(dashboard.queries[1]).not.toBe(request);
+  expect(request.query_timeout).toBe(25);
+  expect(dashboard.releases).toEqual([undefined]);
+});
+
 test('adapter options preserve owner deadline and settled PostgreSQL errors', async () => {
   let checkouts = 0;
   const expiredPool = {
@@ -359,7 +418,7 @@ test('adapter options preserve owner deadline and settled PostgreSQL errors', as
       checkouts += 1;
       throw new Error('expired checkout must not start');
     },
-  } as unknown as Pool;
+  } as Pool;
   const expired = await withManagedAdviceReadConnection(expiredPool, Date.now() - 1, async () => 'unused').catch(
     (error: unknown) => error,
   );
@@ -375,7 +434,7 @@ test('adapter options preserve owner deadline and settled PostgreSQL errors', as
       if (checkoutCount++ === 0) return lateCheckout.promise;
       return healthy.pool.connect();
     },
-  } as unknown as Pool;
+  } as Pool;
   const pending = withManagementReadConnection(recoveryPool, Date.now() + 20, async (client) => {
     await client.query(select);
     return 'too late';
@@ -399,18 +458,18 @@ test('adapter options preserve owner deadline and settled PostgreSQL errors', as
   const pool = {
     async connect() {
       return {
-        async query(input: QueryConfig | string) {
+        async query(input: NativeReadQueryConfig | string) {
           const sql = typeof input === 'string' ? input : (input.text ?? '');
           statements.push(sql);
           if (sql === 'SELECT rejected') throw serverFailure;
-          return { rows: [] };
+          return queryResult([]);
         },
         release(error?: Error | boolean) {
           releaseError = error;
         },
-      } as unknown as PoolClient;
+      } as PoolClient;
     },
-  } as unknown as Pool;
+  } as Pool;
   const settled = await withReportReadConnection(pool, Date.now() + 2_000, async (client) => {
     await client.query('SELECT rejected');
   }).catch((error: unknown) => error);

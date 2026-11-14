@@ -62,6 +62,9 @@ export const COMMAND_HISTORY_COVERAGE = Object.freeze({
     'library.entry.retention.purge',
     'content.board.watch',
     'content.watch.remove',
+    'library.collection.publication.begin',
+    'library.collection.publish-selected',
+    'library.collection.publication.activate',
   ]),
   missing: Object.freeze([
     'other command producer and consumer conversion',

@@ -34,6 +34,17 @@ export type ReportedYearSummary = ReportedYearCounts &
     currentness: Readonly<{ state: 'snapshot'; revision: string }>;
   }>;
 
+type ReportedYearSummaryReads = Readonly<{
+  summary(actor: Actor, year: number, deadline: number, signal?: AbortSignal): Promise<ReportedYearSummary>;
+  summary<T>(
+    actor: Actor,
+    year: number,
+    deadline: number,
+    signal: AbortSignal | undefined,
+    deliver: (value: ReportedYearSummary, encoded: string) => T,
+  ): Promise<T>;
+}>;
+
 type Head = {
   complete: boolean;
   ready: boolean;
@@ -109,7 +120,7 @@ function counts(row?: Bucket): ReportedYearCounts {
 
 /** Pure bounded read. The optional delivery callback encodes HTTP while final
  * authority and cancellation checks still apply; it cannot await more work. */
-export function createReportedYearSummaryReads(deps: { pool: Pool }) {
+export function createReportedYearSummaryReads(deps: { pool: Pool }): ReportedYearSummaryReads {
   return {
     async summary<T = ReportedYearSummary>(
       actor: Actor,
@@ -126,7 +137,8 @@ export function createReportedYearSummaryReads(deps: { pool: Pool }) {
         if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
       };
       alive();
-      return withReadingDashboardReadConnection(deps.pool, { deadline, signal }, async (client) => {
+      const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
+      return withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
         // Hold native lifecycle authority through response preparation. Source writers
         // already share this owner; this adds no maintenance or write effect.
         await client.query('BEGIN');

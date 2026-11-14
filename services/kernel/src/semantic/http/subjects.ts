@@ -35,7 +35,7 @@ import { proposeStatement } from '../candidate-proposal.ts';
 import { EditorialConflictError, SubjectNotFoundError } from '../contract/subject-errors.ts';
 import { PageCursorError } from '../page.ts';
 import type { Pool } from 'pg';
-import { withConnection } from '../../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction, withConnection } from '../../database/pool.ts';
 import { isRelationProperty, relationSlotForApi, SubjectInputError, type Item, type Snak } from '../item.ts';
 import { createSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
 import { DATA_TYPES, type DataType, type Release } from '@rezics/definitions';
@@ -1767,7 +1767,7 @@ function subjectRoutes(
         const route = routeOf(params.id);
         if (route === null || routeOf(params.candidate) !== route) throw new ProblemError('not_found');
         const located = await admission.run('normal', job, () =>
-          withConnection(pool, (client) =>
+          withBoundedReadConnection(pool, job.deadline, (client) =>
             readContributionLifecycleLocator.run(client, {
               route,
               subject_id: params.id,
@@ -1845,7 +1845,7 @@ function subjectRoutes(
         const route = routeOf(params.id);
         if (route === null || routeOf(params.candidate) !== route) throw new ProblemError('not_found');
         const located = await admission.run('normal', job, () =>
-          withConnection(pool, (client) =>
+          withBoundedReadConnection(pool, job.deadline, (client) =>
             readContributionLifecycleLocator.run(client, {
               route,
               subject_id: params.id,
@@ -3100,7 +3100,7 @@ function subjectRoutes(
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         const result = await admission.run('normal', job, () =>
-          withConnection(pool, async (client) => {
+          withBoundedReadOnlyTransaction(pool, job.deadline, async (client) => {
             const subject = await readVisibility.run(client, { route, subject_id: params.id });
             if (!subject || subject.visibility !== 'visible' || !(await check(client)))
               throw new ProblemError('not_found');

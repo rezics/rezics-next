@@ -6,7 +6,7 @@ import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { ACCESS_WORK_AXES, AccessWorkAccounting, EMPTY_ACCESS_WORK, type AccessWork } from '../access/work.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction, withQueryAccounting } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { authoritativeTimeValue, commandTime } from '../command/command.ts';
 import {
@@ -296,31 +296,34 @@ export class LeafNativeWork {
 
   async snapshot<T>(pool: Pool, route: number, read: (client: PoolClient) => Promise<T>): Promise<T> {
     return this.accounting.run('semantic.scope-leaf.checkout', { ...EMPTY_ACCESS_WORK, points: 1 }, () =>
-      withConnection(pool, async (client) => {
-        await this.transaction(client, 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const state = (
-            await this.query(client, home, { partition: partitionOf(route) }, { keys: 0, points: 1, rows: 1 })
-          )[0];
-          if (!state) throw new AccessUnavailableError('overloaded');
-          if (state.write_state === 'moved') throw new CommandUnavailableError('moved', partitionOf(route));
-          const value = await read(client);
-          await this.transaction(client, 'COMMIT');
-          return value;
-        } catch (error) {
-          // Cleanup is reserved with BEGIN; even budget failure must release the source.
-          try {
-            await client.query('ROLLBACK');
-          } catch (rollback) {
-            discardConnection(client, rollback as Error);
-          }
-          throw error;
-        }
-      }),
+      withQueryAccounting(
+        {
+          connection: (dispatch) => dispatch(),
+          query: (sql, _operands, dispatch) =>
+            sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' || sql === 'COMMIT'
+              ? this.transaction(sql, dispatch)
+              : dispatch(),
+        },
+        () =>
+          withBoundedReadOnlyTransaction(
+            pool,
+            this.deadline,
+            async (client) => {
+              const state = (
+                await this.query(client, home, { partition: partitionOf(route) }, { keys: 0, points: 1, rows: 1 })
+              )[0];
+              if (!state) throw new AccessUnavailableError('overloaded');
+              if (state.write_state === 'moved') throw new CommandUnavailableError('moved', partitionOf(route));
+              return read(client);
+            },
+            { deadlineError: () => new AccessUnavailableError('contention') },
+          ),
+      ),
     );
   }
-  private transaction(client: PoolClient, command: string): Promise<unknown> {
-    // BEGIN reserves a possible ROLLBACK as well; COMMIT is charged separately.
+  private transaction<T>(command: string, dispatch: () => Promise<T>): Promise<T> {
+    // The bounded lifetime owns transaction cleanup. BEGIN prepays its possible
+    // ROLLBACK; the query accounting hook charges COMMIT before native dispatch.
     return this.accounting.run(
       'semantic.scope-leaf.transaction',
       {
@@ -328,7 +331,11 @@ export class LeafNativeWork {
         points: command.startsWith('BEGIN') ? 2 : 1,
         bytes: Buffer.byteLength(command) + (command.startsWith('BEGIN') ? 8 : 0),
       },
-      () => client.query(command),
+      () => {
+        // The bounded client checked time before this accounting reservation.
+        if (Date.now() >= this.deadline) throw new AccessUnavailableError('contention');
+        return dispatch();
+      },
     );
   }
   anchor(client: PoolClient, route: number, subject: string) {

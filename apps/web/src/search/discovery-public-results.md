@@ -30,29 +30,24 @@ Missing current summaries or addresses make the whole page unavailable rather th
 
 ## Work discriminators
 
-Decision: Label supplied facts with the existing released property's localized name, preserving its exact item target
-and date precision; absent role metadata never makes a contributor an author or an unqualified date a release event.
+Decision: Discovery consumes the installed client's optional `workContext` union and displays it within each existing
+CreativeWork result. Its `kind` distinguishes a Work, Release or Recording. Missing context and a whole unavailable
+context are shown as unavailable; neither becomes an empty section or makes the admitted hit unusable.
 
-Search already supplies figures, aliases, descriptions, four selected fact properties (three values each), release
-list presentation, and Character/Person context. The result family keeps those features and its four-visible-fact cap.
-The existing definition metadata supplies property names without another request. A name is limited to 96 code points;
-each property is named once in the fact preview, and the selected date keeps its own property name and precision.
-The exact localized Subject title link remains the destination for additional facts. There are no new response fields,
-sorts, context caches, private overlays or per-hit reads. Search's existing reader and request retirement still governs
-the entire page, including these labels.
+Creators and relations retain each supplied property label as the role/relation identity. A statement's qualifiers stay
+with that statement. Item links use the disclosed current target ID and supplied labels; relations remain outgoing.
+Dates show the supplied property label and only the year, month and day components present in that value. `somevalue`,
+`novalue` and `unsupported` stay distinct. Empty, withheld, unsupported and unavailable sections have separate text.
+Overflow shows that more entries exist but supplies no link or inferred destination.
 
-The **qualified work-context seam is unavailable** on the current native contract. `search/hits.ts:Fact` carries only
-item, calendar date, quantity and code values. It cannot distinguish empty from withheld credits, represent explicit
-unknown/no-value dates, or carry detailed roles, credited-as wording, directed associations or overflow destinations.
-`discovery-http.ts` exposes only Character/Person `contexts`; Web cannot treat those as work credits or synthesize
-new wire fields. Native facts remain useful without claiming that missing context is empty or concealed.
+Search keeps native order, full result identity, summaries, descriptive facts and figures, Character/Person contexts,
+`creditMatch`, and private overlays. It adds no reads, Subject hydration, sorting, context cache or controller. Existing
+query replacement, current-reader retirement and ordinary Subject navigation continue to govern the complete result
+page and browser return.
 
-Search owns the producer handoff through its existing bounded discovery page, with Semantic retaining fact meaning:
-publish the smallest qualified creator/release projection with exact property/role, disclosed target identity and labels,
-directed work-versus-release association, original date precision/value state, explicit empty/withheld/unavailable state,
-and an admitted destination for overflow. Keep native order, match identity and currentness, with finite row/page budgets.
-The receiver must then add the qualified multi-kind navigation/return and retirement acceptance; it must not hydrate
-Subjects to work around this missing native projection.
+Fixture choice: Extend `search-work-context.test.tsx` through installed `createKernelClient` and `readDiscovery` with one
+same-title Work/Release/Recording page plus a replacement response; show current section/value states in the homonym
+story, with separate missing-field and whole-unavailable stories.
 
 The retained default Search path includes ready Collection, review and Space producers in the shared kind
 directory and current-page guard. Collection rows include native public curator/member context; their private

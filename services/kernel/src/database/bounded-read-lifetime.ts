@@ -1,6 +1,16 @@
-import type { PoolClient, QueryConfig } from 'pg';
+import type { PoolClient, QueryArrayConfig, QueryConfig } from 'pg';
 
 const begin = 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY';
+
+/** QueryConfig extensions for pg's runtime timeout and array-result options. */
+export type NativeReadQueryConfig<I = unknown[]> = QueryConfig<I> & {
+  query_timeout?: number;
+  rowMode?: 'array';
+};
+
+export type NativeReadQueryArrayConfig<I = unknown[]> = QueryArrayConfig<I> & {
+  query_timeout?: number;
+};
 
 export class BoundedReadDeadlineError extends Error {
   constructor() {
@@ -131,22 +141,34 @@ export function withBoundedReadLifetime<T>(
     before(deadline, deadlineError);
 
     const client = Object.create(raw) as PoolClient;
-    client.query = ((input: QueryConfig | string, values?: unknown[]) => {
+    client.query = ((input: NativeReadQueryConfig | string, valuesOrCallback?: unknown, callbackArgument?: unknown) => {
+      const callback = typeof valuesOrCallback === 'function' ? valuesOrCallback : callbackArgument;
+      const completeWithCallback = (completion: Promise<unknown>) => {
+        if (typeof callback !== 'function') return completion;
+        void completion.then(
+          (result) => Reflect.apply(callback, undefined, [null, result]),
+          (error: unknown) => Reflect.apply(callback, undefined, [error]),
+        );
+        return undefined;
+      };
       try {
         if (retired) throw retiredError();
         if (uncertain) throw uncertainty;
         before(deadline, deadlineError);
       } catch (error) {
-        return Promise.reject(error);
+        return completeWithCallback(Promise.reject(error));
       }
 
-      const config: QueryConfig =
-        typeof input === 'string' ? { text: input, ...(values === undefined ? {} : { values }) } : { ...input };
+      const queryValues = Array.isArray(valuesOrCallback) ? valuesOrCallback : undefined;
+      const config: NativeReadQueryConfig =
+        typeof input === 'string'
+          ? { text: input, ...(queryValues === undefined ? {} : { values: queryValues }) }
+          : { ...input, ...(queryValues === undefined ? {} : { values: queryValues }) };
       let timeout: number;
       try {
         timeout = before(deadline, deadlineError);
       } catch (error) {
-        return Promise.reject(error);
+        return completeWithCallback(Promise.reject(error));
       }
       if (config.query_timeout === undefined) config.query_timeout = timeout;
       else if (typeof config.query_timeout === 'number' && config.query_timeout > 0)
@@ -161,7 +183,7 @@ export function withBoundedReadLifetime<T>(
         before(deadline, deadlineError);
         dispatched = true;
         activeQueries += 1;
-        return Reflect.apply(raw.query, raw, [config]) as Promise<unknown>;
+        return Reflect.apply(raw.query, raw, [config]);
       });
       const observed = native.then(
         (result) => {
@@ -176,7 +198,7 @@ export function withBoundedReadLifetime<T>(
         },
       );
 
-      return until(observed, deadline, deadlineError).catch((error: unknown) => {
+      const completion = until(observed, deadline, deadlineError).catch((error: unknown) => {
         const mapped = mapError(error, options);
         const settledServerError = settled && isPostgresServerError(error);
         if (settledServerError) {
@@ -189,6 +211,7 @@ export function withBoundedReadLifetime<T>(
           discard(mapped);
         throw mapped;
       });
+      return completeWithCallback(completion);
     }) as PoolClient['query'];
 
     const run = async (): Promise<T> => {

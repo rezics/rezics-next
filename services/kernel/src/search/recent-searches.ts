@@ -158,7 +158,7 @@ export async function recentDisplay(
 }
 async function authorizeRead(d: RecentDependencies, actor: AccountActor, deadline: number) {
   const { accessCheck } = await import('../request/access.ts');
-  const { withConnection } = await import('../database/pool.ts');
+  const { withBoundedReadConnection } = await import('../database/pool.ts');
   const check = await accessCheck(
     d.access,
     actor,
@@ -166,7 +166,8 @@ async function authorizeRead(d: RecentDependencies, actor: AccountActor, deadlin
     { route: routeOf(actor.accountId)!, id: actor.accountId },
     { pool: d.pool, deadline },
   );
-  if (!(await withConnection(d.pool, (c) => check(c)))) throw new ProblemError('forbidden');
+  if (!(await withBoundedReadConnection(d.pool, deadline, (c) => check(c))))
+    throw new ProblemError('forbidden');
 }
 export async function listRecentSearches(
   d: RecentDependencies,
@@ -196,29 +197,22 @@ export async function listRecentSearches(
     after = [cursor.after[0], cursor.after[1]];
     epoch = cursor.epoch;
   }
-  const { withConnection } = await import('../database/pool.ts');
-  const page = await withConnection(d.pool, async (c) => {
-    await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const state = await c.query(
-        'SELECT revision FROM search.recent_search_state WHERE partition_no=$1 AND route=$2 AND account_id=$3',
-        keys(actor),
-      );
-      const current = state.rows[0]?.revision ?? 0;
-      if (epoch !== undefined && epoch !== current + 1) throw new ProblemError('stale_cursor');
-      const rows = await c.query(
-        `SELECT id, entry, last_used, revision, to_char(last_used AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_time FROM search.recent_search
-        WHERE partition_no=$1 AND route=$2 AND account_id=$3 AND expires_at>$4
-        AND ($5::timestamptz IS NULL OR (last_used,id)<($5,$6::uuid))
-        ORDER BY last_used DESC,id DESC LIMIT $7`,
-        [...keys(actor), now, after?.[0] ?? null, after?.[1] ?? null, limit + 1],
-      );
-      await c.query('COMMIT');
-      return { rows: rows.rows, revision: current as number };
-    } catch (error) {
-      await c.query('ROLLBACK');
-      throw error;
-    }
+  const { withBoundedReadOnlyTransaction } = await import('../database/pool.ts');
+  const page = await withBoundedReadOnlyTransaction(d.pool, deadline, async (c) => {
+    const state = await c.query(
+      'SELECT revision FROM search.recent_search_state WHERE partition_no=$1 AND route=$2 AND account_id=$3',
+      keys(actor),
+    );
+    const current = state.rows[0]?.revision ?? 0;
+    if (epoch !== undefined && epoch !== current + 1) throw new ProblemError('stale_cursor');
+    const rows = await c.query(
+      `SELECT id, entry, last_used, revision, to_char(last_used AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_time FROM search.recent_search
+      WHERE partition_no=$1 AND route=$2 AND account_id=$3 AND expires_at>$4
+      AND ($5::timestamptz IS NULL OR (last_used,id)<($5,$6::uuid))
+      ORDER BY last_used DESC,id DESC LIMIT $7`,
+      [...keys(actor), now, after?.[0] ?? null, after?.[1] ?? null, limit + 1],
+    );
+    return { rows: rows.rows, revision: current as number };
   });
   const selected = page.rows.slice(0, limit);
   const recentSearches: RecentSearch[] = [];

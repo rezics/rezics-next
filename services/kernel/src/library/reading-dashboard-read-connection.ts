@@ -1,5 +1,6 @@
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { within } from '../access/deadline.ts';
+import type { NativeReadQueryConfig } from '../database/bounded-read-lifetime.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 
@@ -66,30 +67,37 @@ export function withReadingDashboardReadConnection<T>(
           let committed = false;
           let uncertain = false;
           let cleaningUp = false;
+          let activeQueries = 0;
           const originalQuery = connection.query;
           const client = Object.create(connection) as PoolClient;
 
-          client.query = (async (input: QueryConfig | string, values?: unknown[]) => {
+          const query = async (input: QueryConfig | string, valuesOrCallback?: unknown) => {
             if (Date.now() >= deadline || (signal?.aborted && !cleaningUp)) throw expired();
             const timeout = Math.max(1, Math.floor(deadline - Date.now()));
-            const config: QueryConfig =
+            const values = Array.isArray(valuesOrCallback) ? valuesOrCallback : undefined;
+            const config: NativeReadQueryConfig =
               typeof input === 'string'
-                ? { text: input, values: values ?? [], query_timeout: timeout }
-                : { ...input, query_timeout: timeout };
+                ? { text: input, ...(values === undefined ? {} : { values }) }
+                : { ...input, ...(values === undefined ? {} : { values }) };
+            if (config.query_timeout === undefined) config.query_timeout = timeout;
+            else if (config.query_timeout > 0) config.query_timeout = Math.min(config.query_timeout, timeout);
             const sql = config.text;
             const control = controlOf(sql);
             let settled = false;
             let knownOutcome = false;
             let request: Promise<unknown>;
+            activeQueries += 1;
             try {
               request = Promise.resolve(Reflect.apply(originalQuery, connection, [config]));
             } catch (error) {
+              activeQueries -= 1;
               if (control !== 'other' || !isPostgresError(error)) uncertain = true;
               throw error;
             }
             const observed = request.then(
               (result) => {
                 settled = true;
+                activeQueries -= 1;
                 knownOutcome = true;
                 if (control === 'begin') transactionOpen = true;
                 if (control === 'commit') {
@@ -101,6 +109,7 @@ export function withReadingDashboardReadConnection<T>(
               },
               (error) => {
                 settled = true;
+                activeQueries -= 1;
                 knownOutcome = isPostgresError(error);
                 throw error;
               },
@@ -112,11 +121,27 @@ export function withReadingDashboardReadConnection<T>(
                 uncertain = true;
               throw error;
             }
+          };
+
+          client.query = ((input: QueryConfig | string, valuesOrCallback?: unknown, callbackArgument?: unknown) => {
+            const callback = typeof valuesOrCallback === 'function' ? valuesOrCallback : callbackArgument;
+            const completion = query(input, valuesOrCallback);
+            if (typeof callback !== 'function') return completion;
+            void completion.then(
+              (result) => Reflect.apply(callback, undefined, [null, result]),
+              (error: unknown) => Reflect.apply(callback, undefined, [error]),
+            );
+            return undefined;
           }) as PoolClient['query'];
 
           if (Date.now() >= deadline || signal?.aborted) throw expired();
           try {
-            return await work(client);
+            const result = await work(client);
+            if (activeQueries > 0) {
+              uncertain = true;
+              throw new Error('Reading dashboard work returned with a native query still running');
+            }
+            return result;
           } catch (primary) {
             if (uncertain) {
               discardConnection(connection, asError(primary));

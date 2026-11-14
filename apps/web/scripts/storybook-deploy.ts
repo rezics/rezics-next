@@ -13,7 +13,8 @@ type DeploymentOptions = {
   commit?: string;
   cloudflareOutputDir?: string;
   localPublication?: boolean;
-  build: () => Promise<void>;
+  sourceOnly?: boolean;
+  build: (localPublicationCommit?: string) => Promise<void>;
   smoke: () => Promise<void>;
   /** Finite build and the same six smoke scenarios in one physical snapshot, before local publication. */
   validate?: (localPublicationCommit?: string) => Promise<void>;
@@ -29,15 +30,17 @@ export async function runDeployment(options: DeploymentOptions): Promise<void> {
     throw new Error('The built commit SHA is required to verify the live Storybook.');
   if (options.localPublication && (!expectedCommit || !/^[0-9a-f]{40}$/.test(expectedCommit)))
     throw new Error('Local Storybook publication requires a full committed revision.');
-  if (options.localPublication && !options.validate)
+  if (options.localPublication && !options.validate && !options.sourceOnly)
     throw new Error('Local Storybook publication requires the finite validation callback.');
+  if (options.sourceOnly)
+    options.print('Source-only Storybook publication: all six smoke reviews and acceptance are deferred.');
   if (!options.dryRun || options.localPublication) {
     const changedPaths = await (options.isTreeClean ?? getChangedPaths)();
     if (changedPaths.length > 0) {
       options.print(`Cannot publish from a dirty working tree:\n${changedPaths.join('\n')}`);
       throw new Error(`Cannot publish from a dirty working tree: ${changedPaths.join(', ')}`);
     }
-    if (!options.force) {
+    if (!options.force && !options.sourceOnly) {
       try {
         const liveBuild = await (options.fetchBuild ?? fetchLiveBuild)();
         if (liveBuild.commit === expectedCommit) {
@@ -49,8 +52,10 @@ export async function runDeployment(options: DeploymentOptions): Promise<void> {
       }
     }
   }
-  if (options.localPublication) options.print(`Storybook validation placement: local (${expectedCommit}).`);
-  if (options.validate) await options.validate(options.localPublication ? expectedCommit : undefined);
+  if (options.localPublication)
+    options.print(`Storybook ${options.sourceOnly ? 'build' : 'validation'} placement: local (${expectedCommit}).`);
+  if (options.sourceOnly) await options.build(options.localPublication ? expectedCommit : undefined);
+  else if (options.validate) await options.validate(options.localPublication ? expectedCommit : undefined);
   else {
     await options.build();
     await options.smoke();
@@ -58,11 +63,14 @@ export async function runDeployment(options: DeploymentOptions): Promise<void> {
   if (options.localPublication) {
     const currentCommit = getCurrentCommit();
     if (currentCommit !== expectedCommit)
-      throw new Error(`Local Storybook validation changed from committed snapshot ${expectedCommit}.`);
+      throw new Error(
+        `Local Storybook ${options.sourceOnly ? 'build' : 'validation'} changed from committed snapshot ${expectedCommit}.`,
+      );
     const changedPaths = await (options.isTreeClean ?? getChangedPaths)();
     if (changedPaths.length > 0) {
-      options.print(`Cannot publish from a dirty working tree after validation:\n${changedPaths.join('\n')}`);
-      throw new Error(`Cannot publish from a dirty working tree after validation: ${changedPaths.join(', ')}`);
+      const phase = options.sourceOnly ? 'build' : 'validation';
+      options.print(`Cannot publish from a dirty working tree after ${phase}:\n${changedPaths.join('\n')}`);
+      throw new Error(`Cannot publish from a dirty working tree after ${phase}: ${changedPaths.join(', ')}`);
     }
   }
   const cloudflareOutputDir = options.cloudflareOutputDir ?? resolve(import.meta.dir, '../.cloudflare/output');
@@ -70,7 +78,11 @@ export async function runDeployment(options: DeploymentOptions): Promise<void> {
   options.print(`Removed leftover Cloudflare build output: ${cloudflareOutputDir}`);
   const config = resolve(import.meta.dir, '../storybook.wrangler.jsonc');
   if (options.dryRun) {
-    options.print(`Dry run: validate ${options.commit ?? 'the built commit'}; no version or domain changes.`);
+    options.print(
+      options.sourceOnly
+        ? `Dry run: source-only build ${options.commit ?? 'the built commit'}; all six smoke reviews and acceptance deferred; no version or domain changes.`
+        : `Dry run: validate ${options.commit ?? 'the built commit'}; no version or domain changes.`,
+    );
     options.print(await options.wrangler(['deploy', '--dry-run', '--config', config]));
     return;
   }
@@ -88,7 +100,11 @@ export async function runDeployment(options: DeploymentOptions): Promise<void> {
       `Live build does not name the deployed commit ${expectedCommit} (found ${liveBuild.commit ?? 'none'}).`,
     );
   }
-  options.print(`Published ${version}\nPreview: ${preview}`);
+  options.print(
+    options.sourceOnly
+      ? `Published source-only ${version}\nPreview: ${preview}\nSmoke reviews (all six): deferred.\nAcceptance: deferred.`
+      : `Published ${version}\nPreview: ${preview}`,
+  );
 }
 
 type StatusOptions = {
@@ -165,6 +181,7 @@ export async function validateStorybook(localPublicationCommit?: string): Promis
   const output = resolve(process.env.STORYBOOK_OUTPUT_DIR ?? resolve(app, 'storybook-static'));
   const validationEnvironment = { ...process.env };
   delete validationEnvironment[localStorybookPublicationRevisionEnvironment];
+  delete validationEnvironment.STORYBOOK_SOURCE_ONLY_PUBLICATION;
   if (localPublicationCommit)
     validationEnvironment[localStorybookPublicationRevisionEnvironment] = localPublicationCommit;
   const code = await routeWebCheck(
@@ -203,18 +220,26 @@ if (import.meta.main) {
       const app = resolve(import.meta.dir, '..');
       const commit = getCurrentCommit();
       const localPublication = args.includes('--local');
+      const sourceOnly = args.includes('--source-only');
       if (args.includes('--status')) {
         if (localPublication) throw new Error('--local is only supported for Storybook publication, not --status.');
+        if (sourceOnly) throw new Error('--source-only is only supported for Storybook publication, not --status.');
         process.exitCode = await runStatus({
           localCommit: commit,
           fetchBuild: fetchLiveBuild,
           print: (line) => console.log(line),
         });
       } else {
-        const run = async (script: string) => {
+        const run = async (script: string, localPublicationCommit?: string) => {
+          const environment = { ...process.env };
+          delete environment[localStorybookPublicationRevisionEnvironment];
+          delete environment.STORYBOOK_SOURCE_ONLY_PUBLICATION;
+          if (localPublicationCommit)
+            environment[localStorybookPublicationRevisionEnvironment] = localPublicationCommit;
+          if (sourceOnly) environment.STORYBOOK_SOURCE_ONLY_PUBLICATION = '1';
           const result = Bun.spawn(['bun', script], {
             cwd: app,
-            env: process.env,
+            env: environment,
             stdin: 'inherit',
             stdout: 'inherit',
             stderr: 'inherit',
@@ -226,8 +251,9 @@ if (import.meta.main) {
           dryRun: args.includes('--dry-run'),
           force: args.includes('--force'),
           localPublication,
+          sourceOnly,
           validate: validateStorybook,
-          build: () => run('scripts/storybook-build.ts'),
+          build: (localPublicationCommit) => run('scripts/storybook-build.ts', localPublicationCommit),
           smoke: () => run('scripts/storybook-smoke.ts'),
           commit,
           wrangler,

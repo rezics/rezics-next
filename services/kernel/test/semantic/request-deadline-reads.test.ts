@@ -5,6 +5,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { newId } from '../../src/route/route.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import { readSubject } from '../../src/semantic/subject.ts';
 import { createRealAccess } from './real-access.ts';
 
@@ -65,7 +66,33 @@ test("a semantic read's statement timeout is the time left before its request de
   expect(timeouts[0]).toBeLessThanOrEqual(5_000);
 });
 
-test('a subject read rejects expiry while waiting for its snapshot', async () => {
+test('semantic reads preserve settled source failures across expiry and recover from deadlines', async () => {
+  const now = Date.now();
+  const deadline = now + 5_000;
+  const clock = spyOn(Date, 'now').mockReturnValue(now);
+  let sourceError: unknown;
+  try {
+    const failure = await withReadTransaction(
+      pool,
+      async (client) => {
+        try {
+          await client.query('SELECT * FROM pg_catalog.semantic_deadline_missing_source');
+        } catch (error) {
+          sourceError = error;
+          throw error;
+        } finally {
+          // The source has settled before callback cleanup exhausts the budget and forces retirement.
+          clock.mockReturnValue(deadline + 1);
+        }
+      },
+      deadline,
+    ).catch((error: unknown) => error);
+    expect(sourceError).toMatchObject({ code: '42P01', severity: 'ERROR' });
+    expect(failure).toBe(sourceError);
+  } finally {
+    clock.mockRestore();
+  }
+
   delayRead = true;
   try {
     await expect(
@@ -76,6 +103,7 @@ test('a subject read rejects expiry while waiting for its snapshot', async () =>
   } finally {
     delayRead = false;
   }
+  expect(await readSubject(pool, id, allow, undefined, new Uint8Array(32).fill(13))).toBeNull();
 });
 
 test('an expired subject read answers retryable 503 instead of 404', async () => {

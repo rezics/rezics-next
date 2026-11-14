@@ -70,7 +70,8 @@ export function withReadTransaction<T>(
       deadlineError: () => new AccessUnavailableError('deadline'),
       mapError(error) {
         try {
-          throwAccessUnavailable(error, deadline);
+          // The bounded lifetime selects the deadline race; classify its settled failure without checking time again.
+          throwAccessUnavailable(error);
         } catch (mapped) {
           return mapped;
         }
