@@ -1068,7 +1068,8 @@ test('stopped ordinary proof reconciliation is stable until its observation or s
     });
     const unchanged = snapshot();
     expect(h.store.attempt(attempt).result.length).toBeGreaterThan(150_000);
-    for (let repeat = 0; repeat < 2; repeat++) expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
+    for (let repeat = 0; repeat < 2; repeat++)
+      expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
     expect(snapshot()).toBe(unchanged);
     expect(outcomeEvents()).toHaveLength(1);
     expect(h.store.attempt(attempt).checks).toEqual([checkId]);
@@ -1098,7 +1099,8 @@ test('stopped ordinary proof reconciliation is stable until its observation or s
     expect(h.store.attempt(attempt).result).toContain('capture is not current integration');
     expect(outcomeEvents()).toHaveLength(3);
     const historicalCapture = snapshot();
-    for (let repeat = 0; repeat < 2; repeat++) expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
+    for (let repeat = 0; repeat < 2; repeat++)
+      expect(await reconcileStoppedOrdinaryProof(h.tasks, attempt)).toBe(false);
     expect(snapshot()).toBe(historicalCapture);
 
     git(h.root, ['branch', '-f', 'dev', sourceCommit]);
