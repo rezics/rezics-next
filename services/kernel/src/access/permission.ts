@@ -20,7 +20,6 @@ import { memoizedValue } from '../memoized.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
-import { readNativeAccessTime } from './native-time.ts';
 import { readNativeAccountStates, readNativePermissionAccount, type PermissionAccount } from './account-authority.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { readAccountActionStates, accountProfileAuthorityAnchor } from './account-viewer-actions.ts';
@@ -58,7 +57,7 @@ import {
   type Resource,
 } from './check.ts';
 import { resolveResourceRoles, installResourceRoleCatalogue, type ResourceRoleCatalogue } from './resource-roles.ts';
-import { withConnection } from '../database/pool.ts';
+import { permissionReadClient, withPermissionReadConnection } from './permission-read-connection.ts';
 import { MEMBERSHIP_LIMIT, type MembershipPrincipal } from './membership-inverse.ts';
 import { routeOf as readRoute } from '../route/route.ts';
 import { deadlineClient, within } from './deadline.ts';
@@ -268,6 +267,20 @@ async function readPermissionTime(
   if (!row?.at) return undefined;
   return { at: row.at, databaseAt: row.databaseAt, observedAt };
 }
+
+/** Mint from the exact native observation without another clock query. */
+function mintPermissionReadTime(at: string): Promise<AuthoritativeTime> {
+  return mintReadTime({
+    query: (async () => ({
+      rows: [{ at }],
+      rowCount: 1,
+      command: 'SELECT',
+      oid: 0,
+      fields: [],
+    })) as AccessClient['query'],
+  });
+}
+
 const bind = (actor: Actor, action: string, resource: Resource, page?: ResourcePage): string =>
   JSON.stringify([
     actor.kind,
@@ -633,6 +646,7 @@ export function createAccess(config: PermissionConfig): Access {
   ) {
     const evidence = Object.freeze({});
     const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
+    const source = permissionReadClient(context.pool, deadline);
     try {
       requireAccessDeadline(deadline);
       const metadata = actions.get(action);
@@ -689,9 +703,9 @@ export function createAccess(config: PermissionConfig): Access {
         { actor, action, resource: Object.freeze({ ...resource }), deadline },
         { ...context, ...(time ? { time } : {}) },
       );
-      // Every query uses the pool independently before resource checkout. None
-      // of these reads holds a connection while another partition is consulted.
-      const recorded = await readPermissionTime(context.pool, config.clock, context.work);
+      // Every source query has its own bounded checkout before resource checkout.
+      // None holds a connection while another partition is consulted.
+      const recorded = await readPermissionTime(source, config.clock, context.work);
       if (!recorded?.databaseAt) return evidence;
       // Commands prepare after their executor mints T. Negative membership
       // proofs must start at that same T, not at a later preparation clock.
@@ -716,7 +730,7 @@ export function createAccess(config: PermissionConfig): Access {
             at,
           };
           const assignment = await accessNativeWork(context.work, 'assignment', assignmentInput, {}, () =>
-            assignmentRead.run(context.pool, assignmentInput),
+            assignmentRead.run(source, assignmentInput),
           );
           if (
             !assignment ||
@@ -771,7 +785,7 @@ export function createAccess(config: PermissionConfig): Access {
           if (member.automated) continue;
           const inverseInput = { route: routeOf(member.accountId), account_id: member.accountId };
           const rows = await accessCheckout(context.work, () =>
-            withConnection(context.pool, (client) =>
+            withPermissionReadConnection(context.pool, deadline, (client) =>
               accessNativeWork(context.work, 'inverse', inverseInput, { members: 1, groups: MEMBERSHIP_LIMIT }, () =>
                 inverseRead.run(client, inverseInput),
               ),
@@ -829,7 +843,7 @@ export function createAccess(config: PermissionConfig): Access {
                       members: principalId ? 2 : 1,
                       grantRoles: grantRoles.length,
                     },
-                    () => governanceReachCandidatesRead.run(context.pool, candidateInput),
+                    () => governanceReachCandidatesRead.run(source, candidateInput),
                   ),
                   (() => {
                     const globalInput = {
@@ -847,7 +861,7 @@ export function createAccess(config: PermissionConfig): Access {
                         members: principalId ? 2 : 1,
                         grantRoles: grantRoles.length,
                       },
-                      () => governanceReachCandidatesRead.run(context.pool, globalInput),
+                      () => governanceReachCandidatesRead.run(source, globalInput),
                     );
                   })(),
                 ])
@@ -862,7 +876,7 @@ export function createAccess(config: PermissionConfig): Access {
                   members: principalId ? 2 : 1,
                   grantRoles: grantRoles.length,
                 },
-                () => candidatesRead.run(context.pool, candidateInput),
+                () => candidatesRead.run(source, candidateInput),
               );
         // Only hits from these bounded probes cause an anchored role read.
         const hits = new Set(candidates.map((row) => `${row.accountId}/${row.organizationId}`));
@@ -882,7 +896,7 @@ export function createAccess(config: PermissionConfig): Access {
             matched.slice(start, start + 4).map(async (entries) => {
               const group = entries[0]!;
               const proofs = await accessCheckout(context.work, () =>
-                withConnection(context.pool, async (client) => {
+                withPermissionReadConnection(context.pool, deadline, async (client) => {
                   if (group.group_kind === 'realm')
                     return accessEvidence(
                       () => {
@@ -989,7 +1003,7 @@ export function createAccess(config: PermissionConfig): Access {
       context.work?.fail(error);
       throwAccessUnavailable(error, deadline);
       throwEvidenceFailure(error);
-      // Missing tables, unresolved accounts and other unclassified evidence failures deny.
+      // Other unclassified evidence failures deny.
     }
     return evidence;
   }
@@ -1009,7 +1023,7 @@ export function createAccess(config: PermissionConfig): Access {
     );
     const { actor, context } = input;
     const deadline = accessEvidenceDeadline(context.deadline);
-    const pool = deadlineClient(context.pool, deadline) as typeof context.pool;
+    const source = permissionReadClient(context.pool, deadline);
     try {
       return await within(deadline, async () => {
         const account = actor.kind === 'account' ? config.accountEvidence(actor, context) : undefined;
@@ -1018,7 +1032,7 @@ export function createAccess(config: PermissionConfig): Access {
         const identity =
           actor.kind === 'account' ? Object.freeze({ ...actor, scopes: Object.freeze([...actor.scopes]) }) : actor;
         const recorded = await readPermissionTime(
-          pool,
+          source,
           input.time ? () => new Date(authoritativeTimeValue(input.time!)) : config.clock,
           context.work,
         );
@@ -1045,7 +1059,7 @@ export function createAccess(config: PermissionConfig): Access {
               at,
             };
             const assignment = await accessNativeWork(context.work, 'assignment', assignmentInput, {}, () =>
-              assignmentRead.run(pool, assignmentInput),
+              assignmentRead.run(source, assignmentInput),
             );
             if (!assignment || assignment.kind !== 'actor' || assignment.state !== 'active' || assignment.fenced)
               throw new AccessUnavailableError('overloaded');
@@ -1062,7 +1076,7 @@ export function createAccess(config: PermissionConfig): Access {
             'inverse',
             inverseInput,
             { members: members.length, groups: MEMBERSHIP_LIMIT },
-            () => inverseRead.run(pool, inverseInput),
+            () => inverseRead.run(source, inverseInput),
           );
           for (const member of members) {
             const entries = inverse.filter((row) => row.accountId === member.account_id);
@@ -1110,7 +1124,7 @@ export function createAccess(config: PermissionConfig): Access {
             'membership',
             membershipInput,
             { groups: organizations.length },
-            () => membershipRead.run(pool, membershipInput),
+            () => membershipRead.run(source, membershipInput),
           );
           const indexed = new Map(
             proofs.map((proof) => [`${proof.accountId}/${proof.organizationId}/${proof.role}`, proof]),
@@ -1141,7 +1155,7 @@ export function createAccess(config: PermissionConfig): Access {
                 throw new (AccessWorkUnavailableError())(
                   'Content AccessRealmRoleReader.batch: original Kind Source-eight-axis callback declaration',
                 );
-              return config.realmRoleReader?.batch?.(pool, realmInput) ?? Promise.resolve(null);
+              return config.realmRoleReader?.batch?.(source, realmInput) ?? Promise.resolve(null);
             },
           );
           if (!proofs || proofs.length !== realms.length * 2) throw new AccessUnavailableError('overloaded');
@@ -1161,17 +1175,7 @@ export function createAccess(config: PermissionConfig): Access {
         requireAccessDeadline(deadline);
         // The permission clock query above already observed authoritative T. Mint
         // its opaque read token from that observation without a second SQL read.
-        const time =
-          input.time ??
-          (await mintReadTime({
-            query: (async () => ({
-              rows: [{ at }],
-              rowCount: 1,
-              command: 'SELECT',
-              oid: 0,
-              fields: [],
-            })) as AccessClient['query'],
-          }));
+        const time = input.time ?? (await mintPermissionReadTime(at));
         async function decide(
           client: AccessClient,
           batch: import('../request/access.ts').ReadDecisionInput,
@@ -1346,7 +1350,7 @@ export function createAccess(config: PermissionConfig): Access {
             authoritativeTimeValue(time);
             const ids = Object.freeze([...requestedIds]);
             const subjects = new Map(
-              (await readNativeAccountStates(pool, ids, context.work)).map((row) => [row.id, row]),
+              (await readNativeAccountStates(source, ids, context.work)).map((row) => [row.id, row]),
             );
             const foreignIds = [
               ...new Set([
@@ -1360,7 +1364,7 @@ export function createAccess(config: PermissionConfig): Access {
             const foreign = new Map<string, AccountState>();
             for (let offset = 0; offset < foreignIds.length; offset += 100)
               for (const row of await readNativeAccountStates(
-                pool,
+                source,
                 foreignIds.slice(offset, offset + 100),
                 context.work,
               ))
@@ -1395,7 +1399,7 @@ export function createAccess(config: PermissionConfig): Access {
               for (const [action, keys] of anchors)
                 answers.set(
                   action,
-                  await decide(pool, { action, resourceType: 'access.account', ids: [...keys] }, time),
+                  await decide(source, { action, resourceType: 'access.account', ids: [...keys] }, time),
                 );
             requireAccessDeadline(deadline);
             authoritativeTimeValue(time);
@@ -1551,12 +1555,12 @@ export function createAccess(config: PermissionConfig): Access {
         if (state.open) return true;
         if (request.actor.kind !== 'account') return false;
         return accessCheckout(request.context.work, () =>
-          withConnection(request.context.pool, async (client) => {
+          withPermissionReadConnection(request.context.pool, request.context.deadline, async (client) => {
             for (const action of ['gate:collections', 'gate:any'])
               if (
                 await authorizePreparedReadGate(
                   root,
-                  deadlineClient(client, request.context.deadline),
+                  client,
                   action,
                   'collection:read',
                   GLOBAL_CONTEXT,
@@ -1638,14 +1642,15 @@ export function createAccess(config: PermissionConfig): Access {
       // Copy only the admitted fields. In particular, an effect's command T and
       // any caller-provided session/delegation fields cannot enter this check.
       const currentContext: AccessContext = {
-        pool: deadlineClient(context.pool, deadline) as typeof context.pool,
+        pool: context.pool,
         deadline,
         ...(context.work ? { work: context.work } : {}),
       };
+      const source = permissionReadClient(context.pool, deadline);
       return await within(deadline, async () => {
         const account = context.work
-          ? await readNativePermissionAccount(currentContext.pool, accountId, context.work)
-          : await readAccount(currentContext.pool, routeOf(accountId), accountId);
+          ? await readNativePermissionAccount(source, accountId, context.work)
+          : await readAccount(source, routeOf(accountId), accountId);
         if (!account || account.kind !== 'actor' || account.state !== 'active' || account.fenced) return denied();
         const authnEpoch = Number(account.minimumAuthnEpoch > 1n ? account.minimumAuthnEpoch : 1n);
         if (!Number.isSafeInteger(authnEpoch)) return denied();
@@ -1661,14 +1666,20 @@ export function createAccess(config: PermissionConfig): Access {
         let ownedTime: AuthoritativeTime | undefined;
         try {
           if (context.work) {
-            ownedTime = await readNativeAccessTime(currentContext, config.clock);
+            // Retain the native time checkout and statement charges, then mint
+            // this call's time only from that released observation.
+            const recorded = await accessCheckout(context.work, () =>
+              readPermissionTime(source, config.clock, context.work),
+            );
+            if (!recorded) throw new AccessUnavailableError('overloaded');
+            ownedTime = await mintPermissionReadTime(recorded.at);
             currentContext.time = ownedTime;
           }
           const evidence = await preparePermission(actor, action, resource, currentContext, page, true);
           return await accessCheckout(context.work, () =>
-            withConnection(currentContext.pool, async (client) => {
+            withPermissionReadConnection(currentContext.pool, deadline, async (client) => {
               const decision = await checkPreparedPermission(
-                deadlineClient(client, deadline),
+                client,
                 actor,
                 action,
                 resource,
