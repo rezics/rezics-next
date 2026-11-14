@@ -1,8 +1,8 @@
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { accessClock } from '../access/access-clock.ts';
-import { deadlineClient, within } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -17,6 +17,23 @@ const published = 'com.rezics.content.post.published.v1';
 // Match the native Inbox's default presentation page; larger fanouts continue durably.
 export const BOARD_WATCH_RECIPIENT_BUDGET = 20;
 export const BOARD_WATCH_STEP_DEADLINE_MS = 30_000;
+
+function boundedReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      try {
+        throwAccessUnavailable(error, deadline);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  };
+}
+
 type Source = ContentEventData<typeof published>;
 type Input = { source: Source; route: number; epoch: number; position: string; eventId: string; time: Date };
 type Opening = { board_id: string; active: boolean; published_at: string };
@@ -59,9 +76,10 @@ function sourceInput(event: CloudEvent): Input {
 
 /** Exact original log position plus current originals, never board index/event presentation. */
 async function readOpening(pool: Pool, input: Input, deadline: number): Promise<Opening | null> {
-  return within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
+  return withBoundedReadConnection(
+    pool,
+    deadline,
+    async (client) => {
       const partition = await readPartition(client, partitionOf(input.route));
       if (!partition || partition.writeState === 'moved') throw new Error('Content partition is unavailable');
       const result = await client.query<Opening>(
@@ -91,7 +109,8 @@ async function readOpening(pool: Pool, input: Input, deadline: number): Promise<
         ],
       );
       return result.rows[0] ?? null;
-    }),
+    },
+    boundedReadOptions(deadline),
   );
 }
 
