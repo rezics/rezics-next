@@ -177,7 +177,17 @@ function reviewedPort(vocabulary: ReviewedVocabularyPort, paginated: boolean) {
       } as Awaited<ReturnType<ReviewedCataloguePort['readReviewedSubject']>>;
     },
   };
-  return { port, proposals, accepted, adoptions, reads, rejectedId, candidates };
+  const selectCurrent = (subject: string, property: string, candidate: string, rank: 'normal' | 'preferred') => {
+    for (const row of candidates.values())
+      if (row.subject === subject && row.statement.property.id === property && row.rank !== 'deprecated')
+        row.rank = null;
+    const selected = candidates.get(candidate)!;
+    selected.rank = rank;
+    selected.decision = 'accepted';
+    heads.set(slot(subject, property), (heads.get(slot(subject, property)) ?? 0) + 1);
+    subjects.get(subject)!.statements[property] = [nativeStatement(selected, rank)];
+  };
+  return { port, proposals, accepted, adoptions, reads, rejectedId, candidates, selectCurrent };
 }
 
 for (const paginated of [false, true]) {
@@ -250,10 +260,10 @@ for (const paginated of [false, true]) {
       expect(second.subjects).toEqual(first.subjects);
       expect(second.facts.map((fact) => fact.candidate)).toEqual(first.facts.map((fact) => fact.candidate));
       expect(fixture.proposals).toEqual([...expected, ...expected]);
-      const receipts = [...first.facts, ...second.facts];
-      expect(fixture.accepted).toEqual(receipts.map((fact) => fact.candidate));
+      expect(second.facts).toEqual(first.facts);
+      expect(fixture.accepted).toEqual(first.facts.map((fact) => fact.candidate));
       expect(fixture.adoptions.map(({ subject, body }) => ({ subject, selection: body.selection }))).toEqual(
-        receipts.map((fact) => ({
+        first.facts.map((fact) => ({
           subject: fact.subject,
           selection: [{ candidate: fact.candidate, rank: 'preferred' }],
         })),
@@ -271,6 +281,56 @@ for (const paginated of [false, true]) {
       } finally {
         final.close();
       }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test(`reopen preserves an editorial normal rank (${listing})`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'reviewed-normal-selection-'));
+    const path = join(directory, 'state.sqlite');
+    const vocabulary = releasedReviewedVocabulary();
+    const application = createReviewedCatalogueApplication({ vocabulary });
+    const fixture = reviewedPort(vocabulary, paginated);
+    try {
+      const first = await application.seed({ path, port: fixture.port });
+      const target = first.facts.find((fact) => fact.subject === first.subjects['source-harem'])!;
+      fixture.selectCurrent(target.subject, target.statement.property.id, target.candidate, 'normal');
+      const second = await application.seed({ path, port: fixture.port });
+      const receipt = second.facts.find((fact) => fact.candidate === target.candidate)!;
+      expect(receipt.adoption.adoption.selection).toEqual([{ candidate: target.candidate, rank: 'normal' }]);
+      expect(fixture.accepted).toHaveLength(first.facts.length);
+      expect(fixture.adoptions).toHaveLength(first.facts.length + 1);
+      const current = await fixture.port.readReviewedSubject(target.subject);
+      expect(current.subject.statements[target.statement.property.id]).toContainEqual(
+        expect.objectContaining({ id: target.candidate, rank: 'normal' }),
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test(`reopen leaves a different editorial selection intact (${listing})`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'reviewed-other-selection-'));
+    const path = join(directory, 'state.sqlite');
+    const vocabulary = releasedReviewedVocabulary();
+    const application = createReviewedCatalogueApplication({ vocabulary });
+    const fixture = reviewedPort(vocabulary, paginated);
+    try {
+      const first = await application.seed({ path, port: fixture.port });
+      const target = first.facts.find((fact) => fact.subject === first.subjects['source-harem'])!;
+      const editor = randomUUID();
+      fixture.candidates.set(editor, { ...fixture.candidates.get(target.candidate)!, id: editor, source: null });
+      fixture.selectCurrent(target.subject, target.statement.property.id, editor, 'normal');
+      await expect(application.seed({ path, port: fixture.port })).rejects.toThrow(
+        'Existing editorial selection must not be replaced',
+      );
+      expect(fixture.accepted).toHaveLength(first.facts.length);
+      expect(fixture.adoptions).toHaveLength(first.facts.length);
+      const current = await fixture.port.readReviewedSubject(target.subject);
+      expect(current.subject.statements[target.statement.property.id]).toEqual([
+        expect.objectContaining({ id: editor, rank: 'normal' }),
+      ]);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
