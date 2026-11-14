@@ -28,7 +28,8 @@
     "./catalogue/files": "./src/catalogue-files.ts",
     "./schema/catalogue.json": "./schema/catalogue.json",
     "./schema/catalogue-node.json": "./schema/catalogue-node.json",
-    "./schema/kind.json": "./schema/kind.json"
+    "./schema/kind.json": "./schema/kind.json",
+    "./language": "./src/language.ts"
   },
   "scripts": {
     "check": "bun check --no-script -p tsconfig.json && bun test",

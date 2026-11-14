@@ -35,3 +35,28 @@ test('label selection maximizes scripts, truncates extensions, and returns the s
     expect(policy.chooseLabel({}, ['ja'])).toBeNull();
   }
 });
+
+test('explicit language preferences use canonical keys and reject invalid or oversized input', async () => {
+  const language = await import('@rezics/definitions/language');
+  const entries = [definitions, browser, language];
+  const longest = Array.from(
+    { length: 16 },
+    (_, index) => `en-x-${'abcdefgh-'.repeat(6)}a${String(index).padStart(3, '0')}`,
+  );
+  expect(longest[0]!.length).toBe(language.MAX_LANGUAGE_KEY_LENGTH);
+  expect(longest.join(',').length).toBe(language.MAX_LANGUAGE_PREFERENCES_LENGTH);
+  for (const policy of entries) {
+    expect(policy.canonicalLanguageKey('EN-us')).toBe('en-US');
+    expect(policy.canonicalLanguageKey('iw')).toBe('he');
+    expect(policy.canonicalLanguageKey('en_US')).toBeNull();
+    expect(policy.canonicalLanguageKey(`${longest[0]}a`)).toBeNull();
+    expect(policy.parseLanguagePreferences(undefined)).toEqual([]);
+    expect(policy.parseLanguagePreferences([])).toEqual([]);
+    expect(policy.parseLanguagePreferences('de,fr')).toEqual(['de', 'fr']);
+    expect(policy.parseLanguagePreferences(longest)).toEqual(longest);
+    expect(policy.parseLanguagePreferences([...longest, 'en'])).toBeNull();
+    expect(policy.parseLanguagePreferences(`${longest.join(',')},en`)).toBeNull();
+    for (const value of ['', 'en, en', 'en,en', 'EN', 'iw', '*', 'en_US'])
+      expect(policy.parseLanguagePreferences(value)).toBeNull();
+  }
+});
