@@ -34,6 +34,11 @@ import {
   type CreatorOfferMutation,
   type CreatorOfferResult,
 } from './creator-offers';
+import {
+  CreatorOfferWorkspace,
+  CreatorOfferWorkspaceDisclosure,
+  CreatorOfferWorkspacePanel,
+} from './creator-offer-workspace';
 
 export function creatorNotice(
   kind: CreatorFailure['kind'] | 'price-unavailable' | 'retry' | 'saved' | 'conflict',
@@ -281,12 +286,14 @@ export function CreatorOfferEditor({
 }) {
   return (
     <CreatorOfferDraftNavigation>
-      <CreatorOfferOriginPanelSlot />
-      {guard ? (
-        <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} onReview={onReview} />
-      ) : (
-        <StandaloneCreatorOfferEditor data={data} locale={locale} />
-      )}
+      <CreatorOfferWorkspace>
+        <CreatorOfferOriginPanelSlot />
+        {guard ? (
+          <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} onReview={onReview} />
+        ) : (
+          <StandaloneCreatorOfferEditor data={data} locale={locale} />
+        )}
+      </CreatorOfferWorkspace>
     </CreatorOfferDraftNavigation>
   );
 }
@@ -503,22 +510,24 @@ function CreatorOfferForm({
 
   return (
     <article className="max-w-3xl min-w-0 space-y-6 text-foreground">
-      <PageHeading>{m.creator_new_offer()}</PageHeading>
-      <a
-        href={`/${locale}/creator/offers`}
-        className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-      >
-        {m.creator_offers_heading()}
-      </a>
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <PageHeading>{m.creator_new_offer()}</PageHeading>
+        <a
+          href={`/${locale}/creator/offers`}
+          className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+        >
+          {m.creator_offers_heading()}
+        </a>
+      </header>
       {editor.kind === 'price-unavailable' ? (
-        <section className="space-y-4 rounded-xl border bg-card p-5 text-card-foreground" role="status">
+        <CreatorOfferWorkspacePanel role="status" className="space-y-4">
           <p>{m.creator_price_unavailable()}</p>
           {currency && <p className="text-sm text-muted-foreground">{currency.toUpperCase()}</p>}
           <CreatorPriceField text={text} onChange={() => {}} locale={locale} disabled policyUnavailable />
           {result && <p role="alert">{creatorNotice(result.kind)}</p>}
-        </section>
+        </CreatorOfferWorkspacePanel>
       ) : editor.kind !== 'ready' ? (
-        <div className="space-y-3 rounded-xl border bg-card p-5 text-card-foreground" role="status">
+        <CreatorOfferWorkspacePanel role="status" className="space-y-3">
           <p>{editor.kind === 'choose-edition' ? m.creator_choose_edition() : creatorNotice(editor.kind)}</p>
           <a
             href={`/${locale}/editions/new`}
@@ -526,27 +535,26 @@ function CreatorOfferForm({
           >
             {m.creator_publish_edition()}
           </a>
-        </div>
+        </CreatorOfferWorkspacePanel>
       ) : (
         <>
-          <section
-            className="min-w-0 space-y-4 rounded-xl border bg-card p-5 text-card-foreground"
-            aria-labelledby={`${fieldId}-version`}
-          >
-            <h2 id={`${fieldId}-version`} className="text-lg font-semibold">
-              {m.creator_edition()}
-            </h2>
-            <p className="text-sm leading-relaxed">{m.creator_fixed_version()}</p>
-            <dl className="min-w-0 text-sm">
-              <dt className="text-muted-foreground">{m.creator_licence()}</dt>
-              <dd className="min-w-0 [overflow-wrap:anywhere]">{editor.edition.licence}</dd>
-            </dl>
-            <p className="text-sm leading-relaxed">{m.creator_current_rights()}</p>
-            {data.editor.kind === 'price-unavailable' && (
-              <p role="status" className="text-sm leading-relaxed">
-                {m.creator_price_unavailable()}
-              </p>
-            )}
+          <section aria-labelledby={`${fieldId}-version`} className="min-w-0">
+            <CreatorOfferWorkspacePanel className="space-y-4">
+              <h2 id={`${fieldId}-version`} className="text-lg font-semibold">
+                {m.creator_edition()}
+              </h2>
+              <p className="text-sm leading-relaxed">{m.creator_fixed_version()}</p>
+              <dl className="min-w-0 text-sm">
+                <dt className="text-muted-foreground">{m.creator_licence()}</dt>
+                <dd className="min-w-0 [overflow-wrap:anywhere]">{editor.edition.licence}</dd>
+              </dl>
+              <p className="text-sm leading-relaxed">{m.creator_current_rights()}</p>
+              {data.editor.kind === 'price-unavailable' && (
+                <p role="status" className="text-sm leading-relaxed">
+                  {m.creator_price_unavailable()}
+                </p>
+              )}
+            </CreatorOfferWorkspacePanel>
           </section>
           <form onSubmit={submit} className="space-y-6 rounded-xl border bg-card p-5 text-card-foreground sm:p-6">
             <CreatorOfferDraftState
@@ -616,46 +624,48 @@ function CreatorOfferForm({
               />
               <p className="text-sm text-muted-foreground">{m.creator_tax_code_hint()}</p>
             </Field>
-            {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
-            {requiresReview && onReview && (
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                disabled={checking}
-                onClick={() => void reviewCurrent()}
-              >
-                {checking ? m.creator_offers_preparing() : m.offer_review_terms()}
-              </Button>
-            )}
-            {result?.kind === 'saved' ? (
-              <a
-                href={`/${locale}/offers/${result.id}`}
-                className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-              >
-                {m.creator_view_offer()}
-              </a>
-            ) : (
-              <Button
-                type="submit"
-                className="min-h-11"
-                disabled={
-                  busy ||
-                  checking ||
-                  requiresReview ||
-                  !canSubmit ||
-                  (!uncertain && (amount === null || !title.trim() || !taxCode.trim()))
-                }
-              >
-                {busy ? m.creator_saving() : uncertain ? m.creator_retry() : m.creator_create()}
-              </Button>
-            )}
+            <div className="space-y-4 border-t pt-4">
+              {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
+              {requiresReview && onReview && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={checking}
+                  onClick={() => void reviewCurrent()}
+                >
+                  {checking ? m.creator_offers_preparing() : m.offer_review_terms()}
+                </Button>
+              )}
+              {result?.kind === 'saved' ? (
+                <a
+                  href={`/${locale}/offers/${result.id}`}
+                  className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+                >
+                  {m.creator_view_offer()}
+                </a>
+              ) : (
+                <Button
+                  type="submit"
+                  className="min-h-11"
+                  disabled={
+                    busy ||
+                    checking ||
+                    requiresReview ||
+                    !canSubmit ||
+                    (!uncertain && (amount === null || !title.trim() || !taxCode.trim()))
+                  }
+                >
+                  {busy ? m.creator_saving() : uncertain ? m.creator_retry() : m.creator_create()}
+                </Button>
+              )}
+            </div>
           </form>
-          <details className="min-w-0 rounded-xl border bg-card p-5 text-card-foreground">
-            <summary className="min-h-11 cursor-pointer content-center rounded-sm text-sm font-medium [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-              {m.creator_edition_details_summary()}
-            </summary>
-            <dl className="mt-3 min-w-0 space-y-3 text-sm">
+          <CreatorOfferWorkspaceDisclosure
+            title={m.creator_edition_details_summary()}
+            className="rounded-xl border bg-card p-5 text-card-foreground"
+          >
+            <dl className="min-w-0 space-y-3 text-sm">
               {[
                 [m.creator_edition_details_edition_id(), editor.edition.editionId],
                 [m.creator_edition_details_revision_id(), editor.edition.revisionId],
@@ -667,7 +677,7 @@ function CreatorOfferForm({
                 </div>
               ))}
             </dl>
-          </details>
+          </CreatorOfferWorkspaceDisclosure>
         </>
       )}
     </article>
