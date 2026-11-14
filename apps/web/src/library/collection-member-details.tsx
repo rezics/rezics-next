@@ -88,10 +88,7 @@ export function CollectionMemberSummary({
         {facts.length && comparisonDefinitions === undefined ? <p>{m.catalogue_context_unavailable()}</p> : null}
       </div>
       {member.note ? (
-        <p
-          data-collection-note-available
-          className="line-clamp-2 whitespace-pre-line [overflow-wrap:anywhere]"
-        >
+        <p data-collection-note-available className="line-clamp-2 whitespace-pre-line [overflow-wrap:anywhere]">
           <span className="sr-only">{m.collection_reading_note_available()} </span>
           {member.note}
         </p>
