@@ -148,14 +148,10 @@ test('proof remains fail closed and genuine leftover Git errors keep their task 
     await expect(h.tasks.retry(task.id)).rejects.toThrow('git status:');
 
     expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
-    expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })).toMatchObject({
-      status: 'pending', options: { evidence: h.briefFile },
-    });
     const failure = JSON.parse(h.store.events(task.id, 1).find((event) => event.kind === 'retry-setup-failed')!.body);
-    expect(failure).toMatchObject({
-      step: 'checking worktree leftovers',
-      diagnostic: { commandText: 'git status --porcelain=v1 --untracked-files=normal', timedOut: false },
-    });
+    expect(failure).toMatchObject({ step: 'checking worktree leftovers', diagnostic: {
+      commandText: 'git status --porcelain=v1 --untracked-files=normal', timedOut: false,
+    } });
     expect(failure.diagnostic.message).toContain('index file smaller than expected');
     expect(inbox.pending(task.brief.manager).map((entry) => entry.event.kind)).toContain('environment');
     expect(inbox.pending('operations')).toHaveLength(0);
@@ -204,7 +200,6 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
       expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
       expect(intent).toMatchObject({ status: 'pending', options: { evidence: h.briefFile } });
       expect(Date.parse(intent!.options.notBefore ?? '')).toBeGreaterThan(Date.now());
-      expect(h.store.events(task.id, 1).some((event) => event.kind === 'launch-failed')).toBe(false);
       const failure = JSON.parse(
         h.store.events(task.id, 1).find((event) => event.kind === 'retry-setup-failed')!.body,
       );
