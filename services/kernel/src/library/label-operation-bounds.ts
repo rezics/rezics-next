@@ -4,14 +4,9 @@ import { currentCommandWorkAssociation, currentLibraryOperationAccounting } from
 import type { WorkDimensions } from './contract/work-dimensions.ts';
 import {
   followAccountAuthorizationWork,
-  followAccountWork,
   followSubjectSummaryObservationWork,
 } from './follow-operation-bounds.ts';
-import {
-  sessionCoreCommandAttemptWork,
-  sessionPartitionWork,
-  sessionSnapshotWork,
-} from './session-operation-bounds.ts';
+import { sessionCoreCommandAttemptWork, sessionPartitionWork } from './session-operation-bounds.ts';
 import labelInsert from './label-store-insert.sql';
 import labelRead from './label-store-read.sql';
 import labelRename from './label-store-rename.sql';
@@ -31,6 +26,7 @@ import assignmentSubjectPage from './label-assignment-subject-page.sql';
 import entryTiles from './library-entry-tiles.sql';
 import activeSessions from './shelf-active.sql';
 import generationRead from './shelf-maintenance-gate-read.sql';
+import { partitionOf } from '../route/route.ts';
 
 /** Public page and storage ceilings remain owned by the label contracts. */
 export const LABEL_PAGE_DEFAULT = 20;
@@ -342,16 +338,43 @@ export function labelCommandAttemptComponent(
   );
 }
 
+function labelReadControl(sql: string): Bound {
+  return sqlBound(sql, {}, {
+    candidateKeys: 0,
+    nativeRows: 0,
+    points: 0,
+    emptySeeks: 0,
+    output: {},
+    outputRows: 0,
+  });
+}
+
+/** Current owner and home admission, priced for both selection and final re-admission. */
+export function labelReadAdmissionWork(
+  route: number,
+  accountId: string,
+  isolation: 'REPEATABLE READ' | 'READ COMMITTED',
+): Bound {
+  return sumBounds(
+    labelReadControl(`BEGIN ISOLATION LEVEL ${isolation}`),
+    followAccountAuthorizationWork(accountId),
+    sessionPartitionWork(partitionOf(route)),
+    // ROLLBACK has the larger SQL byte count and the same other work axes as COMMIT.
+    labelReadControl('ROLLBACK'),
+  );
+}
+
 /** Read-snapshot owner work around a page's native storage leaves. */
-export function labelSnapshotComponent(kind: string, input: unknown, responseBytes: number): LabelOperationComponent {
+export function labelSnapshotComponent(
+  kind: string,
+  input: unknown,
+  responseBytes: number,
+  route: number,
+  accountId: string,
+): LabelOperationComponent {
   return component(
     kind,
-    sumBounds(
-      sessionSnapshotWork(uuid),
-      sessionPartitionWork(4095),
-      followAccountWork(uuid),
-      bytes(encoded(input) + responseBytes),
-    ),
+    sumBounds(labelReadAdmissionWork(route, accountId, 'REPEATABLE READ'), bytes(encoded(input) + responseBytes)),
   );
 }
 
@@ -429,6 +452,10 @@ const labelPoint = (route: number, accountId: string, labelId: string) =>
     output: labelRow,
     outputRows: 1,
   });
+
+export function labelPointReadPlan(input: { route: number; accountId: string; labelId: string }) {
+  return operation('label.read', 'point', input, [labelPoint(input.route, input.accountId, input.labelId)]);
+}
 
 export function labelCreatePlan(input: {
   route: number;

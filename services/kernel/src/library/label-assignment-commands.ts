@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { readAccountCommandState, deadlineClient } from './access-port.ts';
+import { deadlineClient } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import {
@@ -13,10 +13,9 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { readPartition } from '../partition/partition.ts';
 import type { Access, Actor, AccountActor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import { routeOf, partitionOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { receiptKeysFor } from '../command/receipt-key.ts';
@@ -35,6 +34,7 @@ import { admitShelfRead } from './shelf-admission.ts';
 import { readShelfGeneration } from './shelf-reader-generation.ts';
 import { readLibraryEntryTiles, type LibraryEntryTile } from './library-entry-tiles.ts';
 import { readPersonalLabel } from './label-store.ts';
+import { admitLabelRead, attachLabelReadHome, type LabelReadHome } from './label-read-admission.ts';
 import { readLibraryProfileAnchor } from './profile-source.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import labelPage from './label-assignment-label-page.sql';
@@ -50,6 +50,7 @@ import {
   labelAssignmentPagePlan,
   labelAssignmentSetPlan,
   labelCommandAttemptComponent,
+  labelReadAdmissionWork,
   labelOperationComponent,
   labelOwnerSqlComponent,
   labelSnapshotComponent,
@@ -124,25 +125,15 @@ export function createLabelAssignmentCommands(deps: {
   async function snapshot<T>(
     actor: AccountActor,
     deadline: number,
-    body: (client: Client, route: number) => Promise<T>,
+    body: (client: Client, route: number, home: LabelReadHome) => Promise<T>,
   ) {
     return withConnection(pool, async (connection) => {
       const client = deadlineClient(connection, deadline),
         route = routeOf(actor.accountId)!;
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
       try {
-        const current = await readAccountCommandState(client, route, actor.accountId);
-        if (
-          !current ||
-          current.kind !== 'actor' ||
-          current.state !== 'active' ||
-          current.fenced ||
-          !Number.isSafeInteger(actor.authnEpoch) ||
-          actor.authnEpoch < 1 ||
-          current.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-        )
-          throw new GrantDeniedError();
-        const result = await body(client, route);
+        const home = await admitLabelRead(client, actor, route);
+        const result = await body(client, route, home);
         await client.query('COMMIT');
         return result;
       } catch (error) {
@@ -574,6 +565,14 @@ export function createLabelAssignmentCommands(deps: {
         view: full ? 'FULL' : 'BASIC',
       }),
       [
+        ...(subjectId
+          ? [
+              labelOperationComponent(
+                'assignment.subject-anchor.owner-admission',
+                labelReadAdmissionWork(route, account.accountId, 'REPEATABLE READ'),
+              ),
+            ]
+          : []),
         labelSnapshotComponent(
           'assignment.partition-cursor-serialization-snapshot',
           {
@@ -585,6 +584,8 @@ export function createLabelAssignmentCommands(deps: {
             view: full ? 'FULL' : 'BASIC',
           },
           limit * 256 + (full && labelId ? 65_536 : 4_096),
+          routeOf(account.accountId)!,
+          account.accountId,
         ),
       ],
       true,
@@ -597,14 +598,12 @@ export function createLabelAssignmentCommands(deps: {
           throw new LibraryNotFoundError();
       }
       const result = await executeLabelOperation(composed, () =>
-        snapshot(account, deadline, async (client, route) => {
+        snapshot(account, deadline, async (client, route, partition) => {
           const parent = labelId
             ? await readPersonalLabel(client, sameAccountRoute(account.accountId, labelId), account.accountId, labelId)
             : null;
           if (labelId && !parent) throw new LibraryNotFoundError();
           if (full && labelId) await readShelfGeneration(client, { route, accountId: account.accountId });
-          const partition = await readPartition(client, partitionOf(route));
-          if (!partition) throw new Error('Missing owner partition');
           const binding = {
             route: 'library_label.assignment_list',
             viewer: account.accountId,
@@ -673,7 +672,7 @@ export function createLabelAssignmentCommands(deps: {
                   })
                 : null;
             const last = rows.at(-1);
-            return {
+            return attachLabelReadHome({
               ...(full && parent ? { label: { id: parent.id, name: parent.name, revision: parent.revision } } : {}),
               assignments: tiles
                 ? assignments.map((row) => ({ ...row, libraryEntry: tiles.get(row.subjectId) ?? null }))
@@ -690,7 +689,7 @@ export function createLabelAssignmentCommands(deps: {
                       now,
                     )
                   : null,
-            };
+            }, partition);
           });
         }),
       );

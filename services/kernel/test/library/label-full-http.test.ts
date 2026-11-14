@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { resolve } from 'node:path';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
+import { enrichAndReAdmitLabelRead } from '../../src/library/label-read-admission.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountToken } from '../support/admitted-access.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 let f: NativeProfileFixture;
@@ -146,3 +149,50 @@ test('native maximum FULL label page preserves the raw cursor when a Subject sum
   expect(lastPage.assignments[0]!.subjectId).not.toBe(withheld);
   expect(lastPage.next).toBeNull();
 }, 180000);
+
+test('mounted FULL assignment enrichment is withheld when the owner credential changes before final admission', async () => {
+  const owner = await f.identity(['library_entry:read', 'library_entry:list']);
+  const route = routeOf(owner.actor.accountId)!;
+  const partition = partitionOf(route);
+  const account = (
+    await f.pool.query<{ floor: string }>(
+      'SELECT minimum_authn_epoch::text AS floor FROM access.account WHERE route=$1 AND account_id=$2',
+      [route, owner.actor.accountId],
+    )
+  ).rows[0]!;
+  const home = (
+    await f.pool.query<{ epoch: number }>('SELECT epoch FROM core.partition WHERE partition_no=$1', [partition])
+  ).rows[0]!;
+
+  let startEnrichment!: () => void;
+  let finishEnrichment!: () => void;
+  const enrichmentStarted = new Promise<void>((resolve) => (startEnrichment = resolve));
+  const enrichmentGate = new Promise<void>((resolve) => (finishEnrichment = resolve));
+  const response = enrichAndReAdmitLabelRead({
+    pool: f.pool,
+    actor: owner.actor,
+    expectedHomeEpoch: home.epoch,
+    deadline: Date.now() + 30_000,
+    enrich: async () => {
+      startEnrichment();
+      await enrichmentGate;
+      return { assignments: [{ subjectId: 'private-subject', label: { name: 'Private label' } }] };
+    },
+  });
+  const denied = expect(response).rejects.toBeInstanceOf(GrantDeniedError);
+  try {
+    await enrichmentStarted;
+    await f.pool.query(
+      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
+      [route, owner.actor.accountId, (BigInt(account.floor) + 1n).toString()],
+    );
+    finishEnrichment();
+    await denied;
+  } finally {
+    finishEnrichment();
+    await f.pool.query(
+      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
+      [route, owner.actor.accountId, account.floor],
+    );
+  }
+});

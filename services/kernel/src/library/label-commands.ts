@@ -1,14 +1,12 @@
 import type { Pool, PoolClient } from 'pg';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { readAccountCommandState } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { readPartition } from '../partition/partition.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
-import { newId, partitionOf, routeOf } from '../route/route.ts';
+import { newId, routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { receiptKeysFor } from '../command/receipt-key.ts';
@@ -25,6 +23,7 @@ import * as store from './label-store.ts';
 import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from './list-import-anilist-label-guard.ts';
 import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from './list-import-mal-label-fence.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import { admitLabelRead, type LabelReadHome } from './label-read-admission.ts';
 import {
   composeLabelOperation,
   executeLabelOperation,
@@ -38,6 +37,7 @@ import {
   labelLifecyclePlan,
   labelOperationComponent,
   labelOwnerSqlComponent,
+  labelPointReadPlan,
   labelRenamePlan,
   labelSnapshotComponent,
 } from './label-operation-bounds.ts';
@@ -140,25 +140,15 @@ export function createPersonalLabelCommands(config: {
   async function snapshot<T>(
     actor: Actor,
     action: string,
-    body: (client: Client, owner: AccountActor, route: number) => Promise<T>,
+    body: (client: Client, owner: AccountActor, route: number, home: LabelReadHome) => Promise<T>,
   ) {
     const owner = account(actor, action);
     const route = routeOf(owner.accountId)!;
     return withConnection(pool, async (client) => {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
       try {
-        const current = await readAccountCommandState(client, route, owner.accountId);
-        if (
-          !current ||
-          current.kind !== 'actor' ||
-          current.state !== 'active' ||
-          current.fenced ||
-          !Number.isSafeInteger(owner.authnEpoch) ||
-          owner.authnEpoch < 1 ||
-          current.minimumAuthnEpoch > BigInt(owner.authnEpoch)
-        )
-          throw new GrantDeniedError();
-        const result = await body(client, owner, route);
+        const home = await admitLabelRead(client, owner, route);
+        const result = await body(client, owner, route, home);
         await client.query('COMMIT');
         return result;
       } catch (error) {
@@ -457,12 +447,29 @@ export function createPersonalLabelCommands(config: {
   }
 
   function readLabel(actor: Actor, labelId: string): Promise<Label> {
-    return snapshot(actor, 'library_entry:read', async (client, owner, route) => {
-      sameAccountRoute(owner.accountId, labelId);
-      const label = await store.readPersonalLabel(client, route, owner.accountId, labelId);
-      if (!label) throw new LibraryNotFoundError();
-      return visible(label);
-    });
+    const owner = account(actor, 'library_entry:read');
+    const route = routeOf(owner.accountId)!;
+    const plan = composeLabelOperation(
+      labelPointReadPlan({ route, accountId: owner.accountId, labelId }),
+      [
+        labelSnapshotComponent(
+          'label.point.admission-snapshot',
+          { owner: owner.accountId, labelId },
+          4_096,
+          route,
+          owner.accountId,
+        ),
+      ],
+      true,
+    );
+    return executeLabelOperation(plan, () =>
+      snapshot(actor, 'library_entry:read', async (client, owner, route) => {
+        sameAccountRoute(owner.accountId, labelId);
+        const label = await store.readPersonalLabel(client, route, owner.accountId, labelId);
+        if (!label) throw new LibraryNotFoundError();
+        return visible(label);
+      }),
+    );
   }
 
   async function listLabels(
@@ -504,14 +511,14 @@ export function createPersonalLabelCommands(config: {
           'label.catalogue.partition-cursor-serialization-snapshot',
           { owner: owner.accountId, cursor: parsed.cursor ?? null, prefix: q, limit },
           limit * (LABEL_NAME_SCALARS * 4 + 128) + 4096,
+          route,
+          owner.accountId,
         ),
       ],
       true,
     );
     return executeLabelOperation(composed, () =>
-      snapshot(actor, 'library_entry:list', async (client, owner, route) => {
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition) throw new Error('Missing owner partition');
+      snapshot(actor, 'library_entry:list', async (client, owner, route, partition) => {
         const binding = {
           route: 'library_label.list',
           viewer: owner.accountId,

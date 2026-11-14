@@ -4,7 +4,7 @@ import { createPersonalLabelCommands } from '../../src/library/label-commands.ts
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { LibraryConflictError } from '../../src/library/entries.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 let f: NativeProfileFixture;
 const reader = new pg.Pool({
@@ -92,3 +92,49 @@ test('native private label catalogue preserves normalized uniqueness minimal rec
   expect(denied.receipts).toEqual(receiptsBefore.receipts);
   expect(denied.events).toEqual(receiptsBefore.events);
 }, 120000);
+
+test('native label point and catalogue reads require the current credential and active home while admitting an empty catalogue', async () => {
+  const owner = await f.identity(['library_entry:read', 'library_entry:list', 'library_entry:update']);
+  const actor = owner.actor;
+  const labels = createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
+  expect(await labels.listLabels(actor)).toEqual({ labels: [], next: null });
+  const label = (await labels.createLabel(actor, { name: 'Admission' }, entryKey())).value.label;
+  const route = routeOf(actor.accountId)!;
+  const partition = partitionOf(route);
+  const account = (
+    await f.pool.query<{ floor: string }>(
+      'SELECT minimum_authn_epoch::text AS floor FROM access.account WHERE route=$1 AND account_id=$2',
+      [route, actor.accountId],
+    )
+  ).rows[0]!;
+  const home = (
+    await f.pool.query<{ writeState: string; movedTo: string | null }>(
+      'SELECT write_state AS "writeState",moved_to AS "movedTo" FROM core.partition WHERE partition_no=$1',
+      [partition],
+    )
+  ).rows[0]!;
+  try {
+    await f.pool.query(
+      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
+      [route, actor.accountId, actor.authnEpoch + 1],
+    );
+    await expect(labels.readLabel(actor, label.id)).rejects.toBeInstanceOf(GrantDeniedError);
+    await expect(labels.listLabels(actor)).rejects.toBeInstanceOf(GrantDeniedError);
+    await f.pool.query(
+      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
+      [route, actor.accountId, account.floor],
+    );
+    await f.pool.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [partition]);
+    await expect(labels.readLabel(actor, label.id)).rejects.toBeInstanceOf(GrantDeniedError);
+    await expect(labels.listLabels(actor)).rejects.toBeInstanceOf(GrantDeniedError);
+  } finally {
+    await f.pool.query(
+      'UPDATE access.account SET minimum_authn_epoch=$3::bigint WHERE route=$1 AND account_id=$2',
+      [route, actor.accountId, account.floor],
+    );
+    await f.pool.query(
+      'UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1',
+      [partition, home.writeState, home.movedTo],
+    );
+  }
+});

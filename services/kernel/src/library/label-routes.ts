@@ -17,6 +17,7 @@ import { LibraryNotFoundError } from './collection-command-work.ts';
 import { LibraryConflictError } from './entry-errors.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
+import { enrichAndReAdmitLabelRead, selectedLabelReadHomeEpoch } from './label-read-admission.ts';
 import { createLabelConsolidationReview, LABEL_CONSOLIDATION_REVIEW_LIMITS } from './label-consolidation-review.ts';
 import { createLabelConsolidationCommands } from './label-consolidation.ts';
 import { libraryEntryTileSchema } from './library-entry-tiles.ts';
@@ -382,13 +383,23 @@ export function personalLabelRoutes(
       async ({ actor, query, admission, job }) => {
         return admission.run('normal', job, async () => {
           const body = await command(() => assignments().listAssignments(actor, query));
+          const expectedHomeEpoch = selectedLabelReadHomeEpoch(body);
           // The owner RR connection is released before standard per-partition summary readers acquire theirs.
           // FULL by-label keeps the raw assignment frontier: a concealed or moved Source is
           // subject: null, not dependency_unavailable.
-          return fullView({ ...deps, access: deps.access() }, actor, query.labelId ? query.view : 'BASIC', body, {
-            deadline: job.deadline,
-            ...(query.labelId && query.view === 'FULL' ? { withholdChangedSource: true as const } : {}),
-          });
+          return command(() =>
+            enrichAndReAdmitLabelRead({
+              pool: deps.pool,
+              actor,
+              expectedHomeEpoch,
+              deadline: job.deadline,
+              enrich: () =>
+                fullView({ ...deps, access: deps.access() }, actor, query.labelId ? query.view : 'BASIC', body, {
+                  deadline: job.deadline,
+                  ...(query.labelId && query.view === 'FULL' ? { withholdChangedSource: true as const } : {}),
+                }),
+            }),
+          );
         });
       },
     )
