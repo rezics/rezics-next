@@ -31,6 +31,7 @@ import { assertSnapshotSize, editorSnapshot } from './rich-text-editor-snapshot.
 import { richTextEditorLabels, type RichTextEditorLabels } from './editor-labels.ts';
 import { SelectionMenu } from './editor-selection-menu.tsx';
 import { EditorTouchBar } from './editor-touch-bar.tsx';
+import { TableControls } from './editor-upstream/reactjs-tiptap-editor/table-controls.tsx';
 import {
   isLinkRangeValid,
   LinkMenu,
@@ -996,10 +997,16 @@ export function RichTextEditor({
         openLink();
         return;
       }
-      if (editable && editor && event.altKey && event.key === 'F10' && !editor.state.selection.empty) {
-        event.preventDefault();
-        menuContainer.current?.querySelector<HTMLButtonElement>('[role="toolbar"] button[tabindex="0"]')?.focus();
-        return;
+      if (editable && editor && event.altKey && event.key === 'F10') {
+        const tableControls = menuContainer.current?.querySelector('[data-slot="editor-table-controls"]');
+        const controls = tableControls ?? menuContainer.current;
+        const entry = [...(controls?.querySelectorAll<HTMLButtonElement>('button:not([disabled])[tabindex="0"], button:not([disabled]):not([tabindex])') ?? [])]
+          .find((button) => button.closest('[role="toolbar"]') && button.getClientRects().length > 0);
+        if (entry) {
+          event.preventDefault();
+          entry.focus();
+          return;
+        }
       }
       if (modifier && event.key.toLowerCase() === 's' && latest.current.onSave) {
         event.preventDefault();
@@ -1055,6 +1062,15 @@ export function RichTextEditor({
           onSheetOpenChange={(open) => {
             if (isCurrent()) setTouchSheetOpen(open);
           }}
+          isCurrent={isCurrent}
+        />
+      ) : null}
+      {editor && editable && toolbar !== 'never' ? (
+        <TableControls
+          key={`table-${visit}`}
+          editor={editor}
+          labels={resolvedLabels}
+          labelOverrides={labels}
           isCurrent={isCurrent}
         />
       ) : null}

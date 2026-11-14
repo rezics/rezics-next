@@ -2,7 +2,6 @@
 
 import { Button } from '@rezics/ui/shadcn/button';
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '@rezics/ui/shadcn/sheet';
-import { Toggle } from '@rezics/ui/shadcn/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@rezics/ui/shadcn/tooltip';
 import type { Editor } from '@tiptap/core';
 import { Blocks, Bold, ChevronDown, Code, Eraser, Italic, Link, Redo2, Strikethrough, Undo2 } from 'lucide-react';
@@ -16,7 +15,8 @@ import {
   type EditorCommand,
 } from './editor-commands.ts';
 import type { RichTextEditorLabels } from './editor-labels.ts';
-import { pressedTone, returnFocus } from './editor-selection-menu.tsx';
+import { returnFocus } from './editor-selection-menu.tsx';
+import { ActionButton } from './editor-upstream/reactjs-tiptap-editor/action-button.tsx';
 
 const icons = {
   bold: Bold,
@@ -181,13 +181,15 @@ export function EditorTouchBar({
 
   function moveFocus(event: KeyboardEvent<HTMLDivElement>) {
     if (!menuIsCurrent()) return;
+    if (!event.currentTarget.contains(event.target as Node)) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
       if (isCurrent() && !editor.isDestroyed && editor.isEditable) editor.view.focus();
       return;
     }
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+    const step = { ArrowRight: rtl ? -1 : 1, ArrowDown: 1, ArrowLeft: rtl ? 1 : -1, ArrowUp: -1 }[event.key];
     if (!step && event.key !== 'Home' && event.key !== 'End') return;
     const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')];
     const activeButton = document.activeElement?.closest('button');
@@ -216,35 +218,20 @@ export function EditorTouchBar({
   function commandButton(command: EditorCommand, disabled = false) {
     const Icon = icons[command.id as keyof typeof icons];
     const active = command.active?.(editor) ?? false;
-    const common = {
-      type: 'button' as const,
-      className: cn(
-        barButton,
-        command.id === 'undo' || command.id === 'redo' ? 'size-11' : 'gap-1.5 px-2.5',
-        command.active && pressedTone,
-      ),
-      'aria-label': labels[command.label],
-      disabled,
-      tabIndex: activeTabStop === command.id ? 0 : -1,
-      onFocus: () => {
-        if (isCurrent()) setTabStop(command.id);
-      },
-      ...focusPreservingPointer,
-    };
-    const icon = Icon ? <Icon aria-hidden="true" /> : null;
-    return barControl(
-      command.id,
-      labels[command.label],
-      command.active ? (
-        <Toggle pressed={active} onPressedChange={() => runCommand(command)} {...common}>
-          {icon}
-          <span className="text-xs sm:text-sm">{labels[command.label]}</span>
-        </Toggle>
-      ) : (
-        <Button variant="ghost" onClick={() => runCommand(command)} {...common}>
-          {icon}
-        </Button>
-      ),
+    return (
+      <ActionButton
+        key={command.id}
+        label={labels[command.label]}
+        icon={Icon ? <Icon aria-hidden="true" /> : null}
+        action={() => runCommand(command)}
+        {...(command.active ? { pressed: active } : {})}
+        disabled={disabled}
+        tabIndex={activeTabStop === command.id ? 0 : -1}
+        onFocus={() => { if (isCurrent()) setTabStop(command.id); }}
+        className={cn(barButton, command.id === 'undo' || command.id === 'redo' ? 'size-11' : 'gap-1.5 px-2.5')}
+      >
+        {command.active ? <span className="text-xs sm:text-sm">{labels[command.label]}</span> : null}
+      </ActionButton>
     );
   }
 

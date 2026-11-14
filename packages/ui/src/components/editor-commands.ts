@@ -3,11 +3,11 @@ import { redo, redoDepth, undo, undoDepth } from '@tiptap/pm/history';
 import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { TextSelection } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
-import type { RichTextEditorLabels } from './editor-labels.ts';
+import type { EditorCommandLabel } from './editor-labels.ts';
 
 export interface EditorCommand {
   id: string;
-  label: keyof RichTextEditorLabels;
+  label: EditorCommandLabel;
   node?: string;
   mark?: string;
   /** Extra words the slash menu matches besides the localized label. */
@@ -50,7 +50,7 @@ function setTextblock(editor: Editor, type: string, attrs: Record<string, unknow
     .run();
 }
 
-const mark = (id: string, label: keyof RichTextEditorLabels): EditorCommand => ({
+const mark = (id: string, label: EditorCommandLabel): EditorCommand => ({
   id,
   label,
   mark: id,
@@ -124,7 +124,7 @@ const heading = (level: 1 | 2 | 3): EditorCommand => ({
 const list = (
   node: string,
   item: string,
-  label: keyof RichTextEditorLabels,
+  label: EditorCommandLabel,
   keywords: readonly string[],
 ): EditorCommand => ({
   id: node,

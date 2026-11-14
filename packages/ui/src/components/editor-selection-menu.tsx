@@ -8,7 +8,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@rezics/ui/shadcn/dropdown-menu';
-import { Toggle } from '@rezics/ui/shadcn/toggle';
+import { TooltipProvider } from '@rezics/ui/shadcn/tooltip';
 import type { Editor } from '@tiptap/core';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { ChevronDown } from 'lucide-react';
@@ -16,6 +16,7 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject }
 import { useCommandState } from './editor-commands.ts';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { LinkField, type LinkVisitRange } from './editor-link.tsx';
+import { ActionButton } from './editor-upstream/reactjs-tiptap-editor/action-button.tsx';
 
 /** Placement belongs to the selection controls, outside the document surface. */
 export const bubbleOptions = { placement: 'top' as const, offset: 8, flip: true, shift: { padding: 8 }, inline: true };
@@ -35,8 +36,8 @@ export const returnFocus =
   };
 
 /**
- * Formatting for the selected text. shadcn has no toolbar, so the bar is a `toolbar` role over `toggle` and `button`
- * with one tab stop and arrow-key travel; Tiptap's bubble menu places it above the selection.
+ * Upstream action controls keep one tab stop and arrow-key travel in the existing selection layer.
+ * The editor's range owner still controls links and frame-deferred focus restoration.
  */
 export function SelectionMenu({
   editor,
@@ -104,7 +105,8 @@ export function SelectionMenu({
       } else focusEditor();
       return;
     }
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+    const step = { ArrowRight: rtl ? -1 : 1, ArrowDown: 1, ArrowLeft: rtl ? 1 : -1, ArrowUp: -1 }[event.key];
     if (!step && event.key !== 'Home' && event.key !== 'End') return;
     // Up and down open the menu on its own button.
     if (target.closest('[data-slot="dropdown-menu-trigger"]') && (event.key === 'ArrowDown' || event.key === 'ArrowUp'))
@@ -128,6 +130,7 @@ export function SelectionMenu({
   }
   if (!isCurrent() || state.empty) return null;
   return (
+    <TooltipProvider delay={600}>
     <BubbleMenu
       editor={editor}
       pluginKey="rezicsSelectionMenu"
@@ -163,31 +166,18 @@ export function SelectionMenu({
           />
         ) : (
           <>
-            {state.marks.map(({ command, active }) => {
-              const common = {
-                tabIndex: activeTabStop === command.id ? 0 : -1,
-                onFocus: () => {
-                  if (menuIsCurrent()) setTabStop(command.id);
-                },
-                onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
-                onPointerDown: (event: React.PointerEvent) => event.preventDefault(),
-              };
-              return command.active ? (
-                <Toggle
-                  key={command.id}
-                  pressed={active}
-                  onPressedChange={() => runCommand(command)}
-                  className={pressedTone}
-                  {...common}
-                >
-                  {labels[command.label]}
-                </Toggle>
-              ) : (
-                <Button key={command.id} variant="ghost" onClick={() => runCommand(command)} {...common}>
-                  {labels[command.label]}
-                </Button>
-              );
-            })}
+            {state.marks.map(({ command, active }) => (
+              <ActionButton
+                key={command.id}
+                label={labels[command.label]}
+                {...(command.active ? { pressed: active } : {})}
+                action={() => runCommand(command)}
+                tabIndex={activeTabStop === command.id ? 0 : -1}
+                onFocus={() => { if (menuIsCurrent()) setTabStop(command.id); }}
+              >
+                {labels[command.label]}
+              </ActionButton>
+            ))}
             {state.blocks.length ? (
               <DropdownMenu
                 modal={false}
@@ -239,5 +229,6 @@ export function SelectionMenu({
         )}
       </div>
     </BubbleMenu>
+    </TooltipProvider>
   );
 }

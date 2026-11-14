@@ -159,8 +159,15 @@ contract; text-range formatting uses the editor selection layer. Domain hosts re
 permission and disclosure, private-draft departure, uncertain commands, revisions, save/publication review and
 authorized media access. These business rules justify custom integration; generic editor controls do not.
 
-This is the adopted implementation direction, not a claim that adaptation is installed or usable. The existing
-shared editor owner implements it once for all callers. Web owns subsequent rich-document round trips, table and
+The first bounded source adaptation is in `src/components/editor-upstream/reactjs-tiptap-editor`: its action
+control now serves the existing formatting/history toolbars, and its complete table action groups use the current
+document schema through `editor-table-commands.ts`. Table selection/paste, row/column operations, merge/split,
+headers, resizing and cell navigation share the existing editor/history instance. The upstream table bubble's
+groups use an in-flow toolbar and the public responsive `Menu`; interface labels remain separate from document
+language. The adjacent provenance identifies the copied/adapted source and retained MIT notice.
+
+Block/slash, table-size picker, link and media composition still need adoption through this owner. Source is not
+usable-journey acceptance. Web owns subsequent rich-document round trips, table and
 media operations, keyboard/touch/IME/RTL/screen-reader use, native undo, two-editor isolation and caller save/publish
 continuity. Root owns publication and sampled review. Those checks are separately scheduled after the code-only window.
 

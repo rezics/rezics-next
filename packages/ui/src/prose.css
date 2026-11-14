@@ -244,6 +244,19 @@ img.ProseMirror-separator {
   background: color-mix(in oklab, var(--primary) 16%, transparent);
   pointer-events: none;
 }
+.rezics-document .tiptap .column-resize-handle {
+  position: absolute;
+  inset-block: 0;
+  right: -2px;
+  width: 4px;
+  z-index: 2;
+  background: var(--primary);
+  pointer-events: none;
+}
+.rezics-document .tiptap.resize-cursor,
+.rezics-document .tiptap.resize-cursor * {
+  cursor: col-resize;
+}
 .rezics-document ul[data-type='taskList'] {
   list-style: none;
   padding-inline-start: 0;

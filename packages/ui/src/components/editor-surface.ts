@@ -16,6 +16,7 @@ import { createElement, type CompositionEvent, type KeyboardEvent, type ReactNod
 import { cn } from '../utils.ts';
 import { safeDocumentUrl } from './document-url.ts';
 import { documentExtensionsForProfile } from './document-extensions.ts';
+import { EditorTables } from './editor-table-commands.ts';
 import { Prose } from './prose.tsx';
 
 function textLength(doc: Editor['state']['doc']): number {
@@ -106,6 +107,7 @@ export function editorExtensions(
   const uniqueTypes = [...identifiableNodeNames].filter((name) => permittedNodes.has(name));
   return [
     ...documentExtensionsForProfile(profile),
+    ...(profile === 'blocks' && !options.readOnly ? [EditorTables] : []),
     Placeholder.configure({ placeholder: options.placeholder ?? '' }),
     UniqueID.configure({
       types: uniqueTypes,
