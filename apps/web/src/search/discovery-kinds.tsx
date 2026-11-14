@@ -62,6 +62,7 @@ export function DiscoveryKinds({
   onRefreshFocus,
   onRefusalFocus,
   onRefusal,
+  onSelectionChange,
 }: {
   initial: Kinds;
   checkpoint: string;
@@ -74,9 +75,12 @@ export function DiscoveryKinds({
   onRefreshFocus?: ((source: HTMLButtonElement) => void) | undefined;
   onRefusalFocus?: ((source: HTMLButtonElement) => void) | undefined;
   onRefusal?: ((state: SearchRecoveryState) => void) | undefined;
+  /** A composing owner stages these choices until its own Apply. */
+  onSelectionChange?: ((selected: string[]) => void) | undefined;
 }) {
   const [continuation, setContinuation] = useState<Kinds>();
-  const [chosen, setChosen] = useState(() => new Set(selected));
+  const [localChosen, setChosen] = useState(() => new Set(selected));
+  const chosen = onSelectionChange ? new Set(selected) : localChosen;
   const [stopped, setStopped] = useState(false);
   const [refused, setRefused] = useState(false);
   const [needsRefresh, setNeedsRefresh] = useState(false);
@@ -289,10 +293,17 @@ export function DiscoveryKinds({
                     aria-label={m.search_kind_choice({ value: label.text || kind.id }, options)}
                     name="kinds"
                     value={kind.id}
-                    defaultChecked={chosen.has(kind.id)}
+                    checked={chosen.has(kind.id)}
                     className="mt-0.5 size-4 shrink-0 accent-primary"
                     onChange={(event) => {
                       const { value, checked } = event.currentTarget;
+                      if (onSelectionChange) {
+                        const updated = new Set(chosen);
+                        if (checked) updated.add(value);
+                        else updated.delete(value);
+                        onSelectionChange([...updated]);
+                        return;
+                      }
                       setChosen((previous) => {
                         const updated = new Set(previous);
                         if (checked) updated.add(value);

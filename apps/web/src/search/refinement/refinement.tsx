@@ -18,6 +18,7 @@ import { quantityUnitChangeNeedsConfirmation, searchQuantityUnitText } from '../
 import {
   createRangeDraftState,
   getRangeDraft,
+  rangeFromDraft,
   updateRangeDraft,
   type RangeDraft,
   type RangeDraftState,
@@ -755,12 +756,10 @@ function RefinementInstance({
                     size="sm"
                     disabled={busy && !keepSelectedEditable}
                     onClick={() =>
-                      navigate(
-                        href({
-                          ...conditions,
-                          facetValues: { ...conditions.facetValues, [property]: [] },
-                        }),
-                      )
+                      changeConditions({
+                        ...conditions,
+                        facetValues: { ...conditions.facetValues, [property]: [] },
+                      })
                     }
                   >
                     {clearActions[property]}
@@ -867,7 +866,7 @@ function RangeControl({
     unavailable: (value: string) => m.search_quantity_unit_label_unavailable({ unit: value }, options),
   };
   const range = conditions.ranges?.[definition.property];
-  const applied = range !== undefined;
+  const applied = range !== undefined && !draft.removed;
   const { lower, upper, unit, invalid } = draft;
   const time = definition.datatype === 'time';
   const [pendingUnitChange, setPendingUnitChange] = useState<
@@ -899,7 +898,7 @@ function RangeControl({
       (unit || undefined) === pendingUnitChange.from &&
       JSON.stringify(pendingUnitChange.magnitudes) === JSON.stringify([lower, upper])
     )
-      onDraftChange({ ...draft, unit: pendingUnitChange.to ?? '' });
+      onDraftChange({ ...draft, unit: pendingUnitChange.to ?? '', invalid: false, removed: false });
     setPendingUnitChange(undefined);
   };
   return (
@@ -917,8 +916,10 @@ function RangeControl({
               max={time ? Number.MAX_SAFE_INTEGER : undefined}
               step={time ? '1' : 'any'}
               value={lower}
+              aria-invalid={invalid || undefined}
+              aria-describedby={invalid ? `${id}-error` : undefined}
               onChange={(event) => {
-                onDraftChange({ ...draft, lower: event.currentTarget.value, invalid: false });
+                onDraftChange({ ...draft, lower: event.currentTarget.value, invalid: false, removed: false });
               }}
             />
             {!time && (
@@ -944,8 +945,10 @@ function RangeControl({
               max={time ? Number.MAX_SAFE_INTEGER : undefined}
               step={time ? '1' : 'any'}
               value={upper}
+              aria-invalid={invalid || undefined}
+              aria-describedby={invalid ? `${id}-error` : undefined}
               onChange={(event) => {
-                onDraftChange({ ...draft, upper: event.currentTarget.value, invalid: false });
+                onDraftChange({ ...draft, upper: event.currentTarget.value, invalid: false, removed: false });
               }}
             />
             {!time && (
@@ -969,7 +972,7 @@ function RangeControl({
               const next = (nextSelectValue ?? '') || undefined;
               if (quantityUnitChangeNeedsConfirmation(unit || undefined, next, [lower, upper]))
                 setPendingUnitChange({ from: unit || undefined, to: next, identity, magnitudes: [lower, upper] });
-              else onDraftChange({ ...draft, unit: next ?? '' });
+              else onDraftChange({ ...draft, unit: next ?? '', invalid: false, removed: false });
             }}
           >
             <SelectTrigger id={`${id}-unit`} className="min-w-0 w-full">
@@ -1001,18 +1004,18 @@ function RangeControl({
       )}
       {time && <p className="text-sm text-muted-foreground">{m.refinement_year_hint({}, options)}</p>}
       {invalid && (
-        <p role="alert" className="text-sm text-destructive">
+        <p id={`${id}-error`} role="alert" tabIndex={-1} data-search-range-error className="text-sm text-destructive">
           {m.refinement_invalid_range({}, options)}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        {applied && deferNavigation && (
+        {deferNavigation && !draft.removed && (applied || lower !== '' || upper !== '' || invalid) && (
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => {
-              onDraftChange({ lower: '', upper: '', unit, invalid: false });
+              onDraftChange({ lower: '', upper: '', unit, invalid: false, removed: true });
               onConditionsChange?.({
                 ...conditions,
                 ranges: Object.fromEntries(
@@ -1044,15 +1047,8 @@ function RangeControl({
             size="sm"
             disabled={!time && (!unit || !definition.units.includes(unit))}
             onClick={() => {
-              const gte = lower === '' ? undefined : Number(lower);
-              const lte = upper === '' ? undefined : Number(upper);
-              if (
-                (gte === undefined && lte === undefined) ||
-                [gte, lte].some(
-                  (value) => value !== undefined && (!Number.isFinite(value) || (time && !Number.isSafeInteger(value))),
-                ) ||
-                (gte !== undefined && lte !== undefined && gte > lte)
-              ) {
+              const nextRange = rangeFromDraft(draft, definition);
+              if (!nextRange) {
                 onDraftChange({ ...draft, invalid: true });
                 return;
               }
@@ -1062,11 +1058,7 @@ function RangeControl({
                   ...conditions,
                   ranges: {
                     ...conditions.ranges,
-                    [definition.property]: {
-                      ...(gte !== undefined ? { gte } : {}),
-                      ...(lte !== undefined ? { lte } : {}),
-                      ...(!time ? { unit } : {}),
-                    },
+                    [definition.property]: nextRange,
                   },
                 }),
               );

@@ -51,7 +51,7 @@ import { discoveryRequest, realmSearchRequest } from './search-request.ts';
 import { applicableRefinementProperties } from './refinement/model';
 import { Refinement } from './refinement/refinement';
 import { readRefinement } from './refinement/server';
-import { createRangeDraftState, updateRangeDraft, type RangeDraft } from './refinement/range-draft';
+import { createRangeDraftState, rangeFromDraft, updateRangeDraft, type RangeDraft } from './refinement/range-draft';
 import { readDiscoveryKinds, type DiscoveryKindsState } from './discovery';
 import {
   facetSearchInvalidation,
@@ -80,13 +80,13 @@ import { requestParams } from './search-application';
 import { validateSearchInput } from './search-query-input';
 import type { SearchPageData } from './search-query-contract';
 export type { SearchFacetValueLabel, SearchPageData } from './search-query-contract';
-import { searchResourceScopeChanged, searchScopeFromFilter, searchStateWithoutScope } from './search-scope-restart';
+import { searchResourceScopeChanged } from './search-scope-restart';
 import { DiscoveryKinds } from './discovery-kinds';
 
 import { useDiscoveryPersonalResults } from './discovery-personal-host';
 
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
-import { ConditionEditor } from './condition-editor';
+import { ConditionEditor, conditionEditorHasRawEdits, type ConditionEditorDraftState } from './condition-editor';
 import { searchQuantityUnitText } from './condition-quantity';
 import type { ConditionEntityContext } from './condition-entity';
 import { SearchRealmDiscovery } from './realm-discovery';
@@ -105,7 +105,8 @@ import { useSearchQuery } from './use-search-query';
 import type { RealmDiscoveryState } from '../community/realm-discovery';
 import { conditionAdmission, conditionSearchState } from './condition-editor-model';
 import { conditionConceptSuggestionFilter } from './condition-concept-model';
-import { createFilterDraft, resetFilterDraft } from './filter-draft-reset';
+import { createFilterDraft, resetFilterDraft, type FilterDraftBaseline, type FilterScopeDraft } from './filter-draft-reset';
+import { filterApplicationCopy } from './filter-application-copy';
 import { useFilterSurfaceFocus } from './filter-surface-focus';
 import { useConditionComposition } from './condition-composition';
 function conditionEntityLookupContext(
@@ -249,32 +250,19 @@ function messageOptions(locale: string): MessageOptions {
 
 /** Search filters author a native request-only resource leaf; the server remains the access authority. */
 function AdvancedScope({
-  filter,
   scope,
   locale,
-  onRemove,
+  onChange,
 }: {
-  filter: string | undefined;
-  scope: SearchResourceScope | undefined;
+  scope: FilterScopeDraft;
   locale: string;
-  onRemove: () => void;
+  onChange: (scope: FilterScopeDraft) => void;
 }) {
   const typeId = useId();
   const resourceId = useId();
   const options = messageOptions(locale);
-  const [kind, setKind] = useState<SearchResourceScope['kind'] | ''>(scope?.kind ?? '');
-  const [id, setId] = useState(scope?.id ?? '');
-  useEffect(() => {
-    setKind(scope?.kind ?? '');
-    setId(scope?.id ?? '');
-  }, [scope?.kind, scope?.id]);
-
+  const { kind, id } = scope;
   const selected = kind && isSearchResourceScope({ kind, id }) ? { kind, id: id.toLowerCase() } : undefined;
-  const nextFilter = selected
-    ? searchFilterWithScope(filter, selected)
-    : scope && !kind
-      ? removeSearchResourceScope(filter)
-      : filter;
   return (
     <fieldset className="space-y-3 rounded-lg border border-border/60 p-3">
       <legend className="px-1 text-sm font-medium">{m.access_resource({}, options)}</legend>
@@ -284,8 +272,7 @@ function AdvancedScope({
           value={kind === '' ? null : kind}
           onValueChange={(nextSelectValue) => {
             const next = (nextSelectValue ?? '') as SearchResourceScope['kind'] | '';
-            setKind(next);
-            if (!next && scope) onRemove();
+            onChange({ kind: next, id: next ? id : '' });
           }}
         >
           <SelectTrigger id={typeId}>
@@ -312,7 +299,7 @@ function AdvancedScope({
             autoComplete="off"
             aria-invalid={(id.length > 0 && !selected) || undefined}
             aria-describedby={id.length > 0 && !selected ? `${resourceId}-error` : undefined}
-            onChange={(event) => setId(event.currentTarget.value)}
+            onChange={(event) => onChange({ kind, id: event.currentTarget.value })}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           {id.length > 0 && !selected && (
@@ -322,13 +309,12 @@ function AdvancedScope({
           )}
         </Field>
       )}
-      <input type="hidden" name="filter" value={nextFilter ?? ''} />
-      {scope && (
-        <Button type="button" variant="ghost" onClick={onRemove} className="max-w-full whitespace-normal wrap-anywhere">
-          {m.header_search_remove_scope({ scope: `${scope.kind} ${scope.id}` }, options)}
+      {kind && (
+        <Button type="button" variant="ghost" onClick={() => onChange({ kind: '', id: '' })} className="max-w-full whitespace-normal wrap-anywhere">
+          {m.header_search_remove_scope({ scope: `${kind} ${id}` }, options)}
         </Button>
       )}
-      {scope && <p className="text-xs text-muted-foreground">{`${scope.kind} ${scope.id}`}</p>}
+      {kind && <p className="text-xs text-muted-foreground">{`${kind} ${id}`}</p>}
     </fieldset>
   );
 }
@@ -382,7 +368,9 @@ export function SearchPage({
   const [filterSurface, setFilterSurface] = useState<'desktop' | 'mobile' | undefined>();
   const router = useRouter({ warn: false });
   const typeControlId = useId();
+  const applyDescriptionId = useId();
   const locale = localeProp ?? getLocale();
+  const filterCopy = filterApplicationCopy(locale);
   const personal = useDiscoveryPersonalResults({
     source: data?.discovery,
     request: data?.queryState ? discoveryRequest(data.queryState, requestLanguages(locale)) : undefined,
@@ -457,17 +445,64 @@ export function SearchPage({
   const filterFocus = useFilterSurfaceFocus(stateKey);
   const [rangeDraftState, setRangeDraftState] = useState(() => createRangeDraftState(stateKey));
   if (rangeDraftState.key !== stateKey) setRangeDraftState(createRangeDraftState(stateKey));
-  const baseline = { condition: data?.condition, languages: committedState.languages };
+  const baseline: FilterDraftBaseline = {
+    condition: data?.condition,
+    languages: committedState.languages,
+    type: committedState.type,
+    kinds: committedState.kinds,
+    facets: committedState.facets,
+    scope: { kind: currentScope?.kind ?? '', id: currentScope?.id ?? '' },
+  };
   const [draft, setDraft] = useState(() => createFilterDraft(stateKey, baseline));
   const [revertedKey, setRevertedKey] = useState<string>();
+  const [revertVersion, setRevertVersion] = useState(0);
+  const conditionDraftState = useRef<ConditionEditorDraftState | undefined>(undefined);
+  const conditionDraftOwner = JSON.stringify([stateKey, session, data?.conditionMetadata?.digest]);
+  const retainedConditionOwner = useRef(conditionDraftOwner);
+  if (retainedConditionOwner.current !== conditionDraftOwner) {
+    retainedConditionOwner.current = conditionDraftOwner;
+    conditionDraftState.current = undefined;
+  }
   if (draft.key !== stateKey) {
     setDraft(createFilterDraft(stateKey, baseline));
   }
+  const draftScope = draft.scope ?? { kind: '', id: '' };
+  const draftResourceScope = isSearchResourceScope(draftScope)
+    ? { ...draftScope, id: draftScope.id.toLowerCase() }
+    : undefined;
+  const invalidScope = Boolean(draftScope.kind && !draftResourceScope);
+  const scopeChanged = invalidScope || searchResourceScopeChanged(currentScope, draftResourceScope);
+  const draftFacets = draft.facets ?? {};
+  const draftRanges = { ...committedState.ranges };
+  const invalidRanges: string[] = [];
+  for (const [property, rangeDraft] of Object.entries(rangeDraftState.key === stateKey ? rangeDraftState.properties : {})) {
+    if (rangeDraft.removed) {
+      delete draftRanges[property];
+      continue;
+    }
+    const definition = data?.refinement?.properties.find((entry) => entry.property === property && entry.mode === 'range');
+    const range = definition ? rangeFromDraft(rangeDraft, definition) : undefined;
+    if (range) draftRanges[property] = range;
+    else invalidRanges.push(property);
+  }
+  const editedState: SearchLoaderDeps = {
+    ...conditionSearchState(committedState, draft.condition, draft.languages),
+    type: draft.type,
+    kinds: draft.kinds,
+    facets: draftFacets,
+    ranges: draftRanges,
+    filter: draftResourceScope
+      ? searchFilterWithScope(committedState.filter, draftResourceScope)
+      : draftScope.kind
+        ? committedState.filter
+        : removeSearchResourceScope(committedState.filter),
+    resourceScope: draftResourceScope,
+  };
   const admit = useMemo(
     () => (data?.conditionMetadata ? conditionAdmission(data.conditionMetadata) : undefined),
     [data?.conditionMetadata],
   );
-  const localIssues = admit?.(draft.condition, committedState) ?? [];
+  const localIssues = admit?.(draft.condition, editedState) ?? [];
   const issues = [
     ...(data?.problem?.errors ?? []),
     ...(draft.attempted || draft.condition !== data?.condition ? localIssues : []),
@@ -476,17 +511,21 @@ export function SearchPage({
   useEffect(() => {
     if (issues.length > 0 && advancedDetails.current) advancedDetails.current.open = true;
   }, [issues.length, data?.problem, filterSurface]);
-  const editedState = {
-    ...conditionSearchState(committedState, draft.condition, draft.languages),
-    filter: committedState.filter,
-    resourceScope: committedState.resourceScope,
-  };
-  // Pending fields can be incomplete. Result navigation consumes only an admitted tree.
-  const navigationState = localIssues.length ? committedState : editedState;
-  const editableData = data ? { ...data, queryState: navigationState, condition: navigationState.condition } : data;
   const editing =
-    JSON.stringify([draft.condition, editedState.languages]) !==
-    JSON.stringify([committedState.condition, committedState.languages]);
+    discoverySearchHref(locale, editedState) !== discoverySearchHref(locale, { ...committedState, cursor: undefined }) ||
+    JSON.stringify(draftScope) !== JSON.stringify(baseline.scope) ||
+    Object.keys(rangeDraftState.properties).length > 0 ||
+    conditionEditorHasRawEdits(conditionDraftState.current);
+  const changeScope = (scope: FilterScopeDraft) => {
+    setDraft((previous) => ({
+      ...previous,
+      scope,
+      facets:
+        previous.scope?.kind === scope.kind && previous.scope?.id.toLowerCase() === scope.id.toLowerCase()
+          ? previous.facets
+          : {},
+    }));
+  };
   const conceptFilter = data?.conditionMetadata ? conditionConceptSuggestionFilter(data.conditionMetadata) : undefined;
   const conceptRequiresReader = !!data?.queryState && searchRequiresCurrentReader(data.queryState);
   const conceptLookup = {
@@ -538,12 +577,12 @@ export function SearchPage({
       'type',
       `${m.search_subject_type({}, options)}: ${label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}`,
       {
-        ...navigationState,
+        ...committedState,
         type: undefined,
       },
       { type },
     );
-  for (const kind of navigationState.kinds ?? []) {
+  for (const kind of committedState.kinds ?? []) {
     const choice =
       discovery?.status === 'ready' ? discovery.page.kinds.values.find((entry) => entry.id === kind) : undefined;
     const kindLabel = choice ? localizedLabel(choice.labels, locale) : undefined;
@@ -554,7 +593,7 @@ export function SearchPage({
         choice?.labels,
         m.search_constraint_identity_kind_unavailable({}, options),
       )}`,
-      { ...navigationState, kinds: navigationState.kinds?.filter((value) => value !== kind) },
+      { ...committedState, kinds: committedState.kinds?.filter((value) => value !== kind) },
       { kind },
       kindLabel?.lang,
       description.text,
@@ -605,7 +644,7 @@ export function SearchPage({
             : label(valueLabels, fallbackValue)
         }`,
         {
-          ...navigationState,
+          ...committedState,
           facets: { ...selectedFacets, [property]: values.filter((entry) => entry !== value) },
         },
         { property, value },
@@ -630,25 +669,25 @@ export function SearchPage({
             : ''
       }`,
       {
-        ...navigationState,
+        ...committedState,
         ranges: Object.fromEntries(Object.entries(data?.ranges ?? {}).filter(([key]) => key !== property)),
       },
       { property, range },
     );
-  for (const tag of draft.languages ?? [])
+  for (const tag of committedState.languages ?? [])
     add(`language:${tag}`, `${m.condition_language({}, options)}: ${languageDisplayName(tag, locale)}`, {
-      ...navigationState,
-      languages: draft.languages?.filter((entry) => entry !== tag),
+      ...committedState,
+      languages: committedState.languages?.filter((entry) => entry !== tag),
     });
-  if (draft.condition) add('condition', m.condition_heading({}, options), { ...navigationState, condition: undefined });
-  const filterWithoutScope = navigationState.resourceScope
-    ? removeSearchResourceScope(navigationState.filter)
-    : navigationState.filter;
+  if (committedState.condition) add('condition', m.condition_heading({}, options), { ...committedState, condition: undefined });
+  const filterWithoutScope = committedState.resourceScope
+    ? removeSearchResourceScope(committedState.filter)
+    : committedState.filter;
   if (filterWithoutScope)
     add('filter', m.search_existing_filter({}, options), {
-      ...navigationState,
-      filter: navigationState.resourceScope
-        ? searchFilterWithScope(undefined, navigationState.resourceScope)
+      ...committedState,
+      filter: committedState.resourceScope
+        ? searchFilterWithScope(undefined, committedState.resourceScope)
         : undefined,
     });
   const activeFilterCount = constraints.length;
@@ -732,9 +771,7 @@ export function SearchPage({
       locale={locale}
       type={type}
       selectedFacets={selectedFacets}
-      data={editableData}
-      continuationAllowed={!editing}
-      invalid={localIssues.length > 0}
+      data={data}
       onRetry={onRetry}
       retryState={committedState}
       recoveryOwnerKey={recoveryOwnerKey}
@@ -749,30 +786,17 @@ export function SearchPage({
       formAction={formAction}
     />
   );
-  const navigate = (href: string, removingCondition = false) => {
+  const navigate = (href: string) => {
     if (!isCurrent()) return;
-    setDraft((previous) => ({ ...previous, attempted: true }));
-    if (!removingCondition && localIssues.length) {
-      if (advancedDetails.current) advancedDetails.current.open = true;
-      requestAnimationFrame(() =>
-        (document.querySelector<HTMLElement>('[data-condition-errors]') ??
-          document.querySelector<HTMLElement>('[data-search-composition-errors]'))?.focus(),
-      );
-      return;
-    }
     void router?.navigate({ href });
   };
-  const removeScope = () => navigate(hrefFor(searchStateWithoutScope(committedState)));
   const clearResourceLanguage = () =>
-    navigate(
-      hrefFor({
-        ...committedState,
-        facets: Object.fromEntries(
-          Object.entries(selectedFacets).filter(([property]) => property !== RESOURCE_LANGUAGE_PROPERTY),
-        ),
-        cursor: undefined,
-      }),
-    );
+    setDraft((previous) => ({
+      ...previous,
+      facets: Object.fromEntries(
+        Object.entries(previous.facets ?? {}).filter(([property]) => property !== RESOURCE_LANGUAGE_PROPERTY),
+      ),
+    }));
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     if (!isCurrent()) {
       event.preventDefault();
@@ -783,33 +807,59 @@ export function SearchPage({
       return;
     }
     setDraft((previous) => ({ ...previous, attempted: true }));
-    if (localIssues.length || router) event.preventDefault();
-    if (localIssues.length) {
+    setRevertedKey(undefined);
+    if (localIssues.length || invalidRanges.length || invalidScope || router) event.preventDefault();
+    if (invalidRanges.length) {
+      setRangeDraftState((previous) => ({
+        ...previous,
+        properties: Object.fromEntries(
+          Object.entries(previous.properties).map(([property, range]) => [
+            property,
+            { ...range, invalid: invalidRanges.includes(property) },
+          ]),
+        ),
+      }));
+    }
+    if (localIssues.length || invalidRanges.length || invalidScope) {
       const form = event.currentTarget;
       if (advancedDetails.current) advancedDetails.current.open = true;
-      requestAnimationFrame(() => form.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
+      requestAnimationFrame(() =>
+        form.querySelector<HTMLElement>('[data-condition-errors], [data-search-range-error], [aria-invalid="true"]')?.focus(),
+      );
       return;
     }
     if (router) {
-      const params = new URLSearchParams();
-      for (const [key, value] of new FormData(event.currentTarget))
-        if (typeof value === 'string' && value !== '') params.append(key, value);
-      if (
-        searchResourceScopeChanged(
-          committedState.resourceScope,
-          searchScopeFromFilter(params.get('filter') ?? undefined),
-        )
-      )
-        for (const key of [...params.keys()]) if (key.startsWith('f.')) params.delete(key);
+      const nextHref = discoverySearchHref(locale, editedState);
+      const params = new URL(nextHref, 'https://rezics.invalid').searchParams;
       const action = new URL(formAction ?? `/${locale}/search`, 'https://rezics.invalid');
       for (const [key, value] of params) action.searchParams.append(key, value);
+      // Applying equivalent values also finishes raw edits when the URL owner does not change.
+      if (nextHref === discoverySearchHref(locale, committedState)) {
+        setDraft(createFilterDraft(stateKey, baseline));
+        setRangeDraftState(createRangeDraftState(stateKey));
+        conditionDraftState.current = undefined;
+        setRevertVersion((previous) => previous + 1);
+      }
       navigate(`${action.pathname}${action.search}`);
     }
+  };
+  const invalidInput = (event: React.FormEvent<HTMLFormElement>) => {
+    setDraft((previous) => ({ ...previous, attempted: true }));
+    if (!(event.target instanceof HTMLElement)) return;
+    for (
+      let ancestor = event.target.parentElement;
+      ancestor && ancestor !== event.currentTarget;
+      ancestor = ancestor.parentElement
+    )
+      if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
   };
   const revertDraft = () => {
     const expectedKey = stateKey;
     if (latestStateKey.current !== expectedKey) return;
     setDraft((previous) => resetFilterDraft(previous, expectedKey, latestStateKey.current, baseline));
+    setRangeDraftState(createRangeDraftState(expectedKey));
+    conditionDraftState.current = undefined;
+    setRevertVersion((previous) => previous + 1);
     setRevertedKey(expectedKey);
     requestAnimationFrame(() => {
       if (latestStateKey.current === expectedKey) revertStatus.current?.focus();
@@ -829,7 +879,7 @@ export function SearchPage({
     )
       return;
     event.preventDefault();
-    navigate(anchor.getAttribute('href')!, anchor.dataset.removeCondition === 'true');
+    navigate(anchor.getAttribute('href')!);
   };
   const filterEntrance = (
     <div className="min-w-0 space-y-4 rounded-xl border border-border/60 p-4" onClick={follow}>
@@ -859,6 +909,7 @@ export function SearchPage({
           {m.search_filters({}, options)} ({number.format(activeFilterCount)})
         </Button>
       </div>
+      {editing && <p role="status" className="text-sm text-muted-foreground">{filterCopy.pending}</p>}
       {draft.attempted && localIssues.length > 0 && !filterSurface && (
         <p
           role="alert"
@@ -870,7 +921,7 @@ export function SearchPage({
         </p>
       )}
       {constraints.length > 0 && (
-        <ul aria-label={m.refinement_selected({}, options)} data-search-constraints className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
+        <ul aria-label={filterCopy.current} data-search-constraints className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
           {constraints.map(({ key, text, state, lang, description, descriptionLang }, index) => (
             <li key={key} className="min-w-0 max-w-full">
               <a
@@ -878,7 +929,6 @@ export function SearchPage({
                   buttonVariants({ variant: 'outline', size: 'sm' }),
                   'h-auto min-h-11 max-w-full whitespace-normal py-2',
                 )}
-                data-remove-condition={key === 'condition' ? 'true' : undefined}
                 aria-label={m.refinement_remove(
                   {
                     value: m.search_constraint_identity_filter(
@@ -1004,6 +1054,7 @@ export function SearchPage({
 
   const filterContents = (surface: 'desktop' | 'mobile') => (
     <div className="min-w-0 space-y-5 pt-4">
+      <p id={`${applyDescriptionId}-${surface}`} className="text-sm text-muted-foreground">{filterCopy.help}</p>
       <input type="hidden" name="q" value={query} />
       {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       {committedState.ratingPopulation && (
@@ -1016,7 +1067,7 @@ export function SearchPage({
       {constraints.length > 0 && (
         <details className="min-w-0 rounded-lg border border-border/60 p-3 lg:hidden">
           <summary className="min-h-10 cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-            {m.refinement_selected({}, options)} ({number.format(activeFilterCount)})
+            {filterCopy.current} ({number.format(activeFilterCount)})
           </summary>
           <ul className="space-y-2 pt-2 text-sm text-muted-foreground">
             {constraints.map(({ key, text, lang }) => (
@@ -1026,19 +1077,12 @@ export function SearchPage({
         </details>
       )}
       <section aria-label={m.access_resource({}, options)} className="min-w-0 space-y-4">
-        {fixedResourceScope ? (
-          <input
-            type="hidden"
-            name="filter"
-            value={searchFilterWithScope(data?.queryState?.filter ?? committedState.filter, fixedResourceScope) ?? ''}
-          />
-        ) : (
+        <input type="hidden" name="filter" value={editedState.filter ?? ''} />
+        {!fixedResourceScope && (
           <AdvancedScope
-            key={`${surface}-${JSON.stringify(data?.queryState?.resourceScope ?? null)}`}
-            filter={data?.queryState?.filter}
-            scope={data?.queryState?.resourceScope}
+            scope={draftScope}
             locale={locale}
-            onRemove={removeScope}
+            onChange={changeScope}
           />
         )}
         {fixedResourceScope && (
@@ -1046,6 +1090,7 @@ export function SearchPage({
             {m.access_resource({}, options)}: <bdi>{`${fixedResourceScope.kind} ${fixedResourceScope.id}`}</bdi>
           </p>
         )}
+        {scopeChanged && <p role="status" className="text-sm text-muted-foreground">{filterCopy.scope}</p>}
       </section>
       {resourceLanguage?.applicability === 'not-applicable' && (type || resourceLanguage.selected.length > 0) && (
         <p role="status" className="text-sm text-muted-foreground">
@@ -1092,21 +1137,21 @@ export function SearchPage({
       {(draft.languages ?? []).map((tag) => (
         <input key={tag} type="hidden" name="language" value={tag} />
       ))}
-      {(!kindDirectory ? (data?.queryState?.kinds ?? []) : []).map((kind) => (
+      {(!kindDirectory ? (draft.kinds ?? []) : []).map((kind) => (
         <input key={kind} type="hidden" name="kinds" value={kind} />
       ))}
-      {(!data?.refinement ||
-        Object.entries(selectedFacets).some(
+      {(!data?.refinement || scopeChanged ||
+        Object.entries(draftFacets).some(
           ([property]) => !filterRefinementProperties.some((entry) => entry.property === property),
         )) &&
-        Object.entries(selectedFacets).flatMap(([property, values]) =>
-          !data?.refinement || !filterRefinementProperties.some((entry) => entry.property === property)
+        Object.entries(draftFacets).flatMap(([property, values]) =>
+          !data?.refinement || scopeChanged || !filterRefinementProperties.some((entry) => entry.property === property)
             ? values.map((value) => (
                 <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
               ))
             : [],
         )}
-      {!typeRefinementAvailable && type && <input type="hidden" name="type" value={type} />}
+      {!typeRefinementAvailable && draft.type && <input type="hidden" name="type" value={draft.type} />}
       {(kindDirectory || typeRefinementAvailable) && (
         <section aria-label={m.home_kind_label({}, options)} className="min-w-0 space-y-4 border-t border-border/60 pt-5">
           {kindDirectory && data?.queryState && (
@@ -1115,7 +1160,8 @@ export function SearchPage({
               initial={kindDirectory.initial}
               checkpoint={kindDirectory.checkpoint}
               locale={locale}
-              selected={data.queryState.kinds ?? []}
+              selected={draft.kinds ?? []}
+              onSelectionChange={(kinds) => setDraft((previous) => ({ ...previous, kinds }))}
               hydrated={hydrated}
               onRefresh={onRetry ? () => void onRetry() : undefined}
               onRefreshFocus={retryFocus.captureRetryFocus}
@@ -1147,9 +1193,9 @@ export function SearchPage({
               <p className="text-sm text-muted-foreground">{m.search_subject_type_help({}, options)}</p>
               <Select
                 name="type"
-                value={(type ?? '') === '' ? null : (type ?? '')}
+                value={draft.type || null}
                 onValueChange={(nextSelectValue) => {
-                  if (hydrated) document.getElementById(`${typeControlId}-${surface}`)?.closest('form')?.requestSubmit();
+                  setDraft((previous) => ({ ...previous, type: nextSelectValue || undefined }));
                 }}
               >
                 <SelectTrigger id={`${typeControlId}-${surface}`}>
@@ -1158,8 +1204,8 @@ export function SearchPage({
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value={null}>{m.search_all_subject_types({}, options)}</SelectItem>
-                    {type && !data?.conditionMetadata?.types[type] && (
-                      <SelectItem value={type}>
+                    {draft.type && !data?.conditionMetadata?.types[draft.type] && (
+                      <SelectItem value={draft.type}>
                         {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}
                       </SelectItem>
                     )}
@@ -1188,20 +1234,18 @@ export function SearchPage({
             onRangeDraftChange={(property: string, draft: RangeDraft) =>
               setRangeDraftState((previous) => updateRangeDraft(previous, stateKey, property, draft))
             }
-            data={{ ...data.refinement, properties: filterRefinementProperties }}
+            data={{
+              ...data.refinement,
+              key: JSON.stringify([data.refinement.key, scopeChanged]),
+              properties: scopeChanged
+                ? filterRefinementProperties.filter((entry) => entry.mode === 'range')
+                : filterRefinementProperties,
+            }}
             showSummary={false}
+            deferNavigation
+            onConditionsChange={(next) => setDraft((previous) => ({ ...previous, facets: next.facetValues }))}
             onNavigate={navigate}
-            hrefForConditions={
-              hrefForState
-                ? (next) =>
-                    hrefFor({
-                      ...committedState,
-                      ...next,
-                      facets: next.facetValues,
-                      cursor: undefined,
-                    })
-                : undefined
-            }
+            hrefForConditions={() => hrefFor({ ...committedState, cursor: undefined })}
             clearActions={
               resourceLanguage?.actions.clear
                 ? { [RESOURCE_LANGUAGE_PROPERTY]: m.search_resource_language_clear({}, options) }
@@ -1211,14 +1255,14 @@ export function SearchPage({
             selectedValueFallbacks={[RESOURCE_LANGUAGE_PROPERTY]}
             selectionLimits={{ [RESOURCE_LANGUAGE_PROPERTY]: RESOURCE_LANGUAGE_SELECTION_LIMIT }}
             conditions={{
-              ...(type ? { type } : {}),
-              facetValues: selectedFacets,
-              ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
+              ...(draft.type ? { type: draft.type } : {}),
+              facetValues: draftFacets,
+              ...(draft.kinds ? { kinds: draft.kinds } : {}),
               ...(draft.languages ? { languages: draft.languages } : {}),
               ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
               ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
               ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
-              ...(data.ranges ? { ranges: data.ranges } : {}),
+              ranges: draftRanges,
               ...(draft.condition ? { condition: draft.condition } : {}),
             }}
             query={query}
@@ -1276,6 +1320,9 @@ export function SearchPage({
           </summary>
           <div className="pt-3">
             <ConditionEditor
+              key={`${stateKey}-${revertVersion}`}
+              draftState={conditionDraftState}
+              onDraftInput={() => setDraft((previous) => ({ ...previous }))}
               requestIdentity={JSON.stringify([stateKey, session])}
               value={draft.condition}
               onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
@@ -1307,16 +1354,29 @@ export function SearchPage({
         </a>
       )}
       {data?.queryState?.filter && <p className="text-sm text-muted-foreground">{m.condition_retained({}, options)}</p>}
-      {Object.entries(data?.ranges ?? {}).map(([property, range]) => (
+      {Object.entries(draftRanges).map(([property, range]) => (
         <input key={property} type="hidden" name={`r.${property}`} value={JSON.stringify(range)} />
       ))}
+      {draft.attempted && invalidRanges.length > 0 && (
+        <div role="alert" tabIndex={-1} data-search-range-error className="text-sm text-destructive">
+          <p>{m.refinement_invalid_range({}, options)}</p>
+          <ul>
+            {invalidRanges.map((property) => (
+              <li key={property}>
+                {label(data?.conditionMetadata?.properties[property]?.labels, property)}{' '}
+                <code className="break-all">{property}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div
         role="group"
-        aria-label={m.search_apply({}, options)}
+        aria-label={filterCopy.apply}
         className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur lg:static lg:mx-0 lg:px-0"
       >
-        <Button type="submit">{m.search_apply({}, options)}</Button>
-        {editing && (
+        <Button type="submit" aria-describedby={`${applyDescriptionId}-${surface}`}>{filterCopy.apply}</Button>
+        {(editing || draft.attempted) && (
           <Button type="button" variant="outline" onClick={revertDraft}>
             {m.search_filter_revert_action({}, options)}
           </Button>
@@ -1329,7 +1389,7 @@ export function SearchPage({
         tabIndex={-1}
         className="rounded-sm text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        {revertedKey === stateKey ? m.search_filter_revert_status({}, options) : ''}
+        {!editing && revertedKey === stateKey ? m.search_filter_revert_status({}, options) : ''}
       </p>
     </div>
   );
@@ -1366,6 +1426,7 @@ export function SearchPage({
             id="desktop-filter-form"
             method="get"
             onSubmit={submit}
+            onInvalidCapture={invalidInput}
             action={formAction ?? `/${locale}/search`}
           >
             {filterContents('desktop')}
@@ -1388,6 +1449,7 @@ export function SearchPage({
             method="get"
             action={formAction ?? `/${locale}/search`}
             onSubmit={submit}
+            onInvalidCapture={invalidInput}
             onClick={follow}
           >
             {filterContents('mobile')}
@@ -1407,7 +1469,7 @@ export function SearchPage({
     );
   }
 
-  const browsing = isRealmDiscoverySearch(committedState) && !editing && !result && !discovery && !data?.recovery;
+  const browsing = isRealmDiscoverySearch(committedState) && !result && !discovery && !data?.recovery;
   const textError = data?.recovery?.status === 'invalid' ? data.recovery.textError : undefined;
   const content =
     textError && textError.query === query && committedState.query === query ? (
@@ -1447,7 +1509,7 @@ export function SearchPage({
                 <QuerySharePreview
                   key={JSON.stringify([stateKey, locale, session])}
                   locale={locale}
-                  changed={editing || Object.keys(rangeDraftState.properties).length > 0}
+                  changed={editing}
                   prepare={(signal) =>
                     prepareShareWithLocale({
                       signal,

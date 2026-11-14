@@ -70,6 +70,24 @@ import {
 } from './condition-tree-edit';
 
 type Choice = { value: string; labels: Record<string, string> };
+/** Only authored operand text survives a Filters remount; reads and focus remain mounted-session state. */
+export type ConditionEditorDraftState = {
+  value: FilterDocument | undefined;
+  node: ConditionDraftNode | undefined;
+  owner: string;
+  serial: number;
+};
+
+export function conditionEditorHasRawEdits(state: ConditionEditorDraftState | undefined): boolean {
+  const edited = (node: ConditionDraftNode): boolean =>
+    Boolean(node.calendar?.raw.invalid) ||
+    Object.values(node.ranges).some(({ current }) =>
+      current ? current.raw !== (current.value?.toString() ?? '') : false,
+    ) ||
+    node.children.some(edited);
+  return state?.node ? edited(state.node) : false;
+}
+
 type MessageOptions = { locale: (typeof locales)[number] };
 type PendingPropertyChange = {
   property: string;
@@ -161,6 +179,8 @@ export function ConditionEditor({
   showApply = true,
   framed = true,
   showHeading = true,
+  draftState,
+  onDraftInput,
 }: {
   value?: FilterDocument | undefined;
   onChange(value: FilterDocument | undefined): void;
@@ -182,18 +202,21 @@ export function ConditionEditor({
   showApply?: boolean;
   framed?: boolean;
   showHeading?: boolean;
+  draftState?: { current: ConditionEditorDraftState | undefined };
+  onDraftInput?: () => void;
 }) {
   const options = messageOptions(locale);
   const { store, value: reader } = useWorkspaceAdmission(PRESET_OPERATIONS);
   const address = useReaderAddress(null, undefined, locale);
   const readerKey = JSON.stringify([reader.subject, reader.viewer, reader.observation?.id]);
   const root = useRef<HTMLDivElement>(null);
-  const serial = useRef(0);
+  const retainedDraft = draftState?.current;
+  const serial = useRef(retainedDraft?.serial ?? 0);
   const nextKey = () => ++serial.current;
   let [session, setSession] = useState(() => ({
-    value,
+    value: retainedDraft ? retainedDraft.value : value,
     lifetime: {},
-    node: value ? createConditionDraftNode(value, nextKey) : undefined,
+    node: retainedDraft ? retainedDraft.node : value ? createConditionDraftNode(value, nextKey) : undefined,
   }));
   const disabledRef = useRef(disabled);
   disabledRef.current = disabled;
@@ -219,15 +242,17 @@ export function ConditionEditor({
     recovery.current.cancel();
     focusOwnerRef.current = focusOwner;
   }
-  // Only documents emitted by this session inherit its drafts. Revert and external
+  // Only documents emitted by the current draft owner inherit its operand text. Revert and external
   // replacements start fresh, even when they reuse an earlier document object.
-  const draftOwner = useRef(focusOwner);
+  const draftOwner = useRef(retainedDraft?.owner ?? focusOwner);
   if (session.value !== value || draftOwner.current !== focusOwner) {
     draftOwner.current = focusOwner;
     recovery.current.cancel();
     session = { value, lifetime: {}, node: value ? createConditionDraftNode(value, nextKey) : undefined };
     setSession(session);
   }
+  if (draftState)
+    draftState.current = { value: session.value, node: session.node, serial: serial.current, owner: focusOwner };
   useEffect(() => {
     const focus = recovery.current;
     return () => focus.cancel();
@@ -354,6 +379,7 @@ export function ConditionEditor({
       ref={root}
       className={framed ? 'min-w-0 space-y-3 border-t border-border/60 pt-4' : 'min-w-0 space-y-3'}
       data-condition-editor
+      onChange={onDraftInput}
     >
       {showHeading && <h2 className="font-medium">{m.condition_heading({}, options)}</h2>}
       <p className="text-sm text-muted-foreground">

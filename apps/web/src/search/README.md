@@ -51,6 +51,14 @@ envelope; it does not reimplement parseText, and a malformed page is unavailable
 
 ## Filters and condition authoring
 
+Decision: SearchPage owns one Filters draft. Apply submits resource scope, exact result kinds, Subject type,
+facets, ranges, condition and ordered display languages together through the existing GET action. Closing Filters
+or changing its desktop/phone surface retains these edits; Revert restores all of them. Committed URL replacement,
+including Back/Forward, replaces the draft. Results, selected-constraint links, sort and result-kind navigation use
+only the committed search. Native option reads also retain that executed owner. Changing resource scope clears its
+old facet selections visibly and pauses facet choices until Apply; it never reads the draft scope as Global.
+Untouched empty ranges add no predicate; edited blank bounds are invalid, and Remove range stages explicit removal.
+
 Selected kind, property and value labels use human unavailable wording when the label is missing; the exact
 selection, URL and constraint remain intact and inspectable in labelled technical details. Clear-one and Clear-all,
 the existing local header authority, closed result rows, one bounded native request and SSR fences remain unchanged.
@@ -91,13 +99,16 @@ native release controls applicability and currentness; the UI keeps selected abs
 uses up to the existing 64 continuations, and preserves the actual `lang` attached to a localized option label.
 This does not change title display preferences or the interface locale.
 
-The Revert edits action appears at the bottom of Filters only when condition or ordered-language drafts differ from
-the committed search; it restores those drafts, clears draft validation, and focuses a status announcement in the
-active surface.
+The Revert edits action appears at the bottom of Filters when its draft differs from the committed search or an
+Apply attempt needs repair. It restores the complete draft, resets unfinished condition inputs and validation,
+and focuses a status announcement in the active surface.
 
 Condition-tree edits recover keyboard focus for the initiating action after the changed DOM commits, using that
 session's draft-node identity. A later recovery, external replacement, disablement, unmount, or a focus move away from
 the initiating control retires the queued handoff; the live status still announces the edit.
+SearchPage retains the editor's bounded operand-draft nodes across Filters dismissal and surface replacement;
+reader, release and request replacement still retire them. Native reads, picker inspection and focus remain local
+to the mounted editor. Invalid raw operands continue to block Apply after reopening; Revert discards them.
 
 Released filter selection consumes only public definition labels and filters through the existing bounded metadata
 projection (at most 1024 released filters). Decision: choosing a candidate stages it for an explicit Add or Replace;
@@ -119,9 +130,9 @@ independently of the draft. Locale, public reader/address observation, accepted 
 replacement and node replacement/deletion retire inspection and picker state and pending tree-edit focus. Equivalent
 renders preserve deliberate edits. Existing saved-reference sharing refusal remains authoritative.
 
-Range controls show a localized Remove range link only for a committed property range; lower/upper strings and units
-stay local to the SearchPage committed-state identity across Filters dismissal and desktop/phone changes, and blank
-bounds remain invalid on Apply. The condition/language Revert action does not reset range drafts.
+Range controls stage removal with the localized Remove range action; lower/upper strings and units stay local to the
+SearchPage committed-state identity across Filters dismissal and desktop/phone changes. Apply validates every edited
+range, including a property outside the visible picker window; Revert also resets these range drafts.
 Decision: quantity controls use the shared subject unit symbols, keep exact IDs inspectable in control titles and
 retained options, label unitless `1` as a count, and ask before changing a unit when a magnitude is present. Search's
 released unit roster has no related unit-label projection, so other unavailable labels keep the exact ID in the
