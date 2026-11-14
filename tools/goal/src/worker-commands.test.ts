@@ -41,12 +41,43 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
     'held',
     expected.map(([id]) => id),
   );
-  const all = [held, task('healthy', 'ready'), task('bad-after', 'held', 'invalid'), task('bad-id', 'held', [null])];
+  const amended = {
+    ...task('amended', 'ready'),
+    brief: { after: [], manager: 'task-owner' },
+  } as unknown as Task;
+  const superseded = {
+    ...task('superseded', 'ready'),
+    currentAttempt: 2,
+    brief: { after: [], manager: 'task-owner' },
+  } as unknown as Task;
+  const eventReads: string[] = [];
+  const all = [
+    held,
+    task('healthy', 'ready'),
+    task('bad-after', 'held', 'invalid'),
+    task('bad-id', 'held', [null]),
+    amended,
+    superseded,
+  ];
   const db = {
     query: (sql: string) => {
       if (sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence') reads.incidentHistory++;
       return {
-        all: () => [],
+        all: () =>
+          sql === 'SELECT id, state FROM manager_sessions'
+            ? [
+                {
+                  id: 'control-plane-owner',
+                  state: JSON.stringify({
+                    kind: 'managed',
+                    status: 'running',
+                    goals: ['control-plane'],
+                    threadId: 'control-plane-thread',
+                    waitingForInbox: true,
+                  }),
+                },
+              ]
+            : [],
         get: () => (sql.includes('manager_sessions') ? { id: 'operator' } : null),
         run: mutate,
       };
@@ -64,9 +95,10 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
       if (id !== 'held') throw new Error(`unknown task: ${id}`);
       return held;
     },
-    attempt: (ref: { taskId: string }) => {
+    attempt: (ref: { taskId: string; attempt: number }) => {
       reads.attempt++;
       if (ref.taskId === 'missing-attempt') throw new Error('unknown attempt');
+      if (ref.taskId === 'amended' || ref.taskId === 'superseded') return { state: 'exited', attempt: ref.attempt };
       return {};
     },
     dependency(id: string) {
@@ -84,7 +116,17 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
       reads.retryIntent++;
       return { status: 'pending' };
     },
-    events: () => [],
+    events: (taskId?: string, attempt?: number) => {
+      if (taskId === 'amended' || taskId === 'superseded') eventReads.push(`${taskId}:${attempt}`);
+      return (taskId === 'amended' && attempt === 1) || (taskId === 'superseded' && attempt === 1)
+        ? [
+            {
+              kind: 'typing-retry-unreconciled',
+              body: JSON.stringify({ action: 'source-amendment-compiler-hold' }),
+            },
+          ]
+        : [];
+    },
     attempts: () => [],
     records: () => [],
     runningAttemptsByPool: () => ({}),
@@ -143,6 +185,15 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   ).toEqual(expected);
   expect(heldStatus.waitingFor).toEqual(expected.filter(([, , ready]) => !ready).map(([id]) => id));
   expect(heldStatus.pendingRetry).toEqual({ reason: 'dependencies', waitingFor: heldStatus.waitingFor });
+  expect(status.tasks.find(({ id }: Task) => id === 'amended')?.pendingRetry).toEqual({
+    reason: 'compiler-custody',
+    ownerAction: 'wait-for-retained-check-custody',
+    taskOwner: 'task-owner',
+    controlPlaneOwner: 'control-plane-owner',
+  });
+  expect(status.tasks.find(({ id }: Task) => id === 'superseded')?.pendingRetry).toEqual({ reason: 'start' });
+  expect(status.tasks.find(({ id }: Task) => id === 'healthy')?.pendingRetry).toEqual({ reason: 'start' });
+  expect(eventReads).toEqual(['amended:1', 'superseded:2']);
   expect(JSON.parse(output[1]!)).toMatchObject(heldStatus);
   expect(status.trains).toEqual([
     { lane: 'main', state: 'missing' },
@@ -154,14 +205,14 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   expect(status.taskCounts).toEqual({
     total: all.length,
     byGoal: { unknown: all.length },
-    byState: { held: 3, ready: 1 },
+    byState: { held: 3, ready: 3 },
   });
   expect(JSON.parse(output[1]!).trains).toEqual(status.trains);
   expect(status.tasks.map(({ id }: Task) => id)).toEqual(all.map(({ id }) => id));
-  for (const malformed of status.tasks.slice(2))
+  for (const malformed of status.tasks.slice(2, 4))
     expect(malformed.dependencies).toMatchObject([{ state: 'unknown', ready: false }]);
   expect(statusReads).toEqual([
-    { tasks: 1, task: 0, attempt: 4, retryIntent: 4, incidentHistory: 1 },
+    { tasks: 1, task: 0, attempt: 6, retryIntent: 6, incidentHistory: 1 },
     { tasks: 0, task: 1, attempt: 1, retryIntent: 1, incidentHistory: 1 },
   ]);
   Object.assign(reads, { tasks: 0, task: 0, attempt: 0, retryIntent: 0, incidentHistory: 0 });
@@ -179,7 +230,7 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   await expect(
     runWorkerCommand('status', [], { settings, store: store as unknown as WorkerStore, tasks, print() {} }),
   ).rejects.toThrow('unknown attempt');
-  expect(reads).toEqual({ tasks: 1, task: 0, attempt: 5, retryIntent: 4, incidentHistory: 0 });
+  expect(reads).toEqual({ tasks: 1, task: 0, attempt: 7, retryIntent: 6, incidentHistory: 0 });
   expect(mutations).toBe(0);
 });
 

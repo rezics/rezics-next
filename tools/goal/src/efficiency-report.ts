@@ -26,11 +26,36 @@ import type { AttemptRecord } from './types.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 type ReportPolicy = ControlPolicy['hourlyReport'];
 
-export const PRODUCT_LINE_FILTER_VERSION = 'rezics-product-code-v2';
+export const PRODUCT_LINE_FILTER_VERSION = 'rezics-product-code-v3';
+export const WEB_PRODUCT_LINE_TARGET = 50_000;
+
+// These are the exact path roots of web-app, auth-pages and ui in docs/architecture/modules.json.
+const WEB_PRODUCT_ROOTS = ['apps/web/src/', 'apps/auth/src/', 'packages/ui/src/'] as const;
+const WEB_EXCLUDED_DIRECTORIES = new Set([
+  'doc',
+  'docs',
+  'test',
+  'tests',
+  '__tests__',
+  'stories',
+  '__stories__',
+  'fixtures',
+  '__fixtures__',
+  'recordings',
+  'generated',
+  '__generated__',
+  'paraglide',
+  '__snapshots__',
+  'storybook',
+]);
+const WEB_SOURCE_FILE_SUFFIX = /\.(?:test|spec|stories|fixture|generated|gen)\.[^.]+$/i;
+const WEB_NON_SOURCE_FILE_SUFFIX = /\.(?:json|md|mdx|rst|adoc|txt|snap)$/i;
 
 export type ProductLineMeasurement = {
   productLines: number | null;
   attribution: ObservationAttribution;
+  webProductLines: number | null;
+  webAttribution: ObservationAttribution;
   sourceRevision: string | null;
   backfillProductLines: number | null;
   backfillAttribution: ObservationAttribution;
@@ -111,6 +136,8 @@ function unknownMeasurement(
   return {
     productLines: null,
     attribution: 'unknown',
+    webProductLines: null,
+    webAttribution: 'unknown',
     sourceRevision,
     backfillProductLines: null,
     backfillAttribution: 'unknown',
@@ -211,49 +238,93 @@ function sourceNeutralSideHistory(repository: string, revision: string): SourceH
   return { commits, excludedCommits: excluded };
 }
 
+type ProductLineCounts = { productLines: number; webProductLines: number | null };
+
+function productNumstat(repository: string, selected: readonly string[], ignoreWhitespace: boolean): string | null {
+  const args = ['diff-tree', '--root', '--numstat', '-r'];
+  if (ignoreWhitespace) args.push('--ignore-all-space', '--ignore-blank-lines');
+  args.push('--stdin');
+  const result = spawnSync('git', args, {
+    cwd: repository,
+    encoding: 'utf8',
+    input: `${selected.join('\n')}\n`,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (result.error) {
+    if ((result.error as NodeJS.ErrnoException).code === 'ENOBUFS') return null;
+    throw result.error;
+  }
+  return result.status === 0 ? result.stdout : null;
+}
+
+function countProductAdditions(
+  output: string,
+  commits: ReadonlyMap<string, GitCommit>,
+  includePath: (path: string) => boolean,
+): number | null {
+  let currentCommit: string | null = null;
+  let lines = 0;
+  for (const row of output.split(/\r?\n/)) {
+    if (GIT_OBJECT_ID.test(row)) {
+      if (!commits.has(row)) return null;
+      currentCommit = row;
+      continue;
+    }
+    if (!currentCommit || !row) continue;
+    const [added, , ...pathParts] = row.split('\t');
+    const path = pathParts.join('\t');
+    if (!path || !includePath(path)) continue;
+    if (/^\d+$/.test(added ?? '')) lines += Number(added);
+  }
+  return lines;
+}
+
+function isAggregateProductPath(path: string): boolean {
+  return (
+    /^(apps|services|packages)\//.test(path) &&
+    !/(test|tests|stories|fixtures|recordings|generated|\.d\.ts$|\.temp\/|\.json$|\.snap)/.test(path)
+  );
+}
+
+function isWebProductSourcePath(path: string): boolean {
+  if (!WEB_PRODUCT_ROOTS.some((root) => path.startsWith(root))) return false;
+  if (!/\.(?:ts|tsx|js|jsx|mts|cts|mjs|cjs|sql|css|svg)$/i.test(path)) return false;
+  const parts = path.split('/');
+  if (parts.some((part) => WEB_EXCLUDED_DIRECTORIES.has(part.toLowerCase()))) return false;
+  const filename = parts.at(-1) ?? '';
+  if (WEB_SOURCE_FILE_SUFFIX.test(filename) || /\.d\.ts$/i.test(filename) || WEB_NON_SOURCE_FILE_SUFFIX.test(filename))
+    return false;
+  if (/^apps\/web\/src\/kernel\/(?:fake|recorded)\//.test(path)) return false;
+  return true;
+}
+
 function productLineCount(
   repository: string,
   commitIds: readonly string[],
   commits: ReadonlyMap<string, GitCommit>,
   excludedCommits: ReadonlySet<string>,
   inWindow: (timestampMs: number) => boolean,
-): number | null {
+  measureWeb = true,
+): ProductLineCounts | null {
   const selected = commitIds.filter((id) => {
     const commit = commits.get(id);
     return Boolean(commit && !excludedCommits.has(id) && inWindow(commit.timestamp * 1000));
   });
-  if (selected.length === 0) return 0;
+  if (selected.length === 0) return { productLines: 0, webProductLines: measureWeb ? 0 : null };
 
-  const changes = spawnSync('git', ['diff-tree', '--root', '--numstat', '-r', '--stdin'], {
-    cwd: repository,
-    encoding: 'utf8',
-    input: `${selected.join('\n')}\n`,
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (changes.error) {
-    if ((changes.error as NodeJS.ErrnoException).code === 'ENOBUFS') return null;
-    throw changes.error;
-  }
-  if (changes.status !== 0) return null;
+  const aggregateStats = productNumstat(repository, selected, false);
+  if (aggregateStats === null) return null;
+  const productLines = countProductAdditions(aggregateStats, commits, isAggregateProductPath);
+  if (productLines === null) return null;
+  if (!measureWeb) return { productLines, webProductLines: null };
 
-  let includeCommit = false;
-  let lines = 0;
-  for (const row of changes.stdout.split(/\r?\n/)) {
-    if (GIT_OBJECT_ID.test(row)) {
-      if (!commits.has(row)) return null;
-      includeCommit = true;
-      continue;
-    }
-    if (!includeCommit || !row) continue;
-    const [added, , path] = row.split('\t');
-    if (!path || !/^(apps|services|packages)\//.test(path)) continue;
-    if (/(test|tests|stories|fixtures|recordings|generated|\.d\.ts$|\.temp\/|\.json$|\.snap)/.test(path)) continue;
-    if (/^\d+$/.test(added ?? '')) lines += Number(added);
-  }
-  return lines;
+  // Whitespace-insensitive numstat omits formatting-only additions from the campaign measurement.
+  const webStats = productNumstat(repository, selected, true);
+  const webProductLines = webStats === null ? null : countProductAdditions(webStats, commits, isWebProductSourcePath);
+  return { productLines, webProductLines };
 }
 
-/** Measure commit-date additions at one pinned dev revision using the private duty's existing path filter. */
+/** Measure aggregate and Web commit-date additions at one pinned `dev` revision. */
 export function measureProductLineObservation(
   repository: string,
   bucketValue: string,
@@ -296,19 +367,23 @@ export function measureProductLineObservation(
     } else if (delta.status === 0) {
       const commitIds = delta.stdout.trim() ? delta.stdout.trim().split(/\r?\n/) : [];
       if (commitIds.every((id) => GIT_OBJECT_ID.test(id) && sourceHistory.commits.has(id))) {
-        backfillLines = productLineCount(
+        const backfill = productLineCount(
           repository,
           commitIds,
           sourceHistory.commits,
           sourceHistory.excludedCommits,
           (time) => time < startMs,
+          false,
         );
+        backfillLines = backfill?.productLines ?? null;
       }
     }
   }
   return {
-    productLines: lines,
+    productLines: lines.productLines,
     attribution: 'measured',
+    webProductLines: lines.webProductLines,
+    webAttribution: lines.webProductLines === null ? 'unknown' : 'measured',
     sourceRevision: revision,
     backfillProductLines: backfillLines,
     backfillAttribution: backfillLines === null ? 'unknown' : 'measured',
@@ -338,11 +413,18 @@ function observationData(
 ): HourlyObservationData {
   const rolling = storedRollingLines(db, bucket, measurement);
   const alerts = [...(privateDuty?.alarms ?? [])];
-  if (rolling.attribution === 'measured' && (rolling.productLines ?? 0) < 20_000)
-    alerts.unshift('Two-hour product code is below the 20,000-line stable target.');
+  const webTarget = WEB_PRODUCT_LINE_TARGET.toLocaleString('en-US');
+  if (
+    measurement.webAttribution === 'measured' &&
+    measurement.webProductLines !== null &&
+    measurement.webProductLines < WEB_PRODUCT_LINE_TARGET
+  )
+    alerts.unshift(`Web campaign is below the ${webTarget}-line hourly target.`);
   return {
     productLines: measurement.productLines,
     attribution: measurement.attribution,
+    webProductLines: measurement.webProductLines,
+    webAttribution: measurement.webAttribution,
     sourceRevision: measurement.sourceRevision,
     backfillProductLines: measurement.backfillProductLines,
     backfillAttribution: measurement.backfillAttribution,
@@ -369,23 +451,40 @@ function productLineLines(bucket: UtcHour, data: HourlyObservationData): string[
     data.backfillAttribution === 'measured' && data.backfillProductLines !== null
       ? `${data.backfillProductLines} additions newly visible since ${data.backfillFromRevision}..${data.sourceRevision}`
       : 'unknown (prior source revision unavailable)';
+  const webAttribution = data.webAttribution === 'measured' ? 'measured' : 'unknown';
+  const webCount = data.webProductLines === null ? 'unknown' : String(data.webProductLines);
+  const webTarget = WEB_PRODUCT_LINE_TARGET.toLocaleString('en-US');
+  const webTargetStatus =
+    data.webAttribution !== 'measured' || data.webProductLines === null
+      ? 'unknown (Web attribution unavailable)'
+      : data.webProductLines < WEB_PRODUCT_LINE_TARGET
+        ? `below target (${webTarget} additions per completed hour)`
+        : 'target met';
   return [
-    `Product lines added in UTC bucket: ${count} (attribution ${attribution}; ${source}; window [${bucket.start}, ${bucket.end}); filter ${data.filterVersion}).`,
-    `Product lines across this and the previous completed UTC hour: ${total}.`,
-    `Late integration backfill in this bucket: ${backfill}; excluded from measured throughput.`,
+    `Web campaign product lines added in UTC bucket: ${webCount} ` +
+      `(attribution ${webAttribution}; target ${webTarget}; ${source}; ` +
+      `window [${bucket.start}, ${bucket.end}); filter ${data.filterVersion}).`,
+    `Web campaign target status: ${webTargetStatus}.`,
+    `Aggregate product lines added in UTC bucket: ${count} ` +
+      `(attribution ${attribution}; ${source}; window [${bucket.start}, ${bucket.end}); filter ${data.filterVersion}).`,
+    `Aggregate product lines across this and the previous completed UTC hour: ${total}.`,
+    `Aggregate late integration backfill in this bucket: ${backfill}; excluded from measured throughput.`,
     'Late integrations remain visible in their integration bucket and do not revise a frozen bucket or its measured throughput.',
   ];
 }
 
 function privateDutyLines(context: HourlyPrivateDutyContext, data: HourlyObservationData): string[] {
   const productLines = data.productLines === null ? 'unknown' : String(data.productLines);
+  const webProductLines = data.webProductLines === null ? 'unknown' : String(data.webProductLines);
+  const webTarget = WEB_PRODUCT_LINE_TARGET.toLocaleString('en-US');
   const rolling =
     data.rollingAttribution === 'measured' && data.rollingProductLines !== null
       ? String(data.rollingProductLines)
       : 'unknown';
   return [
     `Private hourly duty — ${context.label} UTC.`,
-    `New product code: ${productLines} lines (stable target 20,000; stretch 40,000).`,
+    `New product code: ${productLines} lines (aggregate).`,
+    `New Web product code: ${webProductLines} lines (hourly campaign target ${webTarget}).`,
     `Product code across two completed hours: ${rolling}.`,
     `Late integration backfill: ${data.backfillAttribution === 'measured' ? data.backfillProductLines : 'unknown'} lines (excluded from throughput).`,
     `Running tasks: ${context.runningTasks}; stopped or held: ${context.stoppedTasks}.`,
