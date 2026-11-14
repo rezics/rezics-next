@@ -1,16 +1,24 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck, type Access, type Actor, type AccessClient } from './check.ts';
 import { routeOf } from '../route/route.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { within } from './deadline.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import globalRead from './bootstrap-governance-read.sql';
 import { suspensionDeclaration, suspensionRequestDigest } from './suspension.ts';
 import { reinstatementDeclaration, reinstatementRequestDigest } from './reinstatement.ts';
-import { activeHome, effects, hash, originalResult, sameHome, unknownOriginal } from './lifecycle-review-source.ts';
+import {
+  activeHome,
+  effects,
+  hash,
+  lifecycleReviewReadOptions,
+  originalResult,
+  sameHome,
+  unknownOriginal,
+} from './lifecycle-review-source.ts';
 import type { LifecycleReview, LifecycleReviewInput, LifecycleOriginalResult } from './lifecycle-review-contract.ts';
 import { classifyUnavailability } from './unavailable.ts';
 
@@ -69,7 +77,12 @@ export async function readLifecycleReview(
     return await within(deadline, async () => {
       async function authority() {
         // Each disclosure phase mints live native T under the ORIGINAL request deadline.
-        const time = await withConnection(pool, (c) => mintReadTime(deadlineClient(c, deadline), deps.clock));
+        const time = await withBoundedReadConnection(
+          pool,
+          deadline,
+          (client) => mintReadTime(client, deps.clock),
+          lifecycleReviewReadOptions,
+        );
         try {
           const allowed: boolean[] = [];
           for (const declaration of declarations()) {
@@ -80,8 +93,7 @@ export async function readLifecycleReview(
               deadline,
               time,
             });
-            const eligible = await withConnection(pool, async (connection) => {
-              const client = deadlineClient(connection, deadline);
+            const eligible = await withBoundedReadConnection(pool, deadline, async (client) => {
               await activeHome(client, routeOf(identity.accountId)!);
               const current = await target(client, routeOf(identity.accountId)!, identity.accountId);
               return (
@@ -92,18 +104,17 @@ export async function readLifecycleReview(
                 identity.authnEpoch >= 1 &&
                 BigInt(identity.authnEpoch) >= BigInt(current.minimumAuthnEpoch)
               );
-            });
+            }, lifecycleReviewReadOptions);
             if (!eligible) throw deny();
             allowed.push(
-              await withConnection(pool, async (connection) => {
-                const client = deadlineClient(connection, deadline);
+              await withBoundedReadConnection(pool, deadline, async (client) => {
                 await activeHome(client, PLATFORM_RESOURCE.route);
                 const global = await globalRead.run(client, {
                   route: PLATFORM_RESOURCE.route,
                   resource_id: PLATFORM_RESOURCE.id,
                 });
                 return global?.global === true && (await check(client, time));
-              }),
+              }, lifecycleReviewReadOptions),
             );
           }
           if (!allowed.some(Boolean) || (original && !allowed[original.operationId === 'account.suspend' ? 0 : 1]))
@@ -114,11 +125,10 @@ export async function readLifecycleReview(
         }
       }
       await authority();
-      const snapshot = await withConnection(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
+      const snapshot = await withBoundedReadConnection(pool, deadline, async (client) => {
         const home = await activeHome(client, route);
         return { home, account: await target(client, route, input.accountId) };
-      });
+      }, lifecycleReviewReadOptions);
       if (!snapshot.account) throw deny();
       let result: LifecycleOriginalResult | undefined;
       if (original) {
@@ -132,8 +142,7 @@ export async function readLifecycleReview(
           original.operationId === 'account.suspend'
             ? suspensionRequestDigest(identity, operands)
             : reinstatementRequestDigest(identity, operands);
-        const source = await withConnection(pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
+        const source = await withBoundedReadConnection(pool, deadline, async (client) => {
           const home = await activeHome(client, route);
           if (!sameHome(snapshot.home, home)) throw new ProblemError('partition_unavailable');
           return originalResult(client, {
@@ -144,7 +153,7 @@ export async function readLifecycleReview(
             key: original.key,
             digest,
           });
-        });
+        }, lifecycleReviewReadOptions);
         result = source
           ? {
               status: 'recorded',
@@ -161,13 +170,12 @@ export async function readLifecycleReview(
       }
       // Reprepare after native/foreign reads, including receipt and effect evidence, before disclosing anything.
       const allowed = await authority();
-      await withConnection(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
+      await withBoundedReadConnection(pool, deadline, async (client) => {
         const home = await activeHome(client, route);
         const current = await target(client, route, input.accountId);
         if (!sameHome(snapshot.home, home) || !current || !hash(current).equals(hash(snapshot.account)))
           throw new ProblemError('dependency_unavailable');
-      });
+      }, lifecycleReviewReadOptions);
       const a = snapshot.account;
       return {
         account: {

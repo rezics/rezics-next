@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import type { AccessClient } from '../request/access.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Partition } from '../partition/partition.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
-import { deadlineClient } from './deadline.ts';
+import { AccessUnavailableError } from './unavailable.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import {
   committedContinuationDigest,
@@ -19,6 +19,11 @@ import { ProblemError } from '../http/problem-error.ts';
 
 const SERVICE_ID = '00000000-0000-8000-8000-000000000001';
 const ROOT_NAMESPACE = 'b7c3d1e2-4f50-4a61-8c70-0d1e2f304152';
+export const lifecycleReviewReadOptions = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  // A settled pg rejection without a server ErrorResponse does not establish wire completion.
+  isUncertainSettledQueryError: () => true,
+};
 export const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest();
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -70,8 +75,7 @@ async function operatorEffects(
   const step = lifting ? 'operator-unfence-page' : 'operator-responsibility-page';
   const pageKey = requestedPageKey ?? createHash('sha256').update('first').digest('hex');
   const pageEntry = requestedPageKey
-    ? await withConnection(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
+    ? await withBoundedReadConnection(pool, deadline, async (client) => {
         await activeHome(client, root.route);
         const { rows } = await client.query<ContinuationEntry>(
           `SELECT step,target,key,digest FROM access.committed_continuation_entry
@@ -79,7 +83,7 @@ async function operatorEffects(
           [root.route, root.continuationId, step, root.accountId, `${root.commandKeyPrefix}:page:${pageKey}`],
         );
         return rows[0];
-      })
+      }, lifecycleReviewReadOptions)
     : root.allowlist.find((e) => e.step === step);
   const unavailable = { operator: 'unknown', inspectedPages: 0, terminalSubjects: 0 } as const;
   if (
@@ -90,8 +94,7 @@ async function operatorEffects(
       (requestedPageKey ? `${root.commandKeyPrefix}:page:${pageKey}` : `${root.commandKeyPrefix}:${step}`)
   )
     return unavailable;
-  const native = await withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
+  const native = await withBoundedReadConnection(pool, deadline, async (client) => {
     const home = await activeHome(client, root.route);
     const { rows } = await client.query<{ cursor: string | null; next: string | null; entries: ContinuationEntry[] }>(
       `SELECT cursor, next_cursor AS next, allowlist AS entries FROM access.operator_fence_page
@@ -101,7 +104,7 @@ async function operatorEffects(
       [root.route, root.continuationId, pageKey],
     );
     return { home, page: rows[0] };
-  });
+  }, lifecycleReviewReadOptions);
   const page = native.page;
   if (
     !page ||
@@ -141,8 +144,7 @@ async function operatorEffects(
       input,
     ]);
     const rawKey = `${route}:${entry.key}`;
-    const completion = await withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
+    const completion = await withBoundedReadConnection(pool, deadline, async (client) => {
       const home = await activeHome(client, root.route);
       if (!sameHome(native.home, home)) return undefined;
       const { rows } = await client.query<{
@@ -157,7 +159,7 @@ async function operatorEffects(
         [root.route, root.continuationId, entry.step, entry.target, entry.key],
       );
       return rows[0];
-    });
+    }, lifecycleReviewReadOptions);
     if (
       !completion ||
       completion.digest !== entry.digest ||
@@ -166,8 +168,7 @@ async function operatorEffects(
     )
       return false;
     // No source connection is held while inspecting a different subject's home.
-    return withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
+    return withBoundedReadConnection(pool, deadline, async (client) => {
       const home = await activeHome(client, route);
       const row = await receipt(client, route, SERVICE_ID, `access.${kind}`, rawKey);
       if (
@@ -184,7 +185,7 @@ async function operatorEffects(
           ? derivedId('134e9749-1120-8a0c-97d0-71287a629cef', `${row.transactionId}:fence`, route)
           : row.transactionId;
       return completion.receiptId === expectedId && sameHome(home, await activeHome(client, route));
-    });
+    }, lifecycleReviewReadOptions);
   }
   if (
     !(await terminal(
@@ -351,8 +352,7 @@ async function sessionAuthorization(
       digest: entry.digest,
     },
   ]);
-  return withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
+  return withBoundedReadConnection(pool, deadline, async (client) => {
     const home = await activeHome(client, root.route);
     const { rows } = await client.query<{
       digest: string;
@@ -387,7 +387,7 @@ async function sessionAuthorization(
     )
       return 'unknown';
     return 'recorded';
-  });
+  }, lifecycleReviewReadOptions);
 }
 
 export async function effects(
