@@ -303,13 +303,15 @@ function GrantForm({
   return (
     <form
       onSubmit={submit}
-      className="space-y-5 rounded-xl bg-muted/40 p-4 sm:p-6"
+      className="space-y-5 rounded-2xl border bg-muted/20 p-4 sm:p-6"
       aria-labelledby="access-form-heading"
       aria-busy={finding}
     >
-      <h2 id="access-form-heading" className="text-lg font-semibold">
-        {grant ? m.access_edit_grant() : m.access_add_grant()}
-      </h2>
+      <header className="space-y-1">
+        <h2 id="access-form-heading" className="text-lg font-semibold">
+          {grant ? m.access_edit_grant() : m.access_add_grant()}
+        </h2>
+      </header>
       {currentReview ? (
         <GrantReview
           page={page}
@@ -325,235 +327,253 @@ function GrantForm({
         />
       ) : (
         <>
-          {grant ? (
-            <p>
-              <SubjectName subject={grant.subject} page={page} />
-            </p>
-          ) : (
-            <>
+          <section aria-label={m.access_recipient()} className="space-y-4 rounded-xl border bg-background p-4">
+            {grant ? (
+              <div className="space-y-1 [overflow-wrap:anywhere]">
+                <p className="text-sm font-medium text-muted-foreground">{m.access_recipient()}</p>
+                <p className="font-medium">
+                  <SubjectName subject={grant.subject} page={page} />
+                </p>
+              </div>
+            ) : (
+              <>
+                <Field>
+                  <FieldLabel htmlFor="access-recipient">{m.access_recipient()}</FieldLabel>
+                  <Select
+                    items={[
+                      { value: 'account', label: m.access_account() },
+                      { value: 'organization', label: m.access_organization_group() },
+                      { value: 'active_accounts', label: m.access_active_accounts() },
+                    ]}
+                    value={recipient}
+                    onValueChange={(value) => changeRecipient(value!)}
+                  >
+                    <SelectTrigger id="access-recipient" className="min-h-11 h-auto w-full min-w-0 whitespace-normal">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="account">{m.access_account()}</SelectItem>
+                        <SelectItem value="organization">{m.access_organization_group()}</SelectItem>
+                        <SelectItem value="active_accounts">{m.access_active_accounts()}</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {recipient !== 'active_accounts' ? (
+                  <>
+                    <Field>
+                      <FieldLabel htmlFor="access-handle">{m.access_handle()}</FieldLabel>
+                      <div className="flex flex-wrap gap-2">
+                        <Input
+                          id="access-handle"
+                          className="min-h-11 min-w-32 flex-1"
+                          value={handle}
+                          onChange={(event) => changeHandle(event.target.value)}
+                          autoComplete="off"
+                          maxLength={64}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                          disabled={finding || !handle.trim()}
+                          onClick={() => void lookup()}
+                        >
+                          {m.access_find_account()}
+                        </Button>
+                      </div>
+                      <FieldDescription aria-live="polite">
+                        {identity ? identityName(identity) : m.access_confirm_identity()}
+                      </FieldDescription>
+                    </Field>
+                    {recipient === 'organization' ? (
+                      <Field>
+                        <FieldLabel htmlFor="access-group-role">{m.access_group_membership()}</FieldLabel>
+                        <Select
+                          items={[
+                            { value: 'member', label: m.access_org_members() },
+                            { value: 'owner', label: m.access_org_owners() },
+                          ]}
+                          value={groupRole}
+                          onValueChange={(value) => setGroupRole(value! as 'owner' | 'member')}
+                        >
+                          <SelectTrigger id="access-group-role" className="min-h-11 h-auto w-full min-w-0 whitespace-normal">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="member">{m.access_org_members()}</SelectItem>
+                              <SelectItem value="owner">{m.access_org_owners()}</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{m.access_active_accounts_description()}</p>
+                )}
+              </>
+            )}
+          </section>
+          <section aria-labelledby="access-permission-heading" className="space-y-4 rounded-xl border bg-background p-4">
+            <h3 id="access-permission-heading" className="font-semibold">
+              {kind === 'role' ? m.access_named_role() : m.access_direct_action()}
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel htmlFor="access-recipient">{m.access_recipient()}</FieldLabel>
+                <FieldLabel htmlFor="access-kind">{m.access_grant_kind()}</FieldLabel>
                 <Select
                   items={[
-                    { value: 'account', label: m.access_account() },
-                    { value: 'organization', label: m.access_organization_group() },
-                    { value: 'active_accounts', label: m.access_active_accounts() },
+                    { value: 'role', label: m.access_named_role() },
+                    { value: 'direct', label: m.access_direct_action() },
                   ]}
-                  value={recipient}
-                  onValueChange={(value) => changeRecipient(value!)}
+                  value={kind}
+                  disabled={grant !== null}
+                  onValueChange={(value) => {
+                    setKind(value! as 'role' | 'direct');
+                    setPermissionFilter('');
+                  }}
                 >
-                  <SelectTrigger id="access-recipient" className="w-full min-w-0">
+                  <SelectTrigger id="access-kind" className="min-h-11 h-auto w-full min-w-0 whitespace-normal">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="account">{m.access_account()}</SelectItem>
-                      <SelectItem value="organization">{m.access_organization_group()}</SelectItem>
-                      <SelectItem value="active_accounts">{m.access_active_accounts()}</SelectItem>
+                      <SelectItem value="role">{m.access_named_role()}</SelectItem>
+                      <SelectItem value="direct">{m.access_direct_action()}</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
               </Field>
-              {recipient !== 'active_accounts' ? (
-                <>
-                  <Field>
-                    <FieldLabel htmlFor="access-handle">{m.access_handle()}</FieldLabel>
-                    <div className="flex flex-wrap gap-2">
-                      <Input
-                        id="access-handle"
-                        className="min-w-32 flex-1"
-                        value={handle}
-                        onChange={(event) => changeHandle(event.target.value)}
-                        autoComplete="off"
-                        maxLength={64}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={finding || !handle.trim()}
-                        onClick={() => void lookup()}
-                      >
-                        {m.access_find_account()}
-                      </Button>
-                    </div>
-                    <FieldDescription aria-live="polite">
-                      {identity ? identityName(identity) : m.access_confirm_identity()}
-                    </FieldDescription>
-                  </Field>
-                  {recipient === 'organization' ? (
-                    <Field>
-                      <FieldLabel htmlFor="access-group-role">{m.access_group_membership()}</FieldLabel>
-                      <Select
-                        items={[
-                          { value: 'member', label: m.access_org_members() },
-                          { value: 'owner', label: m.access_org_owners() },
-                        ]}
-                        value={groupRole}
-                        onValueChange={(value) => setGroupRole(value! as 'owner' | 'member')}
-                      >
-                        <SelectTrigger id="access-group-role" className="w-full min-w-0">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="member">{m.access_org_members()}</SelectItem>
-                            <SelectItem value="owner">{m.access_org_owners()}</SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  ) : null}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">{m.access_active_accounts_description()}</p>
-              )}
-            </>
-          )}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="access-kind">{m.access_grant_kind()}</FieldLabel>
-              <Select
-                items={[
-                  { value: 'role', label: m.access_named_role() },
-                  { value: 'direct', label: m.access_direct_action() },
-                ]}
-                value={kind}
-                disabled={grant !== null}
-                onValueChange={(value) => {
-                  setKind(value! as 'role' | 'direct');
-                  setPermissionFilter('');
-                }}
-              >
-                <SelectTrigger id="access-kind" className="w-full min-w-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="role">{m.access_named_role()}</SelectItem>
-                    <SelectItem value="direct">{m.access_direct_action()}</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="access-role">{kind === 'role' ? m.access_role() : m.access_action()}</FieldLabel>
-              <Input
-                id="access-permission-filter"
-                type="search"
-                value={permissionFilter}
-                onChange={(event) => setPermissionFilter(event.target.value)}
-                aria-label={m.access_search_permissions()}
-                placeholder={m.access_search_permissions()}
-              />
-              <FieldDescription>{m.access_filter_help()}</FieldDescription>
-              <Select
-                items={[
-                  { value: '', label: m.access_choose() },
-                  ...(kind === 'role'
-                    ? page.roles.map((item) => {
-                        const presented = rolePresentation(item.id);
-                        return {
-                          value: item.id,
-                          label: `${presented.label} · ${presented.identifier}${item.delegable ? '' : ` — ${m.access_selection_unavailable()}`}`,
-                        };
-                      })
-                    : page.actions.map((value) => {
-                        const presented = permissionPresentation(value);
-                        return { value, label: `${presented.label} · ${presented.identifier}` };
-                      })),
-                ]}
-                value={kind === 'role' ? role : action}
-                onValueChange={(value) => (kind === 'role' ? setRole(value!) : setAction(value!))}
-                required
-              >
-                <SelectTrigger id="access-role" className="w-full min-w-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="" disabled>
-                      {m.access_choose()}
-                    </SelectItem>
-                    {kind === 'role'
-                      ? roles.map((item) => {
+              <Field>
+                <FieldLabel htmlFor="access-role">{kind === 'role' ? m.access_role() : m.access_action()}</FieldLabel>
+                <Input
+                  id="access-permission-filter"
+                  className="min-h-11"
+                  type="search"
+                  value={permissionFilter}
+                  onChange={(event) => setPermissionFilter(event.target.value)}
+                  aria-label={m.access_search_permissions()}
+                  placeholder={m.access_search_permissions()}
+                />
+                <FieldDescription>{m.access_filter_help()}</FieldDescription>
+                <Select
+                  items={[
+                    { value: '', label: m.access_choose() },
+                    ...(kind === 'role'
+                      ? page.roles.map((item) => {
                           const presented = rolePresentation(item.id);
-                          return (
-                            <SelectItem key={item.id} value={item.id} disabled={!item.delegable}>
-                              {`${presented.label} · ${presented.identifier}${item.delegable ? '' : ` — ${m.access_selection_unavailable()}`}`}
-                            </SelectItem>
-                          );
+                          return {
+                            value: item.id,
+                            label: `${presented.label} · ${presented.identifier}${item.delegable ? '' : ` — ${m.access_selection_unavailable()}`}`,
+                          };
                         })
-                      : actions.map((item) => {
-                          const presented = permissionPresentation(item);
-                          return (
-                            <SelectItem key={item} value={item}>
-                              {`${presented.label} · ${presented.identifier}`}
-                            </SelectItem>
-                          );
-                        })}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              {(kind === 'role' ? roles.length : actions.length) === 0 ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                  {m.access_no_permission_matches()}
-                </p>
-              ) : null}
-              {kind === 'role' ? (
-                <div className="space-y-2">
-                  {roleActions.length ? <PermissionExpansion actions={roleActions} /> : null}
-                  {selectedRole && !selectedRole.delegable ? (
-                    <p className="text-sm text-muted-foreground">{m.access_selection_unavailable()}</p>
-                  ) : null}
-                  {roles.some((item) => item.id !== role) ? (
-                    <details className="max-h-64 overflow-y-auto rounded-lg border p-3">
-                      <summary className="cursor-pointer font-medium">{m.access_review_expansion()}</summary>
-                      <ul className="mt-3 grid gap-4">
-                        {roles
-                          .filter((item) => item.id !== role)
-                          .map((item) => {
+                      : page.actions.map((value) => {
+                          const presented = permissionPresentation(value);
+                          return { value, label: `${presented.label} · ${presented.identifier}` };
+                        })),
+                  ]}
+                  value={kind === 'role' ? role : action}
+                  onValueChange={(value) => (kind === 'role' ? setRole(value!) : setAction(value!))}
+                  required
+                >
+                  <SelectTrigger id="access-role" className="min-h-11 h-auto w-full min-w-0 whitespace-normal">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="" disabled>
+                        {m.access_choose()}
+                      </SelectItem>
+                      {kind === 'role'
+                        ? roles.map((item) => {
                             const presented = rolePresentation(item.id);
                             return (
-                              <li key={item.id} className="min-w-0">
-                                <p className="font-medium">{presented.label}</p>
-                                <code className="break-all text-xs text-muted-foreground">{presented.identifier}</code>
-                                {!item.delegable ? (
-                                  <p className="text-sm text-muted-foreground">{m.access_selection_unavailable()}</p>
-                                ) : null}
-                                <PermissionExpansion actions={item.actions} />
-                              </li>
+                              <SelectItem key={item.id} value={item.id} disabled={!item.delegable}>
+                                {`${presented.label} · ${presented.identifier}${item.delegable ? '' : ` — ${m.access_selection_unavailable()}`}`}
+                              </SelectItem>
+                            );
+                          })
+                        : actions.map((item) => {
+                            const presented = permissionPresentation(item);
+                            return (
+                              <SelectItem key={item} value={item}>
+                                {`${presented.label} · ${presented.identifier}`}
+                              </SelectItem>
                             );
                           })}
-                      </ul>
-                    </details>
-                  ) : null}
-                </div>
-              ) : selectedActionIsAvailable ? (
-                <PermissionExpansion actions={[action]} />
-              ) : null}
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="access-start">{m.access_starts()}</FieldLabel>
-              <Input
-                id="access-start"
-                type="datetime-local"
-                step="any"
-                value={startsAt}
-                onChange={(event) => setStartsAt(event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="access-end">{m.access_ends()}</FieldLabel>
-              <Input
-                id="access-end"
-                type="datetime-local"
-                step="any"
-                value={endsAt}
-                onChange={(event) => setEndsAt(event.target.value)}
-              />
-            </Field>
-          </div>
-          <p className="text-sm text-muted-foreground">{m.access_interval_help()}</p>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {(kind === 'role' ? roles.length : actions.length) === 0 ? (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {m.access_no_permission_matches()}
+                  </p>
+                ) : null}
+                {kind === 'role' ? (
+                  <div className="space-y-2">
+                    {roleActions.length ? <PermissionExpansion actions={roleActions} /> : null}
+                    {selectedRole && !selectedRole.delegable ? (
+                      <p className="text-sm text-muted-foreground">{m.access_selection_unavailable()}</p>
+                    ) : null}
+                    {roles.some((item) => item.id !== role) ? (
+                      <details className="max-h-64 overflow-y-auto rounded-lg border p-3">
+                        <summary className="cursor-pointer font-medium">{m.access_review_expansion()}</summary>
+                        <ul className="mt-3 grid gap-4">
+                          {roles
+                            .filter((item) => item.id !== role)
+                            .map((item) => {
+                              const presented = rolePresentation(item.id);
+                              return (
+                                <li key={item.id} className="min-w-0">
+                                  <p className="font-medium">{presented.label}</p>
+                                  <code className="break-all text-xs text-muted-foreground">{presented.identifier}</code>
+                                  {!item.delegable ? (
+                                    <p className="text-sm text-muted-foreground">{m.access_selection_unavailable()}</p>
+                                  ) : null}
+                                  <PermissionExpansion actions={item.actions} />
+                                </li>
+                              );
+                            })}
+                        </ul>
+                      </details>
+                    ) : null}
+                  </div>
+                ) : selectedActionIsAvailable ? (
+                  <PermissionExpansion actions={[action]} />
+                ) : null}
+              </Field>
+            </div>
+          </section>
+          <section aria-label={m.access_interval_help()} className="space-y-4 rounded-xl border bg-background p-4">
+            <p className="text-sm text-muted-foreground">{m.access_interval_help()}</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="access-start">{m.access_starts()}</FieldLabel>
+                <Input
+                  id="access-start"
+                  className="min-h-11"
+                  type="datetime-local"
+                  step="any"
+                  value={startsAt}
+                  onChange={(event) => setStartsAt(event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="access-end">{m.access_ends()}</FieldLabel>
+                <Input
+                  id="access-end"
+                  className="min-h-11"
+                  type="datetime-local"
+                  step="any"
+                  value={endsAt}
+                  onChange={(event) => setEndsAt(event.target.value)}
+                />
+              </Field>
+            </div>
+          </section>
           {finding ? (
             <p role="status" className="text-sm text-muted-foreground">
               {m.access_loading()}
@@ -564,11 +584,11 @@ function GrantForm({
               {error}
             </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={finding}>
+          <div className="flex flex-wrap gap-2 border-t pt-4">
+            <Button type="submit" className="min-h-11" disabled={finding}>
               {m.access_review_title()}
             </Button>
-            <Button type="button" variant="ghost" onClick={onCancel}>
+            <Button type="button" className="min-h-11" variant="ghost" onClick={onCancel}>
               {m.access_cancel()}
             </Button>
           </div>
@@ -723,68 +743,38 @@ function ResourceAccessEditor({
           );
         };
         return (
-          <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-8 sm:py-10">
+          <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-8 sm:py-10">
             <header className="space-y-2">
               <PageHeading>{m.access_heading()}</PageHeading>
               <p className="max-w-2xl text-muted-foreground">{m.access_description()}</p>
             </header>
-            {notice ? (
-              <p role="status" className="rounded-lg bg-muted p-3">
-                {notice}
-              </p>
-            ) : null}
-            {state.pending ? (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">{m.access_retry_help()}</p>
-                <PendingAccessIntent intent={state.pending} />
-                <Button type="button" disabled={state.busy} onClick={() => void controller.retry()}>
-                  {m.access_retry_operation()}
-                </Button>
-              </div>
-            ) : null}
-            <h2 ref={currentHeading} id="access-current-grants-heading" tabIndex={-1} className="text-xl font-semibold">
-              {m.access_current_grants()}
-            </h2>
-            {!page ? (
-              <section aria-busy={state.busy || state.page.status === 'loading'} className="space-y-4">
-                <p role={state.page.status === 'unavailable' ? 'alert' : 'status'}>
-                  {state.page.status === 'denied'
-                    ? m.access_denied()
-                    : state.page.status === 'loading'
-                      ? m.access_loading()
-                      : state.page.status === 'preparing'
-                        ? m.access_preparing()
-                        : m.access_unavailable()}
-                </p>
-                {state.page.status !== 'loading' ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
-                    disabled={state.busy}
-                    onClick={() => void controller.retryPage()}
-                  >
-                    {m.access_retry_page()}
-                  </Button>
-                ) : null}
-              </section>
-            ) : (
+            {page ? (
               <>
-                <section className="min-w-0 space-y-2 [overflow-wrap:anywhere]" aria-label={m.access_resource()}>
-                  <h2 className="text-lg font-semibold">{resourceName(page)}</h2>
-                  <p className="text-sm">
-                    {m.access_acting_as({
-                      name: identityName(page.identities.find((item) => item.id === page.authority.accountId)),
-                    })}
-                  </p>
-                  {page.authority.principalId ? (
-                    <p className="text-sm text-muted-foreground">
-                      {m.access_delegated_by({
-                        name: identityName(page.identities.find((item) => item.id === page.authority.principalId)),
-                      })}
-                    </p>
-                  ) : null}
-                  <p className="text-sm text-muted-foreground">{m.access_authority_help()}</p>
+                <section
+                  aria-label={m.access_resource()}
+                  className="min-w-0 space-y-4 rounded-2xl border bg-card p-4 sm:p-6"
+                >
+                  <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1.2fr)_minmax(15rem,0.8fr)]">
+                    <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
+                      <p className="text-sm font-medium text-muted-foreground">{m.access_resource()}</p>
+                      <h2 className="text-xl font-semibold [overflow-wrap:anywhere]">{resourceName(page)}</h2>
+                    </div>
+                    <div className="min-w-0 space-y-2 rounded-xl bg-muted/50 p-4 [overflow-wrap:anywhere]">
+                      <p className="text-sm font-semibold">
+                        {m.access_acting_as({
+                          name: identityName(page.identities.find((item) => item.id === page.authority.accountId)),
+                        })}
+                      </p>
+                      {page.authority.principalId ? (
+                        <p className="text-sm text-muted-foreground">
+                          {m.access_delegated_by({
+                            name: identityName(page.identities.find((item) => item.id === page.authority.principalId)),
+                          })}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{m.access_authority_help()}</p>
                   <IdentityDetails
                     entries={[
                       [m.access_identity_resource_id(), page.resource.id],
@@ -798,15 +788,58 @@ function ResourceAccessEditor({
                   />
                 </section>
                 {page.mutationState === 'realm_guard_unavailable' ? (
-                  <p role="status" className="rounded-lg bg-muted p-4">
+                  <p role="status" className="rounded-xl border bg-muted p-4">
                     {m.access_realm_guard()}
                   </p>
                 ) : null}
-                <div className="flex flex-wrap items-center justify-end gap-3">
-                  <div className="flex gap-2">
+              </>
+            ) : null}
+            {notice ? (
+              <p role="status" className="rounded-xl border bg-muted p-4">
+                {notice}
+              </p>
+            ) : null}
+            {state.pending ? (
+              <section
+                aria-labelledby="access-pending-intent-heading"
+                className="min-w-0 space-y-4 rounded-2xl border border-amber-500/30 bg-muted/30 p-4 sm:p-6"
+              >
+                <div className="space-y-1">
+                  <h2 id="access-pending-intent-heading" className="text-lg font-semibold">
+                    {state.phase === 'preparing' ? m.access_preparing() : m.access_uncertain()}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">{m.access_retry_help()}</p>
+                </div>
+                <PendingAccessIntent intent={state.pending} />
+                <Button
+                  type="button"
+                  className="min-h-11"
+                  disabled={state.busy}
+                  onClick={() => void controller.retry()}
+                >
+                  {m.access_retry_operation()}
+                </Button>
+              </section>
+            ) : null}
+            <section
+              aria-labelledby="access-current-grants-heading"
+              className="min-w-0 space-y-5 rounded-2xl border p-4 sm:p-6"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h2
+                  ref={currentHeading}
+                  id="access-current-grants-heading"
+                  tabIndex={-1}
+                  className="text-xl font-semibold"
+                >
+                  {m.access_current_grants()}
+                </h2>
+                {page ? (
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
+                      className="min-h-11"
                       disabled={state.busy}
                       onClick={() => {
                         setRevoke(null);
@@ -819,6 +852,7 @@ function ResourceAccessEditor({
                     (page.actions.length > 0 || page.roles.some((item) => item.delegable)) ? (
                       <Button
                         type="button"
+                        className="min-h-11"
                         disabled={state.busy || !!state.pending}
                         onClick={() =>
                           move(() => {
@@ -832,7 +866,228 @@ function ResourceAccessEditor({
                       </Button>
                     ) : null}
                   </div>
-                </div>
+                ) : null}
+              </div>
+              {!page ? (
+                <section aria-busy={state.busy || state.page.status === 'loading'} className="space-y-4">
+                  <p role={state.page.status === 'unavailable' ? 'alert' : 'status'}>
+                    {state.page.status === 'denied'
+                      ? m.access_denied()
+                      : state.page.status === 'loading'
+                        ? m.access_loading()
+                        : state.page.status === 'preparing'
+                          ? m.access_preparing()
+                          : m.access_unavailable()}
+                  </p>
+                  {state.page.status !== 'loading' ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                      disabled={state.busy}
+                      onClick={() => void controller.retryPage()}
+                    >
+                      {m.access_retry_page()}
+                    </Button>
+                  ) : null}
+                </section>
+              ) : (
+                <>
+                  {page.grants.length === 0 ? (
+                    <p role="status" className="py-6 text-muted-foreground">
+                      {m.access_empty()}
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {page.grants.map((grant, index) => {
+                        const subject = grant.subject;
+                        const identity =
+                          subject.kind === 'account' || subject.kind === 'organization'
+                            ? page.identities.find((identity) => identity.id === subject.id)
+                            : undefined;
+                        return (
+                          <ContentItem
+                            key={index}
+                            className="min-w-0 rounded-xl border bg-background p-4 [overflow-wrap:anywhere] sm:p-5 [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]"
+                            title={subjectTitle(subject, identity)}
+                            headingLevel={3}
+                            metadata={
+                              grant.kind === 'role' ? rolePresentation(grant.role!).label : m.access_direct_action()
+                            }
+                            preview={
+                              <>
+                                <div className="space-y-2">
+                                  {grant.kind === 'role' ? (
+                                    <p className="font-medium">{m.access_review_expansion()}</p>
+                                  ) : null}
+                                  {grant.actions.length ? (
+                                    <ul className="grid gap-2">
+                                      {grant.actions.map((identifier, actionIndex) => {
+                                        const permission = permissionPresentation(identifier);
+                                        return (
+                                          <li key={`${identifier}:${actionIndex}`} className="min-w-0">
+                                            <p className="font-medium">{permission.label}</p>
+                                            <p className="text-sm text-muted-foreground">{permission.effect}</p>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  ) : null}
+                                </div>
+                                <p className="text-muted-foreground">
+                                  {m.access_valid_interval({
+                                    start: dateLabel(grant.startsAt, m.access_no_start()),
+                                    end: dateLabel(grant.endsAt, m.access_no_end()),
+                                  })}
+                                </p>
+                                <IdentityDetails
+                                  entries={[
+                                    ...(subject.kind !== 'active_accounts'
+                                      ? [[m.access_identity_subject_id(), subject.id] as const]
+                                      : []),
+                                    ...(grant.role ? [[m.access_named_role(), grant.role] as const] : []),
+                                    ...(grant.actions.length
+                                      ? [[m.access_action(), grant.actions.join(', ')] as const]
+                                      : []),
+                                    [m.access_identity_valid(), grant.valid],
+                                  ]}
+                                />
+                              </>
+                            }
+                            state={
+                              identity?.state === 'deleted' ||
+                              ['active', 'scheduled', 'expired'].includes(String(grant.state)) ? (
+                                <>
+                                  {identity?.state === 'deleted' ? (
+                                    <Tombstone
+                                      shape="row"
+                                      reason="deleted"
+                                      labels={{ deleted: m.access_deleted_account() }}
+                                    />
+                                  ) : null}
+                                  {grant.state === 'scheduled' ? <p>{m.access_scheduled()}</p> : null}
+                                  {grant.state === 'active' ? <p>{m.access_active()}</p> : null}
+                                  {String(grant.state) === 'expired' ? <p>{m.access_expired()}</p> : null}
+                                </>
+                              ) : null
+                            }
+                            actions={
+                              grant.manageable ? (
+                                <Menu
+                                  title={m.access_grant_actions()}
+                                  trigger={
+                                    <Button
+                                      size="icon-sm"
+                                      variant="ghost"
+                                      className="min-h-11 min-w-11"
+                                      aria-label={m.access_grant_actions()}
+                                      disabled={state.busy || !!state.pending}
+                                    >
+                                      <EllipsisIcon aria-hidden="true" />
+                                    </Button>
+                                  }
+                                  entries={[
+                                    {
+                                      type: 'item',
+                                      label: m.access_edit_grant(),
+                                      onSelect: () =>
+                                        move(() => {
+                                          setTransfer(null);
+                                          drafts.clear();
+                                          setForm(grant);
+                                        }),
+                                    },
+                                    ...(io.transfer && transferableOwner(page, grant)
+                                      ? [
+                                          {
+                                            type: 'item' as const,
+                                            label: m.access_transfer_owner(),
+                                            onSelect: () =>
+                                              move(() => {
+                                                setForm(null);
+                                                drafts.clear();
+                                                setTransfer(grant);
+                                              }),
+                                          },
+                                        ]
+                                      : []),
+                                    {
+                                      type: 'destructive',
+                                      label: m.access_revoke(),
+                                      onSelect: () =>
+                                        move(() => {
+                                          setForm(null);
+                                          setTransfer(null);
+                                          setRevoke({ grant, advice });
+                                        }),
+                                    },
+                                  ]}
+                                />
+                              ) : null
+                            }
+                          />
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <nav aria-label={m.access_page_navigation()} className="flex flex-wrap gap-2 border-t pt-4">
+                    {state.canPrevious ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                        disabled={state.busy || !!state.pending}
+                        onClick={(event) =>
+                          requestPageMove(
+                            event.detail === 0 && document.activeElement === event.currentTarget,
+                            event.currentTarget,
+                            () => controller.previous(),
+                          )
+                        }
+                      >
+                        {m.access_previous_page()}
+                      </Button>
+                    ) : null}
+                    {state.canFirst ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                        disabled={state.busy || !!state.pending}
+                        onClick={(event) =>
+                          requestPageMove(
+                            event.detail === 0 && document.activeElement === event.currentTarget,
+                            event.currentTarget,
+                            () => controller.first(),
+                          )
+                        }
+                      >
+                        {m.access_first_page()}
+                      </Button>
+                    ) : null}
+                    {page.next != null ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
+                        disabled={state.busy || !!state.pending}
+                        onClick={(event) =>
+                          requestPageMove(
+                            event.detail === 0 && document.activeElement === event.currentTarget,
+                            event.currentTarget,
+                            () => controller.next(),
+                          )
+                        }
+                      >
+                        {m.access_next_page()}
+                      </Button>
+                    ) : null}
+                  </nav>
+                </>
+              )}
+            </section>
+            {page ? (
+              <div className="space-y-4">
                 {transfer &&
                 !state.busy &&
                 !state.pending &&
@@ -893,177 +1148,8 @@ function ResourceAccessEditor({
                     }}
                   />
                 ) : null}
-                {page.grants.length === 0 ? (
-                  <p role="status" className="py-6 text-muted-foreground">
-                    {m.access_empty()}
-                  </p>
-                ) : (
-                  <ul className="space-y-2">
-                    {page.grants.map((grant, index) => {
-                      const subject = grant.subject;
-                      const identity =
-                        subject.kind === 'account' || subject.kind === 'organization'
-                          ? page.identities.find((identity) => identity.id === subject.id)
-                          : undefined;
-                      return (
-                        <ContentItem
-                          key={index}
-                          className="p-3 sm:p-4 [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]"
-                          title={subjectTitle(subject, identity)}
-                          headingLevel={3}
-                          metadata={
-                            grant.kind === 'role' ? rolePresentation(grant.role!).label : m.access_direct_action()
-                          }
-                          preview={
-                            <>
-                              <GrantContents kind={grant.kind} role={grant.role} actions={grant.actions} />
-                              <p className="text-muted-foreground">
-                                {m.access_valid_interval({
-                                  start: dateLabel(grant.startsAt, m.access_no_start()),
-                                  end: dateLabel(grant.endsAt, m.access_no_end()),
-                                })}
-                              </p>
-                              <IdentityDetails
-                                entries={[
-                                  ...(subject.kind !== 'active_accounts'
-                                    ? [[m.access_identity_subject_id(), subject.id] as const]
-                                    : []),
-                                  ...(grant.role ? [[m.access_named_role(), grant.role] as const] : []),
-                                  [m.access_identity_valid(), grant.valid],
-                                ]}
-                              />
-                            </>
-                          }
-                          state={
-                            identity?.state === 'deleted' ||
-                            ['active', 'scheduled', 'expired'].includes(String(grant.state)) ? (
-                              <>
-                                {identity?.state === 'deleted' ? (
-                                  <Tombstone
-                                    shape="row"
-                                    reason="deleted"
-                                    labels={{ deleted: m.access_deleted_account() }}
-                                  />
-                                ) : null}
-                                {grant.state === 'scheduled' ? <p>{m.access_scheduled()}</p> : null}
-                                {grant.state === 'active' ? <p>{m.access_active()}</p> : null}
-                                {String(grant.state) === 'expired' ? <p>{m.access_expired()}</p> : null}
-                              </>
-                            ) : null
-                          }
-                          actions={
-                            grant.manageable ? (
-                              <Menu
-                                title={m.access_grant_actions()}
-                                trigger={
-                                  <Button
-                                    size="icon-sm"
-                                    variant="ghost"
-                                    aria-label={m.access_grant_actions()}
-                                    disabled={state.busy || !!state.pending}
-                                  >
-                                    <EllipsisIcon aria-hidden="true" />
-                                  </Button>
-                                }
-                                entries={[
-                                  {
-                                    type: 'item',
-                                    label: m.access_edit_grant(),
-                                    onSelect: () =>
-                                      move(() => {
-                                        setTransfer(null);
-                                        drafts.clear();
-                                        setForm(grant);
-                                      }),
-                                  },
-                                  ...(io.transfer && transferableOwner(page, grant)
-                                    ? [
-                                        {
-                                          type: 'item' as const,
-                                          label: m.access_transfer_owner(),
-                                          onSelect: () =>
-                                            move(() => {
-                                              setForm(null);
-                                              drafts.clear();
-                                              setTransfer(grant);
-                                            }),
-                                        },
-                                      ]
-                                    : []),
-                                  {
-                                    type: 'destructive',
-                                    label: m.access_revoke(),
-                                    onSelect: () =>
-                                      move(() => {
-                                        setForm(null);
-                                        setTransfer(null);
-                                        setRevoke({ grant, advice });
-                                      }),
-                                  },
-                                ]}
-                              />
-                            ) : null
-                          }
-                        />
-                      );
-                    })}
-                  </ul>
-                )}
-                <nav aria-label={m.access_page_navigation()} className="flex flex-wrap gap-2">
-                  {state.canPrevious ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
-                      disabled={state.busy || !!state.pending}
-                      onClick={(event) =>
-                        requestPageMove(
-                          event.detail === 0 && document.activeElement === event.currentTarget,
-                          event.currentTarget,
-                          () => controller.previous(),
-                        )
-                      }
-                    >
-                      {m.access_previous_page()}
-                    </Button>
-                  ) : null}
-                  {state.canFirst ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
-                      disabled={state.busy || !!state.pending}
-                      onClick={(event) =>
-                        requestPageMove(
-                          event.detail === 0 && document.activeElement === event.currentTarget,
-                          event.currentTarget,
-                          () => controller.first(),
-                        )
-                      }
-                    >
-                      {m.access_first_page()}
-                    </Button>
-                  ) : null}
-                  {page.next != null ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal px-3 py-2 text-center"
-                      disabled={state.busy || !!state.pending}
-                      onClick={(event) =>
-                        requestPageMove(
-                          event.detail === 0 && document.activeElement === event.currentTarget,
-                          event.currentTarget,
-                          () => controller.next(),
-                        )
-                      }
-                    >
-                      {m.access_next_page()}
-                    </Button>
-                  ) : null}
-                </nav>
-              </>
-            )}
+              </div>
+            ) : null}
             <AlertDialog
               open={removalReview !== null}
               onOpenChange={(open) => {
