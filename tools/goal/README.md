@@ -1857,6 +1857,10 @@ installs still reuse the immutable store. A failed install or identity validatio
 cause. Recovery uses the normal controller resume of the same current task/session after this preparation source is
 released; source validation alone does not repair or restart retained consumers or prove their compilers pass.
 
+The key lease covers only an absent-key build through its atomic publication. Validation of an already published immutable store and each consumer's private skeleton copy run after that lease is released. One `installShared` preparation keeps call-local Bun observations keyed by device and inode plus file size and timestamps: it hashes each reached executable once and runs its version/revision probes once, while rechecking every consumer's manifest, lock, installed package metadata and direct links. A later preparation starts a fresh cache; changed pins and lockfiles are still checked against the current source.
+
+Measured warm cohorts on this host used 1, 4 and 16 workspaces, 364, 886 and 2,998 manifest/lock bytes, and 1, 4 and 16 workspace link entries. Three independent consumers copied 4, 7 and 19 `node_modules` entries each; total preparation fell from 29.031/35.699/44.969 ms to 9.557/12.859/23.564 ms (9.677/11.900/14.990 ms to 3.186/4.286/7.855 ms per consumer). These dependency-free fixtures have no pinned Bun artifact. The installed pinned executable is 138,468,432 bytes: nested healthy validation previously read it four times and ran four version/revision probes per consumer (553,873,728 bytes); one preparation now reads it once and runs two probes, and a repeated same-preparation validation measured 5.98 ms with no additional hash or probe. Timings are observations, not thresholds.
+
 Disposable train worktrees capture their directory identity when created. Before Git removes one, the train restores
 owner access on its own directories, including immutable fixture stores left by checks. Cleanup rejects replaced roots
 or parents, never follows dependency links, and never changes package file modes or outside store directories.
@@ -2290,7 +2294,9 @@ already holding the same brief is left in place. A different brief is published 
 untracked source is removed only after publication, while a newly tracked source remains unchanged after its copy is
 published. When every distinct name is occupied the source stays and a `continuation-retained` event is recorded. A
 brief moves only when it parses with the ordinary
-brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
+brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies.
+Plain-Markdown continuations inherit their omitted Goal, manager, kind and target from the current structured task brief;
+other inherited values retain the existing serialized-front-matter normalization rules.
 regular Markdown that cannot be admitted moves to `<state>/backlog/<goal>/failed/` under a task/attempt-prefixed name,
 with a `.reason` file and a manager `instruction` naming the continuation and reason; other entries are removed. The
 attempt still records `continuation-dropped`. Decision: keep rejected Markdown in the Goal's `failed/` directory, and
