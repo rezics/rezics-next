@@ -2,7 +2,7 @@ import { KnowledgeDetails, KnowledgeValue } from './workspace';
 import { BookOpen, FileText } from 'lucide-react';
 import { KnowledgeOrganizationOwner } from './organization-page';
 import type { OrganizationOperations } from './organization-read';
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -13,9 +13,11 @@ import {
   knowledgeNavigationRoot,
   type KnowledgeNavigationFrontier,
   type KnowledgeNavigationReader,
+  type KnowledgeNavigationSnapshot,
 } from './navigation-model';
 import type { KnowledgeNavigationAddress } from './navigation-read';
 import { KnowledgeNavigationReturn } from './navigation-return';
+import { KnowledgeNavigationFocus } from './navigation-focus';
 import { knowledgeNavigationControl, knowledgeNavigationLink } from './navigation-return-link';
 
 export type KnowledgeNavigationAccess = 'available' | 'preparing' | 'denied' | 'unavailable' | 'signed-out';
@@ -241,10 +243,34 @@ function KnowledgeNavigationRows({
   const snapshot = useSyncExternalStore(reading.subscribe, reading.getSnapshot, reading.getSnapshot);
   const options = { locale: locale as never };
   const focus = useRef<HTMLElement>(null);
+  const [orientation] = useState(() => new KnowledgeNavigationFocus());
+  const requested = useRef<KnowledgeNavigationSnapshot | null>(null);
+  useLayoutEffect(() => () => orientation.cancel(), [orientation]);
   useLayoutEffect(() => {
-    if (!embedded && snapshot.state !== 'preparing' && snapshot.state !== 'retired')
-      focus.current?.focus({ preventScroll: true });
-  }, [snapshot, embedded]);
+    const pending = requested.current;
+    if (!pending || snapshot === pending) return;
+    requested.current = null;
+    if (
+      embedded ||
+      snapshot.state === 'preparing' ||
+      snapshot.state === 'retired' ||
+      snapshot.frontier.request !== pending.frontier.request
+    ) {
+      orientation.cancel();
+      return;
+    }
+    orientation.arrive(focus.current);
+  }, [snapshot, embedded, orientation]);
+  const activate = (event: MouseEvent<HTMLElement>, action: () => void) => {
+    requested.current = null;
+    orientation.cancel();
+    if (snapshot !== reading.getSnapshot()) return;
+    const orient = orientation.request(event.currentTarget, !embedded && event.detail === 0);
+    action();
+    const started = reading.getSnapshot();
+    if (orient && started !== snapshot && started.state === 'preparing') requested.current = started;
+    else orientation.cancel();
+  };
   const actions = reading.actions(snapshot);
   const { page, frontier } = snapshot;
   const outline = frontier.request.kind === 'outline';
@@ -275,7 +301,7 @@ function KnowledgeNavigationRows({
             variant="ghost"
             className={knowledgeNavigationControl}
             disabled={snapshot.state === 'preparing'}
-            onClick={actions.root}
+            onClick={(event) => activate(event, actions.root)}
           >
             {m.knowledge_navigation_root({}, options)}
           </Button>
@@ -286,7 +312,7 @@ function KnowledgeNavigationRows({
               className={knowledgeNavigationControl}
               aria-current={index === frontier.breadcrumbs.length - 1 ? 'location' : undefined}
               disabled={snapshot.state !== 'ready'}
-              onClick={() => actions.ancestor(index)}
+              onClick={(event) => activate(event, () => actions.ancestor(index))}
             >
               {crumb.title}
             </Button>
@@ -356,7 +382,7 @@ function KnowledgeNavigationRows({
                           variant="ghost"
                           className={knowledgeNavigationControl}
                           disabled={frontier.breadcrumbs.length >= 32}
-                          onClick={() => actions.children(row)}
+                          onClick={(event) => activate(event, () => actions.children(row))}
                         >
                           {m.knowledge_navigation_children({}, options)}
                           <span className="sr-only">: {row.title}</span>
@@ -368,7 +394,7 @@ function KnowledgeNavigationRows({
           </ul>
           {frontier.breadcrumbs.length >= 32 && <p role="status">{m.knowledge_navigation_depth({}, options)}</p>}
           {page.next && (
-            <Button className={knowledgeNavigationControl} onClick={actions.more}>
+            <Button className={knowledgeNavigationControl} onClick={(event) => activate(event, actions.more)}>
               {m.knowledge_navigation_more({}, options)}
             </Button>
           )}
@@ -385,12 +411,12 @@ function KnowledgeNavigationRows({
                   : m.knowledge_navigation_unavailable({}, options)}
           </p>
           {snapshot.state === 'changed' && (
-            <Button className={knowledgeNavigationControl} onClick={actions.restart}>
+            <Button className={knowledgeNavigationControl} onClick={(event) => activate(event, actions.restart)}>
               {m.knowledge_navigation_restart({}, options)}
             </Button>
           )}
           {snapshot.state === 'unavailable' && (
-            <Button className={knowledgeNavigationControl} onClick={actions.retry}>
+            <Button className={knowledgeNavigationControl} onClick={(event) => activate(event, actions.retry)}>
               {m.knowledge_navigation_retry({}, options)}
             </Button>
           )}

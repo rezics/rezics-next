@@ -142,3 +142,19 @@ and installed APIs. Content native first-loop and the focused private, publicati
 source owners. The fixture is `apps/web/tests/native/knowledge-journey.host.test.ts`. Invoke it after integration
 with `bun apps/web/scripts/check.ts --host tests/native/knowledge-journey.host.test.ts`. Native/browser execution
 stays with the Goal verification lane.
+
+## Notebook navigation orientation
+
+Decision: only a focused keyboard page action or deliberate keyboard document return requests orientation;
+pointer actions and ordinary observations preserve the reader's focus. One ephemeral request is cancelled by
+focus movement, pointer use, another key, window departure, a superseding request or owner replacement. Embedded
+navigation leaves orientation to its caller. Each completed current read may orient its result or failure boundary;
+no focus request starts a read. Native page order, sparse continuation, exact-cursor Retry and explicit first-page
+Restart retain their existing contracts and twenty-row bound.
+
+Sources read before design: this owner document, `navigation-page.tsx`, `navigation.ts`, `navigation-model.ts`,
+`navigation-return.ts`, `navigation-return-link.tsx`, the mounted `knowledge-navigation.test.tsx` and existing
+navigation stories, the writer/reader and organization contracts in [Knowledge workspaces](../../../../docs/knowledge-workspaces.md),
+and the read-only main reference index. The separate history/comparison journey retains its own focus ownership.
+Source review covers every request, arrival and cancellation; execution of mounted regressions, typing, builds,
+native document return, and phone/desktop keyboard and visual acceptance belongs to the integration verifier.
