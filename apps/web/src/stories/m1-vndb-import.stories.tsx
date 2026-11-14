@@ -17,7 +17,16 @@ import {
 import type { VndbVisit } from '../library/personal-list-import/visit';
 import { PatternStory } from './page';
 
-type Scenario = 'upload' | 'review' | 'score' | 'changed' | 'results' | 'library' | 'signed-out';
+type Scenario =
+  | 'upload'
+  | 'review'
+  | 'score'
+  | 'changed'
+  | 'results'
+  | 'library'
+  | 'signed-out'
+  | 'cleanup-unknown'
+  | 'cleanup-unavailable';
 function VndbImportStory({ scenario = 'upload' }: { scenario?: Scenario }) {
   const port = useMemo(() => {
     const matched =
@@ -32,6 +41,7 @@ function VndbImportStory({ scenario = 'upload' }: { scenario?: Scenario }) {
       { ...vndbLifecycleUnmatchedRow(), ordinal: 2 },
     ]);
     let firstApply = true;
+    let firstCleanup = true;
     const base = vndbLifecyclePort(page);
     return vndbLifecyclePort(page, {
       async apply(command) {
@@ -44,7 +54,11 @@ function VndbImportStory({ scenario = 'upload' }: { scenario?: Scenario }) {
       async cancel() {
         return { kind: 'cancelled' };
       },
-      async delete() {
+      async delete(command) {
+        if (firstCleanup && (scenario === 'cleanup-unknown' || scenario === 'cleanup-unavailable')) {
+          firstCleanup = false;
+          return scenario === 'cleanup-unknown' ? { kind: 'unknown', command } : { kind: 'unavailable', status: 503 };
+        }
         return { kind: 'deleted' };
       },
     });
@@ -63,6 +77,13 @@ function VndbImportStory({ scenario = 'upload' }: { scenario?: Scenario }) {
   return (
     <PatternStory path="/library/import-vndb" visitor={scenario === 'signed-out' ? 'Signed Out' : 'Signed In'}>
       <aside className="mx-auto max-w-5xl space-y-2 border-b p-4 text-sm">
+        {scenario.startsWith('cleanup-') ? (
+          <p>
+            Choose Replace upload and submit the sample. The first removal is uncertain or unavailable. Retry that
+            removal, choose a newer replacement, or withdraw replacement while removal remains pending. Cleanup never
+            reopens the old review or reverses acknowledged Library and score effects.
+          </p>
+        ) : null}
         <p>
           Illustrative contract-shaped fixtures using the production route. Matched, unmatched and source-zero items
           retain their provider identity. Review Library state, Progress and score independently. A native score
@@ -104,3 +125,6 @@ export const ChangedReimport: Story = { args: { scenario: 'changed' } };
 export const Results: Story = { name: 'Partial result journey', args: { scenario: 'results' } };
 export const LibraryReturn: Story = { args: { scenario: 'library' } };
 export const OtherViewer: Story = { args: { scenario: 'signed-out' } };
+
+export const ReplacementCleanupUnknown: Story = { args: { scenario: 'cleanup-unknown' } };
+export const ReplacementCleanupUnavailable: Story = { args: { scenario: 'cleanup-unavailable' } };

@@ -28,7 +28,15 @@ import { sourceAdmissionBlock, sourceAdmissionBody } from '../rich-private-entry
 import { aniListSourcePreview } from './source';
 import type { AniListVisit } from './visit';
 
-export type AniListStage = 'upload' | 'cleanup' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
+export type AniListStage =
+  | 'upload'
+  | 'cleanup'
+  | 'review'
+  | 'confirm'
+  | 'applying'
+  | 'results'
+  | 'cancelled'
+  | 'removed';
 
 export type AniListNotice =
   | AniListFailure
@@ -271,8 +279,10 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   function live(): boolean {
     if (
       !retired &&
-      (!visit.current() || sender.subject !== visit.subject ||
-        sender.csrfToken !== visit.csrfToken || visit.controller.signal.aborted)
+      (!visit.current() ||
+        sender.subject !== visit.subject ||
+        sender.csrfToken !== visit.csrfToken ||
+        visit.controller.signal.aborted)
     ) {
       retired = true;
       clearPrivate();
@@ -550,10 +560,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     }
     if (!live() || token !== generation) return snapshot();
     if (response.kind !== 'cancelled' || !response.removed) {
-      notice =
-        response.kind === 'unknown' || response.kind === 'cancelled'
-          ? { kind: 'unknown', command }
-          : response;
+      notice = response.kind === 'unknown' || response.kind === 'cancelled' ? { kind: 'unknown', command } : response;
       retain();
       return snapshot();
     }
@@ -565,8 +572,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   async function preview(upload: string, format?: AniListScoreFormat | null): Promise<AniListJourneySnapshot> {
-    if (!live() || (busy && !cleanupCommand) || (unknown && !cleanupCommand) || stage === 'applying')
-      return snapshot();
+    if (!live() || (busy && !cleanupCommand) || (unknown && !cleanupCommand) || stage === 'applying') return snapshot();
     if (!upload || encodedBytes(upload) > ANILIST_UPLOAD_BYTES) {
       replacement = null;
       // Keep an uncertain cleanup notice visible when a replacement file fails admission.
@@ -1016,7 +1022,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     subjectId: string | null,
     selections: AniListLabelSelection[],
   ): AniListJourneySnapshot {
-    if (!live() || busy || heldUnknown()) return snapshot();
+    if (!live() || sourceRetired || busy || heldUnknown()) return snapshot();
     const row = meta.get(ordinal)!;
     const pending = page.find((item) => item.ordinal === ordinal)?.labelWork;
     if (Object.values(pending ?? {}).some((work) => (work.createStarted || work.assignStarted) && !work.outcome))
@@ -1131,7 +1137,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   async function labelTargets(query: string, cursor?: string) {
-    if (!live() || heldUnknown()) return { kind: 'unavailable' as const };
+    if (!live() || sourceRetired || heldUnknown()) return { kind: 'unavailable' as const };
     cost.recordCall('label-targets');
     return port.labelTargets(query, cursor, { expectedReader: visit.subject, expectedCredential: visit.csrfToken });
   }

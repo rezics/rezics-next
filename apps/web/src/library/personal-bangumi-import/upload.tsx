@@ -1,5 +1,5 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ImportDetails } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import { BANGUMI_FORMAT, BANGUMI_ROWS, BANGUMI_UPLOAD_BYTES } from './contract';
@@ -26,12 +26,19 @@ export function BangumiUploadForm({
   const attestId = useId();
   const input = useRef<HTMLInputElement>(null);
   const revision = useRef(0);
+  useEffect(
+    () => () => {
+      revision.current += 1;
+    },
+    [],
+  );
   function edit() {
     revision.current += 1;
     onEdit?.();
   }
   async function submit() {
     const token = ++revision.current;
+    onEdit?.();
     const file = input.current?.files?.[0];
     if (!file) return;
     if (file.size > BANGUMI_UPLOAD_BYTES) {

@@ -98,6 +98,13 @@ export function BangumiLabelAdoption({
           ...(panel?.custody ? { custody: panel.custody } : {}),
         }
     : null;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const latest = useRef({ rowRevision, visit });
   latest.current = { rowRevision, visit };
   useEffect(() => {
@@ -107,6 +114,7 @@ export function BangumiLabelAdoption({
 
   function isCurrent(expectedRevision: string | null): boolean {
     return (
+      mounted.current &&
       latest.current.rowRevision === expectedRevision &&
       latest.current.visit.current() &&
       !latest.current.visit.controller.signal.aborted

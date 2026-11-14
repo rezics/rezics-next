@@ -564,7 +564,7 @@ test.each(['denied', 'unknown'] as const)('source replacement retires review bef
   await journey.source();
   expect(journey.openConfirm().stage).toBe('confirm');
   const replacing = journey.preview('<replacement/>');
-  expect(journey.snapshot()).toMatchObject({ stage: 'upload', sourceXML: null, rows: [], selection: [], page: null });
+  expect(journey.snapshot()).toMatchObject({ stage: 'cleanup', sourceXML: null, rows: [], selection: [], page: null });
   cleanup.resolve(kind === 'denied' ? { kind, status: 403 } : { kind, command: deletes[0]! });
   await replacing;
   await journey.loadPage(0);

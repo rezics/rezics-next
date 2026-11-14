@@ -506,7 +506,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   async function reopen(address: VndbReviewAddress): Promise<VndbJourneySnapshot> {
-    if (!live() || pending > 0 || unknown) return snapshot();
+    if (!live() || cleanupCommand || pending > 0 || unknown) return snapshot();
     generation += 1;
     clearForReplacement();
     uploadId = address.uploadId;
@@ -615,7 +615,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   function replaceSource(): VndbJourneySnapshot {
-    if (!live() || pending > 0 || unknown) return snapshot();
+    if (!live() || cleanupCommand || pending > 0 || unknown) return snapshot();
     retireForCleanup();
     return snapshot();
   }
@@ -837,7 +837,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   async function cancelAdmission(): Promise<VndbJourneySnapshot> {
-    if (!uploadId || !live() || unknown || (pending > 0 && stage !== 'applying')) return snapshot();
+    if (!uploadId || !live() || sourceRetired || unknown || (pending > 0 && stage !== 'applying')) return snapshot();
     stopApply = true;
     const command: Extract<VndbCommand, { kind: 'cancel' }> = { kind: 'cancel', uploadId, key: newVndbKey() };
     const response = await run(command, () => port.cancel(command), { concurrent: true });

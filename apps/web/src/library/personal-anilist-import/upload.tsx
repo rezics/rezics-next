@@ -1,7 +1,7 @@
 import { ImportDetails } from '../personal-list-import/presentation';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { ANILIST_ROWS, ANILIST_SCORE_FORMATS, ANILIST_UPLOAD_BYTES, type AniListScoreFormat } from './contract';
 import { AniListAction } from './controls';
@@ -27,6 +27,12 @@ export function AniListUploadForm({
   const scoreId = useId();
   const input = useRef<HTMLInputElement>(null);
   const revision = useRef(0);
+  useEffect(
+    () => () => {
+      revision.current += 1;
+    },
+    [],
+  );
   function edit() {
     revision.current += 1;
     onEdit?.();
@@ -36,6 +42,7 @@ export function AniListUploadForm({
   const retainedIdInput = useId();
   async function submit() {
     const token = ++revision.current;
+    onEdit?.();
     const file = input.current?.files?.[0];
     if (!file) {
       onUpload('', null);

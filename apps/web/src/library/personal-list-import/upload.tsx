@@ -1,5 +1,5 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { useId, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { VndbAction } from './controls';
 
@@ -20,6 +20,12 @@ export function VndbUploadForm({
   const helpId = useId();
   const input = useRef<HTMLInputElement>(null);
   const revision = useRef(0);
+  useEffect(
+    () => () => {
+      revision.current += 1;
+    },
+    [],
+  );
   function edit() {
     revision.current += 1;
     onEdit?.();
@@ -27,6 +33,7 @@ export function VndbUploadForm({
 
   async function submit() {
     const token = ++revision.current;
+    onEdit?.();
     const file = input.current?.files?.[0];
     if (!file) return;
     try {

@@ -15,6 +15,8 @@ import type {
 import { QUESTION } from '../features/pages/subject-ratings';
 import { PatternStory } from './page';
 
+type CleanupState = 'unknown' | 'unavailable';
+
 type NavigationState = 'observed' | 'failed-previous' | 'retained-edge';
 
 const owner = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
@@ -95,8 +97,9 @@ function question(revision: number): AniListQuestion {
   };
 }
 
-function makeJourneyPort(navigation?: NavigationState) {
+function makeJourneyPort(navigation?: NavigationState, cleanup?: CleanupState) {
   const count = navigation === 'retained-edge' ? 11 : titles.length;
+  let cleanupAttempts = 0;
   let lastAfter = -1;
   let failPrevious = navigation === 'failed-previous';
   const reviews = new Map<number, AniListReview>();
@@ -289,6 +292,14 @@ function makeJourneyPort(navigation?: NavigationState) {
       return { kind: 'admitted' };
     },
     async cancel(command) {
+      if (command.remove) {
+        cleanupAttempts += 1;
+        if (cleanup && cleanupAttempts === 1)
+          return cleanup === 'unknown' ? { kind: 'unknown', command } : { kind: 'unavailable' };
+        reviews.clear();
+        readbacks.clear();
+        labelReviews.clear();
+      }
       return { kind: 'cancelled', removed: command.remove };
     },
     async question() {
@@ -298,8 +309,8 @@ function makeJourneyPort(navigation?: NavigationState) {
   return { port };
 }
 
-function ScoreImportStory({ navigation }: { navigation?: NavigationState } = {}) {
-  const fixture = useMemo(() => makeJourneyPort(navigation), [navigation]);
+function ScoreImportStory({ navigation, cleanup }: { navigation?: NavigationState; cleanup?: CleanupState } = {}) {
+  const fixture = useMemo(() => makeJourneyPort(navigation, cleanup), [navigation, cleanup]);
   const visit = useMemo(
     () => ({
       subject: owner,
@@ -312,11 +323,19 @@ function ScoreImportStory({ navigation }: { navigation?: NavigationState } = {})
         this.controller.abort();
       },
     }),
-    [navigation],
+    [navigation, cleanup],
   );
   return (
     <PatternStory path="/library/import-anilist" visitor="Signed In">
       <aside className="mx-auto max-w-5xl space-y-2 border-b p-4 text-sm">
+        {cleanup ? (
+          <p>
+            Upload the sample, choose Replace upload, then submit a replacement. The first removal
+            {cleanup === 'unknown' ? ' loses its acknowledgement' : ' is unavailable'}. Retry the original removal to
+            continue, edit the file to withdraw automatic continuation, or continue removal without replacement. Old
+            review and score consent stay retired.
+          </p>
+        ) : null}
         {navigation ? (
           <p>
             {navigation === 'retained-edge'
@@ -340,7 +359,7 @@ function ScoreImportStory({ navigation }: { navigation?: NavigationState } = {})
         </a>
       </aside>
       <AniListImportPortContext.Provider value={fixture.port}>
-        <PersonalAniListImportPage key={navigation} visit={visit} />
+        <PersonalAniListImportPage key={`${navigation}:${cleanup}`} visit={visit} />
       </AniListImportPortContext.Provider>
     </PatternStory>
   );
@@ -360,3 +379,6 @@ export const ScoreReviewConsentAndReadback: Story = {};
 export const ObservedPreviousAndFirst: Story = { args: { navigation: 'observed' } };
 export const FailedPreviousExactRetry: Story = { args: { navigation: 'failed-previous' } };
 export const RetainedEdgeFirst: Story = { args: { navigation: 'retained-edge' } };
+
+export const ReplacementCleanupUnknown: Story = { args: { cleanup: 'unknown' } };
+export const ReplacementCleanupUnavailable: Story = { args: { cleanup: 'unavailable' } };

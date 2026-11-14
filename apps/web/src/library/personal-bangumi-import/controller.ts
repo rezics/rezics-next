@@ -22,7 +22,15 @@ import { bangumiTitle } from './meaning';
 import { bangumiSourcePreview } from './source';
 import type { BangumiVisit } from './visit';
 
-export type BangumiStage = 'upload' | 'cleanup' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
+export type BangumiStage =
+  | 'upload'
+  | 'cleanup'
+  | 'review'
+  | 'confirm'
+  | 'applying'
+  | 'results'
+  | 'cancelled'
+  | 'removed';
 
 /** Label commands run in the labels panel, outside the journey's retry and cost ledger. */
 type JourneyCommand = Exclude<BangumiCommand, { kind: 'tags' | 'review-labels' | 'apply-labels' }>;
@@ -128,8 +136,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   function live(): boolean {
     if (
       !retired &&
-      (!visit.current() || sender.subject !== visit.subject ||
-        sender.csrfToken !== visit.csrfToken || visit.controller.signal.aborted)
+      (!visit.current() ||
+        sender.subject !== visit.subject ||
+        sender.csrfToken !== visit.csrfToken ||
+        visit.controller.signal.aborted)
     ) {
       retired = true;
       clearPrivate();
@@ -368,10 +378,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     }
     if (!live() || token !== generation) return snapshot();
     if (response.kind !== 'deleted') {
-      notice =
-        response.kind === 'unknown' || response.kind === 'cancelled'
-          ? { kind: 'unknown', command }
-          : response;
+      notice = response.kind === 'unknown' || response.kind === 'cancelled' ? { kind: 'unknown', command } : response;
       retain();
       return snapshot();
     }
@@ -383,8 +390,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   }
 
   async function preview(upload: string): Promise<BangumiJourneySnapshot> {
-    if (!live() || (busy && !cleanupCommand) || (unknown && !cleanupCommand) || stage === 'applying')
-      return snapshot();
+    if (!live() || (busy && !cleanupCommand) || (unknown && !cleanupCommand) || stage === 'applying') return snapshot();
     if (!upload || encodedBytes(upload) > BANGUMI_UPLOAD_BYTES) {
       replacement = null;
       // Keep an uncertain cleanup notice visible when a replacement file fails admission.

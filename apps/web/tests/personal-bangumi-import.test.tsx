@@ -7,6 +7,7 @@ import {
   BANGUMI_FORMAT,
   BANGUMI_PAGE,
   type BangumiImportPort,
+  type BangumiCommand,
   type BangumiPage,
   type BangumiReview,
   type BangumiRow,
@@ -902,4 +903,226 @@ test('Bangumi failed movement recovers and source, cancellation and reader retir
   await late;
   expect(fresh.snapshot().after).toBe(-1);
   expect(fresh.snapshot().position.previous).toBeNull();
+});
+
+test.each(['unknown', 'unavailable', 'denied'] as const)(
+  'Bangumi replacement retains the original cleanup after %s and admits only the newest selection',
+  async (failure) => {
+    const fixture = recordingPort(1);
+    const commands: Extract<BangumiCommand, { kind: 'delete' }>[] = [];
+    const acknowledged = Promise.withResolvers<Awaited<ReturnType<BangumiImportPort['delete']>>>();
+    const port: BangumiImportPort = {
+      ...fixture.port,
+      async delete(command) {
+        commands.push(command);
+        if (commands.length === 1) return failure === 'unknown' ? { kind: 'unknown', command } : { kind: failure };
+        return acknowledged.promise;
+      },
+    };
+    const journey = createBangumiJourney({ port, visit: visit() });
+    await journey.preview(envelope(1));
+    await journey.review(0, subject, { action: 'set', units: 0 });
+    journey.openConfirm();
+    journey.confirmScore(0, true);
+    journey.confirmSource({ privacy: true, timestamps: true });
+    await journey.preview(envelope(2));
+    expect(journey.snapshot()).toMatchObject({
+      stage: 'cleanup',
+      uploadId: id,
+      page: [],
+      meta: [],
+      confirmPrivacy: false,
+      confirmTimestamps: false,
+      cleanupPending: true,
+      replacementPending: true,
+    });
+    const pageCalls = journey.cost().calls.page;
+    await journey.loadPage(id, -1);
+    await journey.confirm();
+    await journey.cancelAdmission();
+    expect(journey.cost().calls.page).toBe(pageCalls);
+    expect(fixture.applies).toHaveLength(0);
+    const retry = journey.retryUnknown();
+    await journey.retryUnknown();
+    journey.editReplacement();
+    await journey.preview(envelope(3));
+    expect(fixture.previews).toHaveLength(1);
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(commands[0]);
+    expect(commands[0]).toMatchObject({ uploadId: id });
+    acknowledged.resolve({ kind: 'deleted' });
+    await retry;
+    expect(fixture.previews).toHaveLength(2);
+    expect(fixture.previews[1]).toEqual(envelope(3));
+    expect(journey.snapshot().cleanupPending).toBe(false);
+    expect(journey.cost().calls.delete).toBe(2);
+    expect(journey.cost().retries).toBe(1);
+  },
+);
+
+test('Bangumi discard preserves acknowledged results and withdrawal cannot turn cleanup into another request', async () => {
+  const fixture = recordingPort(1);
+  const commands: BangumiCommand[] = [];
+  const port: BangumiImportPort = {
+    ...fixture.port,
+    async delete(command) {
+      commands.push(command);
+      return commands.length === 1 ? { kind: 'unknown', command } : { kind: 'deleted' };
+    },
+  };
+  const journey = createBangumiJourney({ port, visit: visit() });
+  await journey.preview(envelope(1));
+  await journey.review(0, subject);
+  journey.openConfirm();
+  await journey.confirm();
+  const receipts = journey.snapshot().outcomes;
+  expect(receipts).toHaveLength(1);
+  await journey.discard();
+  await journey.preview(envelope(2));
+  await journey.discard();
+  expect(journey.snapshot()).toMatchObject({
+    cleanupPending: true,
+    replacementPending: false,
+    cleanupReceipts: receipts,
+  });
+  expect(commands).toHaveLength(1);
+  await journey.retryUnknown();
+  expect(commands[1]).toBe(commands[0]);
+  expect(journey.snapshot()).toMatchObject({ stage: 'removed', uploadId: null, outcomes: receipts });
+  expect(fixture.previews).toHaveLength(1);
+  expect(fixture.applies).toHaveLength(1);
+});
+
+test.each(['account', 'credential', 'departure'] as const)(
+  'Bangumi %s retirement erases replacement bytes and ignores a late cleanup acknowledgement',
+  async (change) => {
+    const fixture = recordingPort(1);
+    const current = visit();
+    const acknowledged = Promise.withResolvers<Awaited<ReturnType<BangumiImportPort['delete']>>>();
+    const journey = createBangumiJourney({
+      port: { ...fixture.port, delete: () => acknowledged.promise },
+      visit: current,
+    });
+    await journey.preview(envelope(1));
+    const replacing = journey.preview(envelope(2));
+    if (change === 'departure') current.retire();
+    else if (change === 'account') current.subject = 'other';
+    else current.csrfToken = 'other-token';
+    expect(journey.snapshot()).toMatchObject({
+      uploadId: null,
+      page: [],
+      meta: [],
+      cleanupPending: false,
+      replacementPending: false,
+    });
+    if (change === 'account') current.subject = 'alice';
+    if (change === 'credential') current.csrfToken = 'csrf-1';
+    acknowledged.resolve({ kind: 'deleted' });
+    await replacing;
+    await journey.retryUnknown();
+    expect(journey.live()).toBe(false);
+    expect(journey.cost().uploadBytes).toBe(0);
+    expect(fixture.previews).toHaveLength(1);
+  },
+);
+
+test('Bangumi browser cleanup transport loss retains the exact request and lets unexpected errors throw', async () => {
+  const { bangumiCleanupDelivery } = await import('../src/library/personal-bangumi-import/port');
+  const command: Extract<BangumiCommand, { kind: 'delete' }> = {
+    kind: 'delete',
+    uploadId: id,
+    key: 'original-cleanup',
+  };
+  const delivery = bangumiCleanupDelivery;
+  const result = await delivery(command, async () => {
+    throw new TypeError('Failed to fetch');
+  });
+  expect(result).toEqual({ kind: 'unknown', command });
+  expect(result.command).toBe(command);
+  await expect(
+    delivery(command, async () => {
+      throw new Error('unexpected');
+    }),
+  ).rejects.toThrow('unexpected');
+});
+
+test('Bangumi editing during removal withdraws the old preview until another explicit submission', async () => {
+  const fixture = recordingPort(1);
+  const acknowledged = Promise.withResolvers<Awaited<ReturnType<BangumiImportPort['delete']>>>();
+  const journey = createBangumiJourney({
+    port: { ...fixture.port, delete: () => acknowledged.promise },
+    visit: visit(),
+  });
+  await journey.preview(envelope(1));
+  const replacing = journey.preview(envelope(2));
+  journey.editReplacement();
+  acknowledged.resolve({ kind: 'deleted' });
+  await replacing;
+  expect(journey.snapshot()).toMatchObject({ stage: 'upload', uploadId: null, replacementPending: false });
+  expect(fixture.previews).toHaveLength(1);
+  await journey.preview(envelope(3));
+  expect(fixture.previews).toHaveLength(2);
+});
+
+test('Bangumi recovery replaces the mounted review, owns focus and retries only cleanup', async () => {
+  const fixture = recordingPort(1);
+  const commands: BangumiCommand[] = [];
+  await mount({
+    ...fixture.port,
+    async delete(command) {
+      commands.push(command);
+      return { kind: 'unknown', command };
+    },
+  });
+  async function upload() {
+    Object.defineProperty(host.querySelector('input[type="file"]'), 'files', {
+      configurable: true,
+      value: [new File([envelope(1)], 'list.json', { type: 'application/json' })],
+    });
+    await click(m.library_bangumi_upload());
+  }
+  await upload();
+  await click(m.library_import_replace());
+  expect(host.querySelector('[data-bangumi-row]')).toBeNull();
+  await upload();
+  const recovery = host.querySelector('[data-import-cleanup]');
+  expect(recovery).not.toBeNull();
+  expect(document.activeElement).toBe(recovery);
+  expect(host.textContent).toContain(m.library_import_cleanup_selected());
+  await click(m.library_import_cleanup_retry());
+  expect(commands).toHaveLength(2);
+  expect(commands[1]).toBe(commands[0]);
+  expect(fixture.previews).toHaveLength(1);
+  await click(m.library_import_cleanup_withdraw());
+  expect(host.textContent).toContain(m.library_import_cleanup_choose());
+});
+
+test('Bangumi retiring the review unmounts label readers before their late response can repopulate parent state', async () => {
+  const { BangumiLabelAdoption, emptyBangumiLabelPanel } =
+    await import('../src/library/personal-bangumi-import/labels');
+  const fixture = recordingPort(1);
+  const response = Promise.withResolvers<Awaited<ReturnType<BangumiImportPort['tags']>>>();
+  let updates = 0;
+  await act(async () => {
+    root.render(
+      <BangumiLabelAdoption
+        uploadId={id}
+        ordinal={0}
+        rowRevision={token}
+        port={{ ...fixture.port, tags: () => response.promise }}
+        visit={visit()}
+        panel={emptyBangumiLabelPanel(token)}
+        onChange={() => {
+          updates += 1;
+        }}
+        disabled={false}
+      />,
+    );
+  });
+  await click(m.library_bangumi_label_load_tags());
+  await act(async () => root.render(null));
+  const retiredUpdates = updates;
+  response.resolve({ kind: 'unavailable' });
+  await settle();
+  expect(updates).toBe(retiredUpdates);
 });

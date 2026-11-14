@@ -1,5 +1,5 @@
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
 import { m } from '../../paraglide/messages.js';
 import type { AniListRow, AniListLabelSelection, AniListLabelTargetsResult, AniListRowMeta } from './contract';
@@ -38,6 +38,12 @@ export function AniListLabelAdoption({
   const [searching, setSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
   const searchEpoch = useRef(0);
+  useEffect(
+    () => () => {
+      searchEpoch.current += 1;
+    },
+    [],
+  );
   const evidence = row.labelEvidence!;
   const labels = meta.labels!;
   const selections = labels.selections;

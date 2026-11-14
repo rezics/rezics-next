@@ -7,6 +7,7 @@ import {
   ANILIST_APPLY,
   ANILIST_PAGE,
   type AniListImportPort,
+  type AniListCommand,
   type AniListPage,
   type AniListReview,
   type AniListRow,
@@ -1185,4 +1186,260 @@ test('AniList cancellation retires a pending independent question read', async (
   expect(snap.question).toBeNull();
   expect(snap.questionPending).toBe(false);
   expect(snap.position.canFirst).toBe(false);
+});
+
+test.each(['unknown', 'unavailable', 'denied'] as const)(
+  'AniList replacement retains the original cleanup after %s and admits only the newest selection',
+  async (failure) => {
+    const fixture = recordingPort(1);
+    const commands: Extract<AniListCommand, { kind: 'cancel' }>[] = [];
+    const acknowledged = Promise.withResolvers<Awaited<ReturnType<AniListImportPort['cancel']>>>();
+    const port: AniListImportPort = {
+      ...fixture.port,
+      async cancel(command) {
+        commands.push(command);
+        if (commands.length === 1) return failure === 'unknown' ? { kind: 'unknown', command } : { kind: failure };
+        return acknowledged.promise;
+      },
+    };
+    const journey = createAniListJourney({ port, visit: visit() });
+    await journey.preview(envelope(1), 'POINT_10');
+    await journey.readQuestion();
+    journey.choose(0, { scoreAction: 'vote', scoreUnits: 0 });
+    await journey.review(0, subject);
+    journey.openConfirm();
+    journey.confirmVoteEffect(0, true);
+    journey.confirmSource({ privacy: true, timestamps: true });
+    await journey.preview(envelope(2), 'POINT_10');
+    expect(journey.snapshot()).toMatchObject({
+      stage: 'cleanup',
+      importId: id,
+      page: [],
+      meta: [],
+      confirmPrivacy: false,
+      confirmTimestamps: false,
+      cleanupPending: true,
+      replacementPending: true,
+    });
+    const pageCalls = journey.cost().calls.page;
+    await journey.loadPage(id, -1);
+    await journey.confirm();
+    await journey.cancelAdmission();
+    expect(journey.cost().calls.page).toBe(pageCalls);
+    expect(fixture.applies).toHaveLength(0);
+    const retry = journey.retryUnknown();
+    await journey.retryUnknown();
+    journey.editReplacement();
+    await journey.preview(envelope(3), 'POINT_100');
+    expect(fixture.previews).toHaveLength(1);
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(commands[0]);
+    expect(commands[0]).toMatchObject({ importId: id, remove: true });
+    acknowledged.resolve({ kind: 'cancelled', removed: true });
+    await retry;
+    expect(fixture.previews).toHaveLength(2);
+    expect(fixture.previews[1]).toEqual({ upload: envelope(3), scoreFormat: 'POINT_100' });
+    expect(journey.snapshot().cleanupPending).toBe(false);
+    expect(journey.cost().calls.cancel).toBe(2);
+    expect(journey.cost().retries).toBe(1);
+  },
+);
+
+test('AniList discard preserves acknowledged results and withdrawal cannot turn cleanup into another request', async () => {
+  const fixture = recordingPort(1);
+  const commands: AniListCommand[] = [];
+  const port: AniListImportPort = {
+    ...fixture.port,
+    async cancel(command) {
+      commands.push(command);
+      return commands.length === 1 ? { kind: 'unknown', command } : { kind: 'cancelled', removed: true };
+    },
+  };
+  const journey = createAniListJourney({ port, visit: visit() });
+  await journey.preview(envelope(1), 'POINT_10');
+  await journey.review(0, subject);
+  journey.openConfirm();
+  await journey.confirm();
+  const receipts = journey.snapshot().outcomes;
+  expect(receipts).toHaveLength(1);
+  await journey.discard();
+  await journey.preview(envelope(2), 'POINT_10');
+  await journey.discard();
+  expect(journey.snapshot()).toMatchObject({
+    cleanupPending: true,
+    replacementPending: false,
+    cleanupReceipts: receipts,
+  });
+  expect(commands).toHaveLength(1);
+  await journey.retryUnknown();
+  expect(commands[1]).toBe(commands[0]);
+  expect(journey.snapshot()).toMatchObject({ stage: 'removed', importId: null, outcomes: receipts });
+  expect(fixture.previews).toHaveLength(1);
+  expect(fixture.applies).toHaveLength(1);
+});
+
+test.each(['account', 'credential', 'departure'] as const)(
+  'AniList %s retirement erases replacement bytes and ignores a late cleanup acknowledgement',
+  async (change) => {
+    const fixture = recordingPort(1);
+    const current = visit();
+    const acknowledged = Promise.withResolvers<Awaited<ReturnType<AniListImportPort['cancel']>>>();
+    const journey = createAniListJourney({
+      port: { ...fixture.port, cancel: () => acknowledged.promise },
+      visit: current,
+    });
+    await journey.preview(envelope(1), 'POINT_10');
+    const replacing = journey.preview(envelope(2), 'POINT_10');
+    if (change === 'departure') current.retire();
+    else if (change === 'account') current.subject = 'other';
+    else current.csrfToken = 'other-token';
+    expect(journey.snapshot()).toMatchObject({
+      importId: null,
+      page: [],
+      meta: [],
+      cleanupPending: false,
+      replacementPending: false,
+    });
+    if (change === 'account') current.subject = 'alice';
+    if (change === 'credential') current.csrfToken = 'csrf-1';
+    acknowledged.resolve({ kind: 'cancelled', removed: true });
+    await replacing;
+    await journey.retryUnknown();
+    expect(journey.live()).toBe(false);
+    expect(journey.cost().uploadBytes).toBe(0);
+    expect(fixture.previews).toHaveLength(1);
+  },
+);
+
+test('AniList browser cleanup transport loss retains the exact request and lets unexpected errors throw', async () => {
+  const { aniListCommandDelivery } = await import('../src/library/personal-anilist-import/port');
+  const command: Extract<AniListCommand, { kind: 'cancel' }> = {
+    kind: 'cancel',
+    importId: id,
+    key: 'original-cleanup',
+    remove: true,
+  };
+  const delivery = aniListCommandDelivery;
+  const result = await delivery(command, async () => {
+    throw new TypeError('Failed to fetch');
+  });
+  expect(result).toEqual({ kind: 'unknown', command });
+  expect(result.command).toBe(command);
+  await expect(
+    delivery(command, async () => {
+      throw new Error('unexpected');
+    }),
+  ).rejects.toThrow('unexpected');
+});
+
+test('AniList editing during removal withdraws the old preview until another explicit submission', async () => {
+  const fixture = recordingPort(1);
+  const acknowledged = Promise.withResolvers<Awaited<ReturnType<AniListImportPort['cancel']>>>();
+  const journey = createAniListJourney({
+    port: { ...fixture.port, cancel: () => acknowledged.promise },
+    visit: visit(),
+  });
+  await journey.preview(envelope(1), 'POINT_10');
+  const replacing = journey.preview(envelope(2), 'POINT_10');
+  journey.editReplacement();
+  acknowledged.resolve({ kind: 'cancelled', removed: true });
+  await replacing;
+  expect(journey.snapshot()).toMatchObject({ stage: 'upload', importId: null, replacementPending: false });
+  expect(fixture.previews).toHaveLength(1);
+  await journey.preview(envelope(3), 'POINT_10');
+  expect(fixture.previews).toHaveLength(2);
+});
+
+test('AniList recovery replaces the mounted review, owns focus and retries only cleanup', async () => {
+  const fixture = recordingPort(1);
+  const commands: AniListCommand[] = [];
+  await mount({
+    ...fixture.port,
+    async cancel(command) {
+      commands.push(command);
+      return { kind: 'unknown', command };
+    },
+  });
+  async function upload() {
+    Object.defineProperty(host.querySelector('input[type="file"]'), 'files', {
+      configurable: true,
+      value: [new File([envelope(1)], 'list.json', { type: 'application/json' })],
+    });
+    await click(m.library_anilist_upload());
+  }
+  await upload();
+  await click(m.library_import_replace());
+  expect(host.querySelector('[data-anilist-row]')).toBeNull();
+  await upload();
+  const recovery = host.querySelector('[data-import-cleanup]');
+  expect(recovery).not.toBeNull();
+  expect(document.activeElement).toBe(recovery);
+  expect(host.textContent).toContain(m.library_import_cleanup_selected());
+  await click(m.library_import_cleanup_retry());
+  expect(commands).toHaveLength(2);
+  expect(commands[1]).toBe(commands[0]);
+  expect(fixture.previews).toHaveLength(1);
+  await click(m.library_import_cleanup_withdraw());
+  expect(host.textContent).toContain(m.library_import_cleanup_choose());
+});
+
+test('AniList cleanup retires a late question answer without using it to infer removal', async () => {
+  const fixture = recordingPort(1);
+  const answer = await fixture.port.question();
+  const pending = Promise.withResolvers<Awaited<ReturnType<AniListImportPort['question']>>>();
+  const journey = createAniListJourney({
+    port: {
+      ...fixture.port,
+      question: () => pending.promise,
+      cancel: async (command) => ({ kind: 'unknown', command }),
+    },
+    visit: visit(),
+  });
+  await journey.preview(envelope(1));
+  const reading = journey.readQuestion();
+  await journey.preview(envelope(2));
+  pending.resolve(answer);
+  await reading;
+  expect(journey.snapshot()).toMatchObject({ question: null, questionPending: false, cleanupPending: true });
+  expect(fixture.previews).toHaveLength(1);
+});
+
+test('file selection retires an older text read and unmount retires its replacement read', async () => {
+  const { AniListUploadForm } = await import('../src/library/personal-anilist-import/upload');
+  const older = Promise.withResolvers<string>();
+  const newer = Promise.withResolvers<string>();
+  const uploads: string[] = [];
+  let edits = 0;
+  await act(async () => {
+    root.render(
+      <AniListUploadForm
+        busy={false}
+        onEdit={() => {
+          edits += 1;
+        }}
+        onUpload={(value) => uploads.push(value)}
+      />,
+    );
+  });
+  const input = host.querySelector('input[type="file"]')!;
+  async function submit(read: Promise<string>) {
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [{ size: 20, text: () => read }],
+    });
+    await act(async () => {
+      input.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    await click(m.library_anilist_upload());
+  }
+  await submit(older.promise);
+  await submit(newer.promise);
+  older.resolve(envelope(1));
+  await settle();
+  expect(uploads).toEqual([]);
+  expect(edits).toBe(4);
+  await act(async () => root.render(null));
+  newer.resolve(envelope(2));
+  await settle();
+  expect(uploads).toEqual([]);
 });

@@ -13,6 +13,8 @@ import type { BangumiVisit } from '../library/personal-bangumi-import/visit';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
+type CleanupState = 'unknown' | 'unavailable';
+
 type NavigationState = 'observed' | 'failed-previous' | 'retained-edge';
 
 const uploadId = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
@@ -48,7 +50,8 @@ const collections = [
   },
   { subject_id: 12346, subject_type: 2, type: 2, rate: 8, tags: [], subject: { name: 'Unmatched source title' } },
 ];
-function makePort(navigation?: NavigationState): BangumiImportPort {
+function makePort(navigation?: NavigationState, cleanup?: CleanupState): BangumiImportPort {
+  let cleanupAttempts = 0;
   let lastAfter = -1;
   let failPrevious = navigation === 'failed-previous';
   let firstApply = true;
@@ -167,7 +170,16 @@ function makePort(navigation?: NavigationState): BangumiImportPort {
       cancelled = true;
       return { kind: 'cancelled', uploadId };
     },
-    async delete() {
+    async delete(command) {
+      cleanupAttempts += 1;
+      if (cleanup && cleanupAttempts === 1)
+        return cleanup === 'unknown' ? { kind: 'unknown', command } : { kind: 'unavailable' };
+      for (const row of rows) {
+        row.review = null;
+        row.outcome = null;
+      }
+      labelState = null;
+      cancelled = false;
       return { kind: 'deleted' };
     },
     async tags(command) {
@@ -239,8 +251,8 @@ function makePort(navigation?: NavigationState): BangumiImportPort {
     },
   };
 }
-function BangumiImportStory({ navigation }: { navigation?: NavigationState } = {}) {
-  const port = useMemo(() => makePort(navigation), [navigation]);
+function BangumiImportStory({ navigation, cleanup }: { navigation?: NavigationState; cleanup?: CleanupState } = {}) {
+  const port = useMemo(() => makePort(navigation, cleanup), [navigation, cleanup]);
   const visit = useMemo<BangumiVisit>(() => {
     const controller = new AbortController();
     return {
@@ -252,10 +264,18 @@ function BangumiImportStory({ navigation }: { navigation?: NavigationState } = {
       current: () => !controller.signal.aborted,
       retire: () => controller.abort(),
     };
-  }, [navigation]);
+  }, [navigation, cleanup]);
   return (
     <PatternStory path="/library/import-bangumi" visitor="Signed In">
       <aside className="mx-auto max-w-5xl space-y-2 border-b p-4 text-sm">
+        {cleanup ? (
+          <p>
+            Upload the sample, choose Replace upload, then submit a replacement. The first removal
+            {cleanup === 'unknown' ? ' loses its acknowledgement' : ' is unavailable'}. Retry the original removal to
+            continue, edit the file to withdraw automatic continuation, or continue removal without replacement. Old
+            review and score consent stay retired.
+          </p>
+        ) : null}
         {navigation ? (
           <p>
             {navigation === 'retained-edge'
@@ -281,7 +301,7 @@ function BangumiImportStory({ navigation }: { navigation?: NavigationState } = {
         </a>
       </aside>
       <BangumiImportPortContext.Provider value={port}>
-        <PersonalBangumiImportPage key={navigation} visit={visit} />
+        <PersonalBangumiImportPage key={`${navigation}:${cleanup}`} visit={visit} />
       </BangumiImportPortContext.Provider>
     </PatternStory>
   );
@@ -299,3 +319,6 @@ export const ReviewedSetNeedsConsent: Story = {};
 export const ObservedPreviousAndFirst: Story = { args: { navigation: 'observed' } };
 export const FailedPreviousExactRetry: Story = { args: { navigation: 'failed-previous' } };
 export const RetainedEdgeFirst: Story = { args: { navigation: 'retained-edge' } };
+
+export const ReplacementCleanupUnknown: Story = { args: { cleanup: 'unknown' } };
+export const ReplacementCleanupUnavailable: Story = { args: { cleanup: 'unavailable' } };
