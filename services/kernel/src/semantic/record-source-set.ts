@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import { readContentDocumentHistorySource } from '../content/adapters/subject-document.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { FactRow } from './item.ts';
 import begin from './record-source-set-begin.sql';
@@ -213,31 +213,37 @@ async function readAt<T>(
   work: (tx: CommandTransaction) => Promise<T>,
 ): Promise<T> {
   const now = () => deps.clock?.().getTime() ?? Date.now();
-  if (!Number.isFinite(deadline) || now() >= deadline) throw new AccessUnavailableError('deadline');
-  return withConnection(deps.pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+  const expired = new AccessUnavailableError('deadline');
+  const clockNow = now();
+  if (!Number.isFinite(deadline) || clockNow >= deadline) throw expired;
+  // Keep an injected clock's remaining budget fixed while the physical lifetime uses wall time.
+  const boundedDeadline = deps.clock ? Date.now() + (deadline - clockNow) : deadline;
+  const assertDeadline = () => {
+    if (now() >= deadline) throw expired;
+  };
+  const value = await withBoundedReadOnlyTransaction(
+    deps.pool,
+    boundedDeadline,
+    async (client) => {
       const remaining = Math.floor(deadline - now());
-      if (remaining <= 0) throw new AccessUnavailableError('deadline');
+      if (remaining <= 0) throw expired;
       await client.query(`SET LOCAL statement_timeout = '${remaining}ms'`);
+      assertDeadline();
       const home = await client.query<{ write_state: string }>(
         'SELECT write_state FROM core.partition WHERE partition_no=$1',
         [partition],
       );
+      assertDeadline();
       if (home.rows[0]?.write_state !== 'active') throw new AccessUnavailableError('contention');
-      const value = await work(client);
-      if (now() >= deadline) throw new AccessUnavailableError('deadline');
-      await client.query('COMMIT');
-      return value;
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      throw error;
-    }
-  });
+      const result = await work(client);
+      assertDeadline();
+      return result;
+    },
+    // An injected-clock expiry must retire the open snapshot instead of waiting for rollback.
+    { deadlineError: () => expired, isUncertainWorkError: (error) => error === expired },
+  );
+  assertDeadline();
+  return value;
 }
 
 export async function readSemanticRecordSourceSet(
