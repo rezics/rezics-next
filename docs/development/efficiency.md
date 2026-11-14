@@ -33,7 +33,6 @@ During the current Web reconstruction campaign, target at least 50,000 high-qual
 completed UTC hour. The Web boundary is the `web-app`, `auth-pages` and `ui` paths in
 [`docs/architecture/modules.json`](../architecture/modules.json): `apps/web/src/**`, `apps/auth/src/**` and
 `packages/ui/src/**`. Apply the exclusions above; also exclude docs and formatting-only changes from the campaign.
-Keep overall product additions separate, with no comparison to the Web target.
 
 The line count does not certify usefulness or quality. Changed workflows, integrated source and published visual
 review are part of every delivery assessment. Duplicated implementations, unnecessary abstractions and artificial
@@ -124,7 +123,8 @@ record the effect, including when it is not yet observable.
 - Make a task one complete outcome of about 1,500 to 3,000 product lines, landed with one check: a whole capability
   row, a whole system or one migration step across a module. Chain similar work in one worker, not in slivers. State
   the expected line count in the brief. An honest under-floor estimate on a complete outcome is not a dispatch return.
-  Keep at most six tasks in flight per Goal.
+  Keep at most 32 tasks in flight per Goal, including retries and released dependencies. Waiting checks and landing
+  count; dependency-held, urgent and control-plane tasks are exempt; admit ready work in order.
 - Repairs of integrated code that is broken on dev (type diagnostics, boot failures, failing tests named in landed
   summaries) go out as urgent briefs under the manager's urgent grant. They carry an honest estimate and are batched
   per area, never one per diagnostic. The dispatch estimate floor is advisory.
@@ -136,7 +136,7 @@ record the effect, including when it is not yet observable.
 - Send a handoff as one message containing the revision, remaining question, proposed decision and affected consumer.
   Co-owner review answers accept or one counterexample.
 
-Decision: enforce the six-task per-Goal limit at worker start admission; waiting checks and landing count, dependency-held, urgent and control-plane tasks are exempt, and ready work starts in order when a slot opens.
+Decision: enforce the 32-task per-Goal limit at worker start admission.
 
 ## Operating discipline
 
