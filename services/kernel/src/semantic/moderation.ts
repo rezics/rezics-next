@@ -1,8 +1,15 @@
 import { jsonParameter } from '../database/json.ts';
 import { subjectPageSlot, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import type { Pool } from 'pg';
-import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import {
+  currentCommand,
+  DEFAULT_REQUEST_DEADLINE_MS,
+  runCommand,
+  type CommandAuthorization,
+  type CommandTransaction,
+} from '../command/command.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
@@ -118,7 +125,7 @@ function validateModerationBody(action: ModerationAction, raw: unknown): Record<
 export async function readSubjectVisibility(pool: Pool, id: string): Promise<SubjectVisibilityState | null> {
   const route = routeOf(id);
   if (route === null) return null;
-  return withConnection(pool, async (client) => {
+  return withBoundedReadConnection(pool, deadlineFor(DEFAULT_REQUEST_DEADLINE_MS), async (client) => {
     return (await readVisibility.run(client, { route, subject_id: id })) as SubjectVisibilityState | null;
   });
 }
@@ -176,7 +183,7 @@ export async function moderationLinks(
 export async function readStatementCandidate(pool: Pool, subject: string, candidate: string): Promise<boolean> {
   const route = routeOf(subject);
   if (route === null || routeOf(candidate) !== route) return false;
-  return withConnection(pool, async (client) => {
+  return withBoundedReadConnection(pool, deadlineFor(DEFAULT_REQUEST_DEADLINE_MS), async (client) => {
     return (
       (await moderationHasLiveCandidate.run(client, { route, subject_id: subject, candidate_id: candidate })) !== null
     );

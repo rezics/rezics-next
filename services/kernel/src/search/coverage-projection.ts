@@ -2,7 +2,8 @@ import type { BatchResult, Envelope } from '../events/log.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readIdentityHome, type HomeIdentity } from '../semantic/identity-basis.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { createSubjectIndexer } from './indexer.ts';
 import { readSubjectCalendarMappingFormat, readSubjectCreditMappingFormat } from './indices.ts';
 import { createCoverageStore, type HomeGuard } from './coverage-store.ts';
@@ -38,9 +39,8 @@ export async function observeCoverageHome(
   pool: ProjectionOptions['pool'],
   partition: number,
 ): Promise<{ source: CoverageHome; fence: StructuralFence; pending: bigint }> {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+  try {
+    return await withBoundedReadOnlyTransaction(pool, deadlineFor(30_000), async (client) => {
       const home: HomeIdentity = await readIdentityHome(client, partition);
       const core = (
         await client.query<{ epoch: number; position: string }>(
@@ -49,23 +49,17 @@ export async function observeCoverageHome(
         )
       ).rows[0];
       if (!core) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-      await client.query('COMMIT');
       return {
         source: { partition: home.partition, epoch: home.epoch, home: home.home, generation: home.generation },
         fence: { epoch: home.epoch, position: BigInt(core.position), generation: home.generation },
         pending: home.pending,
       };
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        /* keep the original error */
-      }
-      if (error instanceof CommandUnavailableError)
-        throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-      throw error;
-    }
-  });
+    });
+  } catch (error) {
+    if (error instanceof CommandUnavailableError)
+      throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+    throw error;
+  }
 }
 
 /** Internal producer seam; durable enrollment precedes source reads and engine writes. */

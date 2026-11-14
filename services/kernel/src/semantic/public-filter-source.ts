@@ -15,7 +15,7 @@ import { AccessUnavailableError, CommandUnavailableError } from '../access/unava
 import type { JoinedPopulationRequest, PublicFilterNativeSource } from './public-filter-source-binding.ts';
 import type { PublicCanonicalCaptureInput } from '../search/index.ts';
 import type { PublicFilterConsumerContext } from './source-binding-port.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { BoundedReadDeadlineError, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -229,26 +229,27 @@ async function inReadSnapshot<T>(
   read: (client: import('pg').PoolClient) => Promise<T>,
   accessPort: PublicFilterAccessBindingPort,
 ) {
-  return withConnection(pool, async (client) => {
-    accessPort.requireDeadline(deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
+      accessPort.requireDeadline(deadline);
       const remaining = Math.max(1, Math.floor(deadline - Date.now()));
       await client.query(`SET LOCAL statement_timeout = '${remaining}ms'`);
       accessPort.requireDeadline(deadline);
       const result = await read(client);
       accessPort.requireDeadline(deadline);
-      await client.query('COMMIT');
       return result;
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      accessPort.requireDeadline(deadline);
-      throw error;
-    }
+    },
+    {
+      deadlineError: () => {
+        accessPort.requireDeadline(deadline);
+        return new BoundedReadDeadlineError();
+      },
+    },
+  ).catch((error: unknown) => {
+    accessPort.requireDeadline(deadline);
+    throw error;
   });
 }
 

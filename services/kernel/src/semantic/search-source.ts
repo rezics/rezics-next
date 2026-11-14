@@ -13,7 +13,6 @@ import { relationSource } from './search-relations.ts';
 import { readRelease } from './definition-release-read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { CommandUnavailableError } from '../access/unavailable.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { IndexedStatement, IndexedSubject, SubjectSnapshot, SubjectSource } from '../search/source.ts';
@@ -142,21 +141,7 @@ function termValues(rows: FactRow[], kind: 'label' | 'description' | 'alias') {
 }
 
 export async function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const result = await work(client);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      throw error;
-    }
-  });
+  return withReadTransaction(pool, work);
 }
 
 export function subjectSource(

@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { PoolClient } from 'pg';
-import { withConnection } from '../database/pool.ts';
+import {
+  BoundedReadDeadlineError,
+  withBoundedReadConnection,
+  withBoundedReadOnlyTransaction,
+  withConnection,
+} from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
@@ -133,116 +138,121 @@ export const createNativeFacetPopulationSource: FacetPopulationSourceFactory = (
       validate(request);
       let cost = zero();
       const fail = (status: 'changed' | 'unready' | 'unavailable'): FacetPopulationPage => ({ status, cost });
-      const context = request.capture.context;
-      if (Date.now() >= context.deadline) return fail('unavailable');
-      const joined = await binding.join(
-        {
-          queried: request.capture.queried,
-          ...(request.capture.start === null ? {} : { execution: request.capture.execution }),
-        },
-        context,
-      );
-      cost = plus(cost, joined.cost);
-      if (joined.status !== 'joined') return fail(joined.status);
-      if (
-        joined.definition.readDefinition !== request.population ||
-        (request.capture.start !== null && joined.execution?.start.observation !== request.capture.start.observation)
-      )
-        return fail('changed');
-      const native = await sourceReader();
-      if (!native) return fail('unavailable');
-      const observed = await native.readPrivacyReductionHeads(request.capture);
-      cost = plus(cost, observed.cost);
-      if (observed.status !== 'observed') return fail(observed.status === 'home' ? 'unavailable' : observed.status);
-      if (observed.changed.length || observed.blocking.some((entry) => entry.phase === 'changed'))
-        return fail('changed');
-      if (!observed.routingComplete || observed.unacknowledged.length || observed.blocking.length)
-        return fail('unready');
-      const signature = fingerprint({
-        source: joined.definition.source,
-        definition: request.population,
-        meaning: joined.definition.meaning.digest,
-      });
-      const captured = fingerprint({
-        // Native join validates PIT renewal. Its rotating transport ID is not immutable capture identity.
-        queried: {
-          consumer: joined.queried.consumer,
-          snapshot:
-            joined.queried.snapshot.kind === 'pit'
-              ? { kind: 'pit', observation: joined.queried.snapshot.observation }
-              : joined.queried.snapshot,
-        },
-        start: request.capture.start,
-        execution: request.capture.execution,
-      });
-      const owner = joined.definition.source;
-      const now = config.clock().getTime();
-      async function storage<T>(work: (client: PoolClient) => Promise<T>): Promise<T | null> {
-        return withConnection(config.pool, async (client) => {
+      try {
+        const context = request.capture.context;
+        if (Date.now() >= context.deadline) return fail('unavailable');
+        const joined = await binding.join(
+          {
+            queried: request.capture.queried,
+            ...(request.capture.start === null ? {} : { execution: request.capture.execution }),
+          },
+          context,
+        );
+        cost = plus(cost, joined.cost);
+        if (joined.status !== 'joined') return fail(joined.status);
+        if (
+          joined.definition.readDefinition !== request.population ||
+          (request.capture.start !== null && joined.execution?.start.observation !== request.capture.start.observation)
+        )
+          return fail('changed');
+        const native = await sourceReader();
+        if (!native) return fail('unavailable');
+        const observed = await native.readPrivacyReductionHeads(request.capture);
+        cost = plus(cost, observed.cost);
+        if (observed.status !== 'observed') return fail(observed.status === 'home' ? 'unavailable' : observed.status);
+        if (observed.changed.length || observed.blocking.some((entry) => entry.phase === 'changed'))
+          return fail('changed');
+        if (!observed.routingComplete || observed.unacknowledged.length || observed.blocking.length)
+          return fail('unready');
+        const signature = fingerprint({
+          source: joined.definition.source,
+          definition: request.population,
+          meaning: joined.definition.meaning.digest,
+        });
+        const captured = fingerprint({
+          // Native join validates PIT renewal. Its rotating transport ID is not immutable capture identity.
+          queried: {
+            consumer: joined.queried.consumer,
+            snapshot:
+              joined.queried.snapshot.kind === 'pit'
+                ? { kind: 'pit', observation: joined.queried.snapshot.observation }
+                : joined.queried.snapshot,
+          },
+          start: request.capture.start,
+          execution: request.capture.execution,
+        });
+        const owner = joined.definition.source;
+        const now = config.clock().getTime();
+        async function currentHome<T>(
+          client: PoolClient,
+          work: (client: PoolClient) => Promise<T>,
+        ): Promise<T | null> {
           const home = await readPartition(client, owner.partition);
           cost = plus(cost, { dependencyPoints: 1 });
           if (!home || home.epoch !== owner.epoch || home.writeState !== 'active') return null;
           return work(client);
-        });
-      }
-      const load = async (frontier: string, successor: boolean) =>
-        storage(async (client) => {
-          const rows = await client.query<Retained>(
-            successor ? replaySql : loadSql,
-            successor
-              ? [owner.partition, frontier, Math.max(0, request.inputLimit - cost.inputKeys)]
-              : [owner.partition, frontier],
-          );
-          return rows.rows[0];
-        });
-      const prior = request.frontier === null ? undefined : await load(request.frontier, false);
-      if (request.frontier !== null && !prior) return fail('changed');
-      if (prior && (prior.binding !== signature || prior.capture !== captured || Number(prior.expires) <= now))
-        return fail('changed');
-      const deliver = (row: Retained): FacetPopulationPage => {
-        // A retry with a smaller allowance cannot read/replay an oversized retained page for free.
-        if ((row.replay_keys ?? row.subjects.length) + cost.inputKeys > request.inputLimit) return fail('unready');
-        cost = plus(cost, { inputKeys: row.subjects.length, outputSlots: row.subjects.length });
-        return {
-          status: row.complete ? 'complete' : 'progress',
-          observation: row.observation,
-          subjects: row.subjects,
-          frontier: row.frontier,
-          cost,
+        }
+        const readOptions = { isUncertainSettledQueryError: () => true };
+        const readStorage = <T>(work: (client: PoolClient) => Promise<T>): Promise<T | null> =>
+          withBoundedReadConnection(config.pool, context.deadline, (client) => currentHome(client, work), readOptions);
+        const appendStorage = <T>(work: (client: PoolClient) => Promise<T>): Promise<T | null> =>
+          withConnection(config.pool, (client) => currentHome(client, work));
+        const load = async (frontier: string, successor: boolean) =>
+          readStorage(async (client) => {
+            const rows = await client.query<Retained>(
+              successor ? replaySql : loadSql,
+              successor
+                ? [owner.partition, frontier, Math.max(0, request.inputLimit - cost.inputKeys)]
+                : [owner.partition, frontier],
+            );
+            return rows.rows[0];
+          });
+        const prior = request.frontier === null ? undefined : await load(request.frontier, false);
+        if (request.frontier !== null && !prior) return fail('changed');
+        if (prior && (prior.binding !== signature || prior.capture !== captured || Number(prior.expires) <= now))
+          return fail('changed');
+        const deliver = (row: Retained): FacetPopulationPage => {
+          // A retry with a smaller allowance cannot read/replay an oversized retained page for free.
+          if ((row.replay_keys ?? row.subjects.length) + cost.inputKeys > request.inputLimit) return fail('unready');
+          cost = plus(cost, { inputKeys: row.subjects.length, outputSlots: row.subjects.length });
+          return {
+            status: row.complete ? 'complete' : 'progress',
+            observation: row.observation,
+            subjects: row.subjects,
+            frontier: row.frontier,
+            cost,
+          };
         };
-      };
-      if (prior?.complete)
-        return { status: 'complete', observation: prior.observation, subjects: [], frontier: prior.frontier, cost };
-      if (prior) {
-        const replay = await load(prior.frontier, true);
-        if (replay) return deliver(replay);
-      }
-      const state = structuredClone(prior?.state ?? initial());
-      let next = state;
-      let subjects: Subject[] = [];
-      const remaining = Math.min(256, request.inputLimit - cost.inputKeys);
-      if (remaining < 1 || Date.now() >= context.deadline) return fail('unavailable');
-      if (state.phase === 'keys') {
-        const page = await keys.read(
-          { partition: state.partition, after: state.after, inputLimit: remaining },
-          context,
-        );
-        cost = plus(cost, page.cost);
-        if (page.status !== 'eligible') return fail(page.status === 'identity_pending' ? 'unready' : 'unavailable');
-        if (state.epoch !== null && state.epoch !== page.epoch) return fail('changed');
-        if (state.base !== null && page.position < BigInt(state.base)) return fail('changed');
-        next = { ...state, epoch: page.epoch, base: state.base ?? String(page.position), after: page.after };
-        subjects = page.ids.map((subject) => ({ partition: state.partition, subject }));
-        if (page.complete) {
-          next.through = String(page.position);
-          next.position = String(BigInt(next.base!) + 1n);
-          next.phase = 'bridge';
-          if (BigInt(next.position) > page.position) next = advanceHome(next);
-        } else if (page.after === null || fingerprint(page.after) === fingerprint(state.after)) return fail('unready');
-      } else if (state.phase === 'bridge' || state.phase === 'anchor') {
-        const bridge = await withConnection(config.pool, async (client) => {
-          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          try {
+        if (prior?.complete)
+          return { status: 'complete', observation: prior.observation, subjects: [], frontier: prior.frontier, cost };
+        if (prior) {
+          const replay = await load(prior.frontier, true);
+          if (replay) return deliver(replay);
+        }
+        const state = structuredClone(prior?.state ?? initial());
+        let next = state;
+        let subjects: Subject[] = [];
+        const remaining = Math.min(256, request.inputLimit - cost.inputKeys);
+        if (remaining < 1 || Date.now() >= context.deadline) return fail('unavailable');
+        if (state.phase === 'keys') {
+          const page = await keys.read(
+            { partition: state.partition, after: state.after, inputLimit: remaining },
+            context,
+          );
+          cost = plus(cost, page.cost);
+          if (page.status !== 'eligible') return fail(page.status === 'identity_pending' ? 'unready' : 'unavailable');
+          if (state.epoch !== null && state.epoch !== page.epoch) return fail('changed');
+          if (state.base !== null && page.position < BigInt(state.base)) return fail('changed');
+          next = { ...state, epoch: page.epoch, base: state.base ?? String(page.position), after: page.after };
+          subjects = page.ids.map((subject) => ({ partition: state.partition, subject }));
+          if (page.complete) {
+            next.through = String(page.position);
+            next.position = String(BigInt(next.base!) + 1n);
+            next.phase = 'bridge';
+            if (BigInt(next.position) > page.position) next = advanceHome(next);
+          } else if (page.after === null || fingerprint(page.after) === fingerprint(state.after)) return fail('unready');
+        } else if (state.phase === 'bridge' || state.phase === 'anchor') {
+          const bridge = await withBoundedReadOnlyTransaction(config.pool, context.deadline, async (client) => {
             const home = await readPartition(client, state.partition);
             cost = plus(cost, { dependencyPoints: 1 });
             if (!home || home.writeState !== 'active') return null;
@@ -286,58 +296,59 @@ export const createNativeFacetPopulationSource: FacetPopulationSourceFactory = (
             }
             if (next.phase === 'bridge' && BigInt(next.position!) > BigInt(next.through!)) next = advanceHome(next);
             return 'ok';
-          } finally {
-            await client.query('ROLLBACK');
-          }
+          }, readOptions);
+          if (bridge === null) return fail('unavailable');
+          if (bridge === 'changed') return fail('changed');
+          if (bridge === 'unready') return fail('unready');
+        }
+        if (Date.now() >= context.deadline) return fail('unavailable');
+        // Empty native home pages and finite bridge exhaustion are required before reaching seal.
+        // The native observation above revalidates the SAME immutable consumer, not its latest ACK.
+        const row: Retained = {
+          frontier: randomUUID(),
+          observation: prior?.observation ?? observed.start.observation,
+          binding: signature,
+          capture: captured,
+          state: next,
+          subjects,
+          complete: state.phase === 'seal',
+          expires: prior?.expires ?? String(now + lifetime),
+        };
+        const saved = await appendStorage(async (client) => {
+          const result = await client.query<Retained>(appendSql, [
+            owner.partition,
+            row.frontier,
+            prior?.frontier ?? null,
+            row.observation,
+            signature,
+            captured,
+            JSON.stringify(next),
+            JSON.stringify(subjects),
+            row.complete,
+            row.expires,
+            owner.epoch,
+          ]);
+          cost = plus(cost, { frontierWrites: 1 });
+          return result.rows[0];
         });
-        if (bridge === null) return fail('unavailable');
-        if (bridge === 'changed') return fail('changed');
-        if (bridge === 'unready') return fail('unready');
+        if (saved === null || Date.now() >= context.deadline) return fail('unavailable');
+        if (!saved) {
+          // The winning successor is durable; a loser never publishes its discarded subjects.
+          const winner = prior ? await load(prior.frontier, true) : undefined;
+          return winner ? deliver(winner) : fail('changed');
+        }
+        cost = plus(cost, { outputSlots: subjects.length });
+        return {
+          status: row.complete ? 'complete' : 'progress',
+          observation: row.observation,
+          subjects,
+          frontier: row.frontier,
+          cost,
+        };
+      } catch (error) {
+        if (error instanceof BoundedReadDeadlineError) return fail('unavailable');
+        throw error;
       }
-      if (Date.now() >= context.deadline) return fail('unavailable');
-      // Empty native home pages and finite bridge exhaustion are required before reaching seal.
-      // The native observation above revalidates the SAME immutable consumer, not its latest ACK.
-      const row: Retained = {
-        frontier: randomUUID(),
-        observation: prior?.observation ?? observed.start.observation,
-        binding: signature,
-        capture: captured,
-        state: next,
-        subjects,
-        complete: state.phase === 'seal',
-        expires: prior?.expires ?? String(now + lifetime),
-      };
-      const saved = await storage(async (client) => {
-        const result = await client.query<Retained>(appendSql, [
-          owner.partition,
-          row.frontier,
-          prior?.frontier ?? null,
-          row.observation,
-          signature,
-          captured,
-          JSON.stringify(next),
-          JSON.stringify(subjects),
-          row.complete,
-          row.expires,
-          owner.epoch,
-        ]);
-        cost = plus(cost, { frontierWrites: 1 });
-        return result.rows[0];
-      });
-      if (saved === null || Date.now() >= context.deadline) return fail('unavailable');
-      if (!saved) {
-        // The winning successor is durable; a loser never publishes its discarded subjects.
-        const winner = prior ? await load(prior.frontier, true) : undefined;
-        return winner ? deliver(winner) : fail('changed');
-      }
-      cost = plus(cost, { outputSlots: subjects.length });
-      return {
-        status: row.complete ? 'complete' : 'progress',
-        observation: row.observation,
-        subjects,
-        frontier: row.frontier,
-        cost,
-      };
     },
   };
 };

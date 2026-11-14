@@ -1,13 +1,12 @@
 export { ScopeWork, scopeAllowance, scopeWorkAxes, zeroScopeWork } from './scope-work.ts';
 import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import type { Pool } from 'pg';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { SearchOperationError } from './operation-outcomes.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { LeafOptions, LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import {
-  deadlineClient,
   readOwnerFilterCandidate,
   readOwnerFilterCandidateClosure,
   readScopeLeafEvidence,
@@ -137,18 +136,9 @@ export async function evaluateScopeSubjects(
           const control = native.reserve({ ...zeroScopeWork(), nativePoints: 1, statements: 3, bytes: 256 });
           control.dispatch();
           try {
-            return await withConnection(pool, async (connection) => {
-              const client = deadlineClient(connection, options.deadline);
-              await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-              try {
-                const value = await readOwnerFilterCandidate(client, owner.admission, closure.closure, native);
-                await client.query('COMMIT');
-                return value;
-              } catch (error) {
-                await client.query('ROLLBACK');
-                throw error;
-              }
-            });
+            return await withBoundedReadOnlyTransaction(pool, options.deadline, (client) =>
+              readOwnerFilterCandidate(client, owner.admission, closure.closure, native),
+            );
           } finally {
             control.settle();
           }

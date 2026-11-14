@@ -2,7 +2,9 @@
 
 import type { Pool } from 'pg';
 import { memoizedValue } from '../../memoized.ts';
-import { withConnection } from '../../database/pool.ts';
+import { BoundedReadDeadlineError, withBoundedReadOnlyTransaction } from '../../database/pool.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../../command/command.ts';
+import { deadlineFor } from '../../request/deadline.ts';
 import {
   AuthenticationError,
   type Access,
@@ -84,21 +86,16 @@ async function withZoneReadTransaction<T>(
   requireDeadline: (deadline: number) => void,
   deadline?: number,
 ): Promise<T> {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      if (deadline !== undefined) {
-        requireDeadline(deadline);
-        await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
+  const readDeadline = deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  return withBoundedReadOnlyTransaction(pool, readDeadline, work, {
+    deadlineError() {
+      try {
+        requireDeadline(readDeadline);
+      } catch (error) {
+        return error instanceof Error ? error : new BoundedReadDeadlineError();
       }
-      const result = await work(client);
-      if (deadline !== undefined) requireDeadline(deadline);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
+      return new BoundedReadDeadlineError();
+    },
   });
 }
 

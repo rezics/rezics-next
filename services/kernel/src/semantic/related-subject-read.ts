@@ -1,8 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
-import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { Item } from './contract/item-values.ts';
 import { RELATED_SUBJECT_BATCH_LIMIT as BATCH_LIMIT } from './contract/subject-values.ts';
+import { withReadTransaction } from './read.ts';
 import readRelatedStatement from './read-related.sql';
 
 function listed<T>(result: T[] | T | null): T[] {
@@ -117,6 +117,6 @@ export async function readRelated(db: Pool | PoolClient, ids: readonly string[])
     }
     return related;
   };
-  if (isPool(db)) return withConnection(db, assemble);
+  if (isPool(db)) return withReadTransaction(db, assemble);
   return assemble(db);
 }

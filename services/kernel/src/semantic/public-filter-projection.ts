@@ -5,8 +5,18 @@ import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
 import type { AccessCheck } from '../access/index.ts';
 import { mintReadTime, type AuthoritativeTime } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import {
+  discardConnection,
+  withBoundedReadConnection,
+  withBoundedReadOnlyTransaction,
+  withConnection,
+} from '../database/pool.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  requireAccessDeadline,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -143,16 +153,20 @@ export async function readRetainedPublicFilterProjectionPage(
     request.inputLimit > 1000
   )
     throw new TypeError('Invalid original projection page locator');
-  const stored = await withConnection(pool, (client) =>
-    readOriginalPage.run(client, {
-      partition_no: 0,
-      bootstrap: request.identity.bootstrap,
-      execution: request.identity.execution,
-      predecessor: request.identity.predecessor ?? '',
-      route: routed.route,
-      subject_id: request.subject,
-      request_digest: originalProjectionRequestDigest(request),
-    }),
+  const stored = await withBoundedReadConnection(
+    pool,
+    deadline,
+    (client) =>
+      readOriginalPage.run(client, {
+        partition_no: 0,
+        bootstrap: request.identity.bootstrap,
+        execution: request.identity.execution,
+        predecessor: request.identity.predecessor ?? '',
+        route: routed.route,
+        subject_id: request.subject,
+        request_digest: originalProjectionRequestDigest(request),
+      }),
+    boundedProjectionReadOptions(deadline),
   );
   requireAccessDeadline(deadline);
   if (!stored) return null;
@@ -358,26 +372,39 @@ function readCursor(routeKey: Uint8Array, frontier: PublicFilterProjectionFronti
   }
 }
 
-async function inSnapshot<T>(pool: Pool, deadline: number, work: (client: PoolClient) => Promise<T>): Promise<T> {
-  return withConnection(pool, async (client) => {
-    requireAccessDeadline(deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
-      const result = await work(client);
-      requireAccessDeadline(deadline);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
+function isSettledServerError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const details = error as { code?: unknown; severity?: unknown };
+  return typeof details.code === 'string' && /^[0-9A-Z]{5}$/.test(details.code) && details.severity === 'ERROR';
+}
+
+function boundedProjectionReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown): unknown {
       try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
+        throwAccessUnavailable(error, deadline);
+      } catch (mapped) {
+        return mapped;
       }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: (error: unknown) => !isSettledServerError(error),
+  };
+}
+
+async function inSnapshot<T>(pool: Pool, deadline: number, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
       requireAccessDeadline(deadline);
-      throw error;
-    }
-  });
+      await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
+      return work(client);
+    },
+    boundedProjectionReadOptions(deadline),
+  );
 }
 
 async function storedMeaningRelease(pool: Pool, digest: string, deadline: number): Promise<Release | null> {
@@ -928,47 +955,29 @@ export async function readPublicFilterProjectionPage(
       (digest) => !releaseCache.has(digest),
     );
     if (missingDigests.length) {
-      const releases = await withConnection(config.pool, async (client) => {
-        requireAccessDeadline(deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
-          const owner = await readPartition(client, 0);
-          if (!owner || owner.writeState !== 'active') {
-            await client.query('ROLLBACK');
-            return null;
-          }
-          const found = rows(await readReleases.run(client, { route: 0, digests: missingDigests })) as {
-            digest: string;
-            body: unknown;
-          }[];
-          const result = new Map<string, Release>();
-          for (const row of found) {
-            try {
-              if (object(row.body) && releaseDigest(row.body as unknown as Release) === row.digest)
-                result.set(row.digest, row.body as unknown as Release);
-            } catch {
-              // A malformed stored release is unresolved metadata, never an empty facet.
-            }
-          }
-          const storedDigests = new Set(found.map((row) => row.digest));
-          for (const digest of missingDigests) {
-            if (storedDigests.has(digest)) continue;
-            const release = await readRelease(client, digest);
-            if (release) result.set(digest, release);
-          }
-          requireAccessDeadline(deadline);
-          await client.query('COMMIT');
-          return result;
-        } catch (error) {
+      const releases = await inSnapshot(config.pool, deadline, async (client) => {
+        const owner = await readPartition(client, 0);
+        if (!owner || owner.writeState !== 'active') return null;
+        const found = rows(await readReleases.run(client, { route: 0, digests: missingDigests })) as {
+          digest: string;
+          body: unknown;
+        }[];
+        const result = new Map<string, Release>();
+        for (const row of found) {
           try {
-            await client.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(client, rollbackError as Error);
+            if (object(row.body) && releaseDigest(row.body as unknown as Release) === row.digest)
+              result.set(row.digest, row.body as unknown as Release);
+          } catch {
+            // A malformed stored release is unresolved metadata, never an empty facet.
           }
-          requireAccessDeadline(deadline);
-          throw error;
         }
+        const storedDigests = new Set(found.map((row) => row.digest));
+        for (const digest of missingDigests) {
+          if (storedDigests.has(digest)) continue;
+          const release = await readRelease(client, digest);
+          if (release) result.set(digest, release);
+        }
+        return result;
       });
       if (!releases) return unready('metadata_missing', cost);
       for (const digest of missingDigests) releaseCache.set(digest, releases.get(digest) ?? null);
