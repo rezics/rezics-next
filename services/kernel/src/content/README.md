@@ -788,6 +788,9 @@ Content owns mixed Home composition through the existing Home port. The [feed co
 owns selection, source limits and sparse cursors; Search owns its public discovery source/result/continuation entry,
 real adapters, query/default-worker assembly and minimal caller migration. There is no second renderer or private
 Library merge.
+Decision: Following and Space snapshots carry one request deadline through checkout, repeatable-read transaction and
+cleanup; late checkouts send no SQL, and expiry or unresolved database work discards the connection so the next
+authorized read observes current sources.
 Decision: mixed Home construction and read orchestration run through the Content feed application over
 consumer-owned continuation, public-summary and presentation ports. Library owns Continue page vocabulary and
 the native Continue adapter; Semantic owns disclosed Subject summary vocabulary and the native public-summary

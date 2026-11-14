@@ -1,8 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { PoolClient } from 'pg';
-import { deadlineClient, within } from './access-port.ts';
+import { withFeedReadConnection, type FeedReadClient } from './feed-read-connection.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Actor } from '../request/access.ts';
@@ -10,7 +8,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { openFollowingSpace } from './feed-space.ts';
 
 type Dependencies = Parameters<typeof openFollowingSpace>[0];
-type Client = Pick<PoolClient, 'query'>;
+type Client = FeedReadClient;
 type RealmPopulation = Readonly<{
   realmId: string;
   headRevisionId: string;
@@ -51,45 +49,34 @@ export async function openSpaceSubjectPopulation(
   const route = routeOf(spaceId)!;
   const partitionNo = partitionOf(route);
   async function snapshot<T>(read: (client: Client, observation: SpaceSubjectObservation) => Promise<T>) {
-    return within(deadline, () =>
-      withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const partition = await readPartition(client, partitionNo);
-          if (!partition) throw new CommandUnavailableError('contention', partitionNo);
-          if (partition.writeState === 'moved')
-            throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-          if (partition.writeState !== 'active') throw new CommandUnavailableError('fenced', partitionNo);
-          const realm =
-            (
-              await client.query<RealmPopulation>(
-                `SELECT realm_id AS "realmId", head_revision_id AS "headRevisionId",
-                  discovery_epoch::text AS "discoveryEpoch", publication_generation::text AS "publicationGeneration"
-                  FROM community.realm
-                  WHERE route=$1 AND space_id=$2 AND state='active'`,
-                [route, spaceId],
-              )
-            ).rows[0] ?? null;
-          // A withheld Realm slot is not a complete empty population. This
-          // same-home unique slot read reveals no hidden identity to a client.
-          if ((realm?.realmId ?? null) !== selected.realmId) throw new ProblemError('stale_cursor');
-          if (realm) Object.freeze(realm);
-          const observation = Object.freeze({
-            spaceId,
-            spaceHeadRevisionId: selected.headRevisionId,
-            partitionEpoch: partition.epoch,
-            realm,
-          });
-          const value = await read(client, observation);
-          await client.query('COMMIT');
-          return value;
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
-        }
-      }),
-    );
+    return withFeedReadConnection(deps.pool, deadline, async (client) => {
+      const partition = await readPartition(client, partitionNo);
+      if (!partition) throw new CommandUnavailableError('contention', partitionNo);
+      if (partition.writeState === 'moved')
+        throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+      if (partition.writeState !== 'active') throw new CommandUnavailableError('fenced', partitionNo);
+      const realm =
+        (
+          await client.query<RealmPopulation>(
+            `SELECT realm_id AS "realmId", head_revision_id AS "headRevisionId",
+              discovery_epoch::text AS "discoveryEpoch", publication_generation::text AS "publicationGeneration"
+              FROM community.realm
+              WHERE route=$1 AND space_id=$2 AND state='active'`,
+            [route, spaceId],
+          )
+        ).rows[0] ?? null;
+      // A withheld Realm slot is not a complete empty population. This
+      // same-home unique slot read reveals no hidden identity to a client.
+      if ((realm?.realmId ?? null) !== selected.realmId) throw new ProblemError('stale_cursor');
+      if (realm) Object.freeze(realm);
+      const observation = Object.freeze({
+        spaceId,
+        spaceHeadRevisionId: selected.headRevisionId,
+        partitionEpoch: partition.epoch,
+        realm,
+      });
+      return read(client, observation);
+    });
   }
   const observation = await snapshot(async (_client, current) => current);
   if (expected !== undefined && !isDeepStrictEqual(expected, observation)) throw new ProblemError('stale_cursor');
