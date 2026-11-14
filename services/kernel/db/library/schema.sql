@@ -790,6 +790,12 @@ BEGIN
       RAISE EXCEPTION 'Collection source identity is immutable'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'collection_source_identity_immutable';
     END IF;
+    IF OLD.curator_account_id IS NOT NULL AND NEW.curator_account_id IS NULL THEN
+      UPDATE library.collection_listing_history
+      SET curator_account_id = NULL
+      WHERE route = OLD.route AND collection_id = OLD.collection_id
+        AND curator_account_id = OLD.curator_account_id;
+    END IF;
     NEW.listing_ever_public := OLD.listing_ever_public
       OR (OLD.state = 'active' AND OLD.visibility = 'public')
       OR (NEW.state = 'active' AND NEW.visibility = 'public');
@@ -797,9 +803,14 @@ BEGIN
   ELSE
     IF OLD.listing_ever_public OR (OLD.state = 'active' AND OLD.visibility = 'public') THEN
       PERFORM pg_advisory_xact_lock(hashtextextended(OLD.collection_id::text, OLD.route::bigint));
-      INSERT INTO library.collection_listing_history (route, collection_id, ever_public)
-      VALUES (OLD.route, OLD.collection_id, true)
-      ON CONFLICT (route, collection_id) DO NOTHING;
+      INSERT INTO library.collection_listing_history AS history
+        (route, collection_id, ever_public, curator_account_id)
+      VALUES (OLD.route, OLD.collection_id, true, OLD.curator_account_id)
+      ON CONFLICT (route, collection_id) DO UPDATE
+      SET curator_account_id = COALESCE(
+        history.curator_account_id,
+        EXCLUDED.curator_account_id
+      );
     END IF;
     RETURN OLD;
   END IF;
@@ -3569,7 +3580,9 @@ CREATE TABLE library.collection_listing_history (
     route integer NOT NULL,
     collection_id uuid NOT NULL,
     ever_public boolean NOT NULL,
+    curator_account_id uuid,
     CONSTRAINT collection_listing_history_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT collection_listing_history_curator_route_check CHECK (((curator_account_id IS NULL) OR (route = ((get_byte(uuid_send(curator_account_id), 10) * 256) + get_byte(uuid_send(curator_account_id), 11))))),
     CONSTRAINT collection_listing_history_ever_public_check CHECK (ever_public),
     CONSTRAINT collection_listing_history_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
@@ -8919,6 +8932,11 @@ CREATE UNIQUE INDEX collection_builtin_state_identity ON library.collection USIN
 --
 
 CREATE INDEX collection_curator_listing ON library.collection USING btree (route, curator_account_id, collection_id);
+
+-- Name: collection_listing_history_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_listing_history_owner ON library.collection_listing_history USING btree (route, curator_account_id, collection_id) WHERE (curator_account_id IS NOT NULL);
 
 
 --

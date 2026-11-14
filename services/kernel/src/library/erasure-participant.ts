@@ -29,7 +29,7 @@ const BLOCKERS = Object.freeze([
   'native_source_hold: release-to-terminal reinspection/wakeup and foreign Source/destination disposition custody are not delivered',
   'identity_epoch_participant_work/identity_epoch_participant_scope/identity_epoch_participant_handoff/identity_epoch_source_basis/owner_identity_scope/owner_identity_candidate: exact Source/receiving/control closure and minimizer custody remain pending',
   'bulk_effect: target-home effects have no account-home producer locator or late-disposition fence',
-  'collection_listing_history: no curator locator after parent removal',
+  'collection_listing_history: pre-migration history with no exact surviving curator header remains unattributed; no global scan or guessed backfill',
   'shared receipt/outbox/write_basis/work payloads: no exact Library producer custody/minimizer handoff',
   'listing effects: no account-home locator fence or committed late-item disposition',
   'collection_publication_operation: foreign operator/principal locators, receiving SDK and shared Core history minimizer custody remain pending',

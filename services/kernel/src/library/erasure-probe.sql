@@ -35,6 +35,8 @@ probe AS (
     EXISTS (SELECT 1 FROM library.builtin_collection_reference WHERE route = input.route AND account_id = input.account_id) AS builtin_collection_reference,
     EXISTS (SELECT 1 FROM library.builtin_state_reference_source WHERE route = input.route AND account_id = input.account_id) AS builtin_state_reference_source,
     EXISTS (SELECT 1 FROM library.collection WHERE route = input.route AND curator_account_id = input.account_id) AS collection,
+    EXISTS (SELECT 1 FROM library.collection_listing_history
+      WHERE route = input.route AND curator_account_id = input.account_id) AS collection_listing_history,
     EXISTS (SELECT 1 FROM library.copy WHERE route = input.route AND account_id = input.account_id) AS copy,
     EXISTS (SELECT 1 FROM library.entry WHERE route = input.route AND account_id = input.account_id) AS entry,
     EXISTS (SELECT 1 FROM library.entry_deleted WHERE route = input.route AND account_id = input.account_id) AS entry_deleted,
@@ -100,6 +102,7 @@ CROSS JOIN LATERAL (VALUES
   (builtin_collection_reference, 'builtin_collection_reference'::text),
   (builtin_state_reference_source, 'builtin_state_reference_source'::text),
   (collection, 'collection'::text),
+  (collection_listing_history, 'collection_listing_history'::text),
   (bangumi_upload, 'bangumi_upload'::text),
   (collection_archive_recovery, 'collection_archive_recovery'::text),
   (copy, 'copy'::text),

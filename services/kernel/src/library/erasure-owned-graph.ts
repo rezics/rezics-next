@@ -80,6 +80,7 @@ export const OWNED_PHASES = [
   'copy_loan',
   'copy_loan_generation',
   'hosted_reading',
+  'collection_listing_history',
 ] as const;
 function childQueries(): {
   units: typeof units;
@@ -505,6 +506,7 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
           removed += controls;
           hasMore = controls >= 98;
         }
+        if (kind === 'collection_listing_history') hasMore = removed >= 100;
       }
       const value = { kind, removed, parent: null, retain: false, blocked: false, ...(hasMore ? { hasMore } : {}) };
       return {
