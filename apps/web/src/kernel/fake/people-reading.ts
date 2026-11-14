@@ -593,9 +593,10 @@ export const routes: FakeRoute[] = [
       if (!board) return;
       if (!match![2]) return { status: 200, board };
       const kind = board.purpose === 'reviews' ? 'review' : 'discussion';
-      const threads = state === 'sparse'
-        ? []
-        : [...peopleReadingFixture().subjects.values()].map((current) => peopleThread(kind, current));
+      const threads =
+        state === 'sparse'
+          ? []
+          : [...peopleReadingFixture().subjects.values()].map((current) => peopleThread(kind, current));
       const cursor = new URL(request.url).searchParams.get('cursor');
       const offset = cursor ? Number(cursor.split(':').at(-1)) : 0;
       const page = threads.slice(offset, offset + 20);
@@ -644,14 +645,18 @@ export const routes: FakeRoute[] = [
       if (!match![2]) return { status: 200, thread };
       return {
         status: 200,
-        ...authoredReadingPage(thread, [], [
-          {
-            id: communityAuthor.id,
-            displayName: communityAuthor.displayName,
-            handle: communityAuthor.handle,
-            avatar: null,
-          },
-        ]),
+        ...authoredReadingPage(
+          thread,
+          [],
+          [
+            {
+              id: communityAuthor.id,
+              displayName: communityAuthor.displayName,
+              handle: communityAuthor.handle,
+              avatar: null,
+            },
+          ],
+        ),
       };
     },
   },

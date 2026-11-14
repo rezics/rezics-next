@@ -302,17 +302,28 @@ test('registered transport follows every People subject and exact document/discu
 
 test('People handlers decline Anime and unallocated identities rather than claiming their prefix or resource kind', async () => {
   const paths = [
-    `subjects/${anime.id}`, `subjects/${anime.id}/links?property=schema:director`,
-    `subjects/${anime.id}/relations?property=schema:director`, `documents/${animeId(90)}`,
-    `subjects/${peopleReadingId(999)}`, `subjects/${peopleReadingId(80)}`, `documents/${peopleReadingIds.character}`,
-    `threads/${animeId(20051)}/reading-page`, `threads/${peopleReadingId(99999)}`, `boards/${animeId(81)}`,
-    `libraryEntries/${anime.id}`, `progressSessions?subjectId=${anime.id}`, `accounts?agent=${anime.id}`,
+    `subjects/${anime.id}`,
+    `subjects/${anime.id}/links?property=schema:director`,
+    `subjects/${anime.id}/relations?property=schema:director`,
+    `documents/${animeId(90)}`,
+    `subjects/${peopleReadingId(999)}`,
+    `subjects/${peopleReadingId(80)}`,
+    `documents/${peopleReadingIds.character}`,
+    `threads/${animeId(20051)}/reading-page`,
+    `threads/${peopleReadingId(99999)}`,
+    `boards/${animeId(81)}`,
+    `libraryEntries/${anime.id}`,
+    `progressSessions?subjectId=${anime.id}`,
+    `accounts?agent=${anime.id}`,
   ];
   const requests = paths.map((path) => new Request(`https://kernel.invalid/v1/${path}`));
   for (const id of [anime.id, peopleReadingId(999), peopleReadingId(80)]) {
-    requests.push(new Request('https://kernel.invalid/v1/pages:read', {
-      method: 'POST', body: JSON.stringify({ target: { subject: id } }),
-    }));
+    requests.push(
+      new Request('https://kernel.invalid/v1/pages:read', {
+        method: 'POST',
+        body: JSON.stringify({ target: { subject: id } }),
+      }),
+    );
   }
   for (const request of requests) {
     for (const route of peopleRoutes) {
