@@ -5,6 +5,7 @@ import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
 import { parseUtcHour } from './efficiency-report-time.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 
 type ReportPolicy = ControlPolicy['hourlyReport'];
 export type ObservationAttribution = 'measured' | 'unknown';
@@ -417,6 +418,35 @@ export type DeliveryResult = {
   detail?: string;
 };
 
+export type HourlyResidentDelivery = { managerId: string; stateDirectory: string };
+
+function deliverResidentReport(
+  db: Database,
+  bucket: string,
+  resident: HourlyResidentDelivery,
+  inbox: SqliteManagerInbox,
+): void {
+  const frozen = readFrozenHourlyEfficiencyReport(db, bucket);
+  if (!frozen || frozen.status === 'pending' || frozen.status === 'claimed') return;
+  const row = deliveryRow(db, bucket)!;
+  const detail = row.detail ? ` (${row.detail})` : '';
+  inbox.deliver(
+    {
+      managerId: resident.managerId,
+      kind: 'environment',
+      from: 'system:hourly-report',
+      summary: frozen.report,
+      documentRefs: [
+        {
+          path: 'tools/goal/scripts/efficiency-report.ts',
+          change: `Frozen bucket ${bucket}, report ${frozen.reportRef}. Notifier delivery: ${frozen.status}${detail}. Review reached native journeys and the largest delivery loss; raw tokens are not allowance spent.`,
+        },
+      ],
+    },
+    `hourly-report:${bucket}`,
+  );
+}
+
 function saveOutcome(
   db: Database,
   bucket: string,
@@ -507,6 +537,7 @@ export async function sendHourlyEfficiencyReport(
   timeoutMs: number,
   now = new Date(),
   policy: ControlPolicy = defaultPolicy,
+  resident?: HourlyResidentDelivery,
 ): Promise<DeliveryResult> {
   const bucket = parseUtcHour(bucketValue);
   if (!notifier?.length)
@@ -514,6 +545,7 @@ export async function sendHourlyEfficiencyReport(
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > policy.validation.hourlyReportMaxTimeoutMs)
     throw new Error('invalid hourly report notifier timeout');
   migrate(db, efficiencyReportMigrations);
+  const inbox = resident ? new SqliteManagerInbox(db, resident.stateDirectory, undefined, policy.inbox) : undefined;
   const proposedRef = createHash('sha256').update(report).digest('hex');
   db.transaction(() => {
     if (deliveryRow(db, bucket.start)) return;
@@ -569,6 +601,7 @@ export async function sendHourlyEfficiencyReport(
           : claimed.status === 'unknown'
             ? 'already-unknown'
             : 'claimed';
+    if (resident && inbox) deliverResidentReport(db, bucket.start, resident, inbox);
     return {
       disposition,
       bucket: bucket.start,
@@ -579,7 +612,10 @@ export async function sendHourlyEfficiencyReport(
 
   // A successful send belongs only to this exact first persisted report; later sweeps never replace its identity.
   const outcome = await invokeNotifier(notifier, claimed.report, timeoutMs, policy.hourlyReport);
-  saveOutcome(db, bucket.start, outcome.status, outcome.detail, new Date());
+  db.transaction(() => {
+    saveOutcome(db, bucket.start, outcome.status, outcome.detail, new Date());
+    if (resident && inbox) deliverResidentReport(db, bucket.start, resident, inbox);
+  }).immediate();
   return {
     disposition: outcome.status,
     bucket: bucket.start,

@@ -10,12 +10,7 @@ import { controlPlaneReleaseBrief } from './briefs.ts';
 import { runInboxCommand } from './inbox-cli.ts';
 import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
 import { SqliteLandingQueue } from './land.ts';
-import {
-  authenticatedCallingManager,
-  callingManager,
-  isResidentSupermanagerRecord,
-  recordManagerCommand,
-} from './manager-command-context.ts';
+import { authenticatedCallingManager, callingManager, recordManagerCommand } from './manager-command-context.ts';
 import { createHourlyReportScheduler, serveManagers, singleFlight, startOrphanRecoveryTimer } from './manager-host.ts';
 import { readManagerOwnership, recordManagerDecision } from './managers.ts';
 import { MergeTrain } from './merge-train.ts';
@@ -141,6 +136,8 @@ async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
 
 export async function runIntegration(argv: string[], runtime: IntegrationRuntime): Promise<number> {
   const [command, subcommand, id, ...flags] = argv;
+  if (command === 'manager' && ['start', 'renew', 'assign'].includes(subcommand ?? ''))
+    throw new Error('Managed manager launches and assignments are retired; use unit register for an execution unit');
   const policy = runtime.managerServices.policy ?? defaultPolicy;
   const requestHost = (request: HostRequest, timeoutMs?: number) =>
     hostRequest(runtime.managerSocket, request, timeoutMs, undefined, policy.host);
@@ -271,14 +268,6 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     console.log(JSON.stringify(readManagerOwnership(runtime.db), null, 2));
     return 0;
   }
-  if (command === 'manager' && subcommand === 'assign') {
-    const to = flags[0];
-    if (!id || !to || flags.length !== 1) throw new Error('usage: manager assign <goal> <manager>');
-    await ensureHost(runtime);
-    await recordManagerCommand(runtime);
-    console.log(JSON.stringify(await requestHost({ command: 'assign', goal: id, manager: to })));
-    return 0;
-  }
   if (command === 'manager' && subcommand === 'register-supermanager') {
     if (id !== undefined && (id !== '--replace-session' || flags.length !== 1))
       throw new Error('usage: manager register-supermanager [--replace-session <previous-thread-id>]');
@@ -349,60 +338,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     });
   }
   if (command === 'manager' && id) {
-    if (subcommand === 'start') {
-      const option = (name: string) => flags[flags.indexOf(name) + 1];
-      const engine = option('--engine');
-      const budget = Number(option('--budget'));
-      if (
-        !flags.includes('--engine') ||
-        (engine !== 'codex' && engine !== 'claude') ||
-        !flags.includes('--budget') ||
-        !Number.isSafeInteger(budget) ||
-        budget <= 0
-      )
-        throw new Error('usage: manager start <goal> --engine <codex|claude> --budget <positive integer>');
-      if (isResidentSupermanagerRecord(runtime, id))
-        throw new Error(`Resident supermanager ${id} is an external session and cannot be started`);
-      await ensureHost(runtime);
-      await recordManagerCommand(runtime);
-      console.log(JSON.stringify(await requestHost({ command: 'start', spec: runtime.manager(id, engine, budget) })));
-    } else if (subcommand === 'renew') {
-      // --engine moves a manager to another engine, for example to keep a weekly allowance within its week.
-      const engineAt = flags.indexOf('--engine');
-      const engineFlag = engineAt < 0 ? undefined : flags[engineAt + 1];
-      if (
-        (engineAt < 0 && flags.length) ||
-        (engineAt >= 0 && (flags.length !== 2 || (engineFlag !== 'codex' && engineFlag !== 'claude')))
-      )
-        throw new Error('usage: manager renew <manager> [--engine <codex|claude>]');
-      const hasManagerTable = runtime.db
-        .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'")
-        .get();
-      const row = hasManagerTable
-        ? (runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null)
-        : null;
-      if (!row) throw new Error(`Unknown manager: ${id}`);
-      const current = JSON.parse(row.state) as {
-        kind?: string;
-        engine?: 'codex' | 'claude';
-        budget?: number;
-      };
-      if (current.kind === 'resident-supermanager')
-        throw new Error(`Resident supermanager ${id} is an external session and cannot be renewed`);
-      if (!current.engine || !current.budget)
-        throw new Error(`Manager ${id} does not have a renewable managed session`);
-      await ensureHost(runtime);
-      await recordManagerCommand(runtime);
-      console.log(
-        JSON.stringify(
-          await requestHost({
-            command: 'renew',
-            manager: id,
-            spec: runtime.manager(id, (engineFlag as 'codex' | 'claude' | undefined) ?? current.engine, current.budget),
-          }),
-        ),
-      );
-    } else if (subcommand === 'decision') {
+    if (subcommand === 'decision') {
       await ensureHost(runtime);
       recordManagerDecision(runtime.db, id);
     } else if (subcommand && ['stop', 'complete', 'turn-start', 'turn-end'].includes(subcommand)) {

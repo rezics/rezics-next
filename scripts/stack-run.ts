@@ -54,6 +54,8 @@ import {
   recognizeCheckHostRun,
   type CheckHostRecognitionDisposition,
 } from './check-placement.ts';
+import { nativeUnitContext, NATIVE_UNIT_CONTEXT_VARIABLE } from '../tools/goal/src/native-unit-context.ts';
+import { observeNativeUnitContext } from '../tools/goal/src/native-units.ts';
 
 export type StackRun = {
   label: string;
@@ -102,7 +104,12 @@ const SHARED_HOSTS = join('.temp', 'goal', 'remote-check-hosts.json');
 
 /** A worker carries a task id. An unset or empty id is a person, who may still opt out of a remote run. */
 export function isWorker(env: Environment): boolean {
-  return Boolean(env.GOAL_TASK_ID);
+  return Boolean(env.GOAL_TASK_ID || nativeCheckContext(env));
+}
+
+/** The approved check transport retains the original unit context; local starts re-observe registration. */
+export function nativeCheckContext(env: Environment) {
+  return isCheckHostRun(process.cwd()) ? nativeUnitContext(env) : observeNativeUnitContext(env);
 }
 
 /** The working directory is inside a check host's run directory. Environment variables do not count. */
@@ -154,7 +161,8 @@ export const LOCAL_CONTAINER_REFUSAL =
 /** Whether this worker's brief lists a native or browser acceptance check, so it may run one walk stack. */
 export function walkStackRequired(env: Environment): boolean {
   if (!isWorker(env)) return false;
-  return (env.GOAL_ACCEPTANCE_REQUIRES ?? '').split(',').some((item) => item === 'native' || item === 'browser');
+  const requires = nativeCheckContext(env)?.requires ?? (env.GOAL_ACCEPTANCE_REQUIRES ?? '').split(',');
+  return requires.some((item) => item === 'native' || item === 'browser');
 }
 
 /** Host-wide walk admission, including concurrent remote-check checkouts. `TMPDIR` does not override it. */
@@ -312,7 +320,13 @@ export async function runOnCheckHost(
           hostsFile: reason.hostsFile,
           workspace: run.root,
           cwd: relative(resolve(run.root), resolve(run.cwd)) || '.',
-          command: profile ? ['env', `GROWTH_PROFILE=${profile}`, ...run.command] : run.command,
+          command: [
+            ...(env[NATIVE_UNIT_CONTEXT_VARIABLE]
+              ? ['env', `${NATIVE_UNIT_CONTEXT_VARIABLE}=${JSON.stringify(nativeCheckContext(env))}`]
+              : []),
+            ...(profile ? ['env', `GROWTH_PROFILE=${profile}`] : []),
+            ...run.command,
+          ],
           ...(run.slots === undefined ? {} : { slots: run.slots }),
           ...(run.estimateMs === undefined ? {} : { estimateMs: run.estimateMs }),
           ...(priority === undefined ? {} : { priority }),

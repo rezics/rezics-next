@@ -19,6 +19,9 @@ import {
   fillTemplate,
   gitBlobSha,
   renderManagerOpening,
+  renderSupermanagerOpening,
+  renderGoalAuthorOpening,
+  renderUnitOpening,
   renderWorkerPrompt,
   type RenderedPrompt,
 } from './prompts.ts';
@@ -228,23 +231,23 @@ test('a worker render over its budgets launches with layer sizes, budgets and ov
   expect(rendered.manifest.overBudget).toEqual(['role', 'conditions', 'brief', 'total']);
 });
 
-test('manager and worker roles apply operating discipline within their prompt budgets', () => {
+test('resident and worker roles apply operating discipline within their prompt budgets', () => {
   const input = {
     spec: { id: 'manager', goal: 'fixture', brief: 'Manage the fixture.', cwd: '/missing', engine: 'codex' as const },
     backlogPath: '/backlog',
     command: 'goal',
   };
-  const standard = renderManagerOpening(input);
+  const standard = renderSupermanagerOpening(input);
   expect(standard.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerRoleBytes);
   const workerPrompt = renderWorkerPrompt({ task: worker(contract()), mainCheckout: MAIN }).prompt;
-  expect(standard.prompt).toMatch(
-    /one concrete user outcome[\s\S]*worker-owned write boundary[\s\S]*smallest\s+required check[\s\S]*efficiency.md#operating-discipline[\s\S]*Let the worker choose repair\s+order and take the next evidenced fix within the owned boundary/,
-  );
-  expect(standard.prompt).toContain('Replenish before others finish; dependencies never pause independent work.');
+  expect(standard.prompt).toContain('sole resident manager');
+  expect(standard.prompt).toContain('worker-owned write boundary');
+  expect(standard.prompt).toContain('Let execution units choose their');
+  expect(standard.prompt).toContain('efficiency.md#operating-discipline');
   expect(workerPrompt).toContain(
     'Keep in-scope work. Send distinct ready gaps (outcome/source evidence/first edit/prerequisite) to manager for merge/dispatch/refill.',
   );
-  const rendered = renderManagerOpening({
+  const rendered = renderSupermanagerOpening({
     ...input,
     policy: {
       ...defaultPolicy,
@@ -256,72 +259,77 @@ test('manager and worker roles apply operating discipline within their prompt bu
   expect(rendered.manifest.overBudget).toEqual(['role', 'opening']);
 });
 
-test('manager openings link oversized Goal detail and include each current continuation once', () => {
+test('resident opening reads only its assigned brief and an explicit continuation', () => {
   const directory = temporaryDirectory();
   try {
-    const goalDirectory = join(directory.path, 'docs', 'goals');
-    const alphaState = join(directory.path, '.temp', 'goal', 'alpha');
-    const betaState = join(directory.path, '.temp', 'goal', 'beta');
-    mkdirSync(goalDirectory, { recursive: true });
-    mkdirSync(alphaState, { recursive: true });
-    mkdirSync(betaState, { recursive: true });
-    const historicalRequirement = 'HISTORICAL_REQUIREMENT_MUST_STAY_ON_DEMAND '.repeat(1500);
-    const oversizedScope = 'OVERSIZED_SCOPE_MUST_STAY_WHOLE '.repeat(1500);
-    const alphaDocument = [
-      '# Alpha',
-      '',
-      '## Outcome',
-      '',
-      'Alpha outcome remains concise.',
-      '',
-      '## Done when',
-      '',
-      historicalRequirement,
-      '',
-      '## Scope',
-      '',
-      oversizedScope,
-      '',
-      '## Ownership',
-      '',
-      'Alpha case ownership detail.',
-    ].join('\n');
-    writeFileSync(join(goalDirectory, 'alpha.md'), alphaDocument);
-    writeFileSync(
-      join(goalDirectory, 'beta.md'),
-      '# Beta\n\n## Outcome\n\nBeta outcome remains useful.\n\n## Scope\n\nBeta scope remains useful.\n',
-    );
-    const alphaContinuation = '- Next action: alpha continuation has one live copy.';
-    const betaContinuation = '- Next action: beta continuation has one live copy.';
-    const alphaContinuationPath = join(alphaState, 'CONTINUATION.md');
-    writeFileSync(alphaContinuationPath, alphaContinuation);
-    writeFileSync(join(betaState, 'CONTINUATION.md'), betaContinuation);
-    const brief = 'Configured brief stays intact.\n- Deliver the current outcome.';
-    const rendered = renderManagerOpening({
+    mkdirSync(join(directory.path, 'docs/goals'), { recursive: true });
+    mkdirSync(join(directory.path, '.temp/goal/alpha'), { recursive: true });
+    writeFileSync(join(directory.path, 'docs/goals/alpha.md'), '# Alpha\n\n## Scope\n\nOLD_DOMAIN_SCOPE');
+    writeFileSync(join(directory.path, '.temp/goal/alpha/CONTINUATION.md'), 'OLD_DOMAIN_CONTINUATION');
+    const input = {
       spec: {
-        id: 'alpha',
+        id: 'resident',
         goal: 'alpha',
         goals: ['alpha', 'beta'],
-        brief,
+        brief: 'Allocate the current independent outcomes.',
         cwd: directory.path,
-        engine: 'codex',
+        engine: 'codex' as const,
       },
-      continuationFile: alphaContinuationPath,
       backlogPath: '/backlog',
       command: 'goal',
-    });
+    };
+    const rendered = renderSupermanagerOpening(input);
+    expect(rendered.prompt).toContain(input.spec.brief);
+    expect(rendered.prompt).not.toContain('OLD_DOMAIN_SCOPE');
+    expect(rendered.prompt).not.toContain('OLD_DOMAIN_CONTINUATION');
+    expect(rendered.prompt).not.toContain('docs/goals/alpha.md');
+    expect(rendered.manifest.overBudget).toEqual([]);
+    const continuation = '- Next action: preserve the resident allocation.';
+    writeFileSync(join(directory.path, 'resident-continuation.md'), continuation);
+    const resumed = renderSupermanagerOpening({ ...input, continuationFile: 'resident-continuation.md' });
+    expect(resumed.prompt.split(continuation)).toHaveLength(2);
+    expect(resumed.prompt).not.toContain('OLD_DOMAIN_CONTINUATION');
+  } finally {
+    directory.close();
+  }
+});
 
-    expect(rendered.prompt).toContain('[full Goal document](docs/goals/alpha.md)');
-    expect(rendered.prompt).toContain('[Done when](docs/goals/alpha.md#done-when)');
-    expect(rendered.prompt).toContain('- Objective: Alpha outcome remains concise.');
-    expect(rendered.prompt).toContain('- Opening scope: Beta scope remains useful.');
-    expect(rendered.prompt).toContain(brief);
-    expect(rendered.prompt).not.toContain('HISTORICAL_REQUIREMENT_MUST_STAY_ON_DEMAND');
-    expect(rendered.prompt).not.toContain('OVERSIZED_SCOPE_MUST_STAY_WHOLE');
-    expect(rendered.prompt.split(alphaContinuation).length - 1).toBe(1);
-    expect(rendered.prompt.split(betaContinuation).length - 1).toBe(1);
-    expect(rendered.openingBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerOpeningBytes);
-    expect(rendered.manifest.overBudget).not.toContain('opening');
+test('managed manager rendering rejects instead of aliasing an active role', () => {
+  expect(() =>
+    renderManagerOpening({
+      spec: { id: 'old-domain', goal: 'fixture', brief: 'Manage.', cwd: '/missing', engine: 'codex' },
+      backlogPath: '/backlog',
+      command: 'goal',
+    }),
+  ).toThrow('Managed manager launches are retired; use unit register');
+});
+
+test('unit and Goal-author openings carry only the assigned brief and owner links', () => {
+  const directory = temporaryDirectory();
+  try {
+    mkdirSync(join(directory.path, 'docs/goals'), { recursive: true });
+    mkdirSync(join(directory.path, '.temp/goal/fixture'), { recursive: true });
+    writeFileSync(join(directory.path, 'docs/goals/fixture.md'), 'UNREQUESTED_OWNER_BODY');
+    writeFileSync(join(directory.path, '.temp/goal/fixture/CONTINUATION.md'), 'STALE_MANAGER_CONTINUATION');
+    const input = { goal: 'fixture', brief: 'Deliver the assigned source outcome.', cwd: directory.path };
+    for (const render of [renderUnitOpening, renderGoalAuthorOpening]) {
+      const result = render(input);
+      expect(result.prompt).toContain(input.brief);
+      expect(result.prompt).toContain('[Goal scope and acceptance](docs/goals/fixture.md)');
+      expect(result.prompt).not.toContain('UNREQUESTED_OWNER_BODY');
+      expect(result.prompt).not.toContain('STALE_MANAGER_CONTINUATION');
+      expect(result.prompt).not.toContain('{{task.');
+      expect(result.manifest.overBudget).toEqual([]);
+      expect(result.openingBytes).toBe(Buffer.byteLength(result.prompt));
+    }
+    const unit = renderUnitOpening({ ...input, worktree: '/shared/unit' }).prompt;
+    expect(unit).toContain('in /shared/unit');
+    expect(unit).toContain('native subagents and Grok CLI work in this same worktree');
+    expect(unit).toContain('resident allocates it');
+    expect(renderGoalAuthorOpening({ brief: 'Author a concrete Goal.', cwd: '/missing' }).prompt).toContain(
+      'resident adopts scope and acceptance',
+    );
+    expect(() => renderUnitOpening({ brief: 'Missing Goal.', cwd: '/missing' })).toThrow('assigned Goal');
   } finally {
     directory.close();
   }
@@ -602,7 +610,7 @@ test('editing a template file changes the next render without restarting or relo
   const directory = mkdtempSync(join(tmpdir(), 'prompt-templates-'));
   try {
     mkdirSync(join(directory, 'conditions'));
-    for (const name of ['worker.md', 'research.md', 'manager.md'])
+    for (const name of ['worker.md', 'research.md', 'supermanager.md', 'goal-author.md', 'unit.md'])
       copyFileSync(join(DEFAULT_PROMPT_DIRECTORY, name), join(directory, name));
     for (const name of readdirSync(join(DEFAULT_PROMPT_DIRECTORY, 'conditions')))
       copyFileSync(join(DEFAULT_PROMPT_DIRECTORY, 'conditions', name), join(directory, 'conditions', name));

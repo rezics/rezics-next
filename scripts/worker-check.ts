@@ -47,7 +47,8 @@ import {
   type RemotePhysicalRunReceipt,
 } from './remote-check.ts';
 import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
-import { hostsLocation } from './stack-run.ts';
+import { hostsLocation, nativeCheckContext } from './stack-run.ts';
+import type { NativeUnitContext } from '../tools/goal/src/native-unit-context.ts';
 import {
   classifyCheck,
   isCheckHostRun,
@@ -198,6 +199,7 @@ export type CheckRecord = {
   status: 'running' | 'finished';
   log: string;
   ownership?: CheckOwnership;
+  nativeUnit?: NativeUnitContext;
   physicalRunId?: string;
   runnerIdentity?: RunnerIdentity;
   runnerPid?: number;
@@ -243,6 +245,7 @@ export type CheckPhysicalRecord = {
   argv: string[];
   remoteArgv?: string[];
   ownership?: CheckOwnership;
+  nativeUnit?: NativeUnitContext;
   physicalRunId: string;
   runnerHost: string;
   runnerIdentity: RunnerIdentity;
@@ -340,7 +343,12 @@ function applyTaskPriority(root: string, env: NodeJS.ProcessEnv): void {
 }
 
 /** Launcher task/attempt/acceptance that remote argv must not rewrite. */
-export const ORIGINAL_CONTEXT_VARIABLES = ['GOAL_TASK_ID', 'GOAL_ATTEMPT', 'GOAL_ACCEPTANCE_REQUIRES'] as const;
+export const ORIGINAL_CONTEXT_VARIABLES = [
+  'GOAL_TASK_ID',
+  'GOAL_ATTEMPT',
+  'GOAL_ACCEPTANCE_REQUIRES',
+  'REZICS_NATIVE_UNIT_CONTEXT',
+] as const;
 
 export function originalContextAssignments(env: NodeJS.ProcessEnv = process.env): string[] {
   return ORIGINAL_CONTEXT_VARIABLES.flatMap((name) => {
@@ -552,6 +560,7 @@ function physicalRecordFor(
     argv: [...argv],
     ...(record.controllerProof === undefined ? {} : { controllerProof: record.controllerProof }),
     ...(record.ownership === undefined ? {} : { ownership: validateOwnership(record.ownership) }),
+    ...(record.nativeUnit === undefined ? {} : { nativeUnit: record.nativeUnit }),
     physicalRunId: record.physicalRunId,
     runnerHost: host,
     runnerIdentity: validateRunnerIdentity(identity),
@@ -2680,6 +2689,7 @@ export function startWorkerCheck(
     execution,
   );
   const ownership = ownershipFromEnvironment(process.env);
+  const nativeUnit = nativeCheckContext(process.env);
   registryForStart(process.env, ownership);
   const recovery = admission?.ok && 'recovery' in admission ? admission.recovery : undefined;
   const id = recovery?.checkId ?? randomUUID();
@@ -2704,6 +2714,7 @@ export function startWorkerCheck(
     log: relative(root, file),
     physicalRunId,
     ...(ownership === undefined ? {} : { ownership }),
+    ...(nativeUnit === undefined ? {} : { nativeUnit }),
   };
   writeRecord(record);
   try {

@@ -2,7 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { constants } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { hostsLocation, mainCheckout, type StackRun } from '../../../scripts/stack-run.ts';
+import { hostsLocation, mainCheckout, nativeCheckContext, type StackRun } from '../../../scripts/stack-run.ts';
+import { nativeUnitContext } from '../../../tools/goal/src/native-unit-context.ts';
 import { hasWebCheckCustody, requireWebCheckCustody } from './web-check-custody.ts';
 import {
   createWebCheckPrivateFiles,
@@ -235,6 +236,9 @@ function canonicalDevRevision(commonDirectory: string): string {
 /** Selects only a clean snapshot in the candidate's repository that is integrated into canonical dev. */
 export function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string {
   const candidateCommon = commonGitDirectory(workspace, 'candidate');
+  const unit = nativeCheckContext(env);
+  if (unit && realpathSync(unit.worktree) !== realpathSync(workspace))
+    throw new Error('Web check unavailable: native unit context belongs to another candidate worktree');
   // Read this canonical ref once from the shared repository; the main checkout may lag behind it.
   const devRevision = canonicalDevRevision(candidateCommon);
   const fallback = env.WEB_CHECK_DRIVER_ROOT ? undefined : mainCheckout(workspace);
@@ -246,7 +250,7 @@ export function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string
   } catch {
     throw new Error('Web check unavailable: the selected Performance driver snapshot is missing');
   }
-  if (driverRoot === realpathSync(workspace))
+  if (!unit && driverRoot === realpathSync(workspace))
     throw new Error('Web check unavailable: the trusted driver must be separate from candidate source');
   const driverCommon = commonGitDirectory(driverRoot, 'Performance driver');
   if (driverCommon !== candidateCommon)
@@ -259,24 +263,32 @@ export function trustedDriver(workspace: string, env: NodeJS.ProcessEnv): string
   // Protect the imported driver closure; unrelated checkout changes do not affect this trust decision.
   if (git(driverRoot, ['status', '--porcelain', '--untracked-files=all', '--', ...sourcePathspecs]))
     throw new Error('Web check unavailable: trusted Performance driver sources must be clean');
-  const producerRevision = git(driverRoot, ['rev-parse', 'HEAD']);
-  const ancestry = spawnSync('git', [
-    '--git-dir',
-    candidateCommon,
-    'merge-base',
-    '--is-ancestor',
-    producerRevision,
-    devRevision,
-  ]);
-  if (ancestry.error) throw ancestry.error;
-  if (ancestry.status !== 0)
-    throw new Error('Web check unavailable: the selected Performance snapshot is not integrated into canonical dev');
+  if (!unit) {
+    const producerRevision = git(driverRoot, ['rev-parse', 'HEAD']);
+    const ancestry = spawnSync('git', [
+      '--git-dir',
+      candidateCommon,
+      'merge-base',
+      '--is-ancestor',
+      producerRevision,
+      devRevision,
+    ]);
+    if (ancestry.error) throw ancestry.error;
+    if (ancestry.status !== 0)
+      throw new Error('Web check unavailable: the selected Performance snapshot is not integrated into canonical dev');
+  }
   for (const [path, bytes] of sources) {
     git(driverRoot, ['ls-files', '--error-unmatch', path]);
     const committed = spawnSync('git', ['-C', driverRoot, 'show', `HEAD:${path}`]);
     if (committed.error) throw committed.error;
     if (committed.status !== 0 || !committed.stdout.equals(bytes))
       throw new Error(`Web check unavailable: Performance driver differs from its committed source: ${path}`);
+    if (unit) {
+      const canonical = spawnSync('git', ['--git-dir', candidateCommon, 'show', `${devRevision}:${path}`]);
+      if (canonical.error) throw canonical.error;
+      if (canonical.status !== 0 || !canonical.stdout.equals(bytes))
+        throw new Error(`Web check unavailable: Performance driver differs from canonical dev: ${path}`);
+    }
   }
   return driverRoot;
 }
@@ -444,7 +456,7 @@ export async function routeWebCheck(
   if (env.WEB_CHECK_EVENTS) returns.push(workspacePath(workspace, resolve(run.cwd, env.WEB_CHECK_EVENTS)));
   const driverRoot = adapter.driver(workspace, env);
   const hosts = adapter.hosts(workspace, env);
-  const revision = adapter.revision(workspace);
+  const revision = nativeUnitContext(env)?.sourceRevision ?? adapter.revision(workspace);
   const semantic = webCheckEnvironment(env, workspace, run.cwd);
   const file = adapter.environment(semantic);
   try {

@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, setSystemTime, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
@@ -19,6 +19,7 @@ import {
 import { checkResumeOperationId, recordCheckResumeReady, recordFlow, type FlowEvent } from './flow.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { WorkerStore, workerRecordEndedAtExpression } from './store.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 function fixture() {
@@ -509,6 +510,103 @@ test('hourly delivery stores one timestamped outcome and discards notifier outpu
   }
 });
 
+test('scheduled hourly delivery races and replay retain one frozen notifier and resident inbox event', async () => {
+  const h = fixture();
+  const peer = openDb(join(h.directory.path, 'goal.sqlite'));
+  try {
+    setSystemTime(new Date('2026-10-31T02:15:00.000Z'));
+    const bucket = '2026-10-31T01:00:00.000Z';
+    const firstReport = 'Hourly operations report — first frozen report\nNative execution units: books active.';
+    const marker = join(h.directory.path, 'notifier-runs.txt');
+    const notifier = [
+      process.execPath,
+      '-e',
+      `require('node:fs').appendFileSync(${JSON.stringify(marker)}, 'sent\\n'); setTimeout(() => {}, 40);`,
+    ];
+    const resident = { managerId: 'supermanager', stateDirectory: h.directory.path };
+    const first = sendHourlyEfficiencyReport(
+      h.db,
+      bucket,
+      firstReport,
+      notifier,
+      2000,
+      new Date('2026-10-31T02:15:00.000Z'),
+      undefined,
+      resident,
+    );
+    const competing = await sendHourlyEfficiencyReport(
+      peer,
+      bucket,
+      'competing report',
+      notifier,
+      2000,
+      new Date('2026-10-31T02:15:01.000Z'),
+      undefined,
+      resident,
+    );
+    expect(competing.disposition).toBe('claimed');
+    expect((await first).disposition).toBe('sent');
+    const inbox = new SqliteManagerInbox(peer, h.directory.path);
+    const delivered = inbox.read('supermanager');
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]!.event.summary).toContain('first frozen report');
+    expect(delivered[0]!.event.documentRefs?.[0]?.change).toContain('Notifier delivery: sent');
+    inbox.acknowledge('supermanager', [delivered[0]!.id]);
+    setSystemTime(new Date('2026-11-01T02:15:00.000Z'));
+    const replay = await sendHourlyEfficiencyReport(
+      peer,
+      bucket,
+      'changed later report',
+      notifier,
+      2000,
+      new Date('2026-11-01T02:15:00.000Z'),
+      undefined,
+      resident,
+    );
+    expect(replay.disposition).toBe('already-sent');
+    expect(readFileSync(marker, 'utf8')).toBe('sent\n');
+    expect(peer.query('SELECT count(*) AS count FROM manager_inbox_delivery_keys').get()).toEqual({ count: 1 });
+    expect(peer.query('SELECT count(*) AS count FROM manager_inbox').get()).toEqual({ count: 1 });
+    expect(inbox.pending('supermanager')).toEqual([]);
+    const nextBucket = '2026-10-31T03:00:00.000Z';
+    const preexistingReport = 'Hourly operations report — another frozen report';
+    await sendHourlyEfficiencyReport(h.db, nextBucket, preexistingReport, notifier, 2000);
+    inbox.deliver({
+      managerId: 'supermanager',
+      kind: 'environment',
+      from: 'system:hourly-report',
+      summary: preexistingReport,
+    });
+    inbox.acknowledge(
+      'supermanager',
+      inbox.read('supermanager').map((entry) => entry.id),
+    );
+    setSystemTime(new Date('2026-11-02T02:15:00.000Z'));
+    expect(
+      (
+        await sendHourlyEfficiencyReport(
+          peer,
+          nextBucket,
+          'replacement',
+          notifier,
+          2000,
+          new Date(),
+          undefined,
+          resident,
+        )
+      ).disposition,
+    ).toBe('already-sent');
+    expect(peer.query('SELECT count(*) AS count FROM manager_inbox').get()).toEqual({ count: 2 });
+    expect(peer.query('SELECT count(*) AS count FROM manager_inbox_delivery_keys').get()).toEqual({ count: 2 });
+    expect(inbox.pending('supermanager')).toEqual([]);
+    expect(readFileSync(marker, 'utf8')).toBe('sent\nsent\n');
+  } finally {
+    setSystemTime();
+    peer.close();
+    h.close();
+  }
+});
+
 test('hourly delivery preserves disabled, competing and interrupted-claim outcomes through the public API', async () => {
   const h = fixture();
   try {
@@ -861,14 +959,6 @@ test('Web campaign measures additions within its module roots and freezes below-
       bucket,
       now,
       productLineMeasurement: measurement,
-      privateDuty: {
-        label: 'campaign',
-        runningTasks: 0,
-        stoppedTasks: 0,
-        readyBriefs: ' none',
-        allowance: 'unknown',
-        alarms: [],
-      },
     });
     expect(capture.snapshot.alerts).toContain('Web campaign is below the 50,000-line hourly target.');
     expect(capture.snapshot.report).toContain(
@@ -877,8 +967,7 @@ test('Web campaign measures additions within its module roots and freezes below-
     expect(capture.snapshot.report).toContain(
       'Web campaign target status: below target (50,000 additions per completed hour).',
     );
-    expect(capture.snapshot.report).toContain('New product code: 11 lines (aggregate).');
-    expect(capture.snapshot.report).toContain('New Web product code: 6 lines (hourly campaign target 50,000).');
+    expect(capture.snapshot.report).toContain('Aggregate product lines added in UTC bucket: 11 (attribution measured;');
     expect(capture.snapshot.report).not.toContain('stable target 20,000');
     expect(capture.snapshot.report).not.toContain('Two-hour product code is below');
 
