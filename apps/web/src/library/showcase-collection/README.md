@@ -12,6 +12,37 @@ References inspected: legacy-final:apps/web/features/catalogue/work-row.tsx and 
 
 Presentation tests retain explicit unknown/empty/unavailable context states from the existing comparison reader while checking that absent or invalid facts never become values.
 
+## Complete review visits
+
+Canonical entries are `pages-collections-showcase--books` and `pages-collections-showcase--mixed-media` in
+[Collection review](../../stories/collection-showcase.stories.tsx). The existing Library story group also exposes
+`pages-library-collection--complete-book-list` and `pages-library-collection--complete-mixed-media`; all older IDs
+remain available. Named states in Collection review are `--empty`, `--sparse-continuation`, `--unavailable-retry`,
+`--filtered-books`, `--grid`, `--member` and `--owner` (same `pages-collections-showcase` prefix). Main entries do not
+run navigation or viewport walks. Shared locale, viewport and theme globals remain freely changeable.
+
+These PageStory visits use the installed application router, Collection reader and Subject destinations. One
+isolated fake transport owns contract-shaped synthetic Books, Games and Anime, original local cover artwork,
+descriptions and supplied facts; it does not alter native recordings. A repeated Book has a separate occurrence,
+note and return anchor. A sparse Book deliberately has no creator, year or cover. Released Type presentation owns
+geometry and fact selection; Game key facts remain unavailable where its released configuration supplies none.
+
+Filters execute at the fake HTTP boundary through the installed predicate contract. Native occurrence order,
+exact opaque continuation and item-to-list return remain with their existing owners. List and grid reuse
+`CollectionReadMembers`; the private Library retains its existing table view. No third Collection renderer or
+browser-derived membership, total or authority is introduced. Row notes now show a bounded supplied-text preview;
+the independent Inspect action retains complete notes and facts. Rows share separators and wrap long text, with
+phone cover width bounded independently from the primary destination and independent actions.
+
+Owner advice uses the fixture viewer's actual curator identity; member and anonymous variants retain their native
+advice paths. No successful write or authorization evidence is invented. Source orientation was the Book catalogue
+owner, Library Collection reader and return guides, the Web Storybook/recording guide, the Web Collection filter
+outcome and the read-only reference index. No external topic or legacy implementation was imported.
+
+The [Book catalogue owner](../../books/catalogue/README.md#capability-and-integration-boundaries) records the source-only
+verification decision. Mounted regressions, decoded-cover, keyboard, phone and desktop acceptance follow publication
+in the dev verifier; these illustrative visits do not claim native acceptance.
+
 ## Owner presentation review
 
 Decision: review stays inline in the metadata form, uses the editor's captured loaded page, and returns focus to

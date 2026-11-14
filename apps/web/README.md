@@ -770,13 +770,18 @@ Canonical entries for the existing publisher:
 - Connected identity returns: `pages-library-books--edition-return` and `pages-library-books--series-return`.
 - Named states: `pages-library-books--sparse-data`, `--section-retry`, `--permission-limited`,
   `--long-multilingual-text` and `--member-readback` (the same prefix applies).
+- Complete lists: `pages-books-catalogue--complete-book-list`, `pages-collections-showcase--books` and
+  `pages-collections-showcase--mixed-media`. These use the installed Search/Collection readers and matching Subject
+  destinations, with empty, sparse continuation and unavailable/retry entries. See the
+  [Book catalogue owner](src/books/catalogue/README.md) and [Collection presentation owner](src/library/showcase-collection/README.md)
+  for stable IDs, fixture provenance and the source-only verification decision.
 
 The Book module answers the released read plans, including ordinary continuations; it keeps work, edition,
 series and catalogue interlude identities separate. Interlude metadata does not promise hosted chapter text.
 Local illustrated covers are served from `.storybook/media/`. Personal library and vote writes read back per
 subject for the mounted visit; the limited member receives native write denials without changing saved state.
-Book-only preview navigation keeps related-page links in the mounted application router, including links that
-normally open a new tab. Other stories retain their navigation policy.
+Opt-in preview navigation keeps related-page links and GET forms in the mounted application router, including
+destinations that normally open a new tab. Other stories retain their navigation policy.
 `src/stories/book-showcase.stories.tsx` exercises complete tab navigation, Back/Forward, continuation, identity
 returns, failed-section retry and personal readback. `tests/book-showcase.test.ts` pins the transport and released
 view contract. The dev verifier runs acceptance and browser checks after landing.
@@ -2708,8 +2713,9 @@ shared automatic cover label and native metadata revision/idempotency commands r
 
 Member images use their own actual Type and the exact fallback in
 [Collection presentation](../../docs/collection-presentation.md), then existing valid release `coverRatio` hints.
-No new release fields are cast into existence. Current FULL summaries lack creator and other key facts, so rows show
-only the real localized Type and any real note. Public and private disclosure, hidden subject concealment, cursor
+No new release fields are cast into existence. Rows consume supplied member facts through the released Type's
+key-fact configuration; absent or unavailable context remains explicit. Supplied notes have a bounded inline preview
+and a complete independent Inspect view. Public and private disclosure, hidden subject concealment, cursor
 bounds, session credentials and private no-store responses retain their existing authorities. Visitor totals stay
 unknown on filtered or partial pages; an unfiltered complete page can disclose its admitted visible size. Owner and
 browse totals retain the native total rather than the preview/page length.

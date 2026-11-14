@@ -68,14 +68,24 @@ Source readiness, native search/facet execution and private Library capabilities
 Route-tree and Paraglide message generation belong to integration; source declarations are provided without generated
 output. The focused [composition assertions](../../../tests/book-library-catalogue.test.tsx) cover released metadata,
 all eight localized entries, exact shelf/default and Search filter/frontier propagation, bounded page requests,
-literary reading retirement, safe sign-in and the existing shelf entry action/readback. These assertions execute
-after landing in the dev verifier; source acceptance is final-source Web typing.
+literary reading retirement, safe sign-in and the existing shelf entry action/readback.
 
-[Book catalogue visit stories](../../stories/book-library-catalogue.stories.tsx) mount `AnonymousBrowse`,
-`MemberShelfHandoff`, `Sparse` and `UnavailableRecovery`. Public discovery and literary envelopes are explicitly
-illustrative; the member shelf uses the installed recorded Library transport. Locale, phone390/desktop1280 and
-light/dark globals cover the same mounted compositions. Browser/native journey acceptance, visual review and
-publication remain integration work.
+Decision: the maintainer's source-only review window retains existing test files unchanged and defers test writing,
+tests, typing, builds, browser checks and captures to the dev verifier; the existing Web publisher owns publication.
+
+[Book catalogue visit stories](../../stories/book-library-catalogue.stories.tsx) use the actual application router,
+Search, Subject and Library consumers. Canonical `pages-books-catalogue--complete-book-list` opens the supplied Book
+list directly; the existing `--anonymous-browse` and `--member-shelf-handoff` retain the public entry and signed-in
+shelf handoff. `--empty`, `--sparse` and `--unavailable-recovery` provide the named recovery states (same prefix).
+Main entries stay at rest. The preview follows the entry's separate-tab links and GET forms in its mounted router.
+
+The isolated `a-collection-review.ts` fake transport supplies eight invented Books, separate Series and Edition
+identities, descriptions, original local covers and supplied native facts. Missing creator, date and cover remain
+absent. Search predicates and rating order execute in that transport; consumers retain the admitted filters and
+opaque frontier. The same Subject envelopes serve every item destination. Public fixtures are illustrative,
+separate from recordings and native evidence; the private shelf retains its installed recorded Library transport.
+Shared locale, phone390/desktop1280 and light/dark globals remain freely changeable. The related complete Book and
+mixed-media Collection visits are owned by [Collection presentation](../../library/showcase-collection/README.md).
 
 ## Source orientation
 

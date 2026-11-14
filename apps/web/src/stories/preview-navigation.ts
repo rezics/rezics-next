@@ -86,7 +86,8 @@ export function bindPreviewNavigation({
     const submitter = event.submitter as HTMLButtonElement | HTMLInputElement | null;
     const method = submitter?.getAttribute('formmethod') ?? form.method;
     const target = submitter?.getAttribute('formtarget') ?? form.target;
-    if (method.toLowerCase() !== 'get' || (target && target !== '_self')) return;
+    if (method.toLowerCase() !== 'get' || (target && target !== '_self' && !(previewNewTabs && target === '_blank')))
+      return;
     const url = destination(
       submitter?.getAttribute('formaction') ?? form.getAttribute('action') ?? history.location.href,
     );

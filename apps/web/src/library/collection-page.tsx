@@ -2659,14 +2659,16 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
             comparisonDefinitions={comparisonDefinitions}
           />
         }
-        evidence={layout === 'grid' ? (
-          <CollectionMemberActionEvidence
-            member={member}
-            viewerProjection={viewerProjection}
-            actionHref={viewerActionHref?.(member)}
-            collection={collection}
-          />
-        ) : null}
+        evidence={
+          layout === 'grid' ? (
+            <CollectionMemberActionEvidence
+              member={member}
+              viewerProjection={viewerProjection}
+              actionHref={viewerActionHref?.(member)}
+              collection={collection}
+            />
+          ) : null
+        }
         detailId={detailId}
         expanded={Boolean(selected && selection?.key === key)}
         inspectLabel={m.collection_reading_inspect()}
@@ -2714,7 +2716,7 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
         </div>
       ) : (
         <ul
-          className="min-w-0 space-y-3"
+          className="min-w-0 divide-y divide-border [&_[data-slot=list-row]]:max-w-none [&_[data-slot=member-list-row-cover]]:max-w-[28vw] sm:[&_[data-slot=member-list-row-cover]]:max-w-none"
           data-collection-members
           data-collection-layout={layout}
           onClickCapture={onReadNavigate}
