@@ -39,8 +39,10 @@ test('a checkout arriving after expiry sends no SQL and releases the client', as
       released.resolve();
     },
   );
-  const visit = withCollectionDiscoveryReadSnapshot(pool(() => checkout.promise), Date.now() + 30, (connection) =>
-    connection.query('SELECT late'),
+  const visit = withCollectionDiscoveryReadSnapshot(
+    pool(() => checkout.promise),
+    Date.now() + 30,
+    (connection) => connection.query('SELECT late'),
   );
 
   await expect(visit).rejects.toBeDefined();
@@ -105,11 +107,7 @@ test('successful snapshots commit and cleanup errors preserve the original read 
     },
   );
   expect(committed).toBe('current');
-  expect(statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT current',
-    'COMMIT',
-  ]);
+  expect(statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT current', 'COMMIT']);
 
   const primary = new Error('read failed');
   const failure = await withCollectionDiscoveryReadSnapshot(

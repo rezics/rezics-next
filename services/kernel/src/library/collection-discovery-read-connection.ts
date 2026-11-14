@@ -29,10 +29,7 @@ function deadlineClient(
   const originalQuery = connection.query;
   const client = Object.create(connection) as PoolClient;
   client.query = (async (input: QueryConfig | string, values?: unknown[]) => {
-    const config: QueryConfig =
-      typeof input === 'string'
-        ? { text: input, values: values ?? [] }
-        : { ...input };
+    const config: QueryConfig = typeof input === 'string' ? { text: input, values: values ?? [] } : { ...input };
     const command = /^\s*(BEGIN|COMMIT|ROLLBACK)\b/i.exec(config.text ?? '')?.[1]?.toUpperCase();
     let settled = false;
     let dispatched = false;
@@ -61,10 +58,7 @@ function deadlineClient(
     try {
       return await within(deadline, () => observed);
     } catch (error) {
-      if (
-        dispatched &&
-        (!settled || command !== undefined || classifyUnavailability(error) !== undefined)
-      ) {
+      if (dispatched && (!settled || command !== undefined || classifyUnavailability(error) !== undefined)) {
         state.uncertain = true;
         discard(error);
       }
