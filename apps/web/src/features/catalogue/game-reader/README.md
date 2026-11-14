@@ -95,6 +95,16 @@ Composition and deliberate continuation share `gameReaderEditionPage` and its ro
 A malformed successful external response such as `{}`, a null row or an assertion missing its property/value
 objects is unavailable, never an empty release catalogue. The shared HTTP receiver admits row and nested assertion
 objects before reading their identities, so both composition and the dedicated reader use the existing failure mapping.
+A malformed successful external response such as `{}` is unavailable, never an empty release catalogue.
+Decision: admit the optional comparison's installed closed union at that HTTP seam; malformed or oversized comparison
+facts become comparison-unavailable while independently valid work facts and release memberships remain usable.
+Admission checks all native card fields, statement/evidence shapes and summary/cover credits without rewriting values,
+and matches each card's Subject, Type and membership to its ordered admitted row. Native unavailable, available-empty,
+missing, withheld and unsupported meanings stay distinct. The comparison Retry explicitly rereads that same native
+page, including its cursor, through the existing window request fence; replacement retires pending results.
+Admission costs O(N + K) for at most 20 memberships and the supplied facts within the comparison's 2 MiB cap, with
+native field limits of 32 statements, 64 qualifiers, 32 references, 64 parts per reference and 64 KiB per field statement.
+It adds no request, hydration or retained response history; membership assertions keep their existing row byte bound.
 An initially unavailable release section retains admitted work facts and retries the first native window explicitly;
 withheld or invalid admission still removes both sections. No former release destinations survive a failed retry.
 
@@ -117,3 +127,6 @@ Decision: repair malformed edition data at the shared HTTP receiver and pin reta
 failure through `gameOverviewInitial` in `tests/game-showcase.test.ts`. Run that focused file through the Web owner
 runner and the changed workspace's owner typecheck through `worker-check`; broader mounted/native/browser/build/capture
 acceptance remains with the dev verifier. Source completion is not a runtime pass.
+Comparison-envelope and mounted recovery regression source lives in `tests/game-showcase.test.ts` and
+`tests/game-reader-view.test.tsx`. Source-only delivery defers test, typing, build, native and browser/capture acceptance
+to the integrated verifier. Source completion is not a runtime pass.
