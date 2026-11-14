@@ -444,8 +444,8 @@ export function createHostedVersionWrite<Value extends object>(
   for (const indexKind of HOSTED_VERSION_INDEX_KINDS)
     sequences.set(
       indexKind,
-      createVersionedOutlineSequenceReadWriteSet<Value>((id) =>
-        readHostedVersionSequenceNode<Value>(client, boundSnapshot, indexKind, id),
+      createVersionedOutlineSequenceReadWriteSet<Value>(
+        (id) => readHostedVersionSequenceNode<Value>(client, boundSnapshot, indexKind, id),
         (ids) => readHostedVersionSequenceNodes<Value>(client, boundSnapshot, indexKind, ids),
       ),
     );

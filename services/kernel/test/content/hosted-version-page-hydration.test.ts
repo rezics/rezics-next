@@ -40,9 +40,7 @@ test('outline and chapter windows hydrate only visible rows with bounded tempora
   const target = f.target(await f.native.thread());
   const path = `/v1/hostedCatalogues/${catalogue.firstPost.id}`;
   const partIds = Array.from({ length: 2 }, () => f.newOccurrenceIdFor(catalogue.firstPost.id));
-  const chapterIds = partIds.map(() =>
-    Array.from({ length: 10 }, () => f.newOccurrenceIdFor(catalogue.firstPost.id)),
-  );
+  const chapterIds = partIds.map(() => Array.from({ length: 10 }, () => f.newOccurrenceIdFor(catalogue.firstPost.id)));
   const created = await f.native.call('POST', '/v1/hostedCatalogues', {
     postId: catalogue.firstPost.id,
     threadId: catalogue.id,
@@ -165,10 +163,9 @@ test('outline and chapter windows hydrate only visible rows with bounded tempora
     position: 0,
     ordinal: 0,
   });
-  expect(outlineTen.placements.map(({ occurrenceId, position, ordinal }) => [occurrenceId, position, ordinal])).toEqual([
-    [firstPart, 0, 0],
-    ...firstChapters.slice(0, 9).map((id, index) => [id, index, index + 1]),
-  ]);
+  expect(outlineTen.placements.map(({ occurrenceId, position, ordinal }) => [occurrenceId, position, ordinal])).toEqual(
+    [[firstPart, 0, 0], ...firstChapters.slice(0, 9).map((id, index) => [id, index, index + 1])],
+  );
   const mixedOutlineCoordinates = outlineMixed.placements.map(({ occurrenceId, parentId, position, ordinal }) => [
     occurrenceId,
     parentId,
@@ -196,27 +193,25 @@ test('outline and chapter windows hydrate only visible rows with bounded tempora
     null,
   );
   const nextOne = await page(snapshot, 'next', firstChapters[4]!, 1, [firstChapters[5]!], [firstPart], null);
-  const previousOne = await page(
-    snapshot,
-    'previous',
-    secondChapters[5]!,
-    1,
-    [secondChapters[4]!],
-    [secondPart],
-    null,
-  );
+  const previousOne = await page(snapshot, 'previous', secondChapters[5]!, 1, [secondChapters[4]!], [secondPart], null);
   expect(nextOne).toMatchObject({ origin: 4, lastAfter: 5, hasMore: true });
-  expect(nextTen.placements.map(({ occurrenceId, position, ordinal }) => [occurrenceId, position, ordinal])).toEqual(
-    [
-      ...firstChapters.slice(5).map((id, index) => [id, index + 5, index + 5]),
-      ...secondChapters.slice(0, 5).map((id, index) => [id, index, index + 10]),
-    ],
-  );
+  expect(nextTen.placements.map(({ occurrenceId, position, ordinal }) => [occurrenceId, position, ordinal])).toEqual([
+    ...firstChapters.slice(5).map((id, index) => [id, index + 5, index + 5]),
+    ...secondChapters.slice(0, 5).map((id, index) => [id, index, index + 10]),
+  ]);
   expect(nextTen.lastAfter).toBe(14);
   expect(previousOne).toMatchObject({ origin: 15, lastAfter: 14, hasMore: true });
-  expect(previousTen.placements.map(({ occurrenceId, position, ordinal }) => [occurrenceId, position, ordinal])).toEqual([
-    ...secondChapters.slice(0, 5).reverse().map((id, index) => [id, 4 - index, 14 - index]),
-    ...firstChapters.slice(5).reverse().map((id, index) => [id, 9 - index, 9 - index]),
+  expect(
+    previousTen.placements.map(({ occurrenceId, position, ordinal }) => [occurrenceId, position, ordinal]),
+  ).toEqual([
+    ...secondChapters
+      .slice(0, 5)
+      .reverse()
+      .map((id, index) => [id, 4 - index, 14 - index]),
+    ...firstChapters
+      .slice(5)
+      .reverse()
+      .map((id, index) => [id, 9 - index, 9 - index]),
   ]);
   expect(previousTen.lastAfter).toBe(5);
   expect(await page(snapshot, 'outline', null, 1, [], [], 21)).toMatchObject({

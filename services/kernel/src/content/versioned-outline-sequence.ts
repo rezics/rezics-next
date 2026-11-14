@@ -124,10 +124,7 @@ export function createVersionedOutlineSequenceReadWriteSet<Value>(
   readSelectedSnapshot: VersionedOutlineSequenceSnapshotReader<Value>,
   readSelectedSnapshotBatch?: VersionedOutlineSequenceSnapshotBatchReader<Value>,
 ): VersionedOutlineSequenceReadWriteSet<Value> {
-  const selectedSnapshot = createVersionedOutlineSequenceReadAccess(
-    readSelectedSnapshot,
-    readSelectedSnapshotBatch,
-  );
+  const selectedSnapshot = createVersionedOutlineSequenceReadAccess(readSelectedSnapshot, readSelectedSnapshotBatch);
   const nodeReads = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
   const nodeWrites = new Map<string, VersionedOutlineSequenceNode<Value>>();
   const visited = new Set<string>();
@@ -637,9 +634,7 @@ export async function rankVersionedOutlineSequenceNodes<Value>(
 
   const loaded = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
   async function loadFrontier(ids: readonly (string | null)[]): Promise<void> {
-    const missingIds = [...new Set(ids.filter((id): id is string => id !== null))].filter(
-      (id) => !loaded.has(id),
-    );
+    const missingIds = [...new Set(ids.filter((id): id is string => id !== null))].filter((id) => !loaded.has(id));
     if (missingIds.length === 0) return;
     const nodes = await access.readNodes(missingIds);
     for (const id of missingIds) loaded.set(id, nodes.get(id) ?? null);

@@ -191,10 +191,7 @@ async function pageChildren(
   if (query.parentId !== null) {
     const parent = await readHostedVersionOccurrence<HostedVersionPointValue>(client, snapshot, query.parentId);
     if (!parent || parent.value.kind !== 'part') throw new ContentNotFoundError();
-    if (
-      (await rankVersionedOutlineSequenceNode(access.preorder, snapshot.preorderRootId, query.parentId)) ===
-      null
-    )
+    if ((await rankVersionedOutlineSequenceNode(access.preorder, snapshot.preorderRootId, query.parentId)) === null)
       throw new ContentNotFoundError();
   }
   const siblingRoot = await readHostedVersionSiblingRoot(client, snapshot, query.parentId);
