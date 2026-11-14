@@ -94,6 +94,7 @@ async function typecheck(
   emitSchema?: string,
   emitOpenApi = false,
   prepareSqlAnalysis: typeof prepareReyloAnalysisCache = prepareReyloAnalysisCache,
+  generationOnly = false,
 ): Promise<number> {
   const incremental = localCompilerStateArgs(env);
   const analysis = await withCommandPhase('sql-analysis', () => prepareSqlAnalysis(env), env);
@@ -117,17 +118,21 @@ async function typecheck(
           const emitted = await compilerCommand('client-emit', ['bun', 'scripts/client.ts'], compilerEnv);
           if (emitted !== 0) return emitted;
         }
-        const tsc = await withCommandPhase(
-          'typecheck',
-          () =>
-            compilerCommand(
-              'tsc',
-              ['tsc', '--noEmit', ...incremental, '--runExternalCode', '-p', 'tsconfig.json'],
-              typecheckEnv,
-            ),
-          env,
-        );
-        if (tsc !== 0) return tsc;
+        // Artifact publication checks production API roots in client.ts. Full project typing also
+        // includes tests and operator scripts, and remains a separate command when generating only.
+        if (!generationOnly) {
+          const tsc = await withCommandPhase(
+            'typecheck',
+            () =>
+              compilerCommand(
+                'tsc',
+                ['tsc', '--noEmit', ...incremental, '--runExternalCode', '-p', 'tsconfig.json'],
+                typecheckEnv,
+              ),
+            env,
+          );
+          if (tsc !== 0) return tsc;
+        }
         const constructed = await compilerCommand('construct', ['bun', 'run', 'construct'], compilerEnv);
         if (constructed !== 0) return constructed;
         if (emitOpenApi) {
@@ -185,12 +190,14 @@ export async function runKernelTypecheck(
   env = compilerEnvironment(env, args);
   const emitClient = args.includes('--emit-client');
   const emitOpenApi = args.includes('--emit-openapi');
+  const generationOnly = args.includes('--generate-only');
+  if (generationOnly && !emitClient) throw new Error('Generation-only mode requires --emit-client');
   const emitSchema = args.find((arg) => arg.startsWith('--emit-schema='))?.slice('--emit-schema='.length);
   schemaModules(emitSchema);
   const runCommands = dependencies.typecheck ?? typecheck;
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
   const checkDatabaseReady = dependencies.assertCompilerDatabaseReady ?? assertCompilerDatabaseReady;
-  const label = 'kernel typecheck';
+  const label = generationOnly ? 'kernel generation' : 'kernel typecheck';
   let databasePhase = 'database-setup';
   let compilerResult: number | undefined;
   const compile = async (databaseEnv: NodeJS.ProcessEnv) => {
@@ -213,7 +220,7 @@ export async function runKernelTypecheck(
       }
     }
     const result = await compilerInfrastructurePhase(label, 'compiler', () =>
-      runCommands(compilerEnv, emitClient, emitSchema, emitOpenApi, dependencies.prepareSqlAnalysis),
+      runCommands(compilerEnv, emitClient, emitSchema, emitOpenApi, dependencies.prepareSqlAnalysis, generationOnly),
     );
     if (result !== 0 && container && compilerEnv.DATABASE_URL) {
       try {
@@ -237,6 +244,7 @@ export async function runKernelTypecheck(
     'scripts/typecheck.ts',
     ...(emitClient ? ['--emit-client'] : []),
     ...(emitOpenApi ? ['--emit-openapi'] : []),
+    ...(generationOnly ? ['--generate-only'] : []),
     ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
     ...config,
   ];
@@ -245,7 +253,7 @@ export async function runKernelTypecheck(
     : await compilerInfrastructurePhase(label, 'placement', () =>
         placeCompilerRun(
           {
-            label: 'kernel typecheck',
+            label,
             root: repository,
             cwd: directory,
             command: remoteCommand,
@@ -258,7 +266,7 @@ export async function runKernelTypecheck(
         ),
       );
   if (placed !== null) return compilerPlacementResult(label, placed);
-  writeCommandObservation('kernel typecheck', commandObservation(remoteCommand, repository, env), env);
+  writeCommandObservation(label, commandObservation(remoteCommand, repository, env), env);
   // The compiler database applies the same migrations as derived generation, in admitted custody only.
   validateKernelMigrationVersions(directory, new Date());
   // The analysis cache is prepared by typecheck itself, with its own phases, so the seam must not prepare it again.
