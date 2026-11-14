@@ -34,16 +34,28 @@ action, and report the cause and action in the project's Telegram group without 
 
 ## Implementation sprint width
 
-For the current 6–8 hour implementation window, the supermanager intervenes whenever fewer than 25 workers
-are actively implementing source. Use the existing ten-minute checkpoint. Count current owned worker processes
-with source work; separate startup reservations, ready tasks, parked checks and landing from coding. Compare
-worktree changes and commits with landings; a process or task label alone is not evidence of code output.
+Decision: keep fewer than 25 confirmed source coders or ready independent source outcomes below usable width as
+intervention triggers, retain the ten-minute checkpoint, and treat 32–64 as a capacity-conditioned target.
 
-At each checkpoint inspect actual starts, first source and ready supply. Delegate discovery, prompt quality, assignment
-and continuous dispatch to managers. Identify the observed loss—unprepared work, a weak brief, admission or a shared
-bottleneck—and hold the responsible managers to its repair. Check concrete allowance and host admission after checking
-supply, ownership and start failures. Keep this intervention active until width recovers or the window ends; do not
-create filler or interrupt live writers.
+For the current 6–8 hour implementation window, aim for 32–64 active source workers only when owned independent work,
+safe host admission and current authorized allowance support them. This range is an operating target, not a hard cap or
+authority to raise one. Use the existing ten-minute checkpoint; add no alert or timer.
+
+Managers follow [Delivery ownership](delivery.md#delivery-ownership) for ongoing source discovery and review, useful
+worker proposals and dispatch. At each checkpoint, distinguish machine telemetry from manager action and observed first
+source: telemetry reports owned starts and process or admission state; managers act on source gaps and proposals, confirm
+actual starts, and inspect assigned worktrees or commits for the first source change. A process or task status alone does
+not confirm coding, and queued work or checks do not count as coding. Count an active source worker only after an actual
+start and first source activity are observed; exclude reservations, duplicate starts, ready tasks, parked checks,
+verification and landing.
+
+Real ready supply is independent, reviewed source work eligible to start now, as defined by Delivery ownership. Usable
+width is the concurrent source-worker capacity supported by safe host admission and current authorized allowance. The
+resident acts when confirmed coding width falls below 25 or the supply of ready independent source outcomes falls below
+usable width. Restore useful independent starts and confirm their first source within ten minutes of observing either
+deficit. If a specific host, allowance, authority or source dependency prevents recovery in that window, surface the
+dependency, accountable owner and unblocking action, while continuing independent starts that can proceed. Keep the
+intervention active until width and supply recover or the window ends; do not create filler or interrupt live writers.
 
 Consolidate resident managers whose work duplicates another owner's or whose role produces no independent decision
 or actionable work. Transfer their Goals and outstanding task ownership through Goal before stopping the redundant
