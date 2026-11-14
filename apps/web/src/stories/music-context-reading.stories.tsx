@@ -3,6 +3,7 @@ import type { SubjectRead } from '@rezics/client';
 import { MusicContextProfile } from '../features/pages/music-context-profile';
 import { catalogueEntries } from '../features/catalogue/catalogue-entry';
 import type { MusicContextRead } from '../features/catalogue/music-context-profile';
+import { releaseReturnHref } from '../features/catalogue/release-fidelity/navigation';
 import { getLocale } from '../paraglide/runtime.js';
 import { candidateContext } from '../subject/candidates';
 import { AppShell } from '../shell/shell';
@@ -105,12 +106,19 @@ function ReadingStory({
     | 'failed'
     | 'removed'
     | 'selected'
+    | 'selected-release-return'
+    | 'selected-quotations-return'
     | 'realm'
     | 'unavailable-return'
     | 'graph-node'
     | 'graph-edge';
 }) {
   const locale = getLocale();
+  const hasContext =
+    state === 'selected' ||
+    state === 'selected-release-return' ||
+    state === 'selected-quotations-return' ||
+    state === 'unavailable-return';
   const initial: MusicContextRead | undefined =
     state === 'realm'
       ? undefined
@@ -118,9 +126,8 @@ function ReadingStory({
         ? { ok: false, reason: 'unavailable' }
         : successful(
             state === 'removed' ? 'removed' : state === 'empty' ? 'empty' : 'populated',
-            state === 'selected' || state === 'unavailable-return' ? selectedContext : candidateContext,
+            hasContext ? selectedContext : candidateContext,
           );
-  const hasContext = state === 'selected' || state === 'unavailable-return';
   const hasRealm = state === 'realm';
   const graph = catalogueEntries.graph({ id: venue, label: 'Harbor Hall', locale }).href;
   const returnTo =
@@ -133,9 +140,25 @@ function ReadingStory({
             ? { node: anchor }
             : { edge: event, from: venue, to: anchor, edgeProperty: 'schema:location' }),
         })}`
-      : state === 'unavailable-return'
-        ? `/en/subjects/${anchor}/harbor-stage`
-        : undefined;
+      : state === 'selected-release-return'
+        ? releaseReturnHref('Harbor Stage', locale, {
+            id: anchor,
+            context: selectedContext,
+            digest: subject(selectedContext).subject.release,
+            revision: 3,
+            stream: 'forward:schema:location',
+            cursor: 'selected-release-window-2',
+            focus: 'related',
+          })
+        : state === 'selected-quotations-return'
+          ? `/${locale}/subjects/${anchor}/harbor-stage/quotations?${new URLSearchParams({
+              context: selectedContext,
+              quote: event,
+              quotationReturn: 'selected-quotation-2',
+            })}`
+          : state === 'unavailable-return'
+            ? `/en/subjects/${anchor}/harbor-stage`
+            : undefined;
   return (
     <PatternStory path={`/subjects/${anchor}/harbor-stage/music-context`}>
       <AppShell>
@@ -165,7 +188,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The actual music-context reader with selected Context, unsupported Realm and unavailable exact-return states. Check every story in all eight locale toolbar settings and both themes; use keyboard navigation at the phone and desktop viewport sizes.',
+          'The actual music-context reader with exact selected-Context Release and Quotations returns, unsupported Realm and unavailable exact-return states. Companion returns preserve the admitted destination address. Check every story in all eight locale toolbar settings and both themes; use keyboard navigation at the phone and desktop viewport sizes. These fixtures are illustrative, not native or browser acceptance.',
       },
     },
   },
@@ -178,6 +201,8 @@ export const Empty: Story = { args: { state: 'empty' } };
 export const Failed: Story = { args: { state: 'failed' } };
 export const RemovedStream: Story = { args: { state: 'removed' } };
 export const SelectedContext: Story = { args: { state: 'selected' } };
+export const SelectedContextReleaseReturn: Story = { args: { state: 'selected-release-return' } };
+export const SelectedContextQuotationsReturn: Story = { args: { state: 'selected-quotations-return' } };
 export const UnsupportedRealm: Story = { args: { state: 'realm' } };
 export const UnavailableReturn: Story = { args: { state: 'unavailable-return' } };
 

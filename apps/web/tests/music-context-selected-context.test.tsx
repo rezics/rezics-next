@@ -212,7 +212,25 @@ test('selected Context stays bound through the Subject entry, route, session, ac
   relationCalls.length = 0;
   readerCalls.length = 0;
   const { readSubjectMusicContext } = await import('../src/features/catalogue/music-context-profile/actions');
-  const compatibleReturn = `/en/subjects/${anchor}/harbor-stage/quotations?context=${contextA}`;
+  const { releaseReturnHref } = await import('../src/features/catalogue/release-fidelity/navigation');
+  const compatibleReturn = `/en/subjects/${anchor}/harbor-stage/quotations?${new URLSearchParams({
+    context: contextA,
+    quote: target,
+    quotationReturn: 'selected-quotation-2',
+  })}`;
+  const releaseReturn = releaseReturnHref('Harbor Stage', 'en', {
+    id: anchor,
+    context: contextB,
+    digest: fixture.public.subject.release,
+    revision: fixture.public.subject.revision,
+    stream: 'forward:schema:location',
+    cursor: 'release-window:2/selected',
+    focus: 'related',
+  })!;
+  const companionReturns = new Map([
+    [contextA, compatibleReturn],
+    [contextB, releaseReturn],
+  ]);
   const entryMarkup = renderToStaticMarkup(
     createElement(SubjectExploreSlot, {
       subjectId: anchor,
@@ -342,6 +360,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
             locale: 'en',
             ...(context !== undefined ? { context } : {}),
             ...(selectedRealm !== undefined ? { realm: selectedRealm } : {}),
+            returnTo: companionReturns.get(context ?? ''),
             ...(routeStream !== undefined ? { stream: routeStream } : {}),
             ...(routeCursor !== undefined ? { cursor: routeCursor } : {}),
             onAddressChange: (address: { context?: string; stream: string; cursor?: string }) => {
@@ -371,9 +390,14 @@ test('selected Context stays bound through the Subject entry, route, session, ac
       await Promise.resolve();
     });
   };
+  const returnLink = () =>
+    [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
+      (link) => link.textContent === 'Return to the source subject',
+    )!;
 
   try {
     await render(route?.context);
+    expect(returnLink().getAttribute('href')).toBe(compatibleReturn);
     await until(
       () => subjectCalls.length === 1,
       () =>
@@ -381,8 +405,10 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     );
     await render(contextB);
     await until(() => subjectCalls.length === 2);
+    expect(returnLink().getAttribute('href')).toBe(releaseReturn);
     await render(contextA);
     await until(() => subjectCalls.length === 3);
+    expect(returnLink().getAttribute('href')).toBe(compatibleReturn);
     expect(subjectCalls.map((call) => call.query.context)).toEqual([contextA, contextB, contextA]);
 
     setCaller(callerB);
@@ -392,6 +418,8 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await render(contextA);
     await until(() => subjectCalls.length === 5);
     expect(readerCalls).toEqual([callerA, callerA, callerA, callerB, callerA]);
+    returnLink().focus();
+    const focusedReturn = window.document.activeElement;
 
     await resolve(0, contextA, 'Retired Context A');
     await resolve(1, contextB, 'Retired Context B');
@@ -403,6 +431,8 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     expect(host.textContent).not.toContain('Propose a correction');
     expect(host.textContent).not.toContain('Retired Context A');
     expect(host.textContent).not.toContain('Retired Context B');
+    expect(returnLink().getAttribute('href')).toBe(compatibleReturn);
+    expect(window.document.activeElement).toBe(focusedReturn);
     expect(host.querySelector('[data-context]')?.getAttribute('data-context')).toBe(contextA);
     expect(relationCalls.map((call) => call.query.context)).toEqual([contextA, contextB, contextA, contextA, contextA]);
     expect(subjectCalls[4]?.fetch).toEqual({ cache: 'no-store', redirect: 'manual', signal: expect.any(AbortSignal) });
@@ -420,6 +450,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await resolve(5, contextA, 'Continued Context A');
     await until(() => relationCalls.length === 6 && host.textContent?.includes('Continued Context A') === true);
     await render(contextA);
+    expect(returnLink().getAttribute('href')).toBe(compatibleReturn);
     expect(relationCalls[5]?.query).toMatchObject({ context: contextA, cursor: 'music-cursor-1' });
     expect(addressChanges.at(-1)).toEqual({
       context: contextA,
@@ -439,6 +470,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await resolve(6, contextA, 'Fresh selected Previous');
     await until(() => relationCalls.length === 7 && host.textContent?.includes('Fresh selected Previous') === true);
     await render(contextA);
+    expect(returnLink().getAttribute('href')).toBe(compatibleReturn);
     expect(relationCalls[6]?.query).toMatchObject({ context: contextA });
     expect(relationCalls[6]?.query.cursor).toBeUndefined();
     expect(host.textContent).toContain('Fresh selected Previous');
@@ -467,6 +499,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     });
     expect(addressChanges.at(-1)).toEqual({ context: contextA, stream: alternateStream.value });
     await render(contextA);
+    expect(returnLink().getAttribute('href')).toBe(compatibleReturn);
     await until(() => subjectCalls.length === 8);
     const nextRelease = `sha256:${'b'.repeat(64)}`;
     relationTargetType = 'schema:Thing';
@@ -536,6 +569,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await render(undefined, realm);
     await until(() => host.textContent?.includes('cannot apply the selected Realm') === true);
     expect(subjectCalls).toHaveLength(beforeUnsupportedRealm);
+    expect(returnLink()).toBeUndefined();
     const freshGlobal = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) =>
       link.textContent?.includes('Start a fresh Global reading'),
     );

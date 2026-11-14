@@ -21,7 +21,13 @@ const streams = [
   { id: 'schema:performer', label: 'performer' },
 ];
 
-function successful(stream: string, label: string, session: string, next: string | null = 'next-1') {
+function successful(
+  stream: string,
+  label: string,
+  session: string,
+  next: string | null = 'next-1',
+  context = candidateContext,
+) {
   return {
     ok: true,
     public: {
@@ -30,7 +36,7 @@ function successful(stream: string, label: string, session: string, next: string
         type: 'schema:MusicEvent',
         revision: 4,
         release: bundledDigest,
-        context: candidateContext,
+        context,
         labels: { en: 'Harbor Stage' },
         descriptions: {},
         aliases: {},
@@ -301,11 +307,11 @@ test('the mounted music-context reader selects, pages, retries and returns throu
         graphVisit,
       )!,
     ];
-    const graphTransport = { read: (input: Deferred['input']) => deferred(input).promise };
-    const showGraph = async (returnTo: string, key = 'graph') => {
+    const companionTransport = { read: (input: Deferred['input']) => deferred(input).promise };
+    const showCompanion = async (returnTo: string, key: string, address: MusicContextAddress = {}) => {
       const href = musicContextAddressHref(
         `/en/subjects/${anchor}/harbor-stage/music-context`,
-        { returnTo },
+        { ...address, returnTo },
         'en',
         anchor,
       )!;
@@ -321,12 +327,67 @@ test('the mounted music-context reader selects, pages, retries and returns throu
             key={key}
             id={anchor}
             locale="en"
+            context={received!.context}
+            initialStream={received!.stream}
+            initialCursor={received!.cursor}
             returnTo={received!.returnTo}
-            transport={graphTransport}
+            transport={companionTransport}
           />,
         ),
       );
       expect(returnLink().getAttribute('href')).toBe(returnTo);
+    };
+    const selectedContext = '00000000-0000-4000-8000-000000000021';
+    const { releaseReturnHref } = await import('../src/features/catalogue/release-fidelity/navigation');
+    const selectedReturn = releaseReturnHref('Harbor Stage', 'en', {
+      id: anchor,
+      context: selectedContext,
+      digest: bundledDigest,
+      revision: 4,
+      stream: 'forward:schema:location',
+      cursor: 'release-window:2/selected',
+      focus: 'related',
+    })!;
+    const selectedAddress = { context: selectedContext, stream: 'schema:location', cursor: 'selected-page-2' };
+    const firstSelected = pending.length;
+    await showCompanion(selectedReturn, 'selected', selectedAddress);
+    await showCompanion(selectedReturn, 'selected', { ...selectedAddress, cursor: 'selected-page-3' });
+    await settle(() =>
+      pending[firstSelected + 1]!.resolve(
+        successful('schema:location', 'Current selected page', 'selected-token', null, selectedContext),
+      ),
+    );
+    returnLink().focus();
+    const selectedFocus = document.activeElement;
+    await settle(() =>
+      pending[firstSelected]!.resolve(
+        successful('schema:location', 'Retired selected page', 'retired-token', null, selectedContext),
+      ),
+    );
+    expect(host.textContent).toContain('Current selected page');
+    expect(host.textContent).not.toContain('Retired selected page');
+    expect(returnLink().getAttribute('href')).toBe(selectedReturn);
+    expect(document.activeElement).toBe(selectedFocus);
+    // Same-tab Back delivers the earlier route coordinates to the mounted reader.
+    await showCompanion(selectedReturn, 'selected', selectedAddress);
+    await settle(() =>
+      pending[firstSelected + 2]!.resolve(
+        successful('schema:location', 'Reread selected page', 'back-token', null, selectedContext),
+      ),
+    );
+    expect(host.textContent).toContain('Reread selected page');
+    expect(returnLink().getAttribute('href')).toBe(selectedReturn);
+    expect(pending.slice(firstSelected).map(({ input }) => input.cursor)).toEqual([
+      'selected-page-2',
+      'selected-page-3',
+      'selected-page-2',
+    ]);
+    const beforeReturn = pending.length;
+    returnLink().addEventListener('click', (event) => event.preventDefault(), { once: true });
+    await settle(() => returnLink().click());
+    expect(pending).toHaveLength(beforeReturn);
+    const showGraph = async (returnTo: string, key = 'graph') => {
+      await showCompanion(returnTo, key);
       expect(subjectGraphVisitReturn(returnLink().getAttribute('href'), 'en')).toBe(returnTo);
     };
     const firstGraph = pending.length;
