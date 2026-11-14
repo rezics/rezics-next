@@ -305,9 +305,7 @@ function comparisonSummary(value: unknown, id: string): value is WorkReleaseCard
     Array.isArray(cover.variants) &&
     cover.variants.every(
       (variant) =>
-        record(variant) &&
-        (variant.format === 'avif' || variant.format === 'webp') &&
-        Number.isInteger(variant.width),
+        record(variant) && (variant.format === 'avif' || variant.format === 'webp') && Number.isInteger(variant.width),
     ) &&
     (cover.focalPoint === null ||
       (record(cover.focalPoint) && Number.isFinite(cover.focalPoint.x) && Number.isFinite(cover.focalPoint.y))) &&

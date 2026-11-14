@@ -5,7 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import { gameExample, editionId } from '../src/features/catalogue/game-reader/examples';
 import { workReleaseComparisonExample } from '../src/features/catalogue/game-reader/comparison-example';
-import type { GameReaderAddress, GameReaderRead, GameReaderTransport } from '../src/features/catalogue/game-reader/model';
+import type {
+  GameReaderAddress,
+  GameReaderRead,
+  GameReaderTransport,
+} from '../src/features/catalogue/game-reader/model';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -377,50 +381,55 @@ test('a missing assertion is unavailable and a missing summary remains withheld,
   }
 });
 
-test.each([false, true])('malformed HTTP comparison retains reading and retries its same native page (cursor: %s)', async (cursor) => {
-  const mounted = await ui();
-  try {
-    const fixture = workReleaseComparisonExample();
-    const good = await fixture.read();
-    if (!good.ok || good.workReleaseCards?.state !== 'available') throw new Error('Expected native comparison reading');
-    const body = { ...fixture.first, next: null, workReleaseCards: good.workReleaseCards };
-    const broken = structuredClone(body);
-    Reflect.deleteProperty(broken.workReleaseCards!, 'cards');
-    const addresses: GameReaderAddress[] = [];
-    const transport: GameReaderTransport = (address) => {
-      addresses.push(address);
-      return fixture.read(address);
-    };
-    if (!cursor) fixture.respond(broken);
-    await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport });
-    if (cursor) {
-      fixture.respond(broken);
-      await mounted.click(m.work_parts_more());
+test.each([false, true])(
+  'malformed HTTP comparison retains reading and retries its same native page (cursor: %s)',
+  async (cursor) => {
+    const mounted = await ui();
+    try {
+      const fixture = workReleaseComparisonExample();
+      const good = await fixture.read();
+      if (!good.ok || good.workReleaseCards?.state !== 'available')
+        throw new Error('Expected native comparison reading');
+      const body = { ...fixture.first, next: null, workReleaseCards: good.workReleaseCards };
+      const broken = structuredClone(body);
+      Reflect.deleteProperty(broken.workReleaseCards!, 'cards');
+      const addresses: GameReaderAddress[] = [];
+      const transport: GameReaderTransport = (address) => {
+        addresses.push(address);
+        return fixture.read(address);
+      };
+      if (!cursor) fixture.respond(broken);
+      await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport });
+      if (cursor) {
+        fixture.respond(broken);
+        await mounted.click(m.work_parts_more());
+      }
+      expect(mounted.host.textContent).toContain('Harbour Studio');
+      expect(mounted.host.textContent).toContain(m.game_reader_compare_unavailable());
+      expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).not.toBeNull();
+      expect(mounted.host.querySelector('[data-slot="work-release-comparison"]')).toBeNull();
+      fixture.respond(body);
+      await mounted.click(m.album_tracks_retry());
+      const target = { ...fixture.address, ...(cursor ? { cursor: 'opaque:game/next' } : {}) };
+      expect(addresses.slice(-2)).toEqual([target, target]);
+      const requests = fixture.calls.slice(-4).map((url) => new URL(url));
+      expect(requests.map((url) => url.pathname.endsWith('/links'))).toEqual([false, true, false, true]);
+      expect(
+        requests.filter((url) => url.pathname.endsWith('/links')).map((url) => url.searchParams.get('cursor')),
+      ).toEqual([target.cursor ?? null, target.cursor ?? null]);
+      expect(mounted.host.querySelectorAll('[data-slot="work-release-comparison"]')).toHaveLength(1);
+      expect(mounted.host.textContent).toContain('Harbour Digital');
+      expect(mounted.host.textContent).not.toContain(m.game_reader_compare_unavailable());
+      if (cursor) {
+        // Retrying a successful continuation must not push that address into Previous again.
+        await mounted.click(m.game_reader_previous());
+        expect(addresses.at(-1)).toEqual(fixture.address);
+      }
+    } finally {
+      await mounted.close();
     }
-    expect(mounted.host.textContent).toContain('Harbour Studio');
-    expect(mounted.host.textContent).toContain(m.game_reader_compare_unavailable());
-    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).not.toBeNull();
-    expect(mounted.host.querySelector('[data-slot="work-release-comparison"]')).toBeNull();
-    fixture.respond(body);
-    await mounted.click(m.album_tracks_retry());
-    const target = { ...fixture.address, ...(cursor ? { cursor: 'opaque:game/next' } : {}) };
-    expect(addresses.slice(-2)).toEqual([target, target]);
-    const requests = fixture.calls.slice(-4).map((url) => new URL(url));
-    expect(requests.map((url) => url.pathname.endsWith('/links'))).toEqual([false, true, false, true]);
-    expect(requests.filter((url) => url.pathname.endsWith('/links')).map((url) => url.searchParams.get('cursor')))
-      .toEqual([target.cursor ?? null, target.cursor ?? null]);
-    expect(mounted.host.querySelectorAll('[data-slot="work-release-comparison"]')).toHaveLength(1);
-    expect(mounted.host.textContent).toContain('Harbour Digital');
-    expect(mounted.host.textContent).not.toContain(m.game_reader_compare_unavailable());
-    if (cursor) {
-      // Retrying a successful continuation must not push that address into Previous again.
-      await mounted.click(m.game_reader_previous());
-      expect(addresses.at(-1)).toEqual(fixture.address);
-    }
-  } finally {
-    await mounted.close();
-  }
-});
+  },
+);
 
 test('reader replacement fences a pending comparison retry and its former release destinations', async () => {
   const mounted = await ui();
@@ -435,17 +444,29 @@ test('reader replacement fences a pending comparison retry and its former releas
     let calls = 0;
     const transport: GameReaderTransport = (address) => {
       if (++calls === 1) return fixture.read(address);
-      return new Promise((resolve) => { deliver = resolve; });
+      return new Promise((resolve) => {
+        deliver = resolve;
+      });
     };
     await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport });
-    const retry = Array.from(mounted.host.querySelectorAll('button'))
-      .find((button) => button.textContent === m.album_tracks_retry())!;
-    await act(async () => { retry.click(); retry.click(); });
+    const retry = Array.from(mounted.host.querySelectorAll('button')).find(
+      (button) => button.textContent === m.album_tracks_retry(),
+    )!;
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
     expect(calls).toBe(2);
     expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
     const replacement = gameExample('empty');
     replacement.respond({ ...replacement.first, workReleaseCards: { state: 'available', cards: [] } });
-    await mounted.render({ ...replacement.address, locale: 'en', source: replacement, reader: null, transport: replacement.read });
+    await mounted.render({
+      ...replacement.address,
+      locale: 'en',
+      source: replacement,
+      reader: null,
+      transport: replacement.read,
+    });
     await act(async () => deliver(good));
     expect(mounted.host.textContent).toContain(m.game_reader_editions_empty());
     expect(mounted.host.textContent).not.toContain('Harbour Digital');

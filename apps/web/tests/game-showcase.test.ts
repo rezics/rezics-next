@@ -198,7 +198,12 @@ test('comparison HTTP admission preserves native facts and useful memberships in
     expect(result.ok && result.editions).toBe(body.links);
   }
   const invalid = [
-    undefined, null, {}, { state: 'available' }, { state: 'available', cards: {} }, { state: 'other' },
+    undefined,
+    null,
+    {},
+    { state: 'available' },
+    { state: 'available', cards: {} },
+    { state: 'other' },
     { state: 'available', cards: [null] },
     { state: 'available', cards: [], extra: 'x'.repeat(2 * 1024 * 1024) },
   ];
@@ -209,12 +214,23 @@ test('comparison HTTP admission preserves native facts and useful memberships in
     expect(result.ok && result.editions).toBe(body.links);
     response.body = { ...body, workReleaseCards: comparison };
     expect(gameOverviewInitial(page, seed)).toMatchObject({
-      ok: true, editions: body.links, workReleaseCards: { state: 'unavailable' },
+      ok: true,
+      editions: body.links,
+      workReleaseCards: { state: 'unavailable' },
     });
   }
-  expect(gameReaderEditionPage(seed, address, 200, { ...body, links: [...body.links, body.links[0]] })).toEqual({ ok: false, reason: 'unavailable' });
-  expect(gameReaderEditionPage(seed, address, 200, { ...body, next: 'x'.repeat(4097) })).toEqual({ ok: false, reason: 'unavailable' });
-  expect(gameReaderEditionPage(seed, address, 200, { ...body, extra: 'x'.repeat(3 * 1024 * 1024) })).toEqual({ ok: false, reason: 'unavailable' });
+  expect(gameReaderEditionPage(seed, address, 200, { ...body, links: [...body.links, body.links[0]] })).toEqual({
+    ok: false,
+    reason: 'unavailable',
+  });
+  expect(gameReaderEditionPage(seed, address, 200, { ...body, next: 'x'.repeat(4097) })).toEqual({
+    ok: false,
+    reason: 'unavailable',
+  });
+  expect(gameReaderEditionPage(seed, address, 200, { ...body, extra: 'x'.repeat(3 * 1024 * 1024) })).toEqual({
+    ok: false,
+    reason: 'unavailable',
+  });
 });
 
 test('malformed native comparison identities, evidence and budgets never become rendered facts', async () => {
@@ -235,7 +251,10 @@ test('malformed native comparison identities, evidence and budgets never become 
     expect(result.ok && result.workReleaseCards).toBe(comparison);
   }
   for (const type of ['somevalue', 'novalue']) {
-    const comparison = { state: 'available', cards: [replace({ ...field, statements: [{ ...statement, value: { type } }] })] };
+    const comparison = {
+      state: 'available',
+      cards: [replace({ ...field, statements: [{ ...statement, value: { type } }] })],
+    };
     const result = admit(comparison);
     expect(result.ok && result.workReleaseCards).toBe(comparison);
   }
@@ -247,8 +266,11 @@ test('malformed native comparison identities, evidence and budgets never become 
     { ...card, membership: { ...card.membership, value: { type: 'value', content: gameSparse.id } } },
     { ...card, related: { [game.id]: null } },
     { ...card, summary: { ...card.summary, cover: { ...card.summary.cover!, credit: null } } },
-    { ...card, fields: {} }, replace(null), replace({ state: 'other' }),
-    replace({ state: 'available' }), replace({ ...field, related: [] }),
+    { ...card, fields: {} },
+    replace(null),
+    replace({ state: 'other' }),
+    replace({ state: 'available' }),
+    replace({ ...field, related: [] }),
     replace({ ...field, statements: [null] }),
     replace({ ...field, statements: [{ ...statement, property: { ...statement.property, id: 'schema:publisher' } }] }),
     replace({ ...field, statements: [{ ...statement, value: { type: 'value' } }] }),
@@ -258,7 +280,10 @@ test('malformed native comparison identities, evidence and budgets never become 
     replace({ ...field, statements: Array(33).fill(statement) }),
     replace({ ...field, statements: [{ ...statement, qualifiers: Array(65).fill(statement) }] }),
     replace({ ...field, statements: [{ ...statement, references: Array(33).fill({ hash: 'source', parts: [] }) }] }),
-    replace({ ...field, statements: [{ ...statement, references: [{ hash: 'source', parts: Array(65).fill(statement) }] }] }),
+    replace({
+      ...field,
+      statements: [{ ...statement, references: [{ hash: 'source', parts: Array(65).fill(statement) }] }],
+    }),
     replace({ ...field, statements: [{ ...statement, value: { type: 'value', content: 'x'.repeat(64 * 1024) } }] }),
   ];
   for (const cards of [...invalid.map((value) => [value]), [card, card], Array(21).fill(card)]) {
