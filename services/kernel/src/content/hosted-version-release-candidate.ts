@@ -531,10 +531,20 @@ export async function readHostedVersionReleaseCandidateProgress(
   const actor = accountActor(actorInput);
   const route = routeOf(locator.catalogueId);
   const source = (
-    await tx.query<Pick<SourceFenceRow,
-      | 'initiator_account_id' | 'owner_epoch' | 'source_revision_id' | 'expected_head_revision_id'
-      | 'expected_publication_id' | 'mode' | 'seal_input_version' | 'seal_candidate_count' | 'seal_sealed_at'
-    >>(
+    await tx.query<
+      Pick<
+        SourceFenceRow,
+        | 'initiator_account_id'
+        | 'owner_epoch'
+        | 'source_revision_id'
+        | 'expected_head_revision_id'
+        | 'expected_publication_id'
+        | 'mode'
+        | 'seal_input_version'
+        | 'seal_candidate_count'
+        | 'seal_sealed_at'
+      >
+    >(
       `SELECT stage.initiator_account_id,stage.owner_epoch::text AS owner_epoch,
               stage.source_revision_id,stage.expected_head_revision_id,stage.expected_publication_id,stage.mode,
               source_seal.input_version::text AS seal_input_version,

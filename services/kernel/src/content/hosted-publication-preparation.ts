@@ -101,7 +101,7 @@ function progress(
   };
 }
 
-/** Every mutation is an ordinary catalogue-home command. `runCommand` performs
+/** Every preparation operation is an ordinary catalogue-home command. `runCommand` performs
  * current Post/container/revise authorization before it reads the retained
  * receipt, so exact retries keep their original response after later progress. */
 function preparationCommand(
