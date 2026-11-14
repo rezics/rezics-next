@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
+import { BoundedReadDeadlineError, withBoundedReadConnection } from '../database/pool.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
@@ -292,10 +293,19 @@ export async function readPublicFilterPopulation(
     bytes: 0,
   };
   let accounted = false;
+  let deadlineSelected = false;
   const unready = (): PrivacyReductionObservation => ({ status: 'unready', reason: 'metadata_missing', cost });
+  const requireDeadline = (deadline: number) => {
+    try {
+      access.requireDeadline(deadline);
+    } catch (error) {
+      deadlineSelected = true;
+      throw error;
+    }
+  };
   try {
     const deadline = request.context.deadline;
-    access.requireDeadline(deadline);
+    requireDeadline(deadline);
     if (!Number.isSafeInteger(deadline)) return unready();
     // A malformed final role must never fall through SQL's NULL execution
     // branch and attempt a new start without its write reservation.
@@ -327,19 +337,25 @@ export async function readPublicFilterPopulation(
     cost.statements++;
     cost.bytes += Buffer.byteLength(sql) + Buffer.byteLength(search.encodeState(values));
     const query = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
-    const result = await withRequestDeadline(deadline, () => pool.query<Row>(query));
+    const result = await withRequestDeadline(deadline, () =>
+      withBoundedReadConnection(pool, deadline, (client) => client.query<Row>(query), {
+        // A settled transport failure still cannot prove whether retention committed.
+        // The lifetime keeps settled PostgreSQL rejections distinct from this case.
+        isUncertainSettledQueryError: () => true,
+      }),
+    );
     cost.bytes += Buffer.byteLength(search.encodeState(result.rows));
     const row = result.rows[0];
     if (!row || result.rows.length !== 1) {
       accounted = true;
-      access.requireDeadline(deadline);
+      requireDeadline(deadline);
       return unready();
     }
     cost.inputKeys += row.coverage_keys.length + 5 * row.own_homes + 2 * row.own_subjects;
     cost.dependencyPoints += 2 * row.heads.length + 2 * row.own_homes + row.own_subjects;
     cost.rows += 2 * row.heads.length + 2 * row.own_homes + row.own_subjects;
     accounted = true;
-    access.requireDeadline(deadline);
+    requireDeadline(deadline);
     if (
       cost.inputKeys > 1000 ||
       cost.bytes > 4 * 1024 * 1024 ||
@@ -386,10 +402,14 @@ export async function readPublicFilterPopulation(
       cost.rows += 468 + 4;
     }
     if (error instanceof TypeError || error instanceof RangeError || error instanceof SyntaxError) return unready();
-    if (access.classifyUnavailability(error) !== undefined || (error && typeof error === 'object' && 'code' in error))
+    if (
+      error instanceof BoundedReadDeadlineError ||
+      access.classifyUnavailability(error) !== undefined ||
+      (error && typeof error === 'object' && 'code' in error)
+    )
       return {
         status: 'unavailable',
-        reason: Date.now() >= request.context.deadline ? 'deadline' : 'dependency_unavailable',
+        reason: deadlineSelected || error instanceof BoundedReadDeadlineError ? 'deadline' : 'dependency_unavailable',
         cost,
       };
     throw error;
