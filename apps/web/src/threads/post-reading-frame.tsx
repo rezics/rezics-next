@@ -1,5 +1,7 @@
 import type { ReactNode, Ref } from 'react';
 import { ContentItemFrame } from '@rezics/ui/content-item';
+import { ConversationInspection } from './conversation-presentation';
+import { m } from '../paraglide/messages.js';
 import './post-reading.css';
 
 /** Reading anatomy only. Actions, reply context and editors retain their own authority and lifetime. */
@@ -42,7 +44,11 @@ export function PostReadingFrame({
         >
           {actions}
         </div>
-        {details}
+        {details ? (
+          <ConversationInspection label={m.conversation_post_details()} className="mt-1">
+            {details}
+          </ConversationInspection>
+        ) : null}
       </ContentItemFrame>
     </li>
   );

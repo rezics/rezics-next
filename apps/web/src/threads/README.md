@@ -370,15 +370,15 @@ Decision: Board and mounted thread reading share compact supplied-author bylines
 readable titles and body-first post actions. The opening is identified independently of the supplied page position;
 replies keep native order and bounded indentation. Ancestry and exact citation identifiers use labelled inspection,
 while the reviewed Subject and cited value stay visible. Closing inspection retains mounted drafts and commands.
+Post details and watch guidance use the same secondary disclosure, while deliberate actions and recovery remain visible.
 Main routed review stories are manual and stable; separate interaction stories pin branch/reply/Board return.
 Runtime, native, browser, visual and ordinary test acceptance are deferred to the dev verifier; the final explicit
 workspace typecheck remains the source check. Existing regression assertions remain authoritative.
 
-
 `PostReadingFrame` owns the byline-to-body hierarchy and the visible permalink/focus surface; its action and reply
 context slots consume the existing controls unchanged. The action row after the body uses the installed `FeedActionBar` detail port
-for reactions, share and the single post-specific reply action; licence, history and provenance follow it. Share and reply are not
-repeated in that footer. `ThreadPostReadingBody` passes the complete snapshot to the
+for reactions, share and the single post-specific reply action; licence, history and provenance follow in Post details.
+Share and reply are not repeated in that footer. `ThreadPostReadingBody` passes the complete snapshot to the
 existing `DocumentBody` and `NativeDocumentImage`, with a single exact-document media index. The current document's
 post, thread, revision, digest and declared media must all match the supplied disclosure. A replacement revision
 starts a fresh spoiler visit. Erased/withheld placeholders, keyed editing and current-reader retirement retain their
