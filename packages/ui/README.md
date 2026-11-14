@@ -80,6 +80,11 @@ menu opens as a bottom sheet with a title and touch rows at least 44px high. On 
 a dropdown anchored to its trigger. Menu labels, including the title and Back control, come from the caller's native
 locale messages. A submenu becomes a sheet page; browser Back returns to the previous page and then closes the sheet.
 Selecting a radio value closes the menu once. Escape closes either form, and focus returns to the trigger.
+Decision: current item and link entries retain `aria-current="page"` and show a decorative location-pin marker at
+the end of their row in both forms, including submenus. The marker adds no accessible-name text and is distinct
+from radio selection. Entry labels (items, links, submenus and radio options) wrap, including unbroken words,
+within viewport-bounded dropdown panels and the sheet width. Markers and submenu arrows keep their space;
+multiline touch rows grow above the 44px minimum. This treatment belongs to entry rows, not custom content.
 Custom menu content with client-side links can set `closeOnNavigation` so following a link closes the menu without
 adding a sheet-history entry.
 

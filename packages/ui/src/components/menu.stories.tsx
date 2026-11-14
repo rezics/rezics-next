@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { Button } from '../shadcn/button.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
 import { ShelfToolbar } from './shelf-toolbar.tsx';
@@ -128,6 +128,88 @@ export const DestructiveEntry: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
     const remove = await screen.findByRole(sheetPresentation() ? 'button' : 'menuitem', { name: 'Remove' });
     await expect(remove).toHaveClass(/text-destructive/);
+  },
+};
+
+const localizedLabels = {
+  item: 'Meine derzeitige Sammlung mit allen vorgemerkten Veröffentlichungen und persönlichen Leseempfehlungen',
+  link: '目前所在的收藏目的地，包含已閱讀、計劃閱讀以及朋友推薦的所有作品與完整的本地化說明',
+  submenu: 'Parcourir les autres destinations de votre bibliothèque et toutes les collections enregistrées',
+  nestedItem:
+    'SammlungsnavigationOhneWorttrennungMitVollständigenVeröffentlichungsempfehlungenUndLesezeichenFürAlleSprachen',
+  nestedLink: '現在のコレクションに保存されたすべての作品と、これから読みたい作品の詳しい一覧を表示する',
+  radio: 'Zuletzt aktualisierte Veröffentlichungen mit vollständigen übersetzten Titeln zuerst anzeigen',
+};
+const selectLocalizedEntry = fn();
+
+export const CurrentAndLocalizedEntries: Story = {
+  args: {
+    entries: [
+      { type: 'item', label: localizedLabels.item, current: true, onSelect: () => {} },
+      { type: 'link', label: localizedLabels.link, current: true, href: '#current-destination' },
+      {
+        type: 'submenu',
+        label: localizedLabels.submenu,
+        entries: [
+          { type: 'item', label: localizedLabels.nestedItem, current: true, onSelect: () => {} },
+          { type: 'link', label: localizedLabels.nestedLink, current: true, href: '#nested-current-destination' },
+        ],
+      },
+      {
+        type: 'radio',
+        label: 'Reihenfolge',
+        value: 'recent',
+        options: [{ value: 'recent', label: localizedLabels.radio }],
+        onValueChange: () => {},
+      },
+      { type: 'item', label: 'Unavailable', disabled: true, onSelect: () => {} },
+      { type: 'destructive', label: 'Remove', onSelect: () => {} },
+      { type: 'item', label: 'Öffnen', onSelect: selectLocalizedEntry },
+    ],
+  },
+  play: async () => {
+    selectLocalizedEntry.mockClear();
+    const sheet = sheetPresentation();
+    const role = sheet ? 'button' : 'menuitem';
+    const trigger = await screen.findByRole('button', { name: 'Open menu' });
+    const expectCurrent = async (name: string, link = false) => {
+      const row = await screen.findByRole(sheet && link ? 'link' : role, { name, exact: true });
+      await expect(row).toHaveAttribute('aria-current', 'page');
+      await expect(row).toHaveAccessibleName(name);
+      await expect(row).not.toHaveAttribute('aria-checked');
+      const marker = row.querySelector('[data-slot="menu-current-indicator"]');
+      await expect(marker).toBeVisible();
+      await expect(marker).toHaveAttribute('aria-hidden', 'true');
+      return row;
+    };
+    const expectLabelsToFit = async (panel: HTMLElement) => {
+      await expectPanelInViewport(panel);
+      await expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+      for (const label of panel.querySelectorAll<HTMLElement>('[data-slot="menu-entry-label"]')) {
+        await expect(label).toBeVisible();
+        await expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth + 1);
+        const row = label.parentElement!.getBoundingClientRect();
+        const text = label.getBoundingClientRect();
+        await expect(text.top).toBeGreaterThanOrEqual(row.top - 1);
+        await expect(text.bottom).toBeLessThanOrEqual(row.bottom + 1);
+      }
+    };
+    await userEvent.click(trigger);
+    const panel = await screen.findByRole(sheet ? 'dialog' : 'menu');
+    await expectCurrent(localizedLabels.item);
+    await expectCurrent(localizedLabels.link, true);
+    await expectLabelsToFit(panel);
+    await expect(screen.getByRole(sheet ? 'radio' : 'menuitemradio', { name: localizedLabels.radio })).toBeChecked();
+    await userEvent.click(screen.getByRole(role, { name: localizedLabels.submenu }));
+    const nested = await expectCurrent(localizedLabels.nestedItem);
+    await expectCurrent(localizedLabels.nestedLink, true);
+    await expectLabelsToFit(nested.closest<HTMLElement>(sheet ? '[role="dialog"]' : '[role="menu"]')!);
+    if (sheet) await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    else await userEvent.keyboard('{Escape}');
+    await userEvent.click(await screen.findByRole(role, { name: 'Öffnen' }));
+    await expect(selectLocalizedEntry).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(panel).not.toBeVisible());
+    await waitFor(() => expect(trigger).toHaveFocus());
   },
 };
 const toolbarLabels = {

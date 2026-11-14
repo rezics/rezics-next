@@ -11,6 +11,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { MapPinIcon } from 'lucide-react';
 import * as D from '../shadcn/dropdown-menu.tsx';
 import { Popover, PopoverContent, PopoverTrigger } from '../shadcn/popover.tsx';
 import { BottomSheet } from './bottom-sheet.tsx';
@@ -120,6 +121,23 @@ function legacyEntries(content: ReactNode): MenuEntry[] {
   return output;
 }
 
+const entryPanelClassName = 'w-max min-w-[min(8rem,var(--available-width))] max-w-[min(24rem,var(--available-width))]';
+const entryRowClassName = 'min-w-0 whitespace-normal text-start';
+const touchEntryRowClassName = 'h-auto min-h-11 w-full min-w-0 justify-start gap-2 whitespace-normal py-2 text-start';
+
+function EntryLabel({ label, current }: { label: string; current?: boolean }) {
+  return (
+    <>
+      <span data-slot="menu-entry-label" className="min-w-0 flex-1 whitespace-normal [overflow-wrap:anywhere]">
+        {label}
+      </span>
+      {current && (
+        <MapPinIcon data-slot="menu-current-indicator" aria-hidden="true" className="ms-auto size-4 shrink-0" />
+      )}
+    </>
+  );
+}
+
 function DropdownEntries({
   entries,
   select,
@@ -143,8 +161,8 @@ function DropdownEntries({
           }}
         >
           {entry.options.map((option) => (
-            <D.DropdownMenuRadioItem key={option.value} value={option.value}>
-              {option.label}
+            <D.DropdownMenuRadioItem key={option.value} value={option.value} className={entryRowClassName}>
+              <EntryLabel label={option.label} />
             </D.DropdownMenuRadioItem>
           ))}
         </D.DropdownMenuRadioGroup>
@@ -152,8 +170,10 @@ function DropdownEntries({
     if (entry.type === 'submenu')
       return (
         <D.DropdownMenuSub key={index}>
-          <D.DropdownMenuSubTrigger>{entry.label}</D.DropdownMenuSubTrigger>
-          <D.DropdownMenuSubContent>
+          <D.DropdownMenuSubTrigger className={entryRowClassName}>
+            <EntryLabel label={entry.label} />
+          </D.DropdownMenuSubTrigger>
+          <D.DropdownMenuSubContent className={entryPanelClassName}>
             <DropdownEntries entries={entry.entries} select={select} close={close} />
           </D.DropdownMenuSubContent>
         </D.DropdownMenuSub>
@@ -162,21 +182,23 @@ function DropdownEntries({
       return (
         <D.DropdownMenuItem
           key={index}
+          className={entryRowClassName}
           disabled={entry.disabled}
           render={<a href={entry.href} aria-current={entry.current ? 'page' : undefined} />}
         >
-          {entry.label}
+          <EntryLabel label={entry.label} current={entry.current} />
         </D.DropdownMenuItem>
       );
     return (
       <D.DropdownMenuItem
         key={index}
+        className={entryRowClassName}
         disabled={entry.disabled}
         aria-current={entry.current ? 'page' : undefined}
         variant={entry.type === 'destructive' ? 'destructive' : 'default'}
         onClick={() => select(entry)}
       >
-        {entry.label}
+        <EntryLabel label={entry.label} current={entry.current} />
       </D.DropdownMenuItem>
     );
   });
@@ -363,7 +385,7 @@ export function Menu({
             triggerRef.current = event.currentTarget as HTMLElement;
           }}
         />
-        <D.DropdownMenuContent>
+        <D.DropdownMenuContent className={entryPanelClassName}>
           <DropdownEntries entries={entries} select={select} close={() => close()} />
         </D.DropdownMenuContent>
       </D.DropdownMenu>
@@ -432,6 +454,7 @@ export function Menu({
             />
             {form === 'dropdown' && (
               <D.DropdownMenuContent
+                className={entryPanelClassName}
                 ref={physicalNavigationHost}
                 finalFocus={false}
                 onClickCapture={closeAfterNavigation}
@@ -477,16 +500,20 @@ export function Menu({
                           entry.onValueChange(value);
                           close();
                         }}
-                        className="gap-0"
+                        className="min-w-0 gap-0"
                       >
                         {entry.options.map((option) => (
-                          <Field key={option.value} orientation="horizontal" className="min-h-11 items-center">
-                            <RadioGroupItem id={`${radioName}-${index}-${option.value}`} value={option.value} />
+                          <Field key={option.value} orientation="horizontal" className="min-h-11 min-w-0 items-center">
+                            <RadioGroupItem
+                              id={`${radioName}-${index}-${option.value}`}
+                              value={option.value}
+                              className="shrink-0"
+                            />
                             <FieldLabel
                               htmlFor={`${radioName}-${index}-${option.value}`}
-                              className="min-h-11 flex-1 items-center rounded-xl px-3 hover:bg-accent"
+                              className="min-h-11 min-w-0 flex-1 items-center rounded-xl px-3 py-2 text-start hover:bg-accent"
                             >
-                              {option.label}
+                              <EntryLabel label={option.label} />
                             </FieldLabel>
                           </Field>
                         ))}
@@ -497,15 +524,17 @@ export function Menu({
                       <Button
                         key={index}
                         variant="ghost"
-                        className="min-h-11 justify-between"
+                        className={touchEntryRowClassName}
                         onClick={() => {
                           setStack((value) => [...value, entry]);
                           window.history.pushState({ rezicsMenuPage: true }, '', window.location.href);
                           historyDepth.current += 1;
                         }}
                       >
-                        {entry.label}
-                        <span aria-hidden>›</span>
+                        <EntryLabel label={entry.label} />
+                        <span aria-hidden className="shrink-0">
+                          ›
+                        </span>
                       </Button>
                     );
                   if (entry.type === 'link')
@@ -514,22 +543,22 @@ export function Menu({
                         key={index}
                         href={entry.href}
                         aria-current={entry.current ? 'page' : undefined}
-                        className="flex min-h-11 items-center rounded-xl px-3 text-sm hover:bg-accent"
+                        className={`flex items-center rounded-xl px-3 text-sm hover:bg-accent ${touchEntryRowClassName}`}
                         onClick={() => close()}
                       >
-                        {entry.label}
+                        <EntryLabel label={entry.label} current={entry.current} />
                       </a>
                     );
                   return (
                     <Button
                       key={index}
                       variant="ghost"
-                      className={`min-h-11 justify-start ${entry.type === 'destructive' ? 'text-destructive hover:text-destructive' : ''}`}
+                      className={`${touchEntryRowClassName} ${entry.type === 'destructive' ? 'text-destructive hover:text-destructive' : ''}`}
                       disabled={entry.disabled}
                       aria-current={entry.current ? 'page' : undefined}
                       onClick={() => select(entry)}
                     >
-                      {entry.label}
+                      <EntryLabel label={entry.label} current={entry.current} />
                     </Button>
                   );
                 })}
