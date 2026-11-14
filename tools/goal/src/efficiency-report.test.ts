@@ -851,7 +851,7 @@ test('Web campaign measures additions within its module roots and freezes below-
     const now = new Date('2026-10-31T02:00:00.000Z');
     const measurement = measureProductLineObservation(repository, bucket, now);
     expect(measurement).toMatchObject({
-      productLines: 10,
+      productLines: 11,
       attribution: 'measured',
       webProductLines: 6,
       webAttribution: 'measured',
@@ -877,7 +877,7 @@ test('Web campaign measures additions within its module roots and freezes below-
     expect(capture.snapshot.report).toContain(
       'Web campaign target status: below target (50,000 additions per completed hour).',
     );
-    expect(capture.snapshot.report).toContain('New product code: 10 lines (aggregate).');
+    expect(capture.snapshot.report).toContain('New product code: 11 lines (aggregate).');
     expect(capture.snapshot.report).toContain('New Web product code: 6 lines (hourly campaign target 50,000).');
     expect(capture.snapshot.report).not.toContain('stable target 20,000');
     expect(capture.snapshot.report).not.toContain('Two-hour product code is below');
@@ -885,7 +885,7 @@ test('Web campaign measures additions within its module roots and freezes below-
     const retry = captureHourlyEfficiencyObservation(h.db, {
       bucket,
       now: new Date('2026-10-31T02:20:00.000Z'),
-      productLineMeasurement: measuredLines(10, measurement.sourceRevision!, 7),
+      productLineMeasurement: measuredLines(11, measurement.sourceRevision!, 7),
     });
     expect(retry.disposition).toBe('conflicting');
     expect(retry.snapshot.report).toBe(capture.snapshot.report);
