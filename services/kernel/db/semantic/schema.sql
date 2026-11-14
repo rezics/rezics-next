@@ -227,6 +227,164 @@ $$;
 
 
 --
+-- Name: bump_title_input_home_revision(integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_home_revision(home integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF home IS NULL OR home < 0 OR home > 4095 THEN
+    RAISE EXCEPTION 'Invalid Semantic title-input home %', home USING ERRCODE = '23514';
+  END IF;
+  INSERT INTO semantic.title_input_home_revision(partition_no,revision)
+  VALUES(home,1)
+  ON CONFLICT(partition_no) DO UPDATE
+    SET revision=semantic.title_input_home_revision.revision+1;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_all_homes(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_all_homes() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE semantic.title_input_home_revision SET revision=revision+1;
+  RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_identity_mapping(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_identity_mapping() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  old_source integer;
+  old_control integer;
+  new_source integer;
+  new_control integer;
+  home integer;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    old_source := (to_jsonb(OLD)->>'route')::integer / 16;
+    old_control := (to_jsonb(OLD)->>'control_partition')::integer;
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    new_source := (to_jsonb(NEW)->>'route')::integer / 16;
+    new_control := (to_jsonb(NEW)->>'control_partition')::integer;
+  END IF;
+  FOR home IN
+    SELECT DISTINCT affected.home
+    FROM unnest(ARRAY[old_source,old_control,new_source,new_control]) AS affected(home)
+    WHERE affected.home IS NOT NULL
+    ORDER BY affected.home
+  LOOP
+    PERFORM semantic.bump_title_input_home_revision(home);
+  END LOOP;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_native_commit(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_native_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  affected_home integer;
+  affected_transaction uuid;
+  referenced boolean;
+BEGIN
+  IF TG_WHEN = 'BEFORE' THEN
+    affected_home := OLD.partition_no;
+    affected_transaction := OLD.transaction_id;
+  ELSE
+    affected_home := NEW.partition_no;
+    affected_transaction := NEW.transaction_id;
+  END IF;
+  SELECT EXISTS (
+    SELECT 1
+    FROM semantic.identity_epoch_original original
+    JOIN semantic.identity_epoch_native_commit native
+      ON native.partition_no=original.partition_no
+     AND native.transaction_id=original.closure_registration_transaction
+     AND native.xmin::text=original.closure_registration_xid
+    WHERE native.partition_no=affected_home AND native.transaction_id=affected_transaction
+  ) INTO referenced;
+  IF referenced THEN PERFORM semantic.bump_title_input_home_revision(affected_home); END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_partition(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_partition() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  old_home integer;
+  new_home integer;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    old_home := (to_jsonb(OLD)->>TG_ARGV[0])::integer;
+    PERFORM semantic.bump_title_input_home_revision(old_home);
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    new_home := (to_jsonb(NEW)->>TG_ARGV[0])::integer;
+    IF new_home IS DISTINCT FROM old_home THEN
+      PERFORM semantic.bump_title_input_home_revision(new_home);
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_route(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_route() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  old_home integer;
+  new_home integer;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    old_home := (to_jsonb(OLD)->>TG_ARGV[0])::integer / 16;
+    PERFORM semantic.bump_title_input_home_revision(old_home);
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    new_home := (to_jsonb(NEW)->>TG_ARGV[0])::integer / 16;
+    IF new_home IS DISTINCT FROM old_home THEN
+      PERFORM semantic.bump_title_input_home_revision(new_home);
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: capture_acceptance_current_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -2319,164 +2477,6 @@ BEGIN
      OR (NEW.visibility IS DISTINCT FROM OLD.visibility AND NEW.security_revision <= OLD.security_revision) THEN
     RAISE EXCEPTION 'Visibility changes require an increasing security revision' USING ERRCODE = '23514';
   END IF;
-  RETURN NEW;
-END;
-$$;
-
-
---
--- Name: bump_title_input_home_revision(integer); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.bump_title_input_home_revision(home integer) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF home IS NULL OR home < 0 OR home > 4095 THEN
-    RAISE EXCEPTION 'Invalid Semantic title-input home %', home USING ERRCODE = '23514';
-  END IF;
-  INSERT INTO semantic.title_input_home_revision(partition_no,revision)
-  VALUES(home,1)
-  ON CONFLICT(partition_no) DO UPDATE
-    SET revision=semantic.title_input_home_revision.revision+1;
-END;
-$$;
-
-
---
--- Name: bump_title_input_revision_all_homes(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.bump_title_input_revision_all_homes() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  UPDATE semantic.title_input_home_revision SET revision=revision+1;
-  RETURN NULL;
-END;
-$$;
-
-
---
--- Name: bump_title_input_revision_identity_mapping(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.bump_title_input_revision_identity_mapping() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-  old_source integer;
-  old_control integer;
-  new_source integer;
-  new_control integer;
-  home integer;
-BEGIN
-  IF TG_OP <> 'INSERT' THEN
-    old_source := (to_jsonb(OLD)->>'route')::integer / 16;
-    old_control := (to_jsonb(OLD)->>'control_partition')::integer;
-  END IF;
-  IF TG_OP <> 'DELETE' THEN
-    new_source := (to_jsonb(NEW)->>'route')::integer / 16;
-    new_control := (to_jsonb(NEW)->>'control_partition')::integer;
-  END IF;
-  FOR home IN
-    SELECT DISTINCT affected.home
-    FROM unnest(ARRAY[old_source,old_control,new_source,new_control]) AS affected(home)
-    WHERE affected.home IS NOT NULL
-    ORDER BY affected.home
-  LOOP
-    PERFORM semantic.bump_title_input_home_revision(home);
-  END LOOP;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-  RETURN NEW;
-END;
-$$;
-
-
---
--- Name: bump_title_input_revision_native_commit(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.bump_title_input_revision_native_commit() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-  affected_home integer;
-  affected_transaction uuid;
-  referenced boolean;
-BEGIN
-  IF TG_WHEN = 'BEFORE' THEN
-    affected_home := OLD.partition_no;
-    affected_transaction := OLD.transaction_id;
-  ELSE
-    affected_home := NEW.partition_no;
-    affected_transaction := NEW.transaction_id;
-  END IF;
-  SELECT EXISTS (
-    SELECT 1
-    FROM semantic.identity_epoch_original original
-    JOIN semantic.identity_epoch_native_commit native
-      ON native.partition_no=original.partition_no
-     AND native.transaction_id=original.closure_registration_transaction
-     AND native.xmin::text=original.closure_registration_xid
-    WHERE native.partition_no=affected_home AND native.transaction_id=affected_transaction
-  ) INTO referenced;
-  IF referenced THEN PERFORM semantic.bump_title_input_home_revision(affected_home); END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-  RETURN NEW;
-END;
-$$;
-
-
---
--- Name: bump_title_input_revision_partition(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.bump_title_input_revision_partition() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-  old_home integer;
-  new_home integer;
-BEGIN
-  IF TG_OP <> 'INSERT' THEN
-    old_home := (to_jsonb(OLD)->>TG_ARGV[0])::integer;
-    PERFORM semantic.bump_title_input_home_revision(old_home);
-  END IF;
-  IF TG_OP <> 'DELETE' THEN
-    new_home := (to_jsonb(NEW)->>TG_ARGV[0])::integer;
-    IF new_home IS DISTINCT FROM old_home THEN
-      PERFORM semantic.bump_title_input_home_revision(new_home);
-    END IF;
-  END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-  RETURN NEW;
-END;
-$$;
-
-
---
--- Name: bump_title_input_revision_route(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.bump_title_input_revision_route() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-  old_home integer;
-  new_home integer;
-BEGIN
-  IF TG_OP <> 'INSERT' THEN
-    old_home := (to_jsonb(OLD)->>TG_ARGV[0])::integer / 16;
-    PERFORM semantic.bump_title_input_home_revision(old_home);
-  END IF;
-  IF TG_OP <> 'DELETE' THEN
-    new_home := (to_jsonb(NEW)->>TG_ARGV[0])::integer / 16;
-    IF new_home IS DISTINCT FROM old_home THEN
-      PERFORM semantic.bump_title_input_home_revision(new_home);
-    END IF;
-  END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END;
 $$;
@@ -4711,19 +4711,6 @@ CREATE TABLE semantic.contribution_lifecycle (
     CONSTRAINT contribution_lifecycle_check2 CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
     CONSTRAINT contribution_lifecycle_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT contribution_lifecycle_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text, 'purged'::text])))
-);
-
-
---
--- Name: title_input_home_revision; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.title_input_home_revision (
-    partition_no integer NOT NULL,
-    revision bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT title_input_home_revision_check CHECK ((partition_no >= 0) AND (partition_no <= 4095)),
-    CONSTRAINT title_input_home_revision_check1 CHECK ((revision >= 0)),
-    CONSTRAINT title_input_home_revision_pkey PRIMARY KEY (partition_no)
 );
 
 
@@ -9203,6 +9190,18 @@ CREATE TABLE semantic.subject_page_work_home (
 
 
 --
+-- Name: title_input_home_revision; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.title_input_home_revision (
+    partition_no integer NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT title_input_home_revision_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT title_input_home_revision_revision_check CHECK ((revision >= 0))
+);
+
+
+--
 -- Name: acceptance_current acceptance_current_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -11376,6 +11375,14 @@ ALTER TABLE ONLY semantic.subject
 
 ALTER TABLE ONLY semantic.term_head
     ADD CONSTRAINT term_head_pkey PRIMARY KEY (route, subject_id, kind, language);
+
+
+--
+-- Name: title_input_home_revision title_input_home_revision_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.title_input_home_revision
+    ADD CONSTRAINT title_input_home_revision_pkey PRIMARY KEY (partition_no);
 
 
 --
@@ -15119,6 +15126,13 @@ CREATE TRIGGER subject_security_revision BEFORE UPDATE ON semantic.subject FOR E
 
 
 --
+-- Name: term_head term_head_canonical_name; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER term_head_canonical_name AFTER INSERT OR DELETE OR UPDATE ON semantic.term_head FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_subject_name();
+
+
+--
 -- Name: adoption title_input_revision_adoption; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -15347,13 +15361,6 @@ CREATE TRIGGER title_input_revision_term_head AFTER INSERT OR DELETE OR UPDATE O
 --
 
 CREATE TRIGGER title_input_revision_term_head_truncate AFTER TRUNCATE ON semantic.term_head FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
-
-
---
--- Name: term_head term_head_canonical_name; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE TRIGGER term_head_canonical_name AFTER INSERT OR DELETE OR UPDATE ON semantic.term_head FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_subject_name();
 
 
 --
