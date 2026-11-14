@@ -73,6 +73,22 @@ export const WatchManagementItemSchema = t.Union([
   t.Object(
     {
       ...watchManagementIdentity,
+      kind: t.Literal('thread'),
+      state: t.Literal('available'),
+      resourceId: ContentIdSchema,
+      title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
+      place: t.Object(
+        { boardId: ContentIdSchema, title: t.Union([t.String({ maxLength: 1024 }), t.Null()]) },
+        closed,
+      ),
+      command: WatchManagementCommandSchema,
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ...watchManagementIdentity,
+      kind: t.Literal('board'),
       state: t.Literal('available'),
       resourceId: ContentIdSchema,
       title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),

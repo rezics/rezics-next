@@ -4205,7 +4205,7 @@ unknown Boards return 404. Authentication and dependency errors retain their nat
 admitted missing exact key returns false/0. A current read never acknowledges an earlier PUT.
 This mounted producer is consumed by the Board page through a small local adapter while the shared publication
 owner's installed declarations are pending. The adapter uses this DTO and OpenAPI operation directly; it does not
-generate a second client. The existing watch GET/PUT and management ABI are unchanged.
+generate a second client. The existing watch GET/PUT and management commands are unchanged.
 
 ### Cost: private Board watch companion
 
@@ -4254,8 +4254,8 @@ command authorization; `removeWatch` still reauthorizes. Changed advice during t
 
 The native reader is
 `listWatches(deps: WatchDependencies, actor: Actor, accountId: string, input: {kind: WatchManagementKind; limit?: number; cursor?: string}, deadline: number): Promise<WatchManagementPage>`;
-`WatchManagementItem` is the closed available/unavailable union with `command`, and `WatchManagementPage` is
-`{viewer,actions,items,next}`.
+`WatchManagementItem` is the closed union of available thread items, available Board items and unavailable items,
+each with `command`; `WatchManagementPage` is `{viewer,actions,items,next}`.
 Web imports `createKernelClient(origin: string, options?: KernelClientOptions): KernelClient` from `@rezics/client`;
 options are `{fetch?, headers?, session?, onSession?}`. The generated inventory contract uses
 `client.accounts({accountId}).watches.get({query: {kind, limit?, cursor?}})`;
@@ -4268,7 +4268,7 @@ The Web transport factory is
 Its options are `{fetch?, headers?, session?, onSession?}`. Create one instance per viewer; `session` is the initial
 session token and `onSession(token)` receives replacements. The package exports `WatchManagementKind`,
 `WatchManagementItem` and `WatchManagementPage` from its narrow source contract at
-`packages/client/src/kernel/content/watch-management-contract.ts`, mirrored from the closed Kernel schema above.
+`packages/client/src/kernel/content/watch-management-contract.ts`, which must mirror the closed Kernel schema above.
 Mounted route call types use a narrow source adapter for the paths above until the supported complete-input
 generator can publish the complete route type; replace that adapter only through supported generation, never by
 editing emitted declarations.
@@ -4284,10 +4284,26 @@ substitute for native disclosure or history-growth verification.
 Client declaration generation must succeed before Web compiles these methods; publishing OpenAPI alone does not
 install the typed client.
 
-Available rows contain `{id,kind,revision,createdAt,state:'available',resourceId,title,command}`. Denied and absent
-resources both return `{id,kind,revision,createdAt,state:'unavailable',command}`. They contain no title, author, place,
-owner, destination or denial reason; `command` is the owned subscription identity after a ban. Concurrent removal
-skips the row and advances its raw key. Sparse or empty pages can continue; there is no request refill. Encrypted
+Available Board rows retain `{id,kind:'board',revision,createdAt,state:'available',resourceId,title,command}`.
+Available thread rows contain `{id,kind:'thread',revision,createdAt,state:'available',resourceId,title,place,command}`,
+with the required closed `place: {boardId,title}` from the thread's current native Board. Both titles retain their
+native nullable value and 1024-character contract bound. Content owns this projection and closed contract; Web owns
+Settings labels and destinations built from the admitted thread `resourceId` and `place.boardId`. For example, two
+`Announcements` threads can carry different Board titles before the member selects an exact removal command.
+The place adds no command authority and contains no Realm label or copied community presentation.
+
+Each thread observation admits `readThread` and its selected `readBoard` under the same actor and original deadline,
+then uses that thread read's retained original source and Board/Access checks after the place await. Both page rounds
+compare the original thread and Board witnesses, including native partition/epoch, identity, title, visibility,
+security revision, availability, the thread's Board and the Board's Realm identity. The retained check cannot replace the
+original witness or anchor. A changed still-disclosed witness requires a retry; a concealed or absent thread or Board
+uses the existing unavailable shape, discarding all previously observed target and place labels. An initially
+unavailable item that becomes disclosed also requires a retry.
+
+Denied and absent resources both return `{id,kind,revision,createdAt,state:'unavailable',command}`. They contain no
+resource identity, title, author, place, Realm label, owner, destination or denial reason; `command` is the owned
+subscription identity after a ban. Concurrent removal skips the row and advances its raw key. Sparse or empty pages
+can continue; there is no request refill. Encrypted
 cursors bind viewer, selection, page size, client, operator, authentication epoch and actor-home partition generation,
 retaining database microsecond keys. Native self-account authority precedes cursor parsing and new receipt lookups.
 
@@ -4328,7 +4344,13 @@ existing mandatory path.
   all first-pass hydration, followed by the same account, session and home checks. Each source-row read returns at
   most one active episode and preserves its resource, creation time and revision; the page stores compact native
   context witnesses, not first-post bodies or copied Realm authority.
-- Bound: `Q_self + Q_home + 2*Q_update + Q_range(R) + R*(Q_native_initial + Q_episode) + P*(Q_native_final + Q_episode) + Q_self_final + Q_home_final`, where R≤100 raw keys are examined and P≤20 are retained. The range is one statement/at most 100 physical subscription rows; each `Q_episode` is one statement/at most one physical source row. Each `Q_update` is one account:update preparation/evaluation for the whole page. Native calls include their actual preparations, evaluations, board/Realm disclosure, transaction controls and thread's selected first-post read. They release all checkouts between calls; Access uses its configured pools, and no cross-home atomic snapshot is implied. The inventory retains only compact target witnesses and the returned title, not native first-post bodies or copied authority. A failed request returns no partial page or cursor; a same-cursor retry repeats the dispatched read work. GET has no registered runner phase; removals remain on the existing `runCommand` receipt/history phases below. Memory is O(R+P+D), with D bounded by the existing native reader limits; output contains at most 20 closed DTOs, current viewer/action advice and a cursor of at most 4096 characters. There is no refill or all-partition query.
+  Each disclosed thread additionally selects its exact native Board once per round (`Q_place`), then runs its retained
+  original thread finalizer (`Q_thread_recheck`). These add at most 100 initial and 20 final Board reads and the same
+  number of thread finalizations. Concealed threads skip the place lookup; concealed places skip the finalizer.
+  Board management adds neither operation. The place lookup includes all native Board/Realm/Access work; the thread
+  finalizer includes its exact chain/first-post read, original Board recheck, current Access evaluations and native
+  citation work. No Board scan, shared authority cache or new command work is introduced.
+- Bound: `Q_self + Q_home + 2*Q_update + Q_range(R) + R*(Q_native_initial + Q_episode) + P*(Q_native_final + Q_episode) + (R+P)*(Q_place + Q_thread_recheck) + Q_self_final + Q_home_final`, where R≤100 raw keys are examined and P≤20 are retained; `Q_place` and `Q_thread_recheck` are zero for Board management. The range is one statement/at most 100 physical subscription rows; each `Q_episode` is one statement/at most one physical source row. Each `Q_update` is one account:update preparation/evaluation for the whole page. Native calls include their actual preparations, evaluations, board/Realm disclosure, transaction controls and thread's selected first-post read. They release all checkouts between calls; Access uses its configured pools, and no cross-home atomic snapshot is implied. The inventory retains only compact target/place witnesses and the returned titles and identities, not native first-post bodies or copied authority. A failed request returns no partial page or cursor; a same-cursor retry repeats the dispatched read work. GET has no registered runner phase; removals remain on the existing `runCommand` receipt/history phases below. Memory is O(R+P+D), with D bounded by the existing native reader limits; output contains at most 20 closed DTOs (including at most 20 closed thread places), current viewer/action advice and a cursor of at most 4096 characters. There is no refill or all-partition query.
 - Growth check: `board-watch-growth.test.ts` executes both mounted selections at 256/1024/4096 with fixed selected
   identities, homes and page limits while separately seeding unrelated identities, selected identity rows, selected
   post revision history and expired selected/unrelated Access grants. Captures retain actual SQL, transaction

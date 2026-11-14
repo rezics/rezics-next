@@ -28,7 +28,15 @@ type WatchRow = { watch_id: string; resource_id: string; created_at: string; rev
 export type ManagedWatch = WatchManagementItem;
 
 type TargetObservation = Readonly<{
-  presentation: Readonly<{ resourceId: string; title: string | null }> | null;
+  presentation:
+    | Readonly<{
+        kind: 'thread';
+        resourceId: string;
+        title: string | null;
+        place: Readonly<{ boardId: string; title: string | null }>;
+      }>
+    | Readonly<{ kind: 'board'; resourceId: string; title: string | null }>
+    | null;
   witness: string | null;
 }>;
 
@@ -240,13 +248,34 @@ async function observeTarget(
   deadline: number,
 ): Promise<TargetObservation> {
   try {
-    const result =
-      kind === 'thread'
-        ? await readThread(deps, resourceId, { actor, deadline })
-        : await readBoard(deps, resourceId, { actor, deadline });
+    if (kind === 'thread') {
+      let finishThread: (() => Promise<Awaited<ReturnType<typeof readThread>>>) | undefined;
+      const result = await readThread(deps, resourceId, { actor, deadline }, (finish) => {
+        finishThread = finish;
+      });
+      if (!result.value) return { presentation: null, witness: null };
+      const targetWitness = nativeTargetWitness('thread', result);
+      const target = { kind: 'thread' as const, resourceId: result.value.id, title: result.value.title };
+      const place = await readBoard(deps, result.value.boardId, { actor, deadline });
+      if (!place.value) return { presentation: null, witness: null };
+      const placeWitness = nativeTargetWitness('board', place);
+      const presentation = {
+        ...target,
+        place: { boardId: place.value.id, title: place.value.title },
+      };
+      // Keep the thread's original source and Board/Access checks across the added place read.
+      if (!finishThread) throw new ProblemError('dependency_unavailable');
+      const current = await finishThread();
+      if (!current.value) return { presentation: null, witness: null };
+      if (nativeTargetWitness('thread', current) !== targetWitness)
+        throw new ProblemError('dependency_unavailable');
+      // Both page rounds compare these originals; the finalizer never replaces their anchors.
+      return { presentation, witness: JSON.stringify([targetWitness, placeWitness]) };
+    }
+    const result = await readBoard(deps, resourceId, { actor, deadline });
     if (!result.value) return { presentation: null, witness: null };
     return {
-      presentation: { resourceId: result.value.id, title: result.value.title },
+      presentation: { kind, resourceId: result.value.id, title: result.value.title },
       // The native view and its partition epoch are the observation. A refreshed boolean cannot replace it.
       witness: nativeTargetWitness(kind, result),
     };
