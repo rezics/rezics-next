@@ -48,23 +48,36 @@ export function QueryPublicationView({
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [target, setTarget] = useState<'public' | 'unlisted'>(visibility === 'public' ? 'public' : 'unlisted');
+  const [retentionProblem, setRetentionProblem] = useState(false);
   const live = useRef(true);
   const running = useRef(false);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     live.current = true;
-    const saved = sessionStorage.getItem(storageKey);
-    if (saved) {
-      // Retained browser bytes are an external file boundary. Invalid bytes must not create a new request.
-      const data: unknown = JSON.parse(saved);
-      if (!isRecord(data)) throw new Error('Invalid retained publication request');
-      const { id: retainedId, ...request } = data;
-      const input = queryPublicationInput(request);
-      const id =
-        retainedId === null ? null : queryPublicationAddress({ collectionId: input.collectionId, id: retainedId }).id;
-      const transport = capture();
-      if (input.collectionId === collectionId && transport) setAttempt({ input, id, transport });
+    let saved: string | null = null;
+    try {
+      saved = sessionStorage.getItem(storageKey);
+    } catch {
+      setRetentionProblem(true);
+      setConfirmed(false);
+    }
+    if (saved !== null) {
+      try {
+        // Retained browser bytes are an external file boundary. Invalid bytes must not create a new request.
+        const data: unknown = JSON.parse(saved);
+        if (!isRecord(data)) throw new Error('Invalid retained publication request');
+        const { id: retainedId, ...request } = data;
+        const input = queryPublicationInput(request);
+        if (input.collectionId !== collectionId) throw new Error('Invalid retained publication address');
+        const id =
+          retainedId === null ? null : queryPublicationAddress({ collectionId: input.collectionId, id: retainedId }).id;
+        const transport = capture();
+        if (transport) setAttempt({ input, id, transport });
+      } catch {
+        setRetentionProblem(true);
+        setConfirmed(false);
+      }
     }
     setLoaded(true);
     return () => {
@@ -72,10 +85,19 @@ export function QueryPublicationView({
     };
   }, [storageKey]);
 
+  function persist(current: Attempt) {
+    try {
+      // A lost begin acknowledgement is recoverable with precisely the original key/body as well.
+      sessionStorage.setItem(storageKey, JSON.stringify({ ...current.input, id: current.id }));
+    } catch {
+      setRetentionProblem(true);
+    }
+  }
+
   function retain(current: Attempt) {
-    // A lost begin acknowledgement is recoverable with precisely the original key/body as well.
-    sessionStorage.setItem(storageKey, JSON.stringify({ ...current.input, id: current.id }));
+    // Keep the exact request in memory even when the browser will not retain it.
     setAttempt(current);
+    persist(current);
   }
 
   async function run(current: Attempt) {
@@ -96,10 +118,18 @@ export function QueryPublicationView({
         setFailure(result.reason);
         return;
       }
-      retain({ ...current, id: result.status.id });
+      const accepted = { ...current, id: result.status.id };
+      setAttempt(accepted);
       setStatus(result.status);
-      if (result.status.phase === 'complete' || result.status.phase === 'refused')
-        sessionStorage.removeItem(storageKey);
+      if (result.status.phase === 'complete' || result.status.phase === 'refused') {
+        try {
+          sessionStorage.removeItem(storageKey);
+        } catch {
+          setRetentionProblem(true);
+        }
+      } else {
+        persist(accepted);
+      }
     } catch (error) {
       // A failed fetch cannot tell whether a dispatched command committed. Keep the original request.
       if (!(error instanceof TypeError)) throw error;
@@ -136,6 +166,7 @@ export function QueryPublicationView({
       </h1>
       <p className="text-muted-foreground">{m.library_query_publication_description()}</p>
       <p>{m.library_publication_privacy()}</p>
+      {retentionProblem ? <p role="alert">{m.library_query_publication_unknown()}</p> : null}
       {!attempt ? (
         <>
           <Field className="min-w-0 flex-row flex-wrap items-center gap-3">
@@ -184,7 +215,7 @@ export function QueryPublicationView({
         </>
       ) : (
         <>
-          <p>{m.library_query_publication_recovery()}</p>
+          {!retentionProblem ? <p>{m.library_query_publication_recovery()}</p> : null}
           {status && !complete && !refused ? <p role="status">{m.library_publication_pending()}</p> : null}
           {refused ? <p role="alert">{m.library_publication_denied()}</p> : null}
           {complete ? (
