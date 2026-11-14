@@ -9,8 +9,9 @@ Two measures run together, and neither replaces the other:
   cannot create journeys. A journey is accepted only when it works end to end on the integrated revision, seen in the
   running-product walkthrough, which runs at least every three hours, or by a native receipt. Track the burn-down of
   the remaining journeys and the projected finish date.
-- **Landed product lines measure throughput**, against the hourly floor below. They show whether the work system is
-  producing at the rate the burn-down needs.
+- **Landed product lines measure throughput.** The overall total shows whether the work system is producing at the
+  rate the burn-down needs; report it separately as a measure, not another target. The Web campaign target is defined
+  below.
 
 Landings and attempts are diagnostics; allowance and worker occupancy explain cost. Compare windows only across
 comparable outcome classes, stages, model profiles and actual worker exposure, not configured width or raw task count.
@@ -24,15 +25,19 @@ Each coding worker targets at least 1,000 landed product lines per worker-hour. 
 separate source delivery, check waits, and unknown attribution. When a worker is below target, repair the brief,
 admission, or verification cause and keep independent code moving. Do not add code merely to meet the count.
 
-Target 20,000 landed product lines per hour, aiming for 40,000, alongside accepted journeys and quality. Count
-additions under `apps/`, `services/` and `packages/` excluding tests, stories, fixtures, recordings, JSON, snapshots
-and generated files, including emitted declarations. Never pad output or subtract deletions.
+Report overall landed product additions across `apps/`, `services/` and `packages/` separately from Web campaign
+output, alongside accepted journeys and quality. Exclude tests, stories, fixtures, recordings, JSON, snapshots and
+generated files, including emitted declarations. Count additions without subtracting deletions; never pad output.
 
-During the Web reconstruction campaign, the hourly delivery target is at least 50,000 landed product lines,
-alongside useful, published frontend outcomes. This is a target, not a claim about measured output. Apply the
-same exclusions above; duplicated implementations, unnecessary abstractions, formatting churn and artificial
-expansion do not qualify. Prefer removing bad code when that produces the better product, even when it lowers
-the measured additions. Report the actual shortfall instead of weakening quality or changing the denominator.
+During the current Web reconstruction campaign, target at least 50,000 high-quality landed product additions from
+Web campaign source per completed hour. This Web-only target is not a target for overall product throughput, and is
+not a claim about measured output. Apply the exclusions above; duplicated implementations, unnecessary abstractions,
+formatting churn and artificial expansion do not qualify. Prefer removing bad code when that produces the better
+product, even when it lowers measured additions. Report the actual shortfall instead of weakening quality or changing
+the denominator.
+
+Decision: The current Web-only campaign target is 50,000 high-quality product additions per completed hour; overall
+product throughput remains a separate measure.
 
 The Web manager owns assignment, priority, independent refill, actual worker starts and integration follow-through
 without waiting for another maintainer prompt. Use up to the authorized 32 concurrent Web workers when independent
@@ -41,11 +46,12 @@ checkpoints; queued tasks and a `running` label alone are not evidence of produc
 repeated setup failure or landing bottleneck in its owning module rather than repeating the same failed attempt.
 
 Every hourly delivery assessment pairs the product-line measure with changed routes, integrated revisions and
-published visual results. A six-hour reconstruction interval without useful visible delivery is a delivery failure
-requiring immediate replanning. Storybook and verification assist reconstruction; during the authorized source-only
-wave, do not insert frontend tests or typing as a prerequisite for writing or review publication. Keep the single
-publication program moving under the [review cadence](storybook.md#review-publication-cadence), preserving native
-authorization, money semantics and the separate release acceptance obligations.
+published visual results. Choose the next-hour action from observed source output and visible product outcomes. A
+six-hour reconstruction interval without useful visible delivery is a delivery failure requiring immediate
+replanning. Storybook and verification assist reconstruction; during the authorized source-only wave, do not insert
+frontend tests or typing as a prerequisite for writing or review publication. Keep the single publication program
+moving under the [review cadence](storybook.md#review-publication-cadence), preserving native authorization, money
+semantics and the separate release acceptance obligations.
 
 Size one coherent outcome for one worker, typically 1,000–2,000 product lines in about an hour. This is an
 estimate, not a quota. Split only at a real dependency; complete independent parts and hold only their receiving

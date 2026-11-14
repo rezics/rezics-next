@@ -184,13 +184,14 @@ Escalate to the supermanager only a cross-Goal impasse, a scope or resource trad
 fault requiring live control-plane access. Neither reporting lines nor delayed responses should serialize independent work.
 
 Efficiency is measured without model tokens. An hourly report to the project's Telegram group, in Traditional
-Chinese, leads with new product code landed in the last full clock hour under apps, services and packages, excluding
-tests, stories, fixtures, recordings, generated files, JSON, evidence and documents, against the steady 20,000-line
-target and 40,000-line aim, then width, stopped tasks, ready briefs per Goal and allowance. It raises alarms for a
-two-hour total below the target, unfilled width, a Goal with fewer than three ready briefs, more than ten stopped
-tasks, and no product landing for 60 minutes. The supermanager acts on alarms. When a cause is unclear, it
-commissions a one-off measurement from session logs and the task store instead of a standing review. Lines are a
-measure, never a goal: quality comes first.
+Chinese, leads with qualifying Web campaign product additions landed in the last full clock hour against the
+[current Web campaign target](efficiency.md#output-and-flow), alongside overall landed product throughput across
+apps, services and packages as a separate measure. Exclude tests, stories, fixtures, recordings, generated files,
+JSON, evidence and documents. Then report width, stopped tasks, ready briefs per Goal and allowance. It raises alarms
+for a two-hour Web total below its two-hour target, unfilled width, a Goal with fewer than three ready briefs, more
+than ten stopped tasks, and no product landing for 60 minutes. The supermanager acts on alarms. When a cause is
+unclear, it commissions a one-off measurement from session logs and the task store instead of a standing review.
+Lines are a measure, never a goal: quality comes first.
 
 The control plane exists to maximize sustained delivery of useful, accepted work per unit of time and allowance.
 Remove orchestration steps that add waiting without improving delivery. Control-plane owns delivery-tool defects;

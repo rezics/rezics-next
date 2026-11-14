@@ -27,9 +27,10 @@ or hand it to its owner within 15 minutes, then retry the affected tasks.
 
 ## Hourly target
 
-After every full clock hour below the 20,000-line product target, the supermanager is woken with the hour's numbers.
-It analyses the causes from the task store and run logs, acts on the largest within the same hour, and reports the
-cause and action in the project's Telegram group, without waiting to be asked.
+After every completed hour below the [current Web campaign target](efficiency.md#output-and-flow), the supermanager
+is woken with Web campaign additions, overall product throughput, source changes and visible product outcomes. It uses the
+observed source output and visible outcomes to analyse causes from the task store and run logs, choose the next-hour
+action, and report the cause and action in the project's Telegram group without waiting to be asked.
 
 ## Implementation sprint width
 
