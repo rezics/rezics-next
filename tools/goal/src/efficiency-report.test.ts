@@ -227,15 +227,18 @@ test('an unfinished-hour preview leaves the later measured scheduled send availa
       productLineMeasurement: measuredLines(123, 'd'.repeat(40)),
     });
     expect(capture).toMatchObject({ disposition: 'captured', attribution: 'measured' });
+    const deliveredReport = join(h.directory.path, 'scheduled-report.txt');
+    const notifier = `require('node:fs').writeFileSync(${JSON.stringify(deliveredReport)}, process.argv[process.argv.length - 1]);`;
     const delivery = await sendHourlyEfficiencyReport(
       h.db,
       bucket,
       capture.snapshot.report,
-      [process.execPath, '-e', ''],
+      [process.execPath, '-e', notifier],
       2000,
       new Date('2026-10-31T07:03:00.000Z'),
     );
     expect(delivery.disposition).toBe('sent');
+    expect(readFileSync(deliveredReport, 'utf8')).toBe(capture.snapshot.report);
 
     const frozen = readFrozenHourlyEfficiencyReport(h.db, bucket)!;
     expect(frozen.observation).toMatchObject({
