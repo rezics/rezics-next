@@ -202,9 +202,7 @@ test('operator plans authored COPY character traits and imports exact supported 
       subjects[id] = { subject };
       const restored = await readBindings();
       expect(restored.concepts.map((item) => item.code).sort()).toEqual(['i73', 'main']);
-      expect(restored.concepts.map((item) => item.id).sort()).toEqual(
-        bindings.concepts.map((item) => item.id).sort(),
-      );
+      expect(restored.concepts.map((item) => item.id).sort()).toEqual(bindings.concepts.map((item) => item.id).sort());
     }
     const again = await importVndbCharacterTraits({
       tables: authoredTables(),

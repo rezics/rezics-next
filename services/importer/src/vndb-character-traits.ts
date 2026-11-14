@@ -60,9 +60,11 @@ function copyId(value: unknown, pattern: RegExp): string | undefined {
 }
 
 function adoptedContents(read: unknown, property: string): string[] {
-  const statements = (read as {
-    subject?: { statements?: Record<string, { rank?: string; value?: { content?: unknown } }[]> };
-  }).subject?.statements?.[property];
+  const statements = (
+    read as {
+      subject?: { statements?: Record<string, { rank?: string; value?: { content?: unknown } }[]> };
+    }
+  ).subject?.statements?.[property];
   if (!Array.isArray(statements)) return [];
   return statements.flatMap((statement) =>
     (statement.rank === 'normal' || statement.rank === 'preferred') && typeof statement.value?.content === 'string'
