@@ -117,8 +117,7 @@ function OwnDraftCommandFeedback({
       : feedback.action === 'publish'
         ? m.own_drafts_ack_publish({}, { locale })
         : m.own_drafts_ack_erase({}, { locale });
-  const readback =
-    feedback.state === 'readback' && typeof feedback.readback === 'object' ? feedback.readback : null;
+  const readback = feedback.state === 'readback' && typeof feedback.readback === 'object' ? feedback.readback : null;
   return (
     <section
       id={id}
@@ -180,7 +179,9 @@ function OwnDraftCommandFeedback({
               locale={locale}
               current={current}
             />
-          ) : <p>{m.own_drafts_readback_body_unavailable({}, { locale })}</p>}
+          ) : (
+            <p>{m.own_drafts_readback_body_unavailable({}, { locale })}</p>
+          )}
         </article>
       ) : null}
       {feedback.state === 'readback' && !readback ? (
@@ -1083,15 +1084,23 @@ function BoundOwnDraftsPage({
                           </li>
                         ))}
                       </ul>
-                    ) : <p>{m.own_drafts_no_references({}, { locale })}</p>}
+                    ) : (
+                      <p>{m.own_drafts_no_references({}, { locale })}</p>
+                    )}
                   </section>
                   <section className="space-y-2" aria-label={m.own_drafts_media({}, { locale })}>
                     <h4 className="font-medium">{m.own_drafts_media({}, { locale })}</h4>
                     {selection.entry.mediaIds.length ? (
                       <ul className="flex flex-wrap gap-2">
-                        {selection.entry.mediaIds.map((id) => <li key={id}><code>{id}</code></li>)}
+                        {selection.entry.mediaIds.map((id) => (
+                          <li key={id}>
+                            <code>{id}</code>
+                          </li>
+                        ))}
                       </ul>
-                    ) : <p>{m.own_drafts_no_references({}, { locale })}</p>}
+                    ) : (
+                      <p>{m.own_drafts_no_references({}, { locale })}</p>
+                    )}
                   </section>
                 </article>
                 {localWriting?.state === 'loading' ? (

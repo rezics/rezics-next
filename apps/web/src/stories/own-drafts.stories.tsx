@@ -28,16 +28,19 @@ const nextRevision = '0192f3a0-6c1e-7b2a-9d4e-000000000008';
 
 /** Illustrative documents using the installed schema; no attachment or identity reads. */
 function structuredDraft(source: string): DocumentSnapshot {
-  const prose = fromMarkdown([
-    `## ${source} / 観測記録`,
-    '日本語の本文。 The supplied document language stays separate from the interface.',
-    '> A quotation remains a quotation.',
-    '- First observation\n- Second observation',
-    '1. Inspect both sources\n2. Choose deliberately',
-    '[Supplied reference](https://example.test/field-notes)',
-    `Before the spoiler. >!${source}: the hidden conclusion.!< After the spoiler.`,
-    `\`\`\`typescript\nconst observation = '${'wide-token-'.repeat(24)}';\n  console.log(observation);\n\`\`\``,
-  ].join('\n\n'), 'blocks');
+  const prose = fromMarkdown(
+    [
+      `## ${source} / 観測記録`,
+      '日本語の本文。 The supplied document language stays separate from the interface.',
+      '> A quotation remains a quotation.',
+      '- First observation\n- Second observation',
+      '1. Inspect both sources\n2. Choose deliberately',
+      '[Supplied reference](https://example.test/field-notes)',
+      `Before the spoiler. >!${source}: the hidden conclusion.!< After the spoiler.`,
+      `\`\`\`typescript\nconst observation = '${'wide-token-'.repeat(24)}';\n  console.log(observation);\n\`\`\``,
+    ].join('\n\n'),
+    'blocks',
+  );
   return {
     ...prose,
     doc: withDocumentIds({
@@ -48,13 +51,39 @@ function structuredDraft(source: string): DocumentSnapshot {
           type: 'table',
           attrs: { lang: 'ja' },
           content: [
-            { type: 'tableRow', content: ['Direction / 方角', 'Observation / 観測', 'Context / 文脈', 'Status / 状態'].map((text) => ({ type: 'tableHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] })) },
-            { type: 'tableRow', content: ['North / 北', 'A complete wide table cell with an unbroken value: ' + 'observation'.repeat(12), 'Keep the original order and all supplied text.', 'Saved / 保存済み'].map((text) => ({ type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] })) },
+            {
+              type: 'tableRow',
+              content: ['Direction / 方角', 'Observation / 観測', 'Context / 文脈', 'Status / 状態'].map((text) => ({
+                type: 'tableHeader',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+              })),
+            },
+            {
+              type: 'tableRow',
+              content: [
+                'North / 北',
+                'A complete wide table cell with an unbroken value: ' + 'observation'.repeat(12),
+                'Keep the original order and all supplied text.',
+                'Saved / 保存済み',
+              ].map((text) => ({
+                type: 'tableCell',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+              })),
+            },
           ],
         },
         { type: 'image', attrs: { src: mediaId, alt: 'Field notes illustration without a supplied derivative' } },
-        { type: 'media', attrs: { src: mediaId, kind: 'file', caption: 'Field notes attachment; no download presentation supplied' } },
-        { type: 'paragraph', content: [{ type: 'text', text: 'Unresolved supplied mention: ' }, { type: 'mention', attrs: { accountId } }] },
+        {
+          type: 'media',
+          attrs: { src: mediaId, kind: 'file', caption: 'Field notes attachment; no download presentation supplied' },
+        },
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Unresolved supplied mention: ' },
+            { type: 'mention', attrs: { accountId } },
+          ],
+        },
       ],
     }),
   };
@@ -264,10 +293,17 @@ function OwnDraftStory(args: StoryArgs) {
     <>
       {args.scenario === 'structured-save' || args.scenario === 'structured-publish' ? (
         <aside role="note" className="border-b border-border bg-muted p-4 text-sm">
-          Illustrative successful command and current read using installed contracts. This fixture does not establish native save or publication evidence.
+          Illustrative successful command and current read using installed contracts. This fixture does not establish
+          native save or publication evidence.
         </aside>
       ) : null}
-      <OwnDraftsPage identity={identity} active reader={reader} {...(commands ? { commands } : {})} {...(localWritingReader ? { localWritingReader } : {})} />
+      <OwnDraftsPage
+        identity={identity}
+        active
+        reader={reader}
+        {...(commands ? { commands } : {})}
+        {...(localWritingReader ? { localWritingReader } : {})}
+      />
     </>
   );
 }
@@ -421,15 +457,24 @@ const inspectStructured: NonNullable<Story['play']> = async ({ canvasElement, ar
   await userEvent.click(
     (await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) }))[0]!,
   );
-  const server = within(await view.findByRole('article', { name: m.own_drafts_server_source({}, { locale: args.locale }) }));
+  const server = within(
+    await view.findByRole('article', { name: m.own_drafts_server_source({}, { locale: args.locale }) }),
+  );
   const heading = server.getByRole('heading', { name: 'Server field notes / 観測記録' });
   await expect(heading).toHaveAttribute('id');
   await expect(server.getByRole('table')).toBeVisible();
   await expect(server.getByText('First observation')).toBeVisible();
   await expect(server.getByText('A quotation remains a quotation.')).toBeVisible();
-  await expect(server.getByRole('link', { name: 'Supplied reference' })).toHaveAttribute('href', 'https://example.test/field-notes');
-  await expect(server.getByRole('img', { name: 'Field notes illustration without a supplied derivative' })).toHaveTextContent(m.content_edition_image_unavailable({}, { locale: args.locale }));
-  await expect(server.getByRole('button', { name: m.wide_document_code_inspect({}, { locale: args.locale }) })).toBeVisible();
+  await expect(server.getByRole('link', { name: 'Supplied reference' })).toHaveAttribute(
+    'href',
+    'https://example.test/field-notes',
+  );
+  await expect(
+    server.getByRole('img', { name: 'Field notes illustration without a supplied derivative' }),
+  ).toHaveTextContent(m.content_edition_image_unavailable({}, { locale: args.locale }));
+  await expect(
+    server.getByRole('button', { name: m.wide_document_code_inspect({}, { locale: args.locale }) }),
+  ).toBeVisible();
   await expect(view.getByRole('heading', { level: 1 })).toHaveFocus();
 };
 
@@ -459,7 +504,9 @@ export const StructuredRecovery: Story = {
     await expect(view.getByRole('article').querySelector('[aria-expanded="false"]')).not.toBeNull();
     await userEvent.click(browser.getByRole('button', { name: m.own_drafts_use_browser({}, { locale }) }));
     await expect(view.queryByRole('heading', { name: 'Server field notes / 観測記録' })).not.toBeInTheDocument();
-    await expect(context.canvasElement.querySelector('[role="textbox"].ProseMirror')).toHaveTextContent('Browser field notes / 観測記録');
+    await expect(context.canvasElement.querySelector('[role="textbox"].ProseMirror')).toHaveTextContent(
+      'Browser field notes / 観測記録',
+    );
   },
 };
 export const BrowserUnknown: Story = {
@@ -479,15 +526,20 @@ const readStructured: NonNullable<Story['play']> = async (context) => {
   const view = within(context.canvasElement);
   const locale = context.args.locale;
   await userEvent.click(view.getByRole('button', { name: m.own_drafts_use_server({}, { locale }) }));
-  await userEvent.click(await view.findByRole('button', {
-    name: context.args.scenario === 'structured-publish' ? m.own_drafts_publish() : m.thread_edit_save(),
-  }));
+  await userEvent.click(
+    await view.findByRole('button', {
+      name: context.args.scenario === 'structured-publish' ? m.own_drafts_publish() : m.thread_edit_save(),
+    }),
+  );
   await expect(view.queryByRole('heading', { name: 'Current post field notes / 観測記録' })).not.toBeInTheDocument();
   await userEvent.click(await view.findByRole('button', { name: m.own_drafts_readback({}, { locale }) }));
   const readback = within(await view.findByRole('article', { name: m.own_drafts_readback_heading({}, { locale }) }));
   await expect(readback.getByRole('heading', { name: 'Current post field notes / 観測記録' })).toBeVisible();
   await expect(readback.getByRole('table')).toBeVisible();
-  await expect(readback.getByRole('button', { name: m.thread_reveal_spoiler({}, { locale }) })).toHaveAttribute('aria-expanded', 'false');
+  await expect(readback.getByRole('button', { name: m.thread_reveal_spoiler({}, { locale }) })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
   await expect(view.getByText(m.own_drafts_submitted_context({}, { locale }))).toBeVisible();
 };
 
@@ -499,10 +551,31 @@ export const StructuredPublishedReadback: Story = {
   args: { scenario: 'structured-publish' },
   play: readStructured,
 };
-export const StructuredGerman: Story = { args: { scenario: 'structured-recovery', locale: 'de' }, play: inspectStructured };
-export const StructuredSpanish: Story = { args: { scenario: 'structured-recovery', locale: 'es' }, play: inspectStructured };
-export const StructuredFrench: Story = { args: { scenario: 'structured-recovery', locale: 'fr' }, play: inspectStructured };
-export const StructuredJapanese: Story = { args: { scenario: 'structured-recovery', locale: 'ja' }, play: inspectStructured };
-export const StructuredKorean: Story = { args: { scenario: 'structured-recovery', locale: 'ko' }, play: inspectStructured };
-export const StructuredSimplifiedChinese: Story = { args: { scenario: 'structured-recovery', locale: 'zh-Hans' }, play: inspectStructured };
-export const StructuredTraditionalChinese: Story = { args: { scenario: 'structured-recovery', locale: 'zh-Hant' }, play: inspectStructured };
+export const StructuredGerman: Story = {
+  args: { scenario: 'structured-recovery', locale: 'de' },
+  play: inspectStructured,
+};
+export const StructuredSpanish: Story = {
+  args: { scenario: 'structured-recovery', locale: 'es' },
+  play: inspectStructured,
+};
+export const StructuredFrench: Story = {
+  args: { scenario: 'structured-recovery', locale: 'fr' },
+  play: inspectStructured,
+};
+export const StructuredJapanese: Story = {
+  args: { scenario: 'structured-recovery', locale: 'ja' },
+  play: inspectStructured,
+};
+export const StructuredKorean: Story = {
+  args: { scenario: 'structured-recovery', locale: 'ko' },
+  play: inspectStructured,
+};
+export const StructuredSimplifiedChinese: Story = {
+  args: { scenario: 'structured-recovery', locale: 'zh-Hans' },
+  play: inspectStructured,
+};
+export const StructuredTraditionalChinese: Story = {
+  args: { scenario: 'structured-recovery', locale: 'zh-Hant' },
+  play: inspectStructured,
+};

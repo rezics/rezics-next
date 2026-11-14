@@ -196,10 +196,7 @@ test('browser writing stays separate until the person names it as the editor sou
     state: 'unsent' as const,
     payload: prepareWriting(
       'Browser-only title',
-      fromMarkdown(
-        '## Independent browser body\n\nBefore >!Browser secret!< after.\n\n- A browser item',
-        'blocks',
-      ),
+      fromMarkdown('## Independent browser body\n\nBefore >!Browser secret!< after.\n\n- A browser item', 'blocks'),
     ),
   };
   const reader: OwnDraftReader = {
@@ -402,12 +399,24 @@ test('equal preview replacement retires disclosure, a wide inspector and late cl
   const originalClipboard = Object.getOwnPropertyDescriptor(fixture.window.navigator, 'clipboard');
   Object.defineProperty(fixture.window.navigator, 'clipboard', {
     configurable: true,
-    value: { writeText: () => new Promise<void>((resolve) => { finishCopy = resolve; }) },
+    value: {
+      writeText: () =>
+        new Promise<void>((resolve) => {
+          finishCopy = resolve;
+        }),
+    },
   });
   const render = (visitKey: string, source: 'server' | 'browser' = 'server') =>
-    fixture.renderComponent(createElement(OwnDraftBodyPreview, {
-      document, source, visitKey, documentLanguage: 'ja', locale: 'en', current: () => true,
-    }));
+    fixture.renderComponent(
+      createElement(OwnDraftBodyPreview, {
+        document,
+        source,
+        visitKey,
+        documentLanguage: 'ja',
+        locale: 'en',
+        current: () => true,
+      }),
+    );
   try {
     await render('first');
     expect(fixture.host.querySelector('img')).toBeNull();
@@ -431,10 +440,17 @@ test('equal preview replacement retires disclosure, a wide inspector and late cl
     await act(async () => finishCopy!());
     expect(fixture.window.document.activeElement).toBe(focus);
     expect(fixture.host.textContent).not.toContain(m.wide_document_code_copied());
-    await fixture.renderComponent(createElement(OwnDraftBodyPreview, {
-      document: null, fallbackText: 'Text-only recovery', source: 'browser', visitKey: 'text',
-      documentLanguage: null, locale: 'en', current: () => true,
-    }));
+    await fixture.renderComponent(
+      createElement(OwnDraftBodyPreview, {
+        document: null,
+        fallbackText: 'Text-only recovery',
+        source: 'browser',
+        visitKey: 'text',
+        documentLanguage: null,
+        locale: 'en',
+        current: () => true,
+      }),
+    );
     expect(fixture.host.textContent).toContain(m.own_drafts_browser_text_fallback());
     expect(fixture.host.textContent).toContain('Text-only recovery');
     expect(fixture.host.querySelector('[data-slot="post-reading-body"]')).toBeNull();
