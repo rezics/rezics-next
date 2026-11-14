@@ -112,7 +112,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   let confirmPrivacy = false;
   let confirmTimestamps = false;
   const coordinates = new ImportPageCoordinates(-1);
-  let pageRequest: { command: Extract<BangumiCommand, { kind: 'page' }>; loadedStage: 'review' | 'results' } | null = null;
+  let pageRequest: { command: Extract<BangumiCommand, { kind: 'page' }>; loadedStage: 'review' | 'results' } | null =
+    null;
   let generation = 0;
 
   function live(): boolean {
@@ -563,7 +564,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       uploadText = null;
       return loadPage(response.uploadId, -1);
     }
-    if (command.kind === 'page') return loadPage(command.uploadId, command.after, true, pageRequest?.loadedStage ?? 'review');
+    if (command.kind === 'page')
+      return loadPage(command.uploadId, command.after, true, pageRequest?.loadedStage ?? 'review');
     if (command.kind === 'review') {
       const response = await run(command, () => port.review(command), true);
       if (response?.kind === 'reviewed' && uploadId) return loadPage(uploadId, after);

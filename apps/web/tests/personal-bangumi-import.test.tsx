@@ -892,7 +892,10 @@ test('Bangumi failed movement recovers and source, cancellation and reader retir
   const fresh = createBangumiJourney({ port: f.port, visit: current });
   await fresh.loadPage(id, -1);
   let finish!: (value: Awaited<ReturnType<BangumiImportPort['page']>>) => void;
-  f.port.page = () => new Promise((resolve) => { finish = resolve; });
+  f.port.page = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
   const late = fresh.nextPage();
   current.retire();
   finish({ kind: 'page', page: pageOf([row(20)], { next: 29 }) });

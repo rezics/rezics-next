@@ -124,11 +124,14 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     timestamps: restored?.sourceConsent.timestamps ?? false,
   });
 
-  useEffect(() => () => {
-    coordinates.current.retire();
-    pageRequest.current = null;
-    visit.retire();
-  }, [visit]);
+  useEffect(
+    () => () => {
+      coordinates.current.retire();
+      pageRequest.current = null;
+      visit.retire();
+    },
+    [visit],
+  );
 
   function live() {
     return visit.current() && sender.current.subject === visit.subject && sender.current.csrfToken === visit.csrfToken;
@@ -145,7 +148,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     generation.current += 1;
     setQuestionLoading(false);
     retireCoordinates();
-    setPage((current) => current ? { ...current, canceled: true } : current);
+    setPage((current) => (current ? { ...current, canceled: true } : current));
   }
 
   function resetPrivate() {
@@ -221,7 +224,8 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     sourceConsent = confirmFlags.current,
     retry = false,
   ) {
-    if (!live() || sending.current || (unknownRef.current && (!retry || !sameCommand(unknownRef.current, command)))) return;
+    if (!live() || sending.current || (unknownRef.current && (!retry || !sameCommand(unknownRef.current, command))))
+      return;
     const token = generation.current;
     sending.current = true;
     setBusy(true);
@@ -314,14 +318,16 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       const next = { ...current };
       for (const row of rows) {
         const prior = current[row.index];
-        const sameReview = priorVersions.has(row.index) && priorVersions.get(row.index) === (row.review?.version ?? null);
-        next[row.index] = prior && sameReview
-          ? prior
-          : {
-              ...draftFromRow(row),
-              ...(row.selectedFields ? { fields: [...row.selectedFields] } : {}),
-              ...(preserveFields && prior ? { fields: prior.fields } : {}),
-            };
+        const sameReview =
+          priorVersions.has(row.index) && priorVersions.get(row.index) === (row.review?.version ?? null);
+        next[row.index] =
+          prior && sameReview
+            ? prior
+            : {
+                ...draftFromRow(row),
+                ...(row.selectedFields ? { fields: [...row.selectedFields] } : {}),
+                ...(preserveFields && prior ? { fields: prior.fields } : {}),
+              };
       }
       return next;
     });
@@ -596,7 +602,14 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       }
     } else if (command.kind === 'page') {
       const request = pageRequest.current;
-      await loadPage(command.id, command.after, request?.switchToReview ?? true, request?.preserveFields ?? false, true, command);
+      await loadPage(
+        command.id,
+        command.after,
+        request?.switchToReview ?? true,
+        request?.preserveFields ?? false,
+        true,
+        command,
+      );
     } else if (command.kind === 'review') {
       const response = await run(command, () => port.review(command), sourceConsent, true);
       if (response?.kind === 'reviewed' && live()) {
@@ -679,9 +692,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
           </MalAction>
         </div>
       ) : null}
-      {pageFailure && !unknownCommand ? (
-        <ImportPageReadRecovery busy={locked} onRetry={retryPage} />
-      ) : null}
+      {pageFailure && !unknownCommand ? <ImportPageReadRecovery busy={locked} onRetry={retryPage} /> : null}
       {stage === 'upload' ? (
         <>
           <MalUploadForm busy={busy} disabled={locked} onUpload={(xml) => void upload(xml)} />

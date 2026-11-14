@@ -251,7 +251,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   let confirmPrivacy = false;
   let confirmTimestamps = false;
   const coordinates = new ImportPageCoordinates(-1);
-  let pageRequest: { command: Extract<AniListCommand, { kind: 'page' }>; loadedStage: 'review' | 'results' } | null = null;
+  let pageRequest: { command: Extract<AniListCommand, { kind: 'page' }>; loadedStage: 'review' | 'results' } | null =
+    null;
   let generation = 0;
   let questionGeneration = 0;
   let question: AniListQuestion | null = null;
@@ -823,7 +824,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       uploadText = null;
       return loadPage(response.importId, -1);
     }
-    if (command.kind === 'page') return loadPage(command.importId, command.after, true, pageRequest?.loadedStage ?? 'review');
+    if (command.kind === 'page')
+      return loadPage(command.importId, command.after, true, pageRequest?.loadedStage ?? 'review');
     if (command.kind === 'review') {
       const response = await run(command, () => port.review(command), true);
       if (response?.kind === 'reviewed' && importId) return loadPage(importId, after);

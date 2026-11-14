@@ -38,7 +38,12 @@ export function AniListReviewPage({
     <section className="space-y-6" data-anilist-stage="review">
       <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
       <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
-      <p ref={pageStatus} role="status" tabIndex={-1} className="rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+      <p
+        ref={pageStatus}
+        role="status"
+        tabIndex={-1}
+        className="rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+      >
         {m.library_anilist_page_status({
           shown: snap.page.length,
           total: snap.count,

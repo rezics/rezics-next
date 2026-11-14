@@ -62,10 +62,13 @@ function makePort(navigation?: NavigationState): MalImportPort {
     },
   ];
   if (navigation === 'retained-edge') {
-    for (let index = rows.length; index < 11; index += 1) rows.push({
-      ...structuredClone(rows[0]!), index, title: `Illustrative item ${index + 1}`,
-      identifier: { namespace: 'mal_anime', source: 'mal_anime', value: String(42 + index) },
-    });
+    for (let index = rows.length; index < 11; index += 1)
+      rows.push({
+        ...structuredClone(rows[0]!),
+        index,
+        title: `Illustrative item ${index + 1}`,
+        identifier: { namespace: 'mal_anime', source: 'mal_anime', value: String(42 + index) },
+      });
   }
   return {
     async preview() {
@@ -236,9 +239,10 @@ function makePort(navigation?: NavigationState): MalImportPort {
 
 function MalImportStory({ navigation }: { navigation?: NavigationState } = {}) {
   const port = useMemo(() => makePort(navigation), [navigation]);
-  const sample = navigation === 'retained-edge'
-    ? `<myanimelist>${Array.from({ length: 11 }, (_, index) => `<anime><series_animedb_id>${42 + index}</series_animedb_id><series_title>Illustrative item ${index + 1}</series_title><my_status>Watching</my_status><my_score>8</my_score></anime>`).join('')}</myanimelist>`
-    : xml;
+  const sample =
+    navigation === 'retained-edge'
+      ? `<myanimelist>${Array.from({ length: 11 }, (_, index) => `<anime><series_animedb_id>${42 + index}</series_animedb_id><series_title>Illustrative item ${index + 1}</series_title><my_status>Watching</my_status><my_score>8</my_score></anime>`).join('')}</myanimelist>`
+      : xml;
   const visit = useMemo<MalVisit>(() => {
     const controller = new AbortController();
     let custody: MalDeliveryCustody | null = null;

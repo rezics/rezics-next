@@ -1144,20 +1144,34 @@ function navigationFixture() {
   let failure: 'unavailable' | 'unknown' | null = null;
   let canceled = false;
   const port: MalImportPort = {
-    async preview() { return { kind: 'previewed', id }; },
-    async readQuestion() { return { kind: 'unavailable' }; },
-    async readVote() { return { kind: 'unavailable' }; },
+    async preview() {
+      return { kind: 'previewed', id };
+    },
+    async readQuestion() {
+      return { kind: 'unavailable' };
+    },
+    async readVote() {
+      return { kind: 'unavailable' };
+    },
     async page(command) {
       reads.push(structuredClone(command));
       if (failure === 'unavailable') return { kind: 'unavailable' };
-      if (failure === 'unknown') return {
-        kind: 'unknown',
-        command: { ...command, custody: { viewer: 'alice', csrfToken: 'csrf-1', credential: 'original-reader' } },
+      if (failure === 'unknown')
+        return {
+          kind: 'unknown',
+          command: { ...command, custody: { viewer: 'alice', csrfToken: 'csrf-1', credential: 'original-reader' } },
+        };
+      const current =
+        rows.get(command.after) ??
+        row({ index: command.after, title: `Item ${command.after}`, target: subject, match: 'matched' });
+      return {
+        kind: 'page',
+        page: pageOf(command.after === 17 ? [] : [structuredClone(current)], {
+          canceled,
+          total: 100,
+          next: coordinates[coordinates.indexOf(command.after) + 1] ?? null,
+        }),
       };
-      const current = rows.get(command.after) ?? row({ index: command.after, title: `Item ${command.after}`, target: subject, match: 'matched' });
-      return { kind: 'page', page: pageOf(command.after === 17 ? [] : [structuredClone(current)], {
-        canceled, total: 100, next: coordinates[coordinates.indexOf(command.after) + 1] ?? null,
-      }) };
     },
     async review(command) {
       rows.set(command.input.row, reviewedRow(row({ index: command.input.row, target: subject }), command));
@@ -1167,11 +1181,27 @@ function navigationFixture() {
       applies.push(structuredClone(command));
       return { kind: 'applied', result: { id, stopped: false, remaining: [], outcomes: [] } };
     },
-    async admitSource() { return { kind: 'admitted' }; },
-    async cancel() { canceled = true; return { kind: 'done', id }; },
-    async delete() { return { kind: 'done', id }; },
+    async admitSource() {
+      return { kind: 'admitted' };
+    },
+    async cancel() {
+      canceled = true;
+      return { kind: 'done', id };
+    },
+    async delete() {
+      return { kind: 'done', id };
+    },
   };
-  return { port, coordinates, reads, applies, rows, fail: (next: typeof failure) => { failure = next; } };
+  return {
+    port,
+    coordinates,
+    reads,
+    applies,
+    rows,
+    fail: (next: typeof failure) => {
+      failure = next;
+    },
+  };
 }
 
 test('MAL retains eight observed predecessors, rereads sparse pages and confirms only the current page', async () => {
@@ -1197,7 +1227,9 @@ test('MAL retains eight observed predecessors, rereads sparse pages and confirms
   expect(document.activeElement).toBe(status);
   const navigation = host.querySelector('nav[aria-label]')!;
   expect([...navigation.querySelectorAll('button')].map((item) => item.textContent)).toEqual([
-    m.library_import_first_page(), m.library_import_previous_page(), m.library_mal_next_page(),
+    m.library_import_first_page(),
+    m.library_import_previous_page(),
+    m.library_mal_next_page(),
   ]);
   expect([...navigation.querySelectorAll('button')].every((item) => item.className.includes('min-h-11'))).toBe(true);
   await click(m.library_mal_continue_confirm());
@@ -1249,7 +1281,10 @@ test('MAL reader replacement ignores a late moved page and starts with no predec
   await uploadXml();
   expect(button(m.library_import_previous_page())?.disabled).toBe(true);
   let finish!: (value: Awaited<ReturnType<MalImportPort['page']>>) => void;
-  f.port.page = () => new Promise((resolve) => { finish = resolve; });
+  f.port.page = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
   await click(m.library_mal_next_page());
   current.retire();
   await mount(f.port, visit('bob', 'csrf-b'));
@@ -1264,7 +1299,10 @@ test('MAL replacement upload and cancellation retire pending independent score r
   const f = navigationFixture();
   f.port.readQuestion = async () => ({ kind: 'question', question });
   let finish!: (value: Awaited<ReturnType<NonNullable<MalImportPort['readVote']>>>) => void;
-  f.port.readVote = () => new Promise((resolve) => { finish = resolve; });
+  f.port.readVote = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
   await mount(f.port);
   await uploadXml();
   await click(m.library_mal_read_question());

@@ -46,7 +46,12 @@ export function BangumiReviewPage({
     <section className="space-y-6" data-bangumi-stage="review">
       <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
       <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
-      <p ref={pageStatus} role="status" tabIndex={-1} className="rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+      <p
+        ref={pageStatus}
+        role="status"
+        tabIndex={-1}
+        className="rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+      >
         {snap.count === 0
           ? m.library_import_retained_page({ shown: snap.page.length })
           : m.library_bangumi_page_status({ shown: snap.page.length, total: snap.count, after: snap.after + 1 })}

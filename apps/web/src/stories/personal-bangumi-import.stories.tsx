@@ -54,9 +54,13 @@ function makePort(navigation?: NavigationState): BangumiImportPort {
   let firstApply = true;
   let cancelled = false;
   let labelState: BangumiLabelState | null = null;
-  const supplied = navigation === 'retained-edge'
-    ? Array.from({ length: 11 }, (_, ordinal) => ({ ...collections[ordinal % collections.length]!, subject_id: 12345 + ordinal }))
-    : collections;
+  const supplied =
+    navigation === 'retained-edge'
+      ? Array.from({ length: 11 }, (_, ordinal) => ({
+          ...collections[ordinal % collections.length]!,
+          subject_id: 12345 + ordinal,
+        }))
+      : collections;
   const rows: BangumiRow[] = supplied.map((source, ordinal) => ({
     ordinal,
     evidence: {
@@ -104,10 +108,15 @@ function makePort(navigation?: NavigationState): BangumiImportPort {
       lastAfter = command.after;
       const current = navigation ? rows.filter((row) => row.ordinal > command.after).slice(0, 1) : rows;
       const last = current.at(-1)?.ordinal;
-      return { kind: 'page', page: {
-        uploadId, cancelled, rows: structuredClone(current),
-        next: navigation && last !== undefined && last < rows.length - 1 ? last : null,
-      } };
+      return {
+        kind: 'page',
+        page: {
+          uploadId,
+          cancelled,
+          rows: structuredClone(current),
+          next: navigation && last !== undefined && last < rows.length - 1 ? last : null,
+        },
+      };
     },
     async review(command) {
       const row = rows[command.ordinal]!;

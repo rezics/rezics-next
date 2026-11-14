@@ -20,7 +20,10 @@ type NavigationState = 'observed' | 'failed-previous' | 'retained-edge';
 const owner = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
 const subject = '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb';
 const importId = '0192f3a0-6c1e-7b2a-9d4e-00000000cccc';
-const reviewIds = Array.from({ length: 11 }, (_, index) => `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`);
+const reviewIds = Array.from(
+  { length: 11 },
+  (_, index) => `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`,
+);
 const titles = ['Zero means unrated', 'Clear the old vote', 'Guard unavailable', 'Unmatched source title'];
 const sourceScores = [0, 8, 6, 0];
 const existingVotes: (number | null)[] = [5, 9, null, null];

@@ -1,4 +1,8 @@
-import { ImportPageNavigation, useImportPageFocus, type ImportPagePosition } from '../personal-list-import/page-navigation';
+import {
+  ImportPageNavigation,
+  useImportPageFocus,
+  type ImportPagePosition,
+} from '../personal-list-import/page-navigation';
 import { ImportDetails, ImportEmpty } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import type { MalOwnVoteReadback, MalPage, MalQuestion } from './contract';
@@ -55,7 +59,12 @@ export function MalReviewPage({
     <section className="space-y-6" data-mal-stage="review">
       <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
       <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
-      <p ref={pageStatus} role="status" tabIndex={-1} className="rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+      <p
+        ref={pageStatus}
+        role="status"
+        tabIndex={-1}
+        className="rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+      >
         {m.library_mal_page_status({
           shown: page.rows.length,
           total: page.total,

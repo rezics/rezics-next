@@ -1120,7 +1120,10 @@ test('AniList movement cannot replace an uncertain apply and retires with source
   const fresh = createAniListJourney({ port: f.port, visit: current });
   await fresh.loadPage(id, -1);
   let finish!: (value: Awaited<ReturnType<AniListImportPort['page']>>) => void;
-  f.port.page = () => new Promise((resolve) => { finish = resolve; });
+  f.port.page = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
   const late = fresh.nextPage();
   current.retire();
   finish({ kind: 'page', page: pageOf([row(20)], { next: 29 }) });
@@ -1169,7 +1172,10 @@ test('AniList cancellation retires a pending independent question read', async (
   const f = recordingPort(1);
   const answer = await f.port.question();
   let finish!: (value: Awaited<ReturnType<AniListImportPort['question']>>) => void;
-  f.port.question = () => new Promise((resolve) => { finish = resolve; });
+  f.port.question = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
   const journey = createAniListJourney({ port: f.port, visit: visit() });
   await journey.preview(envelope(1));
   const pending = journey.readQuestion();
