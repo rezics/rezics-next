@@ -103,10 +103,7 @@ test('401 renews once while other denials are not retried and unsafe origins rec
     'manual',
   ]);
   expect(requests[1]!.wire).toEqual(requests[0]!.wire);
-  expect(requests.map(({ authorization }) => authorization)).toEqual([
-    'Bearer expired-token',
-    'Bearer renewed-token',
-  ]);
+  expect(requests.map(({ authorization }) => authorization)).toEqual(['Bearer expired-token', 'Bearer renewed-token']);
   expect(scheduled).toEqual([1_200]);
 
   for (const status of [401, 403, 404, 409, 422]) {
