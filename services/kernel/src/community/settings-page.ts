@@ -3,8 +3,6 @@ import { documentText, DocumentSnapshotSchema } from '@rezics/document';
 import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
 import {
-  deadlineClient,
-  within,
   readExactPublishedRules,
   rulesKey,
   exactRealmPresentationImage,
@@ -14,7 +12,6 @@ import {
 } from './domain-ports.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Actor } from '../request/access.ts';
@@ -25,6 +22,7 @@ import { readRealm, readRealmSettingsHead, realmReadEligibility } from './realm-
 import { type RealmDependencies } from './realm.ts';
 import { readSpace, spaceReadEligibility } from './space-read.ts';
 import type { CommunityAmbient } from './ambient.ts';
+import { withManagementReadSnapshot } from './management-read-connection.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -136,49 +134,37 @@ async function sourceRound(deps: Dependencies, actor: Actor, realmId: string, sp
     },
     context,
   );
-  return within(deadline, () =>
-    withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      let time: Awaited<ReturnType<typeof mintReadTime>> | undefined;
-      try {
-        time = await mintReadTime(client, deps.clock);
-        const home = await readPartition(client, partitionOf(route));
-        if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
-        if (!(await manage(client, time)) || !(await disclose(client, time)) || !(await discloseHost(client, time)))
-          throw hidden();
-        const at = authoritativeTimeValue(time);
-        const realm = await readRealmSettingsHead(client, realmId, at);
-        const host = await readSpace(client, spaceId, at);
-        const binding = await bindingRead.run(client, {
-          ...resource,
-          subject: null,
-          at,
-        });
-        if (!realm || !host || !binding || realm.spaceId !== spaceId) throw hidden();
-        await client.query('COMMIT');
-        return {
-          realm,
-          host,
-          binding,
-          home: {
-            node: home.node,
-            epoch: home.epoch,
-            writeState: home.writeState,
-          },
-        };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      } finally {
-        if (time) releaseOperationalTime(time);
-      }
-    }),
-  );
+  let time: Awaited<ReturnType<typeof mintReadTime>> | undefined;
+  try {
+    return await withManagementReadSnapshot(deps.pool, deadline, async (client) => {
+      time = await mintReadTime(client, deps.clock);
+      const home = await readPartition(client, partitionOf(route));
+      if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+      if (!(await manage(client, time)) || !(await disclose(client, time)) || !(await discloseHost(client, time)))
+        throw hidden();
+      const at = authoritativeTimeValue(time);
+      const realm = await readRealmSettingsHead(client, realmId, at);
+      const host = await readSpace(client, spaceId, at);
+      const binding = await bindingRead.run(client, {
+        ...resource,
+        subject: null,
+        at,
+      });
+      if (!realm || !host || !binding || realm.spaceId !== spaceId) throw hidden();
+      return {
+        realm,
+        host,
+        binding,
+        home: {
+          node: home.node,
+          epoch: home.epoch,
+          writeState: home.writeState,
+        },
+      };
+    });
+  } finally {
+    if (time) releaseOperationalTime(time);
+  }
 }
 
 async function selected(

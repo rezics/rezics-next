@@ -1,9 +1,13 @@
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
-import { deadlineClient, within, accessCheck, AuthenticationError } from './domain-ports.ts';
+import { accessCheck, AuthenticationError } from './domain-ports.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
-import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  releaseOperationalTime,
+  type AuthoritativeTime,
+} from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccessClient, Actor } from '../request/access.ts';
@@ -15,6 +19,7 @@ import bindingRead from './container-lifecycle-binding.sql';
 import continuityRead from './realm-continuity-read.sql';
 import exactRead from './realm-claim-status-read.sql';
 import currentRead from './realm-claim-status-mine.sql';
+import { withManagementReadSnapshot } from './management-read-connection.ts';
 
 export type RealmClaimStatus = Readonly<{
   realmId: string;
@@ -75,26 +80,17 @@ export const readOwnRealmClaimPage: ReadOwnRealmClaimPage = async (deps, actor, 
   const unavailable = () =>
     new ProblemError('dependency_unavailable', { detail: 'Native Realm claim source changed.' });
 
-  const snapshot = <T>(read: (client: AccessClient, time: AuthoritativeTime) => Promise<T>) =>
-    within(context.deadline, () =>
-      withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, context.deadline);
-        try {
-          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          const time = await mintReadTime(client, deps.clock);
-          const value = await read(client, time);
-          await client.query('COMMIT');
-          return value;
-        } catch (error) {
-          try {
-            await connection.query('ROLLBACK');
-          } catch {
-            discardConnection(connection, new Error('Realm claim read rollback failed'));
-          }
-          throw error;
-        }
-      }),
-    );
+  const snapshot = async <T>(read: (client: AccessClient, time: AuthoritativeTime) => Promise<T>) => {
+    let time: AuthoritativeTime | undefined;
+    try {
+      return await withManagementReadSnapshot(deps.pool, context.deadline, async (client) => {
+        time = await mintReadTime(client, deps.clock);
+        return read(client, time);
+      });
+    } finally {
+      if (time) releaseOperationalTime(time);
+    }
+  };
 
   const source = async (client: AccessClient, time: AuthoritativeTime) => {
     const partition = await readPartition(client, partitionNo);

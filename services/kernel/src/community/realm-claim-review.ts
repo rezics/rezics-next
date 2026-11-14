@@ -1,11 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { readPublicIdentities, deadlineClient, PLATFORM_RESOURCE, accessCheck } from './domain-ports.ts';
+import { readPublicIdentities, PLATFORM_RESOURCE, accessCheck } from './domain-ports.ts';
 import type { PublicIdentity } from '../access/account-data.ts';
 import globalContext from '../access/bootstrap-governance-read.sql';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -16,7 +15,8 @@ import page from './realm-claim-review-page.sql';
 import current from './realm-claim-review-current.sql';
 import inspection from './realm-claim-review-page-inspection.sql';
 import { readRealmHomePresentation } from './realm-home-presentation.ts';
-import type { Access, Actor } from '../request/access.ts';
+import type { Access, AccessClient, Actor } from '../request/access.ts';
+import { withManagementReadConnection, withManagementReadSnapshot } from './management-read-connection.ts';
 
 export type RealmClaimantPresentation = Readonly<{ label: string; href: string | null }>;
 export type RealmClaimApprovalAdvice = Readonly<{
@@ -200,8 +200,8 @@ export async function listRealmClaimRequests(
   };
   // Mint on a released connection before ordinary Access prepares actor evidence.
   async function admission() {
-    const time = await withConnection(deps.pool, (client) =>
-      mintReadTime(deadlineClient(client, context.deadline), clock),
+    const time = await withManagementReadConnection(deps.pool, context.deadline, (client) =>
+      mintReadTime(client, clock),
     );
     try {
       const check = await accessCheck(deps.access, actor, 'realm:approve_claim', PLATFORM_RESOURCE, {
@@ -214,30 +214,15 @@ export async function listRealmClaimRequests(
       throw error;
     }
   }
-  async function snapshot<T>(work: (client: ReturnType<typeof deadlineClient>) => Promise<T>): Promise<T> {
-    return withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const result = await work(client);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    });
+  async function snapshot<T>(work: (client: AccessClient) => Promise<T>): Promise<T> {
+    return withManagementReadSnapshot(deps.pool, context.deadline, work);
   }
-  async function partition(client: ReturnType<typeof deadlineClient>, targetRoute: number) {
+  async function partition(client: AccessClient, targetRoute: number) {
     const value = await readPartition(client, partitionOf(targetRoute));
     if (!value || value.writeState === 'moved') throw new ProblemError('partition_unavailable');
     return value;
   }
-  async function authorize(client: ReturnType<typeof deadlineClient>, prepared: Awaited<ReturnType<typeof admission>>) {
+  async function authorize(client: AccessClient, prepared: Awaited<ReturnType<typeof admission>>) {
     await partition(client, PLATFORM_RESOURCE.route);
     if (
       !(await globalContext.run(client, { route: PLATFORM_RESOURCE.route, resource_id: PLATFORM_RESOURCE.id }))

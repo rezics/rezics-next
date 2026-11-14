@@ -4,7 +4,6 @@ import type { PublicIdentity } from '../access/account-data.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
 import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessClient, Actor } from '../request/access.ts';
@@ -25,6 +24,7 @@ import sourceRead from './ban-review-page-source.sql';
 import windowRead from './ban-review-page-window.sql';
 import selectedRead from './ban-review-page-selected.sql';
 import contextRead from './ban-review-page-context.sql';
+import { withManagementReadConnection, withManagementReadSnapshot } from './management-read-connection.ts';
 
 // Admission bounds derive from the native reason (1024 scalars), Account profile
 // (4096 scalars) and handle (64 ASCII) contracts, including JSON escaping.
@@ -101,22 +101,7 @@ export async function readBanReviewPage(
     if (canonicalize(actor) !== caller) throw changed();
   };
   const snapshot = <T>(read: (client: AccessClient) => Promise<T>) =>
-    withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const result = await read(client);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    });
+    withManagementReadSnapshot(deps.pool, context.deadline, read);
   async function home(client: AccessClient) {
     const value = await readPartition(client, partitionOf(route!));
     if (!value || value.writeState === 'moved') throw new ProblemError('partition_unavailable');
@@ -124,8 +109,8 @@ export async function readBanReviewPage(
   }
   async function admission() {
     assertCaller();
-    const time = await withConnection(deps.pool, (client) =>
-      mintReadTime(deadlineClient(client, context.deadline), deps.clock),
+    const time = await withManagementReadConnection(deps.pool, context.deadline, (client) =>
+      mintReadTime(client, deps.clock),
     );
     try {
       const check = await accessCheck(deps.access, actor, 'realm:ban', resource, { ...accessContext, time });
@@ -194,8 +179,8 @@ export async function readBanReviewPage(
     return result;
   }
   async function optionalContext(source: Source): Promise<BanReviewPage['context']> {
-    const time = await withConnection(deps.pool, (client) =>
-      mintReadTime(deadlineClient(client, context.deadline), deps.clock),
+    const time = await withManagementReadConnection(deps.pool, context.deadline, (client) =>
+      mintReadTime(client, deps.clock),
     );
     try {
       const host = { route, id: source.spaceId };
