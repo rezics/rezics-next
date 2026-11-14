@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import type { LibraryExportStatus } from '@rezics/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -1246,6 +1246,7 @@ test('bytes-lost presentation offers original replay rather than download and re
 test('restore navigation uses the router and keeps the completed original archive for the same owner', async () => {
   const fixture = recordingPort(pagesFor(1));
   const router = await mount(fixture.port);
+  const blockers = spyOn(router.history, 'block');
   await click(m.library_export_capture());
   await waitFor(m.library_export_ready());
   const original = completedArchiveFor('alice')!;
@@ -1257,7 +1258,21 @@ test('restore navigation uses the router and keeps the completed original archiv
     destination.dispatchEvent(activation);
   });
   expect(activation.defaultPrevented).toBe(true);
-  await waitFor(m.library_export_leave_completed(), document.body);
+  await waitFor(m.library_export_leave_completed(), document.body).catch((cause) => {
+    throw new Error(
+      `Export departure state: ${JSON.stringify({
+        isServer: router.isServer,
+        location: router.state.location.pathname,
+        history: router.history.location.pathname,
+        status: router.state.status,
+        routes: router.state.matches.map((match) => match.routeId),
+        blockerSubscriptions: blockers.mock.calls.length,
+        stage: host.querySelector('[data-export-stage]')?.getAttribute('data-export-stage'),
+        dialogs: document.querySelectorAll('[role="alertdialog"]').length,
+      })}`,
+      { cause },
+    );
+  });
   const leave = [...document.querySelectorAll('button')].find((item) => item.textContent === m.library_export_leave())!;
   await act(async () => {
     leave.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
