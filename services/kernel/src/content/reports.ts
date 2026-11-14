@@ -2,6 +2,7 @@ import { communityReportReadCheck, communityReportTargetFacts } from '../communi
 import { ProblemError } from '../http/problem-error.ts';
 import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
+import { withReportReadConnection } from './report-read-connection.ts';
 import {
   deadlineClient,
   within,
@@ -23,7 +24,6 @@ import {
   type PrincipalCommandOptions,
   type PrincipalCommandReceipt,
 } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { anonymousCommandTarget, anonymousRequestDigest, requestDigest } from '../command/request.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccessClient, AccessCheck, Actor } from '../request/access.ts';
@@ -182,29 +182,14 @@ async function snapshot<T>(
   deadline: number,
   work: (client: AccessClient) => Promise<T>,
 ): Promise<Anchored<T>> {
-  return within(deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partitionNo = partitionOf(route(id));
-        const partition = await readPartition(client, partitionNo);
-        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        const value = await work(client);
-        await client.query('COMMIT');
-        return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+  return withReportReadConnection(dependencies.pool, deadline, async (client) => {
+    const partitionNo = partitionOf(route(id));
+    const partition = await readPartition(client, partitionNo);
+    if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+    if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+    const value = await work(client);
+    return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
+  });
 }
 
 /** Security fences only, without loading revision bodies. All probes include the

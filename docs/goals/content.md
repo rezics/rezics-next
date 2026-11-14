@@ -58,6 +58,9 @@ authority, preferences and lifecycle ports. Semantic owns Book/Series/Edition bi
 identity. Commerce owns personal Library, follows, Collections, financial and rights authority. Search owns public
 discovery sources, results, continuations and their query and default-worker assembly.
 
+Decision: Report and moderation reads use one Content-owned repeatable-read transaction wrapper for the full original
+deadline; unresolved native I/O is discarded without queuing rollback behind it.
+
 Decision: Content owns large-serial Book release-candidate acceptance; Web links to it for the mounted journey.
 Chapter count, outline count and a complete release have no 512 business ceiling. Request envelopes, pages and
 preparation steps may be capped under [architecture's bounds](../architecture.md), without limiting total book size.

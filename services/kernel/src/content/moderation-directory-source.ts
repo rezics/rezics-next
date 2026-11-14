@@ -1,8 +1,7 @@
 import type { Pool } from 'pg';
 import { mintReadTime, type AuthoritativeTime } from '../command/command.ts';
 import { createHash } from 'node:crypto';
-import { deadlineClient, within } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { withReportReadConnection } from './report-read-connection.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from './access-port.ts';
 import type { Actor, AccessClient } from '../request/access.ts';
@@ -32,26 +31,13 @@ async function exact<T>(
 ): Promise<Readonly<{ epoch: number; value: T }> | null> {
   const route = routeOf(id);
   if (route === null) return null;
-  return within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition || partition.writeState === 'moved') {
-          await client.query('COMMIT');
-          return null;
-        }
-        const time = await mintReadTime(client);
-        const value = await read(client, time);
-        await client.query('COMMIT');
-        return { epoch: partition.epoch, value };
-      } catch (error) {
-        await connection.query('ROLLBACK');
-        throw error;
-      }
-    }),
-  );
+  return withReportReadConnection(pool, deadline, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    if (!partition || partition.writeState === 'moved') return null;
+    const time = await mintReadTime(client);
+    const value = await read(client, time);
+    return { epoch: partition.epoch, value };
+  });
 }
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('base64url');
 
