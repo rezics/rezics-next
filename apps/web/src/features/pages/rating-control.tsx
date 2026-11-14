@@ -362,12 +362,15 @@ export function RatingRecoveryView({
   const busy = pending || reading.kind === 'loading';
   return (
     <div className="min-w-0 space-y-2" data-slot="rating-recovery" aria-busy={busy}>
-      <p className="text-sm" role="status">{m.subject_rating_control_uncertain({}, options)}</p>
+      <p className="text-sm" role="status">
+        {m.subject_rating_control_uncertain({}, options)}
+      </p>
       <p className="text-sm font-medium wrap-anywhere" data-slot="rating-original-request">
         {original.units === null
           ? m.subject_rating_control_original_clear({}, options)
           : m.subject_rating_control_original_save(
-              { score: number(original.units), max: number(original.question.scale.max) }, options,
+              { score: number(original.units), max: number(original.question.scale.max) },
+              options,
             )}
       </p>
       <p className="text-xs text-muted-foreground wrap-anywhere">{original.question.meaning}</p>
@@ -386,11 +389,14 @@ export function RatingRecoveryView({
         {reading.kind === 'unavailable' && m.subject_rating_control_read_failed({}, options)}
         {reading.kind === 'ready' && (
           <>
-            <p>{reading.units === null
-              ? m.subject_rating_control_current_clear({}, options)
-              : m.subject_rating_control_current_save(
-                  { score: number(reading.units), max: number(currentScale.max) }, options,
-                )}</p>
+            <p>
+              {reading.units === null
+                ? m.subject_rating_control_current_clear({}, options)
+                : m.subject_rating_control_current_save(
+                    { score: number(reading.units), max: number(currentScale.max) },
+                    options,
+                  )}
+            </p>
             <p className="text-muted-foreground">{m.subject_rating_control_read_separate({}, options)}</p>
           </>
         )}
@@ -554,7 +560,11 @@ export function SubjectRatingControl(props: SubjectRatingControlProps) {
   if (owner.current.binding !== props.binding)
     owner.current = { binding: props.binding, incarnation: owner.current.incarnation + 1 };
   const lifetime = JSON.stringify([
-    props.binding?.key, owner.current.incarnation, props.subjectId, props.locale, props.session,
+    props.binding?.key,
+    owner.current.incarnation,
+    props.subjectId,
+    props.locale,
+    props.session,
   ]);
   return <MountedSubjectRatingControl key={lifetime} {...props} />;
 }
@@ -608,11 +618,13 @@ function MountedSubjectRatingControl({
     const expectedCredential = queryClient.getQueryData<BrowserSession>(sessionQueryKey)?.csrfToken ?? '';
     const request = boundRatingCommand(subjectId, units, binding, question, command.key, expectedCredential);
     // Capture the sender as well as the envelope: neither lazy loading nor later props may replace this request.
-    const sender: RatingWrite = write ?? (async () => {
-      const { changeQuestionBoundRating } = await import('./rating-actions');
-      if (!mounted.current || !binding.isCurrent()) return 'rejected';
-      return changeQuestionBoundRating({ data: request });
-    });
+    const sender: RatingWrite =
+      write ??
+      (async () => {
+        const { changeQuestionBoundRating } = await import('./rating-actions');
+        if (!mounted.current || !binding.isCurrent()) return 'rejected';
+        return changeQuestionBoundRating({ data: request });
+      });
     const original = Object.freeze({ request, sender, binding });
     pendingCommand.current = original;
     setRetryable(false);
@@ -621,11 +633,19 @@ function MountedSubjectRatingControl({
   };
 
   const dispatch = async (original: PendingRatingCommand) => {
-    if (!mounted.current || !original.binding.isCurrent() || activePending.current ||
-      pendingCommand.current !== original) return;
+    if (
+      !mounted.current ||
+      !original.binding.isCurrent() ||
+      activePending.current ||
+      pendingCommand.current !== original
+    )
+      return;
     const attempt = {};
-    const isCurrent = () => mounted.current && original.binding.isCurrent() &&
-      pendingCommand.current === original && activePending.current === attempt;
+    const isCurrent = () =>
+      mounted.current &&
+      original.binding.isCurrent() &&
+      pendingCommand.current === original &&
+      activePending.current === attempt;
     activePending.current = attempt;
     setPending(true);
     setFailure(null);
@@ -659,12 +679,20 @@ function MountedSubjectRatingControl({
   };
 
   const readCurrentAnswer = async (original: PendingRatingCommand) => {
-    if (!mounted.current || !original.binding.isCurrent() || activePending.current ||
-      pendingCommand.current !== original) return;
+    if (
+      !mounted.current ||
+      !original.binding.isCurrent() ||
+      activePending.current ||
+      pendingCommand.current !== original
+    )
+      return;
     const attempt = {};
     activePending.current = attempt;
-    const isCurrent = () => mounted.current && original.binding.isCurrent() &&
-      pendingCommand.current === original && activePending.current === attempt;
+    const isCurrent = () =>
+      mounted.current &&
+      original.binding.isCurrent() &&
+      pendingCommand.current === original &&
+      activePending.current === attempt;
     setReading({ kind: 'loading' });
     try {
       const result = await queryClient.fetchQuery(

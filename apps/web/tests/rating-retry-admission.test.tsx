@@ -209,15 +209,25 @@ test('lost score save and clear replay the original envelope and sender; fresh a
   );
   const window = new Window({ url: 'https://rezics.test/en/subjects/one' });
   const globals = {
-    window, document: window.document, navigator: window.navigator,
-    HTMLElement: window.HTMLElement, HTMLInputElement: window.HTMLInputElement,
-    HTMLButtonElement: window.HTMLButtonElement, Element: window.Element, Node: window.Node,
-    Document: window.Document, DocumentFragment: window.DocumentFragment,
-    Event: window.Event, MouseEvent: window.MouseEvent, KeyboardEvent: window.KeyboardEvent,
-    MutationObserver: window.MutationObserver, ResizeObserver: window.ResizeObserver,
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    Event: window.Event,
+    MouseEvent: window.MouseEvent,
+    KeyboardEvent: window.KeyboardEvent,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
@@ -233,7 +243,10 @@ test('lost score save and clear replay the original envelope and sender; fresh a
   function deferred() {
     let resolve!: (result: Outcome) => void;
     let reject!: (error: Error) => void;
-    const promise = new Promise<Outcome>((yes, no) => { resolve = yes; reject = no; });
+    const promise = new Promise<Outcome>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
     return { promise, resolve, reject };
   }
   const deliveries: Array<ReturnType<typeof deferred> & { request: Request }> = [];
@@ -249,16 +262,35 @@ test('lost score save and clear replay the original envelope and sender; fresh a
       client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-a', csrfToken: 'credential-a' });
       let live = true;
       const operation = () => ({
-        id: 1, sequence: 1, ownsCache: () => live,
-        commit: () => {}, rollback: () => null, preserveUncertainty: () => {},
+        id: 1,
+        sequence: 1,
+        ownsCache: () => live,
+        commit: () => {},
+        rollback: () => null,
+        preserveUncertainty: () => {},
       });
       let binding = {
-        key: 'reader-a:first-visit', reader: 'reader-a', subjectId: subject, locale: 'en', view: 'overview',
+        key: 'reader-a:first-visit',
+        reader: 'reader-a',
+        subjectId: subject,
+        locale: 'en',
+        view: 'overview',
         scope: {
-          reader: 'reader-a', admission: 1, view: 'overview', cacheEpoch: 0, errorEpoch: 0, incarnation: 1,
-          scopeKey: 'first-visit', isCurrent: () => live, hasLiveObserver: () => live,
+          reader: 'reader-a',
+          admission: 1,
+          view: 'overview',
+          cacheEpoch: 0,
+          errorEpoch: 0,
+          incarnation: 1,
+          scopeKey: 'first-visit',
+          isCurrent: () => live,
+          hasLiveObserver: () => live,
         },
-        isCurrent: () => live, retire: () => { live = false; }, beginRatingWrite: operation,
+        isCurrent: () => live,
+        retire: () => {
+          live = false;
+        },
+        beginRatingWrite: operation,
       } satisfies Lease;
       let own: Own = { reader: 'reader-a', kind: 'ready', units: 8 };
       let currentQuestion = structuredClone(question);
@@ -267,21 +299,41 @@ test('lost score save and clear replay the original envelope and sender; fresh a
       const host = window.document.createElement('main');
       window.document.body.append(host);
       const root = createRoot(host as unknown as HTMLElement);
-      const render = () => root.render(createElement(QueryClientProvider, { client },
-        createElement(StrictMode, null, createElement(SubjectRatingControl, {
-          question: currentQuestion, subjectId: subject, locale: 'en', returnTo: '/en/subjects/one',
-          session: 'signed-in', own, binding, ...(replacement ? { write: replacement } : {}),
-        }))));
+      const render = () =>
+        root.render(
+          createElement(
+            QueryClientProvider,
+            { client },
+            createElement(
+              StrictMode,
+              null,
+              createElement(SubjectRatingControl, {
+                question: currentQuestion,
+                subjectId: subject,
+                locale: 'en',
+                returnTo: '/en/subjects/one',
+                session: 'signed-in',
+                own,
+                binding,
+                ...(replacement ? { write: replacement } : {}),
+              }),
+            ),
+          ),
+        );
       const flush = async (action: () => void = () => {}) => {
-        await act(async () => { action(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+        await act(async () => {
+          action();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
       };
-      const button = (name: string) => Array.from(host.querySelectorAll('button')).find(
-        (node) => node.textContent === name,
-      ) as HTMLButtonElement;
-      const chooseZero = () => host.querySelector('input[type="range"]')!.dispatchEvent(
-        new window.KeyboardEvent('keydown', { key: 'Home', bubbles: true }),
-      );
-      const replayName = units === null ? m.subject_rating_control_retry_clear() : m.subject_rating_control_retry_save();
+      const button = (name: string) =>
+        Array.from(host.querySelectorAll('button')).find((node) => node.textContent === name) as HTMLButtonElement;
+      const chooseZero = () =>
+        host
+          .querySelector('input[type="range"]')!
+          .dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      const replayName =
+        units === null ? m.subject_rating_control_retry_clear() : m.subject_rating_control_retry_save();
       const read = spyOn(client, 'fetchQuery').mockResolvedValue({ reader: 'reader-a', kind: 'ready', units });
       try {
         await flush(render);
@@ -302,7 +354,10 @@ test('lost score save and clear replay the original envelope and sender; fresh a
         expect(deliveries).toHaveLength(1);
         const original = deliveries[0]!.request;
         expect(original).toMatchObject({
-          subjectId: subject, units, expectedReader: 'reader-a', expectedCredential: 'credential-a',
+          subjectId: subject,
+          units,
+          expectedReader: 'reader-a',
+          expectedCredential: 'credential-a',
           question: { id: QUESTION, revision: 1, meaning: question.label, scale: question.scale },
         });
         expect(Object.isFrozen(original)).toBe(true);
@@ -329,7 +384,10 @@ test('lost score save and clear replay the original envelope and sender; fresh a
         );
         expect(host.textContent).toContain(m.subject_rating_control_uncertain());
         expect(deliveries).toHaveLength(1);
-        await flush(() => { button(replayName).click(); button(replayName).click(); });
+        await flush(() => {
+          button(replayName).click();
+          button(replayName).click();
+        });
         expect(deliveries).toHaveLength(2);
         expect(deliveries[1]!.request).toBe(original);
         expect(replacements).toHaveLength(0);
@@ -338,16 +396,23 @@ test('lost score save and clear replay the original envelope and sender; fresh a
         own = { reader: 'reader-a', kind: 'ready', units };
         await flush(render);
         if (units === null) await flush(chooseZero);
-        await flush(() => button(units === null ? m.subject_rating_control_save() : m.subject_rating_control_clear()).click());
+        await flush(() =>
+          button(units === null ? m.subject_rating_control_save() : m.subject_rating_control_clear()).click(),
+        );
         expect(replacements).toHaveLength(1);
         expect(replacements[0]!.request).toMatchObject({
-          units: units === null ? 0 : null, expectedCredential: 'credential-new', question: { revision: 2 },
+          units: units === null ? 0 : null,
+          expectedCredential: 'credential-new',
+          question: { revision: 2 },
         });
         expect(replacements[0]!.request.idempotencyKey).not.toBe(original.idempotencyKey);
         // Two observer leases can share a scope key. Replacing the actual owner still retires private intent.
         live = false;
-        binding = { ...binding, isCurrent: () => true,
-          scope: { ...binding.scope, isCurrent: () => true, hasLiveObserver: () => true } };
+        binding = {
+          ...binding,
+          isCurrent: () => true,
+          scope: { ...binding.scope, isCurrent: () => true, hasLiveObserver: () => true },
+        };
         own = { reader: 'reader-a', kind: 'ready', units: 12 };
         await flush(render);
         expect(host.querySelector('[data-slot="rating-recovery"]')).toBeNull();

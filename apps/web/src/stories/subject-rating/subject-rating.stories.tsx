@@ -246,8 +246,14 @@ function UncertainVote({
         pending={reading.kind === 'loading'}
         preserveDraft={unresolved}
         failure={null}
-        onSet={(value) => { setOwn({ ...own, units: value }); setUnresolved(false); }}
-        onClear={() => { setOwn({ ...own, units: null }); setUnresolved(false); }}
+        onSet={(value) => {
+          setOwn({ ...own, units: value });
+          setUnresolved(false);
+        }}
+        onClear={() => {
+          setOwn({ ...own, units: null });
+          setUnresolved(false);
+        }}
       />
       {unresolved && (
         <RatingRecoveryView
