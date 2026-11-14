@@ -177,6 +177,7 @@ Subject discussions and author activity retain their native final disclosure and
 Decision: retain original source authority through enrichment, preserve sparse continuation frontiers, and use
 connection-free timing barriers for late-revocation acceptance. `disclosureBarrier` pauses after initial Board/Access
 checks; `pageDisclosureBarrier` pauses after page enrichment. Both change timing only and are absent in production.
+Decision: Content page snapshots and reaction enrichment use deadline-bound checkouts; uncertain native reads discard their connection, and a checkout arriving after expiry dispatches no SQL.
 Author and Subject page handlers accept the limit as a decimal-digit query string (1 through 20) and convert it for internal paging, so a mismatched continuation stays `400` instead of a missing route. A bound Subject discussion cursor is checked against place, kind and viewer before disclosure.
 Selected reading references validate each Board’s own routed identity. Current thread-to-Board membership supplies
 placement authority; the Board and thread need not share a native home. Subject discussion cards keep the Subject

@@ -21,8 +21,6 @@ import type { Pool } from 'pg';
 import {
   commandAccessContext,
   accountStandingCheck,
-  deadlineClient,
-  within,
   createResourcePublicEligibility,
 } from './access-port.ts';
 import { spaceReadEligibility } from '../community/space.ts';
@@ -45,7 +43,8 @@ import { DurableInitiatorUnavailableError } from '../access/contract/index.ts';
 import type { DurableOperationAnchor, InitiatorRestorer } from '../access/content-adapter.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withConnection } from '../database/pool.ts';
+import { withReadConnection } from './read-connection.ts';
 import { readPartition, readPartitions, type Partition } from '../partition/partition.ts';
 import { accessExplicitCheck, accessCheck } from './access-port.ts';
 import type { Access, AccessCheck, AccessClient, Actor, ReadDecisions, Resource } from '../request/access.ts';
@@ -276,45 +275,46 @@ function route(id: string): number {
   return value;
 }
 
-/** All pool preparation happens outside this boundary. A failed rollback evicts
- * the connection rather than returning an open transaction to the pool. */
+/** All pool preparation happens outside this boundary. Uncertain native reads
+ * discard their connection instead of queueing cleanup behind expired I/O. */
 export async function snapshot<T>(
   dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
   id: string,
   context: Pick<RealmSubjectReadContext, 'deadline' | 'work'>,
   work: (client: AccessClient) => Promise<T>,
 ): Promise<Anchored<T>> {
-  return within(context.deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      bindRealmSubjectReadWork(client, context.work);
-      let began = false;
-      try {
-        await realmSubjectBegin(client, () => {
-          began = true;
-        });
-        const partitionNo = partitionOf(route(id));
-        const partition = context.work
-          ? await realmSubjectPartition(client, partitionNo)
-          : await readPartition(client, partitionNo);
-        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        const value = await work(client);
-        await realmSubjectCommit(client);
-        return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
-      } catch (error) {
-        // Admission failure dispatched no BEGIN and reserved no cleanup slot.
-        if (!began) throw error;
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
+  return withReadConnection(dependencies.pool, context.deadline, async ({ client, uncertain, discard, retain }) => {
+    bindRealmSubjectReadWork(client, context.work);
+    let beginAttempted = false;
+    try {
+      await realmSubjectBegin(client, () => {
+        beginAttempted = true;
+      });
+      const partitionNo = partitionOf(route(id));
+      const partition = context.work
+        ? await realmSubjectPartition(client, partitionNo)
+        : await readPartition(client, partitionNo);
+      if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+      if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+      const value = await work(client);
+      await realmSubjectCommit(client);
+      beginAttempted = false;
+      return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
+    } catch (error) {
+      retain(error);
+      if (beginAttempted) {
+        if (uncertain) discard(error);
+        else {
+          try {
+            await client.query('ROLLBACK');
+          } catch (rollbackError) {
+            discard(rollbackError);
+          }
         }
-        throw error;
       }
-    }),
-  );
+      throw error;
+    }
+  });
 }
 
 type BatchKey = { route: number; id: string; thread_id: string };
@@ -463,33 +463,38 @@ async function batchSnapshot<T>(
   const poolGroups = new Map<Pool, Set<number>>([
     [dependencies.pool, new Set(ids.map((id) => partitionOf(route(id))))],
   ]);
-  return within(context.deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partitionNos = [...poolGroups.get(dependencies.pool)!];
-        const partitions = await readPartitions(client, partitionNos);
-        const anchors = new Map(partitions.map((partition) => [partition.partitionNo, partition]));
-        for (const partitionNo of partitionNos) {
-          const partition = anchors.get(partitionNo);
-          if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-          if (partition.writeState === 'moved')
-            throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        }
-        const value = await work(client, anchors);
-        await client.query('COMMIT');
-        return { value, anchors };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
+  return withReadConnection(dependencies.pool, context.deadline, async ({ client, uncertain, discard, retain }) => {
+    let beginAttempted = false;
+    try {
+      beginAttempted = true;
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const partitionNos = [...poolGroups.get(dependencies.pool)!];
+      const partitions = await readPartitions(client, partitionNos);
+      const anchors = new Map(partitions.map((partition) => [partition.partitionNo, partition]));
+      for (const partitionNo of partitionNos) {
+        const partition = anchors.get(partitionNo);
+        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+        if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
       }
-    }),
-  );
+      const value = await work(client, anchors);
+      await client.query('COMMIT');
+      beginAttempted = false;
+      return { value, anchors };
+    } catch (error) {
+      retain(error);
+      if (beginAttempted) {
+        if (uncertain) discard(error);
+        else {
+          try {
+            await client.query('ROLLBACK');
+          } catch (rollbackError) {
+            discard(rollbackError);
+          }
+        }
+      }
+      throw error;
+    }
+  });
 }
 
 export async function prepareBoardPageDecisions(
@@ -1824,12 +1829,10 @@ export async function withViewerReactions<T extends { readonly id: string }>(
   const parameters = { route: home, actor_id: actor.accountId, target_ids: ids };
   // Query the compiled statement directly. run() probes schema freshness once,
   // which would add a statement on the first page and nowhere else.
-  const rows = await within(deadline, () =>
-    withConnection(dependencies.pool, (client) =>
-      client.query<(typeof viewerReactions)['~reylo']['element']>(
-        viewerReactions.sql,
-        viewerReactions.params.map((name) => parameters[name as keyof typeof parameters]),
-      ),
+  const rows = await withReadConnection(dependencies.pool, deadline, ({ client }) =>
+    client.query<(typeof viewerReactions)['~reylo']['element']>(
+      viewerReactions.sql,
+      viewerReactions.params.map((name) => parameters[name as keyof typeof parameters]),
     ),
   );
   const kinds = new Map<string, ViewerReactionKind>();
@@ -1889,12 +1892,10 @@ async function readReactionCountProjection<T extends { readonly id: string }>(
   let oldest: { epoch: number; position: bigint } | null = null;
   for (const [partition, group] of groups) {
     const parameters = { partition, target_ids: group.ids, routes: group.routes };
-    const rows = await within(deadline, () =>
-      withConnection(dependencies.pool, (client) =>
-        client.query<(typeof pageCounts)['~reylo']['element']>(
-          pageCounts.sql,
-          pageCounts.params.map((name) => parameters[name as keyof typeof parameters]),
-        ),
+    const rows = await withReadConnection(dependencies.pool, deadline, ({ client }) =>
+      client.query<(typeof pageCounts)['~reylo']['element']>(
+        pageCounts.sql,
+        pageCounts.params.map((name) => parameters[name as keyof typeof parameters]),
       ),
     );
     for (const row of rows.rows) {
@@ -2007,7 +2008,15 @@ export async function readSubjectReactionCounts(
           pageSubjectReactionCounts.params.map((name) => parameters[name as keyof typeof parameters]),
         ),
       );
-    const result = deadline === undefined ? await read() : await within(deadline, read);
+    const result =
+      deadline === undefined
+        ? await read()
+        : await withReadConnection(dependencies.pool, deadline, ({ client }) =>
+            client.query<(typeof pageSubjectReactionCounts)['~reylo']['element']>(
+              pageSubjectReactionCounts.sql,
+              pageSubjectReactionCounts.params.map((name) => parameters[name as keyof typeof parameters]),
+            ),
+          );
     for (const row of result.rows) {
       if (typeof row.targetId !== 'string' || !subjectReactionKinds.includes(row.kind as SubjectReactionKind))
         throw new TypeError('Invalid subject reaction count');
