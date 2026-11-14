@@ -3,10 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:f
 import { join } from 'node:path';
 
 const root = join(import.meta.dir, '..');
-const story = 'src/components/editor-link.stories.tsx';
+const stories = ['src/components/editor-link.stories.tsx', 'src/components/editor-touch-bar.stories.tsx'];
 
-test('mounted rich-text inline authoring stays owned by its editable document visit', async () => {
-  expect(existsSync(join(root, story)), story).toBe(true);
+test('mounted rich-text authoring and keyboard history stay owned by their editable document visit', async () => {
+  for (const story of stories) expect(existsSync(join(root, story)), story).toBe(true);
   const temp = join(root, '../../.temp');
   mkdirSync(temp, { recursive: true });
   const output = mkdtempSync(join(temp, 'editor-inline-lifetime-'));
@@ -18,9 +18,9 @@ test('mounted rich-text inline authoring stays owned by its editable document vi
         'x',
         'vitest',
         'run',
-        story,
+        ...stories,
         '-t',
-        'Inline Lifetime Journey',
+        'Inline Lifetime Journey|Undo Redo',
         '--reporter=json',
         `--outputFile=${report}`,
       ],
@@ -45,8 +45,9 @@ test('mounted rich-text inline authoring stays owned by its editable document vi
       .flatMap((file) => file.assertionResults)
       .map((assertion) =>
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
-      );
-    expect(outcomes).toEqual(['Inline Lifetime Journey: passed']);
+      )
+      .sort();
+    expect(outcomes).toEqual(['Inline Lifetime Journey: passed', 'Undo Redo: passed']);
   } finally {
     rmSync(output, { recursive: true, force: true });
   }

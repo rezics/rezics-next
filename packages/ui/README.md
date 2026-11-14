@@ -132,6 +132,8 @@ Caller key handling runs first; only a handled shortcut is consumed, while compo
 visits cannot dispatch history commands. History commands keep editor focus. Hiding the mounted editor for preview
 or version history retains its history; controlled echoes and editability toggles retain it too. An external document
 replacement clears both history stacks in the existing editor, and a replaced editor starts with its own history.
+Keyboard and visit acceptance extend the existing touch-bar `UndoRedo` story; the focused inline-lifetime regression
+runs it alongside `InlineLifetimeJourney`, keeping the existing story inventory.
 
 This keyboard capability is inherited by Studio Book/Column ([workspace](../../apps/web/src/studio/workspace.tsx)),
 [native drafts](../../apps/web/src/studio/native-draft-composer.tsx),

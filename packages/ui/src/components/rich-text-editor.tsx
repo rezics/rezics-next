@@ -930,7 +930,7 @@ export function RichTextEditor({
       if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
       if (!isCurrent()) return;
       latest.current.onKeyDown?.(event);
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || !isCurrent()) return;
 
       const key = event.key.toLowerCase();
       const historyModifier = (event.ctrlKey || event.metaKey) && !event.altKey;

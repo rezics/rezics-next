@@ -13,6 +13,7 @@ function demo(
     upload?: boolean;
     labels?: Partial<RichTextEditorLabels>;
     value?: string;
+    historyControls?: boolean;
   } = {},
 ) {
   const initial = fromPlainText(options.value ?? 'Touch formatting', profile);
@@ -20,19 +21,41 @@ function demo(
 
   function Demo() {
     const [value, setValue] = useState(initial);
+    const [mode, setMode] = useState('Edit');
     return (
       <div className="min-h-[70vh] pb-24">
-        <RichTextEditor
-          value={value}
-          label="Post"
-          {...(!options.defaultToolbar ? { toolbar: options.toolbar ?? 'always' } : {})}
-          labels={options.labels ?? {}}
-          upload={options.upload ? async () => ({ src: 'touch-bar-image' }) : undefined}
-          onChange={(next) => {
-            latest.current = next;
-            setValue(next);
-          }}
-        />
+        {options.historyControls &&
+          ['Edit', 'Preview', 'History', 'Read only', 'Outer shortcut', 'Replace', 'Unmount'].map((next) => (
+            <button
+              key={next}
+              type="button"
+              onClick={() => {
+                setMode(next);
+                if (next === 'Replace') setValue(fromPlainText('Other document', profile));
+              }}
+            >
+              {next}
+            </button>
+          ))}
+        <div hidden={mode === 'Preview' || mode === 'History'}>
+          {mode !== 'Unmount' && (
+            <RichTextEditor
+              value={value}
+              label="Post"
+              readOnly={mode === 'Read only'}
+              onKeyDown={(event) => {
+                if (mode === 'Outer shortcut') event.preventDefault();
+              }}
+              {...(!options.defaultToolbar ? { toolbar: options.toolbar ?? 'always' } : {})}
+              labels={options.labels ?? {}}
+              upload={options.upload ? async () => ({ src: 'touch-bar-image' }) : undefined}
+              onChange={(next) => {
+                latest.current = next;
+                setValue(next);
+              }}
+            />
+          )}
+        </div>
       </div>
     );
   }
@@ -83,7 +106,7 @@ type Story = StoryObj<typeof meta>;
 const format = demo('blocks', { toolbar: 'always' });
 const keepsFocus = demo('blocks', { toolbar: 'always' });
 const blocks = demo('blocks', { toolbar: 'always' });
-const history = demo('blocks', { toolbar: 'always', value: '' });
+const history = demo('blocks', { toolbar: 'always', value: '', historyControls: true });
 const keyboard = demo('blocks', { toolbar: 'always' });
 const profiles = demo('text', { toolbar: 'always', upload: true });
 const finePointer = demo('blocks', { defaultToolbar: true, value: 'Selection menu still works' });
@@ -154,6 +177,57 @@ export const UndoRedo: Story = {
     await userEvent.click(redo);
     await waitFor(() => expect(plainText(history.latest.current)).toBe('History'));
     expect(checked(history.latest.current)).toBeTruthy();
+
+    const shortcut = async (key: string, expected: string, init: KeyboardEventInit = {}, handled = true) => {
+      const event = new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true, ...init });
+      expect(textbox.dispatchEvent(event)).toBe(!handled);
+      await waitFor(() => expect(textbox.textContent).toBe(expected));
+      if (handled) expect(textbox).toHaveFocus();
+    };
+    const control = async (name: string) => userEvent.click(canvas.getByRole('button', { name, exact: true }));
+    for (const panel of ['Preview', 'History']) {
+      await control(panel);
+      expect(textbox).not.toBeVisible();
+      await control('Edit');
+      expect(canvas.getByRole('textbox', { name: 'Post' })).toBe(textbox);
+      await userEvent.click(textbox);
+      const platform = { ctrlKey: panel === 'Preview', metaKey: panel === 'History' };
+      await shortcut('z', '', platform);
+      expect(undo).toBeDisabled();
+      expect(redo).toBeEnabled();
+      await userEvent.click(redo);
+      await shortcut('z', '', platform);
+      await shortcut(panel === 'Preview' ? 'y' : 'z', 'History', { ...platform, shiftKey: panel === 'History' });
+      await shortcut('z', 'History', { shiftKey: true }, false);
+    }
+    for (const mode of ['Read only', 'Outer shortcut', 'Edit']) {
+      await control(mode);
+      if (mode !== 'Read only') await userEvent.click(textbox);
+      await shortcut('z', 'History', { isComposing: mode === 'Edit' }, mode === 'Outer shortcut');
+    }
+    await shortcut('z', 'History', { altKey: true }, false);
+    await shortcut('z', '');
+    await shortcut('z', 'History', { shiftKey: true });
+    const keyboardCallback = () => {
+      const surface = textbox.closest('[data-slot="rich-text-editor"]')!;
+      const props = Object.getOwnPropertyNames(surface).find((key) => key.startsWith('__reactProps$'))!;
+      return (surface as unknown as Record<string, { onKeyDown: (event: unknown) => void }>)[props]!.onKeyDown;
+    };
+    const retired = keyboardCallback();
+    await control('Replace');
+    await userEvent.type(textbox, 'New');
+    const currentText = textbox.textContent!;
+    const staleKey = Object.assign(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }), { nativeEvent: {} });
+    retired(staleKey);
+    expect(textbox.textContent).toBe(currentText);
+    await shortcut('z', 'Other document');
+    await shortcut('z', 'Other document', {}, false);
+    await waitFor(() => expect(plainText(history.latest.current)).toBe('Other document'));
+    const unmounted = keyboardCallback();
+    await control('Unmount');
+    const published = history.latest.current;
+    unmounted(staleKey);
+    expect(history.latest.current).toBe(published);
   },
 };
 
