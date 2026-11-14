@@ -152,3 +152,31 @@ contains the bounded page receiver and history. No external implementation was u
 The dev verifier runs the focused fixtures after landing. Native/default-worker receiving, query-plan/growth,
 installed/promoted revision qualification and mounted HTTP/browser checks remain deferred. Source formatting,
 scoped lint and the affected Kernel typecheck are this attempt's checks; the focused tests are not run here.
+
+## Cancelled sealed Book candidate reclamation
+
+Decision: cancelled sealed whole and explicit-selection Book candidates become reclaimable at their original
+expiry deadline through the existing indexed retention drain. Cancellation remains `cancelled`; only a live
+sealed source reaching expiry transitions to `expired`. The durable candidate claim records the source's actual
+terminal status, and step receipts read that retained status alongside their original frontier and row count.
+Existing expired claims and receipts are unchanged. Downgrade refuses cancelled claim evidence rather than
+rewriting or deleting outcomes.
+
+The stage lock precedes the claim, candidate and generation locks. Both terminal states require the same exact
+source seal, owner epoch, expected revisions, frozen selection input and generation head/snapshot binding.
+Retained revisions, current public/draft pointers, other candidate checkpoints, activation/baseline checkpoints
+and active ordered receiving holds still prevent the claim. Generation retirement fences new descriptors and
+writes before any deletion. Previously activated or otherwise referenced generations remain retained.
+
+Pending insertion and bounded legacy adoption already include cancelled stages; neither filters by terminal
+state. The existing due index seeks `(available_at, route, catalogue_id, stage_id)` and also requires the stage's
+expiry deadline. A deferred cancelled source resumes on its existing retry time. Each segment still scans at most
+100 due keys, adopts at most 100 old keys and advances one cleanup step of at most 100 rows; the hourly sweep
+still stops after 16 segments. No stage census, new sweep or scheduling change is needed. Cleanup retains source
+seals, staging inputs and observations, build pages, command receipts and public selection.
+
+Sources read for this extension: `hosted-version-candidate-cleanup.ts`, its pin query, `hosted-publication-retention.ts`
+and due/adoption SQL; `hosted-publication-staging.ts`'s cancellation/expiry fence; the staging, candidate-cleanup,
+selection-retention and retention-drain migrations; `hosted-chapters.md`'s activation and retention contracts;
+`test/content/hosted-{publication-retention,version-candidate-cleanup}.test.ts`; and the read-only main
+`.reference/INDEX.md`. This extends the existing native mechanism without external implementation code.
