@@ -42,6 +42,13 @@ Gregorian dates in natural language at their supplied year, month or day precisi
 owns validation, calendar, uncertainty and structured-date admission; the full native form remains inspectable.
 Unsupported calendars, uncertain times and long signed years retain that native presentation.
 
+Character, Person and Organization overviews retain their distinct native readers. Read identity and supplied
+portrait first, then the supplied short description, admitted biography and populated domain facts, bounded works
+and relationships, and discussion. The family reader alone presents its biography; the ordinary Summary projection
+does not repeat that document. Sparse profiles omit empty optional fact groups from primary reading. Names,
+identifiers, measurements and editorial/provenance tools stay reachable in Details. Directed relationships,
+qualifiers, partial dates, citations, withheld targets and native continuation/currentness rules remain unchanged.
+
 ## Reader Type display
 
 Reader labels, cover proportions and explicit Schema.org hints come from the shared Web Type-directory
