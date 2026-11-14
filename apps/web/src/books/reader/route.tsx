@@ -1,4 +1,7 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useContext, useMemo } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
+import { readerSessionSource } from '../../reader/lifetime';
+import { createBookContentsNavigation } from './contents-navigation';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
@@ -8,7 +11,7 @@ import { HostedBookCheckpoint } from './checkpoint';
 import type { NativeHostedBookAdmissionSource } from './native-source';
 import type { BookPage } from './source';
 import type { CheckpointPosition } from './checkpoint-position';
-import type { BookReaderNavigation } from './reader-state';
+import type { BookReaderFocus, BookReaderNavigation } from './reader-state';
 import type { HostedBookReaderProps } from './hosted-book-reader';
 import type { HostedBookVisit } from './visit';
 
@@ -24,17 +27,75 @@ export { HostedBookReaderLink, HostedBookSubjectReaderLink } from './link';
 export type { HostedBookSearch } from './address';
 export type { HostedBookVisit } from './visit';
 
+/** Route-owned memory survives loader replacement, but never survives leaving this publication visit. */
+export function createHostedBookNavigation() {
+  const contents = createBookContentsNavigation();
+  let scope: string | null = null;
+  let pendingFocus: HostedBookReaderProps['focusOnRead'];
+  let stopFocus: (() => void) | undefined;
+  const cancelFocus = () => {
+    pendingFocus = undefined;
+    stopFocus?.();
+    stopFocus = undefined;
+  };
+  return {
+    contents,
+    bind(identity: string) {
+      if (scope !== null && scope !== identity) {
+        contents.retire();
+        cancelFocus();
+      }
+      scope = identity;
+    },
+    retire() {
+      contents.retire();
+      scope = null;
+      cancelFocus();
+    },
+    captureFocus(focus: BookReaderFocus) {
+      cancelFocus();
+      if (!focus || typeof document === 'undefined') return;
+      const owner = document.activeElement;
+      pendingFocus = { owner, focus };
+      const moved = (event: FocusEvent) => {
+        if (event.target !== owner) cancelFocus();
+      };
+      document.addEventListener('focusin', moved);
+      document.addEventListener('pointerdown', cancelFocus, true);
+      stopFocus = () => {
+        document.removeEventListener('focusin', moved);
+        document.removeEventListener('pointerdown', cancelFocus, true);
+      };
+    },
+    focusOnRead: () => pendingFocus,
+    cancelFocus,
+  };
+}
+export type HostedBookNavigation = ReturnType<typeof createHostedBookNavigation>;
+
 export type HostedBookVisitViewProps = {
   visit: HostedBookVisit;
   locale: Locale;
   navigate: (href: string) => void;
   reload: () => void;
+  navigation?: HostedBookNavigation;
   /** Supplied only when the existing Commerce owner has admitted an occurrence-aware region. */
   renderProgress?: HostedBookReaderProps['renderProgress'];
 };
 
 /** One production visit, using the retained native source and document reader. No body cache in the router. */
-export function HostedBookVisitView({ visit, locale, navigate, reload, renderProgress }: HostedBookVisitViewProps) {
+export function HostedBookVisitView({ visit, locale, navigate, reload, navigation, renderProgress }: HostedBookVisitViewProps) {
+  const localNavigation = useMemo(createHostedBookNavigation, []);
+  const coordinates = navigation ?? localNavigation;
+  const client = useContext(QueryClientContext);
+  const session = readerSessionSource(client);
+  if (visit.state === 'ready') {
+    const { publication, viewer, currentReleaseRevisionId, currentStructureRevisionId } = visit.admission;
+    coordinates.bind(JSON.stringify([
+      publication, currentReleaseRevisionId, currentStructureRevisionId, locale,
+      viewer.kind, viewer.kind === 'session' ? viewer.subject : null, session.snapshot(),
+    ]));
+  }
   const admission = useMemo<NativeHostedBookAdmissionSource>(
     () => ({
       getSnapshot: () => (visit.state === 'ready' ? visit.admission : { state: 'unavailable' }),
@@ -43,7 +104,8 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, renderPro
     [visit],
   );
   const open = useCallback<BookReaderNavigation>(
-    (address, contentsReturn) => {
+    (address, contentsReturn, focus) => {
+      coordinates.captureFocus(focus);
       const href = hostedBookAddressHref(
         address,
         locale,
@@ -52,21 +114,13 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, renderPro
       );
       navigate(href);
     },
-    [locale, navigate, visit],
+    [locale, navigate, visit, coordinates],
   );
-  const focusOnRead = useMemo<HostedBookReaderProps['focusOnRead']>(() => {
-    if (visit.state !== 'ready' || typeof document === 'undefined') return undefined;
-    const owner = document.activeElement;
-    // A shared header/search control chosen during navigation keeps its focus.
-    if (owner && owner !== document.body && !owner.closest('[data-slot="hosted-book-reader"]')) return undefined;
-    return {
-      owner,
-      focus:
-        visit.address.kind === 'contents' && visit.address.selection
-          ? { kind: 'occurrence', occurrenceId: visit.address.selection.occurrenceId }
-          : { kind: 'heading' },
-    };
-  }, [visit]);
+  const focusOnRead = coordinates.focusOnRead();
+  const reread = (focus: BookReaderFocus = null) => {
+    coordinates.captureFocus(focus);
+    reload();
+  };
   const options = { locale };
   if (visit.state === 'catalogues')
     return (
@@ -127,7 +181,8 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, renderPro
       locale={locale}
       hrefForAddress={(address) => hostedBookAddressHref(address, locale, origin, visit.subjectId)}
       onNavigate={open}
-      onReload={reload}
+      onReload={reread}
+      contentsNavigation={coordinates.contents}
       {...(focusOnRead !== undefined ? { focusOnRead } : {})}
       {...(renderProgress !== undefined ? { renderProgress } : {})}
       {...(subjectId && viewer.kind === 'session'

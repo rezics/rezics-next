@@ -11934,6 +11934,8 @@
   "book_reader_denied": "当前阅读者无法访问此内容。",
   "book_reader_empty": "此目录窗口未提供任何条目。",
   "book_reader_first": "此发布版本的开头",
+  "book_reader_previous_page": "此层级的上一页",
+  "book_reader_contents_recovery": "已保留此目录位置。重试会重新读取同一位置；选择第一页才会重新开始此层级。",
   "book_reader_first_page": "此层级的第一页",
   "book_reader_hide_controls": "取消固定阅读控件",
   "book_reader_last": "此发布版本的结尾",

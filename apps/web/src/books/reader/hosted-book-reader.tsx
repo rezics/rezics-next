@@ -18,6 +18,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { readerSessionSource, useReaderVisit } from '../../reader/lifetime';
 import { PostReadingBody } from '../../threads/post-reading-body';
+import type { BookContentsMovement, BookContentsNavigation } from './contents-navigation';
 import { createCheckpointPosition, type CheckpointPosition } from './checkpoint-position';
 import { createBookReader, type BookReader, type BookReaderNavigation, type BookReaderFocus } from './reader-state';
 import {
@@ -45,7 +46,8 @@ export type HostedBookReaderProps = {
   /** One bounded originating contents position supplied by the route. */
   contentsReturn?: BookContentsAddress | null;
   onNavigate?: BookReaderNavigation;
-  onReload?: () => void;
+  onReload?: (focus?: BookReaderFocus) => void;
+  contentsNavigation?: BookContentsNavigation;
   focusOnRead?: { focus: BookReaderFocus; owner: Element | null };
   /** Native Library checkpoint controls share the admitted page lifetime. */
   renderCheckpoint?: (page: BookPage, isCurrent: () => boolean, position: CheckpointPosition) => ReactNode;
@@ -60,6 +62,7 @@ export function HostedBookReader({
   locale = getLocale(),
   readingIdentity,
   contentsReturn,
+  contentsNavigation,
   onNavigate,
   onReload,
   focusOnRead,
@@ -84,6 +87,7 @@ export function HostedBookReader({
       locale,
       () => route.current() && session.snapshot() === sessionVersion,
       {
+        ...(contentsNavigation !== undefined ? { contentsNavigation } : {}),
         ...(contentsReturn !== undefined ? { contentsReturn } : {}),
         ...(onNavigate !== undefined ? { navigate: onNavigate } : {}),
         ...(onReload !== undefined ? { reload: onReload } : {}),
@@ -95,13 +99,16 @@ export function HostedBookReader({
   if (previous.current !== reader) previous.current.retire();
   previous.current = reader;
   useLayoutEffect(() => {
-    const stopSession = session.subscribe(() => reader.retire());
+    const stopSession = session.subscribe(() => {
+      contentsNavigation?.retire();
+      reader.retire();
+    });
     const disconnect = reader.connect();
     return () => {
       stopSession();
       disconnect();
     };
-  }, [reader, session]);
+  }, [reader, session, contentsNavigation]);
   useLayoutEffect(() => {
     if (!route.current()) reader.retire();
   });
@@ -159,16 +166,16 @@ function BookReaderView({
     () => createCheckpointPosition(page, article, isPageCurrent),
     [page, isPageCurrent],
   );
-  const act = (action: () => void) => {
+  const act = (action: (focus: BookReaderFocus) => void, keyboard = true) => {
     if (!reader.current() || reader.getSnapshot() !== state) return;
-    intent.current = { owner: document.activeElement };
-    action();
+    intent.current = keyboard ? { owner: document.activeElement } : null;
+    action(keyboard ? { kind: 'heading' } : null);
   };
-  const navigate = (address: BookAddress) =>
-    act(() => {
-      if (address.kind === 'chapter') reader.openChapter(address);
-      else reader.openContents(address);
-    });
+  const navigate = (address: BookAddress, movement: BookContentsMovement = 'level', keyboard = true) =>
+    act((focus) => {
+      if (address.kind === 'chapter') reader.openChapter(address, focus);
+      else reader.openContents(address, movement, focus);
+    }, keyboard);
   const currentPage = useRef(page);
   currentPage.current = page;
 
@@ -177,9 +184,12 @@ function BookReaderView({
     const moved = (event: FocusEvent) => {
       if (intent.current && event.target !== intent.current.owner) intent.current = null;
     };
+    const cancel = () => { intent.current = null; };
     document.addEventListener('focusin', moved);
+    document.addEventListener('pointerdown', cancel, true);
     return () => {
       document.removeEventListener('focusin', moved);
+      document.removeEventListener('pointerdown', cancel, true);
       intent.current = null;
     };
   }, [reader]);
@@ -209,10 +219,13 @@ function BookReaderView({
     unavailable: m.book_reader_unavailable({}, options),
   };
   const destination: Destination = (target, title, extra) => {
-    const address =
+    const selected =
       target.kind === 'contents' && state.address.selection
         ? { ...target, selection: state.address.selection }
         : target;
+    const address = selected.kind === 'contents'
+      ? reader.resolveContents(selected, extra?.movement ?? 'level')
+      : selected;
     const supplied = hrefForAddress?.(address);
     // Only the host's origin-local canonical addresses can become native links.
     const href = supplied?.startsWith('/') && !supplied.startsWith('//') && !/[\\\s]/.test(supplied) ? supplied : null;
@@ -249,7 +262,7 @@ function BookReaderView({
           )
             return;
           event.preventDefault();
-          navigate(address);
+          navigate(address, extra?.movement, event.detail === 0);
         }}
       >
         {title}
@@ -261,7 +274,7 @@ function BookReaderView({
         variant={variant}
         className={className}
         aria-current={extra?.selected ? 'location' : undefined}
-        onClick={() => navigate(address)}
+        onClick={(event) => navigate(address, extra?.movement, event.detail === 0)}
       >
         {title}
       </Button>
@@ -335,7 +348,7 @@ function BookReaderView({
       </div>
     );
   };
-  const title = page?.title ?? m.book_reader_title({}, options);
+  const title = page?.title ?? (state.address.kind === 'contents' ? m.book_reader_contents({}, options) : m.book_reader_title({}, options));
   const rootContents = page
     ? {
         kind: 'contents' as const,
@@ -395,7 +408,7 @@ function BookReaderView({
       </header>
       {page?.kind === 'chapter' ? (
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b pb-3">
-          <Button className={`${control} gap-2 px-2`} variant="ghost" onClick={() => act(() => reader.openContents())}>
+          <Button className={`${control} gap-2 px-2`} variant="ghost" onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}>
             <List aria-hidden="true" className="size-4 shrink-0" />
             {labels.contents}
           </Button>
@@ -473,7 +486,7 @@ function BookReaderView({
             <Button
               variant="ghost"
               className={`${control} self-center px-2`}
-              onClick={() => act(() => reader.openContents())}
+              onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}
             >
               {labels.contents}
             </Button>
@@ -481,9 +494,17 @@ function BookReaderView({
           </nav>
         </>
       ) : page?.kind === 'contents' ? (
-        <Contents page={page} locale={locale} destination={destination} labels={labels} reader={reader} act={act} />
+        <Contents
+          page={page} locale={locale} destination={destination} labels={labels} reader={reader} act={act}
+          previous={state.previousContents ?? null}
+        />
       ) : (
         <div className="grid justify-items-start gap-4 border-y py-6">
+          {state.address.kind === 'contents' && state.state !== 'retired' ? (
+            <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+              {m.book_reader_contents_recovery({}, options)}
+            </p>
+          ) : null}
           <p role="status" className="max-w-prose leading-relaxed text-muted-foreground">
             {state.state === 'loading' || state.state === 'idle'
               ? m.book_reader_loading({}, options)
@@ -502,20 +523,22 @@ function BookReaderView({
               <Button
                 className={control}
                 variant="outline"
-                onClick={() => {
+                onClick={(event) => {
                   if (state.state === 'retired') {
-                    intent.current = { owner: document.activeElement };
+                    intent.current = event.detail === 0 ? { owner: document.activeElement } : null;
                     restart();
-                  } else act(() => reader.retry());
+                  } else act((focus) => reader.retry(focus), event.detail === 0);
                 }}
               >
                 {m.book_reader_retry({}, options)}
               </Button>
               {state.state !== 'retired' ? (
                 <>
-                  <Button className={control} variant="ghost" onClick={() => act(() => reader.openContents())}>
-                    {labels.contents}
-                  </Button>
+                  {state.address.kind === 'contents'
+                    ? destination({ ...state.address, cursor: null }, m.book_reader_first_page({}, options), { movement: 'first' })
+                    : <Button className={control} variant="ghost" onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}>
+                        {labels.contents}
+                      </Button>}
                   {state.address.kind === 'contents' && state.address.selection
                     ? destination(
                         {
@@ -539,7 +562,7 @@ function BookReaderView({
 type Destination = (
   address: BookAddress,
   title: ReactNode,
-  extra?: { selected?: boolean; row?: string; appearance?: 'control' | 'breadcrumb' | 'row' | 'step' },
+  extra?: { selected?: boolean; row?: string; appearance?: 'control' | 'breadcrumb' | 'row' | 'step'; movement?: BookContentsMovement },
 ) => ReactNode;
 
 function Contents({
@@ -549,13 +572,15 @@ function Contents({
   labels,
   reader,
   act,
+  previous,
 }: {
   page: BookContentsPage;
+  previous: BookContentsAddress | null;
   locale: string;
   destination: Destination;
   labels: { contents: string; open: string; part: string; chapter: string; unavailable: string };
   reader: BookReader;
-  act: (action: () => void) => void;
+  act: (action: (focus: BookReaderFocus) => void, keyboard?: boolean) => void;
 }) {
   const options = { locale: locale as never };
   return (
@@ -641,11 +666,14 @@ function Contents({
         </ol>
       </nav>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        {page.address.cursor !== null
-          ? destination({ ...page.address, cursor: null }, m.book_reader_first_page({}, options))
-          : null}
+        <div className="flex min-w-0 flex-wrap gap-2">
+          {previous ? destination(previous, m.book_reader_previous_page({}, options), { movement: 'exact' }) : null}
+          {page.address.cursor !== null
+            ? destination({ ...page.address, cursor: null }, m.book_reader_first_page({}, options), { movement: 'first' })
+            : null}
+        </div>
         {page.continuation.state === 'more' ? (
-          destination({ ...page.address, cursor: page.continuation.cursor }, m.book_reader_more({}, options))
+          destination({ ...page.address, cursor: page.continuation.cursor }, m.book_reader_more({}, options), { movement: 'exact' })
         ) : page.continuation.state === 'end' ? (
           <p className="text-xs text-muted-foreground">{m.book_reader_level_end({}, options)}</p>
         ) : (
@@ -653,7 +681,7 @@ function Contents({
             <p role="status" className="text-sm text-muted-foreground">
               {m.book_reader_navigation_unavailable({}, options)}
             </p>
-            <Button className={control} variant="outline" onClick={() => act(() => reader.retry())}>
+            <Button className={control} variant="outline" onClick={(event) => act((focus) => reader.retry(focus), event.detail === 0)}>
               {m.book_reader_retry({}, options)}
             </Button>
           </>

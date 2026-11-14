@@ -1,4 +1,9 @@
 import {
+  createBookContentsNavigation,
+  type BookContentsNavigation,
+  type BookContentsMovement,
+} from './contents-navigation';
+import {
   BOOK_ANCESTOR_LIMIT,
   BOOK_CONTENTS_LIMIT,
   bookAddressWithinBounds,
@@ -25,6 +30,7 @@ export type BookReaderState = Readonly<{
     | 'retired'
     | 'not-installed';
   page: BookPage | null;
+  previousContents?: BookContentsAddress | null;
   focus: Readonly<{ kind: 'heading' | 'occurrence'; occurrenceId?: string }> | null;
 }>;
 
@@ -35,7 +41,7 @@ export type BookReaderNavigation = (
   focus: BookReaderFocus,
 ) => void;
 
-/** A single bounded page and return address. No tree, body cache, progress conversion or command. */
+/** A single bounded page, observed coordinate window and exact chapter return. No tree, body cache, progress conversion or command. */
 export function createBookReader(
   source: HostedBookSource,
   initialAddress: BookAddress,
@@ -44,11 +50,14 @@ export function createBookReader(
   options: {
     contentsReturn?: BookContentsAddress | null;
     navigate?: BookReaderNavigation;
-    reload?: () => void;
+    reload?: (focus: BookReaderFocus) => void;
+    contentsNavigation?: BookContentsNavigation;
     initialFocus?: BookReaderFocus;
   } = {},
 ) {
   const observation = source.getSnapshot();
+  const contents = options.contentsNavigation ?? createBookContentsNavigation();
+  const contentsGeneration = contents.generation();
   let active = true;
   let connected = false;
   let connection = 0;
@@ -72,7 +81,12 @@ export function createBookReader(
     publish({ address: snapshot.address, state: 'retired', page: null, focus: null });
   };
   const current = () => {
-    if (source.getSnapshot() !== observation || !guard()) retire();
+    if (!active) return false;
+    if (source.getSnapshot() !== observation) {
+      if (contents.generation() === contentsGeneration) contents.retire();
+      retire();
+    }
+    if (!guard() || contents.generation() !== contentsGeneration) retire();
     return active && connected;
   };
   const read = async (address: BookAddress, focus: BookReaderState['focus'] = { kind: 'heading' }) => {
@@ -106,9 +120,13 @@ export function createBookReader(
       if (!current() || ownTicket !== ticket || ownConnection !== connection) return;
       if (result.state === 'ready' && !bookPageMatches(operands, result.page)) result = { state: 'unavailable' };
       request = undefined;
+      if (result.state === 'ready' && address.kind === 'contents') contents.observe(address);
       publish(
         result.state === 'ready'
-          ? { address, state: 'ready', page: result.page, focus }
+          ? {
+              address, state: 'ready', page: result.page, focus,
+              previousContents: address.kind === 'contents' ? contents.previous(address) : null,
+            }
           : { address, state: result.state, page: null, focus },
       );
     } catch {
@@ -160,16 +178,20 @@ export function createBookReader(
     current,
     retire,
     read,
-    openChapter(address: BookChapterAddress) {
+    resolveContents: contents.resolve,
+    openChapter(address: BookChapterAddress, focus: BookReaderFocus = { kind: 'heading' }) {
       if (!current() || snapshot.state === 'loading') return;
       if (snapshot.address.kind === 'contents') contentsReturn = { ...snapshot.address, selection: address.selection };
-      move(address);
+      move(address, focus);
     },
-    openContents(address?: BookContentsAddress) {
+    openContents(
+      address?: BookContentsAddress,
+      movement: BookContentsMovement = 'level',
+      focus: BookReaderFocus = { kind: 'heading' },
+    ) {
       if (!current() || snapshot.state === 'loading') return;
       const chapter = snapshot.page?.kind === 'chapter' ? snapshot.page : null;
-      const target = address ??
-        contentsReturn ??
+      const target = address ? contents.resolve(address, movement) : contentsReturn ??
         chapter?.contents ?? {
           kind: 'contents' as const,
           publication: initialAddress.publication,
@@ -180,13 +202,16 @@ export function createBookReader(
       const selection = chapter?.address.selection ?? snapshot.address.selection;
       const selected = selection ? { ...target, selection } : target;
       contentsReturn = selected;
-      move(selected, selection ? { kind: 'occurrence', occurrenceId: selection.occurrenceId } : { kind: 'heading' });
+      contents.stage(selected, movement);
+      move(selected, focus !== null && chapter && selection
+        ? { kind: 'occurrence', occurrenceId: selection.occurrenceId }
+        : focus);
     },
-    retry() {
+    retry(focus: BookReaderFocus = { kind: 'heading' }) {
       if (options.reload) {
         retire();
-        options.reload();
-      } else void read(snapshot.address);
+        options.reload(focus);
+      } else void read(snapshot.address, focus);
     },
   };
 }

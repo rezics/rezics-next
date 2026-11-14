@@ -11934,6 +11934,8 @@
   "book_reader_denied": "현재 열람자는 이 내용을 읽을 수 없습니다.",
   "book_reader_empty": "이 목차 범위에 제공된 항목이 없습니다.",
   "book_reader_first": "이 발행본의 시작",
+  "book_reader_previous_page": "이 단계의 이전 페이지",
+  "book_reader_contents_recovery": "목차 위치가 유지됩니다. 다시 시도하면 같은 위치를 읽고, 첫 페이지를 선택하면 이 단계를 처음부터 엽니다.",
   "book_reader_first_page": "이 단계의 첫 페이지",
   "book_reader_hide_controls": "읽기 컨트롤 고정 해제",
   "book_reader_last": "이 발행본의 끝",

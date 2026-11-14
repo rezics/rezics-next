@@ -84,7 +84,7 @@ not download contents or descendants. No prefetch, refill, per-row hydration or 
 
 A publication identifies native catalogue, frozen source structure and separate publication release. A chapter
 selects occurrence plus exact Post/revision/SHA-256. Contents preserves native order and container/body/unavailable
-slots. Sparse or empty windows can continue. More replaces the window; failure retries the same parent/cursor.
+slots. Sparse or empty windows can continue. More and Previous replace the window; failure retries the same parent/cursor.
 Pages separately report current release/structure, bounded ancestors and previous/next. Known ends and unavailable
 navigation remain different states. Returning to contents retains the exact selection and focuses its row when
 present, otherwise the heading; a moved selection retains an exact chapter return and current-location control.
@@ -138,7 +138,7 @@ establish native publication acceptance. No new API, progress store, automatic s
 
 ## Controls and progress
 
-Explicit navigation focuses the heading; contents return focuses the selected occurrence where present. Choosing
+Keyboard navigation focuses the heading while its original focus intent remains; pointer activation never schedules a focus transfer; contents return focuses the selected occurrence where present. Choosing
 a shared search/header control during navigation or moving focus during a request cancels the transfer. Arrow
 navigation stays inside the reading region, mirrors the document direction, and respects text selection, editable
 and interactive controls, modifiers, held keys and input methods. Controls wrap with 44px targets and phone safe
@@ -191,12 +191,24 @@ rendering failure cannot remove the chapter. It does not supply or replace the L
 
 ## Bounds and evidence
 
+Decision: retain at most eight observed predecessor contents coordinates plus current/staged coordinates in
+route-owned memory for one mounted publication/viewer/credential/locale visit. Coordinates contain only exact
+public parent/cursor operands, never rows, titles, bodies, credentials or private checkpoints. Only successful,
+current contents observations advance this window. Previous uses an observed predecessor in the same parent;
+level links restore that parent's most recent retained coordinate. An evicted or direct-entry predecessor stays
+unknown; First page explicitly restarts the level. Failed movements retain their exact target for Retry, including
+failed Previous. No refill, tree scan or predecessor inference is permitted. Chapter return rereads its original
+bounded address and focuses the admitted selected occurrence, or the heading if it is missing. Source retirement,
+publication/viewer/credential/locale replacement and leaving the route discard the window and late effects;
+ordinary same-publication route/chapter movement may retain it. Reload/direct entry starts without predecessors.
+Back/Forward keeps its exact public URL and performs the existing fresh admission/source observation.
+
 One reader retains at most 40 consumer rows (native maximum 20), one chapter, 24 ancestors, two neighbours and one
-contents return. Each catalogue host observation makes at most three native operations; Subject discovery makes one. Each source observation makes at
+contents return, in addition to this bounded coordinate window. Each catalogue host observation makes at most three native operations; Subject discovery makes one. Each source observation makes at
 most 32: chapter `7 + ancestors + changedRelease`, contents `5 + parentProbe + ancestors + selectedResolves`.
 Each operation retains Content's own bounds. Body bytes are at most 2 MiB per resolution; frozen/current resolution
 can read two bodies. Consumer cursors allow 8,192 characters; native/route cursors allow 4,096. There is no growing
-page cache, cursor chain, hydrated tree or new progress store.
+page/body cache, unbounded cursor chain, hydrated tree or new progress store.
 
 Checkpoint transport costs one body-free metadata request on initial observation and one after each successful
 save or clear. A later chapter open still performs its existing exact-body admission and canonical-byte verification.

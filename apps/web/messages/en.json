@@ -11934,6 +11934,8 @@
   "book_reader_denied": "This reading is not available to the current viewer.",
   "book_reader_empty": "No entries were supplied in this contents window.",
   "book_reader_first": "Beginning of this publication",
+  "book_reader_previous_page": "Previous page of this level",
+  "book_reader_contents_recovery": "This contents position is retained. Retry reads the same position; First page explicitly restarts this level.",
   "book_reader_first_page": "First page of this level",
   "book_reader_hide_controls": "Unpin reading controls",
   "book_reader_last": "End of this publication",

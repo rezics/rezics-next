@@ -11934,6 +11934,8 @@
   "book_reader_denied": "目前的閱讀者無法存取此內容。",
   "book_reader_empty": "此目錄視窗未提供任何項目。",
   "book_reader_first": "此發布版本的開頭",
+  "book_reader_previous_page": "此層級的上一頁",
+  "book_reader_contents_recovery": "已保留此目錄位置。重試會重新讀取同一位置；選擇第一頁才會重新開始此層級。",
   "book_reader_first_page": "此階層的第一頁",
   "book_reader_hide_controls": "取消固定閱讀控制項",
   "book_reader_last": "此發布版本的結尾",

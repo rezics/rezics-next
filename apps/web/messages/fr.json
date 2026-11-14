@@ -11934,6 +11934,8 @@
   "book_reader_denied": "Cette lecture n’est pas accessible au lecteur actuel.",
   "book_reader_empty": "Aucune entrée n’a été fournie dans cette fenêtre du sommaire.",
   "book_reader_first": "Début de cette publication",
+  "book_reader_previous_page": "Page précédente de ce niveau",
+  "book_reader_contents_recovery": "Cette position du sommaire est conservée. Réessayer recharge la même position ; Première page reprend ce niveau depuis le début.",
   "book_reader_first_page": "Première page de ce niveau",
   "book_reader_hide_controls": "Détacher les commandes de lecture",
   "book_reader_last": "Fin de cette publication",

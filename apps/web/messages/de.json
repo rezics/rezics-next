@@ -11934,6 +11934,8 @@
   "book_reader_denied": "Diese Leseansicht ist für den aktuellen Betrachter nicht verfügbar.",
   "book_reader_empty": "Für diesen Inhaltsausschnitt wurden keine Einträge geliefert.",
   "book_reader_first": "Anfang dieser Veröffentlichung",
+  "book_reader_previous_page": "Vorherige Seite dieser Ebene",
+  "book_reader_contents_recovery": "Diese Inhaltsposition bleibt erhalten. Erneut versuchen lädt dieselbe Position; Erste Seite beginnt diese Ebene ausdrücklich von vorn.",
   "book_reader_first_page": "Erste Seite dieser Ebene",
   "book_reader_hide_controls": "Lesesteuerung lösen",
   "book_reader_last": "Ende dieser Veröffentlichung",

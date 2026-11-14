@@ -1,5 +1,8 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { HostedBookVisitView, parseHostedBookSearch, readHostedBookVisit } from '../books/reader/route';
+import { HostedBookVisitView, createHostedBookNavigation, parseHostedBookSearch, readHostedBookVisit } from '../books/reader/route';
+import { QueryClientContext } from '@tanstack/react-query';
+import { useContext } from 'react';
+import { readerSessionSource } from '../reader/lifetime';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { pageHead } from '../shell/head';
@@ -28,12 +31,35 @@ export const Route = createFileRoute('/books/$id/read')({
   component: BookReaderRoute,
 });
 
+// A WeakMap keeps one bounded visit per live Router across loader/pending component remounts.
+// It is not history payload: direct entry/reload starts empty, and Back/Forward still rereads the URL.
+const contentsVisits = new WeakMap<object, ReturnType<typeof createHostedBookNavigation>>();
+
 function BookReaderRoute() {
   const visit = Route.useLoaderData();
   const router = useRouter();
+  const client = useContext(QueryClientContext);
+  let navigation = contentsVisits.get(router);
+  if (!navigation) {
+    navigation = createHostedBookNavigation();
+    contentsVisits.set(router, navigation);
+    const owned = navigation;
+    const path = router.state.location.pathname;
+    const stopSession = readerSessionSource(client).subscribe(() => owned.retire());
+    window.addEventListener('pagehide', owned.retire);
+    const stopRoute = router.subscribe('onBeforeLoad', ({ toLocation }) => {
+      if (toLocation.pathname === path) return;
+      owned.retire();
+      contentsVisits.delete(router);
+      stopSession();
+      window.removeEventListener('pagehide', owned.retire);
+      stopRoute();
+    });
+  }
   return (
     <HostedBookVisitView
       visit={visit}
+      navigation={navigation}
       locale={getLocale()}
       navigate={(href) => {
         void router.navigate({ href });

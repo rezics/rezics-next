@@ -11934,6 +11934,8 @@
   "book_reader_denied": "Esta lectura no está disponible para el lector actual.",
   "book_reader_empty": "No se proporcionaron entradas en esta ventana de contenido.",
   "book_reader_first": "Inicio de esta publicación",
+  "book_reader_previous_page": "Página anterior de este nivel",
+  "book_reader_contents_recovery": "Se conserva esta posición del índice. Reintentar vuelve a leer la misma posición; Primera página reinicia este nivel de forma explícita.",
   "book_reader_first_page": "Primera página de este nivel",
   "book_reader_hide_controls": "Desfijar controles de lectura",
   "book_reader_last": "Fin de esta publicación",

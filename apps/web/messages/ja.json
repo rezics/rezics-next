@@ -11934,6 +11934,8 @@
   "book_reader_denied": "現在の閲覧者はこの内容を閲覧できません。",
   "book_reader_empty": "この目次の範囲には項目がありません。",
   "book_reader_first": "この公開版の先頭",
+  "book_reader_previous_page": "この階層の前のページ",
+  "book_reader_contents_recovery": "目次の位置は保持されています。再試行では同じ位置を読み込みます。「最初のページ」でこの階層を最初から開きます。",
   "book_reader_first_page": "この階層の最初のページ",
   "book_reader_hide_controls": "読書操作の固定を解除",
   "book_reader_last": "この公開版の末尾",
