@@ -41,7 +41,7 @@ export type BookReaderNavigation = (
   focus: BookReaderFocus,
 ) => void;
 
-/** A single bounded page, observed coordinate window and exact chapter return. No tree, body cache, progress conversion or command. */
+/** One bounded page, observed coordinate window and exact chapter return; no body cache or progress command. */
 export function createBookReader(
   source: HostedBookSource,
   initialAddress: BookAddress,
@@ -124,7 +124,10 @@ export function createBookReader(
       publish(
         result.state === 'ready'
           ? {
-              address, state: 'ready', page: result.page, focus,
+              address,
+              state: 'ready',
+              page: result.page,
+              focus,
               previousContents: address.kind === 'contents' ? contents.previous(address) : null,
             }
           : { address, state: result.state, page: null, focus },
@@ -191,21 +194,25 @@ export function createBookReader(
     ) {
       if (!current() || snapshot.state === 'loading') return;
       const chapter = snapshot.page?.kind === 'chapter' ? snapshot.page : null;
-      const target = address ? contents.resolve(address, movement) : contentsReturn ??
-        chapter?.contents ?? {
-          kind: 'contents' as const,
-          publication: initialAddress.publication,
-          parentOccurrenceId: null,
-          cursor: null,
-          selection: snapshot.address.selection,
-        };
+      const target = address
+        ? contents.resolve(address, movement)
+        : contentsReturn ?? chapter?.contents ?? {
+            kind: 'contents' as const,
+            publication: initialAddress.publication,
+            parentOccurrenceId: null,
+            cursor: null,
+            selection: snapshot.address.selection,
+          };
       const selection = chapter?.address.selection ?? snapshot.address.selection;
       const selected = selection ? { ...target, selection } : target;
       contentsReturn = selected;
       contents.stage(selected, movement);
-      move(selected, focus !== null && chapter && selection
-        ? { kind: 'occurrence', occurrenceId: selection.occurrenceId }
-        : focus);
+      move(
+        selected,
+        focus !== null && snapshot.address.kind === 'chapter' && selection
+          ? { kind: 'occurrence', occurrenceId: selection.occurrenceId }
+          : focus,
+      );
     },
     retry(focus: BookReaderFocus = { kind: 'heading' }) {
       if (options.reload) {

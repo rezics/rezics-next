@@ -32,8 +32,13 @@ export const illustrativeBookIds = {
   nightPost: '0192f3a0-6c1e-7b2a-9d4e-000000000013',
   nightRevision: '0192f3a0-6c1e-7b2a-9d4e-000000000014',
 } as const;
-export type IllustrativeBookState = 'nested' | 'sparse' | 'failed-page' | 'moved' | 'unavailable-navigation';
+export type IllustrativeBookState =
+  | 'nested' | 'sparse' | 'failed-page' | 'moved' | 'unavailable-navigation'
+  | 'multiple-pages' | 'failed-previous';
 export const illustrativeBookCursor = 'illustrative:opaque/+page=2';
+export const illustrativeBookLastCursor = 'illustrative:opaque/+page=3';
+export const illustrativeRootCursor = 'illustrative:root/+page=2';
+export const illustrativePartCursor = 'illustrative:part/+page=2';
 export const illustrativePublication = {
   id: illustrativeBookIds.catalogue,
   structureRevisionId: illustrativeBookIds.structure,
@@ -105,6 +110,8 @@ async function illustrativeBody(markdown: readonly string[], postId: string, rev
 /** Review content is opt-in so existing regression operands and small fixtures stay unchanged. */
 export function createIllustrativeHostedBook(state: IllustrativeBookState = 'nested', review = false) {
   const ids = illustrativeBookIds;
+  const paged = state === 'multiple-pages' || state === 'failed-previous';
+  let lastNestedCursor: string | undefined;
   const body = illustrativeBody(review ? [...dawn, ...dawnReview] : dawn, ids.post, ids.revision);
   const release: HostedRevision = {
     catalogueId: ids.catalogue,
@@ -122,7 +129,7 @@ export function createIllustrativeHostedBook(state: IllustrativeBookState = 'nes
   const part: HostedOccurrence = {
     occurrenceId: ids.part,
     parentId: null,
-    position: 0,
+    position: paged ? 1 : 0,
     kind: 'part',
     availability: 'available',
     title: 'Part I · The journey',
@@ -140,7 +147,7 @@ export function createIllustrativeHostedBook(state: IllustrativeBookState = 'nes
   const secondPart: HostedOccurrence = {
     ...part,
     occurrenceId: ids.secondPart,
-    position: 1,
+    position: paged ? 0 : 1,
     title: 'Part II · The coast, the town, and the long way home / 海岸、町、そして帰り道',
   };
   const ready = body.then(async ({ exact, exactDocument }) => {
@@ -175,8 +182,8 @@ export function createIllustrativeHostedBook(state: IllustrativeBookState = 'nes
         'The long way home, beneath a sky without a moon: notes carried between languages / 月のない空の下、いくつもの言葉を携えて帰る道 / 여러 언어로 남긴 밤의 기록',
       target: { ...(nightBody?.exact ?? exact), threadId: ids.thread },
     };
-    const chapters = review ? [first, reused, harbor, night] : [first, reused];
-    const occurrences = review ? [part, nested, secondPart, ...chapters] : [part, nested, ...chapters];
+    const chapters = paged ? [harbor, night, first, reused] : review ? [first, reused, harbor, night] : [first, reused];
+    const occurrences = review || paged ? [part, nested, secondPart, ...chapters] : [part, nested, ...chapters];
     const previous = new Map(chapters.slice(1).map((row, index) => [row.occurrenceId, chapters[index]!]));
     const next = new Map(chapters.slice(0, -1).map((row, index) => [row.occurrenceId, chapters[index + 1]!]));
     const documents = new Map<string, NonNullable<HostedResolution['document']>>([
@@ -190,6 +197,27 @@ export function createIllustrativeHostedBook(state: IllustrativeBookState = 'nes
         return { state: 'ready', value: query.revisionId === ids.release ? release : current };
       },
       async children(_id, query) {
+        if (paged) {
+          if (state === 'failed-previous' && query.parentId === ids.nested &&
+            query.cursor === illustrativeBookCursor && lastNestedCursor === illustrativeBookLastCursor && !failed) {
+            failed = true;
+            return { state: 'unavailable' };
+          }
+          const items = query.parentId === ids.nested
+            ? query.cursor === illustrativeBookLastCursor ? [] : query.cursor === illustrativeBookCursor ? [reused] : [first]
+            : query.parentId === ids.part
+              ? query.cursor === illustrativePartCursor ? [nested] : []
+              : query.parentId === ids.secondPart ? [harbor, night]
+                : query.cursor === illustrativeRootCursor ? [part] : [secondPart];
+          const nextCursor = query.parentId === ids.nested
+            ? query.cursor === illustrativeBookLastCursor ? null : query.cursor === illustrativeBookCursor
+              ? illustrativeBookLastCursor : illustrativeBookCursor
+            : query.parentId === ids.part
+              ? query.cursor ? null : illustrativePartCursor
+              : !query.parentId && !query.cursor ? illustrativeRootCursor : null;
+          if (query.parentId === ids.nested) lastNestedCursor = query.cursor;
+          return { state: 'ready', value: { ...release, items, nextCursor } };
+        }
         if (query.cursor === illustrativeBookCursor && state === 'failed-page' && !failed) {
           failed = true;
           return { state: 'unavailable' };

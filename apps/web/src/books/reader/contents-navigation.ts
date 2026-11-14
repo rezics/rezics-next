@@ -42,7 +42,7 @@ export function createBookContentsNavigation() {
       const observed = movement === 'level' && address.cursor === null ? latest(address.parentOccurrenceId) : null;
       return observed ? { ...address, cursor: observed.cursor } : address;
     },
-    stage(address: BookContentsAddress, movement: BookContentsMovement = 'exact') {
+    stage(address: BookContentsCoordinate, movement: BookContentsMovement = 'exact') {
       first = movement === 'first';
       window = { ...window, staged: coordinate(address) };
     },
@@ -51,7 +51,8 @@ export function createBookContentsNavigation() {
       // An initial/direct observation has no predecessor. A failed target never calls this method.
       if (window.current && !same(window.current, target)) {
         const index = window.predecessors.findLastIndex((value) => same(value, target));
-        const predecessors = first
+        const restarting = first && window.staged && same(window.staged, target);
+        const predecessors = restarting
           ? window.predecessors.filter((value) => value.parentOccurrenceId !== target.parentOccurrenceId)
           : index >= 0
             ? window.predecessors.slice(0, index)

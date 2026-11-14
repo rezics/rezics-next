@@ -6,13 +6,14 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { HostedBookReader, type HostedBookReaderProps } from '../books/reader/hosted-book-reader';
 import { HostedBookCheckpointControls } from '../books/reader/checkpoint-controls';
+import { createHostedBookNavigation } from '../books/reader/route';
 import { hostedBookAddressHref } from '../books/reader/address';
 import {
   createIllustrativeHostedBook,
   illustrativeBookIds,
   type IllustrativeBookState,
 } from '../books/reader/illustrative-source';
-import type { BookAddress, BookChapterAddress, BookChapterPage, BookPage } from '../books/reader/source';
+import type { BookAddress, BookChapterAddress, BookChapterPage, BookContentsAddress, BookPage } from '../books/reader/source';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 
@@ -23,6 +24,7 @@ type JourneyProps = {
   chapter?: boolean;
   direct?: 'first' | 'night';
   checkpoint?: CheckpointState;
+  startAtRoot?: boolean;
 };
 
 function IllustrativeCheckpoint({
@@ -148,16 +150,18 @@ function IllustrativeProgress({ current }: { current: () => boolean }) {
   );
 }
 
-function BookJourney({ state = 'nested', chapter = false, direct = 'first', checkpoint = 'none' }: JourneyProps) {
+function BookJourney({ state = 'nested', chapter = false, direct = 'first', checkpoint = 'none', startAtRoot = false }: JourneyProps) {
   const [runtime] = useState(() => {
     const book = createIllustrativeHostedBook(state, true);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
-    return { book, client };
+    return { book, client, navigation: createHostedBookNavigation() };
   });
   const [address, setAddress] = useState<BookAddress | null>(() =>
-    chapter ? null : runtime.book.contents(state === 'nested' ? null : illustrativeBookIds.nested),
+    chapter ? null : runtime.book.contents(state === 'nested' || startAtRoot ? null : illustrativeBookIds.nested),
   );
+  runtime.navigation.bind(getLocale());
+  const [contentsReturn, setContentsReturn] = useState<BookContentsAddress | null>(null);
   const [saved, setSaved] = useState<SavedReading | null>(null);
   const [focusOnRead, setFocusOnRead] = useState<HostedBookReaderProps['focusOnRead']>();
   useEffect(() => {
@@ -174,7 +178,10 @@ function BookJourney({ state = 'nested', chapter = false, direct = 'first', chec
       current = false;
     };
   }, [runtime, chapter, direct, checkpoint]);
-  useEffect(() => () => runtime.client.clear(), [runtime]);
+  useEffect(() => () => {
+    runtime.navigation.cancelFocus();
+    runtime.client.clear();
+  }, [runtime]);
   return (
     <QueryClientProvider client={runtime.client}>
       <main className="min-w-0">
@@ -198,7 +205,15 @@ function BookJourney({ state = 'nested', chapter = false, direct = 'first', chec
             source={runtime.book.source}
             readingIdentity={runtime.book}
             locale={getLocale()}
-            hrefForAddress={(target) => hostedBookAddressHref(target, getLocale())}
+            hrefForAddress={(target) => hostedBookAddressHref(target, getLocale(), address.kind === 'contents' ? address : contentsReturn)}
+            contentsReturn={contentsReturn}
+            contentsNavigation={runtime.navigation.contents}
+            onNavigate={(target, origin, focus) => {
+              runtime.navigation.captureFocus(focus);
+              setFocusOnRead(runtime.navigation.focusOnRead());
+              setContentsReturn(origin);
+              setAddress(target);
+            }}
             {...(focusOnRead ? { focusOnRead } : {})}
             {...(checkpoint === 'unavailable'
               ? {
@@ -234,7 +249,7 @@ const meta = {
   id: 'interfaces-hosted-book-reader',
   component: BookJourney,
   parameters: { layout: 'fullscreen', readerJourney: false },
-  render: (args) => <BookJourney key={`${args.state}:${args.chapter}:${args.direct}:${args.checkpoint}`} {...args} />,
+  render: (args) => <BookJourney key={`${args.state}:${args.chapter}:${args.direct}:${args.checkpoint}:${args.startAtRoot}`} {...args} />,
   args: { state: 'nested', chapter: false },
 } satisfies Meta<typeof BookJourney>;
 export default meta;
@@ -296,5 +311,64 @@ export const RetiredReading: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Replace publication / target / viewer admission' }));
     await canvas.findByText(m.book_reader_changed());
     await expect(canvas.queryByRole('article')).toBeNull();
+  },
+};
+
+async function pageRoundTrip({ canvasElement, parameters }: { canvasElement: HTMLElement; parameters: Record<string, unknown> }) {
+  if (!parameters.readerJourney) return;
+  const canvas = within(canvasElement);
+  await canvas.findByText('Dawn / 黎明');
+  await expect(canvas.queryByRole('link', { name: m.book_reader_previous_page() })).toBeNull();
+  await userEvent.click(canvas.getByRole('link', { name: m.book_reader_more() }));
+  await canvas.findByText('Dawn, an echo / 再読');
+  await userEvent.click(canvas.getByRole('link', { name: m.book_reader_previous_page() }));
+  await canvas.findByText('Dawn / 黎明');
+  await userEvent.click(canvas.getByRole('link', { name: m.book_reader_more() }));
+  const chapter = await canvas.findByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn, an echo / 再読` });
+  const frozen = new URL(chapter.getAttribute('href')!, window.location.origin);
+  await expect(frozen.searchParams.get('returnCursor')).toBe('illustrative:opaque/+page=2');
+  await expect(frozen.searchParams.get('release')).toBe(illustrativeBookIds.release);
+  await userEvent.click(chapter);
+  await canvas.findByRole('article');
+  await userEvent.click(canvas.getAllByRole('button', { name: m.book_reader_contents(), exact: true })[0]!);
+  await canvas.findByText('Dawn, an echo / 再読');
+  await expect(canvas.getByRole('link', { name: m.book_reader_previous_page() })).toBeVisible();
+  await expect(canvas.queryByText('Dawn / 黎明')).toBeNull();
+}
+
+export const MultipleContentsPages: Story = { args: { state: 'multiple-pages' }, play: pageRoundTrip };
+export const NestedLevelReturn: Story = {
+  args: { state: 'multiple-pages', startAtRoot: true },
+  play: async ({ canvasElement, parameters }) => {
+    if (!parameters.readerJourney) return;
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_more() }));
+    await userEvent.click(await canvas.findByRole('link', { name: `${m.book_reader_contents()} · Part I · The journey` }));
+    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_more() }));
+    await userEvent.click(await canvas.findByRole('link', { name: `${m.book_reader_contents()} · The observatory` }));
+    await canvas.findByText('Dawn / 黎明');
+    await userEvent.click(canvas.getByRole('link', { name: 'Part I · The journey', exact: true }));
+    await canvas.findByText('The observatory');
+    await expect(new URL(canvas.getByRole('link', { name: m.book_reader_first_page() }).getAttribute('href')!, window.location.origin).searchParams.get('parent')).toBe(illustrativeBookIds.part);
+    await userEvent.click(canvas.getByRole('link', { name: m.book_reader_root() }));
+    await canvas.findByText('Part I · The journey');
+    await expect(canvas.queryByText('Part II · The coast, the town, and the long way home / 海岸、町、そして帰り道')).toBeNull();
+  },
+};
+export const FailedPreviousRetry: Story = {
+  args: { state: 'failed-previous' },
+  play: async ({ canvasElement, parameters }) => {
+    if (!parameters.readerJourney) return;
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_more() }));
+    await canvas.findByText('Dawn, an echo / 再読');
+    await userEvent.click(canvas.getByRole('link', { name: m.book_reader_more() }));
+    await canvas.findByText(m.book_reader_empty());
+    await userEvent.click(canvas.getByRole('link', { name: m.book_reader_previous_page() }));
+    await canvas.findByText(m.book_reader_unavailable());
+    await expect(canvas.getByText(m.book_reader_contents_recovery())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.book_reader_retry() }));
+    await canvas.findByText('Dawn, an echo / 再読');
+    await expect(canvas.queryByText('Dawn / 黎明')).toBeNull();
   },
 };

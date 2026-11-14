@@ -1,5 +1,10 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { HostedBookVisitView, createHostedBookNavigation, parseHostedBookSearch, readHostedBookVisit } from '../books/reader/route';
+import {
+  HostedBookVisitView,
+  createHostedBookNavigation,
+  parseHostedBookSearch,
+  readHostedBookVisit,
+} from '../books/reader/route';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext } from 'react';
 import { readerSessionSource } from '../reader/lifetime';
@@ -23,13 +28,21 @@ export const Route = createFileRoute('/books/$id/read')({
     }),
   head: ({ match }) =>
     pageHead({ title: m.book_reader_title(), robots: 'noindex, follow' }, pageHeadContext(match.pathname)),
-  pendingComponent: () => (
-    <main aria-busy="true" className="mx-auto max-w-3xl px-4 py-8">
-      <p role="status">{m.book_reader_loading()}</p>
-    </main>
-  ),
+  pendingComponent: BookReaderPending,
   component: BookReaderRoute,
 });
+
+function BookReaderPending() {
+  const search = Route.useSearch();
+  const contents = search.view === 'contents' || (search.view === undefined && !search.occurrence);
+  return (
+    <main aria-busy="true" className="mx-auto grid max-w-3xl gap-4 px-4 py-8">
+      <h1 className="text-2xl font-semibold">{contents ? m.book_reader_contents() : m.book_reader_title()}</h1>
+      <p role="status">{m.book_reader_loading()}</p>
+      {contents ? <p className="text-sm text-muted-foreground">{m.book_reader_contents_recovery()}</p> : null}
+    </main>
+  );
+}
 
 // A WeakMap keeps one bounded visit per live Router across loader/pending component remounts.
 // It is not history payload: direct entry/reload starts empty, and Back/Forward still rereads the URL.
@@ -38,6 +51,8 @@ const contentsVisits = new WeakMap<object, ReturnType<typeof createHostedBookNav
 function BookReaderRoute() {
   const visit = Route.useLoaderData();
   const router = useRouter();
+  const { id } = Route.useParams();
+  const search = Route.useSearch();
   const client = useContext(QueryClientContext);
   let navigation = contentsVisits.get(router);
   if (!navigation) {
@@ -46,13 +61,13 @@ function BookReaderRoute() {
     const owned = navigation;
     const path = router.state.location.pathname;
     const stopSession = readerSessionSource(client).subscribe(() => owned.retire());
-    window.addEventListener('pagehide', owned.retire);
+    if (typeof window !== 'undefined') window.addEventListener('pagehide', owned.retire);
     const stopRoute = router.subscribe('onBeforeLoad', ({ toLocation }) => {
       if (toLocation.pathname === path) return;
       owned.retire();
       contentsVisits.delete(router);
       stopSession();
-      window.removeEventListener('pagehide', owned.retire);
+      if (typeof window !== 'undefined') window.removeEventListener('pagehide', owned.retire);
       stopRoute();
     });
   }
@@ -60,6 +75,7 @@ function BookReaderRoute() {
     <HostedBookVisitView
       visit={visit}
       navigation={navigation}
+      location={{ catalogueId: id, search }}
       locale={getLocale()}
       navigate={(href) => {
         void router.navigate({ href });

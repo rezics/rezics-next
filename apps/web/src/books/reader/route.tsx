@@ -6,7 +6,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { NativeHostedBookReader } from './native-hosted-book-reader';
-import { hostedBookAddressHref, hostedBookHref, hostedBookSubjectHref } from './address';
+import { hostedBookAddressHref, hostedBookHref, hostedBookSubjectHref, type HostedBookSearch } from './address';
 import { HostedBookCheckpoint } from './checkpoint';
 import type { NativeHostedBookAdmissionSource } from './native-source';
 import type { BookPage } from './source';
@@ -58,13 +58,15 @@ export function createHostedBookNavigation() {
       const owner = document.activeElement;
       pendingFocus = { owner, focus };
       const moved = (event: FocusEvent) => {
-        if (event.target !== owner) cancelFocus();
+        if (event.target !== owner && !(event.target === document.body && !owner?.isConnected)) cancelFocus();
       };
       document.addEventListener('focusin', moved);
       document.addEventListener('pointerdown', cancelFocus, true);
+      window.addEventListener('blur', cancelFocus);
       stopFocus = () => {
         document.removeEventListener('focusin', moved);
         document.removeEventListener('pointerdown', cancelFocus, true);
+        window.removeEventListener('blur', cancelFocus);
       };
     },
     focusOnRead: () => pendingFocus,
@@ -79,12 +81,15 @@ export type HostedBookVisitViewProps = {
   navigate: (href: string) => void;
   reload: () => void;
   navigation?: HostedBookNavigation;
+  location?: { catalogueId: string; search: HostedBookSearch };
   /** Supplied only when the existing Commerce owner has admitted an occurrence-aware region. */
   renderProgress?: HostedBookReaderProps['renderProgress'];
 };
 
 /** One production visit, using the retained native source and document reader. No body cache in the router. */
-export function HostedBookVisitView({ visit, locale, navigate, reload, navigation, renderProgress }: HostedBookVisitViewProps) {
+export function HostedBookVisitView({
+  visit, locale, navigate, reload, navigation, location, renderProgress,
+}: HostedBookVisitViewProps) {
   const localNavigation = useMemo(createHostedBookNavigation, []);
   const coordinates = navigation ?? localNavigation;
   const client = useContext(QueryClientContext);
@@ -92,8 +97,15 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, navigatio
   if (visit.state === 'ready') {
     const { publication, viewer, currentReleaseRevisionId, currentStructureRevisionId } = visit.admission;
     coordinates.bind(JSON.stringify([
-      publication, currentReleaseRevisionId, currentStructureRevisionId, locale,
-      viewer.kind, viewer.kind === 'session' ? viewer.subject : null, session.snapshot(),
+      publication.id,
+      publication.structureRevisionId,
+      publication.releaseRevisionId,
+      currentReleaseRevisionId,
+      currentStructureRevisionId,
+      locale,
+      viewer.kind,
+      viewer.kind === 'session' ? viewer.subject : null,
+      session.snapshot(),
     ]));
   }
   const admission = useMemo<NativeHostedBookAdmissionSource>(
@@ -152,10 +164,31 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, navigatio
         ) : null}
       </section>
     );
-  if (visit.state !== 'ready')
+  if (visit.state !== 'ready') {
+    const search = location?.search;
+    const contents = !!location && (search?.view === 'contents' || (search?.view === undefined && !search?.occurrence));
+    const first = location && contents ? hostedBookHref(location.catalogueId, locale, {
+      release: search?.release,
+      occurrence: search?.occurrence,
+      subject: search?.subject,
+      view: 'contents',
+      parent: search?.parent,
+    }) : null;
+    const chapter = location && contents && search?.occurrence ? hostedBookHref(location.catalogueId, locale, {
+      release: search.release,
+      occurrence: search.occurrence,
+      subject: search.subject,
+      view: 'chapter',
+      returnParent: search.parent,
+      returnCursor: search.cursor,
+    }) : null;
+    const linkClass = 'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere]';
     return (
       <section className="mx-auto grid max-w-3xl gap-4 px-4 py-8" lang={locale} data-slot="hosted-book-visit">
-        <h1 className="text-2xl font-semibold">{m.book_reader_title({}, options)}</h1>
+        <h1 className="text-2xl font-semibold">
+          {contents ? m.book_reader_contents({}, options) : m.book_reader_title({}, options)}
+        </h1>
+        {contents ? <p className="text-sm text-muted-foreground">{m.book_reader_contents_recovery({}, options)}</p> : null}
         <p role="status">
           {visit.state === 'denied'
             ? m.book_reader_denied({}, options)
@@ -165,11 +198,47 @@ export function HostedBookVisitView({ visit, locale, navigate, reload, navigatio
                 ? m.book_reader_changed({}, options)
                 : m.book_reader_unavailable({}, options)}
         </p>
-        <Button className="min-h-11 min-w-11 justify-self-start" variant="outline" onClick={reload}>
-          {m.book_reader_retry({}, options)}
-        </Button>
+        <div className="flex min-w-0 flex-wrap gap-2">
+          <Button
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
+            variant="outline"
+            onClick={(event) => reread(event.detail === 0 ? { kind: 'heading' } : null)}
+          >
+            {m.book_reader_retry({}, options)}
+          </Button>
+          {first ? (
+            <a
+              className={linkClass}
+              href={first}
+              onClick={(event) => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+                event.preventDefault();
+                coordinates.captureFocus(event.detail === 0 ? { kind: 'heading' } : null);
+                coordinates.contents.stage({ parentOccurrenceId: search?.parent ?? null, cursor: null }, 'first');
+                navigate(first);
+              }}
+            >
+              {m.book_reader_first_page({}, options)}
+            </a>
+          ) : null}
+          {chapter ? (
+            <a
+              className={linkClass}
+              href={chapter}
+              onClick={(event) => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+                event.preventDefault();
+                coordinates.captureFocus(event.detail === 0 ? { kind: 'heading' } : null);
+                navigate(chapter);
+              }}
+            >
+              {m.book_reader_return_chapter({}, options)}
+            </a>
+          ) : null}
+        </div>
       </section>
     );
+  }
   const origin = visit.address.kind === 'contents' ? visit.address : visit.contentsReturn;
   const subjectId = visit.subjectId;
   const viewer = visit.admission.viewer;

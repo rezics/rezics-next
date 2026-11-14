@@ -138,7 +138,8 @@ establish native publication acceptance. No new API, progress store, automatic s
 
 ## Controls and progress
 
-Keyboard navigation focuses the heading while its original focus intent remains; pointer activation never schedules a focus transfer; contents return focuses the selected occurrence where present. Choosing
+Keyboard navigation focuses the heading while its original focus intent remains. Pointer activation never schedules
+a focus transfer. Contents return focuses the selected occurrence where present. Choosing
 a shared search/header control during navigation or moving focus during a request cancels the transfer. Arrow
 navigation stays inside the reading region, mirrors the document direction, and respects text selection, editable
 and interactive controls, modifiers, held keys and input methods. Controls wrap with 44px targets and phone safe
@@ -204,8 +205,8 @@ ordinary same-publication route/chapter movement may retain it. Reload/direct en
 Back/Forward keeps its exact public URL and performs the existing fresh admission/source observation.
 
 One reader retains at most 40 consumer rows (native maximum 20), one chapter, 24 ancestors, two neighbours and one
-contents return, in addition to this bounded coordinate window. Each catalogue host observation makes at most three native operations; Subject discovery makes one. Each source observation makes at
-most 32: chapter `7 + ancestors + changedRelease`, contents `5 + parentProbe + ancestors + selectedResolves`.
+contents return, in addition to this bounded coordinate window. Each catalogue host observation makes at most three
+native operations; Subject discovery makes one. Each source observation makes at most 32: chapter `7 + ancestors + changedRelease`, contents `5 + parentProbe + ancestors + selectedResolves`.
 Each operation retains Content's own bounds. Body bytes are at most 2 MiB per resolution; frozen/current resolution
 can read two bodies. Consumer cursors allow 8,192 characters; native/route cursors allow 4,096. There is no growing
 page/body cache, unbounded cursor chain, hydrated tree or new progress store.
@@ -216,7 +217,9 @@ save or clear. A later chapter open still performs its existing exact-body admis
 `illustrative-source.ts` supplies labelled native-format examples through the actual mapper, exclusively for tests
 and stories. It is never a production source. Story IDs remain `interfaces-hosted-book-reader` with named states
 `nested-contents`, `exact-chapter`, `sparse-continuation`, `failed-page-recovery`, `moved-occurrence`,
-`unavailable-navigation` and `retired-reading`; `saved-continue` and `independent-checkpoint-failure` cover checkpoint
+`unavailable-navigation` and `retired-reading`. `multiple-contents-pages`, `nested-level-return` and
+`failed-previous-retry` cover bounded contents traversal, independent parent restoration, frozen chapter return
+and exact failed-Previous recovery; `saved-continue` and `independent-checkpoint-failure` cover checkpoint
 presentation independently of the body. Review at 390px/1280px in light/dark and all eight locale globals.
 The reading column keeps the shared reading measure, wrapping controls, focus rings and safe area spacing.
 

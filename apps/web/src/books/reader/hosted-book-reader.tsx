@@ -47,6 +47,7 @@ export type HostedBookReaderProps = {
   contentsReturn?: BookContentsAddress | null;
   onNavigate?: BookReaderNavigation;
   onReload?: (focus?: BookReaderFocus) => void;
+  /** Bounded coordinate memory owned and scoped by the route host. */
   contentsNavigation?: BookContentsNavigation;
   focusOnRead?: { focus: BookReaderFocus; owner: Element | null };
   /** Native Library checkpoint controls share the admitted page lifetime. */
@@ -94,7 +95,7 @@ export function HostedBookReader({
         ...(focusOnRead !== undefined ? { initialFocus: focusOnRead.focus } : {}),
       },
     );
-  }, [source, addressKey, locale, readingIdentity, session, route, reopening, owner]);
+  }, [source, addressKey, locale, readingIdentity, session, route, reopening, owner, contentsNavigation]);
   const previous = useRef(reader);
   if (previous.current !== reader) previous.current.retire();
   previous.current = reader;
@@ -182,14 +183,20 @@ function BookReaderView({
   useEffect(() => {
     // Changing focus during a request cancels its later focus transfer.
     const moved = (event: FocusEvent) => {
-      if (intent.current && event.target !== intent.current.owner) intent.current = null;
+      if (!intent.current) return;
+      const owner = intent.current.owner;
+      if (event.target !== owner && !(event.target === document.body && !owner?.isConnected)) intent.current = null;
     };
-    const cancel = () => { intent.current = null; };
+    const cancel = () => {
+      intent.current = null;
+    };
     document.addEventListener('focusin', moved);
     document.addEventListener('pointerdown', cancel, true);
+    window.addEventListener('blur', cancel);
     return () => {
       document.removeEventListener('focusin', moved);
       document.removeEventListener('pointerdown', cancel, true);
+      window.removeEventListener('blur', cancel);
       intent.current = null;
     };
   }, [reader]);
@@ -223,9 +230,8 @@ function BookReaderView({
       target.kind === 'contents' && state.address.selection
         ? { ...target, selection: state.address.selection }
         : target;
-    const address = selected.kind === 'contents'
-      ? reader.resolveContents(selected, extra?.movement ?? 'level')
-      : selected;
+    const address =
+      selected.kind === 'contents' ? reader.resolveContents(selected, extra?.movement ?? 'level') : selected;
     const supplied = hrefForAddress?.(address);
     // Only the host's origin-local canonical addresses can become native links.
     const href = supplied?.startsWith('/') && !supplied.startsWith('//') && !/[\\\s]/.test(supplied) ? supplied : null;
@@ -348,7 +354,8 @@ function BookReaderView({
       </div>
     );
   };
-  const title = page?.title ?? (state.address.kind === 'contents' ? m.book_reader_contents({}, options) : m.book_reader_title({}, options));
+  const title =
+    page?.title ?? (state.address.kind === 'contents' ? m.book_reader_contents({}, options) : m.book_reader_title({}, options));
   const rootContents = page
     ? {
         kind: 'contents' as const,
@@ -408,7 +415,11 @@ function BookReaderView({
       </header>
       {page?.kind === 'chapter' ? (
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b pb-3">
-          <Button className={`${control} gap-2 px-2`} variant="ghost" onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}>
+          <Button
+            className={`${control} gap-2 px-2`}
+            variant="ghost"
+            onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}
+          >
             <List aria-hidden="true" className="size-4 shrink-0" />
             {labels.contents}
           </Button>
@@ -495,7 +506,12 @@ function BookReaderView({
         </>
       ) : page?.kind === 'contents' ? (
         <Contents
-          page={page} locale={locale} destination={destination} labels={labels} reader={reader} act={act}
+          page={page}
+          locale={locale}
+          destination={destination}
+          labels={labels}
+          reader={reader}
+          act={act}
           previous={state.previousContents ?? null}
         />
       ) : (
@@ -534,11 +550,17 @@ function BookReaderView({
               </Button>
               {state.state !== 'retired' ? (
                 <>
-                  {state.address.kind === 'contents'
-                    ? destination({ ...state.address, cursor: null }, m.book_reader_first_page({}, options), { movement: 'first' })
-                    : <Button className={control} variant="ghost" onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}>
-                        {labels.contents}
-                      </Button>}
+                  {state.address.kind === 'contents' ? (
+                    destination({ ...state.address, cursor: null }, m.book_reader_first_page({}, options), { movement: 'first' })
+                  ) : (
+                    <Button
+                      className={control}
+                      variant="ghost"
+                      onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}
+                    >
+                      {labels.contents}
+                    </Button>
+                  )}
                   {state.address.kind === 'contents' && state.address.selection
                     ? destination(
                         {
@@ -562,7 +584,12 @@ function BookReaderView({
 type Destination = (
   address: BookAddress,
   title: ReactNode,
-  extra?: { selected?: boolean; row?: string; appearance?: 'control' | 'breadcrumb' | 'row' | 'step'; movement?: BookContentsMovement },
+  extra?: {
+    selected?: boolean;
+    row?: string;
+    appearance?: 'control' | 'breadcrumb' | 'row' | 'step';
+    movement?: BookContentsMovement;
+  },
 ) => ReactNode;
 
 function Contents({
@@ -591,7 +618,7 @@ function Contents({
           {page.selected.state === 'moved' ? (
             <>
               <p className="text-sm leading-relaxed text-muted-foreground">{m.book_reader_moved({}, options)}</p>
-              {destination(page.selected.contents, m.book_reader_current_location({}, options))}
+              {destination(page.selected.contents, m.book_reader_current_location({}, options), { movement: 'exact' })}
             </>
           ) : null}
         </div>

@@ -8,9 +8,11 @@ import * as start from '../.storybook/react-start';
 import {
   createIllustrativeHostedBook,
   illustrativeBookCursor,
+  illustrativeBookLastCursor,
   illustrativeBookIds as ids,
   illustrativePublication,
 } from '../src/books/reader/illustrative-source';
+import { createBookContentsNavigation } from '../src/books/reader/contents-navigation';
 import { createHostedCatalogueApi } from '../src/books/reader/native-api';
 import type { HostedDiscoveryPage } from '../src/books/reader/discovery';
 import { decodeHostedBookDocument, readHostedBook } from '../src/books/reader/native-mapper';
@@ -315,7 +317,10 @@ test('replacement observations and session ABA remove body and rows; late result
   const book = createIllustrativeHostedBook();
   const chapter = await book.chapter();
   const source = observed(book.source);
-  const render = await mount(source, chapter);
+  const contentsNavigation = createBookContentsNavigation();
+  contentsNavigation.observe(book.contents(ids.nested));
+  contentsNavigation.observe(book.contents(ids.nested, illustrativeBookCursor));
+  const render = await mount(source, chapter, { contentsNavigation });
   const late = deferred<BookReadResult>();
   source.read.mockImplementationOnce(() => late.promise);
   const result = await book.source.read(
@@ -333,6 +338,7 @@ test('replacement observations and session ABA remove body and rows; late result
     book.replace();
   });
   expect(host.textContent).toContain(m.book_reader_changed());
+  expect(contentsNavigation.getSnapshot()).toEqual({ predecessors: [], current: null, staged: null });
   expect(source.read.mock.calls.at(-1)![1].aborted).toBe(true);
   await act(async () => late.resolve(result));
   await settle();
@@ -347,6 +353,7 @@ test('replacement observations and session ABA remove body and rows; late result
   });
   expect(host.querySelector('article')).toBeNull();
   expect(host.textContent).toContain(m.book_reader_changed());
+  expect(contentsNavigation.getSnapshot()).toEqual({ predecessors: [], current: null, staged: null });
 });
 
 test('locale, address, viewer and source replacements fence pending readings and preserve later focus', async () => {
@@ -400,6 +407,8 @@ test('a progress owner rendering failure leaves exact reading available; all eig
       m.book_reader_navigation_unavailable,
       m.book_reader_selection_unavailable,
       m.book_reader_previous,
+      m.book_reader_previous_page,
+      m.book_reader_contents_recovery,
       m.book_reader_next,
       m.book_reader_open_books,
       m.book_reader_checkpoint_title,
@@ -767,6 +776,7 @@ test('the default production route reads native contents and exact chapters, the
   );
   const sourceReads: BookReadRequest[] = [];
   const hostReads: unknown[] = [];
+  let failPrevious = false;
   mock.module('../src/books/reader/native-visit', () => ({
     readHostedBookVisit: async ({ data }: Parameters<typeof actualVisit.readHostedBookVisit>[0]) => {
       hostReads.push(data);
@@ -782,6 +792,10 @@ test('the default production route reads native contents and exact chapters, the
     ...actualRead,
     readNativeHostedBook: async ({ data }: Parameters<typeof actualRead.readNativeHostedBook>[0]) => {
       sourceReads.push(data.request);
+      if (failPrevious && data.request.address.kind === 'contents' && data.request.address.cursor === null) {
+        failPrevious = false;
+        return { state: 'unavailable' };
+      }
       return readHostedBook(api, data.request, data.publicationTitle, new AbortController().signal);
     },
   }));
@@ -873,6 +887,20 @@ test('the default production route reads native contents and exact chapters, the
           !url.searchParams.has('revisionId'),
       ),
     ).toBe(true);
+    failPrevious = true;
+    const beforePrevious = sourceReads.length;
+    await click(link(m.book_reader_previous_page()));
+    const exactPrevious = { ...book.contents(ids.nested), selection: (await book.chapter(true)).selection };
+    expect(sourceReads).toHaveLength(beforePrevious + 1);
+    expect(sourceReads.at(-1)?.address).toEqual(exactPrevious);
+    expect(host.textContent).toContain(m.book_reader_unavailable());
+    expect(host.textContent).toContain(m.book_reader_contents_recovery());
+    await click(button(m.book_reader_retry()));
+    expect(sourceReads).toHaveLength(beforePrevious + 2);
+    expect(sourceReads.at(-1)?.address).toEqual(exactPrevious);
+    expect(host.textContent).toContain(m.book_reader_empty());
+    expect(document.activeElement).toBe(host.querySelector('h1'));
+    expect(hostReads).toHaveLength(sourceReads.length);
   } finally {
     canonical.remove();
     mock.module('../src/books/reader/native-visit', () => actualVisit);
@@ -1468,4 +1496,58 @@ test('a fresh exact reading restores the private block after admission and leave
     window.scrollBy = original;
     mock.module('../src/books/reader/native-checkpoint', () => actual);
   }
+});
+
+test('contents Previous rereads sparse pages; pointer movement keeps focus and keyboard movement focuses the heading', async () => {
+  const book = createIllustrativeHostedBook('multiple-pages');
+  await book.ready;
+  const source = observed(book.source);
+  await mount(source, book.contents(ids.nested));
+  const external = document.createElement('button');
+  document.body.append(external);
+  external.focus();
+  await act(async () => {
+    button(m.book_reader_more()).dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 }));
+  });
+  await settle();
+  expect(document.activeElement).toBe(external);
+  expect(host.textContent).toContain('Dawn, an echo / 再読');
+  await click(button(m.book_reader_more()));
+  expect(source.read.mock.calls.at(-1)?.[0].address).toEqual(book.contents(ids.nested, illustrativeBookLastCursor));
+  expect(host.textContent).toContain(m.book_reader_empty());
+  expect(document.activeElement).toBe(host.querySelector('h1'));
+  const pending = deferred<BookReadResult>();
+  source.read.mockImplementationOnce(() => pending.promise);
+  await click(button(m.book_reader_previous_page()));
+  const target = book.contents(ids.nested, illustrativeBookCursor);
+  expect(source.read.mock.calls.at(-1)?.[0].address).toEqual(target);
+  expect(host.textContent).toContain(m.book_reader_contents_recovery());
+  external.focus();
+  const result = await book.source.read({ address: target, locale: 'en', limit: 40, ancestorLimit: 24 }, new AbortController().signal);
+  await act(async () => pending.resolve(result));
+  await settle();
+  expect(document.activeElement).toBe(external);
+  expect(host.textContent).toContain('Dawn, an echo / 再読');
+  await click(button(m.book_reader_previous_page()));
+  expect(source.read.mock.calls.at(-1)?.[0].address).toEqual(book.contents(ids.nested));
+  expect(document.activeElement).toBe(host.querySelector('h1'));
+});
+
+
+test('chapter return rereads the original sparse address and leaves a missing selected row honestly missing', async () => {
+  const book = createIllustrativeHostedBook('multiple-pages');
+  const chapter = await book.chapter(true);
+  const origin = { ...book.contents(ids.nested, illustrativeBookLastCursor), selection: chapter.selection };
+  const source = observed(book.source);
+  await mount(source, chapter, { contentsReturn: origin });
+  await click(button(m.book_reader_contents()));
+  expect(source.read).toHaveBeenCalledTimes(2);
+  expect(source.read.mock.calls[1]?.[0].address).toEqual(origin);
+  expect(host.textContent).toContain(m.book_reader_empty());
+  expect(host.querySelector('[aria-current="location"]')).toBeNull();
+  expect(host.querySelector('[data-occurrence]')).toBeNull();
+  expect(document.activeElement).toBe(host.querySelector('h1'));
+  await click(button(m.book_reader_return_chapter()));
+  expect(source.read).toHaveBeenCalledTimes(3);
+  expect(source.read.mock.calls[2]?.[0].address).toEqual(chapter);
 });
