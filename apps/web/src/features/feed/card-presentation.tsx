@@ -211,17 +211,9 @@ function ReviewedSubjectLink({
 export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const options = { locale: locale as Locale };
-  if ('kind' in summary && summary.kind === 'review') {
-    const context = 'reviewContext' in summary ? summary.reviewContext : undefined;
-    if (!context) {
-      // Search's public review summary supplies its reviewed Subject directly; Home does not fetch it.
-      const subject = 'subject' in summary ? summary.subject : null;
-      return subject ? (
-        <div className="flex min-w-0 flex-col gap-1" data-feed-card-review-context>
-          <ReviewedSubjectLink id={subject.id} title={subject.title} locale={locale} />
-        </div>
-      ) : null;
-    }
+  // Posts inherit review context from their containing thread without carrying a summary kind.
+  const context = 'reviewContext' in summary ? summary.reviewContext : undefined;
+  if (context) {
     const target = context.target;
     const citation = context.citation;
     return (
@@ -266,6 +258,15 @@ export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; local
         )}
       </div>
     );
+  }
+  if ('kind' in summary && summary.kind === 'review') {
+    // Search's public review summary supplies its reviewed Subject when native context is absent.
+    const subject = 'subject' in summary ? summary.subject : null;
+    return subject ? (
+      <div className="flex min-w-0 flex-col gap-1" data-feed-card-review-context>
+        <ReviewedSubjectLink id={subject.id} title={subject.title} locale={locale} />
+      </div>
+    ) : null;
   }
   if (item.destination.kind === 'space' && 'realm' in summary && summary.realm?.title) {
     return (

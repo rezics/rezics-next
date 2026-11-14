@@ -360,6 +360,9 @@ alone do not close that acceptance gap. Home cards and the shared FeedActionBar 
 
 Decision: review context exposes current permitted work and question meaning with the exact recorded vote units and
 vote revision; absent and concealed context stay distinct, while dependency failure rewinds the owning source for retry.
+Home renders supplied native review context on following posts as well as review threads, independently of summary
+kind, alongside immediate-parent context. Only review rows without native context use the discovery Subject metadata
+fallback; native absent or withheld fields never fall back to that metadata.
 
 An authenticated request also gets `summary.viewerReaction`, including explicit `null` after a successful slot read.
 Anonymous requests omit this private field. It is read in one batch for the current actor and is never cached across
