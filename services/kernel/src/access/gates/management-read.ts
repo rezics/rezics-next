@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { ExposureCatalogue } from '@rezics/access';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../../command/command.ts';
-import { withConnection } from '../../database/pool.ts';
+import { withBoundedReadConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import type { MountedRoute } from '../../http/request.ts';
 import { accessCheck, AuthenticationError, type Access, type Actor } from '../check.ts';
@@ -105,7 +105,9 @@ export async function readExposureManagementPage(
   try {
     requireAccessDeadline(deadline);
     const time = await within(deadline, () =>
-      withConnection(dependencies.pool, (client) => mintReadTime(deadlineClient(client, deadline), dependencies.clock)),
+      withBoundedReadConnection(dependencies.pool, deadline, (client) =>
+        mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+      ),
     );
     try {
       const at = new Date(authoritativeTimeValue(time));
@@ -114,7 +116,9 @@ export async function readExposureManagementPage(
         // Fresh native preparation on both sides of the configuration read refreshes actor/principal evidence.
         const check = await accessCheck(dependencies.access, actor, 'exposure:manage_read', GLOBAL_CONTEXT, context);
         const allowed = await within(deadline, () =>
-          withConnection(dependencies.pool, (client) => check(deadlineClient(client, deadline), time)),
+          withBoundedReadConnection(dependencies.pool, deadline, (client) =>
+            check(deadlineClient(client, deadline), time),
+          ),
         );
         requireAccessDeadline(deadline);
         if (!allowed) throw new ProblemError('forbidden');
@@ -126,7 +130,9 @@ export async function readExposureManagementPage(
           if (!catalogue.actions[action]) continue;
           const check = await accessCheck(dependencies.access, actor, `exposure:${action}`, GLOBAL_CONTEXT, context);
           advice[action] = await within(deadline, () =>
-            withConnection(dependencies.pool, (client) => check(deadlineClient(client, deadline), time)),
+            withBoundedReadConnection(dependencies.pool, deadline, (client) =>
+              check(deadlineClient(client, deadline), time),
+            ),
           );
           requireAccessDeadline(deadline);
         }
