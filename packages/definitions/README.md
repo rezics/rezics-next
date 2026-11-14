@@ -42,6 +42,15 @@ and safe-pattern admission are unchanged.
 
 ## Semantic language selection
 
+The pure `@rezics/definitions/language` entry also exports `canonicalLanguageKey` and
+`parseLanguagePreferences`. Keys use Intl canonical BCP 47 spelling, at most 63 ASCII
+characters; exact storage/wire boundaries compare the canonical result with the input.
+Explicit preference arrays or comma strings require canonical unique keys, at most 16
+and 1023 comma-separated UTF-8 bytes. Absence and an empty array mean no preferences;
+an explicit empty string, whitespace, aliases, duplicates and excess input reject with
+`null`. No preference is silently trimmed, deduplicated or truncated. Existing HTTP
+quality-range handling below keeps its separate tolerant policy.
+
 The existing root and browser entries export the same pure `languageRanges` and `chooseLabel` implementation from
 `src/language.ts`. It orders valid RFC language ranges by quality, caps preferences at 16, truncates ranges according
 to RFC 4647, maximizes likely scripts, then tries the original language, English and a deterministic sorted fallback.
