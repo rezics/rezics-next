@@ -1,9 +1,13 @@
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
 import { readAccount } from '../access/account-data.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
-import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { withConnection } from '../database/pool.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  CommandUnavailableError,
+  requireAccessDeadline,
+} from '../access/unavailable.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
@@ -26,6 +30,11 @@ import bootstrap from './subject-offers-bootstrap.sql';
 
 export const SUBJECT_OFFER_RAW_LIMIT = 20;
 export const SUBJECT_OFFER_START = '00000000-0000-0000-0000-000000000000';
+const boundedReadOptions = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  // A server ERROR has settled; other native query failures can leave IO unresolved.
+  isUncertainSettledQueryError: () => true,
+};
 type Dependencies = {
   pool: Pool;
   access: Access;
@@ -39,10 +48,10 @@ type Dependencies = {
 export async function readSubjectOfferSource(pool: Pool, id: string, deadline: number): Promise<Offer | null> {
   const route = routeOf(id);
   if (route === null) return null;
-  return withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+  const source = await withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
       const owner = await readPartition(client, partitionOf(route));
       if (!owner || owner.writeState !== 'active')
         throw new CommandUnavailableError(
@@ -51,20 +60,16 @@ export async function readSubjectOfferSource(pool: Pool, id: string, deadline: n
           owner?.movedTo,
         );
       const offer = await readOffer(client, route, id);
-      if (!offer) {
-        await client.query('COMMIT');
-        return null;
-      }
+      if (!offer) return null;
       const creator = await readAccount(client, route, offer.creatorAccountId);
       if (!creator) throw new ProblemError('dependency_unavailable');
-      await client.query('COMMIT');
-      if (creator.state !== 'active' || creator.fenced) return null;
-      return offer;
-    } catch (error) {
-      await connection.query('ROLLBACK');
-      throw error;
-    }
-  });
+      return { offer, creator };
+    },
+    boundedReadOptions,
+  );
+  // Evaluate the captured creator after COMMIT and release, before any foreign preparation.
+  if (!source || source.creator.state !== 'active' || source.creator.fenced) return null;
+  return source.offer;
 }
 
 /** The existing active public offer floor, evaluated by the sole native Access formula.
@@ -94,7 +99,7 @@ async function mayReadOffer(deps: Dependencies, actor: Actor, offer: Offer, dead
     },
     { pool: deps.pool, deadline },
   );
-  return withConnection(deps.pool, (client) => check(deadlineClient(client, deadline)));
+  return withBoundedReadConnection(deps.pool, deadline, (client) => check(client), boundedReadOptions);
 }
 
 export function publicOfferCard(offer: Offer): PublicOfferCard {
@@ -151,21 +156,29 @@ export function listSubjectOffers(
       after = decoded.after[0];
       cursorEpoch = decoded.epoch;
     }
-    const directory = await withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, input.deadline);
-      const owner = await readPartition(client, partitionOf(route));
-      if (!owner || owner.writeState !== 'active') throw new ProblemError('dependency_unavailable');
-      if (cursorEpoch !== undefined && cursorEpoch !== owner.epoch) throw new ProblemError('stale_cursor');
-      const rows = await references.run(client, { route, subject: terminal, after, limit: size });
-      return { rows, epoch: owner.epoch };
-    });
+    const directory = await withBoundedReadConnection(
+      deps.pool,
+      input.deadline,
+      async (client) => {
+        const owner = await readPartition(client, partitionOf(route));
+        if (!owner || owner.writeState !== 'active') throw new ProblemError('dependency_unavailable');
+        if (cursorEpoch !== undefined && cursorEpoch !== owner.epoch) throw new ProblemError('stale_cursor');
+        const rows = await references.run(client, { route, subject: terminal, after, limit: size });
+        return { rows, epoch: owner.epoch };
+      },
+      boundedReadOptions,
+    );
     // Release the directory before every creator, Content and Subject home.
-    const state = await withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, input.deadline);
-      const owner = await readPartition(client, 0);
-      if (!owner || owner.writeState !== 'active') return null;
-      return bootstrap.run(client, {});
-    });
+    const state = await withBoundedReadConnection(
+      deps.pool,
+      input.deadline,
+      async (client) => {
+        const owner = await readPartition(client, 0);
+        if (!owner || owner.writeState !== 'active') return null;
+        return bootstrap.run(client, {});
+      },
+      boundedReadOptions,
+    );
     let preparing = !state?.ready;
     const offers: PublicOfferCard[] = [];
     for (const ref of directory.rows) {
@@ -241,11 +254,16 @@ export function listSubjectOffers(
     const finalDisclosure = await disclosure();
     if (!finalDisclosure.summaries.get(subject)) throw new ProblemError('not_found');
     await finalDisclosure.verify();
-    await withConnection(deps.pool, async (connection) => {
-      const owner = await readPartition(deadlineClient(connection, input.deadline), partitionOf(route));
-      if (!owner || owner.writeState !== 'active' || owner.epoch !== directory.epoch)
-        throw new ProblemError('dependency_unavailable');
-    });
+    await withBoundedReadConnection(
+      deps.pool,
+      input.deadline,
+      async (client) => {
+        const owner = await readPartition(client, partitionOf(route));
+        if (!owner || owner.writeState !== 'active' || owner.epoch !== directory.epoch)
+          throw new ProblemError('dependency_unavailable');
+      },
+      boundedReadOptions,
+    );
     requireAccessDeadline(input.deadline);
     const last = directory.rows.at(-1);
     return {
