@@ -7,15 +7,25 @@ const noSubscribe = () => () => {};
 const unobserved = () => 'unobserved';
 type InspectionKind = 'assertion' | 'association';
 type Selection = { key: string; group: string; kind: InspectionKind; part?: string | undefined };
-type Receipt = { opener?: HTMLButtonElement; fallback?: HTMLElement; keyboard: boolean; returning?: boolean };
+type Receipt = {
+  opener?: HTMLButtonElement;
+  fallback?: HTMLElement;
+  keyboard: boolean;
+  returning?: boolean;
+  focusAllowed: boolean;
+};
 type Recovery = { destination: string; state: 'pending' | 'failed' };
 
 type CurrentReading = {
   source: object;
   descriptor: string;
   cache: string;
+  sessionCache: string;
+  spoiler: number | undefined;
   observation: ReturnType<typeof browserObservation> | undefined;
   session: BrowserObservationSnapshot | undefined;
+  sessionBound: boolean;
+  returnInterrupted: boolean;
   retired: boolean;
   active: boolean;
   selection: Selection | undefined;
@@ -60,6 +70,8 @@ function createReading(
   source: object,
   descriptor: string,
   cache: string,
+  sessionCache: string,
+  spoiler: number | undefined,
   observation: ReturnType<typeof browserObservation> | undefined,
   session: BrowserObservationSnapshot | undefined,
 ) {
@@ -67,8 +79,12 @@ function createReading(
     source,
     descriptor,
     cache,
+    sessionCache,
+    spoiler,
     observation,
     session,
+    sessionBound: session?.state === 'signed-in' || session?.state === 'signed-out',
+    returnInterrupted: false,
     retired: false as boolean,
     active: false as boolean,
     selection: undefined as Selection | undefined,
@@ -98,6 +114,7 @@ function createReading(
 export function useCatalogueFileReading(input: {
   source: object;
   descriptor: string;
+  spoiler?: number | undefined;
   cacheSource?: object;
   currentHref?: string | undefined;
   recoverCurrentPage?: (() => Promise<void>) | undefined;
@@ -134,28 +151,46 @@ export function useCatalogueFileReading(input: {
       .findAll({ queryKey: ['exposure', 'viewer'] })
       .map((query) => [query.queryHash, stamp(query.queryKey)])
       .sort((left, right) => String(left[0]).localeCompare(String(right[0])));
-    return JSON.stringify([stamp(['session']), subjects, stamp(['exposure', 'viewer']), viewers]);
+    return JSON.stringify([JSON.stringify([subjects, stamp(['exposure', 'viewer']), viewers]), stamp(['session'])]);
   }, [client, cacheSource]);
-  const cache = useSyncExternalStore(observation?.subscribeCache ?? noSubscribe, cacheSnapshot, cacheSnapshot);
+  const snapshot = useSyncExternalStore(observation?.subscribeCache ?? noSubscribe, cacheSnapshot, cacheSnapshot);
+  const [cache, sessionCache] = client ? (JSON.parse(snapshot) as [string, unknown]) : [snapshot, undefined];
+  const sessionStamp = JSON.stringify(sessionCache) ?? unobserved();
   const holder = useRef<CurrentReading | undefined>(undefined);
   const [, refresh] = useReducer((version: number) => version + 1, 0);
-  const descriptor = JSON.stringify([input.descriptor, session]);
   if (
     !holder.current ||
     holder.current.source !== input.source ||
     holder.current.observation !== observation ||
-    holder.current.descriptor !== descriptor ||
+    holder.current.descriptor !== input.descriptor ||
     holder.current.cache !== cache ||
-    holder.current.session !== session
+    (holder.current.spoiler !== undefined && holder.current.spoiler !== input.spoiler) ||
+    (holder.current.sessionBound &&
+      (holder.current.session !== session || holder.current.sessionCache !== sessionStamp))
   ) {
     holder.current?.retire();
-    holder.current = createReading(input.source, descriptor, cache, observation, session);
+    holder.current = createReading(
+      input.source,
+      input.descriptor,
+      cache,
+      sessionStamp,
+      input.spoiler,
+      observation,
+      session,
+    );
   }
   const episode = holder.current!;
+  // First preparation binds the admitted source; only subsequent replacements retire it.
+  episode.spoiler = input.spoiler;
+  episode.session = session;
+  episode.sessionCache = sessionStamp;
+  episode.sessionBound ||= session?.state === 'signed-in' || session?.state === 'signed-out';
   episode.owns = () =>
     holder.current === episode &&
-    cacheSnapshot() === episode.cache &&
-    (!observation || observation.getSnapshot() === episode.session);
+    (client ? JSON.parse(cacheSnapshot())[0] === episode.cache : cacheSnapshot() === episode.cache) &&
+    (!episode.sessionBound ||
+      ((!observation || observation.getSnapshot() === episode.session) &&
+        JSON.stringify(JSON.parse(cacheSnapshot())[1]) === episode.sessionCache));
   useLayoutEffect(() => {
     episode.active = true;
     const depart = () => {
@@ -179,15 +214,18 @@ export function useCatalogueFileReading(input: {
       fallback: HTMLElement | undefined,
       keyboard: boolean,
       returning = false,
+      focusAllowed = true,
     ) => {
       if (!episode.current()) return;
       episode.cancelFocus?.();
+      if (!returning) episode.returnInterrupted = true;
       episode.selection = selection;
       episode.receipt = {
         ...(keyboard ? { opener } : {}),
         ...(fallback ? { fallback } : {}),
         keyboard,
         returning,
+        focusAllowed,
       };
       episode.recovery = undefined;
       refresh();
@@ -199,6 +237,7 @@ export function useCatalogueFileReading(input: {
     (fallback: HTMLElement | undefined) => {
       if (!episode.current() || !episode.selection) return;
       const receipt = episode.receipt;
+      episode.returnInterrupted = true;
       const opener =
         receipt?.keyboard && receipt.opener?.isConnected && !receipt.opener.disabled ? receipt.opener : undefined;
       const group = receipt?.fallback?.isConnected ? receipt.fallback : fallback;
@@ -234,7 +273,8 @@ export function useCatalogueFileReading(input: {
 
   const focus = useCallback(
     (target: HTMLElement | undefined, preserveFocus = episode.receipt?.returning ?? false) => {
-      if (episode.current()) scheduleFocus(episode, target, preserveFocus);
+      if (episode.current() && (!preserveFocus || episode.receipt?.focusAllowed !== false))
+        scheduleFocus(episode, target, preserveFocus);
     },
     [episode],
   );

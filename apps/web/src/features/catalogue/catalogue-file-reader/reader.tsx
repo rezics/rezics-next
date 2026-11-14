@@ -860,11 +860,11 @@ export function CatalogueFileReader({
   descriptor,
   currentHref,
   recoverCurrentPage,
-  readerSpoiler = 0,
+  readerSpoiler,
   correctionAvailability,
 }: {
   correctionAvailability?: 'allowed' | 'denied' | 'unavailable' | undefined;
-  readerSpoiler?: number;
+  readerSpoiler?: number | undefined;
   visit: CatalogueFileReaderVisit;
   link?: PageLink;
   source?: object;
@@ -879,25 +879,32 @@ export function CatalogueFileReader({
   const readerElement = useRef<HTMLElement>(null);
   const triggers = useRef(new Map<string, HTMLButtonElement>());
   // A receipt is consumed once per address, never once per response or cache/session incarnation.
-  const attemptedReturn = useRef<{ hash: string; episode: object } | undefined>(undefined);
+  const attemptedReturn = useRef<
+    | {
+        hash: string;
+        episode: object;
+        pending: boolean;
+        focusAllowed: boolean;
+      }
+    | undefined
+  >(undefined);
   const [returnOutcome, setReturnOutcome] = useState<'changed' | 'historical' | 'unavailable' | 'retired'>();
   const inspectionHeading = useRef<HTMLHeadingElement>(null);
   const recoveryButton = useRef<HTMLButtonElement>(null);
   const reading = useCatalogueFileReading({
     source,
-    descriptor: JSON.stringify([
-      readerSpoiler,
+    spoiler: readerSpoiler,
+    descriptor:
       descriptor ??
-        JSON.stringify([
-          visit.public.subject.id,
-          visit.public.subject.revision,
-          visit.public.subject.release,
-          visit.digest ?? null,
-          visit.locale,
-          visit.public.subject.context,
-          currentHref,
-        ]),
-    ]),
+      JSON.stringify([
+        visit.public.subject.id,
+        visit.public.subject.revision,
+        visit.public.subject.release,
+        visit.digest ?? null,
+        visit.locale,
+        visit.public.subject.context,
+        currentHref,
+      ]),
     currentHref,
     recoverCurrentPage,
   });
@@ -912,6 +919,13 @@ export function CatalogueFileReader({
   };
   useEffect(() => {
     let cancelled = false;
+    const activity = () => {
+      const attempt = attemptedReturn.current;
+      if (attempt?.episode === reading.episode && attempt.pending) attempt.focusAllowed = false;
+    };
+    window.addEventListener('pointerdown', activity, true);
+    window.addEventListener('keydown', activity, true);
+    window.addEventListener('focusin', activity, true);
     // Let the current session/cache subscription settle before consuming a navigation receipt.
     queueMicrotask(() => {
       if (cancelled) return;
@@ -922,17 +936,24 @@ export function CatalogueFileReader({
       }
       if (!reading.episode.current()) return;
       if (attemptedReturn.current?.hash === returnHash) {
-        if (attemptedReturn.current.episode === reading.episode) return;
-        // Replacing an admitted reading must not replay the URL's old selection (including A/B/A).
-        setReturnOutcome('retired');
-        reading.focus(
-          groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current ?? undefined,
-          true,
-        );
-        return;
+        if (attemptedReturn.current.episode === reading.episode) {
+          if (!attemptedReturn.current.pending) return;
+        } else {
+          // Replacing an admitted reading must not replay the URL's old selection (including A/B/A).
+          setReturnOutcome('retired');
+          reading.focus(
+            groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current ?? undefined,
+            true,
+          );
+          return;
+        }
+      } else {
+        attemptedReturn.current = { hash: returnHash, episode: reading.episode, pending: true, focusAllowed: true };
       }
-      if (visit.state === 'loading') return;
-      attemptedReturn.current = { hash: returnHash, episode: reading.episode };
+      if (visit.state === 'loading' || readerSpoiler === undefined) return;
+      const attempt = attemptedReturn.current;
+      attempt.pending = false;
+      if (reading.episode.returnInterrupted) return;
       const resolved = selectedEvidence(visit, returned);
       const contextMatches =
         returned.context === visit.public.subject.context &&
@@ -962,19 +983,23 @@ export function CatalogueFileReader({
         opener
       ) {
         setReturnOutcome(undefined);
-        reading.select(returned, opener, groupHeadings.current.get(returned.group), true, true);
+        reading.select(returned, opener, groupHeadings.current.get(returned.group), true, true, attempt.focusAllowed);
       } else {
         setReturnOutcome(!available ? 'unavailable' : historical ? 'historical' : 'changed');
-        reading.focus(
-          groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current ?? undefined,
-          true,
-        );
+        if (attempt.focusAllowed)
+          reading.focus(
+            groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current ?? undefined,
+            true,
+          );
       }
     });
     return () => {
       cancelled = true;
+      window.removeEventListener('pointerdown', activity, true);
+      window.removeEventListener('keydown', activity, true);
+      window.removeEventListener('focusin', activity, true);
     };
-  }, [reading.episode, returnHash]);
+  }, [reading.episode, returnHash, readerSpoiler, visit.state]);
   useLayoutEffect(() => {
     if (evidence && reading.episode.current()) {
       const part =
@@ -991,7 +1016,7 @@ export function CatalogueFileReader({
     <Navigation.Provider
       value={{
         href: currentHref,
-        spoiler: readerSpoiler,
+        spoiler: readerSpoiler ?? 0,
         trigger: (key, element) => {
           if (element) triggers.current.set(key, element);
           else triggers.current.delete(key);
@@ -1132,7 +1157,7 @@ export function CatalogueFileReader({
                   locale={visit.locale}
                   release={visit.release}
                   returnSourceId={visit.public.subject.id}
-                  origin={correctionOrigin(visit, currentHref, evidence, readerSpoiler)}
+                  origin={correctionOrigin(visit, currentHref, evidence, readerSpoiler ?? 0)}
                 />
               </nav>
             ) : null}
@@ -1150,7 +1175,7 @@ export function CatalogueFileReaderOverview({
   locale,
   link = PlainLink,
   returning = false,
-  readerSpoiler = 0,
+  readerSpoiler,
   currentHref,
   recoverCurrentPage,
 }: {
@@ -1159,7 +1184,7 @@ export function CatalogueFileReaderOverview({
   locale: string;
   link?: PageLink;
   returning?: boolean;
-  readerSpoiler?: number;
+  readerSpoiler?: number | undefined;
   currentHref?: string | undefined;
   recoverCurrentPage?: (() => Promise<void>) | undefined;
 }) {

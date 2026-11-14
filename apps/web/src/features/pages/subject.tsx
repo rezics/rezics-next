@@ -1383,7 +1383,7 @@ export function SubjectPage({
                       returnTo={workReturn}
                       {...(currentHref !== undefined ? { currentHref } : {})}
                       {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
-                      readerSpoiler={reader?.spoilerLevel ?? 0}
+                      readerSpoiler={reader && reader !== defaultReader ? reader.spoilerLevel : undefined}
                       link={ContextLink}
                     />
                   ) : null}

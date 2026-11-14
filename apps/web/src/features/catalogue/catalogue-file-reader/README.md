@@ -19,6 +19,12 @@ falling back to its current group heading.
 one explicit page-recovery request. Cache and browser-session replacement retire that state; no page snapshot,
 automatic retry, document fetch or per-association request is retained.
 
+**Decision:** The ordinary Subject's unresolved or shared default reader keeps conservative disclosure. Its first
+prepared spoiler preference and browser session bind the existing reading without replacing its source generation,
+inspection or recovery. One exact return waits for that preference, then resolves only currently disclosed evidence
+and connected controls. Manual inspection or collapse takes precedence; intervening visitor activity defeats return
+focus. Later preference, authority, source or cache replacement still retires the reading, including A/B/A changes.
+
 The bounded reader fragment retains at most 4,096 UTF-8 bytes of addresses and keys, never a response body or a nested return URL. It preserves the resolved Context and Definition for comparison, plus native assertion revision and direction. Existing spoiler controls gate complete rows and evidence.
 
 **Decision:** The public correction entry sends the installed correction origin from the current reading, including
