@@ -78,6 +78,7 @@ export function createBookReader(
     request?.abort();
     request = undefined;
     contentsReturn = null;
+    if (!options.contentsNavigation) contents.retire();
     publish({ address: snapshot.address, state: 'retired', page: null, focus: null });
   };
   const current = () => {
