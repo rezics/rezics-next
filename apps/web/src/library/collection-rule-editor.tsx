@@ -107,13 +107,18 @@ function Choice({
         </Select>
       )}
       {(help || retained.length > 0) && (
-        <FieldDescription id={`${fieldId}-help`}>{help ?? m.library_rule_retained_help()}</FieldDescription>
+        <FieldDescription id={`${fieldId}-help`}>
+          {help}
+          {help && retained.length > 0 ? ' ' : null}
+          {retained.length > 0 ? m.library_rule_retained_help() : null}
+        </FieldDescription>
       )}
       {multiple && selected.some(Boolean) && (
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="min-h-11 h-auto whitespace-normal"
           aria-label={`${m.library_subject_clear()} · ${label}`}
           onClick={() => onChange([])}
         >
@@ -185,7 +190,8 @@ function OwnerFields({
           .filter((profile) =>
             'state' in owner ? !!profile.entryStateSet : 'session' in owner ? !!profile.progress : !!profile.copies,
           )
-          .map(({ id }) => ({ id, name: id }))}
+          .map(({ id }, index) => ({ id, name: m.library_rule_profile_option({ number: index + 1 }) }))}
+        help={m.library_rule_profile_help()}
         onChange={([profileId]) => {
           const next = choices.release.profiles.find(({ id }) => id === profileId);
           if ('state' in owner)
@@ -515,6 +521,7 @@ function RuleForm({
   const [feedback, setFeedback] = useState('');
   const [conflict, setConflict] = useState(false);
   const [intent, setIntent] = useState<RuleWrite | null>(null);
+  const [submittedReview, setSubmittedReview] = useState<{ choices: RuleChoices; accepted?: RuleMeaning } | null>(null);
   const captured = useRef<RuleWrite | null>(null);
   const request = useRef<{ csrf: string; send: typeof save } | null>(null);
   const attempted = useRef(false);
@@ -527,6 +534,7 @@ function RuleForm({
   const confirmed = useRef(false);
   const snapshot = ruleDraftSnapshot({ filter, title, description, source });
   const baseline = useRef(snapshot);
+  const editingChoices = intent && submittedReview ? submittedReview.choices : choices;
   const navigation = useCollectionRuleDraftNavigation({
     dirty: !savedId && (snapshot !== baseline.current || !!intent),
     isCurrent: () => isCurrent() && !confirmed.current,
@@ -550,8 +558,8 @@ function RuleForm({
           }}
           choices={
             canLabel && (canLabelCurrent?.() ?? true)
-              ? choices
-              : { ...choices, labels: { state: 'unavailable', values: [], next: null } }
+              ? editingChoices
+              : { ...editingChoices, labels: { state: 'unavailable', values: [], next: null } }
           }
         />
       ) : null,
@@ -590,6 +598,9 @@ function RuleForm({
       return;
     }
     attempted.current = true;
+    if (!captured.current) {
+      setSubmittedReview({ choices: visibleChoices, ...(reviewMeaning ? { accepted: reviewMeaning } : {}) });
+    }
     captured.current = input;
     request.current ??= { csrf, send };
     const original = request.current;
@@ -609,6 +620,7 @@ function RuleForm({
         captured.current = null;
         request.current = null;
         setIntent(null);
+        setSubmittedReview(null);
       }
       if (result.ok) {
         confirmed.current = true;
@@ -727,9 +739,9 @@ function RuleForm({
   const visibleChoices = useMemo(
     () =>
       canLabel && (canLabelCurrent?.() ?? true)
-        ? choices
-        : { ...choices, labels: { state: 'unavailable' as const, values: [], next: null } },
-    [canLabel, canLabelCurrent, choices],
+        ? editingChoices
+        : { ...editingChoices, labels: { state: 'unavailable' as const, values: [], next: null } },
+    [canLabel, canLabelCurrent, editingChoices],
   );
   const currentMeaning = useMemo(() => ruleReviewReleaseFromChoices(choices), [choices]);
   const filterMatchesSaved =
@@ -753,9 +765,10 @@ function RuleForm({
     );
   }, [base, choices]);
   const reviewUsesSavedMeaning = filterMatchesSaved && base.state === 'ready' && !savedId;
-  const reviewMeaning = reviewUsesSavedMeaning && savedMeaning ? savedMeaning : undefined;
-  const reviewProfiles = reviewMeaning?.profiles ?? choices.release.profiles;
-  const reviewProfileState = reviewMeaning?.state ?? choices.release.state;
+  const reviewMeaning =
+    intent && submittedReview ? submittedReview.accepted : reviewUsesSavedMeaning ? savedMeaning : undefined;
+  const reviewProfiles = reviewMeaning?.profiles ?? editingChoices.release.profiles;
+  const reviewProfileState = reviewMeaning?.state ?? editingChoices.release.state;
   // Keep this intent mounted while authority is unavailable, without retaining private UI in the DOM.
   if (!isCurrent())
     return (
@@ -770,7 +783,23 @@ function RuleForm({
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
       {navigation.boundary}
       <PageHeading>{base.state === 'new' ? m.library_rule_new() : m.library_rule_edit()}</PageHeading>
-      <form noValidate onSubmit={(event) => void submit(event)} className="flex min-w-0 flex-col gap-6">
+      <header className="min-w-0 space-y-2 rounded-xl border border-border bg-card p-4 sm:p-6">
+        {base.state === 'ready' && <h2 className="break-words text-xl font-semibold">{base.title}</h2>}
+        <p className="max-w-prose text-sm text-muted-foreground">
+          {base.state === 'new' ? m.library_rule_new_help() : m.library_rule_edit_help()}
+        </p>
+        <p className="max-w-prose text-sm">
+          {base.state === 'new' ? m.library_rule_private() : m.library_rule_privacy_help()}
+        </p>
+        {base.state === 'ready' && (
+          <p className="max-w-prose text-sm text-muted-foreground">{m.library_rule_edit_release_help()}</p>
+        )}
+      </header>
+      <form
+        noValidate
+        onSubmit={(event) => void submit(event)}
+        className="flex min-w-0 flex-col gap-6 [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2"
+      >
         <fieldset disabled={pending || !!intent || !!savedId} className="min-w-0">
           <FieldGroup>
             {base.state === 'new' && (
@@ -823,6 +852,10 @@ function RuleForm({
                 </Field>
               </>
             )}
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold">{m.library_rule_conditions()}</h2>
+              <p className="max-w-prose text-sm text-muted-foreground">{m.library_rule_conditions_help()}</p>
+            </div>
             {choices.release.state !== 'ready' && (
               <p role="status">
                 {choices.release.state === 'preparing'
@@ -895,7 +928,7 @@ function RuleForm({
                 if (isCurrent() && !captured.current) setFilter(value);
               }}
               locale={locale}
-              metadata={choices.release.metadata ?? { types: {}, properties: {} }}
+              metadata={editingChoices.release.metadata ?? { types: {}, properties: {} }}
               extension={extension}
             />
             <details className="text-sm">
@@ -906,11 +939,34 @@ function RuleForm({
             </details>
           </FieldGroup>
         </fieldset>
+        {intent && 'title' in intent && (
+          <section
+            className="min-w-0 space-y-3 rounded-xl border border-border p-4"
+            aria-label={m.library_rule_submitted_metadata()}
+          >
+            <h2 className="font-semibold">{m.library_rule_submitted_metadata()}</h2>
+            <dl className="space-y-2">
+              <div>
+                <dt className="text-sm text-muted-foreground">{m.library_collection_title()}</dt>
+                <dd className="break-words">{intent.title}</dd>
+              </div>
+              {intent.description && (
+                <div>
+                  <dt className="text-sm text-muted-foreground">{m.library_collection_description()}</dt>
+                  <dd className="whitespace-pre-wrap break-words">{intent.description}</dd>
+                </div>
+              )}
+            </dl>
+          </section>
+        )}
         <DynamicRuleReview
           filter={reviewFilter}
           stage={reviewStage}
           current={currentMeaning}
-          accepted={reviewMeaning}
+          accepted={
+            reviewMeaning ??
+            (intent && submittedReview ? ruleReviewReleaseFromChoices(submittedReview.choices) : undefined)
+          }
           choices={visibleChoices}
           profiles={reviewProfiles}
           profileState={reviewProfileState}
@@ -953,7 +1009,6 @@ function RuleForm({
         {feedback && <p role="alert">{feedback}</p>}
         {intent && !pending && <p role="status">{m.library_rule_uncertain()}</p>}
         {savedId && <p role="status">{m.library_rule_saved()}</p>}
-        {base.state === 'new' && <p className="text-sm text-muted-foreground">{m.library_rule_private()}</p>}
         <CollectionRuleControls
           creating={base.state === 'new'}
           pending={pending}

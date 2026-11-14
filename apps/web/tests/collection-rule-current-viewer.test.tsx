@@ -415,6 +415,7 @@ describe('Private rule editor data and asynchronous work stay with the originati
       await ui.render({ csrfToken: 'rotated-csrf' });
       expect(ui.button(m.library_collection_save_pending()).disabled).toBe(true);
       await act(async () => first.resolve({ ok: false, reason: 'unavailable' }));
+      expect(ui.button(m.library_rule_retry_save_original()).disabled).toBe(false);
       await ui.render({ page: ready() }); // Ordinary loader replacement keeps the deliberate draft.
       await ui.click(m.library_collection_reload()); // An unchanged uncertain command keeps its key, even after read.
       expect(calls).toHaveLength(1); // No automatic resubmission.
@@ -425,7 +426,7 @@ describe('Private rule editor data and asynchronous work stay with the originati
       await ui.submit();
       expect(calls).toHaveLength(2); // A conflict requires the user's refresh/revision choice.
       refreshRevision = 8;
-      await ui.click(m.library_collection_reload());
+      await ui.click(m.library_rule_review_current_read());
       await ui.submit();
       expect(calls[2]!.value.revision).toBe(8);
       expect(calls[2]!.value.filter).toEqual(calls[0]!.value.filter);
@@ -476,6 +477,8 @@ describe('Private rule editor data and asynchronous work stay with the originati
       await ui.submit();
       expect(calls[0]!.title).toBe('My private rule');
       expect(calls[0]!.id).toBeUndefined();
+      expect(ui.button(m.library_rule_retry_create_original()).disabled).toBe(false);
+      expect(ui.host.textContent).toContain(m.library_rule_submitted_metadata());
       await ui.render({ csrfToken: 'new-nonempty-csrf' });
       await ui.submit();
       expect(calls[1]).toEqual(calls[0]);

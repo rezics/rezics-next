@@ -36,18 +36,18 @@ export function CollectionRuleControls({
           {pending
             ? m.library_collection_save_pending()
             : savedId
-              ? m.library_rule_saved()
+              ? m.library_rule_confirmed_action()
               : uncertain
                 ? creating
                   ? m.library_rule_retry_create_original()
                   : m.library_rule_retry_save_original()
                 : creating
-              ? navigateAfterSave
-                ? m.library_rule_create_and_view_results()
-                : m.library_collection_create()
-              : navigateAfterSave
-                ? m.library_rule_save_and_view_results()
-                : m.library_collection_save()}
+                  ? navigateAfterSave
+                    ? m.library_rule_create_and_view_results()
+                    : m.library_collection_create()
+                  : navigateAfterSave
+                    ? m.library_rule_save_and_view_results()
+                    : m.library_collection_save()}
         </Button>
         {creating && savedId ? (
           <a
@@ -64,7 +64,11 @@ export function CollectionRuleControls({
       </div>
       {href && (
         <a
-          className="inline-flex min-h-11 items-center rounded-lg px-4 py-2 text-primary underline focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={
+            savedId
+              ? 'inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-center font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+              : 'inline-flex min-h-11 items-center rounded-lg px-4 py-2 text-primary underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+          }
           href={href}
         >
           {m.library_rule_members()}

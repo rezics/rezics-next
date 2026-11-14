@@ -198,9 +198,11 @@ test('available choices use supplied localized names, with exact saved and field
       try {
         expect(ui.select(m.library_rule_state()).textContent).toBe(stateLabels[locale]);
         expect(ui.select(m.library_rule_label()).textContent).toBe('Weekend reading');
-        // The supplied profile has only an ID. Do not invent a profile title.
-        expect(ui.select(m.library_rule_profile()).textContent).toBe('profile.books');
+        // This is an honest numbered description, not a title inferred from the ID.
+        expect(ui.select(m.library_rule_profile()).textContent).toBe(m.library_rule_profile_option({ number: 1 }));
+        expect(ui.host.textContent).toContain(m.library_rule_profile_help());
         for (const raw of [
+          'profile.books',
           'states.books.v2',
           'state.reading',
           '00000000-0000-4000-8000-000000000001',
