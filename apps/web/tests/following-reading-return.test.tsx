@@ -35,33 +35,41 @@ test('Zone continuation and return keep the kind and suspend opening until a fre
     expect(h.window.history.state.followingReturn).toBeUndefined();
     expect(h.host.querySelector('[data-follow-target-type="zone"] a')).toBeNull();
     await h.replace({ ...page(zone), next: 'native/next+' });
-    expect(h.host.querySelector('[data-follow-target-type="zone"] a')?.getAttribute('href')).toBe(`/en/zones/${realmId}`);
+    expect(h.host.querySelector('[data-follow-target-type="zone"] a')?.getAttribute('href')).toBe(
+      `/en/zones/${realmId}`,
+    );
   } finally {
     await h.dispose();
   }
 });
 
-test.each(['native replacement', 'locale', 'exposure', 'account'] as const)('Zone inspection retires on %s', async (change) => {
-  const h = await mountFollowing(page(zone));
-  const { setLocale } = await import('../src/paraglide/runtime.js');
-  try {
-    await h.inspect(spaceId);
-    if (change === 'native replacement') await h.replace(page({ ...zone, destination: { kind: 'unavailable' } }));
-    else if (change === 'exposure') await h.admit([]);
-    else if (change === 'account') await h.account('other');
-    else {
-      setLocale('ja', { reload: false });
-      await h.replace(page(zone));
+test.each(['native replacement', 'locale', 'exposure', 'account'] as const)(
+  'Zone inspection retires on %s',
+  async (change) => {
+    const h = await mountFollowing(page(zone));
+    const { setLocale } = await import('../src/paraglide/runtime.js');
+    try {
+      await h.inspect(spaceId);
+      if (change === 'native replacement') await h.replace(page({ ...zone, destination: { kind: 'unavailable' } }));
+      else if (change === 'exposure') await h.admit([]);
+      else if (change === 'account') await h.account('other');
+      else {
+        setLocale('ja', { reload: false });
+        await h.replace(page(zone));
+      }
+      expect(h.host.querySelector('[role="dialog"]')).toBeNull();
+      if (change === 'native replacement')
+        expect(h.host.querySelector('[data-follow-target-type="zone"] a')).toBeNull();
+      if (change === 'locale')
+        expect(h.host.querySelector('[data-follow-target-type="zone"] a')?.getAttribute('href')).toBe(
+          `/ja/zones/${realmId}`,
+        );
+    } finally {
+      setLocale('en', { reload: false });
+      await h.dispose();
     }
-    expect(h.host.querySelector('[role="dialog"]')).toBeNull();
-    if (change === 'native replacement') expect(h.host.querySelector('[data-follow-target-type="zone"] a')).toBeNull();
-    if (change === 'locale')
-      expect(h.host.querySelector('[data-follow-target-type="zone"] a')?.getAttribute('href')).toBe(`/ja/zones/${realmId}`);
-  } finally {
-    setLocale('en', { reload: false });
-    await h.dispose();
-  }
-});
+  },
+);
 
 test('a fresh translated page restores the returned target by identity rather than English control text', async () => {
   const h = await mountFollowing(page(follow('subject')));

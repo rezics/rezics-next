@@ -102,11 +102,14 @@ export const NativeZoneInspection: Story = {
     await userEvent.click(within(canvasElement).getByRole('link', { name: m.following_kind_zone(), exact: true }));
     await waitFor(() => expect(libraryFollowingStoryReads().at(-1)?.targetType).toBe('zone'));
     row = await followRow(canvasElement, followingStoryZoneTitle);
-    await expect(within(row).getByRole('link', { name: m.following_reading_open({ title: followingStoryZoneTitle }) }))
-      .toHaveAttribute('href', new RegExp(`/zones/${followingStoryZoneId}$`));
-    await userEvent.click(within(row).getByRole('button', {
-      name: m.following_reading_inspect_target({ title: followingStoryZoneTitle }),
-    }));
+    await expect(
+      within(row).getByRole('link', { name: m.following_reading_open({ title: followingStoryZoneTitle }) }),
+    ).toHaveAttribute('href', new RegExp(`/zones/${followingStoryZoneId}$`));
+    await userEvent.click(
+      within(row).getByRole('button', {
+        name: m.following_reading_inspect_target({ title: followingStoryZoneTitle }),
+      }),
+    );
     const panel = await within(canvasElement).findByRole('dialog');
     await expect(within(panel).getByRole('heading', { name: followingStoryZoneTitle })).toHaveFocus();
     await userEvent.click(within(panel).getByText(m.following_reading_details()));
@@ -125,9 +128,11 @@ export const ZoneUnavailableDestination: Story = {
     const hidden = canvasElement.querySelector<HTMLElement>('[data-follow-target$="000085"]')!;
     await expect(within(hidden).getByText(m.following_reading_identity_unavailable())).toBeVisible();
     await expect(within(hidden).queryByRole('link')).toBeNull();
-    await userEvent.click(within(row).getByRole('button', {
-      name: m.following_reading_inspect_target({ title: followingStoryZoneTitle }),
-    }));
+    await userEvent.click(
+      within(row).getByRole('button', {
+        name: m.following_reading_inspect_target({ title: followingStoryZoneTitle }),
+      }),
+    );
     const panel = await within(canvasElement).findByRole('dialog');
     await expect(within(panel).getByText(m.following_reading_no_destination())).toBeVisible();
     await expect(within(panel).queryByRole('link')).toBeNull();

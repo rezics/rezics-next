@@ -217,7 +217,11 @@ function list(request: Request) {
     });
     return page(follows, 'next-page', targetType);
   }
-  return page(base, mode === 'same-cursor-retry' || mode === 'native-zone' ? 'following/native+page/3' : null, targetType);
+  return page(
+    base,
+    mode === 'same-cursor-retry' || mode === 'native-zone' ? 'following/native+page/3' : null,
+    targetType,
+  );
 }
 
 export const routes: FakeRoute[] = [
