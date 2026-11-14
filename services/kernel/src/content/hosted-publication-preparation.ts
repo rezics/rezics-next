@@ -322,11 +322,7 @@ export function advanceHostedPublicationPreparation(
       // fresh-work precondition covers candidate phases before any stage or candidate work.
       requireRoute(stepId, routeOf(catalogueId)!);
       const stageLocator = locator(catalogueId, stageId);
-      const stageRead = await readHostedPublicationStagingProgressWithExpiry(
-        tx as AccessClient,
-        actor,
-        stageLocator,
-      );
+      const stageRead = await readHostedPublicationStagingProgressWithExpiry(tx as AccessClient, actor, stageLocator);
       const stage = stageRead.progress;
 
       if (stage.state === 'building' || stage.state === 'closing' || stage.state === 'collecting') {

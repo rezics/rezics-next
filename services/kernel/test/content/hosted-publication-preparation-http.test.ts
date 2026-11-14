@@ -285,11 +285,15 @@ test('mounted whole and nested selection builds complete private candidates with
   } as const;
   const startKey = crypto.randomUUID();
   let events = await preparationEventCount(book.catalogueId);
-  const [started, eventsAfterStart, freshStartReplay] = await withFixedDateNow(Date.now(), async () => [
-    await f.native.call('POST', `${book.path}:prepareRelease`, startBody, { key: startKey }),
-    await preparationEventCount(book.catalogueId),
-    await f.native.call('POST', `${book.path}:prepareRelease`, startBody, { key: crypto.randomUUID() }),
-  ] as const);
+  const [started, eventsAfterStart, freshStartReplay] = await withFixedDateNow(
+    Date.now(),
+    async () =>
+      [
+        await f.native.call('POST', `${book.path}:prepareRelease`, startBody, { key: startKey }),
+        await preparationEventCount(book.catalogueId),
+        await f.native.call('POST', `${book.path}:prepareRelease`, startBody, { key: crypto.randomUUID() }),
+      ] as const,
+  );
   expect(started.status).toBe(202);
   expect(started.value).toMatchObject({
     catalogueId: book.catalogueId,
@@ -310,7 +314,12 @@ test('mounted whole and nested selection builds complete private candidates with
   expect(wholeStep.status).toBe(200);
   expect(wholeStep.value.stage).toMatchObject({ state: 'building', sourceFrontier: '19', candidateCount: '20' });
   expect(await preparationEventCount(book.catalogueId)).toBe(++events);
-  const freshStepReplay = await f.native.call('POST', `${stagePath}:advance`, { stepId: wholeStepId }, { key: crypto.randomUUID() });
+  const freshStepReplay = await f.native.call(
+    'POST',
+    `${stagePath}:advance`,
+    { stepId: wholeStepId },
+    { key: crypto.randomUUID() },
+  );
   expect([freshStepReplay.value, await preparationEventCount(book.catalogueId)]).toEqual([wholeStep.value, events]);
   const sourceRemainder = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
   expect(sourceRemainder.value.stage).toMatchObject({ state: 'ready', sourceExhausted: true, candidateCount: '21' });
@@ -326,7 +335,10 @@ test('mounted whole and nested selection builds complete private candidates with
   expect(wrongPage.status).toBe(412);
   const beforeCandidatePage = await f.native.call('POST', `${stagePath}:progress`, {});
   expect(beforeCandidatePage.value.candidate).toMatchObject({ placementCount: '0', coverageComplete: false });
-  for (const [placementCount, coverageComplete] of [['20', false], ['21', true]] as const) {
+  for (const [placementCount, coverageComplete] of [
+    ['20', false],
+    ['21', true],
+  ] as const) {
     const page = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
     expect(page.status).toBe(200);
     expect(page.value.candidate).toMatchObject({ placementCount, coverageComplete, sealed: false });
@@ -344,7 +356,10 @@ test('mounted whole and nested selection builds complete private candidates with
   });
   expect(await preparationEventCount(book.catalogueId)).toBe(++events);
   const freshSealReplay = await f.native.call('POST', `${stagePath}:seal`, {}, { key: crypto.randomUUID() });
-  expect([freshSealReplay.value, await preparationEventCount(book.catalogueId)]).toEqual([sealedCandidate.value, events]);
+  expect([freshSealReplay.value, await preparationEventCount(book.catalogueId)]).toEqual([
+    sealedCandidate.value,
+    events,
+  ]);
 
   // Both command receipts replay their original result even after native progress moved on.
   const replayedStart = await f.native.call('POST', `${book.path}:prepareRelease`, startBody, { key: startKey });
@@ -482,16 +497,19 @@ test('mounted whole and nested selection builds complete private candidates with
 test('Advance emits when its locked observation persists stage expiry', async () => {
   const book = await newBook();
   const start = await f.native.call('POST', `${book.path}:prepareRelease`, {
-    stageId: book.newId(), expectedRevisionId: book.created.revisionId,
-    expectedPublicationId: book.published.revisionId, mode: 'whole',
+    stageId: book.newId(),
+    expectedRevisionId: book.created.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'whole',
   });
   await f.native.pool.query(
     `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 hour' WHERE catalogue_id=$1 AND stage_id=$2`,
     [book.catalogueId, start.value.stageId],
   );
   const before = await preparationEventCount(book.catalogueId);
-  const expired = await f.native.call(
-    'POST', `${prepPath(book.path, start.value.stageId as string)}:advance`, { stepId: book.newId() });
+  const expired = await f.native.call('POST', `${prepPath(book.path, start.value.stageId as string)}:advance`, {
+    stepId: book.newId(),
+  });
   expect(expired.value.stage.state).toBe('expired');
   expect(await preparationEventCount(book.catalogueId)).toBe(before + 1);
 });
