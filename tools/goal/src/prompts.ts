@@ -379,9 +379,10 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false, source
         ? ', record it in one line in your summary, and continue.'
         : 'Record it in one summary line and continue.',
     toolFailureRetries: RETRY_WORDS[policy.guidance.toolFailureRetries] ?? String(policy.guidance.toolFailureRetries),
-    devInfrastructure: product && !sourceOnly
-      ? "On dev, for a completed and committed product after the wrapper's own rerun, source success is allowed only when every remaining check failure is explicitly shared transport or infrastructure. Name each failed check and its exact error, and each skipped or unreached check as unverified; never label any of them passed. Do not retry source solely for infrastructure. Type, test and product failures remain non-success; the dev verifier completes deferred checks after merge."
-      : '',
+    devInfrastructure:
+      product && !sourceOnly
+        ? "On dev, for a completed and committed product after the wrapper's own rerun, source success is allowed only when every remaining check failure is explicitly shared transport or infrastructure. Name each failed check and its exact error, and each skipped or unreached check as unverified; never label any of them passed. Do not retry source solely for infrastructure. Type, test and product failures remain non-success; the dev verifier completes deferred checks after merge."
+        : '',
     wrapperFailureRule,
     minimalInfrastructureException: product
       ? ', except when the wrapper reports that the only missing passes are shared transport or infrastructure failures after its own rerun, as described by the dev product source-success rule above'
