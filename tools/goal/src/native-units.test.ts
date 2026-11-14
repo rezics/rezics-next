@@ -158,22 +158,32 @@ test('native registration verifies its termspaces viewer and keeps one worktree 
   }
 });
 
-test('a unit chooses a focused Goal check and records its actual argv and source checkpoint', async () => {
+test('a focused local check records its requested checkpoint without claiming observed immutable source', async () => {
   const f = fixture();
   const previousThread = process.env.CODEX_THREAD_ID;
   try {
     registerNativeUnit(f.db, f.input);
     process.env.CODEX_THREAD_ID = f.input.threadId;
-    const command = [process.execPath, '-e', 'process.exit(0)'];
+    writeFileSync(join(f.input.worktree, 'local-dirty-source.txt'), 'not in the requested checkpoint');
+    const command = [
+      process.execPath,
+      '-e',
+      "process.exit(require('node:fs').readFileSync('local-dirty-source.txt','utf8') === 'not in the requested checkpoint' ? 0 : 1)",
+    ];
     const settings = { integration: { supermanager: 'supermanager' } } as Settings;
     expect(await runNativeUnitCommand(['run', f.input.id, '--', ...command], { db: f.db, settings })).toBe(0);
-    const row = f.db.query('SELECT command, source_commit, exit_code FROM native_unit_runs').get() as {
+    const row = f.db
+      .query('SELECT command, requested_source_commit, source_commit, exit_code FROM native_unit_runs')
+      .get() as {
       command: string;
-      source_commit: string;
+      requested_source_commit: string;
+      source_commit: string | null;
       exit_code: number;
     };
     expect(JSON.parse(row.command)).toEqual(command);
-    expect(row.source_commit).toMatch(/^[a-f0-9]{40}$/);
+    expect(row.requested_source_commit).toMatch(/^[a-f0-9]{40}$/);
+    expect(row.source_commit).toBeNull();
+    expect(f.db.query('SELECT count(*) AS count FROM native_unit_run_sources').get()).toEqual({ count: 0 });
     expect(row.exit_code).toBe(0);
   } finally {
     if (previousThread === undefined) delete process.env.CODEX_THREAD_ID;
