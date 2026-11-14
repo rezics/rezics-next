@@ -441,7 +441,11 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       return delivered;
     },
     sweepWidth: async () => {
-      await sweepWidthGovernor(db, inbox, new Date(), { policy: settings.policy });
+      await sweepWidthGovernor(db, inbox, new Date(), {
+        policy: settings.policy,
+        residentManagerId: settings.integration.supermanager,
+        stateDirectory: settings.stateDirectory,
+      });
     },
     // Runs in the host's single-flight `backlog dispatch` child: dispatch is synchronous Git and install work.
     backlog: () =>
