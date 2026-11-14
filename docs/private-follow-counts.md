@@ -241,10 +241,12 @@ skew, missing/unreachable/expired samples or missing topology members mean unkno
 health tree with bounded fan-out/depth, retaining minimum sample/oldest pending times. Parents expire with their
 oldest child and cannot refresh a stale child's timestamp. Count requests read only constant-size root metadata,
 never poll partitions or enumerate followers. Read the gate at start and end of the count read.
-Both health observations retain the original request deadline for pool waiting, root metadata and effects-consumer
-lag. A late checkout dispatches no expired read; a failed observation discards its borrowed connection before release
-so timed-out native queries cannot retain or reuse pooled capacity. Snapshot consumers keep their caller-owned
-connection and its existing lifetime.
+All borrowed count reads use the same Library connection lifetime: time, Collection, Account, Space, management,
+total, outgoing and both health observations retain the original request deadline for pool waiting and every query,
+including effects-consumer lag. A late checkout dispatches no expired SQL; a failed read discards its borrowed
+connection before normal release so timed-out native queries cannot retain or reuse pooled capacity. The shared
+helper retains `withConnection` work accounting. Snapshot consumers keep their caller-owned connection and its
+existing lifetime.
 
 Dispatch and sampling run at most every 10 seconds. Provision and measure healthy end-to-end completion within
 60 seconds, including large-account fan-out; alert on violations. A recent heartbeat cannot redefine healthy.

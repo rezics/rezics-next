@@ -24,7 +24,13 @@ import { json, requestKey, setGate, unavailable, type NativeConformanceWorld } f
 
 export type NativeFollowCountsDriver = Omit<FollowCountsDriver, 'fault'> & {
   readonly world: NativeConformanceWorld;
-  fault(state: Parameters<FollowCountsDriver['fault']>[0] | 'consumer_lag_unavailable'): Promise<void>;
+  fault(
+    state:
+      | Parameters<FollowCountsDriver['fault']>[0]
+      | 'consumer_lag_unavailable'
+      | 'total_unavailable'
+      | 'outgoing_unavailable',
+  ): Promise<void>;
 };
 const keyOf = (follower: Principal, target: CountTarget): CountKey => ({
   accountId: follower.accountId,
@@ -425,7 +431,11 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
             ? 'LOCK TABLE access.resource_grant,access.resource_role_grant IN ACCESS EXCLUSIVE MODE'
             : state === 'consumer_lag_unavailable'
               ? 'LOCK TABLE core.consumer_lag IN ACCESS EXCLUSIVE MODE'
-              : 'LOCK TABLE library.follow_count_health IN ACCESS EXCLUSIVE MODE',
+              : state === 'total_unavailable'
+                ? 'LOCK TABLE library.follow_count_total IN ACCESS EXCLUSIVE MODE'
+                : state === 'outgoing_unavailable'
+                  ? 'LOCK TABLE library.follow_count_owner IN ACCESS EXCLUSIVE MODE'
+                  : 'LOCK TABLE library.follow_count_health IN ACCESS EXCLUSIVE MODE',
         );
       },
       async publicArtifacts() {

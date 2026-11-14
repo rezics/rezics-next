@@ -42,20 +42,29 @@ export async function readFollowCountHealthObservation(tx: AccessClient): Promis
   };
 }
 
-/** Both samples use the request's original deadline, including checkout wait.
- * A late checkout checks expiry before SQL; a timed-out query discards its socket
- * rather than returning potentially in-flight native IO to the pool. */
-export async function requireFollowCountHealth(pool: Pool, deadline: number): Promise<FollowCountHealthObservation> {
-  return within(deadline, () =>
+/** Autocommit count reads retain the original deadline, including checkout wait.
+ * Every query checks expiry before dispatch, including after a late checkout.
+ * A rejected query may still have native IO in flight: mark its borrowed socket
+ * for discard before withConnection releases it, without queuing a rollback.
+ * Caller-owned snapshots do not pass through this borrowed-client boundary. */
+export function withFollowCountReadConnection<T>(
+  pool: Pool,
+  deadline: number,
+  read: (client: AccessClient) => Promise<T>,
+  timing: { deadlineClient: typeof deadlineClient; within: typeof within } = { deadlineClient, within },
+): Promise<T> {
+  return timing.within(deadline, () =>
     withConnection(pool, async (connection) => {
       try {
-        return await readFollowCountHealthObservation(deadlineClient(connection, deadline));
+        return await read(timing.deadlineClient(connection, deadline));
       } catch (error) {
-        // pg's query_timeout can reject before the server has finished the query.
-        // Health uses autocommit reads, so discard without queuing a rollback.
         discardConnection(connection, error as Error);
         throw error;
       }
     }),
   );
+}
+
+export function requireFollowCountHealth(pool: Pool, deadline: number): Promise<FollowCountHealthObservation> {
+  return withFollowCountReadConnection(pool, deadline, readFollowCountHealthObservation);
 }

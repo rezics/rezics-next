@@ -1,6 +1,5 @@
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../../command/command.ts';
-import { withConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { GrantDeniedError } from '../../access/contract/errors.ts';
 import { accessCheck } from '../../request/access-check.ts';
@@ -23,7 +22,7 @@ import { admitPrivateFollowRead, type FollowReadAdmission } from '../follow-read
 import { withFollowWork } from '../follow-operation-bounds.ts';
 
 import { countRoute } from './follow-count-runtime.ts';
-import { requireFollowCountHealth } from './follow-count-observation.ts';
+import { requireFollowCountHealth, withFollowCountReadConnection } from './follow-count-observation.ts';
 
 /** Only composition supplies foreign behavior. Account and Space observations
  * retain the exact borrowed client and native instant used before the migration. */
@@ -50,10 +49,12 @@ export function createNativeFollowCountReads(
   access: Access,
   ports: NativeFollowCountReadPorts,
 ): FollowCountReads {
+  const read = <T>(deadline: number, body: (client: AccessClient) => Promise<T>): Promise<T> =>
+    withFollowCountReadConnection(pool, deadline, body, ports);
   const application = createFollowCountReadApplication<AuthoritativeTime, FollowReadAdmission>({
     route: routeOf,
     admit: (owner, deadline, expected) => admitPrivateFollowRead(pool, owner, deadline, expected),
-    time: (deadline) => withConnection(pool, (client) => mintReadTime(ports.deadlineClient(client, deadline))),
+    time: (deadline) => read(deadline, mintReadTime),
     health: (deadline) => requireFollowCountHealth(pool, deadline),
     within: ports.within,
     destination: (target) => ports.destination(pool, target),
@@ -62,28 +63,20 @@ export function createNativeFollowCountReads(
     },
     accountForAgent: (id) => ports.accountForAgent(pool, id),
     collection(destination, deadline) {
-      return withConnection(pool, (tx) =>
-        readCollection(ports.deadlineClient(tx, deadline), destination.route, destination.targetId),
-      );
+      return read(deadline, (tx) => readCollection(tx, destination.route, destination.targetId));
     },
     accountState(id, deadline) {
-      return withConnection(
-        pool,
-        async (tx) => (await ports.account(ports.deadlineClient(tx, deadline), countRoute(id), id))?.state ?? null,
-      );
+      return read(deadline, async (tx) => (await ports.account(tx, countRoute(id), id))?.state ?? null);
     },
     spaceExists(id, time, deadline) {
-      return withConnection(pool, (tx) =>
-        ports.spaceExists(ports.deadlineClient(tx, deadline), id, authoritativeTimeValue(time)),
-      );
+      return read(deadline, (tx) => ports.spaceExists(tx, id, authoritativeTimeValue(time)));
     },
     async management(owner, action, id, time, deadline) {
       const check = await accessCheck(access, owner, action, { route: countRoute(id), id }, { pool, deadline });
-      return withConnection(pool, (tx) => check(ports.deadlineClient(tx, deadline), time));
+      return read(deadline, (tx) => check(tx, time));
     },
     total(destination, type, deadline) {
-      return withConnection(pool, async (client) => {
-        const tx = ports.deadlineClient(client, deadline);
+      return read(deadline, async (tx) => {
         const partition = await partitionRead.run(tx, { partition_no: partitionOf(destination.route) });
         if (!partition || partition.writeState !== 'active') throw new FollowCountUnavailableError();
         const row = (
@@ -97,9 +90,8 @@ export function createNativeFollowCountReads(
       });
     },
     outgoing(owner, deadline) {
-      return withConnection(pool, async (client) => {
-        const tx = ports.deadlineClient(client, deadline),
-          route = countRoute(owner.accountId);
+      return read(deadline, async (tx) => {
+        const route = countRoute(owner.accountId);
         const partition = await partitionRead.run(tx, { partition_no: partitionOf(route) });
         if (!partition || partition.writeState !== 'active') throw new FollowCountUnavailableError();
         const row = (
