@@ -11,7 +11,7 @@ import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import type { AcceptedPinsOrigin } from './pins-current';
 import { csrfHeaders } from '../threads/composer';
 import { pinCollection, unpinCollection } from './pins-actions';
-import type { LibraryPinsRead } from './pins-read';
+import type { LibraryNavigationRead, LibraryPinsRead } from './pins-read';
 
 const cachedSession = (client: QueryClient) => {
   const state = client.getQueryState(sessionCache.sessionQuery.queryKey);
@@ -32,10 +32,17 @@ type PinControlInput = {
 type PinAction = 'pin' | 'unpin' | 'up' | 'down';
 type WriteAdmission = { allowed: boolean; active: boolean; version: number | undefined };
 type PinSender = typeof pinCollection | typeof unpinCollection;
+type PinReadSource = {
+  origin: AcceptedPinsOrigin | undefined;
+  pinsOrigin: LibraryPinsRead['origin'];
+};
+type PinAcknowledgement = { action: PinAction; revision: number; source: PinReadSource };
+type PinReadback = 'none' | 'pending' | 'failed' | 'complete';
 type PinAttempt = {
   admission: WriteAdmission;
   lifetime: symbol;
   action: PinAction;
+  source: PinReadSource;
   data: { collectionId: string; revision: number; after?: string | null; idempotencyKey: string };
   headers: ReturnType<typeof csrfHeaders>;
   sender: PinSender;
@@ -58,6 +65,8 @@ function pinLifetime(
     pending: false,
     notice: '',
     action: null as PinAction | null,
+    acknowledgement: null as PinAcknowledgement | null,
+    readback: 'none' as PinReadback,
     put: { allowed: put, active: true, version: versions[0] },
     remove: { allowed: remove, active: true, version: versions[1] },
   };
@@ -95,11 +104,13 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
   const [control, setControl] = useState(() => pinLifetime(key, origin?.lifetime, canPut, canRemove, scoped.dispatch));
   const committed = useRef<symbol | null>(null);
   const attempt = useRef<PinAttempt | null>(null);
+  const readAttempt = useRef<{ lifetime: symbol; token: symbol } | null>(null);
   const live = useRef({ viewer, collectionId, pins, origin, queryClient, router, csrfToken });
   live.current = { viewer, collectionId, pins, origin, queryClient, router, csrfToken };
   const { lifetime, pending, notice, action: retainedAction } = control;
   if (control.key !== key || control.origin !== origin?.lifetime || !control.guard.active) {
     control.guard.active = false;
+    if (readAttempt.current?.lifetime === lifetime) readAttempt.current = null;
     setControl(pinLifetime(key, origin?.lifetime, canPut, canRemove, scoped.dispatch));
   }
   // PUT and DELETE retire independently. Losing target/PUT access must not cancel an admitted removal.
@@ -127,17 +138,19 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     return () => {
       if (committed.current === lifetime) committed.current = null;
       if (attempt.current?.lifetime === lifetime) attempt.current = null;
+      if (readAttempt.current?.lifetime === lifetime) readAttempt.current = null;
     };
   }, [lifetime]);
-  const actualViewer = () => {
+  const actualViewer = (requireCsrf = true) => {
     const now = live.current;
     const actual = cachedSession(now.queryClient);
     // Pure supplied fixtures keep their existing observed-session operand. Production always supplies an origin.
-    if (!supplied && !now.origin && !now.pins.origin) return now.viewer === viewer && !!now.csrfToken;
+    if (!supplied && !now.origin && !now.pins.origin)
+      return now.viewer === viewer && (!requireCsrf || !!now.csrfToken);
     return (
       actual?.state === 'signed-in' &&
       actual.subject === viewer &&
-      !!actual.csrfToken &&
+      (!requireCsrf || !!actual.csrfToken) &&
       store.read().viewer === scoped.viewer
     );
   };
@@ -155,6 +168,13 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     const operation = action === 'unpin' ? 'library_pin.delete' : 'library_pin.put';
     return store.allowed(operation) && value.version === store.dispatchVersion(operation);
   };
+  const sourceCurrent = (source: PinReadSource) =>
+    committed.current === lifetime &&
+    control.guard.active &&
+    live.current.viewer === viewer &&
+    live.current.collectionId === collectionId &&
+    live.current.origin?.lifetime === source.origin?.lifetime &&
+    actualViewer(false);
   const update = (change: Partial<typeof control>) =>
     setControl((current) =>
       current.lifetime === lifetime && control.guard.active ? { ...current, ...change } : current,
@@ -192,9 +212,93 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
   const pinned = index >= 0;
   const orderedIds = loadedPins?.pins.map((pin) => pin.collectionId) ?? [];
   const pinCount = loadedPins?.pins.length ?? 0;
+  const labels = {
+    pin: m.library_pin_pin(),
+    unpin: m.library_pin_unpin(),
+    up: m.library_pin_move_up(),
+    down: m.library_pin_move_down(),
+  };
+  const readbackIsCurrent = (acknowledgement: PinAcknowledgement) => {
+    const source = acknowledgement.source;
+    if (!sourceCurrent(source)) return false;
+    const queryKey = source.origin?.queryKey;
+    if (!queryKey) {
+      const currentPins = live.current.pins;
+      return (
+        currentPins.state === 'loaded' &&
+        currentPins.revision >= acknowledgement.revision &&
+        (!source.pinsOrigin ||
+          (currentPins.origin?.sessionSubject === source.pinsOrigin.sessionSubject &&
+            currentPins.origin.credentialAgrees &&
+            currentPins.origin.requestedLimit === source.pinsOrigin.requestedLimit))
+      );
+    }
+    const client = live.current.queryClient;
+    const state = client.getQueryState(queryKey);
+    const value = client.getQueryData(queryKey) as LibraryNavigationRead | undefined;
+    const currentPins = value?.pins;
+    if (state?.status !== 'success' || currentPins?.state !== 'loaded' || currentPins.revision < acknowledgement.revision)
+      return false;
+    return source.pinsOrigin
+      ? currentPins.origin?.sessionSubject === source.pinsOrigin.sessionSubject &&
+          currentPins.origin.credentialAgrees &&
+          currentPins.origin.requestedLimit === source.pinsOrigin.requestedLimit
+      : !currentPins.origin ||
+          (currentPins.origin.sessionSubject === viewer && currentPins.origin.credentialAgrees);
+  };
+  const refreshCurrentList = async (source: PinReadSource, acknowledgement?: PinAcknowledgement) => {
+    if (!sourceCurrent(source)) return { retired: true, failed: false };
+    const now = live.current;
+    const invalidations = await Promise.allSettled([
+      Promise.resolve().then(() => now.router.invalidate()),
+      Promise.resolve().then(() =>
+        now.queryClient.invalidateQueries(
+          source.origin?.queryKey
+            ? { queryKey: source.origin.queryKey, exact: true }
+            : { queryKey: ['library-navigation'] },
+        ),
+      ),
+    ]);
+    if (!sourceCurrent(source)) return { retired: true, failed: false };
+    return {
+      retired: false,
+      failed: invalidations.some((result) => result.status === 'rejected') ||
+        (!!acknowledgement && !readbackIsCurrent(acknowledgement)),
+    };
+  };
+  const continueReadback = async (acknowledgement: PinAcknowledgement) => {
+    if (readAttempt.current?.lifetime === lifetime) return;
+    const token = Symbol();
+    readAttempt.current = { lifetime, token };
+    update({ pending: true, readback: 'pending' });
+    try {
+      const result = await refreshCurrentList(acknowledgement.source, acknowledgement);
+      if (readAttempt.current?.token !== token) return;
+      readAttempt.current = null;
+      if (result.retired) {
+        if (sourceCurrent(acknowledgement.source)) update({ pending: false, readback: 'failed' });
+        return;
+      }
+      update({ pending: false, readback: result.failed ? 'failed' : 'complete' });
+    } catch {
+      if (readAttempt.current?.token !== token) return;
+      readAttempt.current = null;
+      if (sourceCurrent(acknowledgement.source)) update({ pending: false, readback: 'failed' });
+    } finally {
+      if (readAttempt.current?.token === token) readAttempt.current = null;
+    }
+  };
   const perform = async (action: PinAction) => {
     const admission = action === 'unpin' ? removeOrigin : putOrigin;
-    if (!admissionCurrent(admission, action) || !viewer || !hasCsrf || !loadedPins || !agreed) return;
+    if (
+      (control.acknowledgement !== null && control.readback !== 'complete') ||
+      !admissionCurrent(admission, action) ||
+      !viewer ||
+      !hasCsrf ||
+      !loadedPins ||
+      !agreed
+    )
+      return;
     let current = attempt.current;
     if (current) {
       if (current.lifetime !== lifetime || current.pending || current.action !== action) return;
@@ -211,6 +315,7 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
         admission,
         lifetime,
         action,
+        source: { origin, pinsOrigin: loadedPins.origin },
         data: {
           collectionId,
           revision: loadedPins.revision,
@@ -227,34 +332,45 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     const captured = current;
     const isCurrentAttempt = () =>
       admissionCurrent(captured.admission, captured.action) && attempt.current === captured;
+    const isCurrentSourceAttempt = () => sourceCurrent(captured.source) && attempt.current === captured;
     // This synchronous lock also covers two selections before React commits the pending render.
     captured.pending = true;
-    update({ pending: true, notice: '', action: captured.action });
+    update({
+      pending: true,
+      notice: '',
+      action: captured.action,
+      acknowledgement: null,
+      readback: 'none',
+    });
     let retain = true;
     const refresh = () => {
-      if (!isCurrentAttempt()) return [];
-      const now = live.current;
-      const navigation = now.router.invalidate();
-      const cache = isCurrentAttempt()
-        ? now.queryClient.invalidateQueries(
-            now.origin?.queryKey
-              ? { queryKey: now.origin.queryKey, exact: true }
-              : { queryKey: ['library-navigation'] },
-          )
-        : undefined;
-      return [navigation, cache];
+      return refreshCurrentList(captured.source);
     };
     try {
       if (!isCurrentAttempt()) return;
       const result = await captured.sender({ data: captured.data, headers: captured.headers });
-      if (!isCurrentAttempt()) return;
+      if (!isCurrentSourceAttempt()) return;
       if (result.ok) {
         retain = false;
-        await Promise.all(refresh());
+        attempt.current = null;
+        captured.pending = false;
+        const acknowledgement: PinAcknowledgement = {
+          action: captured.action,
+          revision: result.revision,
+          source: captured.source,
+        };
+        update({
+          pending: true,
+          notice: '',
+          action: null,
+          acknowledgement,
+          readback: 'pending',
+        });
+        await continueReadback(acknowledgement);
       } else if (result.reason === 'conflict') {
         retain = false;
         update({ notice: m.library_pin_conflict() });
-        await Promise.allSettled(refresh());
+        await refresh();
       } else if (result.reason === 'full') {
         retain = false;
         update({ notice: m.library_pin_limit() });
@@ -274,12 +390,12 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
         });
       }
     } catch {
-      if (isCurrentAttempt()) {
+      if (isCurrentSourceAttempt()) {
         captured.uncertain = true;
         update({ notice: m.error_message() });
       }
     } finally {
-      if (isCurrentAttempt()) {
+      if (isCurrentSourceAttempt()) {
         captured.pending = false;
         if (!retain) attempt.current = null;
         update({ pending: false, action: retain ? captured.action : null });
@@ -287,8 +403,9 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     }
   };
 
+  const readbackBlocked = control.acknowledgement !== null && control.readback !== 'complete';
   const actions: PinAction[] = [];
-  if (viewer && loadedPins && agreed && (origin?.isCurrent() ?? true)) {
+  if (!readbackBlocked && viewer && loadedPins && agreed && (origin?.isCurrent() ?? true)) {
     if (pinned) {
       if (canPut && mode === 'list' && index > 0) actions.push('up');
       if (canPut && mode === 'list' && index < pinCount - 1) actions.push('down');
@@ -297,12 +414,6 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     // Keep an uncertain command explicitly retryable even if a refresh changes its menu placement.
     if (retainedAction && !actions.includes(retainedAction)) actions.push(retainedAction);
   }
-  const labels = {
-    pin: m.library_pin_pin(),
-    unpin: m.library_pin_unpin(),
-    up: m.library_pin_move_up(),
-    down: m.library_pin_move_down(),
-  };
   const entries: MenuEntry[] = actions.flatMap((action, index) => [
     ...(action === 'unpin' && index > 0 ? [{ type: 'separator' as const }] : []),
     {
@@ -316,11 +427,29 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
         (retainedAction !== null && retainedAction !== action),
     },
   ]);
+  const acknowledgement = control.acknowledgement;
+  if (acknowledgement && control.readback === 'failed' && sourceCurrent(acknowledgement.source)) {
+    entries.push({
+      type: 'item',
+      label: m.library_collection_boundary_refresh(),
+      onSelect: () => void continueReadback(acknowledgement),
+      disabled: pending || !sourceCurrent(acknowledgement.source),
+    });
+  }
+  const confirmedNotice = acknowledgement
+    ? m.collection_save_confirmed({ action: labels[acknowledgement.action] })
+    : notice;
+  const visibleNotice = [
+    confirmedNotice,
+    control.readback === 'failed' ? m.library_pin_read_failed() : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return {
     canUpdate: entries.length > 0,
     entries,
-    notice,
+    notice: visibleNotice,
     pending,
   };
 }
@@ -340,18 +469,20 @@ export function PinControl({ collectionId, pins, mode, origin }: PinControlInput
 
 /** The menu can outlive a public members refresh while its owning action hook retains exact intent. */
 export function PinControlView({ control }: { control: ReturnType<typeof usePinControlActions> }) {
-  if (!control.canUpdate) return null;
+  if (!control.canUpdate && !control.notice) return null;
   return (
     <span className="inline-flex flex-col items-end gap-1">
-      <Menu
-        title={m.library_pin_actions()}
-        trigger={
-          <Button aria-label={m.library_pin_actions()} disabled={control.pending} size="icon-sm" variant="ghost">
-            <EllipsisIcon aria-hidden="true" />
-          </Button>
-        }
-        entries={control.entries}
-      />
+      {control.canUpdate ? (
+        <Menu
+          title={m.library_pin_actions()}
+          trigger={
+            <Button aria-label={m.library_pin_actions()} disabled={control.pending} size="icon-sm" variant="ghost">
+              <EllipsisIcon aria-hidden="true" />
+            </Button>
+          }
+          entries={control.entries}
+        />
+      ) : null}
       <PinControlNotice notice={control.notice} />
     </span>
   );
