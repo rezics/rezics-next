@@ -19,7 +19,7 @@ afterAll(async () => {
 const sourceReads = (records: readonly SqlExecution[]) =>
   records.filter((row) => /FROM content.hosted_structure_revision|FROM content.hosted_placement/.test(row.statement));
 
-test('native edit admission precedes release reads and errors; exact publish replay retains its original source', async () => {
+test('native admission and receipt lookup precede release reads; exact publish replay returns its original result', async () => {
   const parent = f.newOccurrenceId(),
     child = f.newOccurrenceId();
   const placements = [
@@ -48,7 +48,7 @@ test('native edit admission precedes release reads and errors; exact publish rep
   const rejected = observer.records.length;
   expect((await f.native.call('POST', `${path}:publish`, body)).status).toBe(400);
   expect(sourceReads(observer.records.slice(rejected))).toHaveLength(2);
-  expect(observer.records.slice(rejected).some((row) => row.statement === readReceipt.sql)).toBe(false);
+  expect(observer.records.slice(rejected).some((row) => row.statement === readReceipt.sql)).toBe(true);
 
   const exact = { ...body, occurrenceIds: [child, parent] };
   const key = crypto.randomUUID();
@@ -60,7 +60,7 @@ test('native edit admission precedes release reads and errors; exact publish rep
   expect(replay.status).toBe(200);
   expect(replay.value).toEqual(published.value);
   const reads = sourceReads(observer.records.slice(start));
-  expect(reads).toHaveLength(4);
+  expect(reads).toHaveLength(2);
   for (const row of reads) {
     expect(row.parameters.slice(0, 3)).toEqual([routeOf(f.catalogueId), f.catalogueId, created.revisionId]);
     if (row.statement.includes('FROM content.hosted_placement')) {
