@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { AccessClient } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { deadlineClient } from './deadline.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 import type { MembershipReservation } from './membership-inverse.ts';
@@ -52,8 +52,10 @@ export async function isRealmTransitionOpen(
   input: RealmMembershipTransition,
   deadline = deadlineFor(30_000),
 ): Promise<boolean> {
-  const row = first(await read.run(deadlineClient(pool, deadline), transitionParameters(input)));
-  return !!row && row.active && row.held && row.proofTransactionId === null;
+  return withBoundedReadConnection(pool, deadline, async (client) => {
+    const row = first(await read.run(client, transitionParameters(input)));
+    return !!row && row.active && row.held && row.proofTransactionId === null;
+  });
 }
 export function createRealmMembershipTransitions(config: {
   pool: Pool;
@@ -64,7 +66,9 @@ export function createRealmMembershipTransitions(config: {
   async function proof(input: RealmMembershipTransition, deadline = deadlineFor(30_000)) {
     transitionParameters(input);
     // Source connection is returned before any actor-anchor command starts.
-    const value = await config.authority.readTransition(deadlineClient(config.pool, deadline), input);
+    const value = await withBoundedReadConnection(config.pool, deadline, (client) =>
+      config.authority.readTransition(client, input),
+    );
     if (!value) return null;
     if (
       value.accountId !== input.accountId ||
@@ -87,14 +91,18 @@ export function createRealmMembershipTransitions(config: {
       const value = await proof(input, deadline);
       if (!value || (input.proofTransactionId !== undefined && input.proofTransactionId !== value.transactionId))
         throw new LifecycleDeniedError();
-      return execute(
+      const outcome = await execute(
         {
           route: parameters.route,
           id: input.accountId,
           kind: 'realm-membership-transition-consumed',
           key: input.key,
           deadline,
-          input: { ...parameters, proofTransactionId: value.transactionId, outcome: value.outcome },
+          input: {
+            ...parameters,
+            proofTransactionId: value.transactionId,
+            outcome: value.outcome,
+          },
         },
         async (tx, transactionId) => {
           const account = await accountRead.run(tx, { route: parameters.route, account_id: input.accountId });
@@ -115,9 +123,18 @@ export function createRealmMembershipTransitions(config: {
             transition: input.transition,
             proofTransactionId: value.transactionId,
             outcome: value.outcome,
+            publicationTransactionId: value.publicationTransactionId,
           };
         },
       );
+      // Keep the established receipt digest stable while returning the full
+      // source proof identity, including when replaying an older receipt.
+      return {
+        ...outcome,
+        get value() {
+          return { ...outcome.value, publicationTransactionId: value.publicationTransactionId };
+        },
+      };
     },
   };
 }
