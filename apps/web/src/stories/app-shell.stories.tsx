@@ -31,7 +31,7 @@ type PreviewProps = {
 };
 const previewPath = '/books?q=Prince&cursor=next%2Fpage';
 const compactPhone = () => window.matchMedia('(max-width: 767px)').matches;
-const longCreationLabel = () => `${m.catalogue_create_title()} · ${m.library_nav_collections()} · ${m.nav_library()}`;
+const longCreationLabel = () => `${m.ctxw_create()} · ${m.ctxw_title()} · ${m.nav_library()}`;
 
 function PreparedShellPreview({ visitor = 'Signed In', count = false, session, longLabels = false }: PreviewProps) {
   const client = useQueryClient();
@@ -55,7 +55,12 @@ function PreparedShellPreview({ visitor = 'Signed In', count = false, session, l
     <AppShell
       navigation={
         longLabels
-          ? [...catalogueNavigation.map((entry) => ({ ...entry, label: longCreationLabel() })), ...contextsNavigation]
+          ? [
+              ...catalogueNavigation,
+              ...contextsNavigation.map((entry) =>
+                entry.kind === 'creation' ? { ...entry, label: longCreationLabel() } : entry,
+              ),
+            ]
           : undefined
       }
       communities={
@@ -98,15 +103,17 @@ function PreparedShellPreview({ visitor = 'Signed In', count = false, session, l
     >
       <PageHeading>
         {longLabels
-          ? `${m.nav_library()} · ${m.library_nav_collections()} · ${m.library_following_heading()}`
-          : m.nav_library()}
+          ? `${m.books_catalogue_title()} · ${m.library_nav_collections()} · ${m.library_following_heading()}`
+          : m.books_catalogue_title()}
       </PageHeading>
       <p className="mt-3 max-w-prose text-muted-foreground">Your reading, collections and communities in one place.</p>
       <div className="mt-8 space-y-6 border-t border-border/60 pt-6">
         {[m.nav_home(), m.nav_library(), m.realms_heading()].map((heading) => (
           <section key={heading} className="space-y-2">
             <h2 className="text-lg font-semibold wrap-anywhere">{heading}</h2>
-            <p className="max-w-prose leading-7 text-muted-foreground">{m.route_loading_description()}</p>
+            <p className="max-w-prose leading-7 text-muted-foreground">
+              {m.library_nav_collections()} · {m.realms_heading()}
+            </p>
           </section>
         ))}
       </div>
@@ -292,7 +299,7 @@ export const LongLabelsCreate: Story = {
   play: async (context) => {
     const { trigger, menu } = await openCreate(context);
     const link = await menu.findByRole('link', { name: longCreationLabel() });
-    await expect(link).toHaveAttribute('href', `/${getLocale()}/catalogue/new`);
+    await expect(link).toHaveAttribute('href', `/${getLocale()}/my/contexts/new`);
     await expect(link).toBeVisible();
     expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth + 1);
     await closeToTrigger(trigger);

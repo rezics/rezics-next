@@ -84,7 +84,7 @@ Decision: below 1024px, identity and account actions occupy the first header row
 row. Desktop uses flexible side columns with a bounded action group; translated labels may wrap without consuming
 the search entrance. Unavailable-account text is visible at every width beside the safe sign-in recovery anchor.
 Create in the header and phone tabs uses `ShellCreationMenu`, the existing contribution contract and the same
-Menu focus/dismissal owner. Standalone phone displays retain a header account entrance when tabs are hidden.
+Menu focus/dismissal owner. Standalone phone displays retain header account and appearance entrances when tabs are hidden.
 
 The shell measures both header and phone navigation. `--shell-header-height` positions the desktop rail, bounds its
 scrolling area and offsets heading/recovery anchors; the bottom measurement still includes the safe area exactly

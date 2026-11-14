@@ -134,7 +134,7 @@ export function ShellTopActions({
         </>
       ) : session === 'signed-out' ? (
         <>
-          <div className="hidden min-w-0 flex-wrap items-center justify-end gap-1 md:flex">
+          <div className="hidden min-w-0 flex-wrap items-center justify-end gap-1 md:flex [@media(display-mode:standalone)]:flex [[data-standalone]_&]:flex">
             <LanguageControl />
             <ThemeControl />
           </div>
