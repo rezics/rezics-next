@@ -117,12 +117,12 @@ function ScreenOccurrence({
       id={targetId}
       data-screen-current-evidence={inspect ? 'selected' : undefined}
       tabIndex={targetId ? -1 : undefined}
-      className="min-w-0 space-y-2 rounded-lg border border-border p-4"
+      className="min-w-0 space-y-2 rounded-lg border border-border p-4 [overflow-wrap:anywhere]"
     >
       {propertyLabel.text ? (
-        <h3 lang={propertyLabel.lang ?? undefined} className="font-medium">
+        <h4 lang={propertyLabel.lang ?? undefined} className="font-medium">
           {propertyLabel.text}
-        </h3>
+        </h4>
       ) : null}
       <PageValue
         snak={statement}
@@ -232,7 +232,7 @@ function ScreenCurrentEvidence({
   const hidden = occurrence && spoilerLevel(occurrence) > readerSpoilerLevel;
   return (
     <section data-slot="screen-current-evidence" className="min-w-0 space-y-3">
-      <ContentItemHeading level={2} className="text-xl font-semibold">
+      <ContentItemHeading level={3} className="text-lg font-semibold">
         {m.screen_visit_inspect({}, options(locale))}
       </ContentItemHeading>
       {!occurrence || hidden ? (
@@ -324,7 +324,7 @@ export function ScreenProfileReader({
             id="screen-profile-reader-heading"
             tabIndex={-1}
             level={2}
-            className="text-xl font-semibold"
+            className={compact ? 'sr-only' : 'text-xl font-semibold'}
           >
             <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
           </ContentItemHeading>
@@ -376,7 +376,7 @@ export function ScreenProfileReader({
           {visit.groups.map((group) => {
             const content = (
               <section key={group.id} data-slot={`profile-group-${group.id}`} className="min-w-0 space-y-3">
-                <ContentItemHeading level={2} className="text-xl font-semibold">
+                <ContentItemHeading level={3} className="text-lg font-semibold">
                   {titles(group.id, locale)}
                 </ContentItemHeading>
                 {group.fields.map((field) => (
@@ -446,6 +446,7 @@ export function ScreenProfileReader({
       !visit.unpublished.episodes ? (
         <ScreenEpisodeList
           locale={locale}
+          parentType={visit.type}
           {...(release ? { release } : {})}
           {...(episodeRead ? { read: episodeRead } : {})}
           loading={episodeLoading}

@@ -399,3 +399,23 @@ Focused actual-consumer regressions pin shared hierarchy, nested projection, mis
 domain capabilities. Complete-page rich, sparse and section-failure stories are synthetic contract examples;
 retained literary mounted suites and browser/visual review run in the dev verifier. Canonical literary story ids
 remain unchanged. The Book showcase owns its comprehensive fixture family independently.
+
+### Routed Anime reading
+
+`Library/Anime` uses the actual `PageStory` route tree and the installed Subject shell and presentation profile.
+The canonical synthetic production is shared by the page composer, Screen profile and inverse membership reader;
+seasons and episodes keep their own identities, assertions, references, position strings and private Library state.
+The main entry is a stable page with manual tabs. Contents, Characters, Credits, Relations, Reviews, Discussion,
+Lists and Details use their released read plans; they do not substitute a bespoke Anime renderer. Each related
+identity and community thread resolves through the same transport. One-hop Episode return retains the exact Season
+window, selection and Context; the installed visit controller owns focus, receipts, currentness and continuation.
+
+The first season spans a 20-row native window and a two-row continuation. The second has six episodes. The third
+has only a title and Series membership: missing cover, dates, staff and episode population stay unknown. Series,
+Season and Episode dates and duration retain released precision and units. Spoiler-qualified appearances stay gated.
+Private member progress remains an independent scalar session in the existing Library destination; three episodes
+of progress neither names completed episodes nor changes parent state. Synthetic Season inverse assertions illustrate
+the installed read seam and do not establish native Season creation or membership write admission.
+
+Decision: this frontend source-only delivery defers test authoring and execution, workspace typing, browser review,
+builds and captures to the dev verifier; existing current-reader and episode-return assertions remain unchanged.
