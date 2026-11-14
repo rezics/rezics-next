@@ -437,9 +437,7 @@ export class TermspacesWindows implements ManagerWindows {
           await this.tmux(['send-keys', '-t', paneId, ...(selected === 'resume' ? ['Down'] : []), 'Enter']);
           return;
         }
-        // A ready composer is already usable. Do not send keys or wait for another dialog.
-        if (capture && /^›[ \t]+Ask Codex to do anything[ \t]*$/m.test(capture) && !capture.includes('Resume paused goal?'))
-          return;
+        // Codex can draw the composer before it obtains Goal state and opens this startup menu.
         if (--remaining) {
           again = true;
           this.deferViewerProbe(2_000, () => void probe());
