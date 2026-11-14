@@ -27,6 +27,12 @@ import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import readFreshness from './aggregate-read-freshness.sql';
 import {
+  copyScoredCanonicalRequest,
+  readScoredCanonicalPartition,
+  type RealmRankScoredCanonicalRequest,
+  type RealmRankScoredCanonicalPage,
+} from './realm-rank-canonical-order.ts';
+import {
   ratingQuestionIdentity,
   ratingQuestionView,
   readVisibleRatingQuestion,
@@ -34,6 +40,12 @@ import {
   type QuestionMetadata,
   type RatingQuestionView,
 } from './question-directory.ts';
+
+export type {
+  RealmRankScoredCanonicalKey,
+  RealmRankScoredCanonicalRequest,
+  RealmRankScoredCanonicalPage,
+} from './realm-rank-canonical-order.ts';
 
 export type RealmRankRequest = Readonly<{
   realmId: string;
@@ -63,6 +75,14 @@ export type RealmRankPage = Readonly<{
 export interface RealmRankSource {
   page(actor: Actor, request: RealmRankRequest, context: { deadline: number }): Promise<RealmRankPage>;
 }
+export type RealmRankScoredHome = Readonly<{
+  partition: number;
+  generation: string;
+  epoch: number;
+  position: string;
+  canonicalGeneration: string | null;
+  canonicalRevision: string | null;
+}>;
 export type RealmRankOrderObservation = Readonly<{
   populationId: string;
   questionPublication: string;
@@ -79,6 +99,7 @@ export type RealmRankOrderObservation = Readonly<{
   realmAuthority: string;
   realmRevision: string;
   publicationGeneration: string;
+  scoredHomes: readonly RealmRankScoredHome[];
   canonicalPopulation: SubjectCanonicalPopulation;
 }>;
 export type RealmRankOrderCandidate = RealmRankCandidate & Readonly<{ securityRevision: number }>;
@@ -156,6 +177,15 @@ export interface RealmRankOrderSource {
       candidates: readonly RealmRankOrderCandidate[];
     }>
   >;
+  /** Raw internal candidates in score DESC, canonical name ASC (missing last), Subject ID ASC.
+   * Continue with a returned candidate.key; Search still owns complete predicate admission and disclosure.
+   */
+  readScoredCanonicalPartition(
+    actor: Actor,
+    input: RealmRankScoredCanonicalRequest,
+    observation: RealmRankOrderObservation,
+    context: { deadline: number },
+  ): Promise<RealmRankScoredCanonicalPage>;
   proveFigures(
     actor: Actor,
     input: Readonly<{ realmId: string; questionId: string; partition: number; subjectIds: readonly string[] }>,
@@ -526,9 +556,8 @@ function authorityDigest(actor: Actor): string {
   return createHash('sha256').update(JSON.stringify(authority)).digest('hex');
 }
 
-/** Native observations, canonical population/name candidates and scored/figure primitives.
- * Search still needs canonical scored ties and admitted predicate composition before complete ordering.
- * The compatibility page remains scored-only.
+/** Native observations, canonical score/name/ID and name/ID candidates, and exact figure primitives.
+ * Search owns admitted predicate composition and disclosure. The compatibility page remains scored-only.
  */
 export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSource {
   const canonicalNames = createSubjectCanonicalNames(deps.pool);
@@ -553,7 +582,9 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
       current.realmAuthority !== expected.realmAuthority ||
       current.realmRevision !== expected.realmRevision ||
       current.publicationGeneration !== expected.publicationGeneration ||
+      JSON.stringify(current.scoredHomes) !== JSON.stringify(expected.scoredHomes) ||
       current.canonicalPopulation.generation !== expected.canonicalPopulation?.generation ||
+      JSON.stringify(current.canonicalPopulation.homes) !== JSON.stringify(expected.canonicalPopulation?.homes) ||
       current.populationHome.partition !== expected.populationHome?.partition ||
       current.populationHome.epoch !== expected.populationHome?.epoch ||
       current.populationHome.position !== expected.populationHome?.position
@@ -580,6 +611,8 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
   };
   const source: RealmRankOrderSource = {
     async observe(actor, input, { deadline }) {
+      actor = structuredClone(actor);
+      input = { realmId: input.realmId, questionId: input.questionId };
       if (routeOf(input.realmId) === null || input.realmId === GLOBAL_CONTEXT.id || routeOf(input.questionId) === null)
         throw new ProblemError('invalid_request');
       const realm = await readRealm(deps, actor, input.realmId, { deadline });
@@ -600,14 +633,55 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
         deps.pool,
         deadline,
         (client) =>
-          client.query<{ last_value: string; is_called: boolean }>(
-            `SELECT last_value::text,is_called FROM rating.realm_rank_publication_generation`,
+          client.query<{
+            partition: number;
+            generation: string;
+            epoch: number | null;
+            position: string | null;
+            state: string | null;
+            canonicalGeneration: string | null;
+            canonicalRevision: string | null;
+          }>(
+            `SELECT publication.partition_no AS partition,publication.generation::text,
+                    home.epoch,home.position::text,home.write_state AS state,
+                    canonical.canonical_generation::text AS "canonicalGeneration",
+                    canonical.revision::text AS "canonicalRevision"
+             FROM rating.realm_rank_generation AS publication
+             LEFT JOIN core.partition AS home ON home.partition_no=publication.partition_no
+             LEFT JOIN rating.realm_rank_canonical_state AS canonical ON canonical.partition_no=publication.partition_no
+             WHERE publication.question_id=$1 AND publication.population_id=$2
+             ORDER BY publication.partition_no LIMIT 4097`,
+            [input.questionId, input.realmId],
           ),
         readOptions,
       );
-      const generation = publication.rows[0];
-      if (!generation || !/^[0-9]+$/.test(generation.last_value))
-        throw new Error('Rank publication generation is unavailable');
+      if (publication.rows.length > 4096) throw new ProblemError('index_not_ready');
+      // Committed rows, rather than a sequence advanced by an uncommitted writer, certify publication.
+      const scoredHomes = publication.rows.map((row, index): RealmRankScoredHome => {
+        if (row.epoch === null || row.position === null || row.state === null || row.state === 'moved')
+          throw new ProblemError('partition_unavailable');
+        if (
+          !Number.isInteger(row.partition) ||
+          row.partition < 0 ||
+          row.partition > 4095 ||
+          (index > 0 && row.partition <= publication.rows[index - 1]!.partition) ||
+          !Number.isSafeInteger(row.epoch) ||
+          row.epoch < 1 ||
+          !/^[0-9]+$/.test(row.position) ||
+          !/^[1-9][0-9]*$/.test(row.generation) ||
+          (row.canonicalGeneration !== null && !/^[1-9][0-9]*$/.test(row.canonicalGeneration)) ||
+          (row.canonicalRevision !== null && !/^[1-9][0-9]*$/.test(row.canonicalRevision))
+        )
+          throw new ProblemError('index_not_ready');
+        return {
+          partition: row.partition,
+          generation: row.generation,
+          epoch: row.epoch,
+          position: row.position,
+          canonicalGeneration: row.canonicalGeneration,
+          canonicalRevision: row.canonicalRevision,
+        };
+      });
       const canonicalPopulation = await canonicalNames.observe({ deadline });
       return {
         populationId: input.realmId,
@@ -624,7 +698,8 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
         priorUpdating: prior.updating,
         realmAuthority: authorityDigest(actor),
         realmRevision: `${realm.headRevisionId}:${realm.state}:${realm.visibility}`,
-        publicationGeneration: `${generation.last_value}:${generation.is_called ? 1 : 0}`,
+        publicationGeneration: createHash('sha256').update(JSON.stringify(scoredHomes)).digest('hex'),
+        scoredHomes,
         canonicalPopulation,
       };
     },
@@ -780,6 +855,30 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
           }),
         };
       });
+    },
+
+    async readScoredCanonicalPartition(actor, input, observation, { deadline }) {
+      const request = copyScoredCanonicalRequest(input);
+      if (
+        request.realmId === GLOBAL_CONTEXT.id ||
+        request.realmId !== observation.populationId ||
+        request.questionId !== observation.question.id ||
+        !observation.priorActive ||
+        observation.priorUpdating ||
+        observation.priorEpoch === null ||
+        observation.priorIdentity !== observation.questionIdentity ||
+        !Array.isArray(observation.scoredHomes) ||
+        observation.scoredHomes.length > 4096 ||
+        !Array.isArray(observation.canonicalPopulation?.homes) ||
+        observation.canonicalPopulation.homes.length > 4096
+      )
+        throw new ProblemError('invalid_request');
+      // No caller-owned authority, observation, or continuation remains live across suspension.
+      const expected = structuredClone(observation);
+      const authority = structuredClone(actor);
+      return checked(authority, request, expected, deadline, request.partition, (client, epoch, home) =>
+        readScoredCanonicalPartition(client, request, expected, { epoch, position: BigInt(home.position) }),
+      );
     },
 
     async proveFigures(actor, input, observation, { deadline }) {
