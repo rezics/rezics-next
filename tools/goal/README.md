@@ -3166,6 +3166,8 @@ Decision: authenticated `typing-recover` may replace one consumed compiler grant
 
 Decision: a consumed exact Web compiler grant with unresolved physical evidence returns its check and run identity with terminal or unknown custody, and repeated queries do not re-advertise it. Permit the existing single compiler-only replacement only for that same Web run after verified resultless cleanup, unchanged installed Web inputs and existing authenticated owner or operations authority; terminal compiler receipts still settle normally.
 
+Decision: stopped-action recovery resolves a compiler-only check through its exact authenticated same-attempt native grant, current compiler input identity and owned result/custody; the parent attempt's `checks` remain the original checks and do not need to list the separately registered recovery check.
+
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed
 known stop, terminal custody for every same-attempt check and one exact installed Web compiler grant. Permit one
