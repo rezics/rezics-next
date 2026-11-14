@@ -723,6 +723,23 @@ function SpaceSetupFormVisit({
     }
   }
   const choiceMissing = (step === 1 && !context) || (step === 2 && !scheme) || (step === 3 && !concept);
+  const savedContextLabel = realm?.contextId
+    ? contextState.selected?.phase === 'ready' && contextState.selected.id === realm.contextId
+      ? contextState.selected.choice.label
+      : contextState.current?.choice?.id === realm.contextId
+        ? contextState.current.choice.label
+        : m.space_setup_details_name_unavailable()
+    : m.space_setup_not_saved();
+  const savedSchemeLabel = realm?.schemeId
+    ? scheme?.id === realm.schemeId
+      ? scheme.label
+      : m.space_setup_details_name_unavailable()
+    : m.space_setup_not_saved();
+  const savedConceptLabel = acceptedBoard
+    ? concept?.id === acceptedBoard.conceptId
+      ? concept.label
+      : m.space_setup_details_name_unavailable()
+    : m.space_setup_not_saved();
   if (callerRetired)
     return (
       <div role="status" className="rounded-xl border border-border bg-muted p-4 text-sm text-muted-foreground">
@@ -747,27 +764,86 @@ function SpaceSetupFormVisit({
                   disabled={!reachable[index] || locked || paused || Boolean(boardId)}
                   aria-current={index === step ? 'step' : undefined}
                   onClick={(event) => advance(index, event.detail === 0 ? event.currentTarget : undefined)}
-                  className="flex min-h-14 min-w-0 w-full items-center gap-2 rounded-xl border border-border px-3 py-3 text-start text-sm font-medium aria-[current=step]:border-primary aria-[current=step]:bg-primary/5 aria-[current=step]:text-primary disabled:opacity-50"
+                  className="flex min-h-11 min-w-0 w-full items-center gap-3 rounded-xl border border-border px-3 py-3 text-start text-sm font-medium aria-[current=step]:border-primary aria-[current=step]:bg-primary/5 aria-[current=step]:text-primary disabled:opacity-50"
                 >
-                  {completed[index] ? (
-                    <Check className="size-4 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <Icon className="size-4 shrink-0" aria-hidden="true" />
-                  )}
-                  <span className="min-w-0">{label}</span>
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-current/30 text-xs" aria-hidden="true">
+                    {completed[index] ? <Check className="size-4" /> : <Icon className="size-4" />}
+                  </span>
+                  <span className="min-w-0 flex-1">{label}</span>
                 </button>
               </li>
             );
           })}
         </ol>
       </nav>
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
-        <section className="min-w-0" aria-labelledby={titleId}>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-6">
+        <aside className="order-1 min-w-0 lg:order-2 lg:sticky lg:top-6" aria-label={m.space_setup_overview()}>
+          <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
+            <ContentItemHeading className="text-lg font-semibold">{m.space_setup_overview()}</ContentItemHeading>
+            <dl className="grid min-w-0 grid-cols-1 gap-4 text-sm">
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.space_setup_space()}</dt>
+                <dd className="mt-1 min-w-0 font-medium [overflow-wrap:anywhere]">
+                  {space?.title || m.space_setup_not_saved()}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.space_setup_address()}</dt>
+                <dd className="mt-1 min-w-0 break-all font-medium">
+                  {space?.address ? `/spaces/${space.address}` : m.space_setup_not_saved()}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.space_setup_realm()}</dt>
+                <dd className="mt-1 min-w-0 font-medium [overflow-wrap:anywhere]">
+                  {realm?.title || m.space_setup_not_saved()}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.space_setup_visibility()}</dt>
+                <dd className="mt-1 font-medium">
+                  {realm
+                    ? realm.visibility === 'public'
+                      ? m.space_setup_public()
+                      : m.space_setup_protected()
+                    : m.space_setup_not_saved()}
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.space_setup_context_label()}</dt>
+                <dd className="mt-1 min-w-0 font-medium [overflow-wrap:anywhere]">{savedContextLabel}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.space_setup_scheme_label()}</dt>
+                <dd className="mt-1 min-w-0 font-medium [overflow-wrap:anywhere]">{savedSchemeLabel}</dd>
+              </div>
+            </dl>
+            <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
+              {m.space_setup_saved_hint()}
+            </p>
+            {space?.address ? (
+              <Link
+                to="/spaces/$address"
+                params={{ address: space.address }}
+                className="inline-flex min-h-11 min-w-11 max-w-full flex-wrap items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
+              >
+                {m.space_setup_home()}
+                <ArrowRight className="size-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
+              </Link>
+            ) : null}
+          </ContentItemFrame>
+        </aside>
+        <section className="order-2 min-w-0 lg:order-1" aria-labelledby={titleId}>
           <div className="mb-6 space-y-2">
             <p className="text-xs font-medium tracking-wide text-muted-foreground">
               {m.space_setup_step_number({ current: step + 1, total: steps.length })}
             </p>
-            <h2 ref={heading} tabIndex={-1} id={titleId} className="text-2xl font-semibold tracking-tight outline-none">
+            <h2
+              ref={heading}
+              tabIndex={-1}
+              id={titleId}
+              className="text-2xl font-semibold tracking-tight [overflow-wrap:anywhere] outline-none"
+            >
               {boardId ? m.space_setup_complete() : paused ? m.space_setup_paused() : steps[step]}
             </h2>
             <div className="text-sm leading-relaxed text-muted-foreground">
@@ -787,7 +863,7 @@ function SpaceSetupFormVisit({
             </div>
           </div>
           {problem ? (
-            <div className="mb-6 space-y-3 rounded-xl border border-border bg-muted p-4" role="alert">
+            <div className="mb-6 space-y-3 rounded-xl border border-destructive/30 bg-muted p-4" role="alert">
               <p className="text-sm leading-relaxed">{problemText(problem)}</p>
               {pending ? (
                 <Button disabled={busy || !callerCurrent || !commandReady} onClick={() => void submit(pending)}>
@@ -806,37 +882,60 @@ function SpaceSetupFormVisit({
           ) : null}
           {boardId ? (
             <div role="status" className="space-y-4">
-              <ContentItemFrame className="min-w-0 space-y-4 py-3 sm:py-4" aria-label={m.space_setup_complete()}>
-                <ContentItemHeading level={3} className="text-xl font-semibold leading-snug">
-                  {boardTitle}
+              <ContentItemFrame
+                className="min-w-0 space-y-4 py-3 [overflow-wrap:anywhere] sm:py-4"
+                aria-label={m.space_setup_complete()}
+              >
+                <ContentItemHeading level={3} className="break-words text-xl font-semibold leading-snug">
+                  {acceptedBoard?.title ?? boardTitle}
                 </ContentItemHeading>
                 <dl className="grid min-w-0 gap-4 text-sm sm:grid-cols-2">
                   <div className="min-w-0">
                     <dt className="text-muted-foreground">{m.space_setup_space()}</dt>
-                    <dd className="mt-1 font-medium">{space?.title}</dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="text-muted-foreground">{m.space_setup_realm()}</dt>
-                    <dd className="mt-1 font-medium">{realm?.title}</dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="text-muted-foreground">{m.space_setup_context_label()}</dt>
-                    <dd className="mt-1 font-medium">
-                      {contextState.current?.choice?.label ?? m.space_setup_details_name_unavailable()}
+                    <dd className="mt-1 min-w-0 font-medium [overflow-wrap:anywhere]">
+                      {space?.title || m.space_setup_details_name_unavailable()}
                     </dd>
                   </div>
                   <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_address()}</dt>
+                    <dd className="mt-1 min-w-0 break-all font-medium">
+                      {space?.address ? `/spaces/${space.address}` : m.space_setup_details_name_unavailable()}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_realm()}</dt>
+                    <dd className="mt-1 min-w-0 font-medium [overflow-wrap:anywhere]">
+                      {realm?.title || m.space_setup_details_name_unavailable()}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_context_label()}</dt>
+                    <dd className="mt-1 min-w-0 font-medium [overflow-wrap:anywhere]">{savedContextLabel}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_scheme_label()}</dt>
+                    <dd className="mt-1 min-w-0 font-medium [overflow-wrap:anywhere]">{savedSchemeLabel}</dd>
+                  </div>
+                  <div className="min-w-0">
                     <dt className="text-muted-foreground">{m.space_setup_concept_label()}</dt>
-                    <dd className="mt-1 font-medium">{concept?.label ?? m.space_setup_details_name_unavailable()}</dd>
+                    <dd className="mt-1 min-w-0 font-medium [overflow-wrap:anywhere]">{savedConceptLabel}</dd>
                   </div>
                   <div className="min-w-0">
                     <dt className="text-muted-foreground">{m.space_setup_visibility()}</dt>
                     <dd className="mt-1 font-medium">
-                      {boardVisibility === 'published'
+                      {(acceptedBoard?.visibility ?? boardVisibility) === 'published'
                         ? m.space_setup_public()
-                        : boardVisibility === 'protected'
+                        : (acceptedBoard?.visibility ?? boardVisibility) === 'protected'
                           ? m.space_setup_protected()
                           : m.space_setup_draft()}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.space_setup_purpose()}</dt>
+                    <dd className="mt-1 font-medium">
+                      {(acceptedBoard?.purpose ?? purpose) === 'discussion'
+                        ? m.realm_board_purpose_discussion()
+                        : m.realm_board_purpose_reviews()}
                     </dd>
                   </div>
                 </dl>
@@ -844,7 +943,7 @@ function SpaceSetupFormVisit({
                   <Link
                     to="/boards/$id"
                     params={{ id: boardId }}
-                    className="inline-flex min-h-11 max-w-full items-center gap-2 font-medium text-primary underline underline-offset-4"
+                    className="inline-flex min-h-11 min-w-11 max-w-full flex-wrap items-center gap-2 font-medium text-primary underline underline-offset-4"
                   >
                     {m.space_setup_open_board()}
                     <ArrowRight className="size-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
@@ -1060,62 +1159,6 @@ function SpaceSetupFormVisit({
             </p>
           ) : null}
         </section>
-        <aside className="min-w-0" aria-label={m.space_setup_overview()}>
-          <ContentItemFrame as="div" className="min-w-0 space-y-5 py-3 sm:py-4">
-            <ContentItemHeading className="text-lg font-semibold">{m.space_setup_overview()}</ContentItemHeading>
-            <dl className="space-y-4 text-sm">
-              <div>
-                <dt className="text-muted-foreground">{m.space_setup_space()}</dt>
-                <dd className="mt-1 break-words font-medium">
-                  {space?.title || spaceTitle || m.space_setup_not_saved()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">{m.space_setup_address()}</dt>
-                <dd className="mt-1 break-all font-medium">
-                  {space?.address ? `/spaces/${space.address}` : m.space_setup_not_saved()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">{m.space_setup_realm()}</dt>
-                <dd className="mt-1 break-words font-medium">{realm?.title || m.space_setup_not_saved()}</dd>
-              </div>
-              {realm ? (
-                <div>
-                  <dt className="text-muted-foreground">{m.space_setup_visibility()}</dt>
-                  <dd className="mt-1 font-medium">
-                    {realm.visibility === 'public' ? m.space_setup_public() : m.space_setup_protected()}
-                  </dd>
-                </div>
-              ) : null}
-              {context ? (
-                <div>
-                  <dt className="text-muted-foreground">{m.space_setup_context_label()}</dt>
-                  <dd className="mt-1 break-words font-medium">{context.label}</dd>
-                </div>
-              ) : null}
-              {scheme ? (
-                <div>
-                  <dt className="text-muted-foreground">{m.space_setup_scheme_label()}</dt>
-                  <dd className="mt-1 break-words font-medium">{scheme.label}</dd>
-                </div>
-              ) : null}
-            </dl>
-            <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
-              {m.space_setup_saved_hint()}
-            </p>
-            {space?.address ? (
-              <Link
-                to="/spaces/$address"
-                params={{ address: space.address }}
-                className="inline-flex min-h-11 max-w-full items-center gap-2 text-sm font-medium text-primary underline underline-offset-4"
-              >
-                {m.space_setup_home()}
-                <ArrowRight className="size-4 shrink-0 rtl:rotate-180" aria-hidden="true" />
-              </Link>
-            ) : null}
-          </ContentItemFrame>
-        </aside>
       </div>
     </div>
   );
