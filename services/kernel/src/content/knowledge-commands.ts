@@ -46,6 +46,8 @@ import {
   knowledgeSelectedSubject,
 } from './knowledge-store.ts';
 import { insertKnowledgeOrderEntry, removeKnowledgeOrderEntry } from './knowledge-order.ts';
+import { collectKnowledgeMediaIds } from './knowledge-media-membership.ts';
+import { claimKnowledgeMedia, publishKnowledgeMedia } from './knowledge-media.ts';
 
 const PUBLICATION_EVENT = 'com.rezics.content.knowledge.publication.changed.v1';
 const NOTEBOOK_CREATED_EVENT = 'com.rezics.content.knowledge.notebook.created.v1';
@@ -137,6 +139,7 @@ type StoredBody = Readonly<{
   title: string;
   language: string | null;
   references: readonly KnowledgeReference[];
+  mediaIds: readonly string[];
 }>;
 
 function storedBody(input: KnowledgeDocumentInput): StoredBody {
@@ -161,6 +164,7 @@ function storedBody(input: KnowledgeDocumentInput): StoredBody {
     title: input.title,
     language: input.language ?? null,
     references: validateKnowledgeReferences(validated.snapshot, input.references),
+    mediaIds: collectKnowledgeMediaIds(validated.snapshot),
   };
 }
 
@@ -624,8 +628,8 @@ export async function writeKnowledgeDocument(
       );
       await tx.query(
         `INSERT INTO content.knowledge_revision
-          (route,document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,author_account_id,recorded_transaction_id,created_at,reference_manifest,copy_provenance)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+          (route,document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,author_account_id,recorded_transaction_id,created_at,reference_manifest,copy_provenance,media_ids)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [
           route,
           documentId,
@@ -641,6 +645,7 @@ export async function writeKnowledgeDocument(
           authoritativeTimeValue(time),
           JSON.stringify(document.references),
           provenance === null ? null : JSON.stringify(provenance),
+          document.mediaIds,
         ],
       );
       await tx.query(
@@ -682,6 +687,7 @@ export async function writeKnowledgeDocument(
          WHERE route=$1 AND notebook_id=$2`,
         [route, notebookId, structureRevisionId, nextRevisionNumber.toString()],
       );
+      await claimKnowledgeMedia(tx, { mediaIds: document.mediaIds, documentId, revisionId, author: actor });
       return {
         value: { notebookId, documentId, placementId, revisionId, structureRevisionId },
         events: [
@@ -969,6 +975,7 @@ export async function reviseKnowledgeDocument(
   input: KnowledgeReviseDocumentInput,
   context: KnowledgeCommandContext,
 ) {
+  input = structuredClone(input);
   const owner = await knowledgeOwner(deps.pool, documentId);
   if (!owner) throw new KnowledgeNotFoundError();
   const authorization = fenceKnowledgeAuthorization(
@@ -995,9 +1002,9 @@ export async function reviseKnowledgeDocument(
       if (row.head_revision_id !== input.expectedHeadRevisionId) throw new RevisionPreconditionError();
       await tx.query(
         `INSERT INTO content.knowledge_revision
-          (route,document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,author_account_id,recorded_transaction_id,created_at,reference_manifest,copy_provenance)
+          (route,document_id,revision_id,title,language,canonical_bytes,body_sha256,licence,subject_ids,author_account_id,recorded_transaction_id,created_at,reference_manifest,copy_provenance,media_ids)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
-           (SELECT copy_provenance FROM content.knowledge_revision WHERE route=$1 AND document_id=$2 AND revision_id=$14))`,
+           (SELECT copy_provenance FROM content.knowledge_revision WHERE route=$1 AND document_id=$2 AND revision_id=$14),$15)`,
         [
           owner.route,
           documentId,
@@ -1013,6 +1020,7 @@ export async function reviseKnowledgeDocument(
           authoritativeTimeValue(time),
           JSON.stringify(document.references),
           row.head_revision_id,
+          document.mediaIds,
         ],
       );
       await tx.query(`UPDATE content.knowledge_document SET head_revision_id=$3 WHERE route=$1 AND document_id=$2`, [
@@ -1020,6 +1028,7 @@ export async function reviseKnowledgeDocument(
         documentId,
         revisionId,
       ]);
+      await claimKnowledgeMedia(tx, { mediaIds: document.mediaIds, documentId, revisionId, author: actor });
       return {
         value: { documentId, revisionId },
         events: [
@@ -1041,6 +1050,7 @@ export async function setKnowledgePublication(
   input: KnowledgePublicationInput,
   context: KnowledgeCommandContext,
 ) {
+  input = structuredClone(input);
   const owner = await knowledgeOwner(deps.pool, documentId);
   if (!owner) throw new KnowledgeNotFoundError();
   const authorization = fenceKnowledgeAuthorization(
@@ -1066,7 +1076,7 @@ export async function setKnowledgePublication(
       return prepareAuthority(attempt);
     };
   }
-  const publicationId = input.revisionId === null ? null : newId(owner.route);
+  const allocatedPublicationId = input.revisionId === null ? null : newId(owner.route);
   return runCommand<{ documentId: string; publicationId: string | null; revisionId?: string }>(
     deps.pool,
     commandOptions(actor, owner.route, context, kind, documentId, input, authorization),
@@ -1130,7 +1140,17 @@ export async function setKnowledgePublication(
       );
       const selected = revision.rows[0];
       if (!selected) throw new KnowledgeNotFoundError();
+      const admitted = await tx.query<{ publication_id: string }>(
+        `SELECT s.publication_id FROM content.knowledge_publication_selection s
+         JOIN content.knowledge_document d ON d.route=s.route AND d.document_id=s.document_id
+           AND d.lifecycle_generation=s.lifecycle_generation
+         WHERE s.route=$1 AND s.document_id=$2 AND s.revision_id=$3`,
+        [owner.route, documentId, input.revisionId],
+      );
+      const publicationId = admitted.rows[0]?.publication_id ?? allocatedPublicationId;
       if (!publicationId) throw new Error('A selected publication needs an identity');
+      if (document.current_publication_id === publicationId)
+        return noEffect({ documentId, publicationId, revisionId: input.revisionId });
       const subject = await tx.query<{ subject_id: string }>(
         `SELECT n.subject_id FROM content.knowledge_document d
          JOIN content.knowledge_notebook n ON n.route=d.route AND n.notebook_id=d.notebook_id
@@ -1139,36 +1159,39 @@ export async function setKnowledgePublication(
       );
       const subjectId = subject.rows[0]?.subject_id;
       if (!subjectId) throw new KnowledgeNotFoundError();
-      await tx.query(
-        `INSERT INTO content.knowledge_publication
+      if (!admitted.rows[0]) {
+        await tx.query(
+          `INSERT INTO content.knowledge_publication
           (route,document_id,publication_id,revision_id,subject_id,body_sha256,recorded_transaction_id,published_at,lifecycle_generation)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
            (SELECT lifecycle_generation FROM content.knowledge_document WHERE route=$1 AND document_id=$2))`,
-        [
-          owner.route,
-          documentId,
-          publicationId,
-          input.revisionId,
-          subjectId,
-          selected.body_sha256,
-          transactionId,
-          authoritativeTimeValue(time),
-        ],
-      );
-      await tx.query(
-        `INSERT INTO content.knowledge_publication_selection
+          [
+            owner.route,
+            documentId,
+            publicationId,
+            input.revisionId,
+            subjectId,
+            selected.body_sha256,
+            transactionId,
+            authoritativeTimeValue(time),
+          ],
+        );
+        await tx.query(
+          `INSERT INTO content.knowledge_publication_selection
           (route,document_id,lifecycle_generation,revision_id,publication_id)
          SELECT route,document_id,lifecycle_generation,revision_id,publication_id
          FROM content.knowledge_publication
          WHERE route=$1 AND document_id=$2 AND publication_id=$3
-         ON CONFLICT (route,document_id,lifecycle_generation,revision_id) DO NOTHING`,
-        [owner.route, documentId, publicationId],
-      );
+         `,
+          [owner.route, documentId, publicationId],
+        );
+      }
       await tx.query(
         `UPDATE content.knowledge_document SET current_publication_id=$3
          WHERE route=$1 AND document_id=$2`,
         [owner.route, documentId, publicationId],
       );
+      await publishKnowledgeMedia(tx, { documentId, revisionId: input.revisionId, publicationId, author: actor });
       return {
         value: { documentId, publicationId, revisionId: input.revisionId },
         events: [

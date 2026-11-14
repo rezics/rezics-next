@@ -4,6 +4,7 @@ import type { ReadContext } from './model.ts';
 import { writeKnowledgeDocument } from './knowledge-commands.ts';
 import { readKnowledgePrivateDocument, readKnowledgePublicDocument } from './knowledge-reads.ts';
 import { KnowledgeNotFoundError, type KnowledgeCommandContext, type KnowledgeDependencies } from './knowledge-model.ts';
+import { contextualizeKnowledgeCopyMedia } from './knowledge-media-membership.ts';
 import {
   canonicalKnowledgeJson,
   knowledgeDigest,
@@ -103,7 +104,25 @@ export async function copyKnowledgeDocument(
     receiptInput: input,
     async prepare() {
       const selected = await exportKnowledgeDocument(deps, input.source, { actor, deadline: context.deadline });
-      const copied = remapKnowledgeCopy(selected.value.snapshot, selected.value.references);
+      const source = selected.value.selection;
+      const contextual = contextualizeKnowledgeCopyMedia(
+        selected.value.snapshot,
+        source.representation === 'public'
+          ? {
+              representation: 'public',
+              documentId: source.documentId,
+              revisionId: source.revisionId,
+              sourceSha256: source.sourceSha256,
+              publicationId: source.publicationId,
+            }
+          : {
+              representation: 'authoring',
+              documentId: source.documentId,
+              revisionId: source.revisionId,
+              sourceSha256: source.sha256,
+            },
+      );
+      const copied = remapKnowledgeCopy(contextual, selected.value.references);
       return {
         input: {
           title: selected.value.title,
