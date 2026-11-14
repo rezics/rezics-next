@@ -1,17 +1,29 @@
 import { afterAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, type ComponentProps } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ClassificationsReader } from '../src/ratings/own-classifications/reader';
+import { OwnClassificationsWorkspace } from '../src/ratings/own-classifications/page';
+import type { ClassificationCommands } from '../src/ratings/own-classifications/editor';
+import { OwnVotesDeparture, type OwnVotesDepartureRef } from '../src/ratings/own-votes/departure';
 import type { ClassificationIntent } from '../src/ratings/own-classifications/intent';
 import type { OwnClassificationsRead } from '../src/ratings/own-classifications/types';
 import { m } from '../src/paraglide/messages.js';
-import { accountId, associationId, classificationsPage, subjectId } from './own-classification-assessments-fixture';
+import {
+  accountId,
+  associationId,
+  classificationRow,
+  classificationsPage,
+  subjectId,
+  targetId,
+} from './own-classification-assessments-fixture';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/library/classification-assessments' });
+let deferredFrames: FrameRequestCallback[] | null = null;
 const globals = {
   window,
   document: window.document,
@@ -28,7 +40,9 @@ const globals = {
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
-  requestAnimationFrame: (callback: FrameRequestCallback) => callback(0),
+  requestAnimationFrame: (callback: FrameRequestCallback) =>
+    deferredFrames ? deferredFrames.push(callback) : (callback(0), 0),
+  cancelAnimationFrame: () => {},
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
@@ -57,6 +71,226 @@ function button(host: HTMLElement, label: string) {
   if (!value) throw new Error(`Missing button: ${label}`);
   return value;
 }
+
+function workspace(
+  page = classificationsPage(),
+  commands: Partial<ClassificationCommands> = {},
+  props: Partial<ComponentProps<typeof OwnClassificationsWorkspace>> = {},
+) {
+  const address = props.frontier ?? { cursor: 'raw', selected: null };
+  return (
+    <OwnClassificationsWorkspace
+      state="ready"
+      page={page}
+      frontier={address}
+      locale="en"
+      isCurrent={() => true}
+      onRetry={async () => {}}
+      onNext={() => {}}
+      commands={{
+        read: { ...ready(), page, frontier: address },
+        csrfToken: () => 'csrf',
+        send: async () => ({ kind: 'acknowledged' }),
+        review: async () => ({ kind: 'unavailable' }),
+        ...commands,
+      }}
+      {...props}
+    />
+  );
+}
+
+test('first-of-20 inspection stays at its opener; disclosure preserves the editor and commands keep original keys', async () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const page = classificationsPage(Array.from({ length: 20 }, (_, index) => classificationRow(index)));
+  const first = page.items[0]!;
+  if (first.state !== 'available') throw new Error('Expected available fixture');
+  first.subject = { ...first.subject, id: targetId, label: 'Moved recognizable subject' };
+  const sent: ClassificationIntent[] = [];
+  try {
+    await act(async () =>
+      root.render(
+        workspace(page, {
+          send: async (intent) => {
+            sent.push(intent);
+            return { kind: 'acknowledged' };
+          },
+        }),
+      ),
+    );
+    const opener = button(host, m.subject_classification_assessment_inspect());
+    opener.focus();
+    const focus = opener.focus.bind(opener);
+    const focusCalls: (FocusOptions | undefined)[] = [];
+    opener.focus = (options) => {
+      focusCalls.push(options);
+      focus(options);
+    };
+    await act(async () => opener.click());
+    const detail = host.querySelector('section')!;
+    expect(document.activeElement).toBe(opener);
+    expect(focusCalls).toEqual([]);
+    expect(opener.getAttribute('aria-expanded')).toBe('true');
+    expect(opener.getAttribute('aria-controls')).toBe(detail.id);
+    expect(detail.parentElement).toBe(host.querySelector('li'));
+    expect(detail.previousElementSibling).toBe(opener);
+    expect(detail.querySelector('h2')?.textContent).toContain('Moved recognizable subject · Own-page concept');
+    const disclosure = detail.querySelector('details')!;
+    const summary = disclosure.querySelector('summary')!;
+    expect(disclosure.open).toBe(false);
+    expect(disclosure.querySelector('a')?.getAttribute('href')?.toLowerCase()).not.toContain('moved');
+    const draft = detail.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await act(async () => draft.click());
+    await act(async () => summary.click());
+    await act(async () => summary.click());
+    expect(detail.querySelector('input[type="checkbox"]')).toBe(draft);
+    expect(draft.checked).toBe(false);
+    await act(async () => button(host, m.subject_classification_assessment_change()).click());
+    expect(JSON.stringify(sent[0])).toContain(
+      `/v1/subjects/${subjectId}/classification-associations/${associationId}/assessment`,
+    );
+    await act(async () => button(host, m.own_classifications_close()).click());
+    expect(host.querySelector('section')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(focusCalls).toEqual([{ preventScroll: true }]);
+    await act(async () => opener.click());
+    await act(async () =>
+      host
+        .querySelector('summary')!
+        .dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+    );
+    expect(host.querySelector('section')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+test('dirty close and switching share the editor decision; Stay also preserves an uncertain original intent', async () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const page = classificationsPage([classificationRow(), classificationRow(1)]);
+  const departure: OwnVotesDepartureRef = { current: null };
+  const sent: ClassificationIntent[] = [];
+  const router = createRouter({
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+    routeTree: createRootRoute({
+      component: () =>
+        workspace(page, {
+          confirmMovement: {
+            get current() {
+              return departure.current?.confirm ?? null;
+            },
+          },
+          departure: (dirty, locked, current, retire) => (
+            <OwnVotesDeparture
+              owner={page}
+              dirty={dirty}
+              locked={locked}
+              isCurrent={current}
+              onLeave={retire}
+              confirmMovement={departure}
+            />
+          ),
+          send: async (intent) => {
+            sent.push(intent);
+            return { kind: 'uncertain' };
+          },
+        }),
+    }),
+  });
+  const body = document.body;
+  try {
+    await act(async () => root.render(<RouterProvider router={router} />));
+    const openers = [...host.querySelectorAll<HTMLButtonElement>('button[aria-expanded]')];
+    await act(async () => openers[0]!.click());
+    const draft = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await act(async () => draft.click());
+    await act(async () => button(host, m.own_classifications_close()).click());
+    expect(body.querySelector('[role="alertdialog"]')).not.toBeNull();
+    await act(async () => button(body, m.library_my_ratings_stay()).click());
+    await act(async () => openers[1]!.click());
+    await act(async () => button(body, m.library_my_ratings_stay()).click());
+    expect(host.querySelector('input[type="checkbox"]')).toBe(draft);
+    expect(draft.checked).toBe(false);
+    expect(openers[0]!.getAttribute('aria-expanded')).toBe('true');
+    await act(async () => button(host, m.own_classifications_close()).click());
+    await act(async () => button(body, m.library_my_ratings_leave()).click());
+    expect(host.querySelector('section')).toBeNull();
+    await act(async () => openers[1]!.click());
+    await act(async () => button(host, m.subject_classification_assessment_withdraw()).click());
+    await act(async () => button(host.querySelector('[role="group"]')!, m.library_my_ratings_confirm_clear()).click());
+    await act(async () => button(host, m.own_classifications_close()).click());
+    expect(body.querySelector('[role="alertdialog"]')?.textContent).toContain(m.library_my_ratings_departure_locked());
+    expect([...body.querySelectorAll('button')].some((node) => node.textContent === m.library_my_ratings_leave())).toBe(
+      false,
+    );
+    await act(async () => button(body, m.library_my_ratings_stay()).click());
+    await act(async () => button(host, m.subject_classification_assessment_retry()).click());
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toBe(sent[0]);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
+
+test('replacement rejects a late close decision and retirement cancels deferred opener focus', async () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  let decide!: (leave: boolean) => void;
+  const page = classificationsPage();
+  const address = { cursor: 'raw', selected: { subjectId, associationId } };
+  try {
+    await act(async () =>
+      root.render(
+        workspace(
+          page,
+          {
+            confirmMovement: {
+              current: () =>
+                new Promise((resolve) => {
+                  decide = resolve;
+                }),
+            },
+          },
+          { frontier: address },
+        ),
+      ),
+    );
+    await act(async () => button(host, m.own_classifications_close()).click());
+    const replacement = classificationsPage();
+    await act(async () => root.render(workspace(replacement, {}, { frontier: address })));
+    const detail = host.querySelector('section');
+    await act(async () => decide(true));
+    expect(host.querySelector('section')).toBe(detail);
+    deferredFrames = [];
+    const opener = button(host, m.subject_classification_assessment_inspect());
+    let restored = 0;
+    opener.focus = () => {
+      restored++;
+    };
+    await act(async () => button(host, m.own_classifications_close()).click());
+    expect(deferredFrames).toHaveLength(1);
+    await act(async () =>
+      root.render(workspace(replacement, {}, { state: 'denied', isCurrent: () => false, frontier: address })),
+    );
+    for (const frame of deferredFrames) frame(0);
+    expect(restored).toBe(0);
+    expect(host.querySelector('section')).toBeNull();
+    document.body.focus();
+    await act(async () => root.render(workspace(classificationsPage(), {}, { frontier: address, focusHeading: true })));
+    expect(document.activeElement).toBe(host.querySelector('h1'));
+  } finally {
+    deferredFrames = null;
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
 
 test('browser admission refreshes the selected frontier; readback leaves the original unknown withdrawal locked for retry', async () => {
   const host = window.document.createElement('div') as HTMLElement;

@@ -4,6 +4,56 @@ import { OwnClassificationsWorkspace } from '../src/ratings/own-classifications/
 import { classificationFrontier, indexOwnClassifications } from '../src/ratings/own-classifications/inventory';
 import { classificationRow, classificationsPage, frontier, subjectId } from './own-classification-assessments-fixture';
 
+test('a promoted selection is the supplied occurrence in native order with technical identity disclosed locally', () => {
+  const rows = Array.from({ length: 21 }, (_, index) => {
+    const row = classificationRow(index);
+    if (row.state === 'available') row.target.label = `Concept ${index + 1}`;
+    return row;
+  });
+  const promoted = rows.pop()!;
+  rows.splice(7, 0, promoted);
+  const page = classificationsPage(rows);
+  const address = { cursor: 'raw', selected: { subjectId, associationId: promoted.associationId } };
+  const html = renderToStaticMarkup(
+    <OwnClassificationsWorkspace
+      state="ready"
+      page={page}
+      frontier={address}
+      locale="en"
+      isCurrent={() => true}
+      onRetry={async () => {}}
+      onNext={() => {}}
+      commands={{
+        read: {
+          state: 'ready',
+          page,
+          frontier: address,
+          subject: page.viewer.accountId,
+          locale: 'en',
+          source: 'content.classification-ballot-own-page.v1',
+          credential: 'ab'.repeat(32),
+          observation: 'cd'.repeat(32),
+        },
+        csrfToken: () => 'csrf',
+        send: async () => ({ kind: 'acknowledged' }),
+        review: async () => ({ kind: 'unavailable' }),
+      }}
+    />,
+  );
+  const occurrences = [...html.matchAll(/<li\b[\s\S]*?<\/li>/g)].map(([item]) => item);
+  expect(occurrences).toHaveLength(21);
+  rows.forEach((row, index) => {
+    if (row.state === 'available') expect(occurrences[index]).toContain(row.target.label!);
+    expect(occurrences[index]!.includes('<section')).toBe(index === 7);
+  });
+  expect(occurrences[7]).toContain('aria-expanded="true"');
+  expect(occurrences[7]).toContain(`<details>`);
+  expect(occurrences[7]).not.toContain('<details open');
+  for (const value of [subjectId, promoted.associationId, 'ab'.repeat(32), 'cd'.repeat(32), 'ef'.repeat(32)])
+    expect(occurrences[7]).toContain(value);
+  expect(html.match(/<fieldset/g)).toHaveLength(1);
+});
+
 test('native order, 20 raw slots plus one exact selected promotion, and concealed shape remain native', () => {
   for (const size of [1, 10, 20, 21]) {
     const rows = Array.from({ length: size }, (_, index) => classificationRow(index));

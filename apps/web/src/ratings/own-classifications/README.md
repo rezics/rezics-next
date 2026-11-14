@@ -99,6 +99,11 @@ locale/theme controls and 390/1280 viewports. Supplied
 command adapters illustrate interactions; native recorded responses and browser/keyboard/screen-reader execution
 remain controller verification, separate from these authored examples.
 
+The authored `own-classification-assessments-journey.test.tsx` pins promoted occurrence order and local technical
+identity; `own-classifications-browser.test.tsx` covers first-row focus, disclosure preserving the editor, original
+command keys, protected close/switch/Stay and replacement cancelling late decisions/focus. Their execution and the
+mounted keyboard/phone/desktop/native exact-command/retirement acceptance belong to the integrated verifier.
+
 Decision: deliberate Next/Previous/First retain only eight admitted predecessor cursor coordinates plus current
 and one staged exact frontier in the mounted eligible Router visit. A successful guarded native read commits the
 coordinate; a failed movement retains its exact target for Retry without truncating the accepted path. Selected-pair

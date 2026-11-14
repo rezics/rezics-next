@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import { OwnClassificationsWorkspace } from '../ratings/own-classifications/page';
+import { OwnVotesDeparture, type OwnVotesDepartureControl } from '../ratings/own-votes/departure';
 import type {
   OwnClassification,
   OwnClassificationsPage,
@@ -56,10 +58,27 @@ type Mode =
   | 'long'
   | 'uncertain'
   | 'selected'
+  | 'first-twenty'
   | 'preparing'
   | 'withdraw-only'
   | 'identity-changed'
   | 'question-changed';
+function occurrence(index: number): OwnClassification {
+  const row = structuredClone(available);
+  if (row.state !== 'available') return row;
+  const id = index === 0 ? associationId : `00000000-0000-8000-8000-${String(index + 100).padStart(12, '0')}`;
+  row.associationId = row.association.associationId = row.association.slotId = id;
+  if (row.aggregate) row.aggregate.associationId = id;
+  const exact = `/v1/subjects/${subjectId}/classification-associations/${id}/assessment`;
+  row.actions = {
+    state: 'editable',
+    set: `${exact}?expectedRevision=1`,
+    clear: `${exact}?expectedRevision=1`,
+    readback: exact,
+  };
+  row.target.label = `Own-page concept ${index + 1}`;
+  return row;
+}
 function sample(mode: Mode): OwnClassificationsPage {
   let row = structuredClone(available);
   if (mode === 'long' && row.state === 'available') {
@@ -93,24 +112,38 @@ function sample(mode: Mode): OwnClassificationsPage {
         clear: mode === 'withheld' ? `${path}?expectedRevision=1` : null,
       },
     };
+  const items = mode === 'empty' || mode === 'sparse' ? [] : [row];
+  if (mode === 'first-twenty' || mode === 'selected') {
+    items.splice(
+      0,
+      items.length,
+      ...Array.from({ length: mode === 'selected' ? 21 : 20 }, (_, index) => occurrence(index)),
+    );
+    if (mode === 'selected') items.splice(7, 0, items.pop()!);
+  }
   return {
     viewer: { accountId: subjectId },
     inventory: { kind: 'current-retained', complete: false, generation: '1', cleanup: 'settled' },
-    items: mode === 'empty' || mode === 'sparse' ? [] : [row],
+    items,
     traversal: mode === 'sparse' ? 'more' : 'complete',
     next: mode === 'sparse' ? 'opaque raw continuation' : null,
   };
 }
-function Story({ mode }: { mode: Mode }) {
+function StoryScreen({ mode }: { mode: Mode }) {
   const [page, replace] = useState(() => sample(mode));
   const [state, setState] = useState<OwnClassificationsState>(
     mode === 'unavailable' ? 'unavailable' : mode === 'preparing' ? 'preparing' : 'ready',
   );
+  const departure = useRef<OwnVotesDepartureControl | null>(null);
+  const frontier = {
+    cursor: null,
+    selected: mode === 'selected' ? { subjectId, associationId: occurrence(20).associationId } : null,
+  };
   return (
     <OwnClassificationsWorkspace
       state={state}
       page={page}
-      frontier={{ cursor: null, selected: mode === 'selected' ? { subjectId, associationId } : null }}
+      frontier={frontier}
       locale={getLocale()}
       isCurrent={() => true}
       onRetry={async () => {
@@ -119,10 +152,25 @@ function Story({ mode }: { mode: Mode }) {
       }}
       onNext={() => replace(sample('empty'))}
       commands={{
+        confirmMovement: {
+          get current() {
+            return departure.current?.confirm ?? null;
+          },
+        },
+        departure: (dirty, locked, current, retire) => (
+          <OwnVotesDeparture
+            owner={page}
+            dirty={dirty}
+            locked={locked}
+            isCurrent={current}
+            onLeave={retire}
+            confirmMovement={departure}
+          />
+        ),
         read: {
           state: 'ready',
           page,
-          frontier: { cursor: null, selected: null },
+          frontier,
           subject: subjectId,
           locale: getLocale(),
           source: 'content.classification-ballot-own-page.v1',
@@ -146,6 +194,18 @@ function Story({ mode }: { mode: Mode }) {
     />
   );
 }
+function Story({ mode }: { mode: Mode }) {
+  const locale = getLocale();
+  const router = useMemo(
+    () =>
+      createRouter({
+        routeTree: createRootRoute({ component: () => <StoryScreen key={locale} mode={mode} /> }),
+        history: createMemoryHistory({ initialEntries: ['/'] }),
+      }),
+    [mode, locale],
+  );
+  return <RouterProvider router={router} />;
+}
 const meta = {
   title: 'Library/My classification assessments',
   id: 'pages-library-my-classification-assessments',
@@ -167,6 +227,7 @@ export const Ready: StoryType = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() }));
+    await userEvent.click(canvas.getByText(m.own_classifications_technical()));
     await expect(canvas.getByText(m.subject_classification_assessment_provenance())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.subject_classification_assessment_withdraw() })).toBeVisible();
   },
@@ -201,7 +262,7 @@ export const WithheldClearRequiresPreparation: StoryType = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() }));
-    await expect(canvas.getByText(m.own_classifications_withheld())).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: m.own_classifications_withheld() })).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.subject_classification_assessment_withdraw() })).toBeVisible();
   },
 };
@@ -212,9 +273,10 @@ export const LongTitleKeyboardInspection: StoryType = {
     const inspect = canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() });
     inspect.focus();
     await userEvent.keyboard('{Enter}');
-    await expect(inspect).toHaveAttribute('aria-pressed', 'true');
+    await expect(inspect).toHaveAttribute('aria-expanded', 'true');
+    await expect(inspect).toHaveFocus();
     await expect(canvas.getByRole('status')).toHaveTextContent(m.own_classifications_coverage());
-    await expect(canvas.getByText(/A long disclosed title/)).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: /A long disclosed title/ })).toBeVisible();
   },
 };
 export const KeyboardAssessmentChange: StoryType = {
@@ -232,4 +294,34 @@ export const KeyboardAssessmentChange: StoryType = {
   },
 };
 export const SelectedOffPage: StoryType = { args: { mode: 'selected' } };
+export const FirstOfTwenty: StoryType = {
+  args: { mode: 'first-twenty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const inspect = canvas.getAllByRole('button', { name: m.subject_classification_assessment_inspect() })[0]!;
+    inspect.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(inspect).toHaveFocus();
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: m.own_classifications_close() })).toHaveFocus();
+    await expect(canvas.getByRole('region').parentElement).toBe(canvas.getAllByRole('listitem')[0]);
+  },
+};
+export const ProtectedClose: StoryType = {
+  args: { mode: 'ready' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() }));
+    const draft = canvas.getByRole('checkbox');
+    await userEvent.click(draft);
+    await userEvent.click(canvas.getByRole('button', { name: m.own_classifications_close() }));
+    await expect(body.getByRole('alertdialog')).toBeVisible();
+    await userEvent.click(body.getByRole('button', { name: m.library_my_ratings_stay() }));
+    await expect(draft).not.toBeChecked();
+    await expect(canvas.getByRole('button', { name: m.own_classifications_close() })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    await expect(body.getByRole('alertdialog')).toBeVisible();
+  },
+};
 export const Preparing: StoryType = { args: { mode: 'preparing' } };

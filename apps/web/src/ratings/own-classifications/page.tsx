@@ -120,9 +120,9 @@ export function OwnClassificationsWorkspace({
     if (key === null && returnOpener) {
       const version = focusVersion.current;
       focusFrame.current = requestAnimationFrame(() => {
+        if (focusVersion.current !== version) return;
         focusFrame.current = null;
-        if (current() && focusVersion.current === version && returnOpener.isConnected)
-          returnOpener.focus({ preventScroll: true });
+        if (current() && returnOpener.isConnected) returnOpener.focus({ preventScroll: true });
       });
     }
   }
