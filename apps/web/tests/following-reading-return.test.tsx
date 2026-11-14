@@ -76,6 +76,9 @@ test('clipboard refusal is honest and delayed success cannot restore feedback or
   const h = await mountFollowing(page(follow('subject')));
   try {
     await h.inspect(spaceId);
+    const discloseReferences = () =>
+      h.settle(() => h.host.querySelector<HTMLElement>('[role="dialog"] summary')!.click());
+    await discloseReferences();
     const copy = () => h.host.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label^="Copy "]')!;
     h.window.navigator.clipboard.writeText = async () => {
       throw new Error('clipboard denied');
@@ -92,6 +95,7 @@ test('clipboard refusal is honest and delayed success cannot restore feedback or
     expect(h.host.textContent).not.toContain('Copied');
     expect(h.window.document.activeElement).not.toBe(oldTrigger);
     await h.inspect(spaceId);
+    await discloseReferences();
     const accountCopy = deferred<void>();
     h.window.navigator.clipboard.writeText = () => accountCopy.promise;
     await h.settle(() => copy().click());
