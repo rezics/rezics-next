@@ -10,7 +10,7 @@ import { Tombstone } from '@rezics/ui/tombstone';
 import { ItemMenu, ItemMenuTriggerSlot, type ItemMenuEntry } from '@rezics/ui/item-menu';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { RelativeTime } from '@rezics/ui/relative-time';
-import { ShelfList, ShelfListRow } from '@rezics/ui/shelf-list';
+import { ShelfList, ShelfListRow, type ShelfSelectionProps } from '@rezics/ui/shelf-list';
 import { ShelfTable, type ShelfColumn, type ShelfTableRow } from '@rezics/ui/shelf-table';
 import {
   AlertDialog,
@@ -66,6 +66,7 @@ import { appendSelectionWithinLimit, selectionReviewSignature, selectionResultSt
 import { SelectionResultView } from './selection-result-view';
 import { useReceivedEntryReading } from './received-entry-reading/use-reading';
 import { LibraryOwnScore, type LibraryScoreQuestion, type LibraryViewerFacts } from './score';
+import { ShelfSelectionControl } from './shelf-selection-control';
 
 export function stateLabel(state: LibraryEntryStateRead, label?: string): string | undefined {
   return state ? (label ?? m.library_other()) : undefined;
@@ -256,13 +257,13 @@ function EntryMenu({
 function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: string }) {
   return <RelativeTime value={entry.lastActivityAt ?? entry.updatedAt} locale={locale} timeZone="UTC" />;
 }
-function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
+function selectionControl(entry: PersonalLibraryEntry, controls: Controls): ShelfSelectionProps | undefined {
   if (
     (!controls.writeAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) ||
     !controls.hydrated ||
     !controls.selectable(entry)
   )
-    return {};
+    return undefined;
   if (!controls.selected.length) return { onSelect: () => controls.select(entry.subjectId, true) };
   return {
     selectable: true,
@@ -509,6 +510,7 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
         const progress = entryProgress(entry, locale);
         const title = titleOf(entry, locale);
         const readEntry = controls.readEntry(row);
+        const selection = selectionControl(entry, controls);
         const notes =
           row.conflict || row.failure ? (
             <div className="space-y-1">
@@ -521,13 +523,13 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
         return (
           <EntryMenu key={entry.subjectId} row={row} controls={controls} triggerSlot trigger={{ variant: 'ghost' }}>
             <CoverCard
-              {...selectionProps(entry, controls)}
               {...(entry.subject ? { href: hrefOf(entry, locale) } : {})}
               title={title.text}
               {...(title.lang ? { titleLang: title.lang } : {})}
               cover={coverOf(entry)}
               secondary={
                 <>
+                  <ShelfSelectionControl label={title.text} selection={selection} className="mx-auto w-fit" />
                   <ShelfEntryIdentity entry={entry} controls={controls} includeType />
                   {readEntry ? <div className="mt-2 flex justify-center">{readEntry}</div> : null}
                 </>
@@ -555,6 +557,7 @@ function ListView({ controls }: { controls: Controls }) {
         const href = stateHref(entry.state, locale, controls);
         const progress = entryProgress(entry, locale);
         const readEntry = controls.readEntry(row);
+        const selection = selectionControl(entry, controls);
         if (!entry.subject)
           return (
             <li key={entry.subjectId} className="space-y-2 border-b py-3">
@@ -572,13 +575,13 @@ function ListView({ controls }: { controls: Controls }) {
         return (
           <ShelfListRow
             key={entry.subjectId}
-            {...selectionProps(entry, controls)}
             href={hrefOf(entry, locale)}
             cover={coverOf(entry)}
             title={title}
             {...(localizedTitle.lang ? { titleLang: localizedTitle.lang } : {})}
             meta={
               <>
+                <ShelfSelectionControl label={title} selection={selection} className="w-fit" />
                 <ShelfEntryIdentity entry={entry} controls={controls} includeType />
               </>
             }
@@ -635,12 +638,16 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
     const status = stateLabel(entry.state, entry.stateLabel);
     const href = stateHref(entry.state, locale, controls);
     const title = titleOf(entry, locale);
+    const selection = selectionControl(entry, controls);
     return {
       id: entry.subjectId,
-      ...selectionProps(entry, controls),
-      selectLabel: title.text,
       href: entry.subject ? hrefOf(entry, locale) : '',
-      titleContext: <ShelfEntryIdentity entry={entry} controls={controls} />,
+      titleContext: (
+        <div className="min-w-0 space-y-1">
+          <ShelfSelectionControl label={title.text} selection={selection} className="w-fit" />
+          <ShelfEntryIdentity entry={entry} controls={controls} />
+        </div>
+      ),
       title: title.text,
       ...(title.lang ? { titleLang: title.lang } : {}),
       cover: coverOf(entry),
@@ -1184,14 +1191,23 @@ function LabelShelfTiles({
               </div>
             );
           const progress = labelEntryProgress(entry, locale);
+          const selectionForEntry = selection?.(entry);
           return (
             <div key={entry.id} className="min-w-0 space-y-2">
               <CoverCard
-                {...selection?.(entry)}
                 href={href(entry)}
                 title={title(entry)}
                 cover={shelfCover(entry.subject)}
-                secondary={<ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />}
+                secondary={
+                  <>
+                    <ShelfSelectionControl
+                      label={title(entry)}
+                      selection={selectionForEntry}
+                      className="mx-auto w-fit"
+                    />
+                    <ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />
+                  </>
+                }
                 {...(progress ? { progress } : {})}
                 {...(entry.state ? { status: { label: entry.stateLabel ?? m.library_other() } } : {})}
                 {...(removeAdmitted
@@ -1236,15 +1252,20 @@ function LabelShelfTiles({
               </li>
             );
           const progress = labelEntryProgress(entry, locale);
+          const selectionForEntry = selection?.(entry);
           return (
             <ShelfListRow
               key={entry.id}
-              {...selection?.(entry)}
               href={href(entry)}
               cover={shelfCover(entry.subject)}
               title={title(entry)}
               meta={
                 <>
+                  <ShelfSelectionControl
+                    label={title(entry)}
+                    selection={selectionForEntry}
+                    className="w-fit"
+                  />
                   <span>{entry.subject.typeLabel}</span>
                   {readingTrigger(entry)}
                   <ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />
@@ -1293,15 +1314,19 @@ function LabelShelfTiles({
       ? displayLibraryTitle(entry.subject.label, locale)
       : { text: m.library_subject_unavailable(), lang: undefined };
     const progress = labelEntryProgress(entry, locale);
+    const selectionForEntry = selection?.(entry);
     return {
       id: entry.id,
-      ...selection?.(entry),
-      selectLabel: entryTitle.text,
       title: entryTitle.text,
       href: entry.subject ? href(entry) : '',
       cover: shelfCover(entry.subject),
       creator: entry.subject ? (
         <div className="min-w-0 space-y-1">
+          <ShelfSelectionControl
+            label={entryTitle.text}
+            selection={selectionForEntry}
+            className="w-fit"
+          />
           <a
             className="font-medium break-words hover:underline focus-visible:outline-ring"
             href={href(entry)}
@@ -1314,6 +1339,11 @@ function LabelShelfTiles({
         </div>
       ) : (
         <div className="min-w-0 space-y-2">
+          <ShelfSelectionControl
+            label={entryTitle.text}
+            selection={selectionForEntry}
+            className="w-fit"
+          />
           <Tombstone shape="row" labels={{ unavailable: m.library_subject_unavailable() }} />
           {readingTrigger(entry)}
         </div>
