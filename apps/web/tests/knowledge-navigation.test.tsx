@@ -181,43 +181,124 @@ async function mount(
   };
 }
 
-test('mounted root/children/sparse/More/Retry replace one page and keep exact native operands', async () => {
+for (const organization of [false, true]) {
+  test(`two independent branches preserve native order, repeated documents, sparse More and exact Retry (${organization})`, async () => {
+    const calls: KnowledgeNavigationRequest[] = [];
+    let attempts = 0;
+    const sibling = { ...placement, placementId: id(23), title: 'Second branch', position: '1' };
+    const view = await mount(
+      async (request) => {
+        calls.push({ ...request });
+        if (request.kind !== 'outline' || request.parentPlacementId === null)
+          return outline(request, { placements: [placement, sibling] });
+        if (request.parentPlacementId === sibling.placementId)
+          return outline(request, {
+            placements: [
+              {
+                ...placement,
+                placementId: id(24),
+                parentPlacementId: sibling.placementId,
+                title: 'Second branch child',
+              },
+            ],
+          });
+        if (!request.cursor) return outline(request, { placements: [], next: 'sparse-frontier' });
+        if (attempts++ === 0) return { state: 'unavailable' };
+        return outline(request, {
+          placements: [
+            { ...placement, placementId: id(22), parentPlacementId: placementId, title: 'Next private child' },
+          ],
+        });
+      },
+      rootAddress,
+      { organization },
+    );
+    try {
+      expect(calls).toEqual([rootAddress]);
+      const document = view.host.querySelector('a[href*="/documents/"]');
+      expect(document?.getAttribute('href')).toBe(`/knowledge/notebooks/${notebookId}/documents/${documentId}`);
+      expect(
+        [...view.host.querySelectorAll('[data-knowledge-placement]')].map((row) =>
+          row.getAttribute('data-knowledge-placement'),
+        ),
+      ).toEqual([placementId, sibling.placementId]);
+      await view.click('Explore children: Private supplied note');
+      await view.click('Explore children: Second branch');
+      expect(view.host.textContent).toContain('No available rows on this page');
+      expect(view.host.textContent).toContain('Second branch child');
+      await view.click('More');
+      expect(view.host.textContent).toContain('unavailable right now');
+      expect(view.host.textContent).toContain('Second branch child');
+      await view.click('Retry this page');
+      expect(calls).toEqual([
+        rootAddress,
+        { ...rootAddress, parentPlacementId: placementId },
+        { ...rootAddress, parentPlacementId: sibling.placementId },
+        { ...rootAddress, parentPlacementId: placementId, cursor: 'sparse-frontier' },
+        { ...rootAddress, parentPlacementId: placementId, cursor: 'sparse-frontier' },
+      ]);
+      expect(document?.isConnected).toBe(true);
+      expect(view.host.querySelectorAll('a[href*="/documents/"]')).toHaveLength(4);
+      await view.click('Collapse children: Private supplied note');
+      expect(view.host.textContent).not.toContain('Next private child');
+      expect(view.host.textContent).toContain('Second branch child');
+      await view.click('Explore children: Private supplied note');
+      expect(view.host.textContent).toContain('Next private child');
+      expect(calls).toHaveLength(5);
+    } finally {
+      await view.dispose();
+    }
+  });
+}
+
+test('branch requests complete independently and collapsed pending pages cannot move focus', async () => {
   const calls: KnowledgeNavigationRequest[] = [];
+  const pending = new Map<string, (result: KnowledgeNavigationResult) => void>();
+  const sibling = { ...placement, placementId: id(23), title: 'Second branch' };
   const view = await mount(async (request) => {
-    calls.push({ ...request });
-    if (calls.length === 1) return outline(request);
-    if (calls.length === 2) return outline(request, { placements: [], next: 'sparse-frontier' });
-    if (calls.length === 3) return { state: 'unavailable' };
-    return outline(request, {
-      placements: [{ ...placement, placementId: id(22), parentPlacementId: placementId, title: 'Next private child' }],
-    });
+    calls.push(request);
+    if (request.kind !== 'outline' || request.parentPlacementId === null)
+      return outline(request, { placements: [placement, sibling] });
+    return new Promise((resolve) => pending.set(request.parentPlacementId!, resolve));
   });
   try {
-    expect(calls).toEqual([rootAddress]);
-    expect(view.host.textContent).toContain('Private supplied note');
-    const document = view.host.querySelector('a[href*="/documents/"]');
-    expect(document?.getAttribute('href')).toBe(`/knowledge/notebooks/${notebookId}/documents/${documentId}`);
-    await view.click('Explore children');
-    expect(view.host.textContent).toContain('No available rows on this page');
-    expect(view.host.querySelectorAll('li')).toHaveLength(0);
-    await view.click('More');
-    expect(view.host.textContent).toContain('unavailable right now');
-    await view.click('Retry this page');
-    expect(calls).toEqual([
-      rootAddress,
-      { ...rootAddress, parentPlacementId: placementId },
-      { ...rootAddress, parentPlacementId: placementId, cursor: 'sparse-frontier' },
-      { ...rootAddress, parentPlacementId: placementId, cursor: 'sparse-frontier' },
-    ]);
-    expect(view.host.textContent).toContain('Next private child');
-    expect(document?.isConnected).toBe(false);
-    expect(view.host.querySelectorAll('li')).toHaveLength(1);
+    await view.key('Explore children: Private supplied note');
+    await view.key('Explore children: Second branch');
+    await view.key('Collapse children: Private supplied note');
+    view.elsewhere.focus();
+    await act(async () => {
+      pending.get(sibling.placementId)!(
+        outline(calls[2]!, {
+          placements: [
+            {
+              ...sibling,
+              placementId: id(25),
+              parentPlacementId: sibling.placementId,
+              title: 'Second completed first',
+            },
+          ],
+        }),
+      );
+      pending.get(placementId)!(
+        outline(calls[1]!, {
+          placements: [
+            { ...placement, placementId: id(26), parentPlacementId: placementId, title: 'Hidden completion' },
+          ],
+        }),
+      );
+    });
+    expect(view.host.textContent).toContain('Second completed first');
+    expect(view.host.textContent).not.toContain('Hidden completion');
+    expect(document.activeElement).toBe(view.elsewhere);
+    await view.click('Explore children: Private supplied note');
+    expect(view.host.textContent).toContain('Hidden completion');
+    expect(calls).toHaveLength(3);
   } finally {
     await view.dispose();
   }
 });
 
-test('mounted replacement retires late results for session, CSRF, exposure, locale, source and address', async () => {
+test('mounted replacement retires all revealed branches and late results for session, CSRF, exposure, locale, source and address', async () => {
   const pending: Array<(result: KnowledgeNavigationResult) => void> = [];
   const calls: KnowledgeNavigationRequest[] = [];
   const read = (request: KnowledgeNavigationRequest) => {
@@ -240,18 +321,14 @@ test('mounted replacement retires late results for session, CSRF, exposure, loca
       const before = calls.length;
       await view.show(changes);
       expect(calls.length).toBe(before + 1);
-      await act(async () => {
-        stale(outline(rootAddress));
-      });
+      await act(async () => stale(outline(rootAddress)));
       expect(view.host.textContent).not.toContain('Private supplied note');
       await act(async () => pending.at(-1)!(outline(rootAddress, { next: 'retired-frontier' })));
       expect(document.activeElement).not.toBe(view.boundary());
     }
     await view.key(view.host.querySelector<HTMLElement>('section > button')!);
     await view.show({ access: 'denied' });
-    await act(async () => {
-      pending.at(-1)!(outline(rootAddress));
-    });
+    await act(async () => pending.at(-1)!(outline(rootAddress)));
     expect(view.host.querySelectorAll('li')).toHaveLength(0);
     expect(document.activeElement).not.toBe(view.boundary());
   } finally {
@@ -259,65 +336,102 @@ test('mounted replacement retires late results for session, CSRF, exposure, loca
   }
 });
 
-test('editor return re-admits the same child frontier before rows, then exposes explicit structure restart', async () => {
+for (const organization of [false, true]) {
+  test(`return re-admits the row's supplying page after branch More and retains exact selection (${organization})`, async () => {
+    const calls: KnowledgeNavigationRequest[] = [];
+    let readmit!: (result: KnowledgeNavigationResult) => void;
+    const child = { ...placement, placementId: id(40), parentPlacementId: placementId, title: 'First child page' };
+    const view = await mount(
+      async (request) => {
+        calls.push({ ...request });
+        if (calls.length === 1) return outline(request);
+        if (calls.length === 2) return outline(request, { placements: [child], next: 'next-child' });
+        if (calls.length === 3)
+          return outline(request, { placements: [{ ...child, placementId: id(41), title: 'Later child page' }] });
+        return new Promise((resolve) => {
+          readmit = resolve;
+        });
+      },
+      rootAddress,
+      { organization },
+    );
+    try {
+      await view.click('Explore children');
+      await view.click('More');
+      await view.click('Open document: First child page');
+      expect(view.host.textContent).toContain('Exact existing editor route');
+      expect(view.host.textContent).not.toContain('First child page');
+      await view.key('Return to notebook reading');
+      expect(calls).toHaveLength(4);
+      expect(calls[3]).toEqual(calls[1]);
+      expect(view.host.querySelectorAll('li')).toHaveLength(0);
+      await act(async () => readmit(outline(calls[3]!, { placements: [child] })));
+      expect(document.activeElement).toBe(view.host.querySelector('a[aria-current="page"]'));
+      expect(view.host.textContent).toContain('First child page');
+      expect(view.host.textContent).not.toContain('Later child page');
+    } finally {
+      await view.dispose();
+    }
+  });
+}
+
+test('native structure replacement conceals the whole outline until explicit restart', async () => {
   const calls: KnowledgeNavigationRequest[] = [];
-  let readmit!: (result: KnowledgeNavigationResult) => void;
   const view = await mount(async (request) => {
-    calls.push({ ...request });
-    if (calls.length === 1) return outline(request);
-    if (calls.length === 2)
-      return outline(request, {
-        placements: [{ ...placement, parentPlacementId: placementId, title: 'Child page' }],
-        next: 'next-child',
-      });
-    if (calls.length === 3)
-      return new Promise<KnowledgeNavigationResult>((resolve) => {
-        readmit = resolve;
-      });
-    return outline(request, { structureRevisionId: id(31), placements: [] });
+    calls.push(request);
+    return calls.length === 2 ? outline(request, { structureRevisionId: id(31) }) : outline(request);
   });
   try {
     await view.click('Explore children');
-    await view.click('Open document');
-    expect(view.host.textContent).toContain('Exact existing editor route');
-    expect(view.host.textContent).not.toContain('Child page');
-    await view.key('Return to notebook reading');
-    expect(calls).toHaveLength(3);
-    expect(calls[2]).toEqual(calls[1]);
-    expect(view.host.textContent).not.toContain('Child page');
-    await act(async () => {
-      readmit(outline(calls[2]!, { structureRevisionId: id(31) }));
-    });
     expect(view.host.textContent).toContain('This reading changed');
-    expect(document.activeElement).toBe(view.boundary());
     expect(view.host.querySelectorAll('li')).toHaveLength(0);
+    expect(calls).toHaveLength(2);
     await view.click('Restart this parent');
-    expect(calls[3]).toEqual({ ...rootAddress, parentPlacementId: placementId });
-    expect(view.host.textContent).toContain('No documents are available at this level');
-    expect(view.host.textContent).not.toContain('Child page');
+    expect(calls[2]).toEqual(rootAddress);
+    expect(view.host.textContent).toContain('Private supplied note');
   } finally {
     await view.dispose();
   }
 });
 
-test('inventory reloads once and changed/expired returns require explicit restart without an automatic read', async () => {
+test('inventory stays replacing and expired returns require explicit restart without an automatic read', async () => {
   const calls: KnowledgeNavigationRequest[] = [];
-  const read: KnowledgeNavigationOperations['read'] = async (request) => {
-    calls.push(request);
-    return { state: 'ready', page: { kind: 'owned', notebooks: [], next: 'sparse-owned' } };
-  };
-  const view = await mount(read, { kind: 'owned' });
+  const view = await mount(
+    async (request) => {
+      calls.push(request);
+      if (request.kind === 'outline') return outline(request);
+      return {
+        state: 'ready',
+        page: {
+          kind: 'owned',
+          notebooks: [
+            {
+              notebookId,
+              subjectId: id(50),
+              structureRevisionId,
+              createdAt: '2026-11-01T00:00:00Z',
+              title: request.cursor ? 'Second notebook page' : 'First notebook page',
+            },
+          ],
+          next: request.cursor ? null : 'next-owned',
+        },
+      };
+    },
+    { kind: 'owned' },
+  );
   try {
     expect(calls).toEqual([{ kind: 'owned' }]);
+    await view.click('More');
+    expect(view.host.textContent).toContain('Second notebook page');
+    expect(view.host.textContent).not.toContain('First notebook page');
     await view.show({ binding: 'reload-owned' });
-    expect(calls).toHaveLength(2);
-    expect(view.host.textContent).toContain('More continues this reading');
+    expect(calls).toHaveLength(3);
     view.returning.returnTo('reload-owned', { notebookId, documentId });
     await view.show({ address: rootAddress });
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
     expect(view.host.textContent).toContain('return expired');
     await view.click('Restart this parent');
-    expect(calls[2]).toEqual(rootAddress);
+    expect(calls[3]).toEqual(rootAddress);
   } finally {
     await view.dispose();
   }
@@ -329,13 +443,13 @@ for (const configuration of [
   { embedded: true },
   { organization: true, embedded: true },
 ]) {
-  test(`navigation orientation follows explicit keyboard completion and failure ${JSON.stringify(configuration)}`, async () => {
+  test(`branch continuation and retry keep deliberate keyboard orientation ${JSON.stringify(configuration)}`, async () => {
     const calls: KnowledgeNavigationRequest[] = [];
     let resolve!: (result: KnowledgeNavigationResult) => void;
     const view = await mount(
       (request) => {
         calls.push(request);
-        return new Promise<KnowledgeNavigationResult>((done) => {
+        return new Promise((done) => {
           resolve = done;
         });
       },
@@ -350,20 +464,17 @@ for (const configuration of [
       await view.click('More');
       await complete(outline(calls.at(-1)!, { placements: [], next: 'sparse-frontier' }));
       expect(document.activeElement).not.toBe(view.boundary());
+      expect(view.host.textContent).toContain('Private supplied note');
       await view.key('More');
       await complete({ state: 'unavailable' });
       expect(document.activeElement === view.boundary()).toBe(!configuration.embedded);
       await view.key('Retry this page');
       expect(calls.at(-1)).toEqual(calls.at(-2));
       expect(calls.at(-1)?.cursor).toBe('sparse-frontier');
-      await complete(outline(calls.at(-1)!));
+      await complete(outline(calls.at(-1)!, { placements: [], next: 'continuing-root' }));
       expect(document.activeElement === view.boundary()).toBe(!configuration.embedded);
-      await view.key('Explore children');
-      view.elsewhere.focus();
-      await complete(outline(calls.at(-1)!, { next: 'continuing-child' }));
-      await view.show({});
-      expect(document.activeElement).toBe(view.elsewhere);
       for (const cancel of [
+        () => view.elsewhere.focus(),
         () => view.elsewhere.dispatchEvent(new dom.window.Event('pointerdown', { bubbles: true })),
         () => document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true })),
         () => window.dispatchEvent(new dom.window.Event('blur')),
@@ -371,7 +482,7 @@ for (const configuration of [
       ]) {
         await view.key('More');
         await cancel();
-        await complete(outline(calls.at(-1)!, { next: 'continuing-child' }));
+        await complete(outline(calls.at(-1)!, { placements: [], next: 'continuing-root' }));
         expect(document.activeElement).not.toBe(view.boundary());
       }
       expect(calls).toHaveLength(9);
@@ -382,7 +493,7 @@ for (const configuration of [
 }
 
 for (const organization of [false, true]) {
-  test(`document return re-admits the saved page and selection with cancellable orientation (${organization})`, async () => {
+  test(`document return admission and focus remain cancellable (${organization})`, async () => {
     for (const outcome of ['keyboard', 'pointer', 'moved', 'missing', 'unavailable'] as const) {
       const calls: KnowledgeNavigationRequest[] = [];
       let resolve!: (result: KnowledgeNavigationResult) => void;
@@ -390,8 +501,11 @@ for (const organization of [false, true]) {
         async (request) => {
           calls.push(request);
           if (calls.length === 1) return outline(request, { next: 'selected-page' });
-          if (calls.length === 2) return outline(request);
-          return new Promise<KnowledgeNavigationResult>((done) => {
+          if (calls.length === 2)
+            return outline(request, {
+              placements: [{ ...placement, placementId: id(60), title: 'Selected continued placement' }],
+            });
+          return new Promise((done) => {
             resolve = done;
           });
         },
@@ -400,7 +514,7 @@ for (const organization of [false, true]) {
       );
       try {
         await view.click('More');
-        await view.click('Open document');
+        await view.click('Open document: Selected continued placement');
         if (outcome === 'pointer') await view.click('Return to notebook reading');
         else await view.key('Return to notebook reading');
         expect(calls).toHaveLength(3);
@@ -411,10 +525,17 @@ for (const organization of [false, true]) {
           resolve(
             outcome === 'unavailable'
               ? { state: 'unavailable' }
-              : outline(calls[2]!, { placements: outcome === 'missing' ? [] : [placement] }),
+              : outline(calls[2]!, {
+                  placements:
+                    outcome === 'missing'
+                      ? []
+                      : [placement, { ...placement, placementId: id(60), title: 'Selected continued placement' }],
+                }),
           ),
         );
-        const selected = view.host.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
+        const selected = view.host.querySelector<HTMLAnchorElement>(
+          `[data-knowledge-placement="${id(60)}"] a[aria-current="page"]`,
+        );
         expect(Boolean(selected)).toBe(outcome !== 'missing' && outcome !== 'unavailable');
         if (outcome === 'keyboard') expect(document.activeElement).toBe(selected);
         else if (outcome === 'missing' || outcome === 'unavailable')

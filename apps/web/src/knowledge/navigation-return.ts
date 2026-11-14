@@ -11,16 +11,23 @@ export type KnowledgeNavigationRestoration = KnowledgeNavigationFocusReturn &
 /** One ephemeral return, with no rows. Nothing is serialized into routes, query caches or storage. */
 export class KnowledgeNavigationReturn {
   private pending:
-    | { binding: string; address: KnowledgePrivateAddress; frontier: KnowledgeNavigationFrontier; expires: number }
+    | {
+        binding: string;
+        address: KnowledgePrivateAddress;
+        frontier: KnowledgeNavigationFrontier;
+        placementId?: string;
+        expires: number;
+      }
     | undefined;
   private intent: { binding: string; notebookId: string; orientation?: KnowledgeNavigationFocus } | undefined;
   constructor(private now = () => Date.now()) {}
-  save(binding: string, address: KnowledgePrivateAddress, frontier: KnowledgeNavigationFrontier) {
+  save(binding: string, address: KnowledgePrivateAddress, frontier: KnowledgeNavigationFrontier, placementId?: string) {
     this.clear();
     this.pending = {
       binding,
       address: { ...address },
       frontier: structuredClone(frontier),
+      ...(placementId ? { placementId } : {}),
       expires: this.now() + 15 * 60_000,
     };
   }
@@ -47,7 +54,13 @@ export class KnowledgeNavigationReturn {
     const orientation = intent.orientation ? { orientation: intent.orientation } : {};
     if (!pending || pending.binding !== binding || pending.expires <= this.now())
       return { expired: true, ...orientation };
-    return { frontier: pending.frontier, documentId: pending.address.documentId, expired: false, ...orientation };
+    return {
+      frontier: pending.frontier,
+      documentId: pending.address.documentId,
+      ...(pending.placementId ? { placementId: pending.placementId } : {}),
+      expired: false,
+      ...orientation,
+    };
   }
   retireForAddress(binding: string, address: KnowledgePrivateAddress) {
     if (

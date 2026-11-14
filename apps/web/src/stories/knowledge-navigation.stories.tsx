@@ -71,7 +71,7 @@ function NavigationExample({ scenario, locale = 'en' }: { scenario: Scenario; lo
                 ? []
                 : [
                     {
-                      placementId,
+                      placementId: request.cursor ? '0192f3a0-6c1e-7b2a-9d4e-000000000022' : placementId,
                       documentId,
                       parentPlacementId: null,
                       position: '3',
@@ -80,7 +80,7 @@ function NavigationExample({ scenario, locale = 'en' }: { scenario: Scenario; lo
                         : 'Inspiration: how a character changes through the story',
                     },
                     {
-                      placementId: structureRevisionId,
+                      placementId: request.cursor ? '0192f3a0-6c1e-7b2a-9d4e-000000000023' : structureRevisionId,
                       documentId,
                       parentPlacementId: null,
                       position: '9',
@@ -217,7 +217,8 @@ export const KeyboardCompletion: Story = {
     await expect(await canvas.findByRole('status')).toHaveTextContent(
       m.knowledge_navigation_empty_outline({}, options),
     );
-    await expect(canvas.getByRole('region', { name: m.knowledge_navigation_reading({}, options) })).toHaveFocus();
+    await expect(children).toHaveAttribute('aria-expanded', 'true');
+    await expect(children).toHaveFocus();
   },
 };
 

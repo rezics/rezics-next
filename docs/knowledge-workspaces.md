@@ -63,17 +63,11 @@ parent/order index. The first outline page selects the current structure revisio
 the owner, notebook, parent and selection, and returns `409 stale_cursor` after a structure change. Each outline
 request examines at most 128 indexed candidates and advances past sparse ineligible rows.
 
-Decision: Web reopens owned notebooks at `/knowledge` and immediate outline children at
-`/knowledge/notebooks/$notebookId`. Each active reader replaces one native page of at most 20 rows;
-opening an exact notebook reads root. Root omits `parentPlacementId`, child reads use placement identity,
-and opaque cursors preserve native order and sparse continuation. Open document resumes the existing private
-editor; Explore children is separate because the DTO supplies no child count. Retain only visited breadcrumbs
-(up to 32), with no inferred ancestry after reload. No tree download, refill, prefetch or row-level document reads.
-A retry repeats its attempted cursor; a stale or changed structure requires explicit parent restart without cursor.
-Editor return retains a single in-memory frontier for at most 15 minutes, then re-admits that exact
-notebook/parent/page before displaying rows; expired returns require explicit restart. Session, CSRF, exposure,
-locale, address and source replacement retire private rows and callbacks. These readings never enter SSR,
-shared query caches, persistent storage or URL payloads. Native/browser/visual acceptance uses the seeded integration lane.
+Web's native outline admission, twenty-row request bound, in-place branch browsing and ephemeral document-return
+contract are owned by the [Knowledge interface](../apps/web/src/knowledge/README.md#in-place-notebook-outline).
+The owned-notebook directory remains bounded and replacing. Native cursors bind owner, notebook, parent and structure;
+these readings never enter SSR, shared query caches, persistent storage or URL payloads. Native/browser/visual
+acceptance uses the seeded integration lane.
 
 Decision: Private document history stays inline in the retained editor. One explicit history request reads one
 replacing native page with `limit=20`, preserving order and opaque continuation; retry repeats the attempted cursor

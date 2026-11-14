@@ -9,6 +9,7 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { KnowledgeNavigationEntry, organizationCopy, type OrganizationOperations } from '../knowledge/route';
+import { m } from '../paraglide/messages.js';
 import { knowledgeViewports } from './knowledge-document-fixtures';
 import { locales, type Locale } from '../paraglide/runtime.js';
 
@@ -104,7 +105,20 @@ function OrganizationExample({ scenario, locale = 'en' }: { scenario: Scenario; 
           locale={locale}
           access="available"
           binding={`illustrative-owner-${locale}`}
-          operations={{ read: async () => ({ state: 'retired' }), organization: operations }}
+          operations={{
+            read: async () => ({
+              state: 'ready',
+              page: {
+                kind: 'outline',
+                notebookId,
+                structureRevisionId,
+                parentPlacementId: null,
+                placements: [],
+                next: null,
+              },
+            }),
+            organization: operations,
+          }}
         />
       ),
     });
@@ -138,6 +152,7 @@ type Story = StoryObj<typeof meta>;
 const review: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
   const canvas = within(canvasElement),
     copy = organizationCopy(args.locale!);
+  await userEvent.click(canvas.getByText(m.knowledge_navigation_organization({}, { locale: args.locale! })));
   await userEvent.click(await canvas.findByRole('button', { name: `${copy.choose}: ${source.title}` }));
   await userEvent.click(canvas.getByRole('button', { name: `${copy.before}: ${destination.title}` }));
   await expect(await canvas.findByRole('button', { name: copy.confirm })).toBeEnabled();
@@ -170,6 +185,7 @@ export const HistoricalOutline: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement),
       copy = organizationCopy(args.locale!);
+    await userEvent.click(canvas.getByText(m.knowledge_navigation_organization({}, { locale: args.locale! })));
     await userEvent.click(await canvas.findByRole('button', { name: copy.history }));
     await expect(await canvas.findByText(copy.history_unavailable)).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: `${copy.historical}: 4` }));
@@ -177,4 +193,11 @@ export const HistoricalOutline: Story = {
     await expect(canvas.getByRole('button', { name: copy.current })).toBeEnabled();
   },
 };
-export const Unavailable: Story = { args: { scenario: 'unavailable' } };
+export const Unavailable: Story = {
+  args: { scenario: 'unavailable' },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByText(m.knowledge_navigation_organization({}, { locale: args.locale! })));
+    await expect(await canvas.findByRole('alert')).toBeVisible();
+  },
+};

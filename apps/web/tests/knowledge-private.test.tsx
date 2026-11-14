@@ -223,6 +223,128 @@ test('viewer, exposure, locale, source and exact-address replacement retire late
   }
 });
 
+test('private outline lives in the main navigation while branches, retry and dirty departure retain one draft editor', async () => {
+  const page = await harness(1, true);
+  const requests: Array<Parameters<KnowledgePrivateOperations['readOutline']>[0]> = [];
+  const pending = deferred<Awaited<ReturnType<KnowledgePrivateOperations['readOutline']>>>();
+  let continuation = 0;
+  const firstPlacement = nextRevisionId;
+  const secondPlacement = savedRevisionId;
+  const operations: KnowledgePrivateOperations = {
+    selectPublication: async () => ({ state: 'unavailable', status: 503 }),
+    prepare: async () => ({ state: 'ready', viewer, csrfToken, credential }),
+    read: async () => ({ state: 'ready', viewer, csrfToken, credential, head: head() }),
+    createNotebook: async () => ({ state: 'unavailable', status: 503 }),
+    createDocument: async () => ({ state: 'unavailable', status: 503 }),
+    listNotebooks: async () => ({ state: 'unavailable', status: 503 }),
+    revise: async () => ({ state: 'unavailable', status: 503 }),
+    readOutline: async (request) => {
+      requests.push({ ...request });
+      if (request.parentPlacementId === secondPlacement) return pending.promise;
+      if (request.cursor && continuation++ === 0) return { state: 'unavailable', status: 503 };
+      return {
+        state: 'ready',
+        page: {
+          notebookId,
+          structureRevisionId: knowledgeRevisionId,
+          parentPlacementId: request.parentPlacementId,
+          placements:
+            request.parentPlacementId === null
+              ? [
+                  {
+                    placementId: firstPlacement,
+                    documentId: knowledgeDocumentId,
+                    parentPlacementId: null,
+                    position: '1',
+                    title: 'Current draft document',
+                  },
+                  {
+                    placementId: secondPlacement,
+                    documentId: otherDocumentId,
+                    parentPlacementId: null,
+                    position: '2',
+                    title: 'Other branch',
+                  },
+                ]
+              : request.cursor
+                ? [
+                    {
+                      placementId: otherDocumentId,
+                      documentId: otherDocumentId,
+                      parentPlacementId: firstPlacement,
+                      position: '4',
+                      title: 'Revealed child',
+                    },
+                  ]
+                : [],
+          next: request.parentPlacementId === firstPlacement && !request.cursor ? 'exact-child-cursor' : null,
+        },
+      };
+    },
+  };
+  try {
+    const address = { kind: 'resume', notebookId, documentId: knowledgeDocumentId } as const;
+    const view = await page.mount(address, operations);
+    const title = await view.findInput('Document title');
+    await view.setInput(title, 'Retain this unsaved draft');
+    title.setSelectionRange(2, 9);
+    const editor = document.querySelector('[contenteditable="true"]');
+    const canvas = document.querySelector('[data-private-knowledge-visit]')!;
+    expect(requests).toHaveLength(0);
+    const navigation = document.querySelector('nav[aria-label="Main navigation"]')!;
+    expect(navigation.contains(view.button('Browse documents'))).toBe(true);
+    expect(canvas.querySelector('aside')).toBeNull();
+    expect(canvas.querySelector('[data-shell-context-navigation]')).toBeNull();
+    await view.click(view.button('Browse documents'));
+    const control = (label: string) =>
+      [...navigation.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === label)!;
+    await view.click(control('Explore children: Current draft document'));
+    await view.click(view.button('More'));
+    await view.click(view.button('Retry this page'));
+    expect(requests.at(-1)).toEqual(requests.at(-2));
+    expect(requests.at(-1)?.cursor).toBe('exact-child-cursor');
+    view.expectText('Revealed child');
+    expect(document.querySelector('[contenteditable="true"]')).toBe(editor);
+    expect(await view.findInput('Document title')).toBe(title);
+    expect(title.value).toBe('Retain this unsaved draft');
+    expect([title.selectionStart, title.selectionEnd]).toEqual([2, 9]);
+    await view.click(control('Explore children: Other branch'));
+    const other = [...navigation.querySelectorAll<HTMLAnchorElement>('a')].find((node) =>
+      node.textContent?.includes('Other branch'),
+    )!;
+    await view.click(other);
+    await view.findText('Changes not saved in this browser will be lost when you leave.');
+    await view.click(view.button('Stay'));
+    expect(title.value).toBe('Retain this unsaved draft');
+    expect(document.querySelector('[contenteditable="true"]')).toBe(editor);
+    await page.replace(address, operations, { ...access, owner: 'replacement-account-exposure' });
+    pending.resolve({
+      state: 'ready',
+      page: {
+        notebookId,
+        structureRevisionId: knowledgeRevisionId,
+        parentPlacementId: secondPlacement,
+        placements: [
+          {
+            placementId: otherDocumentId,
+            documentId: otherDocumentId,
+            parentPlacementId: secondPlacement,
+            position: '1',
+            title: 'Retired private child',
+          },
+        ],
+        next: null,
+      },
+    });
+    await page.flush();
+    view.expectMissingText('Retired private child');
+    view.expectMissingText('Retain this unsaved draft');
+    expect(document.querySelectorAll('[data-shell-context-navigation]')).toHaveLength(1);
+  } finally {
+    await page.close();
+  }
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((yes) => {

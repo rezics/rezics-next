@@ -25,6 +25,7 @@ import type { KnowledgeHistoryRevision } from '../knowledge/history';
 import { readerSessionSource } from '../reader/lifetime';
 import { sessionQuery } from '../session/query';
 import { m } from '../paraglide/messages.js';
+import { AppShell } from '../shell/app-shell';
 import { locales, setLocale, type Locale } from '../paraglide/runtime.js';
 import {
   knowledgeLongStudyBody,
@@ -64,7 +65,7 @@ const access: Extract<KnowledgePrivatePageAccess, { state: 'ready' }> = {
   history: 'available',
   compare: 'available',
 };
-type Scenario = 'notebook' | 'writing' | 'long' | 'reading' | 'recovery';
+type Scenario = 'notebook' | 'writing' | 'long' | 'reading' | 'recovery' | 'branches';
 
 /** Contract-shaped examples for interface review; these callbacks are not a native publisher or proof. */
 function exampleSources(scenario: Scenario) {
@@ -113,6 +114,7 @@ function exampleSources(scenario: Scenario) {
   const publicSelections = new Map(scenario === 'reading' ? [[base.revisionId, base]] : []);
   let failedOutline = false;
   let failedHistory = false;
+  let failedBranch = false;
   const historyRevision = (revisionId: string): KnowledgeHistoryRevision => {
     const head = saved.get(revisionId)!;
     return {
@@ -146,6 +148,10 @@ function exampleSources(scenario: Scenario) {
         failedOutline = true;
         return { state: 'unavailable', status: 503 };
       }
+      if (scenario === 'branches' && request.cursor && !failedBranch) {
+        failedBranch = true;
+        return { state: 'unavailable', status: 503 };
+      }
       return {
         state: 'ready',
         page: {
@@ -153,7 +159,21 @@ function exampleSources(scenario: Scenario) {
           structureRevisionId,
           parentPlacementId: request.parentPlacementId,
           placements: request.parentPlacementId
-            ? []
+            ? scenario === 'branches' && (request.cursor || request.parentPlacementId.endsWith('041'))
+              ? [
+                  {
+                    placementId: request.parentPlacementId.endsWith('041')
+                      ? '0192f3a0-6c1e-7b2a-9d4e-000000000061'
+                      : '0192f3a0-6c1e-7b2a-9d4e-000000000060',
+                    documentId: longDocumentId,
+                    parentPlacementId: request.parentPlacementId,
+                    position: '4',
+                    title: request.parentPlacementId.endsWith('041')
+                      ? 'The offered cup: scene connections'
+                      : 'The promise: scene connections',
+                  },
+                ]
+              : []
             : [...heads.values()].map((head, index) => ({
                 placementId: `0192f3a0-6c1e-7b2a-9d4e-00000000004${index}`,
                 documentId: head.documentId,
@@ -161,7 +181,10 @@ function exampleSources(scenario: Scenario) {
                 position: String(index + 1),
                 title: head.title,
               })),
-          next: null,
+          next:
+            scenario === 'branches' && request.parentPlacementId?.endsWith('040') && !request.cursor
+              ? 'illustrative-child-continuation'
+              : null,
         },
       };
     },
@@ -299,7 +322,13 @@ function WorkspaceExample({ scenario, locale }: { scenario: Scenario; locale: Lo
         <KnowledgeDocumentCaller visit={visit} request={request} loading={false} onRetry={() => setVisit(open())} />
       );
     }
-    const root = createRootRoute({ component: Outlet });
+    const root = createRootRoute({
+      component: () => (
+        <AppShell communities={null} notifications={null}>
+          <Outlet />
+        </AppShell>
+      ),
+    });
     const notebook = createRoute({
       getParentRoute: () => root,
       path: '/knowledge/notebooks/$notebookId',
@@ -377,6 +406,65 @@ export const Notebook: Story = { args: { scenario: 'notebook' } };
 export const Writing: Story = { args: { scenario: 'writing' } };
 export const LongDocument: Story = { args: { scenario: 'long' } };
 export const PublicReading: Story = { args: { scenario: 'reading' } };
+async function openWorkspaceOutline(canvasElement: HTMLElement, locale: Locale) {
+  const view = within(canvasElement.ownerDocument.body);
+  const options = { locale };
+  // The installed shell supplies only the expanded rail or the open phone Menu host.
+  if (!view.queryByRole('button', { name: m.knowledge_workspace_navigation_open({}, options) })) {
+    const expand = view.queryByRole('button', { name: m.shell_expand_navigation({}, options) });
+    await userEvent.click(expand ?? view.getByRole('button', { name: m.shell_open_navigation({}, options) }));
+  }
+  await userEvent.click(await view.findByRole('button', { name: m.knowledge_workspace_navigation_open({}, options) }));
+  return view.getByRole('region', { name: m.knowledge_workspace_documents({}, options) });
+}
+
+export const NestedOutline: Story = {
+  args: { scenario: 'branches' },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const options = { locale: args.locale };
+    const title = await canvas.findByLabelText(m.knowledge_private_document_title({}, options), { selector: 'input' });
+    await userEvent.clear(title);
+    await userEvent.type(title, 'Keep this draft while browsing');
+    const navigation = await openWorkspaceOutline(canvasElement, args.locale);
+    const outline = within(navigation);
+    await userEvent.click(
+      await outline.findByRole('button', { name: `${m.knowledge_navigation_children({}, options)}: ${documentTitle}` }),
+    );
+    await userEvent.click(
+      outline.getByRole('button', {
+        name: `${m.knowledge_navigation_children({}, options)}: Inspiration: the offered cup`,
+      }),
+    );
+    await expect(
+      await outline.findByRole('link', {
+        name: `${m.knowledge_navigation_open_document({}, options)}: The offered cup: scene connections`,
+      }),
+    ).toBeVisible();
+    await userEvent.click(outline.getByRole('button', { name: m.knowledge_navigation_more({}, options) }));
+    await userEvent.click(await outline.findByRole('button', { name: m.knowledge_navigation_retry({}, options) }));
+    await expect(
+      await outline.findByRole('link', {
+        name: `${m.knowledge_navigation_open_document({}, options)}: The promise: scene connections`,
+      }),
+    ).toBeVisible();
+    await userEvent.click(
+      outline.getByRole('button', { name: `${m.knowledge_navigation_collapse({}, options)}: ${documentTitle}` }),
+    );
+    await userEvent.click(
+      outline.getByRole('button', { name: `${m.knowledge_navigation_children({}, options)}: ${documentTitle}` }),
+    );
+    await expect(title).toHaveValue('Keep this draft while browsing');
+    await expect(
+      outline.getByRole('link', { name: `${m.knowledge_navigation_open_document({}, options)}: ${documentTitle}` }),
+    ).toHaveAttribute('aria-current', 'page');
+    await expect(canvasElement.querySelector('[data-private-knowledge-visit] aside')).toBeNull();
+    await expect(
+      canvasElement.querySelector('[data-private-knowledge-visit] [data-shell-context-navigation]'),
+    ).toBeNull();
+  },
+};
+
 export const IndependentRecovery: Story = {
   args: { scenario: 'recovery' },
   play: async ({ canvasElement, args }) => {
@@ -385,8 +473,7 @@ export const IndependentRecovery: Story = {
     const title = await canvas.findByLabelText(m.knowledge_private_document_title({}, options), { selector: 'input' });
     await userEvent.clear(title);
     await userEvent.type(title, 'Keep this local interpretation');
-    await userEvent.click(canvas.getByRole('button', { name: m.knowledge_workspace_navigation_open({}, options) }));
-    const navigation = canvas.getByRole('complementary', { name: m.knowledge_workspace_documents({}, options) });
+    const navigation = await openWorkspaceOutline(canvasElement, args.locale);
     await userEvent.click(
       await within(navigation).findByRole('button', { name: m.knowledge_navigation_retry({}, options) }),
     );
@@ -396,6 +483,7 @@ export const IndependentRecovery: Story = {
       }),
     ).toBeVisible();
     await expect(title).toHaveValue('Keep this local interpretation');
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(canvas.getByRole('button', { name: m.knowledge_history_open({}, options) }));
     await expect(await canvas.findByText(m.knowledge_history_unavailable({}, options))).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.knowledge_private_retry({}, options) }));

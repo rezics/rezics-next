@@ -29,7 +29,7 @@ export const access: Extract<KnowledgePrivatePageAccess, { state: 'ready' }> = {
   history: 'available',
   compare: 'available',
 };
-export async function harness(editors = 1) {
+export async function harness(editors = 1, contextualNavigation = false) {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -63,6 +63,8 @@ export async function harness(editors = 1) {
     await import('@tanstack/react-router');
   const { sessionQuery } = await import('../src/session/query');
   const { KnowledgePrivateAccessEntry } = await import('../src/knowledge/private-page');
+  const { ShellContextNavigationProvider, ShellContextNavigationOutlet } =
+    await import('../src/shell/contextual-navigation');
   const { default: userEvent } = await import('@testing-library/user-event');
   const user = userEvent.setup({ document: window.document });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -111,7 +113,19 @@ export async function harness(editors = 1) {
       </>
     );
   }
-  const rootRoute = createRootRoute({ component: Outlet });
+  function Frame() {
+    return contextualNavigation ? (
+      <ShellContextNavigationProvider>
+        <nav aria-label="Main navigation">
+          <ShellContextNavigationOutlet />
+        </nav>
+        <Outlet />
+      </ShellContextNavigationProvider>
+    ) : (
+      <Outlet />
+    );
+  }
+  const rootRoute = createRootRoute({ component: Frame });
   const visitRoute = createRoute({ getParentRoute: () => rootRoute, path: '/knowledge/new', component: Visit });
   router = createRouter({
     routeTree: rootRoute.addChildren([visitRoute]),

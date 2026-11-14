@@ -48,6 +48,7 @@ export class KnowledgeNavigationFocus {
 export type KnowledgeNavigationFocusReturn = Readonly<{
   orientation?: KnowledgeNavigationFocus;
   documentId?: string;
+  placementId?: string;
 }>;
 
 type ReadingSnapshot = Readonly<{ state: string; frontier: Readonly<{ request: object }> }>;

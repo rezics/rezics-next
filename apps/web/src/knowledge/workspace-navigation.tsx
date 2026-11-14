@@ -59,49 +59,49 @@ export function KnowledgeWorkspaceNavigation({
   return (
     <ShellContextNavigation label={m.knowledge_workspace_documents({}, options)}>
       <div className="min-w-0 space-y-4">
-      {!open && (
-        <p aria-current="page" className="border-l-2 border-primary py-2 pl-3 text-sm font-medium">
-          {title}
-        </p>
-      )}
-      <div className="flex flex-wrap gap-x-4 lg:flex-col lg:items-start">
-        {notebookReturn ?? (
-          <Link
-            to="/knowledge/notebooks/$notebookId"
-            params={{ notebookId: address.notebookId }}
-            preload={false}
-            className={knowledgeLink}
-          >
-            {m.knowledge_navigation_return({}, options)}
+        {!open && (
+          <p aria-current="page" className="border-l-2 border-primary py-2 pl-3 text-sm font-medium">
+            {title}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-x-4 lg:flex-col lg:items-start">
+          {notebookReturn ?? (
+            <Link
+              to="/knowledge/notebooks/$notebookId"
+              params={{ notebookId: address.notebookId }}
+              preload={false}
+              className={knowledgeLink}
+            >
+              {m.knowledge_navigation_return({}, options)}
+            </Link>
+          )}
+          <Link to="/knowledge" preload={false} className={knowledgeLink}>
+            {m.knowledge_navigation_heading({}, options)}
           </Link>
-        )}
-        <Link to="/knowledge" preload={false} className={knowledgeLink}>
-          {m.knowledge_navigation_heading({}, options)}
-        </Link>
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        className={knowledgeControl}
-        aria-expanded={open}
-        aria-controls={regionId}
-        onClick={() => setOpen((value) => !value)}
-      >
-        {m.knowledge_workspace_navigation_open({}, options)}
-      </Button>
-      <div id={regionId} hidden={!open}>
-        {open && (
-          <KnowledgeNavigationEntry
-            address={{ kind: 'outline', notebookId: address.notebookId, parentPlacementId: null }}
-            locale={locale}
-            binding={JSON.stringify(binding)}
-            access={admission === 'unknown' ? 'preparing' : admission}
-            operations={navigation}
-            selectedDocumentId={address.documentId}
-            embedded
-          />
-        )}
-      </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className={knowledgeControl}
+          aria-expanded={open}
+          aria-controls={regionId}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {m.knowledge_workspace_navigation_open({}, options)}
+        </Button>
+        <div id={regionId} hidden={!open}>
+          {open && (
+            <KnowledgeNavigationEntry
+              address={{ kind: 'outline', notebookId: address.notebookId, parentPlacementId: null }}
+              locale={locale}
+              binding={JSON.stringify(binding)}
+              access={admission === 'unknown' ? 'preparing' : admission}
+              operations={navigation}
+              selectedDocumentId={address.documentId}
+              embedded
+            />
+          )}
+        </div>
       </div>
     </ShellContextNavigation>
   );

@@ -148,7 +148,7 @@ stays with the Goal verification lane.
 Decision: only a focused keyboard page action or deliberate keyboard document return requests orientation;
 pointer actions and ordinary observations preserve the reader's focus. One ephemeral request is cancelled by
 focus movement, pointer use, another key, window departure, a superseding request or owner replacement. Embedded
-navigation leaves orientation to its caller. Each completed current read may orient its result or failure boundary;
+navigation leaves orientation to its caller. More and Retry may orient their own branch result or failure boundary; disclosure retains focus on its expanded control;
 no focus request starts a read. The organization-enabled notebook caller shares this ownership while its
 commands, history and native producer keep their existing state contracts. Native page order, sparse continuation, exact-cursor Retry and explicit first-page
 Restart retain their existing contracts and twenty-row bound.
@@ -195,7 +195,7 @@ unavailable read retains revealed siblings and its exact attempted cursor. Colla
 reopen makes no duplicate read. A pending explicit read may finish while collapsed, without moving focus. Storage
 is O(revealed rows), with no prefetch, refill, body read or reconstructed whole notebook. Structure replacement
 conceals the outline and requires explicit Restart; permission or lifetime retirement removes all branches.
-Document return stores one supplying frontier and selected document, never rows, and freshly admits that page.
+Document return stores one supplying frontier, selected document and placement, never rows, and freshly admits that page. A missing returned placement falls back to the branch boundary for deliberate keyboard return. An acknowledged move or definite structure conflict conceals the browsing outline until explicit Restart, without altering the command intent or starting another read.
 Disclosure, continuation and retry do not replace or remount the editor; document links retain its existing dirty
 and uncertain-command departure protection. Account, credential, exposure, locale and source replacement retire
 all old branch callbacks and pending responses.
@@ -209,3 +209,12 @@ index. `navigation-reading.ts` is introduced by this migration; it was absent on
 Authored interactions cover independent branches, sparse More, exact retry, collapse/reopen, selected return,
 retirement and one-canvas private editing. Source-only delivery leaves compiler, tests, build, native, mounted
 phone/desktop/keyboard and eight-locale acceptance unverified for the separate verifier.
+
+Changed acceptance source: `knowledge-navigation.test.tsx` now asserts retained parent/sibling rows, per-branch
+continuation and disclosure focus instead of replacing child frontiers; exact operands and retirement assertions
+remain. `knowledge-private.test.tsx` adds the shell-hosted draft and dirty-departure case through an optional host in
+`knowledge-history-harness.tsx`. Existing organization tests/stories explicitly open their secondary command panel;
+their command assertions stay intact. The navigation KeyboardCompletion story retains disclosure focus, and continued
+story rows use distinct native placements. Workspace NestedOutline and IndependentRecovery use the installed shell.
+Other changed paths: `docs/knowledge-workspaces.md` points the superseded outline UI contract here; the optional
+private test host and existing navigation/organization story/test fixtures are supporting consumer migrations.

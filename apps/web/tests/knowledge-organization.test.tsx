@@ -92,9 +92,10 @@ async function mount(organization: OrganizationOperations) {
     access: 'available',
     address: root,
     operations: {
-      read: async () => {
-        throw new Error('Organization must use its admitted reader');
-      },
+      read: async () => ({
+        state: 'ready',
+        page: { kind: 'outline', notebookId, parentPlacementId: null, structureRevisionId, placements: [], next: null },
+      }),
       organization,
       subscribeRetirement: (callback) => {
         retire = callback;
@@ -126,15 +127,27 @@ async function mount(organization: OrganizationOperations) {
       </StrictMode>,
     );
   });
+  const openOrganization = async () => {
+    const panel = host.querySelector<HTMLDetailsElement>('[data-knowledge-organization]');
+    if (panel && !panel.open)
+      await act(async () => {
+        panel.open = true;
+        panel.dispatchEvent(new dom.window.Event('toggle'));
+      });
+  };
+  await openOrganization();
+  const region = () => host.querySelector<HTMLElement>('[data-knowledge-organization]') ?? host;
   const find = (label: string) => {
-    const node = [...host.querySelectorAll<HTMLElement>('button,a')].find(
+    const node = [...region().querySelectorAll<HTMLElement>('button,a')].find(
       (n) => n.textContent?.trim() === label || n.textContent?.trim().startsWith(label + ':'),
     );
     if (!node) throw new Error(`Missing organization control: ${label}`);
     return node;
   };
   return {
-    host,
+    get host() {
+      return region();
+    },
     find,
     retire: () => retire(),
     click: async (label: string) => {
@@ -147,6 +160,7 @@ async function mount(organization: OrganizationOperations) {
       await act(async () => {
         update(props);
       });
+      await openOrganization();
     },
     dispose: async () => {
       await act(async () => {
