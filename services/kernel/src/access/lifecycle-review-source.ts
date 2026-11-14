@@ -75,15 +75,20 @@ async function operatorEffects(
   const step = lifting ? 'operator-unfence-page' : 'operator-responsibility-page';
   const pageKey = requestedPageKey ?? createHash('sha256').update('first').digest('hex');
   const pageEntry = requestedPageKey
-    ? await withBoundedReadConnection(pool, deadline, async (client) => {
-        await activeHome(client, root.route);
-        const { rows } = await client.query<ContinuationEntry>(
-          `SELECT step,target,key,digest FROM access.committed_continuation_entry
+    ? await withBoundedReadConnection(
+        pool,
+        deadline,
+        async (client) => {
+          await activeHome(client, root.route);
+          const { rows } = await client.query<ContinuationEntry>(
+            `SELECT step,target,key,digest FROM access.committed_continuation_entry
        WHERE route=$1 AND continuation_id=$2 AND step=$3 AND target=$4 AND key=$5`,
-          [root.route, root.continuationId, step, root.accountId, `${root.commandKeyPrefix}:page:${pageKey}`],
-        );
-        return rows[0];
-      }, lifecycleReviewReadOptions)
+            [root.route, root.continuationId, step, root.accountId, `${root.commandKeyPrefix}:page:${pageKey}`],
+          );
+          return rows[0];
+        },
+        lifecycleReviewReadOptions,
+      )
     : root.allowlist.find((e) => e.step === step);
   const unavailable = { operator: 'unknown', inspectedPages: 0, terminalSubjects: 0 } as const;
   if (
@@ -94,17 +99,22 @@ async function operatorEffects(
       (requestedPageKey ? `${root.commandKeyPrefix}:page:${pageKey}` : `${root.commandKeyPrefix}:${step}`)
   )
     return unavailable;
-  const native = await withBoundedReadConnection(pool, deadline, async (client) => {
-    const home = await activeHome(client, root.route);
-    const { rows } = await client.query<{ cursor: string | null; next: string | null; entries: ContinuationEntry[] }>(
-      `SELECT cursor, next_cursor AS next, allowlist AS entries FROM access.operator_fence_page
+  const native = await withBoundedReadConnection(
+    pool,
+    deadline,
+    async (client) => {
+      const home = await activeHome(client, root.route);
+      const { rows } = await client.query<{ cursor: string | null; next: string | null; entries: ContinuationEntry[] }>(
+        `SELECT cursor, next_cursor AS next, allowlist AS entries FROM access.operator_fence_page
        WHERE route=$1 AND continuation_id=$2 AND page_key=$3
          AND octet_length(allowlist::text)<=65536 AND coalesce(octet_length(cursor),0)<=8192
          AND coalesce(octet_length(next_cursor),0)<=8192`,
-      [root.route, root.continuationId, pageKey],
-    );
-    return { home, page: rows[0] };
-  }, lifecycleReviewReadOptions);
+        [root.route, root.continuationId, pageKey],
+      );
+      return { home, page: rows[0] };
+    },
+    lifecycleReviewReadOptions,
+  );
   const page = native.page;
   if (
     !page ||
@@ -144,22 +154,27 @@ async function operatorEffects(
       input,
     ]);
     const rawKey = `${route}:${entry.key}`;
-    const completion = await withBoundedReadConnection(pool, deadline, async (client) => {
-      const home = await activeHome(client, root.route);
-      if (!sameHome(native.home, home)) return undefined;
-      const { rows } = await client.query<{
-        digest: string;
-        receiptKey: string | null;
-        receiptDigest: string | null;
-        receiptId: string;
-      }>(
-        `SELECT digest, receipt_key AS "receiptKey", receipt_digest AS "receiptDigest", receipt_id AS "receiptId"
+    const completion = await withBoundedReadConnection(
+      pool,
+      deadline,
+      async (client) => {
+        const home = await activeHome(client, root.route);
+        if (!sameHome(native.home, home)) return undefined;
+        const { rows } = await client.query<{
+          digest: string;
+          receiptKey: string | null;
+          receiptDigest: string | null;
+          receiptId: string;
+        }>(
+          `SELECT digest, receipt_key AS "receiptKey", receipt_digest AS "receiptDigest", receipt_id AS "receiptId"
          FROM access.committed_continuation_completion
          WHERE route=$1 AND continuation_id=$2 AND step=$3 AND target=$4 AND key=$5`,
-        [root.route, root.continuationId, entry.step, entry.target, entry.key],
-      );
-      return rows[0];
-    }, lifecycleReviewReadOptions);
+          [root.route, root.continuationId, entry.step, entry.target, entry.key],
+        );
+        return rows[0];
+      },
+      lifecycleReviewReadOptions,
+    );
     if (
       !completion ||
       completion.digest !== entry.digest ||
@@ -168,24 +183,29 @@ async function operatorEffects(
     )
       return false;
     // No source connection is held while inspecting a different subject's home.
-    return withBoundedReadConnection(pool, deadline, async (client) => {
-      const home = await activeHome(client, route);
-      const row = await receipt(client, route, SERVICE_ID, `access.${kind}`, rawKey);
-      if (
-        !row ||
-        row.epoch > home.epoch ||
-        BigInt(row.position) > home.position ||
-        !row.digest.equals(digest) ||
-        !object(row.response) ||
-        !valid(row.response)
-      )
-        return false;
-      const expectedId =
-        !lifting && row.response.fenced === true
-          ? derivedId('134e9749-1120-8a0c-97d0-71287a629cef', `${row.transactionId}:fence`, route)
-          : row.transactionId;
-      return completion.receiptId === expectedId && sameHome(home, await activeHome(client, route));
-    }, lifecycleReviewReadOptions);
+    return withBoundedReadConnection(
+      pool,
+      deadline,
+      async (client) => {
+        const home = await activeHome(client, route);
+        const row = await receipt(client, route, SERVICE_ID, `access.${kind}`, rawKey);
+        if (
+          !row ||
+          row.epoch > home.epoch ||
+          BigInt(row.position) > home.position ||
+          !row.digest.equals(digest) ||
+          !object(row.response) ||
+          !valid(row.response)
+        )
+          return false;
+        const expectedId =
+          !lifting && row.response.fenced === true
+            ? derivedId('134e9749-1120-8a0c-97d0-71287a629cef', `${row.transactionId}:fence`, route)
+            : row.transactionId;
+        return completion.receiptId === expectedId && sameHome(home, await activeHome(client, route));
+      },
+      lifecycleReviewReadOptions,
+    );
   }
   if (
     !(await terminal(
@@ -352,42 +372,47 @@ async function sessionAuthorization(
       digest: entry.digest,
     },
   ]);
-  return withBoundedReadConnection(pool, deadline, async (client) => {
-    const home = await activeHome(client, root.route);
-    const { rows } = await client.query<{
-      digest: string;
-      receiptKey: string;
-      receiptDigest: string;
-      receiptId: string;
-    }>(
-      `SELECT digest, receipt_key AS "receiptKey", receipt_digest AS "receiptDigest", receipt_id AS "receiptId"
+  return withBoundedReadConnection(
+    pool,
+    deadline,
+    async (client) => {
+      const home = await activeHome(client, root.route);
+      const { rows } = await client.query<{
+        digest: string;
+        receiptKey: string;
+        receiptDigest: string;
+        receiptId: string;
+      }>(
+        `SELECT digest, receipt_key AS "receiptKey", receipt_digest AS "receiptDigest", receipt_id AS "receiptId"
        FROM access.committed_continuation_completion
        WHERE route=$1 AND continuation_id=$2 AND step=$3 AND target=$4 AND key=$5`,
-      [root.route, root.continuationId, entry.step, entry.target, entry.key],
-    );
-    const completion = rows[0];
-    if (
-      !completion ||
-      completion.digest !== entry.digest ||
-      completion.receiptKey !== key ||
-      completion.receiptDigest !== digest.toString('hex')
-    )
-      return 'unknown';
-    const row = await receipt(client, root.route, SERVICE_ID, 'access.cleanup-continuation.recorded', key);
-    if (
-      !row ||
-      !row.digest.equals(digest) ||
-      row.epoch > home.epoch ||
-      BigInt(row.position) > home.position ||
-      !object(row.response) ||
-      row.response.continuationId !== root.continuationId ||
-      row.response.receiptId !== row.transactionId ||
-      completion.receiptId !== row.transactionId ||
-      !sameHome(home, await activeHome(client, root.route))
-    )
-      return 'unknown';
-    return 'recorded';
-  }, lifecycleReviewReadOptions);
+        [root.route, root.continuationId, entry.step, entry.target, entry.key],
+      );
+      const completion = rows[0];
+      if (
+        !completion ||
+        completion.digest !== entry.digest ||
+        completion.receiptKey !== key ||
+        completion.receiptDigest !== digest.toString('hex')
+      )
+        return 'unknown';
+      const row = await receipt(client, root.route, SERVICE_ID, 'access.cleanup-continuation.recorded', key);
+      if (
+        !row ||
+        !row.digest.equals(digest) ||
+        row.epoch > home.epoch ||
+        BigInt(row.position) > home.position ||
+        !object(row.response) ||
+        row.response.continuationId !== root.continuationId ||
+        row.response.receiptId !== row.transactionId ||
+        completion.receiptId !== row.transactionId ||
+        !sameHome(home, await activeHome(client, root.route))
+      )
+        return 'unknown';
+      return 'recorded';
+    },
+    lifecycleReviewReadOptions,
+  );
 }
 
 export async function effects(

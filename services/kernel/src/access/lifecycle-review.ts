@@ -93,28 +93,38 @@ export async function readLifecycleReview(
               deadline,
               time,
             });
-            const eligible = await withBoundedReadConnection(pool, deadline, async (client) => {
-              await activeHome(client, routeOf(identity.accountId)!);
-              const current = await target(client, routeOf(identity.accountId)!, identity.accountId);
-              return (
-                current?.kind === 'actor' &&
-                current.state === 'active' &&
-                !current.fenced &&
-                Number.isSafeInteger(identity.authnEpoch) &&
-                identity.authnEpoch >= 1 &&
-                BigInt(identity.authnEpoch) >= BigInt(current.minimumAuthnEpoch)
-              );
-            }, lifecycleReviewReadOptions);
+            const eligible = await withBoundedReadConnection(
+              pool,
+              deadline,
+              async (client) => {
+                await activeHome(client, routeOf(identity.accountId)!);
+                const current = await target(client, routeOf(identity.accountId)!, identity.accountId);
+                return (
+                  current?.kind === 'actor' &&
+                  current.state === 'active' &&
+                  !current.fenced &&
+                  Number.isSafeInteger(identity.authnEpoch) &&
+                  identity.authnEpoch >= 1 &&
+                  BigInt(identity.authnEpoch) >= BigInt(current.minimumAuthnEpoch)
+                );
+              },
+              lifecycleReviewReadOptions,
+            );
             if (!eligible) throw deny();
             allowed.push(
-              await withBoundedReadConnection(pool, deadline, async (client) => {
-                await activeHome(client, PLATFORM_RESOURCE.route);
-                const global = await globalRead.run(client, {
-                  route: PLATFORM_RESOURCE.route,
-                  resource_id: PLATFORM_RESOURCE.id,
-                });
-                return global?.global === true && (await check(client, time));
-              }, lifecycleReviewReadOptions),
+              await withBoundedReadConnection(
+                pool,
+                deadline,
+                async (client) => {
+                  await activeHome(client, PLATFORM_RESOURCE.route);
+                  const global = await globalRead.run(client, {
+                    route: PLATFORM_RESOURCE.route,
+                    resource_id: PLATFORM_RESOURCE.id,
+                  });
+                  return global?.global === true && (await check(client, time));
+                },
+                lifecycleReviewReadOptions,
+              ),
             );
           }
           if (!allowed.some(Boolean) || (original && !allowed[original.operationId === 'account.suspend' ? 0 : 1]))
@@ -125,10 +135,15 @@ export async function readLifecycleReview(
         }
       }
       await authority();
-      const snapshot = await withBoundedReadConnection(pool, deadline, async (client) => {
-        const home = await activeHome(client, route);
-        return { home, account: await target(client, route, input.accountId) };
-      }, lifecycleReviewReadOptions);
+      const snapshot = await withBoundedReadConnection(
+        pool,
+        deadline,
+        async (client) => {
+          const home = await activeHome(client, route);
+          return { home, account: await target(client, route, input.accountId) };
+        },
+        lifecycleReviewReadOptions,
+      );
       if (!snapshot.account) throw deny();
       let result: LifecycleOriginalResult | undefined;
       if (original) {
@@ -142,18 +157,23 @@ export async function readLifecycleReview(
           original.operationId === 'account.suspend'
             ? suspensionRequestDigest(identity, operands)
             : reinstatementRequestDigest(identity, operands);
-        const source = await withBoundedReadConnection(pool, deadline, async (client) => {
-          const home = await activeHome(client, route);
-          if (!sameHome(snapshot.home, home)) throw new ProblemError('partition_unavailable');
-          return originalResult(client, {
-            route,
-            accountId: input.accountId,
-            principal: identity.accountId,
-            operationId: original.operationId,
-            key: original.key,
-            digest,
-          });
-        }, lifecycleReviewReadOptions);
+        const source = await withBoundedReadConnection(
+          pool,
+          deadline,
+          async (client) => {
+            const home = await activeHome(client, route);
+            if (!sameHome(snapshot.home, home)) throw new ProblemError('partition_unavailable');
+            return originalResult(client, {
+              route,
+              accountId: input.accountId,
+              principal: identity.accountId,
+              operationId: original.operationId,
+              key: original.key,
+              digest,
+            });
+          },
+          lifecycleReviewReadOptions,
+        );
         result = source
           ? {
               status: 'recorded',
@@ -170,12 +190,17 @@ export async function readLifecycleReview(
       }
       // Reprepare after native/foreign reads, including receipt and effect evidence, before disclosing anything.
       const allowed = await authority();
-      await withBoundedReadConnection(pool, deadline, async (client) => {
-        const home = await activeHome(client, route);
-        const current = await target(client, route, input.accountId);
-        if (!sameHome(snapshot.home, home) || !current || !hash(current).equals(hash(snapshot.account)))
-          throw new ProblemError('dependency_unavailable');
-      }, lifecycleReviewReadOptions);
+      await withBoundedReadConnection(
+        pool,
+        deadline,
+        async (client) => {
+          const home = await activeHome(client, route);
+          const current = await target(client, route, input.accountId);
+          if (!sameHome(snapshot.home, home) || !current || !hash(current).equals(hash(snapshot.account)))
+            throw new ProblemError('dependency_unavailable');
+        },
+        lifecycleReviewReadOptions,
+      );
       const a = snapshot.account;
       return {
         account: {
