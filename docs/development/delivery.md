@@ -155,8 +155,6 @@ state, owner links, blockers and next actions. Resume only when authorized.
 
 # Delivery ownership
 
-Decision: Workers surface distinct valuable gaps with source evidence and the first editable boundary while work is underway; they keep in-scope repairs and hand off ready independent outcomes to their owning manager, who owns merge or dispatch and slot refill.
-
 Each manager independently finds runnable release work from actual source gaps, owner contracts and worker proposals.
 Size complete writable outcomes and refill eligible capacity before workers exit or park. Keep a ready queue, verify
 actual process starts and first-source checkpoints, and continue dispatch without waiting for a fixed batch or a list
