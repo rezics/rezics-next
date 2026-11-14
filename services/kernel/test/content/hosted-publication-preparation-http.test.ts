@@ -146,27 +146,26 @@ test('fresh prepare waits on an existing stage before acquiring the catalogue lo
   await held.query('BEGIN');
   const blockerPid = (await held.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
   let catalogueLockAcquired = false;
-  let repeated:
-    | Promise<{ value: Awaited<ReturnType<typeof f.native.call>> } | { error: unknown }>
-    | undefined;
+  let repeated: Promise<{ value: Awaited<ReturnType<typeof f.native.call>> } | { error: unknown }> | undefined;
   try {
     await held.query(
       `SELECT 1 FROM content.hosted_publication_staging
        WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 FOR UPDATE`,
       [route, book.catalogueId, input.stageId],
     );
-    repeated = f.native
-      .call('POST', `${book.path}:prepareRelease`, input, { key: crypto.randomUUID() })
-      .then((value) => ({ value }), (error: unknown) => ({ error }));
+    repeated = f.native.call('POST', `${book.path}:prepareRelease`, input, { key: crypto.randomUUID() }).then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    );
     await waitForBlockedStageRow(blockerPid);
 
     const probe = await f.native.pool.connect();
     try {
       await probe.query('BEGIN');
-      await probe.query(
-        `SELECT 1 FROM content.hosted_catalogue WHERE route=$1 AND catalogue_id=$2 FOR UPDATE NOWAIT`,
-        [route, book.catalogueId],
-      );
+      await probe.query(`SELECT 1 FROM content.hosted_catalogue WHERE route=$1 AND catalogue_id=$2 FOR UPDATE NOWAIT`, [
+        route,
+        book.catalogueId,
+      ]);
       catalogueLockAcquired = true;
     } catch {
       await probe.query('ROLLBACK').catch(() => {});

@@ -11,11 +11,7 @@ import {
 } from '../command/command.ts';
 import { requestDigest } from '../command/request.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import {
-  ContentNotFoundError,
-  hostedPostAuthorization,
-  type ContentCommandDependencies,
-} from './commands.ts';
+import { ContentNotFoundError, hostedPostAuthorization, type ContentCommandDependencies } from './commands.ts';
 import { snapshot } from './reads.ts';
 import { hostedCatalogue } from './hosted-chapters-store.ts';
 import type { HostedCommandContext, HostedDependencies } from './hosted-chapters-model.ts';
