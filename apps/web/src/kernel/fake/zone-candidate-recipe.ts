@@ -24,10 +24,7 @@ import {
 } from '../../zones/candidates/recipe';
 
 const profile = profileJson as PresentationProfile;
-const typeDefinitions = definitions.release.types as Record<
-  string,
-  { bases: string[] }
->;
+const typeDefinitions = definitions.release.types as Record<string, { bases: string[] }>;
 
 type RecordValue = Record<string, unknown>;
 
@@ -61,13 +58,9 @@ const semanticUnavailable = () =>
     'retry-after': '1',
   });
 
-function stateForZone(
-  id: string | undefined,
-): RecipeCandidateState | undefined {
+function stateForZone(id: string | undefined): RecipeCandidateState | undefined {
   if (!id) return undefined;
-  return (Object.keys(RECIPE_ZONE_IDS) as RecipeCandidateState[]).find(
-    (state) => RECIPE_ZONE_IDS[state] === id,
-  );
+  return (Object.keys(RECIPE_ZONE_IDS) as RecipeCandidateState[]).find((state) => RECIPE_ZONE_IDS[state] === id);
 }
 
 function isListed(state: RecipeCandidateState, id: string): boolean {
@@ -76,14 +69,9 @@ function isListed(state: RecipeCandidateState, id: string): boolean {
     : false;
 }
 
-function requestedLanguages(
-  input: RecordValue | undefined,
-  request: Request,
-): string[] {
+function requestedLanguages(input: RecordValue | undefined, request: Request): string[] {
   const supplied = Array.isArray(input?.languages)
-    ? input.languages.filter(
-        (language): language is string => typeof language === 'string',
-      )
+    ? input.languages.filter((language): language is string => typeof language === 'string')
     : [];
   const accepted = (request.headers.get('accept-language') ?? '')
     .split(',')
@@ -147,13 +135,8 @@ async function readInput(request: Request): Promise<RecordValue | undefined> {
   }
 }
 
-const zoneRead: NonNullable<FakeRoute['story']> = async ({
-  request,
-  match,
-}) => {
-  const state = stateForZone(
-    match?.[1] ? decodeURIComponent(match[1]) : undefined,
-  );
+const zoneRead: NonNullable<FakeRoute['story']> = async ({ request, match }) => {
+  const state = stateForZone(match?.[1] ? decodeURIComponent(match[1]) : undefined);
   if (!state) return undefined;
   if (state === 'closed') return sourceClosed();
   if (state === 'unavailable') return semanticUnavailable();
@@ -183,18 +166,12 @@ const pageRead: NonNullable<FakeRoute['story']> = async ({ request }) => {
   const input = await readInput(request);
   const target = input?.target;
   if (!isRecord(target) || typeof target.subject !== 'string') return undefined;
-  const page = pageForSubject(
-    target.subject,
-    target.view,
-    requestedLanguages(input, request),
-  );
+  const page = pageForSubject(target.subject, target.view, requestedLanguages(input, request));
   return page ? { status: 200, ...page } : undefined;
 };
 
 const subjectRead: NonNullable<FakeRoute['story']> = ({ request, match }) => {
-  const candidate = recipeCandidate(
-    match?.[1] ? decodeURIComponent(match[1]) : '',
-  );
+  const candidate = recipeCandidate(match?.[1] ? decodeURIComponent(match[1]) : '');
   return candidate
     ? {
         status: 200,

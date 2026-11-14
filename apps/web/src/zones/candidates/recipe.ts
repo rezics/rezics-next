@@ -1,10 +1,5 @@
 import type { SubjectRead } from '@rezics/client';
-import {
-  PAGE_GLOBAL_CONTEXT,
-  planReads,
-  platformRegistry,
-  type CompositionDocument,
-} from '@rezics/composition';
+import { PAGE_GLOBAL_CONTEXT, planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import definitions from '../../kernel/recorded/definitions-release.json';
 import recipeStarter from '../../../../../packages/definitions/presentation/recipe/zone.json';
@@ -62,12 +57,8 @@ const recipe = (
   method,
   facts: {
     'schema:name': [name],
-    ...(cookMinutes === undefined
-      ? {}
-      : { 'schema:cookTime': [{ amount: `+${cookMinutes}`, unit: minute }] }),
-    ...(servings === undefined
-      ? {}
-      : { 'schema:recipeYield': [{ amount: `+${servings}`, unit: '1' }] }),
+    ...(cookMinutes === undefined ? {} : { 'schema:cookTime': [{ amount: `+${cookMinutes}`, unit: minute }] }),
+    ...(servings === undefined ? {} : { 'schema:recipeYield': [{ amount: `+${servings}`, unit: '1' }] }),
     ...(ingredients.length === 0
       ? {}
       : {
@@ -99,11 +90,7 @@ export const RECIPE_SUBJECTS: readonly RecipeCandidate[] = [
   recipe(
     RECIPE_SUBJECT_IDS.apricotToast,
     'Apricot Window-Pan Toast',
-    [
-      '2 slices country bread',
-      '3 ripe apricots, halved',
-      '1 teaspoon orange zest',
-    ],
+    ['2 slices country bread', '3 ripe apricots, halved', '1 teaspoon orange zest'],
     [
       'Toast the bread until its edges are crisp.',
       'Warm the apricots cut-side down in a covered pan until soft, then spoon them over the toast and finish with orange zest.',
@@ -125,12 +112,7 @@ export const RECIPE_SUBJECTS: readonly RecipeCandidate[] = [
   recipe(
     RECIPE_SUBJECT_IDS.rainyLentils,
     'Rainy-Day Lentil Pot',
-    [
-      '1 cup green lentils',
-      '1 small onion, diced',
-      '1 can crushed tomatoes',
-      'A handful of chopped parsley',
-    ],
+    ['1 cup green lentils', '1 small onion, diced', '1 can crushed tomatoes', 'A handful of chopped parsley'],
     [
       'Soften the onion in a covered pot with a splash of water.',
       'Add lentils, tomatoes, and enough water to cover; simmer until the lentils are tender, then fold through parsley.',
@@ -140,12 +122,7 @@ export const RECIPE_SUBJECTS: readonly RecipeCandidate[] = [
   ),
 ];
 
-const sparseRecipe = recipe(
-  RECIPE_SUBJECT_IDS.sparsePorridge,
-  'Rain-on-the-Window Porridge',
-  [],
-  [],
-);
+const sparseRecipe = recipe(RECIPE_SUBJECT_IDS.sparsePorridge, 'Rain-on-the-Window Porridge', [], []);
 
 export const RECIPE_PREVIEW_LABEL =
   'Candidate · development preview, gated and deferred. Fictional recipes; no live catalogue or official-site claim.';
@@ -156,22 +133,15 @@ type StarterDocument = { root: unknown; content: StarterNode[] };
 const starterPage = recipeStarter.pages.find(({ route }) => route === '');
 const starterDocument = starterPage?.document as StarterDocument | undefined;
 const starterStack = starterDocument?.content[0];
-const starterChildren = starterStack?.props.children as
-  StarterNode[] | undefined;
+const starterChildren = starterStack?.props.children as StarterNode[] | undefined;
 
 function homeDocument(stateCopy: string): StarterDocument {
-  if (!starterDocument || !starterStack || !starterChildren)
-    throw new Error('The Recipe starter home is missing.');
-  const heading = starterChildren.find(
-    ({ type, props }) => type === 'Heading' && props.id === 'title',
-  );
-  const intro = starterChildren.find(
-    ({ type, props }) => type === 'Text' && props.id === 'intro',
-  );
+  if (!starterDocument || !starterStack || !starterChildren) throw new Error('The Recipe starter home is missing.');
+  const heading = starterChildren.find(({ type, props }) => type === 'Heading' && props.id === 'title');
+  const intro = starterChildren.find(({ type, props }) => type === 'Text' && props.id === 'intro');
   const list = starterChildren.find(({ type }) => type === 'TypeList');
   const slots = starterChildren.filter(({ type }) => type === 'Slot');
-  if (!heading || !intro || !list || slots.length !== 4)
-    throw new Error('The Recipe starter home changed shape.');
+  if (!heading || !intro || !list || slots.length !== 4) throw new Error('The Recipe starter home changed shape.');
 
   return {
     ...starterDocument,
@@ -180,13 +150,7 @@ function homeDocument(stateCopy: string): StarterDocument {
         ...starterStack,
         props: {
           ...starterStack.props,
-          children: [
-            heading,
-            { type: 'Text', props: { id: 'preview-note', text: stateCopy } },
-            intro,
-            list,
-            ...slots,
-          ],
+          children: [heading, { type: 'Text', props: { id: 'preview-note', text: stateCopy } }, intro, list, ...slots],
         },
       },
     ],
@@ -195,22 +159,15 @@ function homeDocument(stateCopy: string): StarterDocument {
 
 export const RECIPE_HOME_DOCUMENTS = {
   admitted: homeDocument(RECIPE_PREVIEW_LABEL),
-  empty: homeDocument(
-    `${RECIPE_PREVIEW_LABEL} This read is ready and has no matching recipes.`,
-  ),
-  sparse: homeDocument(
-    `${RECIPE_PREVIEW_LABEL} One fictional recipe is shown with its optional facts absent.`,
-  ),
+  empty: homeDocument(`${RECIPE_PREVIEW_LABEL} This read is ready and has no matching recipes.`),
+  sparse: homeDocument(`${RECIPE_PREVIEW_LABEL} One fictional recipe is shown with its optional facts absent.`),
 } as const;
 
 export const RECIPE_HOME_COPY = {
   admitted: RECIPE_SUBJECTS,
   empty: [],
   sparse: [sparseRecipe],
-} as const satisfies Record<
-  'admitted' | 'empty' | 'sparse',
-  readonly RecipeCandidate[]
->;
+} as const satisfies Record<'admitted' | 'empty' | 'sparse', readonly RecipeCandidate[]>;
 
 function recipeStatements(candidate: RecipeCandidate): Subject['statements'] {
   const statements: Subject['statements'] = {};
@@ -229,15 +186,10 @@ function recipeStatements(candidate: RecipeCandidate): Subject['statements'] {
 }
 
 export function recipeCandidate(id: string): RecipeCandidate | undefined {
-  return [...RECIPE_SUBJECTS, sparseRecipe].find(
-    (candidate) => candidate.id === id,
-  );
+  return [...RECIPE_SUBJECTS, sparseRecipe].find((candidate) => candidate.id === id);
 }
 
-function candidateLabel(
-  candidate: RecipeCandidate,
-  languages: readonly string[] = [],
-) {
+function candidateLabel(candidate: RecipeCandidate, languages: readonly string[] = []) {
   const labels = candidate.labels as Record<string, string>;
   for (const language of languages) {
     const exact = labels[language];
@@ -249,10 +201,7 @@ function candidateLabel(
   return { value: candidate.labels.en, language: 'en' };
 }
 
-export function recipeSubjectRead(
-  candidate: RecipeCandidate,
-  languages: readonly string[] = [],
-): SubjectRead {
+export function recipeSubjectRead(candidate: RecipeCandidate, languages: readonly string[] = []): SubjectRead {
   const subject: Subject = {
     id: candidate.id,
     type: candidate.type,
@@ -323,9 +272,7 @@ export function recipeHomeResponse(
 ): ZonePageResponse {
   const document = RECIPE_HOME_DOCUMENTS[state] as CompositionDocument;
   const plan = planReads(platformRegistry, document, { subject: null });
-  const subjects = RECIPE_HOME_COPY[state].map((candidate) =>
-    searchHit(candidate, languages),
-  );
+  const subjects = RECIPE_HOME_COPY[state].map((candidate) => searchHit(candidate, languages));
   const reads = Object.fromEntries(
     Object.keys(plan.reads).map((key) => [
       key,

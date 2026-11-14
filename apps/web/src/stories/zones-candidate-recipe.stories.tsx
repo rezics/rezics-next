@@ -1,11 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PageStory, type PageStoryContext } from './page';
-import {
-  RECIPE_PREVIEW_LABEL,
-  RECIPE_SUBJECT_IDS,
-  RECIPE_ZONE_IDS,
-} from '../zones/candidates/recipe';
+import { RECIPE_PREVIEW_LABEL, RECIPE_SUBJECT_IDS, RECIPE_ZONE_IDS } from '../zones/candidates/recipe';
 
 const meta = {
   title: 'Zones/Candidates/Recipes',
@@ -39,10 +35,8 @@ function CandidatePage({ path }: { path: string }) {
   );
 }
 
-const zonePath = (state: keyof typeof RECIPE_ZONE_IDS) =>
-  `/zones/${RECIPE_ZONE_IDS[state]}`;
-const recipePath = (state: 'admitted' | 'sparse', subject: string) =>
-  `${zonePath(state)}/subjects/${subject}`;
+const zonePath = (state: keyof typeof RECIPE_ZONE_IDS) => `/zones/${RECIPE_ZONE_IDS[state]}`;
+const recipePath = (state: 'admitted' | 'sparse', subject: string) => `${zonePath(state)}/subjects/${subject}`;
 
 async function expectCopy(canvasElement: HTMLElement, copy: RegExp) {
   await within(canvasElement).findByText(copy);
@@ -67,11 +61,7 @@ const detailReturn: Story['play'] = async ({ canvasElement }) => {
   await canvas.findByRole('heading', { name: 'Apricot Window-Pan Toast' });
   activePage?.router.history.back();
   await waitFor(() =>
-    expect(
-      activePage?.router.state.location.pathname.endsWith(
-        `/zones/${RECIPE_ZONE_IDS.admitted}`,
-      ),
-    ).toBe(true),
+    expect(activePage?.router.state.location.pathname.endsWith(`/zones/${RECIPE_ZONE_IDS.admitted}`)).toBe(true),
   );
   await canvas.findByText(RECIPE_PREVIEW_LABEL);
 };
@@ -82,8 +72,7 @@ export const AdmittedPreview: Story = {
   parameters: {
     docs: {
       description: {
-        story:
-          'A clearly labelled, deferred candidate preview with fictional, typed Recipe rows.',
+        story: 'A clearly labelled, deferred candidate preview with fictional, typed Recipe rows.',
       },
     },
   },
@@ -96,13 +85,11 @@ export const ReadyEmpty: Story = {
   parameters: {
     docs: {
       description: {
-        story:
-          'The candidate read succeeds and returns no matching Recipe rows; real source admission is deferred.',
+        story: 'The candidate read succeeds and returns no matching Recipe rows; real source admission is deferred.',
       },
     },
   },
-  play: async ({ canvasElement }) =>
-    expectCopy(canvasElement, /ready and has no matching recipes/i),
+  play: async ({ canvasElement }) => expectCopy(canvasElement, /ready and has no matching recipes/i),
 };
 
 export const SparseHome: Story = {
@@ -111,8 +98,7 @@ export const SparseHome: Story = {
   parameters: {
     docs: {
       description: {
-        story:
-          'One fictional Recipe is present with optional facts absent; this gated candidate preview is deferred.',
+        story: 'One fictional Recipe is present with optional facts absent; this gated candidate preview is deferred.',
       },
     },
   },
@@ -134,8 +120,7 @@ export const PlatformClosed: Story = {
       },
     },
   },
-  play: async ({ canvasElement }) =>
-    expectCopy(canvasElement, /platform_closed/i),
+  play: async ({ canvasElement }) => expectCopy(canvasElement, /platform_closed/i),
 };
 
 export const SourcesUnavailable: Story = {
@@ -149,8 +134,7 @@ export const SourcesUnavailable: Story = {
       },
     },
   },
-  play: async ({ canvasElement }) =>
-    expectCopy(canvasElement, /semantic_not_ready/i),
+  play: async ({ canvasElement }) => expectCopy(canvasElement, /semantic_not_ready/i),
 };
 
 export const PrivateCandidate: Story = {
@@ -159,17 +143,14 @@ export const PrivateCandidate: Story = {
   parameters: {
     docs: {
       description: {
-        story:
-          'A private, fictional candidate is gated and deferred, and is indistinguishable from a missing page.',
+        story: 'A private, fictional candidate is gated and deferred, and is indistinguishable from a missing page.',
       },
     },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('This page is not available.');
-    expect(
-      canvas.queryByRole('heading', { name: 'Recipes' }),
-    ).not.toBeInTheDocument();
+    expect(canvas.queryByRole('heading', { name: 'Recipes' })).not.toBeInTheDocument();
   },
 };
 
@@ -187,19 +168,13 @@ export const MissingCandidate: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('This page is not available.');
-    expect(
-      canvas.queryByRole('heading', { name: 'Recipes' }),
-    ).not.toBeInTheDocument();
+    expect(canvas.queryByRole('heading', { name: 'Recipes' })).not.toBeInTheDocument();
   },
 };
 
 export const RecipeDetail: Story = {
   name: 'Candidate · recipe detail · gated preview · deferred',
-  render: () => (
-    <CandidatePage
-      path={recipePath('admitted', RECIPE_SUBJECT_IDS.apricotToast)}
-    />
-  ),
+  render: () => <CandidatePage path={recipePath('admitted', RECIPE_SUBJECT_IDS.apricotToast)} />,
   parameters: {
     docs: {
       description: {
