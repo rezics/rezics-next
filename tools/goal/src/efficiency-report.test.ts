@@ -45,10 +45,12 @@ function task(db: ReturnType<typeof openDb>, id: string, state: string, goal: st
   );
 }
 
-function measuredLines(productLines: number, sourceRevision: string) {
+function measuredLines(productLines: number, sourceRevision: string, webProductLines: number | null = null) {
   return {
     productLines,
     attribution: 'measured' as const,
+    webProductLines,
+    webAttribution: webProductLines === null ? ('unknown' as const) : ('measured' as const),
     sourceRevision,
     backfillProductLines: null,
     backfillAttribution: 'unknown' as const,
@@ -76,6 +78,7 @@ function runCaptureChild(databasePath: string, productLines: number, sourceRevis
       now: new Date('2026-10-31T02:15:00.000Z'),
       productLineMeasurement: {
         productLines: ${productLines}, attribution: 'measured',
+        webProductLines: null, webAttribution: 'unknown',
         sourceRevision: ${JSON.stringify(sourceRevision)}, backfillProductLines: null,
         backfillAttribution: 'unknown', backfillFromRevision: null, filterVersion: 'rezics-product-code-v1'
       }
@@ -215,7 +218,7 @@ test('an unfinished-hour preview leaves the later measured scheduled send availa
       now: new Date('2026-10-31T06:43:29.000Z'),
     });
     expect(preview).toContain(
-      'Product lines added in UTC bucket: unknown (attribution unknown; source revision unavailable;',
+      'Aggregate product lines added in UTC bucket: unknown (attribution unknown; source revision unavailable;',
     );
     expect(readFrozenHourlyEfficiencyReport(h.db, bucket)).toBeNull();
 
@@ -667,7 +670,7 @@ test('source-neutral propagation stays out of attribution while real and late la
       productLineMeasurement: firstMeasurement,
     });
     expect(first.snapshot.report).toContain(
-      `Product lines added in UTC bucket: 0 (attribution measured; dev@${firstMeasurement.sourceRevision}`,
+      `Aggregate product lines added in UTC bucket: 0 (attribution measured; dev@${firstMeasurement.sourceRevision}`,
     );
 
     writeFileSync(
@@ -769,7 +772,7 @@ test('source-neutral propagation stays out of attribution while real and late la
       'Landing identities: late-integration#1 at 2026-10-31T01:10:00.000Z (dev).',
     );
     expect(backfill.snapshot.report).toContain(
-      'Late integration backfill in this bucket: 3 additions newly visible since',
+      'Aggregate late integration backfill in this bucket: 3 additions newly visible since',
     );
     expect(backfill.snapshot.report).toContain('Late integrations remain visible in their integration bucket');
     expect(backfill.snapshot.observation.backfillProductLines).toBe(3);
@@ -795,6 +798,104 @@ test('source-neutral propagation stays out of attribution while real and late la
   }
 });
 
+test('Web campaign measures additions within its module roots and freezes below-target attribution', () => {
+  const h = fixture();
+  const repository = join(h.directory.path, 'web-dev');
+  const bucket = '2026-10-31T01:00:00.000Z';
+  try {
+    mkdirSync(join(repository, 'apps/web/src/pages'), { recursive: true });
+    mkdirSync(join(repository, 'apps/auth/src'), { recursive: true });
+    mkdirSync(join(repository, 'packages/ui/src/components'), { recursive: true });
+    mkdirSync(join(repository, 'packages/ui/src/fixtures'), { recursive: true });
+    mkdirSync(join(repository, 'services/kernel/src'), { recursive: true });
+    git(repository, ['init', '-q']);
+    git(repository, ['config', 'user.name', 'Goal report test']);
+    git(repository, ['config', 'user.email', 'goal-report@example.invalid']);
+    writeFileSync(join(repository, 'apps/web/src/pages/format.ts'), 'export const spacing = 1;\n');
+    writeFileSync(
+      join(repository, 'apps/web/src/pages/deleted.ts'),
+      'export const oldOne = 1;\nexport const oldTwo = 2;\nexport const oldThree = 3;\n',
+    );
+    git(repository, ['add', '.']);
+    git(repository, ['commit', '-q', '-m', 'baseline source'], {
+      GIT_AUTHOR_DATE: '2026-10-30T23:10:00Z',
+      GIT_COMMITTER_DATE: '2026-10-30T23:10:00Z',
+    });
+    git(repository, ['branch', '-M', 'dev']);
+
+    writeFileSync(
+      join(repository, 'apps/web/src/pages/home.tsx'),
+      'export const home = 1;\nexport const title = "Home";\n',
+    );
+    writeFileSync(join(repository, 'apps/auth/src/login.ts'), 'export const login = 1;\nexport const logout = 2;\n');
+    writeFileSync(
+      join(repository, 'packages/ui/src/components/button.tsx'),
+      'export const button = 1;\nexport const label = 2;\n',
+    );
+    writeFileSync(join(repository, 'packages/ui/src/fixtures/mock.ts'), 'a\nb\nc\nd\n');
+    writeFileSync(join(repository, 'services/kernel/src/route.ts'), 'a\nb\nc\n');
+    writeFileSync(join(repository, 'apps/web/src/pages/deleted.ts'), '');
+    git(repository, ['add', '-A']);
+    git(repository, ['commit', '-q', '-m', 'mixed Web and backend source'], {
+      GIT_AUTHOR_DATE: '2026-10-31T01:15:00Z',
+      GIT_COMMITTER_DATE: '2026-10-31T01:15:00Z',
+    });
+
+    writeFileSync(join(repository, 'apps/web/src/pages/format.ts'), 'export   const spacing    = 1;\n\n');
+    git(repository, ['add', '-A']);
+    git(repository, ['commit', '-q', '-m', 'format source'], {
+      GIT_AUTHOR_DATE: '2026-10-31T01:30:00Z',
+      GIT_COMMITTER_DATE: '2026-10-31T01:30:00Z',
+    });
+
+    const now = new Date('2026-10-31T02:00:00.000Z');
+    const measurement = measureProductLineObservation(repository, bucket, now);
+    expect(measurement).toMatchObject({
+      productLines: 10,
+      attribution: 'measured',
+      webProductLines: 6,
+      webAttribution: 'measured',
+      filterVersion: PRODUCT_LINE_FILTER_VERSION,
+    });
+    const capture = captureHourlyEfficiencyObservation(h.db, {
+      bucket,
+      now,
+      productLineMeasurement: measurement,
+      privateDuty: {
+        label: 'campaign',
+        runningTasks: 0,
+        stoppedTasks: 0,
+        readyBriefs: ' none',
+        allowance: 'unknown',
+        alarms: [],
+      },
+    });
+    expect(capture.snapshot.alerts).toContain('Web campaign is below the 50,000-line hourly target.');
+    expect(capture.snapshot.report).toContain(
+      'Web campaign product lines added in UTC bucket: 6 (attribution measured; target 50,000;',
+    );
+    expect(capture.snapshot.report).toContain(
+      'Web campaign target status: below target (50,000 additions per completed hour).',
+    );
+    expect(capture.snapshot.report).toContain('New product code: 10 lines (aggregate).');
+    expect(capture.snapshot.report).toContain('New Web product code: 6 lines (hourly campaign target 50,000).');
+    expect(capture.snapshot.report).not.toContain('stable target 20,000');
+    expect(capture.snapshot.report).not.toContain('Two-hour product code is below');
+
+    const retry = captureHourlyEfficiencyObservation(h.db, {
+      bucket,
+      now: new Date('2026-10-31T02:20:00.000Z'),
+      productLineMeasurement: measuredLines(10, measurement.sourceRevision!, 7),
+    });
+    expect(retry.disposition).toBe('conflicting');
+    expect(retry.snapshot.report).toBe(capture.snapshot.report);
+    expect(retry.snapshot.observation).toMatchObject({ webProductLines: 6, webAttribution: 'measured' });
+    expect(retry.snapshot.conflict).toMatchObject({ webProductLines: 7, webAttribution: 'measured' });
+  } finally {
+    h.close();
+  }
+});
+
 test('two-hour product totals sum independent frozen observations', () => {
   const h = fixture();
   try {
@@ -811,7 +912,7 @@ test('two-hour product totals sum independent frozen observations', () => {
     expect(first.snapshot.rolling).toEqual({ productLines: null, attribution: 'unknown' });
     expect(second.snapshot.rolling).toEqual({ productLines: 7245, attribution: 'measured' });
     expect(second.snapshot.report).toContain(
-      'Product lines across this and the previous completed UTC hour: 7245 across two frozen observations.',
+      'Aggregate product lines across this and the previous completed UTC hour: 7245 across two frozen observations.',
     );
     expect(second.snapshot.report).not.toContain('10232');
     const stored = h.db
@@ -851,11 +952,18 @@ test('missing historical product evidence remains unknown after a measured retry
       bucket,
       now: new Date('2026-10-31T02:15:00.000Z'),
     });
-    expect(unknown.snapshot.observation).toMatchObject({ productLines: null, attribution: 'unknown' });
+    expect(unknown.snapshot.observation).toMatchObject({
+      productLines: null,
+      attribution: 'unknown',
+      webProductLines: null,
+      webAttribution: 'unknown',
+    });
     expect(unknown.snapshot.rolling).toMatchObject({ productLines: null, attribution: 'unknown' });
     expect(unknown.snapshot.report).toContain(
-      'Product lines added in UTC bucket: unknown (attribution unknown; source revision unavailable',
+      'Aggregate product lines added in UTC bucket: unknown (attribution unknown; source revision unavailable',
     );
+    expect(unknown.snapshot.report).toContain('Web campaign target status: unknown (Web attribution unavailable).');
+    expect(unknown.snapshot.alerts).not.toContain('Web campaign is below the 50,000-line hourly target.');
 
     const retry = captureHourlyEfficiencyObservation(h.db, {
       bucket,

@@ -1297,30 +1297,35 @@ flow report. It joins timestamped integrations to task and attempt identities, n
 current waits, orphaned landings, promotion state, quarantines and shared tool incidents from their existing durable
 records. Missing source history is `unknown`; an empty counter is not inferred from missing evidence. Landing counts
 are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered
-product work.
+product work. The hourly code measure keeps all-product additions separate from Web campaign additions in the pinned
+completed bucket and reports Web attribution. The campaign boundary and target are owned by
+[delivery efficiency](../../docs/development/efficiency.md#output-and-flow). The report does not certify quality, so
+changed workflows, integrated source and published visual review remain part of delivery assessment.
 
 Decision: one `efficiency_report_deliveries` row is the immutable observation and report for a UTC bucket. The first
-capture stores report bytes/hash, product-line additions, pinned `dev` revision, half-open commit-date window, filter
-version, a separate revision-delta backfill count, attribution, rolling total and private-duty alerts atomically. A retry returns those bytes; a different metric
-or source revision reports `conflicting` and records the first competing attribution against the original report ref
-without rewriting the observation. Product-line totals use only stored measured
-observations, so a two-hour total is unknown when either bucket is missing or unknown. Newly visible older commits are
-reported as backfill from the prior captured source revision and excluded from measured throughput. Late integration events appear
-in their integration bucket and never revise measured throughput. Reads use the bucket primary key and at
-most the preceding bucket. The original 2,979 and 4,266 values and 7,245 observed sum are retained here as unassigned
-history: no permitted original delivery source provided exact UTC labels or provenance, so no bucket is fabricated
-and 10,232 is not used.
+capture stores report bytes/hash, aggregate and Web product-line additions, pinned `dev` revision, half-open
+commit-date window, filter version, a separate aggregate revision-delta backfill count, attribution, aggregate rolling
+total and private-duty alerts atomically. A retry returns those bytes; a different metric or source revision reports
+`conflicting` and records the first competing attribution against the original report ref without rewriting the
+observation. Aggregate rolling totals use only stored measured observations and remain informational during the Web
+campaign. Newly visible older commits are reported as aggregate backfill from the prior captured source revision and
+excluded from measured throughput. Late integration events appear in their integration bucket and never revise
+measured throughput. Reads use the bucket primary key and at most the preceding bucket. The original 2,979 and 4,266
+values and 7,245 observed sum are retained here as unassigned history: no permitted original delivery source provided
+exact UTC labels or provenance, so no bucket is fabricated and 10,232 is not used.
 
 Decision: Native attribution excludes only newly reachable side history from first-parent merges whose tree exactly
-matches their first parent; source-bearing merges and later landings remain countable, incomplete history is unknown,
-and the path filter advances to v2.
+matches their first parent; source-bearing merges and later landings remain countable, incomplete history is unknown.
+Filter v3 keeps aggregate output and adds source-only Web counts from the boundary in
+[delivery efficiency](../../docs/development/efficiency.md#output-and-flow), excluding fixtures and formatting-only
+additions.
 
 The private duty keeps its existing hourly sleep boundary, inbox alarm, and Telegram sender. After the source is
 promoted, the controller replaces the existing `.temp/goal/watch/hourly-report.sh` bridge in place at its ordinary
 post-send boundary. Remove its `lines()` helper and the `n=$(lines ...)` / `n2=$(lines ...)` calls. Keep its current
 `run`, `stop`, `ready`, allowance, and non-product alarm collection, then replace message construction and the direct
-Telegram send with this native call. Remove the old two-hour `$n2 < 20000` alarm; the native capture adds it only when
-both stored observations are measured:
+Telegram send with this native call. The native capture alerts only when measured Web additions in this completed hour
+are below the current campaign target; the all-product two-hour sum remains informational:
 
 ```bash
 duty_context=$(jq -cn \
