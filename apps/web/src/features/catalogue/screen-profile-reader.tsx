@@ -502,7 +502,7 @@ export function ScreenProfileOverview({
   context,
   realm,
   viewerKey,
-  readerSpoilerLevel = 0,
+  readerSpoilerLevel,
 }: {
   locale: string;
   compact?: boolean;
@@ -524,6 +524,14 @@ export function ScreenProfileOverview({
     observationStore.getServerSnapshot,
   );
   const instance = useId();
+  // The first setting prepares disclosure; subsequent observations replace the reading.
+  const preference = useRef({ value: readerSpoilerLevel, prepared: readerSpoilerLevel !== undefined, revision: 0 });
+  if (preference.current.value !== readerSpoilerLevel) {
+    if (preference.current.prepared) preference.current.revision += 1;
+    preference.current.value = readerSpoilerLevel;
+    preference.current.prepared ||= readerSpoilerLevel !== undefined;
+  }
+  const disclosure = readerSpoilerLevel ?? 0;
   const observedSubject = useRef(publicRead.subject);
   const observationGeneration = useRef(0);
   if (observedSubject.current !== publicRead.subject) {
@@ -555,7 +563,7 @@ export function ScreenProfileOverview({
     selectedRealm,
     viewerKey ?? '',
     locale,
-    readerSpoilerLevel,
+    preference.current.revision,
     screenCurrentReturnValue(location.searchStr),
     observation.state,
     observation.state === 'signed-in'
@@ -661,7 +669,7 @@ export function ScreenProfileOverview({
     selectedRealm,
     viewerKey ?? '',
     locale,
-    readerSpoilerLevel,
+    preference.current.revision,
     fullAddress,
     observation.state,
     observation.state === 'signed-in'
@@ -696,7 +704,9 @@ export function ScreenProfileOverview({
     if (params.has('screenSelection') || params.has('via')) return;
     const occurrence =
       returnVisit.occurrence && currentPublic ? statementOf(currentPublic, returnVisit.occurrence) : undefined;
-    const visibleOccurrence = occurrence && spoilerLevel(occurrence) <= readerSpoilerLevel ? occurrence : undefined;
+    const visibleOccurrence = occurrence && spoilerLevel(occurrence) <= disclosure ? occurrence : undefined;
+    // Do not consume an exact return while its disclosure setting is still preparing.
+    if (occurrence && !visibleOccurrence && readerSpoilerLevel === undefined) return;
     const target =
       document.getElementById(
         visibleOccurrence
@@ -715,6 +725,7 @@ export function ScreenProfileOverview({
     currentPublic,
     publicRead.subject.id,
     readerSpoilerLevel,
+    disclosure,
     location.searchStr,
   ]);
   const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
@@ -722,7 +733,12 @@ export function ScreenProfileOverview({
     cursorIntent.kind === 'invalid'
       ? { ok: false, reason: 'stale' }
       : (query.data?.episodes ?? (query.isError ? { ok: false, reason: 'unavailable' } : undefined));
-  const episodeSourceKey = JSON.stringify([profileSourceKey, release ? releaseDigest(release) : '']);
+  // Pending windows replace their rows, not the last admitted definition identity.
+  const episodeDefinition = useRef({ source: profileSourceKey, digest: publicRead.subject.release });
+  if (episodeDefinition.current.source !== profileSourceKey)
+    episodeDefinition.current = { source: profileSourceKey, digest: publicRead.subject.release };
+  if (release) episodeDefinition.current.digest = releaseDigest(release);
+  const episodeSourceKey = JSON.stringify([profileSourceKey, episodeDefinition.current.digest]);
   const settledKey = JSON.stringify([query.dataUpdatedAt, query.errorUpdatedAt, query.fetchStatus, query.failureCount]);
   const directReturn = screenEpisodeReturn(location.searchStr, locale, visitReturn);
   const episodeVisit = useScreenEpisodeVisit({
@@ -735,6 +751,7 @@ export function ScreenProfileOverview({
     ...(episodeRead ? { read: episodeRead } : {}),
     loading: query.isPending || query.isFetching,
     settledKey,
+    ...(readerSpoilerLevel !== undefined ? { readerSpoilerLevel } : {}),
     ...(directReturn ? { directReturn } : {}),
   });
   return (
@@ -751,7 +768,7 @@ export function ScreenProfileOverview({
       {...(query.isPending || query.isFetching ? { episodeLoading: true } : {})}
       onEpisodeRetry={() => void query.refetch()}
       episodeOrigin={{ pathname: location.pathname, searchStr: location.searchStr, hash: location.hash }}
-      readerSpoilerLevel={readerSpoilerLevel}
+      readerSpoilerLevel={disclosure}
       episodeVisitKey={`${episodeSourceKey}:${pageKey}:${settledKey}`}
       episodeVisit={episodeVisit}
       link={link}

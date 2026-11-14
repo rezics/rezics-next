@@ -244,6 +244,24 @@ test('spoiler membership titles stay out of the tree and unsupported membership 
   expect(html).toContain('Show spoilers');
   expect(html).not.toContain('Secret title');
   expect(html).not.toContain(`/en/subjects/${episodeId}`);
+  const prepared = renderToStaticMarkup(
+    bound(
+      <ScreenEpisodeList
+        locale="en"
+        read={spoiled}
+        release={profile.release}
+        readerSpoilerLevel={2}
+        origin={{
+          pathname: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory',
+          searchStr: `?screenSelection=${episodeMembership}`,
+        }}
+      />,
+    ),
+  );
+  expect(prepared).toContain('Secret title');
+  expect(prepared).toContain(`/en/subjects/${episodeId}`);
+  expect(prepared).toContain(`screen-episode-evidence-${episodeMembership}`);
+  expect(prepared).toContain('https://example.invalid/source');
 
   let requests = 0;
   const noMembershipRelease = { ...profile.release, properties: {} } as typeof profile.release;

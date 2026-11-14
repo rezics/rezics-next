@@ -1173,7 +1173,7 @@ export function SubjectPage({
           {...(page.context?.id ? { context: page.context.id } : {})}
           {...(realm ? { realm } : {})}
           viewerKey={page.requestedReader ?? null}
-          readerSpoilerLevel={reader?.spoilerLevel ?? 0}
+          {...(reader && reader !== defaultReader ? { readerSpoilerLevel: reader.spoilerLevel } : {})}
         />
       ) : null}
     </>

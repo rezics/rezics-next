@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement as h } from 'react';
+import { act, createElement as h, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import type { SubjectRead } from '@rezics/client';
@@ -19,6 +19,9 @@ let responseContext = '00000000-0000-4000-8000-000000000906';
 let nativeSubject: SubjectRead;
 let echoContext = false;
 let pendingNative: (() => Promise<SubjectRead>) | undefined;
+let episodeCursors: (string | undefined)[] = [];
+let episodePage: unknown;
+let pendingEpisodes: (() => Promise<unknown>) | undefined;
 const digest = definitions.digest;
 const subjectId = '00000000-0000-4000-8000-000000000901';
 const realmId = '00000000-0000-4000-8000-000000000902';
@@ -27,6 +30,12 @@ const contextId = '00000000-0000-4000-8000-000000000906';
 const release = definitions.release as Release;
 const fakeClient = {
   subjects: ({ id }: { id: string }) => ({
+    links: {
+      get: async ({ query }: { query: { cursor?: string } }) => {
+        episodeCursors.push(query.cursor);
+        return { status: 200, data: pendingEpisodes ? await pendingEpisodes() : episodePage };
+      },
+    },
     get: async (options?: { query?: { context?: string }; fetch?: RequestInit }) => {
       queryContexts.push(options?.query?.context ?? 'missing-context');
       const snapshot = pendingNative && options?.query?.context ? await pendingNative() : nativeSubject;
@@ -370,20 +379,26 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     occurrence,
   };
   const rootRoute = createRootRoute({ component: Outlet });
+  let prepare!: (value: number | undefined) => void;
   const publicRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/en/subjects/$id/$slug',
-    component: () =>
-      h(
+    component: () => {
+      const [preference, setPreference] = useState<number>();
+      prepare = setPreference;
+      return h(
         ScreenReadingBoundary,
         null,
         h(ScreenProfileOverview, {
+          key: nativeSubject.subject.type,
           locale: 'en',
           public: nativeSubject,
           context: contextId,
           realm: realmId,
+          ...(preference !== undefined ? { readerSpoilerLevel: preference } : {}),
         }),
-      ),
+      );
+    },
   });
   const correctionRoute = installed.update({
     getParentRoute: () => rootRoute,
@@ -456,7 +471,18 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
 
     const returnHref = link(ui.m.screen_visit_return())!.getAttribute('href')!;
     const beforeReturn = queryContexts.length;
+    let resolvePrepared!: (read: SubjectRead) => void;
+    pendingNative = () =>
+      new Promise((resolve) => {
+        resolvePrepared = resolve;
+      });
     await go(returnHref);
+    const preparingCalls = queryContexts.length;
+    await act(async () => prepare(2));
+    expect(queryContexts.length).toBe(preparingCalls);
+    pendingNative = undefined;
+    await act(async () => resolvePrepared(nativeSubject));
+    await settle();
     expect(queryContexts.length).toBeGreaterThan(beforeReturn);
     expect(router.state.location.searchStr).toContain(`realm=${realmId}`);
     expect(ui.window.document.activeElement?.id).toBe(contract.screenCurrentInspectionId(statement.id));
@@ -553,8 +579,112 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     await settle();
     expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).not.toBeNull();
     expect(ui.window.document.activeElement?.id).not.toBe(contract.screenCurrentInspectionId(statement.id));
+
+    // Ready concealed returns wait for first settings, then retire on real replacement/ABA.
+    await go(contract.screenCurrentVisitHref(entry.pathname, visit)!);
+    nativeSubject.subject.statements[property]![0]!.qualifiers = [
+      {
+        property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+        value: { type: 'value', content: { amount: '+2', unit: '1' } },
+      },
+    ] as typeof statement.qualifiers;
+    await go(returnHref);
+    const readyCalls = queryContexts.length;
+    expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).toBeNull();
+    await act(async () => prepare(2));
+    expect(queryContexts.length).toBe(readyCalls);
+    expect(ui.window.document.activeElement?.id).toBe(contract.screenCurrentInspectionId(statement.id));
+    for (const level of [0, 2]) {
+      await act(async () => prepare(level));
+      await settle();
+      expect(queryContexts.length).toBeGreaterThan(readyCalls);
+      expect(ui.window.document.activeElement?.id).not.toBe(contract.screenCurrentInspectionId(statement.id));
+    }
+
+    // The same mounted caller retains a native continuation and its Previous address during preparation.
+    const membershipId = '00000000-0000-4000-8000-000000000912';
+    const episodeId = '00000000-0000-4000-8000-000000000913';
+    nativeSubject = { ...nativeSubject, subject: { ...nativeSubject.subject, type: 'schema:TVSeries' } };
+    episodePage = {
+      next: 'opaque-window',
+      links: [
+        {
+          subject: episodeId,
+          property: 'schema:isPartOf',
+          statement: membershipId,
+          summary: { id: episodeId, type: 'schema:Episode', label: { value: 'Secret episode', language: 'en' } },
+          assertion: {
+            ...statement,
+            id: membershipId,
+            property: { id: 'schema:isPartOf', data_type: 'wikibase-item' },
+            value: { type: 'value', content: subjectId },
+            qualifiers: [],
+          },
+        },
+      ],
+    };
+    episodeCursors = [];
+    await act(async () => prepare(undefined));
+    await settle();
+    let resolveWindow!: (value: unknown) => void;
+    pendingEpisodes = () =>
+      new Promise((resolve) => {
+        resolveWindow = resolve;
+      });
+    const continuation = link(ui.m.screen_episode_reader_continue())!;
+    continuation.addEventListener('click', (event) => event.preventDefault(), { once: true });
+    await act(async () => {
+      continuation.click();
+    });
+    await go(continuation.getAttribute('href')!);
+    const windowCalls = episodeCursors.length;
+    await act(async () => prepare(0));
+    expect(episodeCursors.length).toBe(windowCalls);
+    pendingEpisodes = undefined;
+    await act(async () => resolveWindow(episodePage));
+    await settle();
+    expect(episodeCursors).toEqual([undefined, 'opaque-window']);
+    expect(link(ui.m.screen_episode_reader_previous())).toBeDefined();
+    expect(ui.host.textContent).toContain('Secret episode');
+    await act(async () => prepare(0));
+    expect(episodeCursors.length).toBe(windowCalls);
+    await act(async () => prepare(2));
+    await settle();
+    expect(episodeCursors.length).toBe(windowCalls + 1);
+    expect(link(ui.m.screen_episode_reader_previous())).toBeUndefined();
+
+    const activate = async (anchor: NonNullable<ReturnType<typeof link>>) => {
+      anchor.addEventListener('click', (event) => event.preventDefault(), { once: true });
+      await act(async () => {
+        anchor.click();
+      });
+      return anchor.getAttribute('href')!;
+    };
+    const episodeHref = await activate(link('Secret episode')!);
+    const series = nativeSubject;
+    nativeSubject = { ...series, subject: { ...series.subject, id: episodeId, type: 'schema:Episode' } };
+    await go(episodeHref);
+    await act(async () => prepare(undefined));
+    await settle();
+    const exactReturn = await activate(link(ui.m.screen_episode_reader_return())!);
+    nativeSubject = series;
+    const page = episodePage as { links: { assertion: typeof statement }[] };
+    page.links[0]!.assertion.qualifiers = nativeSubject.subject.statements[property]![0]!.qualifiers;
+    await go(exactReturn);
+    const returnCalls = episodeCursors.length;
+    expect(ui.host.textContent).not.toContain('Secret episode');
+    expect(ui.window.document.activeElement?.id).not.toBe(`screen-episode-entry-${membershipId}`);
+    await act(async () => prepare(2));
+    expect(episodeCursors.length).toBe(returnCalls);
+    expect(ui.host.textContent).toContain('Secret episode');
+    expect(ui.window.document.activeElement?.id).toBe(`screen-episode-entry-${membershipId}`);
+    await act(async () => prepare(0));
+    await settle();
+    expect(ui.host.textContent).not.toContain('Secret episode');
+    expect(ui.window.document.activeElement?.id).not.toBe(`screen-episode-entry-${membershipId}`);
   } finally {
     pendingNative = undefined;
+    pendingEpisodes = undefined;
     echoContext = false;
     await ui.cleanup();
     client.clear();

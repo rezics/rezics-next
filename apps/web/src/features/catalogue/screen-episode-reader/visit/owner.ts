@@ -3,6 +3,7 @@ import { addressLease, type AddressLease } from '../../../../session';
 import { useScreenReadingApplication } from '../../screen-reading-application';
 import type { ScreenVisitReturn } from '../../screen-reading-port';
 import type { ScreenEpisodeRead } from '../read';
+import { spoilerLevel, type Stmt } from '../../../pages/shared';
 import {
   SCREEN_EPISODE_VISIT_LIMIT,
   screenEpisodeCursorIntent,
@@ -208,6 +209,7 @@ export function useScreenEpisodeVisit({
   loading,
   settledKey,
   directReturn,
+  readerSpoilerLevel,
 }: {
   sourceKey: string;
   pageKey: string;
@@ -219,6 +221,7 @@ export function useScreenEpisodeVisit({
   loading: boolean;
   settledKey: string;
   directReturn?: { href: string; membershipId: string };
+  readerSpoilerLevel?: number;
 }): ScreenEpisodeVisit {
   const { visitReturn } = useScreenReadingApplication();
   const currentHref = routeAddress(origin);
@@ -333,13 +336,18 @@ export function useScreenEpisodeVisit({
   useLayoutEffect(() => {
     const ticket = focus.current;
     if (loading || !ticket || ticket.source !== sourceKey || ticket.target !== currentAddress) return;
+    const selected =
+      ticket.membership && read?.ok
+        ? read.entries.find((entry) => entry.membershipId === ticket.membership)
+        : undefined;
+    const disclosed =
+      selected?.statement && spoilerLevel(selected.statement as unknown as Stmt) <= (readerSpoilerLevel ?? 0);
+    if (selected?.statement && !disclosed && readerSpoilerLevel === undefined) return;
     focus.current = undefined;
     if (!ticket.lease.current()) return;
     const active = document.activeElement;
     if (active !== ticket.element && !(ticket.allowBody && active === document.body)) return;
-    const selected =
-      ticket.membership && read?.ok && read.entries.some((entry) => entry.membershipId === ticket.membership);
-    const admittedEntry = selected
+    const admittedEntry = disclosed
       ? document.getElementById(screenEpisodeEntryElementId(ticket.membership!) ?? '')
       : null;
     const element =
@@ -349,7 +357,7 @@ export function useScreenEpisodeVisit({
         : (document.querySelector('[data-screen-episode-recovery]') ??
           document.querySelector('[data-screen-episode-list]')));
     (element as HTMLElement | null)?.focus();
-  }, [loading, read, settledKey, sourceKey, currentAddress]);
+  }, [loading, read, settledKey, sourceKey, currentAddress, readerSpoilerLevel]);
 
   const currentDescriptor = addresses.find((address) => address.key === currentAddress);
   const pendingPrevious =
