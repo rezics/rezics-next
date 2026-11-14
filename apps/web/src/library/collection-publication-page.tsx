@@ -1,11 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItem } from '@rezics/ui/content-item';
-import { useLayoutEffect, useState, useRef } from 'react';
+import { useLayoutEffect, useState, useRef, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useCollectionOwnerCurrent } from './collection-owner-current';
-import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
 import { QueryPublicationView } from './saved-query-publication/query-view';
 import { publishQueryCollection, readQueryPublication } from './saved-query-publication/query';
@@ -17,6 +16,10 @@ import {
   publicationReview,
   type PublicationReview,
 } from './collection-publication-review';
+import {
+  CollectionPublicationWorkspace,
+  type CollectionPublicationWorkspaceMode,
+} from './collection-publication-workspace';
 import {
   collectionPublicationQuery,
   publicationCandidates,
@@ -65,6 +68,9 @@ type PublicationViewProps = {
   canPublish?: () => boolean;
   captureSubmit?: () => PublicationSubmit | null;
   responseTimeoutMs?: number;
+  mode?: CollectionPublicationWorkspaceMode;
+  modeNavigation?: ReactNode;
+  queryAction?: ReactNode;
 };
 
 /** Authenticated read identity owns selection; mutation credentials never identify the originating intent. */
@@ -114,6 +120,9 @@ function PublicationIntentView({
   captureSubmit,
   responseTimeoutMs = COLLECTION_PUBLICATION_WRITE_RESPONSE_MS,
   isOwnerCurrent = isCurrent,
+  mode = 'selected',
+  modeNavigation,
+  queryAction,
 }: PublicationViewProps) {
   const source = page.source;
   const ready = source.state === 'ready';
@@ -225,7 +234,7 @@ function PublicationIntentView({
       input = {
         collectionId: page.address.id,
         revision: Math.max(origin.complete?.collection.revision ?? 0, source.revision),
-        subjectIds: [...origin.selected],
+        subjectIds: [...origin.selected].sort(),
         idempotencyKey: crypto.randomUUID(),
       };
       review = publicationReview(source.page, input.revision, origin.selected);
@@ -316,201 +325,182 @@ function PublicationIntentView({
     </>
   );
 
-  return (
-    <article className="mx-auto w-full min-w-0 max-w-6xl space-y-6 px-4 py-6 text-foreground sm:py-8" aria-busy={busy}>
-      <header className="space-y-3">
-        <a className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4" href={base}>
-          {m.library_publication_back()}
-        </a>
-        <PageHeading>{m.library_publication_heading()}</PageHeading>
-        {ready ? <p className="text-lg font-medium [overflow-wrap:anywhere]">{source.page.title}</p> : null}
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
-          {m.collection_workbench_publication_help()}
-        </p>
-      </header>
-      {!ready ? (
-        <div className="space-y-3">
-          <p role="alert">
-            {source.state === 'denied'
-              ? m.library_publication_denied()
-              : source.state === 'unsupported'
-                ? m.library_publication_unsupported()
-                : source.state === 'preparing'
-                  ? m.library_dynamic_preparing()
-                  : m.library_publication_unavailable()}
-          </p>
-          <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_previous()}</p>
-          <SavedQueryPublishedMembership published={published} />
-          {unknown && review ? <CollectionPublicationReview review={review} /> : null}
-          {feedback}
+  const selection = ready ? (
+    <>
+      <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_choose()}</p>
+      {candidates.length ? (
+        <ul className="min-w-0 space-y-3" data-publication-candidates>
+          {candidates.map((member) => {
+            const id = member.subject!.id;
+            const checked = selected.includes(id);
+            const title = displayLibraryTitle(member.subject!.label, getLocale());
+            return (
+              <ContentItem
+                key={id}
+                className={`min-w-0 rounded-xl border p-3 [overflow-wrap:anywhere] ${checked ? 'border-primary/50 bg-primary/5' : 'border-border bg-card'}`}
+                title={title.text}
+                {...(title.lang ? { titleLang: title.lang } : {})}
+                headingLevel={3}
+                href={subjectHref({ id, label: title.text }, getLocale()).href}
+                visual={<SubjectCover subject={member.subject} ratio={ratio} />}
+                metadata={<CollectionMemberDetails member={member} listPresentations={source.page.listPresentations} />}
+                trailing={
+                  <label className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
+                    <input
+                      type="checkbox"
+                      className="size-5 shrink-0 cursor-pointer accent-primary"
+                      checked={checked}
+                      aria-label={m.library_publication_select({
+                        title:
+                          typeof member.subject!.label === 'string'
+                            ? member.subject!.label
+                            : member.subject!.label.value,
+                      })}
+                      disabled={locked || (!checked && selected.length >= 100)}
+                      onChange={() => {
+                        if (!isCurrent()) return;
+                        update((previous) => {
+                          if (previous.busy || previous.attempt) return previous;
+                          const selected = previous.selected.includes(id)
+                            ? previous.selected.filter((value) => value !== id)
+                            : previous.selected.length < 100
+                              ? [...previous.selected, id]
+                              : previous.selected;
+                          return { ...previous, selected, confirmed: false, result: null };
+                        });
+                      }}
+                    />
+                  </label>
+                }
+              />
+            );
+          })}
+        </ul>
+      ) : (
+        <p role="status">{m.library_publication_no_disclosed()}</p>
+      )}
+    </>
+  ) : undefined;
+
+  const reviewContent = ready ? (
+    <>
+      <p id="publication-count" className="font-medium" role="status">
+        {quantityText(selected.length, m.library_publication_count_one, m.library_publication_count)}
+      </p>
+      <p id="publication-bounds" className="max-w-prose text-sm text-muted-foreground">
+        {m.library_publication_page_only()}
+      </p>
+      <p id="publication-replacement" className="max-w-prose text-sm">
+        {m.library_publication_previous()}
+      </p>
+      <SavedQueryAcceptedMeaning meaning={acceptedMeaningFromPage(source.page, source.revision)} />
+      {review ? <CollectionPublicationReview review={review} /> : null}
+      <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
+        <input
+          type="checkbox"
+          className="mt-1 size-5 shrink-0 accent-primary"
+          checked={confirmed}
+          disabled={locked}
+          aria-describedby="publication-count publication-bounds publication-replacement publication-privacy"
+          onChange={(event) => {
+            if (!isCurrent()) return;
+            const confirmed = event.target.checked;
+            update((previous) => (previous.busy || previous.attempt ? previous : { ...previous, confirmed }));
+          }}
+        />
+        <span className="min-w-0 break-words">
+          {selected.length
+            ? quantityText(selected.length, m.library_publication_confirm_one, m.library_publication_confirm)
+            : m.library_publication_confirm_empty()}
+        </span>
+      </label>
+      <p id="publication-privacy" className="max-w-prose text-sm text-muted-foreground">
+        {m.library_publication_privacy()}
+      </p>
+      {feedback}
+      <div className="flex min-w-0 flex-wrap gap-3 border-t border-border pt-4">
+        <Button
+          type="button"
+          className="h-auto min-h-11 w-full max-w-full whitespace-normal px-4 py-3 text-start"
+          aria-describedby="publication-bounds publication-replacement publication-privacy"
+          disabled={!confirmed || busy || refused || (unknown ? !state.attempt || !isOwnerCurrent() : !canPublish())}
+          onClick={() => void publish()}
+        >
+          {unknown ? m.library_publication_retry() : m.library_publication_publish()}
+        </Button>
+        {onReload && !busy ? (
           <Button
             type="button"
+            variant="outline"
             className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
-            disabled={!unknown || busy || !isOwnerCurrent()}
-            onClick={() => void publish()}
+            onClick={reload}
           >
-            {unknown ? m.library_publication_retry() : m.library_publication_publish()}
+            {m.library_collection_reload()}
           </Button>
-          {onReload && !busy ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
-              onClick={reload}
-            >
-              {m.library_collection_reload()}
-            </Button>
-          ) : null}
-        </div>
-      ) : (
-        <>
-          <section
-            className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]"
-            aria-labelledby="publication-selection"
-            aria-busy={busy}
-            data-publication-current
-          >
-            <div className="min-w-0 space-y-4" data-publication-canvas>
-              <h2 id="publication-selection" className="text-xl font-semibold">
-                {m.library_publication_current()}
-              </h2>
-              <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_choose()}</p>
-              {candidates.length ? (
-                <ul className="min-w-0 space-y-3" data-publication-candidates>
-                  {candidates.map((member) => {
-                    const id = member.subject!.id;
-                    const checked = selected.includes(id);
-                    const title = displayLibraryTitle(member.subject!.label, getLocale());
-                    return (
-                      <ContentItem
-                        key={id}
-                        className={`min-w-0 rounded-xl border p-3 [overflow-wrap:anywhere] ${checked ? 'border-primary/50 bg-primary/5' : 'border-border bg-card'}`}
-                        title={title.text}
-                        {...(title.lang ? { titleLang: title.lang } : {})}
-                        headingLevel={3}
-                        href={subjectHref({ id, label: title.text }, getLocale()).href}
-                        visual={<SubjectCover subject={member.subject} ratio={ratio} />}
-                        metadata={
-                          <CollectionMemberDetails member={member} listPresentations={source.page.listPresentations} />
-                        }
-                        trailing={
-                          <label className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
-                            <input
-                              type="checkbox"
-                              className="size-5 shrink-0 cursor-pointer accent-primary"
-                              checked={checked}
-                              aria-label={m.library_publication_select({
-                                title:
-                                  typeof member.subject!.label === 'string'
-                                    ? member.subject!.label
-                                    : member.subject!.label.value,
-                              })}
-                              disabled={locked || (!checked && selected.length >= 100)}
-                              onChange={() => {
-                                if (!isCurrent()) return;
-                                update((previous) => {
-                                  if (previous.busy || previous.attempt) return previous;
-                                  const selected = previous.selected.includes(id)
-                                    ? previous.selected.filter((value) => value !== id)
-                                    : previous.selected.length < 100
-                                      ? [...previous.selected, id]
-                                      : previous.selected;
-                                  return { ...previous, selected, confirmed: false, result: null };
-                                });
-                              }}
-                            />
-                          </label>
-                        }
-                      />
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p role="status">{m.library_publication_no_disclosed()}</p>
-              )}
-            </div>
-            <div
-              role="group"
-              aria-labelledby="publication-count"
-              className="min-w-0 space-y-4 rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-4 sm:p-5"
-              data-publication-confirmation
-            >
-              <h2 className="text-lg font-semibold">{m.collection_workbench_review()}</h2>
-              <p id="publication-count" className="font-medium" role="status">
-                {quantityText(selected.length, m.library_publication_count_one, m.library_publication_count)}
-              </p>
-              <p id="publication-bounds" className="max-w-prose text-sm text-muted-foreground">
-                {m.library_publication_page_only()}
-              </p>
-              <p id="publication-replacement" className="max-w-prose text-sm">
-                {m.library_publication_previous()}
-              </p>
-              <SavedQueryAcceptedMeaning
-                meaning={ready ? acceptedMeaningFromPage(source.page, source.revision) : null}
-              />
-              {review ? <CollectionPublicationReview review={review} /> : null}
-              <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
-                <input
-                  type="checkbox"
-                  className="mt-1 size-5 shrink-0 accent-primary"
-                  checked={confirmed}
-                  disabled={locked}
-                  aria-describedby="publication-bounds publication-replacement publication-privacy"
-                  onChange={(event) => {
-                    if (!isCurrent()) return;
-                    const confirmed = event.target.checked;
-                    update((previous) => (previous.busy || previous.attempt ? previous : { ...previous, confirmed }));
-                  }}
-                />
-                <span className="min-w-0 break-words">
-                  {selected.length
-                    ? quantityText(selected.length, m.library_publication_confirm_one, m.library_publication_confirm)
-                    : m.library_publication_confirm_empty()}
-                </span>
-              </label>
-              <p id="publication-privacy" className="max-w-prose text-sm text-muted-foreground">
-                {m.library_publication_privacy()}
-              </p>
-              {feedback}
-              <div className="flex min-w-0 flex-wrap gap-3 border-t border-border pt-4">
-                <Button
-                  type="button"
-                  className="h-auto min-h-11 w-full max-w-full whitespace-normal px-4 py-3 text-start"
-                  aria-describedby="publication-bounds publication-replacement publication-privacy"
-                  disabled={
-                    !confirmed || busy || refused || (unknown ? !state.attempt || !isOwnerCurrent() : !canPublish())
-                  }
-                  onClick={() => void publish()}
-                >
-                  {unknown ? m.library_publication_retry() : m.library_publication_publish()}
-                </Button>
-                {onReload && !busy ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
-                    onClick={reload}
-                  >
-                    {m.library_collection_reload()}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          </section>
-          <SavedQueryPublishedMembership published={published} />
-          {source.page.next && !locked ? (
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">{m.library_publication_more_pages()}</p>
-              <a
-                className="inline-flex min-h-11 items-center text-primary underline"
-                href={`${base}/publish?${new URLSearchParams({ cursor: source.page.next })}`}
-              >
-                {m.library_publication_next()}
-              </a>
-            </div>
-          ) : null}
-        </>
-      )}
+        ) : null}
+      </div>
+    </>
+  ) : undefined;
+
+  const unavailable = !ready ? (
+    <div className="space-y-3">
+      <p role="alert">
+        {source.state === 'denied'
+          ? m.library_publication_denied()
+          : source.state === 'unsupported'
+            ? m.library_publication_unsupported()
+            : source.state === 'preparing'
+              ? m.library_dynamic_preparing()
+              : m.library_publication_unavailable()}
+      </p>
+      <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_previous()}</p>
+      {unknown && review ? <CollectionPublicationReview review={review} /> : null}
+      {feedback}
+      <Button
+        type="button"
+        className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+        disabled={!unknown || busy || !isOwnerCurrent()}
+        onClick={() => void publish()}
+      >
+        {unknown ? m.library_publication_retry() : m.library_publication_publish()}
+      </Button>
+      {onReload && !busy ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+          onClick={reload}
+        >
+          {m.library_collection_reload()}
+        </Button>
+      ) : null}
+    </div>
+  ) : undefined;
+
+  const continuation = ready && source.page.next && !locked ? (
+    <div className="space-y-1" data-publication-continuation>
+      <p className="text-sm text-muted-foreground">{m.library_publication_more_pages()}</p>
+      <a
+        className="inline-flex min-h-11 items-center text-primary underline"
+        href={`${base}/publish?${new URLSearchParams({ cursor: source.page.next })}`}
+      >
+        {m.library_publication_next()}
+      </a>
+    </div>
+  ) : undefined;
+
+  const sourceIdentity = ready ? (
+    <div className="min-w-0 space-y-2" data-publication-source>
+      <p className="text-lg font-medium [overflow-wrap:anywhere]">{source.page.title}</p>
+      {mode === 'query' ? (
+        <SavedQueryAcceptedMeaning meaning={acceptedMeaningFromPage(source.page, source.revision)} />
+      ) : null}
+    </div>
+  ) : null;
+
+  const resultContent = (
+    <>
+      <SavedQueryPublishedMembership published={published} />
       {complete ? (
         <section className="space-y-2 border-t border-border pt-4" aria-label={m.library_publication_output()}>
           <h2 className="text-lg font-semibold">{m.library_publication_output()}</h2>
@@ -532,18 +522,81 @@ function PublicationIntentView({
           ) : null}
         </section>
       ) : null}
-      {ready ? (
-        <details className="max-w-prose text-sm text-muted-foreground" data-publication-details>
-          <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-            {m.library_publication_details()}
-          </summary>
-          <div className="space-y-2 pt-2">
-            <p>{m.library_publication_description()}</p>
-            <p>{m.library_publication_canonical()}</p>
-          </div>
-        </details>
+      {mode === 'query' && (state.attempt || result?.ok === false) ? (
+        <section className="space-y-3 border-t border-border pt-4" aria-labelledby="selected-attempt-review">
+          <h2 id="selected-attempt-review" className="text-lg font-semibold">
+            {m.collection_workbench_review()}
+          </h2>
+          <p className="font-medium" role="status">
+            {quantityText(
+              state.attempt?.input.subjectIds.length ?? selected.length,
+              m.library_publication_count_one,
+              m.library_publication_count,
+            )}
+          </p>
+          <p className="max-w-prose text-sm">{m.library_publication_previous()}</p>
+          {state.attempt ? <CollectionPublicationReview review={state.attempt.review} /> : null}
+          {feedback}
+          {unknown ? (
+            <Button
+              type="button"
+              className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+              disabled={busy || !isOwnerCurrent()}
+              onClick={() => void publish()}
+            >
+              {m.library_publication_retry()}
+            </Button>
+          ) : null}
+          {onReload && !busy ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+              onClick={reload}
+            >
+              {m.library_collection_reload()}
+            </Button>
+          ) : null}
+        </section>
       ) : null}
-    </article>
+    </>
+  );
+
+  return (
+    <CollectionPublicationWorkspace
+      mode={mode}
+      modeNavigation={modeNavigation}
+      backLink={
+        mode === 'selected' ? (
+          <a className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4" href={base}>
+            {m.library_publication_back()}
+          </a>
+        ) : undefined
+      }
+      sourceIdentity={sourceIdentity}
+      help={mode === 'selected' ? m.collection_workbench_publication_help() : undefined}
+      busy={busy}
+      sourceKey={sourceKey}
+      unavailable={unavailable}
+      selection={selection}
+      review={reviewContent}
+      queryAction={queryAction}
+      continuation={continuation}
+      result={resultContent}
+      details={
+        ready ? (
+          <details className="max-w-prose text-sm text-muted-foreground" data-publication-details>
+            <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              {m.library_publication_details()}
+            </summary>
+            <div className="space-y-2 pt-2">
+              <p>{m.library_publication_description()}</p>
+              <p>{m.library_publication_canonical()}</p>
+            </div>
+          </details>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -639,6 +692,36 @@ function CurrentPublicationPage({
             state: owner.isCurrent() && !query.isFetching && data?.source.state === 'denied' ? 'denied' : 'unavailable',
           },
         };
+  const mode: CollectionPublicationWorkspaceMode =
+    wholeQuery && page.source.state === 'ready' ? 'query' : 'selected';
+  const querySource = mode === 'query' && page.source.state === 'ready' ? page.source : null;
+  const modeNavigation = page.source.state === 'ready' ? (
+    <div
+      className="flex min-w-0 flex-wrap gap-2"
+      role="group"
+      aria-label={m.library_publication_heading()}
+      data-publication-mode-navigation
+    >
+      <Button
+        type="button"
+        className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+        variant={wholeQuery ? 'default' : 'outline'}
+        aria-pressed={wholeQuery}
+        onClick={() => setWholeQuery(true)}
+      >
+        {m.library_query_publication_heading()}
+      </Button>
+      <Button
+        type="button"
+        className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+        variant={!wholeQuery ? 'default' : 'outline'}
+        aria-pressed={!wholeQuery}
+        onClick={() => setWholeQuery(false)}
+      >
+        {m.library_publication_choose()}
+      </Button>
+    </div>
+  ) : undefined;
   return (
     <>
       {query.isFetching ? (
@@ -646,80 +729,58 @@ function CurrentPublicationPage({
           {m.library_publication_loading()}
         </div>
       ) : null}
-      {page.source.state === 'ready' ? (
-        <div
-          className="mx-auto flex w-full max-w-6xl flex-wrap gap-2 px-4 pt-4"
-          role="group"
-          aria-label={m.library_publication_heading()}
-        >
-          <Button
-            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
-            variant={wholeQuery ? 'default' : 'outline'}
-            aria-pressed={wholeQuery}
-            onClick={() => setWholeQuery(true)}
-          >
-            {m.library_query_publication_heading()}
-          </Button>
-          <Button
-            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
-            variant={!wholeQuery ? 'default' : 'outline'}
-            aria-pressed={!wholeQuery}
-            onClick={() => setWholeQuery(false)}
-          >
-            {m.library_publication_choose()}
-          </Button>
-        </div>
-      ) : null}
-      {wholeQuery && page.source.state === 'ready' ? (
-        <QueryPublicationView
-          key={JSON.stringify([subject, address.id, owner.lifetime])}
-          subject={subject}
-          collectionId={address.id}
-          revision={page.source.revision}
-          visibility={page.source.page.visibility}
-          isCurrent={owner.isOwnerCurrent}
-          canBegin={canPublish}
-          capture={() => {
-            const csrf = owner.credential();
-            if (!csrf || !owner.isCurrent()) return null;
-            return {
-              begin: (input) => publishQueryCollection({ data: input, headers: { 'X-CSRF-Token': csrf } }),
-              read: (input) => readQueryPublication({ data: input, headers: { 'X-CSRF-Token': csrf } }),
-            };
-          }}
-        />
-      ) : null}
-      <div hidden={wholeQuery && page.source.state === 'ready'}>
-        <CollectionPublicationPageView
-          page={page}
-          isCurrent={owner.isCurrent}
-          isOwnerCurrent={owner.isOwnerCurrent}
-          canPublish={canPublish}
-          captureSubmit={() => {
-            const csrf = owner.credential();
-            if (!csrf || !canPublish()) return null;
-            const send = publishSelectedCollection;
-            return (input) => send({ data: input, headers: { 'X-CSRF-Token': csrf } });
-          }}
-          submit={async (input) => {
-            const csrf = owner.credential();
-            if (!csrf || !canPublish()) return { ok: false, reason: 'denied' };
-            // Preserve the real outcome of a dispatched native write. Its view fences settlement by owner identity.
-            return publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': csrf } });
-          }}
-          {...(query.isFetching
-            ? {}
-            : {
-                onReload: () => {
-                  if (
-                    owner.isCurrent() &&
-                    client.getQueryState([...options.queryKey, owner.lifetime])?.fetchStatus !== 'fetching'
-                  )
-                    void query.refetch().catch(() => undefined);
-                },
-              })}
-        />
-      </div>
+      <CollectionPublicationPageView
+        page={page}
+        mode={mode}
+        modeNavigation={modeNavigation}
+        queryAction={
+          querySource ? (
+            <QueryPublicationView
+              key={JSON.stringify([subject, address.id, owner.lifetime])}
+              subject={subject}
+              collectionId={address.id}
+              revision={querySource.revision}
+              visibility={querySource.page.visibility}
+              isCurrent={owner.isOwnerCurrent}
+              canBegin={canPublish}
+              capture={() => {
+                const csrf = owner.credential();
+                if (!csrf || !owner.isCurrent()) return null;
+                return {
+                  begin: (input) => publishQueryCollection({ data: input, headers: { 'X-CSRF-Token': csrf } }),
+                  read: (input) => readQueryPublication({ data: input, headers: { 'X-CSRF-Token': csrf } }),
+                };
+              }}
+            />
+          ) : undefined
+        }
+        isCurrent={owner.isCurrent}
+        isOwnerCurrent={owner.isOwnerCurrent}
+        canPublish={canPublish}
+        captureSubmit={() => {
+          const csrf = owner.credential();
+          if (!csrf || !canPublish()) return null;
+          const send = publishSelectedCollection;
+          return (input) => send({ data: input, headers: { 'X-CSRF-Token': csrf } });
+        }}
+        submit={async (input) => {
+          const csrf = owner.credential();
+          if (!csrf || !canPublish()) return { ok: false, reason: 'denied' };
+          // Preserve the real outcome of a dispatched native write. Its view fences settlement by owner identity.
+          return publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': csrf } });
+        }}
+        {...(query.isFetching
+          ? {}
+          : {
+              onReload: () => {
+                if (
+                  owner.isCurrent() &&
+                  client.getQueryState([...options.queryKey, owner.lifetime])?.fetchStatus !== 'fetching'
+                )
+                  void query.refetch().catch(() => undefined);
+              },
+            })}
+      />
     </>
   );
 }
