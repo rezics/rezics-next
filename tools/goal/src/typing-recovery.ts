@@ -37,15 +37,15 @@ import {
   workerCheckHostBudgetRefusalReport,
   workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt,
   workerCheckHostWithdrawnRetryIsRecoverable,
-  workerCheckHostTerminalTypingFailure,
+  workerCheckHostTerminalSourceRepair,
 } from './worker-check-budget.ts';
 
 const WITHDRAWN_WEB_COMPILER = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
 
 /**
- * Release a queued source repair through the normal retry transaction only when the retained compiler failure is
- * current and every check has terminal custody. A stopped attempt needs its completed stop receipt; an ordinary
- * exited attempt additionally needs a matching accepted brief change and the captured branch head.
+ * Release a queued source repair through the normal retry transaction only for a current retained compiler failure
+ * or the exact supported setup defect, with terminal custody for every check. Stopped and exited attempts keep their
+ * existing stop, accepted-brief and captured-head requirements.
  */
 export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: AttemptRef): boolean {
   const { store, settings } = tasks;
@@ -156,7 +156,7 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
     )
       return false;
 
-    const proof = workerCheckHostTerminalTypingFailure({
+    const proofInput = {
       directory: workerCheckBudgetDirectory(settings.stateDirectory, task.id, ref.attempt),
       worktree: task.worktree,
       limit: workerCheckHostBudgetLimit(task, ref.attempt),
@@ -164,8 +164,8 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
       attempt: ref.attempt,
       checkIds: attempt.checks ?? [],
       ...(attempt.typingEvidencePending?.command ? { pendingCommand: attempt.typingEvidencePending.command } : {}),
-    });
-    if (!proof) return false;
+    };
+    if (!workerCheckHostTerminalSourceRepair(proofInput)) return false;
 
     if (retry.status === 'started')
       store.updateRetryIntent(ref, (current) => {

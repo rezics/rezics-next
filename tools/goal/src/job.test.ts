@@ -28,6 +28,7 @@ import {
   recordWorkerCheckTypingInputs,
   settleWorkerCheckHostBudget,
   workerCheckBudgetDirectory,
+  WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
 } from './worker-check-budget.ts';
 import type { Attempt, RetryIntent } from './types.ts';
 
@@ -75,6 +76,7 @@ async function typingRetryFixture(
   options: {
     exited?: boolean;
     kernelOutput?: boolean;
+    setupFailure?: 'migration' | 'generic' | 'spoofed';
     unknownCustody?: boolean;
     misclassified?: boolean;
     stale?: boolean;
@@ -85,6 +87,8 @@ async function typingRetryFixture(
   const exited = options.exited ?? false;
   const kernelOutput = options.kernelOutput ?? false;
   if (kernelOutput && !exited) throw new Error('Kernel output fixture models an exited compiler attempt');
+  if (options.setupFailure && (!exited || kernelOutput))
+    throw new Error('Migration setup fixture models an exited non-emitting compiler attempt');
   const brief = readFileSync(h.briefFile, 'utf8')
     .replace(/^goal: fixture$/m, 'goal: web')
     .replace(/^kind: implementation$/m, 'kind: interface');
@@ -125,14 +129,30 @@ async function typingRetryFixture(
     approaches: [],
   }));
 
-  const compiler = kernelOutput
-    ? ['sh', '-c', 'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck']
-    : ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
+  const compiler = options.setupFailure
+    ? ['bun', 'run', '--cwd', 'services/kernel', 'typecheck']
+    : kernelOutput
+      ? ['sh', '-c', 'bun run --cwd services/kernel typecheck --emit-client && bun run --cwd packages/client typecheck']
+      : ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
   const checkId = randomUUID();
   const physicalRunId = randomUUID();
   const outputRun = `client-output-${physicalRunId}`;
   const worktree = task.worktree;
-  if (kernelOutput) {
+  if (options.setupFailure) {
+    mkdirSync(join(worktree, 'services/kernel/scripts'), { recursive: true });
+    mkdirSync(join(worktree, 'services/kernel/db/commerce/migrations'), { recursive: true });
+    writeFileSync(
+      join(worktree, 'services/kernel/package.json'),
+      JSON.stringify({ name: '@rezics/kernel', scripts: { typecheck: 'bun scripts/typecheck.ts' } }),
+    );
+    writeFileSync(join(worktree, 'services/kernel/scripts/typecheck.ts'), 'export {};\n');
+    writeFileSync(
+      join(worktree, 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql'),
+      options.setupFailure === 'spoofed'
+        ? '-- migrate:up\nselect 1;\n-- migrate:down\n'
+        : '-- migrate:down\nselect 1;\n',
+    );
+  } else if (kernelOutput) {
     mkdirSync(join(worktree, 'services/kernel'), { recursive: true });
     mkdirSync(join(worktree, 'packages/client/src/kernel'), { recursive: true });
     writeFileSync(
@@ -170,8 +190,8 @@ async function typingRetryFixture(
     ...(kernelOutput ? { REMOTE_CHECK_HOST: 'fixture-host', REZICS_CHECK_RUN: outputRun } : {}),
   };
   recordWorkerCheckTypingInputs(env, worktree, physicalRunId, compiler);
-  const complete = beginTypingInputReceipt(worktree, env, compiler);
-  if (!complete) throw new Error('Compiler fixture did not capture its inputs');
+  const complete = options.setupFailure ? undefined : beginTypingInputReceipt(worktree, env, compiler);
+  if (!options.setupFailure && !complete) throw new Error('Compiler fixture did not capture its inputs');
   if (kernelOutput) {
     mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
     const artifactStage = process.env.REZICS_CHECK_ARTIFACTS_DIR;
@@ -205,17 +225,34 @@ async function typingRetryFixture(
       bundleSha256: outputTreeDigest(bundle),
     });
   }
-  complete(1);
+  complete?.(1);
 
-  const log = join(h.settings.stateDirectory, `${task.id}.typecheck.log`);
+  const log = join(worktree, '.temp/goal/checks', `${checkId}.log`);
+  mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
   writeFileSync(
     log,
-    kernelOutput
-      ? 'packages/client/src/index.ts(1,1): error TS2322: route diagnostic\n'
-      : 'apps/web/src/reader.ts(1,1): error TS2322: required optional prop is missing\n',
+    options.setupFailure === 'generic'
+      ? 'remote-check: connection failed before a result\n'
+      : options.setupFailure
+        ? 'Migration version check failed:\n- db/commerce/migrations/20261113195649_post_benefit.sql: missing dbmate up marker; add `-- migrate:up` before the up SQL\nName migrations with `date -u +%Y%m%d%H%M%S`.\n'
+        : kernelOutput
+          ? 'packages/client/src/index.ts(1,1): error TS2322: route diagnostic\n'
+          : 'apps/web/src/reader.ts(1,1): error TS2322: required optional prop is missing\n',
   );
-  settleWorkerCheckHostBudget(env, 1, true, { argv: compiler, log, worktree, physicalRunId });
-  if (options.stale) writeFileSync(join(worktree, 'packages/client/src/index.ts'), 'export const route = "changed";\n');
+  const checkExitCode = options.setupFailure ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1;
+  settleWorkerCheckHostBudget(env, checkExitCode, !options.setupFailure, {
+    argv: compiler,
+    log,
+    worktree,
+    physicalRunId,
+  });
+  if (options.stale && options.setupFailure)
+    writeFileSync(
+      join(worktree, 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql'),
+      '-- migrate:up\nselect 1;\n-- migrate:down\n',
+    );
+  else if (options.stale)
+    writeFileSync(join(worktree, 'packages/client/src/index.ts'), 'export const route = "changed";\n');
 
   const checks = join(worktree, '.temp/goal/checks');
   mkdirSync(join(checks, 'results'), { recursive: true });
@@ -223,9 +260,10 @@ async function typingRetryFixture(
     id: checkId,
     cwd: worktree,
     argv: compiler,
+    log: `.temp/goal/checks/${checkId}.log`,
     ownership: { taskId: options.foreign ? 'foreign-task' : task.id, attempt: ref.attempt },
     status: options.unknownCustody ? 'running' : 'finished',
-    ...(options.unknownCustody ? {} : { exitCode: 1 }),
+    ...(options.unknownCustody ? {} : { exitCode: checkExitCode }),
     physicalRunId,
   };
   writeFileSync(join(checks, 'results', `${checkId}.json`), JSON.stringify(result));
@@ -238,10 +276,13 @@ async function typingRetryFixture(
         version: 1,
         id: checkId,
         cwd: worktree,
+        argv: compiler,
+        log: `.temp/goal/checks/${checkId}.log`,
+        ownership: { taskId: options.foreign ? 'foreign-task' : task.id, attempt: ref.attempt },
         physicalRunId,
         status: 'finished',
         remoteExpected: false,
-        exitCode: 1,
+        exitCode: checkExitCode,
         terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
       }),
     );
@@ -337,6 +378,55 @@ test('an amended retry reuses a current Kernel client-output failure only after 
     ).toBe(true);
 
     for (const retained of [unresolved, stale, foreign]) {
+      expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
+      expect(h.store.retryIntent(retained.ref)?.status).toBe('pending');
+      expect(h.store.attempt(retained.ref).state).toBe('exited');
+      expect(
+        h.store.events(retained.task.id).some((event) => event.kind === 'worker-run-started' && event.attempt > 1),
+      ).toBe(false);
+    }
+    expect(landings).toHaveLength(1);
+  } finally {
+    await h.disposeAsync();
+  }
+}, 30_000);
+
+test('an accepted source amendment retries only for a retained terminal missing-migration-marker setup defect', async () => {
+  const h = harness();
+  try {
+    const proven = await typingRetryFixture(h, { exited: true, setupFailure: 'migration' });
+    const generic = await typingRetryFixture(h, { exited: true, setupFailure: 'generic' });
+    const spoofed = await typingRetryFixture(h, { exited: true, setupFailure: 'spoofed' });
+    const changedSource = await typingRetryFixture(h, {
+      exited: true,
+      setupFailure: 'migration',
+      stale: true,
+    });
+    const unresolved = await typingRetryFixture(h, {
+      exited: true,
+      setupFailure: 'migration',
+      unknownCustody: true,
+    });
+    const landings: LandingRequest[] = [];
+    const job = new WorkerJob(h.tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} });
+
+    job.resumePendingRetries();
+    await job.drain();
+
+    expect(h.store.task(proven.task.id).currentAttempt).toBe(2);
+    expect(h.store.retryIntent(proven.ref)).toMatchObject({ status: 'started', nextAttempt: 2 });
+    expect(h.store.attempt(proven.ref).state).toBe('superseded');
+    expect(h.store.attempt(proven.ref).checks).toEqual([proven.checkId]);
+    expect(h.store.attempt(proven.ref).typingEvidencePending?.command).toEqual([
+      'bun',
+      'run',
+      '--cwd',
+      'services/kernel',
+      'typecheck',
+    ]);
+    expect(h.store.attempt({ taskId: proven.task.id, attempt: 2 }).checks ?? []).toEqual([]);
+
+    for (const retained of [generic, spoofed, changedSource, unresolved]) {
       expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
       expect(h.store.retryIntent(retained.ref)?.status).toBe('pending');
       expect(h.store.attempt(retained.ref).state).toBe('exited');

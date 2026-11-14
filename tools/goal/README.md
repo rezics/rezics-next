@@ -2992,6 +2992,8 @@ Decision: at the existing stopped-task expiry, the sweep reconciles compiler-onl
 
 Decision: an explicit retry after a completed stop keeps the existing stop proof. For an ordinary exited attempt, a queued source repair supersedes pending typing evidence only when the exact accepted replacement brief was recorded after exit, the captured branch head remains current, the exact retained command proves a terminal nonzero failure against unchanged source inputs, any replaced Kernel client declarations match the receipt-bound published tree, all same-attempt check custody is terminal, and no successor, later worker start, landing or live capacity ticket exists. Generated-output identity authorizes failure classification only; pass qualification stays strict. Otherwise the retry remains pending and does not enter compiler-only recovery. A same-generation `started` intent is reconciled only under that proof.
 
+Decision: queued source-repair admission also accepts the exact Kernel migration preflight diagnostic for a missing forward `-- migrate:up` marker when the known compiler command, exit 75, retained source tree and same-attempt terminal check custody all match. This is setup evidence only; it creates no compiler verdict or replay authority, and the accepted amendment, retry transaction and money gate keep their existing rules.
+
 Authenticated owning or operations managers reconcile that same attempt without starting a model:
 
 Decision: when local `integration.operationsManager` is absent, typing-recovery event checks admit the owning task manager only; the nonempty actor session and retained source checks remain required.
