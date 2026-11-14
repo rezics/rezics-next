@@ -93,7 +93,7 @@ const block = (name: string, tag: string, extra: Attribute = {}, parseHTML: TagP
   });
 };
 
-const Doc = Node.create({ name: 'doc', topNode: true, content: 'block+' });
+const Doc = Node.create({ name: 'doc', topNode: true, content: '(block | footnoteDefinition)+' });
 const Text = Node.create({ name: 'text', group: 'inline' });
 const HardBreak = Node.create({
   name: 'hardBreak',
@@ -194,6 +194,61 @@ const InlineExtension = Node.create({
     'span',
     mergeAttributes(HTMLAttributes, { 'data-document-component': node.attrs.definition }),
     node.attrs.fallback,
+  ],
+});
+
+const footnoteLabel = (value: string | null): value is string =>
+  value !== null && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value);
+
+const FootnoteReference = Node.create({
+  name: 'footnoteReference',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  addAttributes: () => ({ label: { default: '' } }),
+  parseHTML: () => [
+    {
+      tag: 'sup[data-footnote-reference]',
+      getAttrs: (element) => {
+        const label = (element as HTMLElement).getAttribute('data-footnote-reference');
+        return footnoteLabel(label) ? { label } : false;
+      },
+    },
+  ],
+  renderHTML: ({ node, HTMLAttributes }) => [
+    'sup',
+    mergeAttributes(HTMLAttributes, { 'data-footnote-reference': node.attrs.label }),
+    `[^${node.attrs.label}]`,
+  ],
+  renderText: ({ node }) => `[^${node.attrs.label}]`,
+});
+
+const FootnoteDefinition = Node.create({
+  name: 'footnoteDefinition',
+  group: 'footnoteDefinition',
+  content: 'block+',
+  defining: true,
+  draggable: true,
+  addAttributes: () => ({
+    ...common,
+    label: {
+      default: '',
+      parseHTML: (element: HTMLElement) => element.getAttribute('data-footnote-definition'),
+    },
+  }),
+  parseHTML: () => [
+    {
+      tag: 'aside[data-footnote-definition]',
+      getAttrs: (element) => {
+        const label = (element as HTMLElement).getAttribute('data-footnote-definition');
+        return footnoteLabel(label) ? {} : false;
+      },
+    },
+  ],
+  renderHTML: ({ node, HTMLAttributes }) => [
+    'aside',
+    mergeAttributes(HTMLAttributes, { 'data-footnote-definition': node.attrs.label, draggable: 'true' }),
+    0,
   ],
 });
 
@@ -504,6 +559,8 @@ export const documentExtensions: Extensions = [
   media,
   extensionBlock,
   InlineExtension,
+  FootnoteDefinition,
+  FootnoteReference,
   mark('bold', 'strong'),
   mark('italic', 'em'),
   mark('underline', 'u'),

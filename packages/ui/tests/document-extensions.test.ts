@@ -22,3 +22,22 @@ test('the blocks editor exposes draggable top-level units and keeps parsing cont
   expect(paragraphParseRule?.preserveWhitespace).toBe('full');
   expect(schema.nodes.codeBlock?.spec.marks).toBe('');
 });
+
+test('text and blocks editor schemas preserve footnote references and editable top-level definitions', () => {
+  for (const profile of ['text', 'blocks'] as const) {
+    const schema = getSchema(documentExtensionsForProfile(profile));
+    const reference = schema.nodes.footnoteReference!.create({ label: 'Source-1' });
+    const paragraph = schema.nodes.paragraph!.create({ id: 'body' }, reference);
+    const definition = schema.nodes.footnoteDefinition!.create(
+      { id: 'definition', label: 'Source-1' },
+      schema.nodes.paragraph!.create({ id: 'note' }, schema.text('Supplied source')),
+    );
+    const document = schema.nodes.doc!.create(null, [paragraph, definition]);
+    const restored = schema.nodeFromJSON(document.toJSON());
+
+    restored.check();
+    expect(restored.toJSON()).toEqual(document.toJSON());
+    expect(schema.nodes.footnoteReference!.spec.inline).toBe(true);
+    expect(schema.nodes.footnoteDefinition!.spec.group).toBe('footnoteDefinition');
+  }
+});

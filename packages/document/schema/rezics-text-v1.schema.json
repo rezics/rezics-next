@@ -389,6 +389,9 @@
               },
               {
                 "$ref": "#/$defs/text_horizontalRule"
+              },
+              {
+                "$ref": "#/$defs/text_footnoteDefinition"
               }
             ]
           },
@@ -494,6 +497,9 @@
               },
               {
                 "$ref": "#/$defs/text_hardBreak"
+              },
+              {
+                "$ref": "#/$defs/text_footnoteReference"
               },
               {
                 "$ref": "#/$defs/text_mention"
@@ -610,6 +616,9 @@
               },
               {
                 "$ref": "#/$defs/text_hardBreak"
+              },
+              {
+                "$ref": "#/$defs/text_footnoteReference"
               },
               {
                 "$ref": "#/$defs/text_mention"
@@ -1293,6 +1302,109 @@
       },
       "additionalProperties": false
     },
+    "text_footnoteDefinition": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "footnoteDefinition"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id",
+            "label"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_paragraph"
+              },
+              {
+                "$ref": "#/$defs/text_heading"
+              },
+              {
+                "$ref": "#/$defs/text_blockquote"
+              },
+              {
+                "$ref": "#/$defs/text_bulletList"
+              },
+              {
+                "$ref": "#/$defs/text_orderedList"
+              },
+              {
+                "$ref": "#/$defs/text_taskList"
+              },
+              {
+                "$ref": "#/$defs/text_codeBlock"
+              },
+              {
+                "$ref": "#/$defs/text_horizontalRule"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
     "text_hardBreak": {
       "type": "object",
       "required": [
@@ -1302,6 +1414,41 @@
         "type": {
           "type": "string",
           "const": "hardBreak"
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_Mark"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_footnoteReference": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "footnoteReference"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "label"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          },
+          "additionalProperties": false
         },
         "marks": {
           "type": "array",

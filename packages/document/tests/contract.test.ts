@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import * as exported from '../src/index.ts';
 import {
   checkDocument,
+  documentJsonSchema,
   documentText,
   documentVersion,
   fromMarkdown,
@@ -90,6 +91,31 @@ test('plain text and CommonMark import produce valid snapshots', () => {
   const markdown = fromMarkdown('# Title\n\nSome *emphasis* and **strength**.');
   expect(checkDocument(markdown)).toBe(true);
   expect(documentText(markdown)).toContain('Some emphasis and strength.');
+});
+
+test('both public profiles publish the footnote nodes and accept their linked snapshot shape', () => {
+  for (const profile of ['text', 'blocks'] as const) {
+    const schema = documentJsonSchema(profile) as { $defs: Record<string, unknown> };
+    const value = snapshot(
+      [
+        {
+          type: 'paragraph',
+          attrs: { id: 'body' },
+          content: [{ type: 'footnoteReference', attrs: { label: 'source' } }],
+        },
+        {
+          type: 'footnoteDefinition',
+          attrs: { id: 'definition', label: 'source' },
+          content: [{ type: 'paragraph', attrs: { id: 'note' }, content: [{ type: 'text', text: 'A source' }] }],
+        },
+      ],
+      profile,
+    );
+
+    expect(schema.$defs[`${profile}_footnoteReference`]).toBeDefined();
+    expect(schema.$defs[`${profile}_footnoteDefinition`]).toBeDefined();
+    expect(checkDocument(value)).toBe(true);
+  }
 });
 
 test('published schemas are generated from the source and omit retired attributes', async () => {

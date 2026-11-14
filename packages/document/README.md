@@ -13,11 +13,11 @@ Tiptap's maintained extensions so editing does not require a second document
 format. These are REZICS's versioned profiles of that model, not an upstream
 ProseMirror interchange standard.
 
-| Contract      | Responsibility                                                                                          | Machine-readable artifact                                 |
-| ------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Document Core | Snapshot envelope and common node/mark shape                                                            | [Core schema](schema/rezics-document-core-v1.schema.json) |
-| Text          | Paragraphs, headings, quotations, lists, tasks, code, links, language, ruby, mentions and text emphasis | [Text schema](schema/rezics-text-v1.schema.json)          |
-| Blocks        | Text plus tables, images, media and opaque components                                                   | [Blocks schema](schema/rezics-blocks-v1.schema.json)      |
+| Contract      | Responsibility                                                                                                     | Machine-readable artifact                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| Document Core | Snapshot envelope and common node/mark shape                                                                       | [Core schema](schema/rezics-document-core-v1.schema.json) |
+| Text          | Paragraphs, headings, quotations, lists, tasks, code, links, language, ruby, mentions, footnotes and text emphasis | [Text schema](schema/rezics-text-v1.schema.json)          |
+| Blocks        | Text plus tables, images, media and opaque components                                                              | [Blocks schema](schema/rezics-blocks-v1.schema.json)      |
 
 ```ts
 import { fromPlainText, parseDocument, serializeDocument } from '@rezics/document';
@@ -56,7 +56,7 @@ const stored = serializeDocument(snapshot);
 establishes the JSON shape, not profile conformance. The profile schemas reject
 undeclared node types, marks and attributes so editor deserialization cannot
 silently discard them. Runtime validation additionally checks ProseMirror
-content expressions, table spans and unique IDs. Lists require a leading
+content expressions, table spans, unique IDs and footnote reference resolution. Lists require a leading
 paragraph in each item; table cells contain blocks. An empty editable document
 contains one empty paragraph. Empty paragraph content can be omitted.
 
@@ -71,7 +71,7 @@ The same bound limits span placement work because each cell can occupy at most
 contract choice, not a hardware maximum or a deployed-capacity measurement;
 validation of the supplied JSON remains proportional to its explicit input.
 
-Every block, table row, table cell and opaque inline component has a nonempty
+Every block, footnote definition, table row, table cell and opaque inline component has a nonempty
 `attrs.id`, unique within its snapshot. IDs remain on moved or edited units;
 copies receive new IDs. Splits retain the original ID on one resulting unit;
 merges retain one participating ID. `withDocumentIds` preserves existing unique
@@ -105,7 +105,8 @@ shape, fill and position vocabulary from
 [CSS Text Decoration](https://www.w3.org/TR/css-text-decor-3/).
 
 `documentParagraphs` returns ordered `{id, text}` leaf units, including image
-alt text, media captions and component fallbacks. Ruby annotation text is
+alt text, media captions, component fallbacks and footnote definitions.
+`documentText` writes footnote references as `[^label]`. Ruby annotation text is
 excluded from the base-text projection; hard breaks become newlines.
 `documentText` joins units with newlines. Both functions accept an optional
 `mentionText(accountId)` callback; without one each mention contributes a lone
@@ -114,6 +115,13 @@ or a ProseMirror position map.
 Mention nodes store only account IDs; resolving a current handle belongs to the site.
 
 ## Components and exchange
+
+Decision: Text and Blocks snapshots store inline `footnoteReference` nodes keyed by case-sensitive labels and
+top-level `footnoteDefinition` blocks with ordinary profile content; definitions keep normal unique block IDs,
+imports accept `[^label]` and `[^label]:` with indented continuations, and the `DocumentBody` export from
+`@rezics/ui/document-body` renders local references plus one accessible disclosure per definition. Labels are unique and every reference resolves; the
+shared reader owns disclosure state per document visit. Labels match `[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}`; note
+definitions cannot contain nested footnote references.
 
 `extensionBlock` and `extensionInline` are opaque atoms with `definition`,
 `version`, arbitrary JSON `payload` and plain `fallback` attributes. Blocks
@@ -127,7 +135,10 @@ component code. REZICS service resource references and authorization remain
 application responsibilities.
 
 `fromMarkdown` imports CommonMark through `prosemirror-markdown`, with the
-existing Reddit-style `>!spoiler!<` spelling mapped to a `spoiler` mark. It preserves
+existing Reddit-style `>!spoiler!<` spelling mapped to a `spoiler` mark and
+`[^label]` references paired with `[^label]:` definitions. Definitions are
+removed from ordinary Markdown flow, appended as editable top-level blocks, and
+retain formatted block content. It preserves
 inline HTML as literal text and promotes inline images to Blocks image nodes,
 splitting surrounding paragraphs as necessary. A Text import with images fails
 instead of dropping media. Markdown and plain-text projections cannot preserve
@@ -139,7 +150,8 @@ Renderers treat documents as untrusted data: use text/attribute APIs, admit safe
 link and media URL schemes, and never execute extension payloads. Content
 validation does not grant authority to a resource reference.
 
-The `mention` node is additive, so existing snapshots keep their meaning and validity under `rezics-document-v1`.
+The `mention`, `footnoteReference` and `footnoteDefinition` nodes are additive,
+so existing snapshots keep their meaning and validity under `rezics-document-v1`.
 Profile changes that alter meaning or reject an existing valid snapshot require
 a new document version. Additional advanced payloads use versioned component
 definitions rather than new basic text models. A consumer unable to represent
