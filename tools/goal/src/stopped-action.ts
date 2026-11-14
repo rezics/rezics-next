@@ -14,6 +14,16 @@ import {
 
 export type StoppedActionHint = 'actionable' | 'preserved' | 'inspect-proof' | 'typing-recovery';
 
+export type StoppedActionProjection =
+  | { kind: 'preserved'; actionable: false }
+  | { kind: 'repair'; actionable: true }
+  | {
+      kind: 'evidence-receiver';
+      actionable: boolean;
+      owner: string | null;
+      missingPredicate: string;
+    };
+
 /** Compact indexed facts for a stopped row. Only owner dispositions need structured event inspection. */
 export function stoppedActionHint(
   taskId: 'c.task_id' | 't.id',
@@ -101,89 +111,6 @@ function hasIntegratedSuccessor(
   );
 }
 
-function hasUnresolvedConsumedRecovery(
-  db: Database,
-  task: Task,
-  attempt: number,
-  attemptBody: {
-    taskId?: unknown;
-    attempt?: unknown;
-    state?: unknown;
-    checks?: unknown;
-    typingEvidencePending?: { command?: unknown };
-  },
-): boolean {
-  if (
-    task.brief.kind === 'verification' ||
-    attemptBody.state !== 'exited' ||
-    !attemptBody.typingEvidencePending ||
-    !Array.isArray(attemptBody.typingEvidencePending.command) ||
-    attemptBody.typingEvidencePending.command.some((part) => typeof part !== 'string') ||
-    !Array.isArray(attemptBody.checks) ||
-    attemptBody.checks.some((check) => typeof check !== 'string')
-  )
-    return false;
-  const authorization = db
-    .query<{ kind: string; body: string }, [string, number]>(
-      `SELECT kind,body FROM worker_events WHERE task_id=? AND attempt=?
-       AND kind IN ('typing-recovery-authorized','typing-evidence-recovery','typing-evidence-failed')
-       ORDER BY sequence DESC LIMIT 1`,
-    )
-    .get(task.id, attempt);
-  if (!authorization || authorization.kind !== 'typing-recovery-authorized') return false;
-  const body = JSON.parse(authorization.body) as {
-    token?: unknown;
-    checkId?: unknown;
-    command?: unknown;
-    identity?: unknown;
-    actor?: { id?: unknown; sessionId?: unknown };
-  };
-  if (
-    typeof body.token !== 'string' ||
-    !/^[0-9a-f-]{36}$/.test(body.token) ||
-    typeof body.checkId !== 'string' ||
-    !/^[0-9a-f-]{36}$/.test(body.checkId) ||
-    typeof body.identity !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(body.identity) ||
-    !body.actor ||
-    typeof body.actor.id !== 'string' ||
-    !body.actor.id ||
-    typeof body.actor.sessionId !== 'string' ||
-    !body.actor.sessionId ||
-    !attemptBody.checks.includes(body.checkId) ||
-    JSON.stringify(body.command) !== JSON.stringify(attemptBody.typingEvidencePending.command)
-  )
-    return false;
-  const recovery = workerCheckHostConsumedTypingRecovery({
-    db,
-    directory: workerCheckBudgetDirectory(dirname(db.filename), task.id, attempt),
-    worktree: task.worktree,
-    taskId: task.id,
-    attempt,
-    checkIds: attemptBody.checks,
-    command: attemptBody.typingEvidencePending.command as string[],
-    token: body.token,
-  });
-  if (
-    !recovery ||
-    !recovery.exact ||
-    recovery.custody !== 'unknown' ||
-    recovery.resultlessCleanup ||
-    recovery.replacement
-  )
-    return false;
-  if (recovery.resultState === 'absent') return true;
-  if (recovery.resultState !== 'running') return false;
-  const active = workerCheckHostActiveTypingRecovery({
-    db,
-    stateDirectory: dirname(db.filename),
-    taskId: task.id,
-    worktree: task.worktree,
-    token: body.token,
-  });
-  return active?.checkId === body.checkId && active.physicalRunId === recovery.physicalRunId;
-}
-
 function successfulSourceAttempt(attempt: {
   state?: unknown;
   exitCode?: unknown;
@@ -216,14 +143,222 @@ function liveOrdinaryProofStop(task: Task, attemptBody: { terminationIntent?: { 
   }
 }
 
-export function isActionableStop(
+function currentTypingRecoveryNeed(
+  db: Database,
+  task: Task,
+  attempt: number,
+  attemptBody: {
+    taskId?: unknown;
+    attempt?: unknown;
+    state?: unknown;
+    exitCode?: unknown;
+    failureKind?: unknown;
+    blocker?: unknown;
+    terminationIntent?: unknown;
+    checks?: unknown;
+    typingEvidencePending?: { command?: unknown };
+  },
+): { missingPredicate: string; actionable: boolean } | null {
+  if (
+    task.brief.kind === 'verification' ||
+    attemptBody.state !== 'exited' ||
+    !successfulSourceAttempt(attemptBody)
+  )
+    return null;
+
+  const pendingEvidence = attemptBody.typingEvidencePending;
+  if (!pendingEvidence || typeof pendingEvidence !== 'object' || Array.isArray(pendingEvidence))
+    return {
+      missingPredicate: 'the structured current compiler command or check identity is unavailable',
+      actionable: true,
+    };
+  const pendingCommand = pendingEvidence.command;
+  if (!Array.isArray(pendingCommand) || pendingCommand.some((part) => typeof part !== 'string'))
+    return {
+      missingPredicate: 'the exact current compiler command or check identity is unknown',
+      actionable: true,
+    };
+  if (!Array.isArray(attemptBody.checks) || attemptBody.checks.some((check) => typeof check !== 'string'))
+    return {
+      missingPredicate: 'the exact current check identity is unknown',
+      actionable: true,
+    };
+  const authorization = db
+    .query<{ kind: string; body: string }, [string, number]>(
+      `SELECT kind,body FROM worker_events WHERE task_id=? AND attempt=?
+       AND kind IN ('typing-recovery-authorized','typing-evidence-recovery','typing-evidence-failed')
+       ORDER BY sequence DESC LIMIT 1`,
+    )
+    .get(task.id, attempt);
+  if (authorization?.kind === 'typing-evidence-failed') return null;
+  if (authorization?.kind === 'typing-evidence-recovery')
+    return {
+      missingPredicate: 'the recovered compiler evidence reconciled into the current attempt',
+      actionable: true,
+    };
+  if (!authorization || authorization.kind !== 'typing-recovery-authorized')
+    return {
+      missingPredicate: 'authenticated owner authorization to receive compiler evidence',
+      actionable: true,
+    };
+  type AuthorizationBody = {
+    token?: unknown;
+    checkId?: unknown;
+    command?: unknown;
+    identity?: unknown;
+    actor?: { id?: unknown; sessionId?: unknown };
+  };
+  let body: AuthorizationBody;
+  try {
+    body = JSON.parse(authorization.body) as AuthorizationBody;
+  } catch {
+    return {
+      missingPredicate: 'valid authenticated recovery authorization for the exact current check',
+      actionable: true,
+    };
+  }
+  if (
+    typeof body.token !== 'string' ||
+    !/^[0-9a-f-]{36}$/.test(body.token) ||
+    typeof body.checkId !== 'string' ||
+    !/^[0-9a-f-]{36}$/.test(body.checkId) ||
+    typeof body.identity !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(body.identity) ||
+    !body.actor ||
+    typeof body.actor.id !== 'string' ||
+    !body.actor.id ||
+    typeof body.actor.sessionId !== 'string' ||
+    !body.actor.sessionId ||
+    !attemptBody.checks.includes(body.checkId) ||
+    JSON.stringify(body.command) !== JSON.stringify(pendingCommand)
+  )
+    return {
+      missingPredicate: 'a valid authenticated recovery authorization bound to this exact check',
+      actionable: true,
+    };
+  const recovery = workerCheckHostConsumedTypingRecovery({
+    db,
+    directory: workerCheckBudgetDirectory(dirname(db.filename), task.id, attempt),
+    worktree: task.worktree,
+    taskId: task.id,
+    attempt,
+    checkIds: attemptBody.checks,
+    command: pendingCommand as string[],
+    token: body.token,
+  });
+  if (!recovery)
+    return {
+      missingPredicate: 'the exact compiler result and its terminal custody',
+      actionable: true,
+    };
+  if (!recovery.exact)
+    return {
+      missingPredicate: 'the exact current compiler check identity and terminal custody',
+      actionable: true,
+    };
+  if (recovery.replacement)
+    return {
+      missingPredicate: 'terminal result and custody for the already authorized compiler-only replacement',
+      actionable: true,
+    };
+  if (recovery.resultlessCleanup)
+    return {
+      missingPredicate: 'authenticated owner authorization for one compiler-only replacement after verified cleanup',
+      actionable: true,
+    };
+  if (recovery.resultState === 'running') {
+    if (recovery.custody === 'terminal')
+      return {
+        missingPredicate: 'the exact compiler result after its recorded terminal custody',
+        actionable: true,
+      };
+    const active = workerCheckHostActiveTypingRecovery({
+      db,
+      stateDirectory: dirname(db.filename),
+      taskId: task.id,
+      worktree: task.worktree,
+      token: body.token,
+    });
+    if (active?.checkId === body.checkId && active.physicalRunId === recovery.physicalRunId)
+      return {
+        missingPredicate: 'the terminal result and custody of the active exact compiler check',
+        actionable: false,
+      };
+  }
+  if (recovery.custody !== 'terminal')
+    return {
+      missingPredicate:
+        recovery.resultState === 'finished'
+          ? 'verified terminal custody for the exact compiler check'
+          : 'the exact compiler result and verified terminal custody',
+      actionable: true,
+    };
+  if (recovery.resultState !== 'finished')
+    return {
+      missingPredicate: 'a valid terminal result for the exact compiler check',
+      actionable: true,
+    };
+
+  const resultPath = join(task.worktree, '.temp/goal/checks/results', `${recovery.checkId}.json`);
+  try {
+    const stat = lstatSync(resultPath);
+    if (stat.isFile() && stat.size <= 256 * 1024) {
+      const result = JSON.parse(readFileSync(resultPath, 'utf8')) as {
+        id?: unknown;
+        cwd?: unknown;
+        argv?: unknown;
+        status?: unknown;
+        exitCode?: unknown;
+        physicalRunId?: unknown;
+        ownership?: { taskId?: unknown; attempt?: unknown };
+      };
+      if (
+        result.id === recovery.checkId &&
+        result.cwd === task.worktree &&
+        result.physicalRunId === recovery.physicalRunId &&
+        result.ownership?.taskId === task.id &&
+        result.ownership.attempt === attempt &&
+        JSON.stringify(result.argv) === JSON.stringify(pendingCommand) &&
+        result.status === 'finished' &&
+        Number.isInteger(result.exitCode)
+      )
+        return {
+          missingPredicate:
+            (result.exitCode as number) !== 0
+              ? 'authenticated failure classification of the exact terminal compiler result'
+              : 'authenticated reconciliation of the exact terminal compiler result',
+          actionable: true,
+        };
+    }
+  } catch {
+    // The exact result is still unverified; keep the receiving obligation explicit.
+  }
+  return {
+    missingPredicate: 'a valid exact compiler result accepted with its terminal custody',
+    actionable: true,
+  };
+}
+
+function receiverOwner(task: Task): string | null {
+  const manager = task.brief?.manager;
+  return typeof manager === 'string' && manager.trim() ? manager : null;
+}
+
+export function stoppedActionProjection(
   db: Database,
   taskId: string,
   attempt: number,
   hint: StoppedActionHint | null,
   policy = defaultPolicy,
-): boolean {
-  if (hint === 'preserved') return false;
+): StoppedActionProjection {
+  let knownOwner: string | null = null;
+  const unknownReceiver = (owner: string | null = null): StoppedActionProjection => ({
+    kind: 'evidence-receiver',
+    actionable: true,
+    owner,
+    missingPredicate: 'the current owner or exact compiler evidence predicate could not be verified',
+  });
+  if (hint === 'preserved') return { kind: 'preserved', actionable: false };
   try {
     const liveRow = db
       .query<{ task: string; attemptBody: string }, [string, number]>(
@@ -233,11 +368,11 @@ export function isActionableStop(
       )
       .get(taskId, attempt);
     if (liveRow && liveOrdinaryProofStop(JSON.parse(liveRow.task) as Task, JSON.parse(liveRow.attemptBody)))
-      return false;
+      return { kind: 'preserved', actionable: false };
   } catch {
     /* Observation defects do not invent an actionable product stop. */
   }
-  if (hint !== 'inspect-proof' && hint !== 'typing-recovery') return true;
+  if (hint !== 'inspect-proof' && hint !== 'typing-recovery') return { kind: 'repair', actionable: true };
   try {
     const row = db
       .query<{ task: string; attemptBody: string; checks: string | null }, [string, number]>(
@@ -246,8 +381,9 @@ export function isActionableStop(
        WHERE t.id=? AND t.current_attempt=?`,
       )
       .get(taskId, attempt);
-    if (!row) return true;
+    if (!row) return hint === 'typing-recovery' ? unknownReceiver() : { kind: 'repair', actionable: true };
     const task = JSON.parse(row.task) as Task;
+    knownOwner = receiverOwner(task);
     const currentAttempt = JSON.parse(row.attemptBody) as {
       taskId?: unknown;
       attempt?: unknown;
@@ -266,14 +402,23 @@ export function isActionableStop(
       currentAttempt.taskId !== taskId ||
       currentAttempt.attempt !== attempt
     )
-      return true;
+      return hint === 'typing-recovery' ? unknownReceiver(knownOwner) : { kind: 'repair', actionable: true };
 
     const events = taskEvents(db, taskId, attempt);
     if (successfulSourceAttempt(currentAttempt) && hasIntegratedSuccessor(db, task, events, attempt, policy))
-      return false;
-    if (hint === 'typing-recovery') return !hasUnresolvedConsumedRecovery(db, task, attempt, currentAttempt);
-    if (task.brief.kind !== 'verification' || !row.checks) return true;
-    if (!preservesTerminalProof(events, task, { taskId, attempt }, policy)) return true;
+      return { kind: 'preserved', actionable: false };
+    if (hint === 'typing-recovery') {
+      const receiver = currentTypingRecoveryNeed(db, task, attempt, currentAttempt);
+      if (!receiver) return { kind: 'repair', actionable: true };
+      return {
+        kind: 'evidence-receiver',
+        actionable: receiver.actionable,
+        owner: receiverOwner(task),
+        missingPredicate: receiver.missingPredicate,
+      };
+    }
+    if (task.brief.kind !== 'verification' || !row.checks) return { kind: 'repair', actionable: true };
+    if (!preservesTerminalProof(events, task, { taskId, attempt }, policy)) return { kind: 'repair', actionable: true };
     const checks: unknown = JSON.parse(row.checks);
     if (
       !Array.isArray(checks) ||
@@ -281,15 +426,17 @@ export function isActionableStop(
       typeof checks[0] !== 'string' ||
       !nativeCheckId.test(checks[0])
     )
-      return true;
+      return { kind: 'repair', actionable: true };
     const owned = ownedCurrentOrdinaryProofInvocation(task);
-    if (!owned) return true;
+    if (!owned) return { kind: 'repair', actionable: true };
     const path = join(task.worktree, '.temp/goal/checks/results', `${owned.id}.json`);
     const stat = lstatSync(path);
-    if (!stat.isFile() || stat.size > policy.proof.sourceBufferBytes) return true;
-    return observeOrdinaryProof(task, owned.id, JSON.parse(readFileSync(path, 'utf8'))).status !== 'terminal';
+    if (!stat.isFile() || stat.size > policy.proof.sourceBufferBytes) return { kind: 'repair', actionable: true };
+    return observeOrdinaryProof(task, owned.id, JSON.parse(readFileSync(path, 'utf8'))).status !== 'terminal'
+      ? { kind: 'repair', actionable: true }
+      : { kind: 'preserved', actionable: false };
   } catch {
     // No unverifiable owner decision, compiler handoff or result silently suppresses an ordinary action.
-    return true;
+    return hint === 'typing-recovery' ? unknownReceiver(knownOwner) : { kind: 'repair', actionable: true };
   }
 }

@@ -4,7 +4,11 @@ import { agentReportingEvidence } from './agents.ts';
 import { migrate } from './db.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
-import { isActionableStop, stoppedActionHint, type StoppedActionHint } from './stopped-action.ts';
+import {
+  stoppedActionHint,
+  stoppedActionProjection,
+  type StoppedActionHint,
+} from './stopped-action.ts';
 
 // Compatibility exports for synthetic callers; production reads its own loaded policy.
 export const WIDTH_WORKER_THRESHOLD = defaultPolicy.width.workerThreshold;
@@ -54,13 +58,24 @@ export type WidthCounts = {
   actionableHeld: number;
   stopped: number;
   actionableStopped: number;
+  evidenceReceivingStopped: number;
+  actionableEvidenceReceivingStopped: number;
   waiting: number;
+};
+
+export type EvidenceReceiverAction = {
+  taskId: string;
+  attempt: number;
+  owner: string | null;
+  missingPredicate: string;
+  actionable: boolean;
 };
 
 export type WidthGoalSnapshot = WidthCounts & {
   goal: string;
   managerId: string | null;
   managerConflict: boolean;
+  evidenceReceiverActions: EvidenceReceiverAction[];
 };
 
 export type WidthSnapshot = {
@@ -103,7 +118,12 @@ type WidthRow = {
 };
 
 type MutableCounts = WidthCounts;
-type MutableGoal = MutableCounts & { goal: string; managers: Set<string>; managerMissing: boolean };
+type MutableGoal = MutableCounts & {
+  goal: string;
+  managers: Set<string>;
+  managerMissing: boolean;
+  evidenceReceiverActions: EvidenceReceiverAction[];
+};
 
 function emptyCounts(): MutableCounts {
   return {
@@ -125,6 +145,8 @@ function emptyCounts(): MutableCounts {
     actionableHeld: 0,
     stopped: 0,
     actionableStopped: 0,
+    evidenceReceivingStopped: 0,
+    actionableEvidenceReceivingStopped: 0,
     waiting: 0,
   };
 }
@@ -242,7 +264,13 @@ function addRow(
   if (typeof row.goal === 'string' && row.goal.length > 0) {
     goal = goals.get(row.goal);
     if (!goal) {
-      goal = { goal: row.goal, ...emptyCounts(), managers: new Set(), managerMissing: false };
+      goal = {
+        goal: row.goal,
+        ...emptyCounts(),
+        managers: new Set(),
+        managerMissing: false,
+        evidenceReceiverActions: [],
+      };
       goals.set(row.goal, goal);
     }
     if (typeof row.manager === 'string' && row.manager.length > 0) goal.managers.add(row.manager);
@@ -285,8 +313,20 @@ function addRow(
     if (source) increment('sourceDependencyHolds');
   } else if (taskState === 'stopped') {
     increment('stopped');
-    if (isActionableStop(db, row.task_id, row.current_attempt, row.stopped_action, policy))
-      increment('actionableStopped');
+    const action = stoppedActionProjection(db, row.task_id, row.current_attempt, row.stopped_action, policy);
+    if (action.kind === 'evidence-receiver') {
+      increment('evidenceReceivingStopped');
+      if (action.actionable) increment('actionableEvidenceReceivingStopped');
+      if (goal && goal.evidenceReceiverActions.length < 3)
+        goal.evidenceReceiverActions.push({
+          taskId: row.task_id,
+          attempt: row.current_attempt,
+          owner: action.owner,
+          missingPredicate: action.missingPredicate,
+          actionable: action.actionable,
+        });
+    }
+    if (action.actionable) increment('actionableStopped');
   }
   if (source && (taskState === 'held' || row.attempt_state === 'waiting')) increment('sourceHolds');
   if (source && row.attempt_state === 'waiting') increment('sourceWaiting');
@@ -419,14 +459,27 @@ function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): stri
     policy.backlog.stoppedTaskLimitMs === 60 * 60_000
       ? 'an hour'
       : `${policy.backlog.stoppedTaskLimitMs / 60_000} minutes`;
+  const receiverDetails = goal.evidenceReceiverActions
+    .map((action) => {
+      const owner = action.owner ?? 'unknown task owner';
+      return action.actionable
+        ? `${action.taskId} attempt ${action.attempt}, owner ${owner}: ${action.missingPredicate}; run \`bun tools/goal/src/cli.ts typing-recover ${action.taskId} --expected-attempt ${action.attempt}\` from an authenticated owning or operations manager session.`
+        : `${action.taskId} attempt ${action.attempt}, owner ${owner}: awaiting ${action.missingPredicate}.`;
+    })
+    .join(' ');
+  const unlistedReceivers = Math.max(0, goal.evidenceReceivingStopped - goal.evidenceReceiverActions.length);
+  const otherActionableStops = goal.actionableStopped - goal.actionableEvidenceReceivingStopped;
   return (
     `Width governor: this Goal has ${goal.running} confirmed live workers (${goal.unknownRunning} current running attempts have unknown process identity); ` +
     `Codex subset ${goal.codexRunning} confirmed live (${codexUnknown} Codex evidence unknown); ` +
-    `current work counts: ready ${goal.ready}, durable pending starts ${goal.pendingStarts}, held ${goal.held}, stopped ${goal.stopped}, waiting ${goal.waiting}; actionable stops ${goal.actionableStopped}. ` +
+    `current work counts: ready ${goal.ready}, durable pending starts ${goal.pendingStarts}, held ${goal.held}, stopped ${goal.stopped}, waiting ${goal.waiting}; actionable stops ${goal.actionableStopped}; completed-source evidence receiving ${goal.evidenceReceivingStopped} (${goal.actionableEvidenceReceivingStopped} awaiting an owner action). ` +
     `Source status: registered starts ${goal.sourceReady} (${goal.sourcePendingStarts} durable pending); held ${goal.sourceHolds} (${goal.sourceDependencyHolds} dependencies, ${goal.sourceWaiting} check or custody waits); live source writers ${goal.sourceWriters}. ` +
     'Recover, reshape, or dispatch real work. ' +
-    (goal.actionableStopped
-      ? `Act within ${stoppedAge}: recover completed source waiting only for compiler typing evidence first; then handle actual stopped source as before: retry with a rewritten brief, split it, or cancel it. `
+    (goal.evidenceReceivingStopped
+      ? `Completed source remains owed to its evidence receiver and is not a source-writing retry. ${receiverDetails}${unlistedReceivers ? ` ${unlistedReceivers} more receiver obligation(s) are not listed here.` : ''} `
+      : '') +
+    (otherActionableStops
+      ? `Act within ${stoppedAge} on other actionable source or proof stops through the existing repair, reshape, or cancel path. `
       : '') +
     'Use the backlog refill notice for runnable source supply and eligible width; low-water is an alert, not a target or quota. ' +
     'Unsubmitted work is not observable from runtime metadata.'

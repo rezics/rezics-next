@@ -9,6 +9,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
 import { brief, temporaryDirectory } from './test-support.ts';
 import { proofFingerprint } from './verification.ts';
+import { stoppedActionProjection } from './stopped-action.ts';
 import {
   grantWorkerTypingRecovery,
   workerCheckBudgetDirectory,
@@ -33,7 +34,7 @@ function prepareTypingRecovery(
   sequence: number,
   at: string,
   terminal = false,
-): void {
+): { checkId: string; physicalRunId: string; worktree: string } {
   const worktree = join(stateDirectory, 'worktrees', taskId);
   mkdirSync(join(worktree, 'apps/web/scripts'), { recursive: true });
   mkdirSync(join(worktree, 'apps/web/src'), { recursive: true });
@@ -113,34 +114,48 @@ function prepareTypingRecovery(
       }),
     );
     writeFileSync(join(budget, 'typing-recovery', `${grant.token}.json`), JSON.stringify({ ...grant, stamp: '1' }));
-    if (terminal) {
-      mkdirSync(join(checkRoot, 'custody/history'), { recursive: true });
-      writeFileSync(
-        join(checkRoot, 'results', `${grant.checkId}.json`),
-        JSON.stringify({
-          id: grant.checkId,
-          status: 'finished',
-          exitCode: 0,
-          cwd: worktree,
-          physicalRunId: grant.physicalRunId,
-          ownership: { taskId, attempt: 1 },
-        }),
-      );
-      writeFileSync(
-        join(checkRoot, 'custody/history', `${grant.checkId}.${grant.physicalRunId}.json`),
-        JSON.stringify({
-          version: 1,
-          id: grant.checkId,
-          cwd: worktree,
-          physicalRunId: grant.physicalRunId,
-          status: 'finished',
-          exitCode: 0,
-          remoteExpected: false,
-          terminalProof: { local: true, resultKnown: true, remote: null },
-        }),
-      );
-    }
+    if (terminal) recordTerminalTypingResult(worktree, taskId, 1, grant.checkId, grant.physicalRunId, grant.command);
   }
+  return { checkId: grant.checkId, physicalRunId: grant.physicalRunId, worktree };
+}
+
+function recordTerminalTypingResult(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkId: string,
+  physicalRunId: string,
+  command: readonly string[],
+  exitCode = 0,
+): void {
+  const checkRoot = join(worktree, '.temp/goal/checks');
+  mkdirSync(join(checkRoot, 'results'), { recursive: true });
+  mkdirSync(join(checkRoot, 'custody/history'), { recursive: true });
+  writeFileSync(
+    join(checkRoot, 'results', `${checkId}.json`),
+    JSON.stringify({
+      id: checkId,
+      status: 'finished',
+      exitCode,
+      cwd: worktree,
+      argv: command,
+      physicalRunId,
+      ownership: { taskId, attempt },
+    }),
+  );
+  writeFileSync(
+    join(checkRoot, 'custody/history', `${checkId}.${physicalRunId}.json`),
+    JSON.stringify({
+      version: 1,
+      id: checkId,
+      cwd: worktree,
+      physicalRunId,
+      status: 'finished',
+      exitCode,
+      remoteExpected: false,
+      terminalProof: { local: true, resultKnown: true, remote: null },
+    }),
+  );
 }
 
 test('preserved terminal proofs and unresolved cancels stay counted but cause no width wake or expiry', async () => {
@@ -206,7 +221,7 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     stopped('ordinary-stop', 'ordinary');
     stopped('typing-only', 'typing', false, {
       exitCode: 0,
-      typingEvidencePending: { result: 'Compiler input closure is unavailable for the last check-host typecheck.' },
+      result: 'Compiler input closure is unavailable for the last check-host typecheck.',
     });
     for (const [taskId, goal, owned] of [
       ['f8a9f5e3-9e8a-4913-8003-0aefdd0faad1', 'preserved', true],
@@ -290,7 +305,12 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     event('superseded-source', 'owner-contract-decisions-superseded', { throughSequence: 100 });
 
     const width = await sweepWidthGovernor(db, inbox, now);
-    expect(width.snapshot.system).toMatchObject({ stopped: 10, actionableStopped: 5 });
+    expect(width.snapshot.system).toMatchObject({
+      stopped: 10,
+      actionableStopped: 5,
+      evidenceReceivingStopped: 1,
+      actionableEvidenceReceivingStopped: 1,
+    });
     expect(width.snapshot.goals.find(({ goal }) => goal === 'preserved')).toMatchObject({
       stopped: 4,
       actionableStopped: 0,
@@ -298,6 +318,12 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     expect(width.snapshot.goals.find(({ goal }) => goal === 'accepted')).toMatchObject({
       stopped: 1,
       actionableStopped: 0,
+    });
+    expect(width.snapshot.goals.find(({ goal }) => goal === 'typing')?.evidenceReceiverActions[0]).toMatchObject({
+      taskId: 'typing-only',
+      owner: 'typing',
+      actionable: true,
+      missingPredicate: 'the structured current compiler command or check identity is unavailable',
     });
     expect(width.deliveredGoals).toEqual(['ordinary', 'stale-successor', 'typing', 'unreviewed']);
     const cancelled: string[] = [];
@@ -320,11 +346,9 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     ]);
     expect(cancelled).toEqual(['ordinary-stop', 'superseded-source']);
     const typingEvents = inbox.pending('typing');
-    expect(
-      typingEvents.some(({ event: delivered }) =>
-        delivered.summary.includes('typing-recover typing-only --expected-attempt 1'),
-      ),
-    ).toBe(true);
+    const typingNotice = typingEvents.find(({ event: delivered }) => delivered.summary.includes('evidence receiver'));
+    expect(typingNotice?.event.summary).toContain('the structured current compiler command or check identity is unavailable');
+    expect(typingNotice?.event.summary).toContain('typing-recover typing-only --expected-attempt 1');
     const row = db
       .query<{ body: string }, [string]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1')
       .get('cancel-pending');
@@ -335,7 +359,7 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
   }
 });
 
-test('consumed owner and operations typing grants stay quiet until custody resolves', async () => {
+test('completed source stays with its evidence receiver until exact evidence resolves', async () => {
   const temp = temporaryDirectory();
   const db = openDb(join(temp.path, 'goal.sqlite'));
   try {
@@ -343,7 +367,16 @@ test('consumed owner and operations typing grants stay quiet until custody resol
     const now = Date.UTC(2026, 0, 2);
     const old = new Date(now - 2 * 60 * 60_000).toISOString();
     const inbox = new SqliteManagerInbox(db, temp.path, () => now);
-    prepareTypingRecovery(db, temp.path, 'consumed-owner', 'quiet-owner', 'quiet-owner', true, 1, old);
+    const consumedOwner = prepareTypingRecovery(db, temp.path, 'consumed-owner', 'quiet-owner', 'quiet-owner', true, 1, old);
+    const originalTaskBody = db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('consumed-owner')!.body;
+    const originalAttemptBody = db
+      .query<{ body: string }, [string, number]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
+      .get('consumed-owner', 1)!.body;
+    const originalAuthorization = db
+      .query<{ body: string }, [string, number]>(
+        "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'",
+      )
+      .get('consumed-owner', 1)!.body;
     prepareTypingRecovery(db, temp.path, 'consumed-operations', 'quiet-operations', 'operations', true, 2, old);
     prepareTypingRecovery(db, temp.path, 'grant-awaiting-run', 'pending-grant', 'pending-grant', false, 3, old);
     const failedSource = {
@@ -406,16 +439,43 @@ test('consumed owner and operations typing grants stay quiet until custody resol
     prepareTypingRecovery(db, temp.path, 'consumed-terminal', 'terminal-result', 'terminal-result', true, 5, old, true);
 
     const width = await sweepWidthGovernor(db, inbox, now);
-    expect(width.snapshot.system).toMatchObject({ stopped: 5, actionableStopped: 3 });
+    expect(width.snapshot.system).toMatchObject({
+      stopped: 5,
+      actionableStopped: 5,
+      evidenceReceivingStopped: 4,
+      actionableEvidenceReceivingStopped: 4,
+    });
     expect(width.snapshot.goals.find(({ goal }) => goal === 'quiet-owner')).toMatchObject({
       stopped: 1,
-      actionableStopped: 0,
+      actionableStopped: 1,
+      evidenceReceivingStopped: 1,
+      actionableEvidenceReceivingStopped: 1,
     });
     expect(width.snapshot.goals.find(({ goal }) => goal === 'quiet-operations')).toMatchObject({
       stopped: 1,
-      actionableStopped: 0,
+      actionableStopped: 1,
+      evidenceReceivingStopped: 1,
+      actionableEvidenceReceivingStopped: 1,
     });
-    expect(width.deliveredGoals).toEqual(['failed-source-goal', 'pending-grant', 'terminal-result']);
+    expect(width.deliveredGoals).toEqual([
+      'failed-source-goal',
+      'pending-grant',
+      'quiet-operations',
+      'quiet-owner',
+      'terminal-result',
+    ]);
+    expect(width.snapshot.goals.find(({ goal }) => goal === 'quiet-owner')?.evidenceReceiverActions[0]).toMatchObject({
+      taskId: 'consumed-owner',
+      attempt: 1,
+      owner: 'quiet-owner',
+      actionable: true,
+      missingPredicate: 'the exact compiler result and verified terminal custody',
+    });
+    const ownerWidthNotice = inbox.pending('quiet-owner')[0]?.event.summary;
+    expect(ownerWidthNotice).toContain('Completed source remains owed to its evidence receiver');
+    expect(ownerWidthNotice).toContain('consumed-owner attempt 1, owner quiet-owner');
+    expect(ownerWidthNotice).toContain('typing-recover consumed-owner --expected-attempt 1');
+    expect(ownerWidthNotice).not.toContain('retry with a rewritten brief');
 
     const recoverCalls: string[] = [];
     const cancelled: string[] = [];
@@ -438,7 +498,82 @@ test('consumed owner and operations typing grants stay quiet until custody resol
     });
     expect(backlog.expired).toEqual([{ goal: 'failed-source-goal', taskId: 'failed-source' }]);
     expect(cancelled).toEqual(['failed-source']);
-    expect(recoverCalls).toEqual(['grant-awaiting-run', 'consumed-terminal']);
+    expect(recoverCalls).toEqual([
+      'consumed-owner',
+      'consumed-operations',
+      'grant-awaiting-run',
+      'consumed-terminal',
+    ]);
+    for (const owner of ['quiet-owner', 'quiet-operations', 'pending-grant', 'terminal-result']) {
+      const event = inbox.pending(owner).find(
+        ({ event: delivered }) => delivered.kind === 'instruction' && delivered.summary.includes('evidence receiver'),
+      );
+      expect(event?.event.summary).toContain('authenticated manager session');
+      expect(event?.event.summary).toContain(`typing-recover ${event?.event.taskId} --expected-attempt 1`);
+    }
+
+    recordTerminalTypingResult(
+      consumedOwner.worktree,
+      'consumed-owner',
+      1,
+      consumedOwner.checkId,
+      consumedOwner.physicalRunId,
+      webCompiler,
+      1,
+    );
+    const received = await sweepWidthGovernor(db, inbox, now + 15 * 60_000);
+    expect(received.snapshot.goals.find(({ goal }) => goal === 'quiet-owner')).toMatchObject({
+      stopped: 1,
+      actionableStopped: 1,
+      evidenceReceivingStopped: 1,
+      actionableEvidenceReceivingStopped: 1,
+    });
+    expect(received.snapshot.goals.find(({ goal }) => goal === 'quiet-owner')?.evidenceReceiverActions[0]).toMatchObject({
+      missingPredicate: 'authenticated failure classification of the exact terminal compiler result',
+    });
+    expect(received.snapshot.goals.find(({ goal }) => goal === 'failed-source-goal')).toMatchObject({
+      actionableStopped: 1,
+      evidenceReceivingStopped: 0,
+    });
+    expect(received.snapshot.goals.find(({ goal }) => goal === 'quiet-operations')?.evidenceReceiverActions[0])
+      .toMatchObject({ missingPredicate: 'the exact compiler result and verified terminal custody' });
+    expect(db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('consumed-owner')!.body)
+      .toBe(originalTaskBody);
+    expect(
+      db.query<{ body: string }, [string, number]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
+        .get('consumed-owner', 1)!.body,
+    ).toBe(originalAttemptBody);
+    expect(
+      db.query<{ body: string }, [string, number]>(
+        "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'",
+      ).get('consumed-owner', 1)!.body,
+    ).toBe(originalAuthorization);
+
+    const laterAttempt = prepareTypingRecovery(db, temp.path, 'later-attempt', 'later-owner', 'later-owner', true, 7, old);
+    const laterTask = JSON.parse(
+      db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('later-attempt')!.body,
+    ) as { currentAttempt: number; [key: string]: unknown };
+    laterTask.currentAttempt = 2;
+    db.query('UPDATE worker_tasks SET current_attempt=2, body=? WHERE id=?').run(JSON.stringify(laterTask), 'later-attempt');
+    db.query('INSERT INTO worker_attempts(task_id,attempt,body) VALUES (?,2,?)').run(
+      'later-attempt',
+      JSON.stringify({
+        taskId: 'later-attempt',
+        attempt: 2,
+        state: 'exited',
+        endedAt: old,
+        exitCode: 1,
+        failureKind: 'tool',
+        result: 'The current compiler check failed.',
+      }),
+    );
+    const later = await sweepWidthGovernor(db, inbox, now + 30 * 60_000);
+    expect(later.snapshot.goals.find(({ goal }) => goal === 'later-owner')).toMatchObject({
+      stopped: 1,
+      actionableStopped: 1,
+      evidenceReceivingStopped: 0,
+    });
+    expect(later.snapshot.goals.find(({ goal }) => goal === 'later-owner')?.evidenceReceiverActions).toEqual([]);
   } finally {
     db.close();
     temp.close();

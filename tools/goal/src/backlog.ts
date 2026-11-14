@@ -1,4 +1,9 @@
-import { isActionableStop, stoppedActionHint, type StoppedActionHint } from './stopped-action.ts';
+import {
+  stoppedActionHint,
+  stoppedActionProjection,
+  type StoppedActionHint,
+  type StoppedActionProjection,
+} from './stopped-action.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { Buffer } from 'node:buffer';
@@ -1154,17 +1159,23 @@ function recordTypingRecoveryAction(
   attempt: number,
   result: string | undefined,
   now: number,
+  deliveryManager: string,
+  owner: string | null,
+  missingPredicate: string,
 ): void {
   const command = `bun tools/goal/src/cli.ts typing-recover ${task.id} --expected-attempt ${attempt}`;
+  const receiver = owner
+    ? `Task owner ${owner} or the configured operations manager must run \`${command}\``
+    : `Task owner is unknown; configured supermanager ${deliveryManager} was notified to identify the receiver. An authenticated owning or operations manager must run \`${command}\``;
   const event: ManagerEvent = {
-    managerId: task.brief!.manager!,
+    managerId: deliveryManager,
     goalId: task.brief!.goal!,
     taskId: task.id,
     kind: 'instruction',
     summary:
-      `Completed source task ${task.id} (attempt ${attempt}) is waiting only for compiler evidence. ` +
-      `Run \`${command}\` from the authenticated owning or operations manager session; it will reconcile evidence ` +
-      'or return the exact typing-only check. The controller does not start a source writer.',
+      `Completed source task ${task.id} (attempt ${attempt}) is waiting for its evidence receiver: ${missingPredicate}. ` +
+      `${receiver} from an authenticated manager session to reconcile the exact compiler evidence. ` +
+      'The controller does not start a source writer.',
   };
   runtime.db
     .transaction(() => {
@@ -1185,7 +1196,7 @@ function recordTypingRecoveryAction(
 
 /**
  * Ordinary product stops past this limit are cancelled into `backlog/<goal>/failed/`. Compiler-only stops first
- * reconcile their same attempt; pending evidence stays actionable with one authenticated recovery instruction. At
+ * reconcile their same attempt; pending evidence stays visible with one authenticated receiver instruction. At
  * most 20 cancellations per Goal run, longest stopped first; control-plane and stabilize work is exempt.
  */
 async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise<BacklogSweep['expired']> {
@@ -1204,7 +1215,9 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
     task: StoppedTask;
     goal: string;
     manager: string;
+    owner: string | null;
     since: number;
+    action: StoppedActionProjection;
   }[] = [];
   for (const row of rows) {
     let task: StoppedTask;
@@ -1214,28 +1227,46 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
       continue;
     }
     const goal = task.brief?.goal;
-    const manager = task.brief?.manager;
-    if (!goal || !manager || goal === 'control-plane' || task.brief?.target === 'stabilize') continue;
+    const owner =
+      typeof task.brief?.manager === 'string' && task.brief.manager.trim() ? task.brief.manager : null;
+    if (!goal || goal === 'control-plane' || task.brief?.target === 'stabilize') continue;
     // Original proofs hold check custody that cancellation does not release; their owner decides.
     if (task.brief?.kind === 'verification') continue;
-    if (!isActionableStop(db, task.id, row.current_attempt, row.stopped_action, runtime.policy ?? defaultPolicy))
-      continue;
+    const action = stoppedActionProjection(
+      db,
+      task.id,
+      row.current_attempt,
+      row.stopped_action,
+      runtime.policy ?? defaultPolicy,
+    );
+    if (!action.actionable) continue;
+    const manager = owner ?? (action.kind === 'evidence-receiver' ? runtime.supermanager : undefined);
+    if (!manager) continue;
     if (hasPendingRetry(db, task.id, row.current_attempt)) continue;
     const since = lastActivity(db, task, row.current_attempt);
     if (since === null || now - since <= (runtime.policy ?? defaultPolicy).backlog.stoppedTaskLimitMs) continue;
-    candidates.push({ row, task, goal, manager, since });
+    candidates.push({ row, task, goal, manager, owner, since, action });
   }
   const perGoal = new Map<string, number>();
   const typingPerGoal = new Map<string, number>();
-  for (const { row, task, goal, manager, since } of candidates.sort((a, b) => a.since - b.since)) {
-    if (row.stopped_action === 'typing-recovery') {
+  for (const { row, task, goal, manager, owner, since, action } of candidates.sort((a, b) => a.since - b.since)) {
+    if (action.kind === 'evidence-receiver') {
       if (hasTypingRecoveryAction(db, task.id, row.current_attempt)) continue;
       const count = typingPerGoal.get(goal) ?? 0;
       if (count >= (runtime.policy ?? defaultPolicy).backlog.stoppedTasksPerGoalPerRun) continue;
       typingPerGoal.set(goal, count + 1);
       const recovered = await runtime.recoverTyping?.({ taskId: task.id, attempt: row.current_attempt });
       if (!recovered || recovered.status === 'pending') {
-        recordTypingRecoveryAction(runtime, task, row.current_attempt, recovered?.result, now);
+        recordTypingRecoveryAction(
+          runtime,
+          task,
+          row.current_attempt,
+          recovered?.result,
+          now,
+          manager,
+          owner,
+          action.missingPredicate,
+        );
         continue;
       }
       if (recovered.status === 'landing') continue;
@@ -1264,9 +1295,9 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
     }
     expired.push({ goal, taskId: task.id });
     const key = `${manager}\u0000${goal}`;
-    const owner = byOwner.get(key) ?? { goal, tasks: [] };
-    owner.tasks.push(task.id);
-    byOwner.set(key, owner);
+    const ownerTasks = byOwner.get(key) ?? { goal, tasks: [] };
+    ownerTasks.tasks.push(task.id);
+    byOwner.set(key, ownerTasks);
   }
   for (const [key, owner] of byOwner) {
     const managerId = key.split('\u0000', 1)[0]!;
@@ -1296,6 +1327,36 @@ function backlogNoWorkScope(
   goal: string,
   authority: NonNullable<ReturnType<typeof currentGoalManagerAuthority>>,
 ): string {
+  let goalStatus = authority.goalStatus;
+  if (goalStatus === 'paused') {
+    const manager = db
+      .query<
+        {
+          status: string | null;
+          sessionId: string | null;
+          waitingForInbox: number | null;
+          pauseOrigin: string | null;
+          goalStatus: string | null;
+        },
+        [string]
+      >(
+        `SELECT json_extract(state, '$.status') AS status,
+                json_extract(state, '$.threadId') AS sessionId,
+                json_extract(state, '$.waitingForInbox') AS waitingForInbox,
+                json_extract(state, '$.goalPauseOrigin') AS pauseOrigin,
+                json_extract(state, '$.goalState.status') AS goalStatus
+         FROM manager_sessions WHERE id=?`,
+      )
+      .get(authority.id);
+    if (
+      manager?.status === 'running' &&
+      manager.sessionId === authority.sessionId &&
+      manager.waitingForInbox === 1 &&
+      manager.pauseOrigin === 'automatic' &&
+      manager.goalStatus === 'paused'
+    )
+      goalStatus = 'active';
+  }
   const ready = briefs(backlogDirectory(stateDirectory, goal))
     .map((path) => {
       try {
@@ -1350,7 +1411,7 @@ function backlogNoWorkScope(
           engine: authority.engine,
           explicitGoalOwnership: authority.goals.includes(goal),
           supermanager: authority.supermanager,
-          goalStatus: authority.goalStatus,
+          goalStatus,
         },
         ready,
         tasks,
