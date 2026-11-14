@@ -113,8 +113,7 @@ function prepareTypingRecovery(
     at,
     JSON.stringify(authorization),
   );
-  if (originalCheckId)
-    recordTerminalTypingResult(worktree, taskId, 1, originalCheckId, randomUUID(), webCompiler);
+  if (originalCheckId) recordTerminalTypingResult(worktree, taskId, 1, originalCheckId, randomUUID(), webCompiler);
   if (options.changedInputs) {
     writeFileSync(join(worktree, 'apps/web/src/reader.ts'), 'export const reader = false\n');
     git(worktree, ['add', 'apps/web/src/reader.ts']);
@@ -147,10 +146,7 @@ function prepareTypingRecovery(
     );
     if (options.replacement) {
       const predecessor = { ...grant, token: randomUUID(), checkId: randomUUID(), physicalRunId: randomUUID() };
-      writeFileSync(
-        join(budget, 'typing-recovery', `${predecessor.token}.json`),
-        JSON.stringify(predecessor),
-      );
+      writeFileSync(join(budget, 'typing-recovery', `${predecessor.token}.json`), JSON.stringify(predecessor));
       writeFileSync(
         join(budget, 'typing-recovery', `${grant.token}.json`),
         JSON.stringify({ ...grant, stamp: '1', replacementOf: predecessor.token }),
