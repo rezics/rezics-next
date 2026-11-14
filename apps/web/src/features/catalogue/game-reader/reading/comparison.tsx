@@ -16,11 +16,13 @@ export function WorkReleaseComparison({
   page,
   locale,
   link,
+  compact = false,
 }: {
   card: WorkReleaseCardView;
   page: GameReaderReady;
   locale: string;
   link: WorkReadingLink;
+  compact?: boolean;
 }) {
   const o = { locale: locale as never };
   const related: SubjectRead['related'] = Object.fromEntries(
@@ -51,7 +53,15 @@ export function WorkReleaseComparison({
           const fields = group.properties.map((property) => card.fields[property]);
           const available = fields.filter((field) => field.state === 'available');
           const states = [
-            ...new Set(fields.filter((field) => field.state !== 'available').map((field) => field.state)),
+            ...new Set(
+              fields
+                .filter(
+                  (field) =>
+                    field.state !== 'available' &&
+                    (!compact || !available.length || field.state === 'unavailable' || field.state === 'withheld'),
+                )
+                .map((field) => field.state),
+            ),
           ];
           return (
             <div key={group.id} className="min-w-0 rounded-md bg-muted/40 p-2">
@@ -67,6 +77,7 @@ export function WorkReleaseComparison({
                       locale={locale}
                       date={statement.property.id === 'schema:datePublished'}
                       link={link}
+                      compact={compact}
                     />
                   )),
                 )}

@@ -6,6 +6,7 @@ import { subjectCatalogueTagDefinitions } from './subject-catalogue-metadata/ind
 import { WorkNamesEntry } from '../catalogue/work-names/entry';
 import { GameProfileEntry, gameProfileEntry } from '../catalogue/game-profile-entry';
 import { GameOverview } from './work-reading-binding';
+import { gameOverviewInitial } from './game-overview';
 import type { GameReaderRead, GameStatement } from '../catalogue/game-reader/model';
 import { EditorialEntry } from '../catalogue/editorial-entry';
 import { AddonProfileEntry } from '../catalogue/addon-profile-entry';
@@ -827,14 +828,17 @@ export function SubjectPage({
     : undefined;
   const gameInitial =
     read && releasedDefinitions && page.catalogue?.digest
-      ? gamePageInitial(
-          read.subject,
-          read.related,
-          read.summary,
-          releasedDefinitions,
-          page.catalogue.digest,
-          locale,
-          publicationReader,
+      ? gameOverviewInitial(
+          page,
+          gamePageInitial(
+            read.subject,
+            read.related,
+            read.summary,
+            releasedDefinitions,
+            page.catalogue.digest,
+            locale,
+            publicationReader,
+          ),
         )
       : undefined;
   const factsContext = read ? (page.context?.id ?? read.subject.context) : undefined;

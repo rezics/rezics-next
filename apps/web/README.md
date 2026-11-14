@@ -811,6 +811,27 @@ Artwork is authored SVG with local 320/640 WebP variants, exact dimensions and C
 there is no external image dependency or CSS cover overlay. Publication remains with the existing Web publisher.
 Decision: the authorized source-only window defers test writing/runs, typecheck, builds, browser/cover decode,
 keyboard and phone/desktop acceptance and capture sweeps to the dev verifier. Existing tests are retained unchanged.
+The canonical Game product visit is `pages-library-games--main` in `src/stories/game-showcase.stories.tsx`.
+Harbour Lights is a synthetic CC0 catalogue with original local covers, six distinct software releases, native
+exact/partial/TBA dates, creators, characters, story acts, related games, community reviews and collections.
+Every installed tab uses the released composition and ordinary application loaders. The existing `PageStory`
+router also handles preview new-tab links; personal library and score changes read back per Subject.
+Fixtures live independently in `kernel/fixtures/game-showcase.ts` and `kernel/fake/game-showcase.ts`.
+
+Canonical Game entries for the existing publisher:
+
+- `pages-library-games--main` starts on the populated work overview.
+- `pages-library-games--exact-release-return` starts on the Switch release companion; follow its work, Editions and
+  the exact release again, or use Back/Forward manually.
+- `pages-library-games--sparse` starts on a title-only work with native missing data.
+- `pages-library-games--release-section-failure` keeps work facts while the release window fails; Retry reacquires it.
+- `pages-library-games--reviews-section-failure` isolates a review read failure from facts and releases.
+
+Entries have no automatic tab/history traversal and do not pin viewport, theme or locale. Separate Game interaction
+examples are linked in their story documentation. The existing publisher owns deployment; these IDs are stable.
+Decision: write focused Game transport/composition regression source, defer tests, mounted/keyboard/responsive review,
+browser checks, builds and captures to the dev verifier, and submit the changed web workspace's owner typecheck through
+`worker-check` under the final validation policy. Source completion does not claim mounted or deployed acceptance.
 
 Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and
 `src/kernel/fixtures/`; add no new routes or entries to `fake.ts` or `fixtures.json`. Each route module exports a

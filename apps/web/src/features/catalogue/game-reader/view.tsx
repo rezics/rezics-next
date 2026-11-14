@@ -143,7 +143,7 @@ export function GameReader(props: Props) {
           tabIndex={-1}
           className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          {m.game_reader_title({}, o)}
+          {props.compact ? m.game_reader_overview_title({}, o) : m.game_reader_title({}, o)}
         </h2>
         {reading.available ? (
           <GameWindow
@@ -340,13 +340,13 @@ function GameWindow({
                 const content = (
                   <section key={group.id} className="space-y-3">
                     <h3 className="font-semibold">{groups[group.id]}</h3>
-                    <dl className="space-y-4">
+                    <dl className={compact ? 'grid min-w-0 gap-x-8 gap-y-5 sm:grid-cols-2' : 'space-y-4'}>
                       {group.fields.map((field) => (
                         <div key={field.property}>
                           <dt className="font-medium" lang={field.label.lang ?? undefined}>
                             {field.label.text || m.subject_value_unlabelled({}, o)}
                           </dt>
-                          <dd className="space-y-3">
+                          <dd className="mt-1 space-y-3">
                             {!field.statements.length ? <p>{m.release_fidelity_date_absent({}, o)}</p> : null}
                             {field.statements.map((statement) => (
                               <div key={statement.id}>
@@ -407,14 +407,14 @@ function GameWindow({
                 );
               })}
               <details
-                open={!compact || undefined}
+                open={!compact || !!failure || undefined}
                 data-slot="game-release-destination"
                 className="min-w-0 border-t border-border pt-3"
               >
                 <summary className={`${action} cursor-pointer font-medium text-primary`}>
                   {m.subject_editions({}, o)}
                 </summary>
-                <section className="space-y-3" data-slot="game-editions">
+                <section className="space-y-4 pt-3" data-slot="game-editions">
                   <h3 className="font-semibold">{m.subject_editions({}, o)}</h3>
                   <p>{m.game_reader_editions_scope({}, o)}</p>
                   {busy ? (
@@ -504,6 +504,7 @@ function GameWindow({
                                   related={related}
                                   locale={locale}
                                   link={Link}
+                                  compact={compact}
                                 />
                               ) : (
                                 <p>{m.game_reader_assertion_unavailable({}, o)}</p>
@@ -519,7 +520,13 @@ function GameWindow({
                                 />
                               ) : null}
                               {card ? (
-                                <WorkReleaseComparison card={card} page={page} locale={locale} link={Link} />
+                                <WorkReleaseComparison
+                                  card={card}
+                                  page={page}
+                                  locale={locale}
+                                  link={Link}
+                                  compact={compact}
+                                />
                               ) : null}
                             </>
                           );
