@@ -128,11 +128,11 @@ Stories cover upload, local preparation, file-read failure, populated review, un
 continuation, unknown application recovery, acknowledged result, stale conflict and partial result. Presentation
 stories label explicit current choices, unsupported archived meaning, sealed mixed/Type reviews, and separate
 mixed/adopted/unsupported-or-stale/unattempted outcomes.
-Journey tests pin original-archive restart, exact original bytes, opaque sequential cursors, native Collection readback and other-member denial. Focused regression source additionally pins three independent
-Collection addresses, exact failed retry, sparse continuation, bounded Back/First, destination/source/viewer
-replacement, late response retirement, outcome-cursor independence and deliberate keyboard focus. The existing
-denial assertion now keeps recovery results visible and reports the denial within the Collection reader. The native Web owner
-and other-member walk exports a completed file, restores through the page, and rereads the Collection. Focused Web
+Journey tests pin original-archive restart, exact original bytes, opaque sequential cursors, native Collection
+readback and other-member denial. Focused regression source additionally pins three independent Collection addresses,
+exact failed retry, sparse continuation, bounded Back/First, destination/source/viewer replacement, late response
+retirement, outcome-cursor independence and deliberate keyboard focus. The existing denial assertion now keeps
+recovery results visible and reports the denial within the Collection reader. The native Web owner and other-member walk exports a completed file, restores through the page, and rereads the Collection. Focused Web
 acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer acceptance
 remains owned by Commerce.
 Preparation decoders and producer implementation are not Web delivery; this guide describes the delivered consumer.

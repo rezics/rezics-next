@@ -1286,8 +1286,14 @@ function receivingPage(
   id = receivingCollectionId,
 ): ReceivingCollectionReadback {
   return {
-    id, title, next, members,
-    visibility: 'private', presentationKind: null, presentationKindSource: 'mixed', memberCount: 400,
+    id,
+    title,
+    next,
+    members,
+    visibility: 'private',
+    presentationKind: null,
+    presentationKindSource: 'mixed',
+    memberCount: 400,
   };
 }
 
@@ -1338,22 +1344,34 @@ test('three Collection addresses, sparse continuation and exact retry keep the o
     await journey.readReceivingCollection();
     await journey.readReceivingCollection(second);
     expect(journey.snapshot().receivingWindow).toMatchObject({
-      displayed: { collectionId: receivingCollectionId, cursor: second }, previous: [null],
+      displayed: { collectionId: receivingCollectionId, cursor: second },
+      previous: [null],
     });
     await journey.readReceivingCollection(third);
     expect(journey.snapshot()).toMatchObject({
       receiving: { title: 'Sparse native page', members: [], next: third },
-      receivingWindow: { displayed: { cursor: second }, requested: { cursor: third }, failure: 'unavailable', previous: [null] },
+      receivingWindow: {
+        displayed: { cursor: second },
+        requested: { cursor: third },
+        failure: 'unavailable',
+        previous: [null],
+      },
     });
     await journey.retryReceivingCollection();
     expect(journey.snapshot().receivingWindow).toMatchObject({
-      displayed: { cursor: third }, requested: null, failure: null, previous: [null, second],
+      displayed: { cursor: third },
+      requested: null,
+      failure: null,
+      previous: [null, second],
     });
     await journey.previousReceivingCollection();
     await journey.previousReceivingCollection();
     await journey.readReceivingCollection();
     expect(fake.calls.readbacks).toEqual(
-      [undefined, second, third, third, second, undefined, undefined].map((cursor) => ({ id: receivingCollectionId, cursor })),
+      [undefined, second, third, third, second, undefined, undefined].map((cursor) => ({
+        id: receivingCollectionId,
+        cursor,
+      })),
     );
     expect(journey.snapshot().outcomesWindow).toEqual(before.outcomesWindow);
     expect(journey.snapshot().outcomesPage).toBe(before.outcomesPage);
@@ -1469,7 +1487,7 @@ test('Collection denial and reads preserve an original uncertain apply command f
   }
 });
 
-test.each(['keyboard', 'moved-focus', 'pointer', 'replacement'] as const)(
+test.each(['keyboard', 'moved-focus', 'pointer', 'replacement', 'source', 'collection'] as const)(
   'Collection reading recovers focus only for a current, unmoved keyboard request: %s',
   async (mode) => {
     const fake = fakePort();
@@ -1492,11 +1510,18 @@ test.each(['keyboard', 'moved-focus', 'pointer', 'replacement'] as const)(
       const returnLink = view.host.querySelector<HTMLAnchorElement>('a[href$="/library"]')!;
       if (mode === 'moved-focus') returnLink.focus();
       if (mode === 'replacement') await view.replaceVisit(visit('viewer-b', 'epoch-b'));
+      if (mode === 'source') await click(button(view.host, m.library_archive_recovery_restart()));
+      if (mode === 'collection') {
+        fake.port.status = async () => ({
+          kind: 'ok', value: status('partial', { collectionId: '00000000-0000-4000-8000-000000000099' }),
+        });
+        await click(button(view.host, m.library_archive_recovery_read_status()));
+      }
       await act(async () => pending.finish({ kind: 'ok', value: receivingPage('New native page') }));
       const heading = view.host.querySelector('#recovery-receiving-title');
       if (mode === 'keyboard') expect(window.document.activeElement).toBe(heading);
       else if (mode === 'moved-focus') expect(window.document.activeElement).toBe(returnLink);
-      else if (mode === 'replacement') expect(heading).toBeNull();
+      else if (mode === 'replacement' || mode === 'source') expect(heading).toBeNull();
       else expect(window.document.activeElement).not.toBe(heading);
     } finally {
       await view.close();

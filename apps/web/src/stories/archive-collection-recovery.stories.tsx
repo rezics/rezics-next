@@ -645,31 +645,44 @@ function ReceivingCollectionStory({ initial }: { initial: ReceivingStoryState })
     revision: 1,
   };
   const [window, setWindow] = useState<ReceivingReadWindow>(() => {
-    if (initial === 'unavailable') return {
-      ...emptyReceivingReadWindow(),
-      requested: { collectionId: receivingFirst.id, cursor: null, direction: 'first' },
-      failure: 'unavailable',
-    };
-    if (initial === 'sparse') return commitReceivingRead(firstWindow, {
-      collectionId: receivingFirst.id, cursor: receivingFirst.next, direction: 'next',
-    });
-    if (initial === 'failed' || initial === 'denied') return {
-      ...firstWindow,
-      requested: { collectionId: receivingFirst.id, cursor: receivingFirst.next, direction: 'next' },
-      failure: initial === 'denied' ? 'denied' : 'unavailable',
-    };
+    if (initial === 'unavailable') {
+      return {
+        ...emptyReceivingReadWindow(),
+        requested: { collectionId: receivingFirst.id, cursor: null, direction: 'first' },
+        failure: 'unavailable',
+      };
+    }
+    if (initial === 'sparse') {
+      return commitReceivingRead(firstWindow, {
+        collectionId: receivingFirst.id,
+        cursor: receivingFirst.next,
+        direction: 'next',
+      });
+    }
+    if (initial === 'failed' || initial === 'denied') {
+      return {
+        ...firstWindow,
+        requested: { collectionId: receivingFirst.id, cursor: receivingFirst.next, direction: 'next' },
+        failure: initial === 'denied' ? 'denied' : 'unavailable',
+      };
+    }
     return firstWindow;
   });
-  const [page, setPage] = useState<ReceivingCollectionReadback | null>(
-    initial === 'unavailable' ? null
-      : initial === 'sparse' ? receivingSparse
-        : initial === 'empty' ? { ...receivingFirst, members: [], next: null, memberCount: 0 }
-          : receivingFirst,
-  );
+  const [page, setPage] = useState<ReceivingCollectionReadback | null>(() => {
+    if (initial === 'unavailable') return null;
+    if (initial === 'sparse') return receivingSparse;
+    if (initial === 'empty') return { ...receivingFirst, members: [], next: null, memberCount: 0 };
+    return receivingFirst;
+  });
   function read(direction: 'first' | 'next' | 'previous' | 'retry', cursor?: string) {
     const target = receivingReadTarget(window, receivingFirst.id, direction, cursor);
     if (!target) return;
-    setPage(target.cursor === null ? receivingFirst : target.cursor === receivingFirst.next ? receivingSparse : receivingLast);
+    const page = target.cursor === null
+      ? receivingFirst
+      : target.cursor === receivingFirst.next
+        ? receivingSparse
+        : receivingLast;
+    setPage(page);
     setWindow(commitReceivingRead(window, target));
   }
   return (
