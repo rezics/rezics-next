@@ -365,6 +365,17 @@ and original log path. It reads only a UUID-owned log in that task's check direc
 tail. Missing, unreadable, mismatched or truncated evidence is identified as unknown; other check logs and the worker's
 attempt log are not used as substitutes.
 
+When the maintainer authorizes a source-only window, the configured state directory's `verification-mode` file may
+contain `source-only`. Install the compatible controller and prompt templates before activating that value. Fresh,
+retry, wake and continuation prompts for ordinary product source then defer optional typing, tests, builds and captures;
+budget-driven minimal verification does not override it. Workers still write contract-required tests as source and
+repair defects established by existing results. Source completion never claims a compiler or test pass. Exact check
+results, running checks, cleanup and compiler grants remain owned and unchanged; a wake receives its original result,
+and a source change cannot reuse an earlier pass. Money paths (declared or already changed), explicit native/browser/root
+requirements, proof authorization and control-plane acceptance keep their existing verification protocols. Removing the
+value restores budget/minimal selection. This prompt policy does not discharge a retained compiler settlement gate;
+that gate must explicitly defer the obligation or retain the source pending evidence, without fabricating a pass.
+
 When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
 receives the current source-completion policy alongside its canonical contract. Workers finish their contract, then
 run one typecheck-only check (the typecheck of each changed workspace in one wrapper invocation, plus the tests of
