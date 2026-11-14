@@ -4,6 +4,7 @@ import { createInitiatorRestorer } from '../access/durable-initiator.ts';
 import { erasureWorkModule } from '../access/erasure.ts';
 import { sharedHistoryWorkModule } from '../history/application/index.ts';
 import { createAccountsWorkModule } from '../access/membership-work.ts';
+import type { CommittedSessionRevocationWorkflow } from '../access/session-revocation-work.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { readMembershipInitiator } from '../community/membership.ts';
 import {
@@ -40,7 +41,15 @@ function createSearchNativePortsComposer(): SearchNativePortsComposer {
  * that the restorer returns for its committed operation. The Realm membership reader
  * comes from the Community declaration, so it shares that declaration's deadline clock.
  */
-function accountsWorkModule(community: CommunityDeclaration): WorkModule {
+function accountsWorkModule(
+  community: CommunityDeclaration,
+  sessionRevocation: CommittedSessionRevocationWorkflow = {
+    async resumeCommittedSessionRevocation() {
+      // Standalone workers retain the durable effect, but cannot acknowledge Auth delivery.
+      throw new Error('Trusted Auth session revocation workflow is unavailable');
+    },
+  },
+): WorkModule {
   return {
     name: 'accounts',
     async register(context) {
@@ -58,7 +67,7 @@ function accountsWorkModule(community: CommunityDeclaration): WorkModule {
           readConsent,
         }),
       });
-      await createAccountsWorkModule({ realm: membership }).register(context);
+      await createAccountsWorkModule({ realm: membership, sessionRevocation }).register(context);
     },
   };
 }
@@ -94,6 +103,7 @@ export function createKernelWorkModules(
   composeCreditSearch?: Parameters<typeof createSearchWorkModule>[2],
   communityAmbient: CommunityAmbient = systemCommunityAmbient,
   suppliedSearchNativePorts?: SearchNativePortsComposer,
+  sessionRevocation?: CommittedSessionRevocationWorkflow,
 ): readonly WorkModule[] {
   composeRatingDependencies();
   installIdentityRatingRepairProducer();
@@ -114,7 +124,7 @@ export function createKernelWorkModules(
   const contentWorkModule = contentDeclaration().work(contentWorkAmbient(ambient));
   const community = createCommunityDeclaration(communityAmbient);
   return [
-    accountsWorkModule(community),
+    accountsWorkModule(community, sessionRevocation),
     erasureWorkModule,
     sharedHistoryWorkModule,
     ratingNativeWorkModule,

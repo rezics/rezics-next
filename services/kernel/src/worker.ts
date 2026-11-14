@@ -23,6 +23,7 @@ import { effectsRelay } from './events/effects.ts';
 import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
 import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
 import type { KeyRing } from './tokens/seal.ts';
+import type { CommittedSessionRevocationWorkflow } from './access/session-revocation-work.ts';
 
 /** Report each owned drain boundary without changing its failure or settlement order. */
 function shutdownPhase(phase: string) {
@@ -66,6 +67,10 @@ export type WorkerConfig = {
   clock?: KernelClock;
   /** Trusted composition only. The worker owns and ends the returned runtime pool. */
   kernelPool?: (url: string) => pg.Pool | Promise<pg.Pool>;
+  /** Supplied by the existing Auth host, directly or through its private worker channel. */
+  sessionRevocation?: CommittedSessionRevocationWorkflow;
+  /** An enclosing worker entry may own signals and channel teardown. */
+  handleSignals?: boolean;
 };
 
 export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
@@ -134,6 +139,8 @@ export async function startWorker(
       },
       createKernelCreditSearchSource,
       community.ambient,
+      undefined,
+      config.sessionRevocation,
     );
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
@@ -211,8 +218,10 @@ export async function startWorker(
       process.exitCode = 1;
     });
   };
-  process.on('SIGINT', signal);
-  process.on('SIGTERM', signal);
+  if (config.handleSignals !== false) {
+    process.on('SIGINT', signal);
+    process.on('SIGTERM', signal);
+  }
   try {
     starting = (async () => {
       // Keep each native service's drain visible inside the runtime shutdown boundary.

@@ -44,6 +44,7 @@ import {
   type WalkNames,
 } from '../../../scripts/walk-stack.ts';
 import { localJwksTransport } from '../../kernel/src/access/membership-work-config.ts';
+import type { AuthBoundKernelWorker } from '../../kernel/src/composition/work-auth-host.ts';
 import {
   developmentDatabaseUrl,
   developmentNativeWebsite,
@@ -621,6 +622,7 @@ export async function assemble(options?: {
 }) {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
   const env = options?.env ?? (await kernelEnvironment());
+  let workEnvironment!: NodeJS.ProcessEnv;
   const [
     auth,
     { createKernel },
@@ -628,8 +630,11 @@ export async function assemble(options?: {
     { createAccess, accessActionCatalogue },
     { createNativeAccountBindings },
     { readConfig },
-  ] = await withDevelopmentDatabase(env, () =>
-    phase('native-imports', () =>
+  ] = await withDevelopmentDatabase(env, () => {
+    // Capture the same prepared SQL view before either SDK creates runtime schema objects.
+    // This is ordinary Kernel configuration; Auth credentials never enter the worker channel.
+    workEnvironment = { ...env, ...process.env, ...developmentKernelBindings() };
+    return phase('native-imports', () =>
       Promise.all([
         import('../src/index.ts'),
         import('../../kernel/src/http/kernel.ts'),
@@ -638,106 +643,168 @@ export async function assemble(options?: {
         import('../../kernel/src/access/native-account-bindings.ts'),
         import('../../kernel/src/server.ts'),
       ]),
-    ),
-  );
+    );
+  });
   const config = readConfig(env);
+  const authUrl = options?.authDatabaseUrl ?? (await authDatabaseUrl());
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
-  const database = new Pool({ connectionString: options?.authDatabaseUrl ?? (await authDatabaseUrl()) });
-  const keys = options?.keys ?? (await developmentKeys());
-  let service: import('../src/index.ts').AuthService;
-  const jwksUrl = issuerPublicJwksUrl(origins.issuer);
-  const kernelAuth = {
-    issuer: origins.issuer,
-    audience: origins.audience,
-    jwksUrl,
-    fetch: async (url: string | URL, init?: RequestInit) => {
-      const requested = typeof url === 'string' ? url : url.href;
-      if (requested !== jwksUrl) throw new TypeError('Local JWKS transport serves only the configured issuer JWKS URL');
-      return service.handler(new Request(jwksUrl, init));
-    },
+  const database = new Pool({ connectionString: authUrl });
+  let stopAuth: (() => Promise<void>) | undefined;
+  let startingWork: Promise<AuthBoundKernelWorker> | undefined;
+  const workAbort = new AbortController();
+  let finishSetup!: () => void;
+  const setupSettled = new Promise<void>((resolve) => {
+    finishSetup = resolve;
+  });
+  let stopping: Promise<void> | undefined;
+  const stop = (): Promise<void> => {
+    workAbort.abort();
+    return (stopping ??= Promise.resolve().then(async () => {
+      await setupSettled;
+      try {
+        const work = await startingWork?.catch(() => undefined);
+        await work?.stop();
+      } finally {
+        try {
+          // Work and its in-flight Auth calls have settled before Auth closes its SDK or pools.
+          if (stopAuth) await stopAuth();
+          else await database.end();
+        } finally {
+          process.off('SIGINT', signal);
+          process.off('SIGTERM', signal);
+          await kernelPool.end();
+        }
+      }
+    }));
   };
-  const kernel = createKernel({
-    pool: kernelPool,
-    tokens: config.tokens,
-    routeKey: config.routeKey,
-    ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
-    access: (mounted) => createAccess({ ...mounted, auth: kernelAuth }),
-  });
-  const actions = accessActionCatalogue(actionCatalogue(kernel));
-  const website = developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(actionCatalogue(kernel)));
-  const access = createAccess({
-    actions,
-    auth: kernelAuth,
-  });
-  const proofs = auth.createNativeWorkflowProofPorts({ database });
-  const bindings = createNativeAccountBindings({
-    pool: kernelPool,
-    access,
-    actions,
-    routeKey: config.routeKey,
-    referenceKeys: config.tokens,
-    auth: () => service,
-    proofs: {
-      workflow: proofs,
-      provisioning: auth.createProvisioningEvidenceVerifier({ database }),
-      barriers: auth.createBarrierProofVerifier({ database }),
-    },
-  });
-  const host = await phase(
-    'auth-host',
-    auth.createAuthHost({
-      database,
+  const signal = () => {
+    void stop().catch(() => {
+      console.error('Native Auth/Work shutdown failed');
+      process.exitCode = 1;
+    });
+  };
+  process.on('SIGINT', signal);
+  process.on('SIGTERM', signal);
+  try {
+    const keys = options?.keys ?? (await developmentKeys());
+    let service: import('../src/index.ts').AuthService;
+    const jwksUrl = issuerPublicJwksUrl(origins.issuer);
+    const kernelAuth = {
       issuer: origins.issuer,
       audience: origins.audience,
-      secret: keys.secret,
-      signing: { activeKid: keys.signing.kid!, privateKeys: [keys.signing] },
-      stagingKey: Buffer.from(keys.staging, 'base64url'),
-      trustedAccess: bindings.trustedAccess,
-      access: bindings.workflowPorts,
-      siteActions: actions,
-      recoveryDelivery: options?.recoveryDelivery ?? localStackRecoveryDelivery(),
-      accountOperations: bindings.accountOperations,
-      accountManagementReads: bindings.accountManagementReads,
-      // The local widget and verifier never call Cloudflare. Production composition is unchanged.
-      turnstile: {
-        secret: 'loopback-only',
-        fetch: (async (_url, init) =>
-          Response.json({
-            success: new URLSearchParams(String(init?.body)).get('response') === 'rezics-local-signup',
-            action: 'signup',
-            hostname: '127.0.0.1',
-          })) as typeof fetch,
+      jwksUrl,
+      fetch: async (url: string | URL, init?: RequestInit) => {
+        const requested = typeof url === 'string' ? url : url.href;
+        if (requested !== jwksUrl)
+          throw new TypeError('Local JWKS transport serves only the configured issuer JWKS URL');
+        return service.handler(new Request(jwksUrl, init));
       },
-    }),
-  );
-  service = host.service;
-  await phase(
-    'auth-registration',
-    (async () => {
-      await service.internal.registerWebsiteClient({
-        publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
-        redirectUris: [`${origins.web}/auth/callback`],
-        postLogoutRedirectUris: [`${origins.web}/`],
-        scopes: website.scopes,
-      });
-      await service.internal.registerClient({
-        clientId: personaClient,
-        firstParty: true,
-        scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
-      });
-      await service.internal.registerClient(localShowcaseClientRegistration());
-      await service.internal.registerClient(semanticWalkClientRegistration());
-    })(),
-  );
-  await phase('auth-worker', host.start());
-  const stop = async () => {
-    try {
-      await host.stop();
-    } finally {
-      await kernelPool.end();
+    };
+    const kernel = createKernel({
+      pool: kernelPool,
+      tokens: config.tokens,
+      routeKey: config.routeKey,
+      ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
+      access: (mounted) => createAccess({ ...mounted, auth: kernelAuth }),
+    });
+    const actions = accessActionCatalogue(actionCatalogue(kernel));
+    const website = developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(actionCatalogue(kernel)));
+    const access = createAccess({
+      actions,
+      auth: kernelAuth,
+    });
+    const proofs = auth.createNativeWorkflowProofPorts({ database });
+    const bindings = createNativeAccountBindings({
+      pool: kernelPool,
+      access,
+      actions,
+      routeKey: config.routeKey,
+      referenceKeys: config.tokens,
+      auth: () => service,
+      proofs: {
+        workflow: proofs,
+        provisioning: auth.createProvisioningEvidenceVerifier({ database }),
+        barriers: auth.createBarrierProofVerifier({ database }),
+      },
+    });
+    const host = await phase(
+      'auth-host',
+      auth.createAuthHost({
+        database,
+        issuer: origins.issuer,
+        audience: origins.audience,
+        secret: keys.secret,
+        signing: { activeKid: keys.signing.kid!, privateKeys: [keys.signing] },
+        stagingKey: Buffer.from(keys.staging, 'base64url'),
+        trustedAccess: bindings.trustedAccess,
+        access: bindings.workflowPorts,
+        siteActions: actions,
+        recoveryDelivery: options?.recoveryDelivery ?? localStackRecoveryDelivery(),
+        accountOperations: bindings.accountOperations,
+        accountManagementReads: bindings.accountManagementReads,
+        // The local widget and verifier never call Cloudflare. Production composition is unchanged.
+        turnstile: {
+          secret: 'loopback-only',
+          fetch: (async (_url, init) =>
+            Response.json({
+              success: new URLSearchParams(String(init?.body)).get('response') === 'rezics-local-signup',
+              action: 'signup',
+              hostname: '127.0.0.1',
+            })) as typeof fetch,
+        },
+      }),
+    );
+    stopAuth = () => host.stop();
+    service = host.service;
+    await phase(
+      'auth-registration',
+      (async () => {
+        await service.internal.registerWebsiteClient({
+          publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
+          redirectUris: [`${origins.web}/auth/callback`],
+          postLogoutRedirectUris: [`${origins.web}/`],
+          scopes: website.scopes,
+        });
+        await service.internal.registerClient({
+          clientId: personaClient,
+          firstParty: true,
+          scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
+        });
+        await service.internal.registerClient(localShowcaseClientRegistration());
+        await service.internal.registerClient(semanticWalkClientRegistration());
+      })(),
+    );
+    const interrupts = new Set(process.listeners('SIGINT'));
+    const terminates = new Set(process.listeners('SIGTERM'));
+    await phase('auth-worker', host.start());
+    // AuthHost currently installs its own shared SIGINT/SIGTERM stop callback.
+    // Adopt only callbacks installed by this start, retaining all prior listeners.
+    // The enclosing composition must drain Work before calling that same host.stop.
+    for (const listener of process.listeners('SIGINT')) {
+      if (!interrupts.has(listener) && !terminates.has(listener) && process.listeners('SIGTERM').includes(listener)) {
+        process.off('SIGINT', listener);
+        process.off('SIGTERM', listener);
+      }
     }
-  };
-  return { host, kernel, access, kernelPool, database, keys, website, stop };
+    const startWork = () => {
+      if (stopping) return Promise.reject(new Error('Native Auth/Work host is stopped'));
+      return (startingWork ??= (async () => {
+        const { startAuthBoundKernelWorker } = await import('../../kernel/src/composition/work-auth-host.ts');
+        return startAuthBoundKernelWorker({
+          sessionRevocation: host.workflows,
+          env: { ...workEnvironment, DATABASE_URL: config.databaseUrl },
+          signal: workAbort.signal,
+        });
+      })());
+    };
+    if (stopping) throw new Error('Native Auth/Work host stopped during startup');
+    finishSetup();
+    return { host, kernel, access, kernelPool, database, keys, website, startWork, stop };
+  } catch (error) {
+    finishSetup();
+    await stop().catch(() => {});
+    throw error;
+  }
 }
 
 const widgetScript = `window.turnstile={ready:function(callback){callback();},render:function(el,o){const box=document.createElement('span');box.textContent='Local development verification';el.appendChild(box);queueMicrotask(()=>o.callback('rezics-local-signup'));return 'local';},remove:function(){},reset:function(){}};`;
@@ -1055,42 +1122,64 @@ function loopbackServe(
 
 async function serveHost() {
   const composition = await assemble();
+  let native: ReturnType<typeof loopbackServe> | undefined;
+  let kernel: ReturnType<typeof loopbackServe> | undefined;
+  let stopping: Promise<void> | undefined;
+  const close = () =>
+    (stopping ??= Promise.resolve().then(async () => {
+      try {
+        await native?.stop(true);
+      } finally {
+        try {
+          await kernel?.stop(true);
+        } finally {
+          await composition.stop();
+        }
+      }
+    }));
+  const stop = () => {
+    void close().then(
+      () => process.exit(Number(process.exitCode) || 0),
+      () => process.exit(1),
+    );
+  };
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
   try {
     const person = await phase('auth-persona', provisionPersona(composition));
     printPersona(composition.keys, person.accountId);
+    const mediaBindings = developmentMediaBindings(await kernelEnvironment(), composition.keys);
+    const media = mediaBindings.LOCAL_MEDIA_TOKEN
+      ? (await import('../../kernel/src/content/index.ts')).developmentMediaHandler(mediaBindings.LOCAL_MEDIA_TOKEN)
+      : undefined;
+    if (stopping) throw new Error('Native Auth/Work host stopped during startup');
+    native = loopbackServe(localPort(origins.native), async (request) => {
+      if (new URL(request.url).pathname.startsWith('/_local/media/') && media) return media(request);
+      if (new URL(request.url).pathname === '/local-turnstile.js')
+        return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
+      return composition.host.handler(issuerRequest(request));
+    });
+    // Recovery uses the existing native JWKS transport. The private IPC capability
+    // is installed before Work launches; no session-revocation HTTP route exists.
+    const work = await phase('kernel-worker', composition.startWork);
+    void work.failed.catch(() => {
+      console.error('Auth-bound Kernel worker failed; stopping the native host');
+      process.exitCode = 1;
+      stop();
+    });
+    if (stopping) throw new Error('Native Auth/Work host stopped during startup');
+    // Deferred account journeys share this Kernel HTTP composition and the same owned Work child.
+    if (process.env.REZICS_WALK_DEFER_FRONTENDS === '1')
+      kernel = loopbackServe(localPort(origins.kernel), (request) => composition.kernel.fetch(request));
+    console.info('Worker ready');
+    console.log(`Native Auth: ${origins.native} (issuer ${origins.issuer})`);
+    if (kernel) console.log(`Kernel: ${origins.kernel}`);
   } catch (error) {
-    await composition.stop();
+    await close().catch(() => {});
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
     throw error;
   }
-  const mediaBindings = developmentMediaBindings(await kernelEnvironment(), composition.keys);
-  const media = mediaBindings.LOCAL_MEDIA_TOKEN
-    ? (await import('../../kernel/src/content/index.ts')).developmentMediaHandler(mediaBindings.LOCAL_MEDIA_TOKEN)
-    : undefined;
-  const composeKernel = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
-  const native = loopbackServe(localPort(origins.native), async (request) => {
-    if (new URL(request.url).pathname.startsWith('/_local/media/') && media) return media(request);
-    if (new URL(request.url).pathname === '/local-turnstile.js')
-      return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
-    return composition.host.handler(issuerRequest(request));
-  });
-  // Account journeys do not need a second Kernel process, worker, or OpenSearch: the host already assembled Kernel.
-  const kernel = composeKernel
-    ? loopbackServe(localPort(origins.kernel), (request) => composition.kernel.fetch(request))
-    : undefined;
-  const stop = async () => {
-    await native.stop(true);
-    await kernel?.stop(true);
-    await composition.stop();
-    process.exit(0);
-  };
-  process.once('SIGINT', () => {
-    void stop();
-  });
-  process.once('SIGTERM', () => {
-    void stop();
-  });
-  console.log(`Native Auth: ${origins.native} (issuer ${origins.issuer})`);
-  if (kernel) console.log(`Kernel: ${origins.kernel}`);
 }
 
 export function webLaunchEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -1184,12 +1273,7 @@ export function stackProcessCommands(env: Record<string, string | undefined> = p
           ['bun', 'services/auth/scripts/dev-stack.ts', 'web'],
         ]
       : []),
-    ...(composedKernel
-      ? []
-      : [
-          ['bun', 'run', '--cwd', 'services/kernel', walk ? 'start' : 'dev'],
-          ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
-        ]),
+    ...(composedKernel ? [] : [['bun', 'run', '--cwd', 'services/kernel', walk ? 'start' : 'dev']]),
   ];
 }
 
@@ -1202,7 +1286,7 @@ export function walkSetupScripts(env: Record<string, string | undefined> = proce
   ];
 }
 
-type DevelopmentService = 'identity' | 'kernel' | 'worker' | 'pages' | 'web';
+type DevelopmentService = 'identity' | 'kernel' | 'pages' | 'web';
 
 /** Web compiles independently; readiness still requires the original native dependency order. */
 export async function startDevelopmentServices<Child>(
@@ -1234,9 +1318,6 @@ export async function startDevelopmentServices<Child>(
   }
   const kernel = launch('kernel');
   await ready('kernel', kernel);
-  if (host.stopping()) return;
-  const worker = launch('worker');
-  await ready('worker', worker);
   if (host.stopping()) return;
   if (mode === 'complete') {
     const pages = launch('pages');
@@ -1332,11 +1413,9 @@ async function start() {
       launch(service) {
         switch (service) {
           case 'identity':
-            return launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
+            return launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host'], 'pipe');
           case 'kernel':
             return launch(plan.kernel);
-          case 'worker':
-            return launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
           case 'pages':
             return launchFrontend('pages');
           case 'web': {
@@ -1347,7 +1426,7 @@ async function start() {
         }
       },
       async ready(service, children) {
-        if (service === 'worker') {
+        if (service === 'identity') {
           await phase(
             'worker',
             Promise.race([
@@ -1358,7 +1437,6 @@ async function start() {
               }),
             ]),
           );
-          return;
         }
         const urls = {
           identity: nativeOnly ? [...plan.nativeReady, `${origins.kernel}/health`] : plan.nativeReady,
