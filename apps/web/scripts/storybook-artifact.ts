@@ -276,6 +276,9 @@ export async function readStorybookArtifactIdentity(
     files: [...files].map(([path, contents]) => ({ path, contents })),
     configuration: {
       STORYBOOK_DISABLE_COMPONENT_REF: env.STORYBOOK_DISABLE_COMPONENT_REF ?? '',
+      ...(mode === 'full' && env.STORYBOOK_SOURCE_ONLY_PUBLICATION === '1'
+        ? { STORYBOOK_SOURCE_ONLY_PUBLICATION: '1' }
+        : {}),
       STORYBOOK_UI_URL: mode === 'full' ? './ui/' : (env.STORYBOOK_UI_URL ?? ''),
       STORYBOOK_DISABLE_TELEMETRY: mode === 'screenshot-test' ? '1' : (env.STORYBOOK_DISABLE_TELEMETRY ?? ''),
       REZICS_UI_ACCESSIBILITY_PROBE: '',

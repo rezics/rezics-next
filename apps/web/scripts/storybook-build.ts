@@ -32,6 +32,11 @@ type BuildMetadata = {
   builtAt: string;
   artifactIdentity: string;
   artifactBytes?: number;
+  publication?: {
+    mode: 'source-only';
+    smokeReviews: { status: 'deferred'; scenarioCount: 6 };
+    acceptance: 'deferred';
+  };
 };
 
 function bytesIn(path: string): number {
@@ -107,15 +112,28 @@ async function build(): Promise<void> {
   const identity = await readStorybookArtifactIdentity(root, 'full');
   const commit = currentCommit();
   const version = storybookVersion();
+  const publication: BuildMetadata['publication'] =
+    process.env.STORYBOOK_SOURCE_ONLY_PUBLICATION === '1'
+      ? {
+          mode: 'source-only',
+          smokeReviews: { status: 'deferred', scenarioCount: 6 },
+          acceptance: 'deferred',
+        }
+      : undefined;
   const startedAt = Date.now();
   const existing = outputMatches(identity);
   if (existing) {
-    if (existing.commit !== commit || existing.storybookVersion !== version) {
+    if (
+      existing.commit !== commit ||
+      existing.storybookVersion !== version ||
+      existing.publication?.mode !== publication?.mode
+    ) {
       writeBuildMetadata(output, {
         ...existing,
         commit,
         storybookVersion: version,
         builtAt: new Date().toISOString(),
+        publication,
       });
     }
     const bytes = bytesIn(output);
@@ -189,6 +207,7 @@ async function build(): Promise<void> {
       builtAt: new Date().toISOString(),
       artifactIdentity: identity,
       artifactBytes: artifact.bytes,
+      publication,
     });
     await publishStorybookDirectory(publicationDirectory, output);
   } catch (error) {
