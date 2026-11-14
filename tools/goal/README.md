@@ -142,6 +142,7 @@ Workers do not merge, except that a product worker integrating into dev in its o
 cherry-picks a branch or commit its contract names explicitly.
 If initial dispatch preparation fails before a task is registered, Goal removes the worktree and branch it created when
 Git confirms ownership, preserves the original error, and names any artifact retained for recovery.
+Decision: under the shared dispatch lease, direct dispatch and claimed backlog registration reuse an indexed active task only when exact brief bytes, resolved manager, Goal, target and ordinary task class match. Admission and authorization run before lookup; proof and continuation identities do not coalesce, and terminal tasks do not suppress new outcomes.
 Decision: task-local Git/worktree preparation (branch heads, leftover and finished-work commits, shared frozen files, missing-worktree recreation, authorized proof captures, and making an owned tree writable so Git/cache leftovers can be removed) lives in `task-workspace.ts`. `WorkerTasks` remains the lifecycle coordinator and delegates that family under the caller's lease and existing store writes. Tests pin those behaviours at the public `WorkerTasks` entry with real Git fixtures rather than mirroring each helper.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is

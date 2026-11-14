@@ -864,6 +864,20 @@ export class WorkerStore implements AttemptFence {
   activeTasks(): Task[] {
     return this.tasksInStates(['held', 'ready', 'running', 'landing', 'stopped']);
   }
+  /** Find an exact dispatch identity among indexed active tasks, excluding all terminal history. */
+  activeDispatchMatch(
+    brief: Pick<Brief, 'markdown' | 'manager' | 'goal' | 'target'>,
+    taskClass: Task['taskClass'],
+  ): Task | undefined {
+    return this.activeTasks().find(
+      (task) =>
+        task.taskClass === taskClass &&
+        task.brief.markdown === brief.markdown &&
+        task.brief.manager === brief.manager &&
+        task.brief.goal === brief.goal &&
+        task.brief.target === brief.target,
+    );
+  }
   /** Tasks in the given states, read through the worker_tasks_state expression index instead of every task body. */
   tasksInStates(states: readonly TaskState[]): Task[] {
     this.refreshSnapshot();

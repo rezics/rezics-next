@@ -812,6 +812,17 @@ export class WorkerTasks {
     );
     try {
       this.assertEnvironmentWalkAdmission(submittedBrief);
+      if (
+        submittedBrief.kind !== 'verification' &&
+        !submittedBrief.proof &&
+        !submittedBrief.continuation &&
+        !submittedBrief.urgent &&
+        !submittedBrief.criticalPath &&
+        taskClass !== 'critical-path'
+      ) {
+        const existing = this.store.activeDispatchMatch(submittedBrief, taskClass);
+        if (existing) return existing;
+      }
       const module = webModule(submittedBrief, this.settings);
       if (module) {
         const controller = new WorkspaceController(this.settings, this.store);
