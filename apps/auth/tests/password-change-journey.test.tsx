@@ -35,15 +35,30 @@ async function fillPassword(host: HTMLElement, password: string, confirmation = 
   });
 }
 
-test('confirmation mismatch is local; editing or cancelling retires an unsent review', async () => {
+test('keyboard correction preserves focus; editing or cancelling retires an unsent review', async () => {
   const { host, calls } = await mount();
-  await fillPassword(host, 'a private password', 'a different password');
-  await flush(() => host.querySelector('form')!.requestSubmit());
+  const password = host.querySelector<HTMLInputElement>('#security-new-password')!;
+  const confirmation = host.querySelector<HTMLInputElement>('#security-confirm-password')!;
+  const form = host.querySelector('form')!;
+  const submit = () => flush(() => form.requestSubmit());
+
+  await submit();
+  expect(document.activeElement).toBe(password);
+  expect(button(host, m.auth_security_password_review())?.disabled).toBe(false);
+  await flush(() => fill(password, 'a private password'));
+  expect(document.activeElement).toBe(password);
+  expect(confirmation.getAttribute('aria-invalid')).toBe('true');
+  await submit();
+  expect(document.activeElement).toBe(confirmation);
+  await flush(() => fill(confirmation, 'a different password'));
+  await submit();
+  expect(document.activeElement).toBe(confirmation);
   expect(host.textContent).toContain(m.auth_signup_password_mismatch());
   expect(calls).toHaveLength(0);
 
-  await fillPassword(host, 'a private password');
-  await flush(() => host.querySelector('form')!.requestSubmit());
+  await flush(() => fill(confirmation, 'a private password'));
+  expect(document.activeElement).toBe(confirmation);
+  await submit();
   expect(host.textContent).toContain(m.auth_security_password_review_heading());
   expect(host.textContent).toContain(storyAccount);
   expect(host.textContent).toContain(m.auth_security_password_consequences());
@@ -52,11 +67,17 @@ test('confirmation mismatch is local; editing or cancelling retires an unsent re
   expect(host.textContent).not.toContain(m.auth_security_password_review_heading());
   expect(calls).toHaveLength(0);
 
-  await flush(() => host.querySelector('form')!.requestSubmit());
+  await submit();
   await flush(() => button(host, m.auth_inventory_cancel())!.click());
   expect((host.querySelector('#security-new-password') as HTMLInputElement).value).toBe('');
   expect((host.querySelector('#security-confirm-password') as HTMLInputElement).value).toBe('');
   expect(document.activeElement).toBe(host.querySelector('#security-new-password'));
+  expect(calls).toHaveLength(0);
+
+  await fillPassword(host, 'password-manager-filled secret');
+  await submit();
+  expect(host.textContent).toContain(m.auth_security_password_review_heading());
+  expect(host.textContent).not.toContain('password-manager-filled secret');
   expect(calls).toHaveLength(0);
 });
 
@@ -85,6 +106,27 @@ test('replacing native advice retires an unsent review before a credential reque
   );
   expect(ui.host.textContent).not.toContain(m.auth_security_password_review_heading());
   expect(button(ui.host, m.auth_security_password_review())?.disabled).toBe(true);
+  expect(ui.calls).toHaveLength(0);
+});
+
+test('changing the current account retires an unsent password review', async () => {
+  const ui = await mount();
+  await fillPassword(ui.host, 'a private password');
+  await flush(() => ui.host.querySelector('form')!.requestSubmit());
+  expect(ui.host.textContent).toContain(m.auth_security_password_review_heading());
+
+  const changedAccount = page();
+  if (changedAccount.kind !== 'ready' || !changedAccount.page) throw new Error('Security fixture is unavailable');
+  changedAccount.accountId = 'changed-account';
+  changedAccount.page.viewer.account_id = 'changed-account';
+  await ui.render(
+    <SecurityPage
+      initial={changedAccount}
+      identitySource={async () => ({ kind: 'unavailable' })}
+      inventorySource={emptyInventory}
+    />,
+  );
+  expect(ui.host.textContent).not.toContain(m.auth_security_password_review_heading());
   expect(ui.calls).toHaveLength(0);
 });
 

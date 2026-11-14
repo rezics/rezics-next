@@ -91,11 +91,6 @@ export function PasswordChangeForm({
   const currentReview = review && review.accountId === accountId && reviewVersion === draftVersion.current;
 
   useLayoutEffect(() => {
-    if (passwordError) newPasswordRef.current?.focus();
-    else if (confirmationError) passwordConfirmation.current?.focus();
-  }, [passwordError, confirmationError, newPasswordRef]);
-
-  useLayoutEffect(() => {
     if (operation) recoveryStatus.current?.focus();
     else if (currentReview) reviewHeading.current?.focus();
   }, [operation?.attempt.key, operation?.attempt.phase, operation?.status, currentReview]);
@@ -127,13 +122,16 @@ export function PasswordChangeForm({
 
   function validate(): boolean {
     let valid = true;
+    let firstInvalid: HTMLInputElement | null = null;
     if (!passwordLimits) {
       setPasswordError(m.auth_inventory_unavailable());
+      newPasswordRef.current?.focus();
       return false;
     }
     if (!password) {
       setPasswordError(m.auth_form_required());
       valid = false;
+      firstInvalid = newPasswordRef.current;
     } else if (!passwordLengthValid(password, passwordLimits)) {
       setPasswordError(
         m.auth_signup_password_invalid({
@@ -142,14 +140,18 @@ export function PasswordChangeForm({
         }),
       );
       valid = false;
+      firstInvalid = newPasswordRef.current;
     }
     if (!confirmation) {
       setConfirmationError(m.auth_form_required());
       valid = false;
+      firstInvalid ??= passwordConfirmation.current;
     } else if (password && confirmation !== password) {
       setConfirmationError(m.auth_signup_password_mismatch());
       valid = false;
+      firstInvalid ??= passwordConfirmation.current;
     }
+    firstInvalid?.focus();
     return valid;
   }
 
