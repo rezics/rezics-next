@@ -254,6 +254,43 @@ type StoryType = StoryObj<typeof meta>;
 
 export const Ready: StoryType = { render: () => <Story mode="ready" /> };
 export const RichInventory: StoryType = { render: () => <Story mode="rich" /> };
+const requestAnotherAnswer = async (canvasElement: HTMLElement) => {
+  const canvas = await inspectFirst(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: m.library_my_ratings_edit() }));
+  await userEvent.clear(canvas.getByRole('spinbutton'));
+  await userEvent.type(canvas.getByRole('spinbutton'), '2');
+  await userEvent.click(canvas.getAllByRole('button', { name: m.library_my_ratings_inspect() })[1]!);
+  return { canvas, dialog: within(canvasElement.ownerDocument.body) };
+};
+export const UnsavedSelectionDecision: StoryType = {
+  render: () => <Story mode="rich" />,
+  play: async ({ canvasElement }) => {
+    const { dialog } = await requestAnotherAnswer(canvasElement);
+    await expect(dialog.getByRole('alertdialog')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: m.library_my_ratings_stay() })).toBeFocused();
+  },
+};
+export const SelectionStayAndDiscard: StoryType = {
+  render: () => <Story mode="rich" />,
+  play: async ({ canvasElement }) => {
+    const { canvas, dialog } = await requestAnotherAnswer(canvasElement);
+    await userEvent.click(dialog.getByRole('button', { name: m.library_my_ratings_stay() }));
+    await expect(canvas.getByRole('spinbutton')).toHaveValue(2);
+    await expect(canvas.getByRole('spinbutton')).toBeFocused();
+    await userEvent.click(canvas.getAllByRole('button', { name: m.library_my_ratings_inspect() })[0]!);
+    await expect(canvas.getByRole('spinbutton')).toHaveValue(2);
+    await expect(dialog.queryByRole('alertdialog')).toBeNull();
+    await userEvent.click(canvas.getAllByRole('button', { name: m.library_my_ratings_inspect() })[1]!);
+    await userEvent.click(dialog.getByRole('button', { name: m.library_my_ratings_leave() }));
+    const selected = canvasElement.querySelector<HTMLElement>('[data-selected]')!;
+    await expect(selected).toHaveAttribute('data-own-vote-target', targetA);
+    await expect(selected).toHaveAttribute('data-own-vote-question', questionB);
+    await expect(within(selected).getByRole('button', { name: m.library_my_ratings_inspect() })).toBeFocused();
+    await userEvent.click(within(selected).getByRole('button', { name: m.library_my_ratings_edit() }));
+    await expect(canvas.getByRole('spinbutton')).toHaveValue(4);
+    await expect(canvas.getByRole('spinbutton')).toHaveAttribute('max', '4');
+  },
+};
 export const NativeZero: StoryType = {
   render: () => <Story mode="ready" />,
   play: async ({ canvasElement }) => {

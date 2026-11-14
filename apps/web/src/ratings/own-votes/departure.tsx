@@ -59,6 +59,7 @@ export function OwnVotesDeparture({
   if (waiting.current && (waiting.current.owner !== owner || !protectedNow())) {
     waiting.current.resolve(false);
     waiting.current = null;
+    setDecision(null);
   }
   const visibleDecision = decision?.owner === owner && decision === waiting.current && isCurrent() ? decision : null;
 
@@ -140,6 +141,7 @@ export function OwnVotesDeparture({
         <AlertDialogContent
           initialFocus={stay}
           finalFocus={() =>
+            connected.current &&
             live.current.owner === visibleDecision.owner &&
             live.current.isCurrent() &&
             visibleDecision.returnFocus?.isConnected

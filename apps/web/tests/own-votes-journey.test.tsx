@@ -17,6 +17,7 @@ const terminal = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
 const target = 'b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2';
 const question = 'd4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4';
 const secondTarget = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
+const secondQuestion = 'e5e5e5e5-e5e5-45e5-85e5-e5e5e5e5e5e5';
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -75,15 +76,15 @@ function deferred<T>() {
   const promise = new Promise<T>((yes) => (resolve = yes));
   return { promise, resolve };
 }
-function row(retired = false, sourceTarget = target): OwnVoteEntry {
-  const path = `/v1/subjects/${sourceTarget}/ratings/${question}/vote`;
+function row(retired = false, sourceTarget = target, sourceQuestion = question): OwnVoteEntry {
+  const path = `/v1/subjects/${sourceTarget}/ratings/${sourceQuestion}/vote`;
   return {
     targetId: sourceTarget,
-    questionId: question,
+    questionId: sourceQuestion,
     subject: subjectSummary({ id: terminal, label: { value: 'Kokoro', language: 'en' } }),
     subjectHref: `/v1/subjects/${target}`,
     question: {
-      id: question,
+      id: sourceQuestion,
       revision: 1,
       label: 'How much does this work stay with you?',
       grain: 'work',
@@ -387,23 +388,13 @@ test('the single departure decision preserves a dirty editor on Stay and retires
     await click(view, button(view, m.library_my_ratings_edit()));
     const input = view.host.querySelector<HTMLInputElement>('input');
     if (!input) throw new Error('Expected the selected answer editor');
-    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set;
-    if (!setter) throw new Error('Expected an input value setter');
-    await act(async () => {
-      setter.call(input, '2');
-      input.dispatchEvent(new view.window.Event('input', { bubbles: true }));
-      input.dispatchEvent(new view.window.Event('change', { bubbles: true }));
-    });
+    await changeDraft(view, input, '2');
     const subjectLink = [...view.host.querySelectorAll('a')].find((link) => link.textContent?.trim() === 'Kokoro');
     if (!subjectLink) throw new Error('Expected the admitted Subject return link');
 
     await click(view, subjectLink);
     expect(view.window.document.body.textContent).toContain(m.library_my_ratings_departure_title());
-    const stay = [...view.window.document.body.querySelectorAll('button')].find(
-      (candidate) => candidate.textContent?.trim() === m.library_my_ratings_stay(),
-    );
-    if (!stay) throw new Error('Expected Stay in the departure decision');
-    await click(view, stay);
+    await click(view, dialogButton(view, m.library_my_ratings_stay()));
     expect(view.router.state.location.pathname).toBe('/library/ratings');
     expect((view.host.querySelector('input') as HTMLInputElement | null)?.value).toBe('2');
     expect(button(view, m.library_my_ratings_save())).toBeDefined();
@@ -414,11 +405,7 @@ test('the single departure decision preserves a dirty editor on Stay and retires
     if (!currentSubjectLink) throw new Error('Expected the current Subject return link');
     await click(view, currentSubjectLink);
     expect(view.window.document.body.textContent).toContain(m.library_my_ratings_departure_title());
-    const leave = [...view.window.document.body.querySelectorAll('button')].find(
-      (candidate) => candidate.textContent?.trim() === m.library_my_ratings_leave(),
-    );
-    if (!leave) throw new Error('Expected Leave in the departure decision');
-    await click(view, leave);
+    await click(view, dialogButton(view, m.library_my_ratings_leave()));
     expect(view.router.state.location.pathname).not.toBe('/library/ratings');
     expect(view.host.querySelector('input')).toBeNull();
     expect(view.host.textContent).toContain('Subject reader');
@@ -430,6 +417,65 @@ test('the single departure decision preserves a dirty editor on Stay and retires
     expect(button(view, m.library_my_ratings_edit())).toBeUndefined();
   } finally {
     await view.close();
+  }
+});
+
+const dialogButton = (view: Awaited<ReturnType<typeof setup>>, label: string) =>
+  [...view.window.document.body.querySelectorAll('button')].find((item) => item.textContent === label)!;
+const inspectAt = (view: Awaited<ReturnType<typeof setup>>, index: number) =>
+  view.host.querySelectorAll<HTMLButtonElement>('[data-own-vote-pair] button[aria-pressed]')[index]!;
+async function changeDraft(view: Awaited<ReturnType<typeof setup>>, input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')!.set!;
+  await act(async () => {
+    setter.call(input, value);
+    input.dispatchEvent(new view.window.Event('input', { bubbles: true }));
+    input.dispatchEvent(new view.window.Event('change', { bubbles: true }));
+  });
+}
+
+test('same-row Inspect preserves every draft; another exact pair shares Stay/discard and keeps the first request', async () => {
+  for (const value of [null, '0', '2', '', '3']) {
+    const requested = row(false, target, secondQuestion);
+    requested.question.scale = { min: 0, max: 4, displayStep: 1 };
+    const page = { ...pageOf(row()), votes: [row(), requested, row(false, secondTarget)] };
+    const view = await setup(page, async () => ({ kind: 'uncertain' }));
+    try {
+      await click(view, inspectAt(view, 0));
+      let input: HTMLInputElement | null = null;
+      if (value !== null) {
+        await click(view, button(view, m.library_my_ratings_edit()));
+        input = view.host.querySelector<HTMLInputElement>('input')!;
+        await changeDraft(view, input, value);
+      }
+      await click(view, inspectAt(view, 0));
+      expect(view.host.querySelector('input')).toBe(input);
+      expect(input?.value ?? null).toBe(value);
+      expect(view.window.document.querySelector('[role="alertdialog"]')).toBeNull();
+      await click(view, inspectAt(view, 1));
+      if (value !== null && value !== '0') {
+        expect(view.host.querySelector('input')).toBe(input);
+        await click(view, dialogButton(view, m.library_my_ratings_stay()));
+        await act(async () => new Promise((resolve) => window.requestAnimationFrame(() => resolve(undefined))));
+        expect(input!.value).toBe(value);
+        expect(view.host.querySelector('[data-selected]')?.getAttribute('data-own-vote-question')).toBe(question);
+        expect(view.window.document.activeElement).toBe(input);
+        await click(view, inspectAt(view, 1));
+        await click(view, inspectAt(view, 2));
+        expect(view.window.document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+        await click(view, dialogButton(view, m.library_my_ratings_leave()));
+      }
+      const selected = view.host.querySelector('[data-selected]');
+      expect(selected?.getAttribute('data-own-vote-target')).toBe(target);
+      expect(selected?.getAttribute('data-own-vote-question')).toBe(secondQuestion);
+      expect(view.window.document.activeElement).toBe(inspectAt(view, 1));
+      await click(view, button(view, m.library_my_ratings_edit()));
+      expect(view.host.querySelector('input')?.getAttribute('max')).toBe('4');
+      expect(view.host.querySelector('input')?.getAttribute('step')).toBe('1');
+      expect(view.calls).toHaveLength(0);
+      expect(view.refreshCount.value).toBe(0);
+    } finally {
+      await view.close();
+    }
   }
 });
 
@@ -620,7 +666,8 @@ test('replacement advice retires drafts, delayed commands and delayed exact read
 });
 
 test('a matching newer exact read leaves an uncertain original intent available for explicit identical replay', async () => {
-  const view = await setup(pageOf(row()), async () => ({ kind: 'uncertain' }), {
+  const page = { ...pageOf(row()), votes: [row(), row(false, secondTarget)] };
+  const view = await setup(page, async () => ({ kind: 'uncertain' }), {
     review: async () => ({ kind: 'current', units: 0, revision: 9, at: row().own.at }),
   });
   try {
@@ -628,6 +675,10 @@ test('a matching newer exact read leaves an uncertain original intent available 
     await click(view, button(view, m.library_my_ratings_edit()));
     await click(view, button(view, m.library_my_ratings_save()));
     await click(view, button(view, m.library_my_ratings_review_original()));
+    expect(inspectAt(view, 1).disabled).toBe(true);
+    await click(view, inspectAt(view, 1));
+    expect(view.host.querySelector('[data-selected]')?.getAttribute('data-own-vote-target')).toBe(target);
+    expect(view.calls).toHaveLength(1);
     expect(view.host.textContent).toContain(m.library_my_ratings_uncertain_text());
     expect(view.host.textContent).not.toContain(m.library_my_ratings_saved());
     expect(button(view, m.library_my_ratings_retry_original()).closest('[data-slot="own-vote-editor"]')).not.toBeNull();
