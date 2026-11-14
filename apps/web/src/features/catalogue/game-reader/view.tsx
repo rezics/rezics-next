@@ -32,6 +32,7 @@ import type { GameClassificationReturn } from '../game-current-visit-descriptor'
 
 type Props = GameReaderAddress & {
   locale: string;
+  /** Embedded identity is supplied by the ordinary Subject frame; fact hierarchy is always compact. */
   compact?: boolean;
   realm?: string | undefined;
   source: object | string;
@@ -46,7 +47,7 @@ type Props = GameReaderAddress & {
 };
 
 /** Source and authority replacement retire the entire window, its cursors, reveal consent and focus intent. */
-export function GameReader(props: Props) {
+export function GameReader({ compact = false, ...props }: Props) {
   const id = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const focused = useRef<EventTarget | null>(null);
@@ -143,12 +144,13 @@ export function GameReader(props: Props) {
           tabIndex={-1}
           className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          {props.compact ? m.game_reader_overview_title({}, o) : m.game_reader_title({}, o)}
+          {m.game_reader_overview_title({}, o)}
         </h2>
         {reading.available ? (
           <GameWindow
             key={reading.key}
             {...props}
+            compact={compact}
             current={reading.isCurrent}
             focusHeading={() => heading.current?.focus()}
             focusAssertion={(statement) => {
@@ -311,7 +313,7 @@ function GameWindow({
       {!page ? <SafeNavigation id={id} locale={locale} realm={realm} /> : null}
       {!page ? failureNotice : null}
       {page ? (
-        <div key={window.revision} className="space-y-5">
+        <div className="space-y-5">
           {!compact && (
             <p>
               <span lang={page.grain.lang ?? undefined}>{page.grain.text}</span> ·{' '}
@@ -338,9 +340,13 @@ function GameWindow({
               {!page.groups.length ? <p>{m.game_reader_empty({}, o)}</p> : null}
               {page.groups.map((group) => {
                 const content = (
-                  <section key={group.id} className="space-y-3">
+                  <section
+                    key={`${group.id}:${window.revision}`}
+                    className="space-y-3"
+                    data-game-fact-group={group.id}
+                  >
                     <h3 className="font-semibold">{groups[group.id]}</h3>
-                    <dl className={compact ? 'grid min-w-0 gap-x-8 gap-y-5 sm:grid-cols-2' : 'space-y-4'}>
+                    <dl className="grid min-w-0 gap-x-8 gap-y-5 sm:grid-cols-2">
                       {group.fields.map((field) => (
                         <div key={field.property}>
                           <dt className="font-medium" lang={field.label.lang ?? undefined}>
@@ -372,7 +378,6 @@ function GameWindow({
                                       related={page.public.related}
                                       locale={locale}
                                       date={field.date}
-                                      compact={compact}
                                       link={Link}
                                     />
                                   </div>,
@@ -385,9 +390,10 @@ function GameWindow({
                     </dl>
                   </section>
                 );
-                return compact && (group.id === 'credits' || group.id === 'relations') ? (
+                return group.id === 'credits' || group.id === 'relations' ? (
                   <details
                     key={group.id}
+                    data-game-extra-group={group.id}
                     open={
                       (returnState?.kind === 'current' &&
                         group.fields.some((field) =>
@@ -407,14 +413,13 @@ function GameWindow({
                 );
               })}
               <details
-                open={!compact || !!failure || undefined}
                 data-slot="game-release-destination"
                 className="min-w-0 border-t border-border pt-3"
               >
                 <summary className={`${action} cursor-pointer font-medium text-primary`}>
                   {m.subject_editions({}, o)}
                 </summary>
-                <section className="space-y-4 pt-3" data-slot="game-editions">
+                <section key={window.revision} className="space-y-4 pt-3" data-slot="game-editions">
                   <h3 className="font-semibold">{m.subject_editions({}, o)}</h3>
                   <p>{m.game_reader_editions_scope({}, o)}</p>
                   {busy ? (
@@ -504,7 +509,6 @@ function GameWindow({
                                   related={related}
                                   locale={locale}
                                   link={Link}
-                                  compact={compact}
                                 />
                               ) : (
                                 <p>{m.game_reader_assertion_unavailable({}, o)}</p>
@@ -525,7 +529,6 @@ function GameWindow({
                                   page={page}
                                   locale={locale}
                                   link={Link}
-                                  compact={compact}
                                 />
                               ) : null}
                             </>

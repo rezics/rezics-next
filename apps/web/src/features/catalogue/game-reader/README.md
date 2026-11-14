@@ -111,10 +111,21 @@ It adds no request, hydration or retained response history; membership assertion
 An initially unavailable release section retains admitted work facts and retries the first native window explicitly;
 withheld or invalid admission still removes both sections. No former release destinations survive a failed retry.
 
-Compact work facts use a two-column rhythm where space permits. Qualifiers and references remain available in each
-fact's evidence disclosure; native date values retain calendar, signed time, precision, timezone and uncertainty.
-Comparison groups with an available value omit redundant missing/unsupported alternative properties in compact mode;
-withheld and unavailable alternatives remain explicit. The standalone reader retains its full comparison states.
+Decision: every Game reader opens with compact admitted work facts; Credits, Relations, Editions, release comparison
+and each fact's qualifiers/citations are labelled native disclosures, closed until deliberately opened. The optional
+`compact` identity prop only suppresses identity text already supplied by the Subject frame; it never selects a long
+fact/evidence mode. Historical meaning and unavailable/withheld field states stay beside their affected values.
+An explicit current-assertion return may reveal its containing group without opening Editions or comparison.
+
+Facts use a two-column rhythm where space permits and retain released property and related-Subject labels. Ordinary
+Gregorian dates use natural language at the supplied year/month/day precision; uncertainty, unsupported calendars and
+long signed years retain native presentation. Evidence retains the unchanged native date, accepting digest, statement,
+rank, qualifier and reference parts. A missing released evidence label uses the existing unlabelled guidance.
+Comparison groups with an available value omit redundant missing/unsupported alternative properties;
+withheld and unavailable alternatives remain explicit. Comparison failure and its exact native retry belong inside
+Editions, as does release-window failure when work facts survive. Neither opens that disclosure automatically.
+Deliberate Editions disclosure survives native continuation/retry while its replaced rows, inspection and spoiler
+consent retire; source/reader replacement retires the entire reader as before.
 
 Named entries are `pages-library-games--exact-release-return`, `--sparse`, `--release-section-failure` and
 `--reviews-section-failure` (each uses the same prefix). They stay at their named state, without automatic tab or
