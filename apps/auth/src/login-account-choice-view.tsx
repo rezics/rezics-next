@@ -38,8 +38,8 @@ export function LoginAccountChoiceView({
       : null;
   return (
     <AuthTaskSection aria-label={m.auth_login_heading()} aria-busy={pending || choice.kind === 'loading'}>
-      <div ref={status} tabIndex={-1} role="status" className="grid gap-3">
-        {uncertain ? <AuthNotice>{m.auth_login_uncertain()}</AuthNotice> : null}
+      <AuthNotice ref={status} tabIndex={-1} role="status" className="gap-2">
+        {uncertain ? <p className="font-medium">{m.auth_login_uncertain()}</p> : null}
         {choice.kind === 'loading' ? <p>{m.auth_inventory_loading()}</p> : null}
         {choice.kind === 'ready' && choice.observation === 'changed' ? <p>{m.auth_login_viewer_changed()}</p> : null}
         {choice.kind === 'ready' && choice.observation === 'signed-out' ? (
@@ -47,11 +47,9 @@ export function LoginAccountChoiceView({
         ) : null}
         {choice.kind === 'ready' && choice.observation === 'reviewed' ? <p>{m.auth_login_reviewed()}</p> : null}
         {viewer ? (
-          <AuthNotice>
-            <p className="font-medium text-base">
-              {m.auth_login_current_account({ account: viewer.email ?? m.auth_security_rezics_account() })}
-            </p>
-          </AuthNotice>
+          <p className="font-medium text-base">
+            {m.auth_login_current_account({ account: viewer.email ?? m.auth_security_rezics_account() })}
+          </p>
         ) : null}
         {choice.kind === 'ready' && choice.mode === 'credentials' && choice.page.viewer.kind === 'signed-in' ? (
           <p>{m.auth_login_switching()}</p>
@@ -60,23 +58,31 @@ export function LoginAccountChoiceView({
           <p>{m.auth_login_sign_in_required()}</p>
         ) : null}
         {pending ? <p>{passkeyPending ? m.auth_login_pending_passkey() : m.auth_login_pending_password()}</p> : null}
-      </div>
+      </AuthNotice>
       {choice.kind === 'unavailable' ? <ErrorAlert>{m.auth_login_page_unavailable()}</ErrorAlert> : null}
-      <AuthActions>
-        {allowContinue && loginCanContinue(choice) ? (
-          <Button type="button" disabled={pending} onClick={onContinue}>
-            {m.auth_login_continue()}
+      {choice.kind === 'unavailable' ? (
+        <AuthActions>
+          <Button type="button" disabled={pending} onClick={onReview}>
+            {m.auth_login_page_retry()}
           </Button>
-        ) : null}
-        {viewer ? (
-          <Button type="button" variant="outline" disabled={pending} onClick={onSwitch}>
-            {m.auth_login_switch_account()}
-          </Button>
-        ) : null}
-      </AuthActions>
-      {choice.kind !== 'loading' ? (
+        </AuthActions>
+      ) : (
+        <AuthActions>
+          {allowContinue && loginCanContinue(choice) ? (
+            <Button type="button" disabled={pending} onClick={onContinue}>
+              {m.auth_login_continue()}
+            </Button>
+          ) : null}
+          {viewer ? (
+            <Button type="button" variant="outline" disabled={pending} onClick={onSwitch}>
+              {m.auth_login_switch_account()}
+            </Button>
+          ) : null}
+        </AuthActions>
+      )}
+      {choice.kind !== 'loading' && choice.kind !== 'unavailable' ? (
         <Button type="button" variant="ghost" disabled={pending} onClick={onReview}>
-          {choice.kind === 'unavailable' ? m.auth_login_page_retry() : m.auth_login_review_session()}
+          {m.auth_login_review_session()}
         </Button>
       ) : null}
     </AuthTaskSection>
