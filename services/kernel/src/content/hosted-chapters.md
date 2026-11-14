@@ -973,6 +973,12 @@ or targets. Exact opening alone loads one body through ordinary Post disclosure,
 then closes the original observation: a fresh read cannot bless a changed source. Attachment validation owns write
 admission; metadata disclosure does not certify canonical bytes.
 
+Decision: Contents and navigation prepare independent target metadata in a local four-operation window per phase.
+Ordinary preparations remain grouped by full target key, privately consented fallback remains one per occurrence,
+and retained finalizations use a separate four-operation window. A page of 20 chapters therefore performs at most
+40 initial preparations and 20 finalizations, with no added probes or chapter-body reads; response and anchor order,
+raw continuation and final catalogue disclosure remain unchanged.
+
 Decision: attachment-denial coverage checks each thread, revision and digest mismatch for `not_found` and zero body
 loads. Cross-route native rejection has no read-chain probe; admitted attachment writes retain the metadata-only
 probe requirement. Mounted append coverage reuses the suite-owned Auth/DBOS fixture and creates a fresh catalogue

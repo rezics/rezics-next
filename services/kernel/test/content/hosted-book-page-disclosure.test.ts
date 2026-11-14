@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { serializeDocument } from '@rezics/document';
 import { hostedBookPageDisclosureFixture } from './support/hosted-book-page-disclosure-fixture.ts';
+import { discloseHostedPageTargets } from '../../src/content/hosted-chapters-reads.ts';
+import type { AnchoredPosition } from '../../src/content/model.ts';
+import type { HostedChapterTarget, OrderedHostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import readChain from '../../src/content/read-chain.sql';
 import { observeSql } from './support/sql-observer.ts';
 
@@ -184,4 +187,146 @@ test('published private selections appear in pages under their own consent and r
   expect(afterRestriction.value.items[0]).toMatchObject({ occurrenceId: unavailable!.occurrenceId, position: 2 });
   expect(afterRestriction.value.nextCursor).toBeNull();
   expect(bodyProbes(progressStart)).toHaveLength(0);
+});
+
+function pageTarget(id: string): HostedChapterTarget {
+  return {
+    threadId: `thread-${id}`,
+    postId: `post-${id}`,
+    revisionId: `revision-${id}`,
+    sha256: id.repeat(64),
+  };
+}
+
+function pagePlacement(occurrenceId: string, target: HostedChapterTarget, position: number): OrderedHostedPlacement {
+  return { occurrenceId, parentId: null, position, title: occurrenceId, kind: 'chapter', target, ordinal: position };
+}
+
+function pageAnchor(position: number): AnchoredPosition {
+  const partition = {
+    partitionNo: 1,
+    node: 'local',
+    writeState: 'active' as const,
+    movedTo: null,
+    epoch: 1,
+    position: BigInt(position),
+  };
+  return { partition, epoch: partition.epoch, position: partition.position };
+}
+
+test('Book target disclosure is bounded, ordered, and keeps each scoped occurrence proof', async () => {
+  type Phase = 'ordinary' | 'scoped' | 'final';
+  const active: Record<Phase, number> = { ordinary: 0, scoped: 0, final: 0 };
+  const maximum: Record<Phase, number> = { ordinary: 0, scoped: 0, final: 0 };
+  const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+  async function run<T>(phase: Phase, milliseconds: number, read: () => T): Promise<T> {
+    active[phase] += 1;
+    maximum[phase] = Math.max(maximum[phase], active[phase]);
+    try {
+      await wait(milliseconds);
+      return read();
+    } finally {
+      active[phase] -= 1;
+    }
+  }
+
+  const targets = ['a', 'b', 'c', 'd', 'e', 'f'].map(pageTarget);
+  const placements = [
+    ...Array.from({ length: 6 }, (_, index) => pagePlacement(`a${index + 1}`, targets[0]!, index)),
+    ...targets.slice(1).map((target, index) => pagePlacement(target.threadId.slice(7), target, index + 6)),
+  ];
+  const ordinaryStarted: string[] = [];
+  const ordinaryFinished: string[] = [];
+  const scopedStarted: string[] = [];
+  const finalFinished: string[] = [];
+  let ordinaryFinishedWhenScopedStarted = -1;
+  let scopedFinishedWhenFinalStarted = -1;
+  let scopedFinished = 0;
+  const ordinaryDelay: Record<string, number> = {
+    'thread-a': 30,
+    'thread-b': 26,
+    'thread-c': 22,
+    'thread-d': 2,
+    'thread-e': 15,
+    'thread-f': 12,
+  };
+  const finalDelay: Record<string, number> = {
+    'thread-b': 30,
+    'thread-c': 26,
+    'thread-d': 2,
+    'thread-e': 22,
+    'thread-f': 18,
+    'scope:a1': 14,
+    'scope:a2': 10,
+  };
+  const guard = (key: string, result: Readonly<{ anchor: AnchoredPosition }> | null) => ({
+    final: () => {
+      if (finalFinished.length === 0) scopedFinishedWhenFinalStarted = scopedFinished;
+      return run('final', finalDelay[key] ?? 5, () => {
+        finalFinished.push(key);
+        return result;
+      });
+    },
+  });
+
+  const disclosed = await discloseHostedPageTargets(
+    placements,
+    async (target) => {
+      ordinaryStarted.push(target.threadId);
+      return run('ordinary', ordinaryDelay[target.threadId]!, () => {
+        ordinaryFinished.push(target.threadId);
+        return target.threadId === 'thread-a'
+          ? null
+          : guard(target.threadId, target.threadId === 'thread-b' ? null : { anchor: pageAnchor(3) });
+      });
+    },
+    async (placement) => {
+      if (scopedStarted.length === 0) ordinaryFinishedWhenScopedStarted = ordinaryFinished.length;
+      scopedStarted.push(placement.occurrenceId);
+      return run('scoped', placement.occurrenceId === 'a1' ? 8 : 3, () => {
+        scopedFinished += 1;
+        return guard(
+          `scope:${placement.occurrenceId}`,
+          placement.occurrenceId === 'a2' ? null : { anchor: pageAnchor(Number(placement.occurrenceId.slice(1))) },
+        );
+      });
+    },
+  );
+
+  expect(ordinaryStarted.filter((id) => id === 'thread-a')).toHaveLength(1);
+  expect(ordinaryFinished[0]).toBe('thread-d');
+  expect(ordinaryFinishedWhenScopedStarted).toBe(6);
+  expect(scopedStarted).toEqual(['a1', 'a2', 'a3', 'a4', 'a5', 'a6']);
+  expect(scopedFinishedWhenFinalStarted).toBe(6);
+  expect(finalFinished[0]).toBe('thread-d');
+  expect(maximum).toEqual({ ordinary: 4, scoped: 4, final: 4 });
+  expect([...disclosed.keys()]).toEqual(['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'b', 'c', 'd', 'e', 'f']);
+  expect(disclosed.get('a1')).toEqual(pageAnchor(1));
+  expect(disclosed.get('a2')).toBeNull();
+  expect(disclosed.get('b')).toBeNull();
+  for (const id of ['a3', 'a4', 'a5', 'a6']) expect(disclosed.get(id)).toEqual(pageAnchor(Number(id.slice(1))));
+  for (const id of ['c', 'd', 'e', 'f']) expect(disclosed.get(id)).toEqual(pageAnchor(3));
+});
+
+test('Book target dependency failure stops new work and propagates the original error', async () => {
+  const failure = new Error('target metadata unavailable');
+  const started: string[] = [];
+  const placements = Array.from({ length: 8 }, (_, position) => {
+    const id = position === 0 ? 'failure' : `target-${position}`;
+    return pagePlacement(id, pageTarget(id), position);
+  });
+  let caught: unknown;
+  try {
+    await discloseHostedPageTargets(placements, async (target) => {
+      started.push(target.threadId);
+      if (target.threadId === 'thread-failure') throw failure;
+      await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      return null;
+    });
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(caught).toBe(failure);
+  expect(started).toHaveLength(4);
 });

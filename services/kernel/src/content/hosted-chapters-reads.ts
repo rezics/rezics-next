@@ -487,6 +487,104 @@ async function page(
   return { value, anchors: disclosed.anchors };
 }
 
+const HOSTED_PAGE_DISCLOSURE_CONCURRENCY = 4;
+
+type HostedChapterPlacement = Extract<OrderedHostedPlacement, { kind: 'chapter' }>;
+type HostedPageTargetGuard = Readonly<{
+  final(): Promise<Readonly<{ anchor: AnchoredPosition }> | null>;
+}>;
+
+/** Run independent target work in a local window. A rejection stops new work
+ * immediately; already active operations settle before the original error is
+ * rethrown. Results retain input order regardless of completion order. */
+async function withinHostedPageWindow<T, R>(
+  values: readonly T[],
+  work: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let next = 0;
+  let rejected = false;
+  let failure: unknown;
+  const worker = async () => {
+    while (!rejected) {
+      const index = next++;
+      if (index >= values.length) return;
+      try {
+        results[index] = await work(values[index]!);
+      } catch (error) {
+        if (!rejected) {
+          rejected = true;
+          failure = error;
+        }
+        return;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(HOSTED_PAGE_DISCLOSURE_CONCURRENCY, values.length) }, () => worker()),
+  );
+  if (rejected) throw failure;
+  return results;
+}
+
+/** Prepare and close a page's target observations while keeping the I/O
+ * strategy injectable for focused bounded-work tests. Ordinary targets share
+ * one observation by full identity; private fallback remains occurrence-bound. */
+export async function discloseHostedPageTargets(
+  placements: readonly OrderedHostedPlacement[],
+  prepareOrdinary: (target: HostedChapterPlacement['target']) => Promise<HostedPageTargetGuard | null>,
+  prepareScoped?: (placement: HostedChapterPlacement) => Promise<HostedPageTargetGuard | null>,
+): Promise<ReadonlyMap<string, AnchoredPosition | null>> {
+  const targetGroups = new Map<string, HostedChapterPlacement['target']>();
+  for (const placement of placements) {
+    if (placement.kind === 'chapter') targetGroups.set(hostedTargetKey(placement.target), placement.target);
+  }
+  const ordinary = new Map(
+    await withinHostedPageWindow([...targetGroups], async ([key, target]) => [key, await prepareOrdinary(target)] as const),
+  );
+
+  const scopedPlacements = prepareScoped
+    ? placements.filter(
+        (placement): placement is HostedChapterPlacement =>
+          placement.kind === 'chapter' && ordinary.get(hostedTargetKey(placement.target)) == null,
+      )
+    : [];
+  const scoped = new Map(
+    await withinHostedPageWindow(scopedPlacements, async (placement) =>
+      [placement.occurrenceId, await prepareScoped!(placement)] as const,
+    ),
+  );
+
+  const finalEntries: Array<
+    | Readonly<{ kind: 'ordinary'; identity: string; guard: HostedPageTargetGuard }>
+    | Readonly<{ kind: 'scoped'; identity: string; guard: HostedPageTargetGuard }>
+  > = [];
+  for (const [identity, guard] of ordinary) {
+    if (guard) finalEntries.push({ kind: 'ordinary', identity, guard });
+  }
+  for (const [identity, guard] of scoped) {
+    if (guard) finalEntries.push({ kind: 'scoped', identity, guard });
+  }
+  const finalized = await withinHostedPageWindow(finalEntries, async ({ guard }) => guard.final());
+  const ordinaryAnchors = new Map<string, AnchoredPosition | null>();
+  const scopedAnchors = new Map<string, AnchoredPosition | null>();
+  finalEntries.forEach(({ kind, identity }, index) => {
+    const anchor = finalized[index]?.anchor ?? null;
+    (kind === 'ordinary' ? ordinaryAnchors : scopedAnchors).set(identity, anchor);
+  });
+
+  return new Map(
+    placements.flatMap((placement) => {
+      if (placement.kind !== 'chapter') return [];
+      const key = hostedTargetKey(placement.target);
+      const anchor = ordinary.get(key)
+        ? ordinaryAnchors.get(key) ?? null
+        : scopedAnchors.get(placement.occurrenceId) ?? null;
+      return [[placement.occurrenceId, anchor] as const];
+    }),
+  );
+}
+
 async function disclosePage(
   deps: HostedDependencies,
   catalogueId: string,
@@ -495,41 +593,28 @@ async function disclosePage(
   context: ReadContext,
   initial: AnchoredPosition[],
 ) {
-  const guards = new Map<string, Awaited<ReturnType<typeof prepareHostedTargetMetadata>>>();
-  for (const placement of placements) {
-    if (placement.kind !== 'chapter') continue;
-    const key = hostedTargetKey(placement.target);
-    if (!guards.has(key)) guards.set(key, await prepareHostedTargetMetadata(deps, placement.target, context));
-  }
-  const bookGuards = new Map<string, Awaited<ReturnType<typeof prepareHostedBookTargetMetadata>>>();
-  if (view.kind === 'publication') {
-    for (const placement of placements) {
-      if (placement.kind !== 'chapter' || guards.get(hostedTargetKey(placement.target))) continue;
-      bookGuards.set(
-        placement.occurrenceId,
-        await prepareHostedBookTargetMetadata(
-          deps,
-          placement.target,
-          {
-            catalogueId,
-            publicationId: view.revisionId,
-            occurrenceId: placement.occurrenceId,
-            sourceRevisionId: placement.target.revisionId,
-          },
-          context,
-        ),
-      );
-    }
-  }
-  const targets = new Map<string, AnchoredPosition | null>();
-  for (const [key, guard] of guards) targets.set(key, (await guard?.final())?.anchor ?? null);
-  const bookTargets = new Map<string, AnchoredPosition | null>();
-  for (const [occurrenceId, guard] of bookGuards) bookTargets.set(occurrenceId, (await guard?.final())?.anchor ?? null);
+  const targetAnchors = await discloseHostedPageTargets(
+    placements,
+    (target) => prepareHostedTargetMetadata(deps, target, context),
+    view.kind === 'publication'
+      ? (placement) =>
+          prepareHostedBookTargetMetadata(
+            deps,
+            placement.target,
+            {
+              catalogueId,
+              publicationId: view.revisionId,
+              occurrenceId: placement.occurrenceId,
+              sourceRevisionId: placement.target.revisionId,
+            },
+            context,
+          )
+      : undefined,
+  );
   const anchors = [...initial];
   const items = placements.map((placement) => {
     if (placement.kind === 'part') return available(placement);
-    const key = hostedTargetKey(placement.target);
-    const targetAnchor = guards.get(key) ? targets.get(key) : bookTargets.get(placement.occurrenceId);
+    const targetAnchor = targetAnchors.get(placement.occurrenceId) ?? null;
     if (!targetAnchor) return unavailable(placement);
     anchors.push(targetAnchor);
     return available(placement);
