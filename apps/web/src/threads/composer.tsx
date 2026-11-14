@@ -58,7 +58,7 @@ type WritingRequest<Result, Value> = {
   send: () => Promise<Result>;
   finish: (value: Value) => void;
   workingRevision: number;
-  credential: string | undefined;
+  credential: string | null;
   locale: string;
   action: WritingAction;
   target: string;
