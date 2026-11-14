@@ -316,11 +316,19 @@ test('localized page states distinguish preparation, completion, denial, continu
         {
           state: 'loaded',
           nativeSourceFingerprint: 'source',
-          page: page([
-            entry(reportId, 'A recognizable public title'),
-            { ...entry(secondReportId, 'Another public title'), outcome: 'actioned', resolvedAt: '2026-10-28T08:00:00.000Z' },
-            withheld,
-          ], 'same/frontier', secondReportId),
+          page: page(
+            [
+              entry(reportId, 'A recognizable public title'),
+              {
+                ...entry(secondReportId, 'Another public title'),
+                outcome: 'actioned',
+                resolvedAt: '2026-10-28T08:00:00.000Z',
+              },
+              withheld,
+            ],
+            'same/frontier',
+            secondReportId,
+          ),
         },
         { cursor: 'same/frontier', reportId: secondReportId },
       );

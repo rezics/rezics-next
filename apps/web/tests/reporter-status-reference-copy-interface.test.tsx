@@ -189,7 +189,8 @@ test('status loading, failure, closed and concealed keep exact history return wi
   const returnHref = '/en/moderation/reports?cursor=original%2Fpage&reportId=report-1';
   for (const state of ['loading', 'unavailable', 'closed', 'concealed'] as const) {
     const content = renderToStaticMarkup(
-      createElement(ReporterStatusPage,
+      createElement(
+        ReporterStatusPage,
         state === 'unavailable' ? { onRetry: () => undefined, returnHref } : { state, returnHref },
       ),
     );

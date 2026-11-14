@@ -105,18 +105,26 @@ export const PendingResolvedAndWithheld: Story = {
   render: () => (
     <Frame>
       <ReporterHistoryPage
-        result={loaded(page('ready', [
-          {
-            ...row,
-            targetSummary: {
-              state: 'available',
-              label: 'A long discussion title about shared reading, repeated advertisements and the original submission context',
-              href: `/v1/threads/${targetId}`,
-            },
-          },
-          resolved,
-          withheld,
-        ], withheld.id, 'next-frontier'))}
+        result={loaded(
+          page(
+            'ready',
+            [
+              {
+                ...row,
+                targetSummary: {
+                  state: 'available',
+                  label:
+                    'A long discussion title about shared reading, repeated advertisements and the original submission context',
+                  href: `/v1/threads/${targetId}`,
+                },
+              },
+              resolved,
+              withheld,
+            ],
+            withheld.id,
+            'next-frontier',
+          ),
+        )}
         query={{ cursor: 'opaque/history-cursor', reportId: withheld.id }}
       />
     </Frame>

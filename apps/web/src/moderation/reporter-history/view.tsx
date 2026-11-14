@@ -219,11 +219,7 @@ export function ReporterHistoryPage({
         </h1>
         <p className="text-sm text-muted-foreground">{m.reporter_history_intro()}</p>
         {onRefresh && result.state === 'loaded' ? (
-          <button
-            type="button"
-            className={historyControl}
-            onClick={() => void onRefresh()}
-          >
+          <button type="button" className={historyControl} onClick={() => void onRefresh()}>
             {m.reporter_status_refresh()}
           </button>
         ) : null}
@@ -243,11 +239,7 @@ export function ReporterHistoryPage({
       {result.state === 'expired' ? (
         <div role="alert" className="space-y-3 rounded-lg border p-4">
           <p>{m.reporter_history_expired()}</p>
-          <button
-            type="button"
-            className={historyControl}
-            onClick={() => void onRestart()}
-          >
+          <button type="button" className={historyControl} onClick={() => void onRestart()}>
             {m.reporter_history_restart()}
           </button>
         </div>
@@ -256,20 +248,12 @@ export function ReporterHistoryPage({
       {result.state === 'loaded' && result.page.state === 'ready' ? (
         <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap gap-3">
           {onPrevious ? (
-            <button
-              type="button"
-              className={historyControl}
-              onClick={() => void onPrevious()}
-            >
+            <button type="button" className={historyControl} onClick={() => void onPrevious()}>
               {m.library_collections_previous()}
             </button>
           ) : null}
           {onFirst ? (
-            <button
-              type="button"
-              className={historyControl}
-              onClick={() => void onFirst()}
-            >
+            <button type="button" className={historyControl} onClick={() => void onFirst()}>
               {m.library_collections_first_page()}
             </button>
           ) : null}
@@ -388,9 +372,7 @@ function HistoryEntry({
   const actionHintId = useId();
   const summary = entry.targetSummary;
   const targetLabel =
-    summary.state === 'available'
-      ? summary.label || m.reporter_status_target()
-      : m.reporter_history_item_unavailable();
+    summary.state === 'available' ? summary.label || m.reporter_status_target() : m.reporter_history_item_unavailable();
   const statusHref = selected ? localizeHref(reporterHistoryStatusHref(entry.id, query.cursor)) : undefined;
   return (
     <ContentItem
