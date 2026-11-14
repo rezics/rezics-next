@@ -170,9 +170,7 @@ function pageQuery(
           AND json_extract(i.body, '$.status')='pending'
       )`
     : '0';
-  const taskStates = includeStopped
-    ? "'ready', 'held', 'running', 'stopped'"
-    : "'ready', 'held', 'running'";
+  const taskStates = includeStopped ? "'ready', 'held', 'running', 'stopped'" : "'ready', 'held', 'running'";
   return db
     .query(
       `SELECT c.sequence, c.task_id, c.current_attempt,
@@ -391,11 +389,11 @@ function noLongerActiveManager(db: Database, managerId: string): boolean {
       FROM manager_sessions WHERE id=?`,
     )
     .get(managerId) as {
-      status?: string | null;
-      goal_status?: string | null;
-      waiting_for_inbox?: number | null;
-      goal_pause_origin?: string | null;
-    } | null;
+    status?: string | null;
+    goal_status?: string | null;
+    waiting_for_inbox?: number | null;
+    goal_pause_origin?: string | null;
+  } | null;
   if (!state) return false;
   const controllerParked =
     state.goal_status === 'paused' && state.waiting_for_inbox === 1 && state.goal_pause_origin === 'automatic';

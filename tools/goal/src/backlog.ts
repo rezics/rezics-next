@@ -1454,9 +1454,7 @@ function unresolvedDependencies(db: Database, ids: string[]): Set<string> {
     const page = ids.slice(offset, offset + 400);
     const placeholders = page.map(() => '?').join(',');
     const rows = db
-      .query(
-        `SELECT id, json_extract(body, '$.state') AS state FROM worker_tasks WHERE id IN (${placeholders})`,
-      )
+      .query(`SELECT id, json_extract(body, '$.state') AS state FROM worker_tasks WHERE id IN (${placeholders})`)
       .all(...page) as { id: string; state: string | null }[];
     const states = new Map(rows.map((row) => [row.id, row.state]));
     for (const id of page) if (!TERMINAL_DEPENDENCIES.has(states.get(id) ?? '')) unresolved.add(id);
@@ -1479,13 +1477,7 @@ function runnableSourceSupply(runtime: BacklogRuntime, goal: string): { ready: n
     }
     const brief = readBriefSizeSnapshot(markdown);
     const after = briefDependencies(markdown);
-    if (
-      !brief ||
-      !brief.kind ||
-      !SOURCE_BRIEF_KINDS.has(brief.kind) ||
-      !hasWritableSourcePath(brief.paths) ||
-      !after
-    )
+    if (!brief || !brief.kind || !SOURCE_BRIEF_KINDS.has(brief.kind) || !hasWritableSourcePath(brief.paths) || !after)
       continue;
     candidates.push({ file, markdown, after });
   }
