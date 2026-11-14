@@ -4,6 +4,7 @@ import { createSubjectThreadEffect } from '../../../src/content/subject-thread-i
 import type { HostedChapterTarget } from '../../../src/content/hosted-chapters-model.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { postPublicationFixture, type PublicationPost } from './post-publication-fixture.ts';
+import { retainedHostedData } from './hosted-retained-data.ts';
 
 type ThreadPost = { id: string; firstPost: PublicationPost };
 
@@ -121,6 +122,7 @@ export async function hostedChaptersFixture() {
       native,
       catalogueId: catalogue.firstPost.id,
       threadId: catalogue.id,
+      retained: retainedHostedData({ native, catalogueId: catalogue.firstPost.id, threadId: catalogue.id }),
       newOccurrenceId: () => newId(route),
       newOccurrenceIdFor: (id: string) => newId(routeOf(id)!),
       subjectOutsidePartition,

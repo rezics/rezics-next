@@ -9,7 +9,7 @@ WITH request AS NOT MATERIALIZED (
          observation.source_record_id AS "sourceRecordId", observation.as_of::text AS "asOf",
          observation.payload_version AS "payloadVersion",
          observation.local_order::text AS "nativeOrder",
-         head.last_order::text AS "lastOrder",
+         observation.seek_order::text AS "seekOrder",
          observation.local_order IS NULL AS legacy, input."subjectEpoch"
   FROM rating.source_statistic_head AS head
   JOIN rating.source_statistic_observation AS observation
@@ -17,20 +17,32 @@ WITH request AS NOT MATERIALIZED (
    AND observation.source = head.source AND observation.digest = head.digest
   CROSS JOIN input
   WHERE head.route = input.route AND head.subject_id = input.subject_id AND head.source = input.source
-), legacy AS (
-  SELECT NULL::text AS digest, statistic.source_alias AS "sourceAlias",
-         statistic.source_record_id AS "sourceRecordId", statistic.as_of::text AS "asOf",
-         1::smallint AS "payloadVersion", NULL::text AS "nativeOrder",
-         '0'::text AS "lastOrder", true AS legacy, input."subjectEpoch"
-  FROM rating.source_statistic AS statistic
-  CROSS JOIN input
-  WHERE statistic.route = input.route AND statistic.subject_id = input.subject_id
-    AND statistic.source = input.source
-    AND NOT EXISTS (SELECT 1 FROM rating.source_statistic_head AS head
+
+)
+SELECT retained.*, input."subjectEpoch" AS "emptySubjectEpoch",
+       EXISTS (SELECT 1 FROM rating.source_statistic AS projection
+               WHERE projection.route = input.route AND projection.subject_id = input.subject_id
+                 AND projection.source = input.source) AS "projectionExists",
+       CASE WHEN retained.digest IS NULL THEN
+         EXISTS (SELECT 1 FROM rating.source_statistic AS statistic
+                 WHERE statistic.route = input.route AND statistic.subject_id = input.subject_id
+                   AND statistic.source = input.source)
+         OR EXISTS (SELECT 1 FROM rating.source_statistic_observation AS observation
+                    WHERE observation.route = input.route AND observation.subject_id = input.subject_id
+                      AND observation.source = input.source)
+         OR EXISTS (SELECT 1 FROM rating.source_statistic_head AS head
                     WHERE head.route = input.route AND head.subject_id = input.subject_id
                       AND head.source = input.source)
-  LIMIT 1
-)
-SELECT * FROM retained
-UNION ALL
-SELECT * FROM legacy;
+       ELSE retained."seekOrder" IS NULL
+         OR EXISTS (SELECT 1 FROM rating.source_statistic_head AS head
+                    WHERE head.route = input.route AND head.subject_id = input.subject_id
+                      AND head.source = input.source AND head.last_seek_order = 0)
+         OR EXISTS (SELECT 1 FROM rating.source_statistic AS statistic
+                    WHERE statistic.route = input.route AND statistic.subject_id = input.subject_id
+                      AND statistic.source = input.source
+                      AND statistic.observation_digest IS DISTINCT FROM retained.digest)
+       END OR EXISTS (SELECT 1 FROM rating.source_statistic_observation AS unkeyed
+                      WHERE unkeyed.route = input.route AND unkeyed.subject_id = input.subject_id
+                        AND unkeyed.source = input.source AND unkeyed.seek_order IS NULL)
+       AS "needsMaterialization"
+FROM input LEFT JOIN retained ON true;

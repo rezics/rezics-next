@@ -352,6 +352,7 @@ async function runResolve(
         writeSourceStatistic: (input) => transport.writeSourceStatistic(input, signal),
         clearSourceStatistic: (input) => transport.clearSourceStatistic(input, signal),
         readSourceStatistics: (input) => transport.readSourceStatistics(input, signal),
+        readSourceObservationHead: (input) => transport.readSourceObservationHead(input, signal),
         readPublicFigure: (input) => transport.readPublicFigure(input, signal),
       },
       ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),

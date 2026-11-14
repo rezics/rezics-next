@@ -10,7 +10,7 @@ import {
   type AuthoritativeTime,
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
-import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, Actor } from '../request/access.ts';

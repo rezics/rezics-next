@@ -368,7 +368,7 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
         const locked = await lockSourceObservation(tx, binding);
         if (!locked.exists) throw new SourceStatisticNotFoundError();
         const next = admitSourceObservation(binding, locked.current);
-        if (next.identical && !('legacy' in (locked.current ?? {}))) {
+        if (next.identical) {
           const current = (await sourceStatisticList.run(tx, { route, subject_id: input.subjectId })).find(
             (row) => row.source === input.source,
           );
@@ -377,14 +377,13 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
         }
         const lastOrder = locked.current?.lastOrder ?? '0';
         const nextOrder = (BigInt(lastOrder) + 1n).toString();
-        if (locked.current && 'legacy' in locked.current)
-          await saveSourceObservation(tx, binding, locked.current, command.transactionId, {
-            localOrder: null,
-            lastOrder,
-          });
+        const lastSeekOrder = locked.current?.lastSeekOrder ?? '0';
+        const seekOrder = (BigInt(lastSeekOrder) + 1n).toString();
         await saveSourceObservation(tx, binding, next, command.transactionId, {
           localOrder: nextOrder,
           lastOrder,
+          seekOrder,
+          lastSeekOrder,
         });
         const rows = await sourceStatisticUpsert.run(tx, {
           route,
@@ -402,7 +401,6 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
           attribution: input.value.attribution,
           transaction_id: command.transactionId,
           observation_digest: next.digest,
-          expose_observation: input.source === 'bangumi' || input.value.expectedObservation !== undefined,
         });
         const row = rows[0];
         if (!row) throw new SourceStatisticNotFoundError();
@@ -467,14 +465,13 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
         if (next.identical) return noEffect({ removed: false });
         const lastOrder = locked.current?.lastOrder ?? '0';
         const nextOrder = (BigInt(lastOrder) + 1n).toString();
-        if (locked.current && 'legacy' in locked.current)
-          await saveSourceObservation(tx, binding, locked.current, command.transactionId, {
-            localOrder: null,
-            lastOrder,
-          });
+        const lastSeekOrder = locked.current?.lastSeekOrder ?? '0';
+        const seekOrder = (BigInt(lastSeekOrder) + 1n).toString();
         await saveSourceObservation(tx, binding, next, command.transactionId, {
           localOrder: nextOrder,
           lastOrder,
+          seekOrder,
+          lastSeekOrder,
         });
         const result = await sourceStatisticClear.run(tx, {
           route,

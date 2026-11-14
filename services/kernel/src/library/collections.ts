@@ -921,9 +921,9 @@ export function createCollectionCommands(config: {
             },
             write: () =>
               updateCollectionRow(tx, route, id, revision, changes, command, {
-                membershipKind: current.membershipKind,
-                builtinKind: current.builtinKind,
-                hasSavedRule: current.hasSavedRule,
+                ...(current.membershipKind === undefined ? {} : { membershipKind: current.membershipKind }),
+                ...(current.builtinKind === undefined ? {} : { builtinKind: current.builtinKind }),
+                ...(current.hasSavedRule === undefined ? {} : { hasSavedRule: current.hasSavedRule }),
               }),
             retirePublication: () => retireCollectionPublicationWork(tx, route, id),
             reducePublicSource: () => recordPublicCollectionReduction(tx, route, id, command.transactionId),

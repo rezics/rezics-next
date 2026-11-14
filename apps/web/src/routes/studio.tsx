@@ -554,6 +554,7 @@ function BookStudioVisit({
           resolveTarget,
           isCurrent,
           owner,
+          ...(csrfToken ? { sourceConsent: { source, csrfToken } } : {}),
         },
         controller.signal,
       );

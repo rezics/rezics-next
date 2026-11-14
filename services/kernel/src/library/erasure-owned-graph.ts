@@ -126,6 +126,9 @@ type Kind =
   | 'library_archive_merge'
   | 'progress_discovery_generation'
   | 'yearly_completion_goals';
+function isOwnedQueryKind(kind: Kind): kind is keyof ReturnType<typeof ownedQueries> {
+  return Object.hasOwn(ownedQueries(), kind);
+}
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -491,7 +494,7 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
             throw new TypeError('Invalid graph child');
         }
       } else {
-        if (!(kind in ownedQueries())) throw new TypeError('Invalid graph namespace');
+        if (!isOwnedQueryKind(kind)) throw new TypeError('Invalid graph namespace');
         if (kind === 'bulk_target') {
           const settled = await verifyCollectionBulkHistoryDispositions(tx, route, accountId, bulkHistoryDispositions);
           removed = (
@@ -502,8 +505,8 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
             })
           ).length;
         } else {
-          // All fixed owner statements have exactly the same typed integer/uuid input.
-          const ownerResult = await ownedQueries()[kind as keyof ReturnType<typeof ownedQueries>].run(tx, args);
+          // Bulk targets require verified dispositions; the remaining statements share the owner input.
+          const ownerResult = await ownedQueries()[kind].run(tx, args);
           removed = Array.isArray(ownerResult) ? ownerResult.length : ownerResult == null ? 0 : 1;
         }
         if (kind === 'bulk_target' && removed < 100) {

@@ -83,7 +83,13 @@ function exactEntries(
       return undefined;
     if (routeOf(entry.subjectId) === null) return undefined;
     for (const [language, binding] of Object.entries(entry.labels)) {
-      if (!languageTag.test(language) || !binding || typeof binding !== 'object' || typeof binding.value !== 'string')
+      if (
+        !languageTag.test(language) ||
+        !binding ||
+        typeof binding !== 'object' ||
+        !('value' in binding) ||
+        typeof binding.value !== 'string'
+      )
         return undefined;
     }
     if (entry.originalLanguage !== null && entry.originalLanguage !== undefined) {

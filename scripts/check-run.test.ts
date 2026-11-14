@@ -1,5 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { openDb, migrate } from '../tools/goal/src/db.ts';
+import { nativeUnitMigrations } from '../tools/goal/src/native-units.ts';
+import { recordNativeUnitSourceObservation } from '../tools/goal/src/native-unit-provenance.ts';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -395,6 +398,61 @@ test('native shared-tree acceptance still refuses a modified frozen source', asy
   expect(result).toBe(75);
   expect(JSON.parse(finals[0]!).cleanup.source).toBe('changed');
   if (retained) removeRetainedSnapshot(fixture, retained);
+});
+
+test('native observed source requires a run-associated frozen settlement and matching physical receipt', async () => {
+  const fixture = candidate();
+  const runId = randomUUID();
+  const environment = { ...nativeUnitEnvironmentFor(fixture), REZICS_NATIVE_UNIT_RUN_ID: runId };
+  writeFileSync(fixture.envFile, JSON.stringify(environment));
+  const registry = join(fixture.parent, 'goal.sqlite');
+  const db = openDb(registry);
+  migrate(db, nativeUnitMigrations);
+  db.query('INSERT INTO native_execution_units VALUES (?, ?, ?, ?, ?)').run(
+    'book-unit',
+    'thread',
+    '%12',
+    fixture.root,
+    '{}',
+  );
+  db.query(
+    'INSERT INTO native_unit_runs(id,unit,started_at,requested_source_commit,context,command) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(runId, 'book-unit', new Date().toISOString(), fixture.revision, environment.REZICS_NATIVE_UNIT_CONTEXT, '[]');
+  try {
+    const finals: string[] = [];
+    const native = receipt('a', 0);
+    const result = await runCheck(argsFor(fixture, ['bun', 'test', 'book-journey']), {
+      settlementWriter: (line) => finals.push(line),
+      stateDirectory: fixture.parent,
+      transport: async (options) => {
+        await options.allocated?.({ host: 'a', run: native.run });
+        options.completed?.(native);
+        options.settled?.(remoteSettlement(options, native));
+        return 0;
+      },
+    });
+    expect(result).toBe(0);
+    const final = JSON.parse(finals[0]!);
+    const record = await getCheckRunStatus(final.invocationId, { stateDirectory: fixture.parent });
+    expect(
+      db.query('SELECT requested_source_commit, source_commit FROM native_unit_runs WHERE id=?').get(runId),
+    ).toEqual({ requested_source_commit: fixture.revision, source_commit: fixture.revision });
+    expect(db.query('SELECT source_sha256, host, physical_run FROM native_unit_run_sources').get()).toEqual({
+      source_sha256: final.binding.sourceSha256,
+      host: native.host,
+      physical_run: native.run,
+    });
+    expect(recordNativeUnitSourceObservation(environment, record, { ...native, run: 'another-physical-run' })).toBe(
+      'unmatched',
+    );
+    expect(
+      recordNativeUnitSourceObservation({ ...environment, REZICS_NATIVE_UNIT_RUN_ID: randomUUID() }, record, native),
+    ).toBe('unmatched');
+    expect(recordNativeUnitSourceObservation(environment, record, native)).toBe('recorded');
+    expect(db.query('SELECT count(*) AS count FROM native_unit_run_sources').get()).toEqual({ count: 1 });
+  } finally {
+    db.close();
+  }
 });
 
 function runSeparateCli(

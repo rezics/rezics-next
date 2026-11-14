@@ -4,27 +4,33 @@ WITH input AS NOT MATERIALIZED (
          :source_record_id::text AS source_record_id, :as_of::date AS as_of,
          :payload::text::jsonb AS payload, :transaction_id::uuid AS transaction_id,
          :payload_version::smallint AS payload_version,
-         :local_order::nullable(bigint) AS local_order, :last_order::bigint AS last_order
+         :local_order::bigint AS local_order, :last_order::bigint AS last_order,
+         :seek_order::bigint AS seek_order, :last_seek_order::bigint AS last_seek_order
 ), inserted AS (
   INSERT INTO rating.source_statistic_observation
     (route, subject_id, source, digest, source_alias, source_record_id, as_of, payload, transaction_id,
-     payload_version, local_order)
+     payload_version, local_order, seek_order)
   SELECT route, subject_id, source, digest, source_alias, source_record_id, as_of, payload, transaction_id,
-         payload_version, local_order
+         payload_version, local_order, seek_order
   FROM input
   ON CONFLICT (route, subject_id, source, digest) DO NOTHING
-  RETURNING local_order
+  RETURNING local_order, seek_order
 ), head AS (
-  INSERT INTO rating.source_statistic_head (route, subject_id, source, digest, last_order)
+  INSERT INTO rating.source_statistic_head (route, subject_id, source, digest, last_order, last_seek_order)
   SELECT input.route, input.subject_id, input.source, input.digest,
-         CASE WHEN EXISTS (SELECT 1 FROM inserted WHERE local_order IS NOT NULL)
+         CASE WHEN EXISTS (SELECT 1 FROM inserted)
               THEN GREATEST(input.last_order, input.local_order)
               ELSE input.last_order
+         END,
+         CASE WHEN EXISTS (SELECT 1 FROM inserted)
+              THEN GREATEST(input.last_seek_order, input.seek_order)
+              ELSE input.last_seek_order
          END
   FROM input
   ON CONFLICT (route, subject_id, source) DO UPDATE
     SET digest = EXCLUDED.digest,
-        last_order = GREATEST(rating.source_statistic_head.last_order, EXCLUDED.last_order)
+        last_order = GREATEST(rating.source_statistic_head.last_order, EXCLUDED.last_order),
+        last_seek_order = GREATEST(rating.source_statistic_head.last_seek_order, EXCLUDED.last_seek_order)
   RETURNING 1
 )
 SELECT 1 FROM head;

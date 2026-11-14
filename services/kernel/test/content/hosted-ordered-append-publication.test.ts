@@ -20,31 +20,6 @@ async function readAllPages(f: Awaited<ReturnType<typeof hostedChaptersFixture>>
   return items;
 }
 
-async function convertDraft(
-  f: Awaited<ReturnType<typeof hostedChaptersFixture>>,
-  path: string,
-  expectedRevisionId: string,
-): Promise<string> {
-  const conversion = `${path}:convertDraft`;
-  const capture = await f.native.command(conversion, { step: 'capture', expectedRevisionId }, 200);
-  const inputId = capture.inputId as string;
-  let progress = await f.native.command(conversion, { step: 'begin', inputId, expectedRevisionId }, 200);
-  while (progress.nextStep === 'page') {
-    progress = await f.native.command(
-      conversion,
-      { step: 'page', inputId, expectedRevisionId, cursor: progress.frontier },
-      200,
-    );
-  }
-  progress = await f.native.command(conversion, { step: 'seal', inputId, expectedRevisionId }, 200);
-  progress = await f.native.command(conversion, { step: 'materialize', inputId, expectedRevisionId }, 200);
-  while (progress.nextStep === 'materializePage') {
-    progress = await f.native.command(conversion, { step: 'materializePage', inputId, expectedRevisionId }, 200);
-  }
-  const committed = await f.native.command(conversion, { step: 'commit', inputId, expectedRevisionId }, 200);
-  return committed.revisionId as string;
-}
-
 function assertNoLegacyRows(records: readonly SqlExecution[]) {
   expect(
     records.some((record) =>
@@ -79,7 +54,7 @@ test('ordered root appends preserve history and publish exact bounded selections
       'GET',
       `${path}/occurrences/${oldChapterId}?kind=structure&revisionId=${created.revisionId}`,
     );
-    const orderedRevisionId = await convertDraft(f, path, created.revisionId);
+    const orderedRevisionId = created.revisionId as string;
 
     const firstInput: HostedRootAppendInput = {
       expectedRevisionId: orderedRevisionId,

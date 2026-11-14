@@ -54,6 +54,7 @@ import {
   type ImportSourceStatisticValue,
   type ImportSourceStatisticClearValue,
   type ImportSourceStatisticFigure,
+  type ImportSourceObservationHead,
   type ImportPublicFigure,
   type ClassificationAssociation,
   type ClassificationClear,
@@ -1227,6 +1228,44 @@ export function createImportTransport(options: ImportTransportOptions) {
       return value as ImportSourceStatisticFigure;
     });
   }
+  async function readSourceObservationHead(
+    input: { subjectId: string },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceObservationHead> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const reply = await exchange(
+      () =>
+        client.subjects({ id: input.subjectId })['source-statistics']({ source: 'vndb' }).observations.get(fetchOptions(signal)),
+      200,
+      signal,
+    );
+    const value = snapshot(reply.body, RESPONSE_BYTES) as Record<string, unknown>;
+    ensure(typeof value === 'object' && value !== null && !Array.isArray(value) && value.source === 'vndb');
+    const head = value.head as Record<string, unknown>;
+    ensure(typeof head === 'object' && head !== null && !Array.isArray(head));
+    if (head.state === 'empty') {
+      ensure(head.digest === null && head.observation === null);
+    } else {
+      ensure(head.state === 'published' || head.state === 'cleared');
+      ensure(typeof head.digest === 'string' && /^[0-9a-f]{64}$/.test(head.digest));
+      const observation = head.observation as Record<string, unknown>;
+      ensure(typeof observation === 'object' && observation !== null && !Array.isArray(observation));
+      ensure(observation.digest === head.digest && observation.payloadVersion === 1);
+      statisticAlias(observation);
+      ensure(typeof observation.sourceAlias === 'string' && typeof observation.sourceRecordId === 'string' && typeof observation.asOf === 'string');
+      const payload = observation.payload as Record<string, unknown>;
+      ensure(typeof payload === 'object' && payload !== null && !Array.isArray(payload));
+      ensure(payload.sourceAlias === observation.sourceAlias && payload.sourceRecordId === observation.sourceRecordId && payload.asOf === observation.asOf);
+      ensure(typeof payload.count === 'number' && Number.isSafeInteger(payload.count) && payload.count >= 0);
+      ensure(head.state === 'cleared' ? payload.count === 0 : payload.count > 0);
+      if (head.state === 'published') {
+        ensure(typeof payload.scale === 'object' && payload.scale !== null && !Array.isArray(payload.scale));
+        const scale = payload.scale as Record<string, unknown>;
+        ensure(typeof scale.min === 'number' && typeof scale.max === 'number' && typeof payload.mean === 'number');
+      }
+    }
+    return head as ImportSourceObservationHead;
+  }
   function classifications(subjectId: string) {
     return client.subjects({ id: subjectId })['source-classifications'];
   }
@@ -1403,6 +1442,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     writeSourceStatistic,
     clearSourceStatistic,
     readSourceStatistics,
+    readSourceObservationHead,
     readPublicFigure,
     readSourceClassifications,
     writeSourceClassification,

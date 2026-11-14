@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { canonicalLanguageKey, MAX_LANGUAGE_KEY_LENGTH } from '@rezics/definitions/language';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -8,6 +8,10 @@ import { getLocale } from '../paraglide/runtime.js';
 import { ExactVersionDetails } from './revisions';
 import { sameExact, type StudioRevision } from './contract';
 import type { StudioController, StudioState } from './controller';
+import { HostedSourceConsentView } from './hosted-source-consent-view';
+import type { HostedSourceConsentVisit, SourceConsentState } from './hosted-source-consent';
+const noConsentSubscription = () => () => {};
+const noConsentSnapshot = () => null;
 
 function candidate(state: StudioState): StudioRevision | null {
   const selected = state.selected;
@@ -50,6 +54,49 @@ export function BookChapterLanguageAssociation({
   const [title, setTitle] = useState(source?.title ?? chapter?.title ?? '');
   const [makeDefault, setMakeDefault] = useState(false);
   const [sending, setSending] = useState(false);
+  const [consent, setConsent] = useState<{ key: string; visit: HostedSourceConsentVisit } | null>(null);
+  const [consentFailure, setConsentFailure] = useState<string | null>(null);
+  const [consentRetry, setConsentRetry] = useState(0);
+  const sourceKey = source ? JSON.stringify(source.exact) : '';
+  const admitted = controller.current();
+  useEffect(() => {
+    if (!source || !admitted) return;
+    let live = true,
+      created: HostedSourceConsentVisit | null = null;
+    const request = new AbortController();
+    setConsent(null);
+    setConsentFailure(null);
+    void controller
+      .createBookSourceConsent(source.exact, request.signal)
+      .then((result) => {
+        if (!result.ok) {
+          if (live && !request.signal.aborted) setConsentFailure(sourceKey);
+          return;
+        }
+        created = result.value;
+        if (!live || request.signal.aborted || !controller.current()) {
+          created.dispose();
+          return;
+        }
+        setConsent({ key: sourceKey, visit: created });
+      })
+      .catch(() => {
+        if (live && !request.signal.aborted) setConsentFailure(sourceKey);
+      });
+    return () => {
+      live = false;
+      request.abort();
+      created?.dispose();
+    };
+  }, [controller, sourceKey, admitted, consentRetry]);
+  const consentVisit = consent?.key === sourceKey ? consent.visit : null;
+  const consentState = useSyncExternalStore<SourceConsentState | null>(
+    consentVisit?.subscribe ?? noConsentSubscription,
+    consentVisit?.snapshot ?? noConsentSnapshot,
+    consentVisit?.snapshot ?? noConsentSnapshot,
+  );
+  const consentBusy =
+    consentState?.kind === 'active' && (consentState.phase === 'working' || consentState.phase === 'uncertain');
   const changed = !structure || structure.revision !== basis || state.issue?.kind === 'stale';
   const unresolved = controller.hasUnresolvedCommand();
   const busy = sending || state.operation !== null;
@@ -62,7 +109,8 @@ export function BookChapterLanguageAssociation({
     controller.canBindChapterLanguage() &&
     chapter?.target.kind === 'chapter' &&
     !busy &&
-    !unresolved;
+    !unresolved &&
+    !consentBusy;
   const valid = Boolean(
     allowed &&
     !changed &&
@@ -122,6 +170,27 @@ export function BookChapterLanguageAssociation({
       ) : (
         <p role="status">{m.studio_book_language_choose({}, options)}</p>
       )}
+      {consentFailure === sourceKey && sourceKey ? (
+        <div className="studio-stack">
+          <p role="status">{m.studio_source_consent_unavailable({}, options)}</p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!active || busy || unresolved}
+            onClick={() => setConsentRetry((value) => value + 1)}
+          >
+            {m.correction_retry({}, options)}
+          </Button>
+        </div>
+      ) : null}
+      {consentVisit ? (
+        <HostedSourceConsentView
+          visit={consentVisit}
+          bookTitle={controller.input.title}
+          locale={locale}
+          disabled={!active || busy || unresolved}
+        />
+      ) : null}
       <Field>
         <FieldLabel htmlFor={`${id}-language`}>{m.studio_book_language_key({}, options)}</FieldLabel>
         <Input
@@ -190,7 +259,7 @@ export function BookChapterLanguageAssociation({
         <Button type="submit" disabled={!valid}>
           {busy ? m.studio_book_language_sending({}, options) : m.studio_book_language_bind({}, options)}
         </Button>
-        <Button type="button" variant="outline" disabled={busy || unresolved} onClick={onCancel}>
+        <Button type="button" variant="outline" disabled={busy || unresolved || consentBusy} onClick={onCancel}>
           {m.action_cancel({}, options)}
         </Button>
       </div>

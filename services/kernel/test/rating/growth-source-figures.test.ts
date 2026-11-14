@@ -65,12 +65,9 @@ function prefixPlans(value: unknown, seen: Set<string>): void {
     expect(node['Index Cond']).toContain('subject_id');
     if (relation !== 'source_statistic') expect(node['Index Cond']).toContain('source');
     if (relation === 'source_statistic_observation') {
-      const index = String(node['Index Name']);
-      if (index === 'source_statistic_observation_legacy_order_idx') {
-        expect(node['Index Cond']).toContain('source');
-      } else {
-        expect(node['Index Cond']).toMatch(/digest|local_order/);
-      }
+      // Missing-head and unkeyed-state probes use this slot prefix with LIMIT/EXISTS.
+      // Payload/history probes additionally constrain digest or seek_order.
+      expect(node['Index Name']).toMatch(/source_statistic_observation_(pkey|seek_order_idx|unkeyed_idx)/);
     }
     expect((node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops']).toBeLessThanOrEqual(2);
   }

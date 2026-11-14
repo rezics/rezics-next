@@ -34,10 +34,9 @@ import {
   aggregateOperationId,
   classifyObservation,
   effectiveAlias,
-  headFromClear,
-  headFromStatistic,
+  headFromAcknowledgedObservation,
+  headFromInspection,
   intendedPayload,
-  observationDigest,
   parseObservationReason,
   type IntendedObservation,
   type ObservationHeadRead,
@@ -1124,20 +1123,15 @@ export class Importer {
   }
 
   private async readObservationHead(
-    owner: Owner,
+    _owner: Owner,
     subjectId: string,
     signal: AbortSignal,
     write: Write,
   ): Promise<ObservationHeadRead> {
-    const read = this.options.transport.readSourceStatistics;
-    const retained = this.session.store.retainedAggregateHead(owner.source, subjectId);
-    if (!read) return retained ? { kind: 'head', head: retained } : { kind: 'absent' };
+    const read = this.options.transport.readSourceObservationHead;
+    if (!read) return { kind: 'unavailable', code: 'source_observation_unavailable' };
     try {
-      const rows = await write(() => read.call(this.options.transport, { subjectId }, signal));
-      const row = rows.find((item) => item.source === 'vndb');
-      if (row && typeof row.sourceRecordId === 'string' && typeof row.asOf === 'string')
-        return { kind: 'head', head: headFromStatistic(subjectId, row) };
-      return retained?.cleared ? { kind: 'head', head: retained } : { kind: 'absent' };
+      return headFromInspection(await write(() => read.call(this.options.transport, { subjectId }, signal)));
     } catch (error) {
       if (
         error instanceof ImportTransportError &&
@@ -1154,22 +1148,20 @@ export class Importer {
 
   private async confirmObservation(
     subjectId: string,
-    intended: IntendedObservation,
+    _intended: IntendedObservation,
     signal: AbortSignal,
     write: Write,
   ): Promise<{ head: RetainedObservationHead | null; figure: unknown; figureUnavailable: boolean }> {
-    const read = this.options.transport.readSourceStatistics;
+    const read = this.options.transport.readSourceObservationHead;
     let head: RetainedObservationHead | null = null;
-    if (read) {
-      try {
-        const rows = await write(() => read.call(this.options.transport, { subjectId }, signal));
-        const row = rows.find((item) => item.source === 'vndb');
-        if (row) head = headFromStatistic(subjectId, row);
-      } catch {
-        return { head: null, figure: null, figureUnavailable: true };
-      }
+    if (!read) return { head: null, figure: null, figureUnavailable: true };
+    try {
+      const current = headFromInspection(await write(() => read.call(this.options.transport, { subjectId }, signal)));
+      if (current.kind === 'unavailable') return { head: null, figure: null, figureUnavailable: true };
+      head = current.kind === 'head' ? current.head : null;
+    } catch {
+      return { head: null, figure: null, figureUnavailable: true };
     }
-    if (intended.kind === 'clear' && !head) head = headFromClear(subjectId, intended);
     let figure: unknown = null;
     let figureUnavailable = false;
     const readFigure = this.options.transport.readPublicFigure;
@@ -1253,16 +1245,7 @@ export class Importer {
         throw new ObservationConflictError(existing.operationId, 'cas-mismatch');
       }
       const confirmed = await this.confirmObservation(subjectId, intended, signal, write);
-      const head =
-        intended.kind === 'clear'
-          ? headFromClear(subjectId, intended)
-          : (confirmed.head ??
-            headFromStatistic(subjectId, {
-              source: 'vndb',
-              ...intended,
-              licence: 'ODbL-1.0',
-              attribution: 'VNDB',
-            } as never));
+      const head = confirmed.head ?? headFromAcknowledgedObservation(subjectId, intended);
       store.retainAggregateHead(owner.source, { ...head, subjectId });
       store.markAggregate(run, existing.operationId, {
         status: 'delivered',
@@ -1325,19 +1308,7 @@ export class Importer {
       throw error;
     }
     const confirmed = await this.confirmObservation(subjectId, intended, signal, write);
-    const retained =
-      intended.kind === 'clear'
-        ? headFromClear(subjectId, intended)
-        : (confirmed.head ?? {
-            provider: 'vndb' as const,
-            sourceAlias: effectiveAlias(intended.sourceAlias),
-            sourceRecordId: intended.sourceRecordId,
-            asOf: intended.asOf,
-            count: intended.count,
-            cleared: false,
-            digest: observationDigest(subjectId, intended),
-            ...(intended.kind === 'write' ? { scale: intended.scale, mean: intended.mean } : {}),
-          });
+    const retained = confirmed.head ?? headFromAcknowledgedObservation(subjectId, intended);
     store.retainAggregateHead(owner.source, { ...retained, subjectId });
     store.markAggregate(run, operationId, {
       status: 'delivered',
@@ -1457,10 +1428,7 @@ export class Importer {
         return { status: 'conflict', operationId: successor.operationId };
       }
       const confirmed = await this.confirmObservation(prior.subjectId, prior.intended, signal, write);
-      const retained =
-        prior.intended.kind === 'clear'
-          ? headFromClear(prior.subjectId, prior.intended)
-          : (confirmed.head ?? headFromStatistic(prior.subjectId, { source: 'vndb', ...prior.intended } as never));
+      const retained = confirmed.head ?? headFromAcknowledgedObservation(prior.subjectId, prior.intended);
       this.session.store.retainAggregateHead(source, { ...retained, subjectId: prior.subjectId });
       this.session.store.markAggregate(run, successor.operationId, {
         status: 'delivered',

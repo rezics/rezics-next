@@ -1,5 +1,5 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
-import { appendHostedRootChapter, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
+import { type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
 import { advanceHostedMigrationInput, captureHostedMigrationInput } from '../../src/content/hosted-migration-input.ts';
 import {
   applyHostedVersionBuilderPage,
@@ -32,13 +32,7 @@ async function createStructure(
   fixture: Awaited<ReturnType<typeof hostedChaptersFixture>>,
   placements: readonly unknown[],
 ): Promise<string> {
-  return (
-    await fixture.native.command('/v1/hostedCatalogues', {
-      postId: fixture.catalogueId,
-      threadId: fixture.threadId,
-      placements,
-    })
-  ).revisionId as string;
+  return (await fixture.retained.structure(placements)).revisionId as string;
 }
 
 async function transaction<T>(
@@ -72,18 +66,12 @@ test('resumes and replays 513 source entries in bounded pages without changing l
       target,
     }));
     const baseRevisionId = await createStructure(fixture, placements);
-    const appended = await appendHostedRootChapter(
-      dependencies(fixture),
-      fixture.native.author.actor,
-      fixture.catalogueId,
-      {
-        expectedRevisionId: baseRevisionId,
-        occurrenceId: fixture.newOccurrenceId(),
-        title: 'Chapter 512',
-        target,
-      },
-      context(),
-    );
+    const appended = await fixture.retained.append({
+      expectedRevisionId: baseRevisionId,
+      occurrenceId: fixture.newOccurrenceId(),
+      title: 'Chapter 512',
+      target,
+    });
     const sourceRevisionId = appended.value.revisionId;
     const captured = await captureHostedMigrationInput(
       dependencies(fixture),
@@ -198,13 +186,12 @@ test('refuses incomplete coverage and a migration page whose captured head is st
       context(),
     );
     await transaction(fixture, (tx) => beginHostedVersionBuilder(tx, staleCapture.value));
-    await appendHostedRootChapter(
-      deps,
-      actor,
-      fixture.catalogueId,
-      { expectedRevisionId: baseRevisionId, occurrenceId: fixture.newOccurrenceId(), title: 'Later', target },
-      context(),
-    );
+    await fixture.retained.append({
+      expectedRevisionId: baseRevisionId,
+      occurrenceId: fixture.newOccurrenceId(),
+      title: 'Later',
+      target,
+    });
     const stale = await advanceHostedMigrationInput(
       deps,
       actor,
