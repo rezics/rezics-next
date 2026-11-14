@@ -11,6 +11,7 @@ import {
 } from '../../access/shared-history-context.ts';
 import { registerZoneHistoryConsumers } from './zone-consumers.ts';
 import { registerLibraryBulkReceiptConsumer } from './composition.ts';
+import { registerWatchHistoryConsumers } from './watch-consumers.ts';
 import { searchObservationSource } from './handles.ts';
 import { type HistoryReceivingContext } from '../contract/index.ts';
 
@@ -23,6 +24,7 @@ export const sharedHistoryWorkModule: WorkModule = {
     if (!history || !context.addNativeEffects) throw new Error('Shared history requires native work composition');
     registerZoneHistoryConsumers({ history });
     registerLibraryBulkReceiptConsumer({ history });
+    registerWatchHistoryConsumers({ history });
     history.registerOwner({
       name: 'library.entry.retention.purge',
       artifactType: 'command-receipt/v1',
