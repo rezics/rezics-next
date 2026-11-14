@@ -616,11 +616,14 @@ authoritative SQL statements in `src/<module>/`, its migrations in `db/<module>/
 `db/<module>/schema.sql`. A module exists when its migrations directory exists, and its tables live in the PostgreSQL
 schema with the module's name. The module owner edits `src/<module>/`, `db/<module>/`, and that module's tests.
 
-Migration versions use UTC timestamps in `YYYYMMDDHHMMSS_<name>.sql` form and are unique across all migration
-directories. `0001_core_partition.sql` keeps its name and sorts first. Dbmate applies pending migrations from every
-directory in version order, so a module migration may merge behind a newer migration from another directory. Once a
-migration is merged, never rename or edit it. Run `bun run derived schema` to regenerate every committed schema dump
-from a fresh database, or `bun run db dump` to refresh those files from the local development database.
+Migration versions use UTC timestamps in `YYYYMMDDHHMMSS_<name>.sql` form. At creation, obtain the version from the
+actual current UTC clock, for example with `date -u +%Y%m%d%H%M%S`; do not infer it from local wall time, a conversation
+date, or an assumed future time. If an unmerged filename collides, obtain a fresh current UTC value instead of
+inventing a later one. Versions are unique across all migration directories. `0001_core_partition.sql` keeps its name
+and sorts first. Dbmate applies pending migrations from every directory in version order, so a module migration may
+merge behind a newer migration from another directory. Once a migration is merged, never rename or edit it. Run
+`bun run derived schema` to regenerate every committed schema dump from a fresh database, or `bun run db dump` to
+refresh those files from the local development database.
 
 Decision: worker-check reads at most 512 header bytes from each inventoried migration for dbmate's `-- migrate:up`
 marker (including `transaction:false`) before check admission; the bounded local read shifts cost from remote setup,
