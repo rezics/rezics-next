@@ -142,6 +142,7 @@ Workers do not merge, except that a product worker integrating into dev in its o
 cherry-picks a branch or commit its contract names explicitly.
 If initial dispatch preparation fails before a task is registered, Goal removes the worktree and branch it created when
 Git confirms ownership, preserves the original error, and names any artifact retained for recovery.
+Decision: under the shared dispatch lease, direct dispatch and claimed backlog registration reuse an indexed active task only when exact brief bytes, resolved manager, Goal, target and ordinary task class match. Admission and authorization run before lookup; proof and continuation identities do not coalesce, and terminal tasks do not suppress new outcomes.
 Decision: task-local Git/worktree preparation (branch heads, leftover and finished-work commits, shared frozen files, missing-worktree recreation, authorized proof captures, and making an owned tree writable so Git/cache leftovers can be removed) lives in `task-workspace.ts`. `WorkerTasks` remains the lifecycle coordinator and delegates that family under the caller's lease and existing store writes. Tests pin those behaviours at the public `WorkerTasks` entry with real Git fixtures rather than mirroring each helper.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
@@ -1809,9 +1810,11 @@ When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every 
 five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
 line of SSH stderr. A successful probe clears that outage, so a later pair of failures can report a new incident. The
 watchdog does not probe when no hosts file is present and does not include the configured identity path in its alert.
-Decision: check wakes use their original pool after live occupancy and allowance admission; check-host retries wait
-only when every performance-approved host is in outage, while started remote runs stay on their recorded host and
-identity and new runs use existing probes to select a responding approved host.
+Decision: check wakes use their original pool after live occupancy and allowance admission. A newly reported reset
+window starts a fresh burn series; repeated recovery preserves the original check result, session, pool and attempt,
+then resumes that session once. Check-host retries wait only when every performance-approved host is in outage, while
+started remote runs stay on their recorded host and identity and new runs use existing probes to select a responding
+approved host.
 
 ## Integration, promotion, culprit isolation and attempt fencing
 
@@ -3009,8 +3012,17 @@ Unchanged legacy stamps remain valid under their original full-tree comparison. 
 requested an artifact their compiler could not produce can reuse their successful original full-tree stamp only while
 the tree and retained prepared dependency inputs still match. Modern physical capture requires its matching artifact;
 a rejected artifact, changed legacy input or missing modern receipt never becomes a pass. True compiler failures retain
-their verdict and log. Unavailable evidence parks completed source with `typingEvidencePending`, preserving the attempt,
-commits and check IDs instead of creating a source-writing retry.
+their verdict and log. Outside an eligible source-only window, unavailable evidence parks completed source with
+`typingEvidencePending`, preserving the attempt, commits and check IDs instead of creating a source-writing retry.
+During an eligible source-only window, settlement records unavailable compiler evidence as `typingEvidenceDeferred` and
+lets ordinary source land for verifier acceptance after same-attempt physical custody is terminal. The original worker
+result, failed check records, compiler identities and unexecuted grants remain unchanged; repeated recovery does not
+launch a compiler or clear the obligation, including after source-only mode is removed.
+
+Decision: settlement and typing recovery use the launch prompt's live source-only eligibility rules, including changed
+paths. They defer only unavailable compiler evidence for ordinary dev source, require terminal custody, preserve exact
+failures and grants, and leave typing failures, money paths, explicit requirements, proof and control-plane acceptance
+on their existing paths. The dev verifier owns the deferred compiler acceptance.
 
 For the installed Kernel client-output pipeline, the receipt retains its remote host/run binding with the local physical
 check identity. Failure classification may accept replaced generated declarations only when the published output tree
@@ -3019,9 +3031,13 @@ pass qualification still requires its existing strict source and prepared-input 
 
 Decision: at the existing stopped-task expiry, the sweep reconciles compiler-only pending source under its current task lease, lands matching evidence, or records one per-attempt actionable event naming the authenticated `typing-recover` action; the stop remains visible to width reporting, no check is minted or compiler started, and explicit stop/cancel, real compiler failures and ordinary stale stops keep their current outcomes.
 
-Decision: an explicit retry after a completed stop keeps the existing stop proof. For an ordinary exited attempt, a queued source repair supersedes pending typing evidence only when the exact accepted replacement brief was recorded after exit, the captured branch head remains current, the exact retained command proves a terminal nonzero failure against unchanged source inputs, any replaced Kernel client declarations match the receipt-bound published tree, all same-attempt check custody is terminal, and no successor, later worker start, landing or live capacity ticket exists. Generated-output identity authorizes failure classification only; pass qualification stays strict. Otherwise the retry remains pending and does not enter compiler-only recovery. A same-generation `started` intent is reconciled only under that proof.
+Decision: an explicit retry after a completed stop keeps the existing stop proof. For an ordinary exited attempt, a queued source repair supersedes pending typing evidence only when the exact accepted replacement brief was recorded after exit, the captured branch head remains current, the exact retained command proves a terminal nonzero failure against unchanged source inputs, any replaced Kernel client declarations match the receipt-bound published tree, all same-attempt check custody is terminal, and no successor, later worker start, landing or live capacity ticket exists. A legacy attempt with no `attempt-progress` event may recover its source identity only through the exact retained source-repair receipt matching the current content tree and terminal same-attempt custody; a present malformed or stale progress event never uses this fallback. Generated-output identity authorizes failure classification only; pass qualification stays strict. Otherwise the retry remains pending and does not enter compiler-only recovery. A same-generation `started` intent is reconciled only under that proof.
 
-Decision: queued source-repair admission also accepts the exact Kernel migration preflight diagnostic for a missing forward `-- migrate:up` marker when the known compiler command, exit 75, retained source tree and same-attempt terminal check custody all match. This is setup evidence only; it creates no compiler verdict or replay authority, and the accepted amendment, retry transaction and money gate keep their existing rules.
+Decision: queued source-repair admission accepts the exact Kernel missing-forward-marker setup evidence from either the current migration preflight or a retained legacy dbmate `database-setup` diagnostic, when the installed Kernel command, exit 75 before compiler entry, current retained source tree and same-attempt terminal physical custody all match. The setup check may be absent from the old `attempt.checks` array and its command may differ from the pending combined compiler/test command; discover it only through an owned same-task/attempt result and bind its command, physical run, log, diagnostic and history to that result. At least one original listed check must still be terminal and bind the retained pending command, so an unrelated same-attempt check cannot stand in for the original obligation. An old stamp may lack `setupFailure` and retain `typingInputs` with `typecheckFailed: true`; accept the receipt only when its physical run and command match the owned setup result, it reports stable source and exit 75, and the exact saved diagnostic plus one current migration missing its up marker prove database setup failed before compilation. The failure flag alone never proves a compiler failure. This is setup evidence only: it creates no compiler verdict, replay authority or money-check pass, and preserves the original pending command, accepted amendment and retry transaction.
+
+Decision: the retained parser accepts the exact bare database-setup diagnostic or the command-wrapped dbmate form, collapses byte-identical echoes and rejects ambiguous setup lines; it scans every migration line in fixed memory and stores the normalized diagnostic while retaining the raw log digest.
+
+The exact legacy rejection began with missing `attempt-progress.endHead`; after recovering current source identity, the setup candidate still rejected the actual stamp because it required `typingInputs` to be absent and `typecheckFailed` not to be true. The retained source-caused exit-75 check has a stable captured input receipt, `includedTypecheck: true`, `typecheckFailed: true`, and dbmate's older `phase=database-setup` message, but no `setupFailure`. It is also absent from `attempt.checks` and uses the standalone installed Kernel typecheck rather than the pending combined typecheck and three money tests. Reconcile from the owned result, bound receipt, saved diagnostic and physical history without rewriting the retained result or log.
 
 Authenticated owning or operations managers reconcile that same attempt without starting a model:
 
@@ -3236,6 +3252,12 @@ child lifecycle remain with the transports ([control-plane simplification resear
 Decision: Goal host restarts hand off the same loopback app-server per pool and adopt only an exact live process and
 private endpoint; a dead or failed attachment gets one bounded same-pool rejoin. The installed Codex daemon is not used
 because its shared inherited environment and remote-management settings do not fit per-pool ownership.
+Decision: on a new provider start, its identity-only registry record remains provisional until readyz, the private
+WebSocket connection and JSON-RPC initialization succeed; the host then publishes the complete pool attachment before
+returning the client to manager thread recovery. Lifecycle checks count only recovery RPCs written after each host
+boundary and read that host's complete attachment after its fresh resume event.
+Decision: manager-host SIGTERM and SIGINT handlers remain attached through graceful shutdown and are removed in its
+final cleanup, so the socket drains before owned app-server process groups are stopped.
 Decision: ManagerSessions is the durable Goal coordinator; `manager-session-transport.ts` owns the provider connection
 cache, concrete Codex/Claude session requests, viewer argv and window prompt/respawn. Prompt rendering, launch-manifest
 accounting, inbox delivery, renewal and budget stay with ManagerSessions. Extraction tests pin saved-thread ordering,

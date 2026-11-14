@@ -229,6 +229,32 @@ function branchChangedPaths(task: Pick<Task, 'worktree' | 'base'>, policy: Contr
   return [...new Set([...committed, ...uncommitted].filter(Boolean))];
 }
 
+/** Keep settlement on the same source-only eligibility boundary used when the worker receives its launch policy. */
+export function sourceOnlyCompletionEligible(input: {
+  task: Task;
+  stateDirectory?: string | undefined;
+  policy?: ControlPolicy | undefined;
+  proofRun?: ProofReservation | undefined;
+  authorization?: ProofAuthorization | undefined;
+}): boolean {
+  const { task } = input;
+  const brief = task.brief;
+  const proofRun =
+    input.proofRun ?? (task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined);
+  const authorization = input.authorization ?? task.proofAuthorization;
+  return (
+    sourceOnlyVerification(input.stateDirectory) &&
+    !proofProtocolAuthorized(brief, proofRun) &&
+    !registeredProof(brief, authorization) &&
+    devProductBrief(brief) &&
+    brief.kind !== 'research' &&
+    brief.goal !== 'control-plane' &&
+    !brief.acceptance?.requires?.length &&
+    !(brief.paths ?? []).some(isMoneyPath) &&
+    !branchChangedPaths(task, input.policy ?? defaultPolicy).some(isMoneyPath)
+  );
+}
+
 function wrapperRunner(
   worktree: string,
   brief: Pick<Brief, 'acceptance' | 'markdown'> & Partial<Brief>,
@@ -275,16 +301,7 @@ export function selectConditions(input: {
   const authorization = input.authorization ?? task.proofAuthorization;
   if (proofProtocolAuthorized(brief, proofRun)) selected.push('proof-run');
   else if (registeredProof(brief, authorization)) selected.push('registered-proof');
-  else if (
-    sourceOnlyVerification(input.stateDirectory) &&
-    devProductBrief(brief) &&
-    brief.kind !== 'research' &&
-    brief.goal !== 'control-plane' &&
-    !brief.acceptance?.requires?.length &&
-    !(brief.paths ?? []).some(isMoneyPath) &&
-    !branchChangedPaths(task, input.policy ?? defaultPolicy).some(isMoneyPath)
-  )
-    selected.push('source-only');
+  else if (sourceOnlyCompletionEligible({ ...input, task, proofRun, authorization })) selected.push('source-only');
   // A governed attempt must see the same typing-only boundary that its check wrapper enforces. Exempt briefs
   // keep their original acceptance; the local minimal setting still applies to otherwise unqualified work.
   else if (

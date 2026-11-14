@@ -41,11 +41,14 @@ import { completeWorkerSourceBaseline } from './conflict-progress.ts';
 import { harvestContinuations } from './continuation.ts';
 import type { Task } from './types.ts';
 import { defaultPolicy } from './policy.ts';
+import { sourceOnlyCompletionEligible } from './prompts.ts';
 import {
   workerCheckBudgetDirectory,
+  workerCheckHostAttemptCheckCustody,
   workerCheckHostBudgetLimit,
   workerCheckHostBudgetRefusalReport,
   workerCheckHostTypingReceiptMatches,
+  workerCheckHostTypingCheckIds,
   workerCheckHostTypingSettlement,
   workerCheckHostWithdrawnRetryIsRecoverable,
 } from './worker-check-budget.ts';
@@ -300,6 +303,7 @@ export async function settle(
     let exited = false;
     let bundle = false;
     let typingEvidencePending: { result: string; command?: string[] } | undefined;
+    let typingEvidenceDeferred: { result: string; command?: string[] } | undefined;
     // Whether the branch has commits matters only for a nonzero exit without a session.
     let committed = false;
     if (code !== null && code !== 0)
@@ -610,14 +614,29 @@ export async function settle(
         !finalMeasurement.blocker &&
         reportsSuccess(finalMeasurement.result, agentAdapter(attempt.profile.cli))
       ) {
+        const directory = workerCheckBudgetDirectory(tasks.settings.stateDirectory, ref.taskId, ref.attempt);
+        const sourceOnly =
+          !recovery?.withdrawnBudgetRecovery &&
+          sourceOnlyCompletionEligible({ task, stateDirectory: tasks.settings.stateDirectory, policy });
         const typing = workerCheckHostTypingSettlement({
-          directory: workerCheckBudgetDirectory(tasks.settings.stateDirectory, ref.taskId, ref.attempt),
+          directory,
           worktree: task.worktree,
           limit: workerCheckHostBudgetLimit(task, ref.attempt),
+          inspectUnbudgeted: sourceOnly,
         });
         if (!typing.ok) {
           if (typing.kind === 'evidence-unavailable') {
-            typingEvidencePending = { result: typing.result, ...(typing.command ? { command: typing.command } : {}) };
+            const evidence = { result: typing.result, ...(typing.command ? { command: typing.command } : {}) };
+            const custody = sourceOnly
+              ? workerCheckHostAttemptCheckCustody(
+                  task.worktree,
+                  task.id,
+                  ref.attempt,
+                  workerCheckHostTypingCheckIds(directory, attempt.checks ?? []),
+                )
+              : 'unknown';
+            if (sourceOnly && custody === 'terminal') typingEvidenceDeferred = evidence;
+            else typingEvidencePending = evidence;
           } else {
             finalMeasurement.failureKind = 'tool';
             finalMeasurement.result = typing.result;
@@ -629,8 +648,12 @@ export async function settle(
         a.result = finalMeasurement.result;
         a.blocker = finalMeasurement.blocker;
         a.failureKind = finalMeasurement.failureKind;
-        if (typingEvidencePending) a.typingEvidencePending = typingEvidencePending;
-        else delete a.typingEvidencePending;
+        if (typingEvidenceDeferred) {
+          a.typingEvidenceDeferred = typingEvidenceDeferred;
+          delete a.typingEvidencePending;
+        } else if (typingEvidencePending) {
+          a.typingEvidencePending = typingEvidencePending;
+        } else delete a.typingEvidencePending;
         a.approaches.push(
           ...reportedApproaches(finalMeasurement.result, agentAdapter(attempt.profile.cli), policy.records),
         );
@@ -648,6 +671,11 @@ export async function settle(
         store.event(ref, 'typing-evidence-pending', typingEvidencePending);
         return;
       }
+      if (
+        typingEvidenceDeferred &&
+        !store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'typing-evidence-deferred')
+      )
+        store.event(ref, 'typing-evidence-deferred', typingEvidenceDeferred);
       if (finalMeasurement.failureKind && !proofTask) return;
       if (proofTask && proofObservation && proofObservation.status !== 'terminal') {
         // A missing, wrong or foreign hint is an observation defect, not a product assertion.
