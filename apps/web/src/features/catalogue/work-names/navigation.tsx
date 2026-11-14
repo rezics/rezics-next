@@ -119,6 +119,57 @@ function selectedReturn(href: string | undefined, realm: string | null, locale: 
   return subjectVisitReturn(`${url.pathname}${url.search}${url.hash}`, locale);
 }
 
+/** Orient to the outermost closed disclosure without reopening a visitor's collapsed view. */
+function visibleNamesFocus(target: HTMLElement | null | undefined): HTMLElement | undefined {
+  if (!target?.isConnected) return;
+  for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+    if (parent.hidden) return;
+    if (parent.tagName !== 'DETAILS' || (parent as HTMLDetailsElement).open) continue;
+    const summary = parent.querySelector<HTMLElement>(':scope > summary');
+    if (!summary) return;
+    if (!summary.contains(target)) target = summary;
+  }
+  return target.isConnected && !target.hidden ? target : undefined;
+}
+
+/** Resolve against the current finite projection; committing focus belongs to the mounted caller. */
+async function namesReturnTarget(
+  intent: NamesReturnFocus | 'section' | undefined,
+  names: readonly WorkNameGroup[],
+  host: HTMLDivElement | null,
+  nameTargets: ReadonlyMap<HTMLElement, NameTarget>,
+  groupTargets: ReadonlyMap<HTMLElement, string>,
+) {
+  if (intent && typeof intent === 'object') {
+    // Spelling identity survives reordering, but a former row or index is never a focus authority.
+    const group = names.find((group) => group.language === intent.language);
+    const candidates = group?.names.filter((name) => name.roles.includes(intent.role)) ?? [];
+    const identities = await Promise.all(candidates.map((name) => spellingIdentity(name.text)));
+    const name = candidates[identities.indexOf(intent.identity)];
+    const target =
+      name &&
+      [...nameTargets].find(
+        ([element, target]) =>
+          element.isConnected &&
+          target.language === intent.language &&
+          target.name.text === name.text &&
+          target.name.roles.includes(intent.role),
+      )?.[0];
+    if (target) return { target, changed: false };
+    const groupTarget = [...groupTargets].find(
+      ([element, language]) => element.isConnected && language === intent.language,
+    )?.[0];
+    return { target: groupTarget ?? host?.querySelector<HTMLElement>('summary'), changed: true };
+  }
+  const anchor =
+    intent === 'sources'
+      ? host?.querySelector<HTMLAnchorElement>('[data-names-sources] a')
+      : intent === 'terms'
+        ? host?.querySelector<HTMLAnchorElement>('[data-names-terms] a')
+        : undefined;
+  return { target: anchor ?? host?.querySelector<HTMLElement>('summary'), changed: false };
+}
+
 export function NamesHandoff({
   binding,
   returnHref,
@@ -169,7 +220,7 @@ export function NamesHandoff({
       const departure =
         focusedDeparture.current &&
         host.current?.querySelector<HTMLElement>(`[data-names-${focusedDeparture.current}] a`);
-      (departure || host.current?.querySelector<HTMLElement>('summary'))?.focus();
+      visibleNamesFocus(departure || host.current?.querySelector<HTMLElement>('summary'))?.focus();
     }
   });
   const [restored, setRestored] = useState<{
@@ -202,45 +253,24 @@ export function NamesHandoff({
       document.activeElement?.isConnected &&
       document.activeElement !== document.body &&
       document.activeElement !== document.documentElement;
+    const canRestore = () => active && current() && !visitorFocused();
     const restoreFocus = async () => {
-      if (visitorFocused()) return;
-      const intent = restored.focus;
-      if (intent && typeof intent === 'object') {
-        // Validate against this fresh finite projection, not a former DOM row or its index.
-        const group = names.find((group) => group.language === intent.language);
-        const candidates = group?.names.filter((name) => name.roles.includes(intent.role)) ?? [];
-        const identities = await Promise.all(candidates.map((name) => spellingIdentity(name.text)));
-        if (!active || !current() || visitorFocused()) return;
-        const name = candidates[identities.indexOf(intent.identity)];
-        const target =
-          name &&
-          [...nameTargets.current].find(
-            ([element, target]) =>
-              element.isConnected &&
-              target.language === intent.language &&
-              target.name.text === name.text &&
-              target.name.roles.includes(intent.role),
-          )?.[0];
-        if (target) {
-          target.focus();
-          return;
-        }
-        const groupTarget = [...groupTargets.current].find(
-          ([element, language]) => element.isConnected && language === intent.language,
-        )?.[0];
-        setRestored((value) => ({ ...value, focus: 'section', status: 'changed' }));
-        (groupTarget ?? host.current?.querySelector<HTMLElement>('summary'))?.focus();
-        return;
-      }
-      const anchor =
-        intent === 'sources'
-          ? host.current?.querySelector<HTMLAnchorElement>('[data-names-sources] a')
-          : intent === 'terms'
-            ? host.current?.querySelector<HTMLAnchorElement>('[data-names-terms] a')
-            : undefined;
-      (anchor ?? host.current?.querySelector<HTMLElement>('summary'))?.focus();
+      if (!canRestore()) return;
+      const { target, changed } = await namesReturnTarget(
+        restored.focus,
+        names,
+        host.current,
+        nameTargets.current,
+        groupTargets.current,
+      );
+      // Hashing may outlive this source, session, visit, target or the visitor's open disclosure.
+      if (!canRestore()) return;
+      if (changed) setRestored((value) => ({ ...value, focus: 'section', status: 'changed' }));
+      visibleNamesFocus(target)?.focus();
     };
-    void restoreFocus();
+    // A descendant observes this admission in layout and updates its enclosing disclosure.
+    // Let that reveal commit before orienting; passive effects can run before the update commits.
+    queueMicrotask(() => void restoreFocus());
     return () => {
       active = false;
     };

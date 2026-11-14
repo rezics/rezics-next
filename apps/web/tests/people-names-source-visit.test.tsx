@@ -53,6 +53,7 @@ async function mounted(
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'one' });
   const hiddenFocus: Element[] = [];
+  const digest = crypto.subtle.digest;
   host.addEventListener('focusin', (event) => {
     const target = event.target as HTMLElement;
     for (let parent = target.parentElement; parent; parent = parent.parentElement)
@@ -63,6 +64,7 @@ async function mounted(
     await run(host, (node) => act(async () => root.render(h(QueryClientProvider, { client }, node))), client);
     expect(hiddenFocus).toEqual([]);
   } finally {
+    crypto.subtle.digest = digest;
     await act(async () => root.unmount());
     client.clear();
     for (const [key, descriptor] of previous)
@@ -309,9 +311,21 @@ test('Context and release replacement permanently retire actions and late copy/a
 });
 
 for (const [kind, outcome] of (['Person', 'Character'] as const).flatMap((kind) =>
-  (['surviving', 'removed', 'language', 'role', 'window', 'connected', 'budget'] as const).map(
-    (outcome) => [kind, outcome] as const,
-  ),
+  (
+    [
+      'surviving',
+      'removed',
+      'language',
+      'role',
+      'window',
+      'connected',
+      'budget',
+      'collapse',
+      'source',
+      'session',
+      'departure',
+    ] as const
+  ).map((outcome) => [kind, outcome] as const),
 ))
   test(`${kind} fresh exact-name Sources return: ${outcome}`, async () => {
     await mounted(async (host, draw, client) => {
@@ -324,6 +338,7 @@ for (const [kind, outcome] of (['Person', 'Character'] as const).flatMap((kind) 
       current.subject.labels = { en: 'Selected', ja: '旅人' };
       current.subject.aliases = { [language]: Array.from({ length: 48 }, (_, i) => `Exact—Mél/旅 ${i}`) };
       let returning = false;
+      let refresh!: () => void;
       const history = createMemoryHistory({
         initialEntries: [`/en/subjects/${current.subject.id}/selected?realm=${realm}`],
       });
@@ -331,6 +346,8 @@ for (const [kind, outcome] of (['Person', 'Character'] as const).flatMap((kind) 
       const route = createRoute({ getParentRoute: () => root, path: '/$', component: Visit });
       const router = createRouter({ routeTree: root.addChildren([route]), history });
       function Visit() {
+        const [, redraw] = useState(0);
+        refresh = () => redraw((value) => value + 1);
         const location = useRouterState({ select: (state) => state.location });
         if (location.pathname.endsWith('/sources'))
           return h(SubjectSourcesPage, {
@@ -393,18 +410,62 @@ for (const [kind, outcome] of (['Person', 'Character'] as const).flatMap((kind) 
       if (outcome === 'role') current.subject.labels.ja = spelling;
       if (outcome === 'window')
         current.subject.aliases[language]!.unshift(...Array.from({ length: 24 }, (_, i) => `New ${i}`));
+      const pending: (() => Promise<void>)[] = [];
+      const controlled = ['collapse', 'source', 'session', 'departure'].includes(outcome);
+      if (controlled) {
+        const digest = crypto.subtle.digest.bind(crypto.subtle);
+        crypto.subtle.digest = (...args) =>
+          new Promise((resolve, reject) => pending.push(() => digest(...args).then(resolve, reject)));
+      }
       returning = true;
       // Exercise the actual Sources return adapter, with the same history value as Back/Forward.
       await act(async () => host.querySelector<HTMLAnchorElement>('a')!.click());
       await act(async () => router.load());
       await draw(h(RouterProvider, { router }));
+      if (controlled) {
+        expect(pending.length).toBeGreaterThan(0);
+        const details = host.querySelector<HTMLDetailsElement>('[data-slot="people-profile-details"]')!;
+        expect(details.open).toBe(true);
+        if (outcome === 'source') {
+          current = structuredClone(current);
+          current.subject.revision++;
+          await act(async () => refresh());
+          expect(host.textContent).toContain('The names reading changed');
+        } else if (outcome === 'departure') {
+          await act(async () => {
+            history.back();
+            await router.load();
+          });
+          expect(host.querySelector('#supplied-names')).toBeNull();
+        } else {
+          if (outcome === 'session') host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!.focus();
+          await act(async () => {
+            details.open = false;
+            details.dispatchEvent(new window.Event('toggle'));
+          });
+          if (outcome === 'session') {
+            await act(async () =>
+              client.setQueryData(['session'], { state: 'signed-in', subject: 'other', csrfToken: 'two' }),
+            );
+            expect(host.textContent).toContain('retired');
+          }
+        }
+        const orientation = document.activeElement;
+        await act(async () => {
+          await Promise.all(pending.splice(0).map((finish) => finish()));
+        });
+        expect(document.activeElement).toBe(
+          outcome === 'collapse' || outcome === 'session' ? details.querySelector(':scope > summary') : orientation,
+        );
+        if (outcome === 'collapse' || outcome === 'session') expect(details.open).toBe(false);
+      }
       if (outcome === 'connected') expect(document.activeElement?.id).toBe('visitor-focus');
       else if (outcome === 'surviving') {
         expect(document.activeElement?.closest('li')?.querySelector('[data-supplied-name]')?.textContent).toBe(
           spelling,
         );
         expect(host.textContent).not.toContain('The names reading changed');
-      } else {
+      } else if (['removed', 'language', 'role', 'window'].includes(outcome)) {
         expect(document.activeElement === host.querySelector(`[data-name-language="${language}"] summary`)).toBe(true);
         expect(host.textContent).toContain('The names reading changed');
       }

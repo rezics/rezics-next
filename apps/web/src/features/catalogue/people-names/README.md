@@ -44,6 +44,10 @@ for the caller's layout reveal update to commit, then check current authority, c
 focus and visible target ancestors, including after asynchronous exact-name hashing. Keeping the
 enclosing Details outside the handoff host preserves its window capture and summary fallback.
 
+Decision: Queue names return focus after layout updates commit, then recheck authority, connected
+visitor focus and target visibility. A manual collapse during spelling hashing or disconnected-row
+recovery orients to the outermost visible summary without reopening the disclosure.
+
 Cost stays one admitted supplied-name model, one local filter, eight language groups with 24 names
 per group window, one advice lifetime and one ephemeral reveal intent per mounted profile. There
 are no per-name reads, additional retained payloads or changes to the 8192-byte handoff.
@@ -53,5 +57,6 @@ Consumer regressions in [people-names](../../../../tests/people-names.test.tsx) 
 Person/Character preparation, bounded view continuity, pending advice, source/session retirement
 and exact Sources return. The mounted return cases also cover both profiles' Sources/Terms and
 Back returns, changed or missing return recovery, exact-name/group/link orientation, visible
-ancestors at focus, ordinary compact rendering and manual collapse. Their execution belongs to
-integrated verification.
+ancestors at focus, ordinary compact rendering and manual collapse. Controlled spelling hashes
+also cover collapse before completion and source replacement, session retirement and departure
+while return focus is pending. Their execution belongs to integrated verification.
