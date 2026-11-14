@@ -2,7 +2,6 @@ import { ImportDetails, ImportTarget } from '../personal-list-import/presentatio
 import { m } from '../../paraglide/messages.js';
 import { ImportSourceChecks, ImportSourceEvidence } from '../rich-private-entry/source-confirm';
 import type { AniListRowMeta } from './contract';
-import { AniListAction } from './controls';
 import { AniListCheck } from './controls';
 import { aniListAppliedFields, aniListMatchLabel, aniListMediaLabel, aniListValidityLabel } from './meaning';
 
@@ -11,8 +10,6 @@ export function AniListConfirmPage({
   busy,
   confirmPrivacy,
   confirmTimestamps,
-  onBack,
-  onConfirm,
   onConfirmSource,
   onVoteConsent,
 }: {
@@ -20,51 +17,54 @@ export function AniListConfirmPage({
   busy: boolean;
   confirmPrivacy: boolean;
   confirmTimestamps: boolean;
-  onBack: () => void;
-  onConfirm: () => void;
   onConfirmSource: (choice: { privacy?: boolean; timestamps?: boolean }) => void;
   onVoteConsent: (ordinal: number, consent: boolean) => void;
 }) {
   const ready = rows.filter((row) => row.reviewId);
-  const gated = busy || ready.length === 0 || !confirmPrivacy || !confirmTimestamps;
   return (
     <section className="space-y-4" data-anilist-stage="confirm">
       <h2 className="text-xl font-semibold">{m.library_import_confirm()}</h2>
       <p>{m.library_anilist_confirm_help({ count: ready.length })}</p>
-      <ul className="space-y-3">
+      <ul className="grid min-w-0 gap-4 xl:grid-cols-2">
         {ready.map((row) => {
           const fields = aniListAppliedFields(row);
           return (
-            <li key={row.ordinal} className="rounded-md border p-3" data-anilist-confirm={row.ordinal}>
-              <p className="font-medium [overflow-wrap:anywhere]">{row.title}</p>
-              <p className="text-sm">
-                {aniListMediaLabel(row.mediaType)} · {aniListMatchLabel(row.match, row.skip)}
-              </p>
-              <p className="text-sm">
-                {m.library_anilist_confirm_fields({
-                  fields: fields.length ? fields.join(', ') : m.library_anilist_match_skipped(),
-                })}
-              </p>
-              {row.replace ? <p className="text-sm">{m.library_anilist_confirm_replace()}</p> : null}
-              {row.replace && row.scoreReview?.currentVote === 'present' ? (
-                <p className="text-sm">{m.library_anilist_confirm_replace_vote()}</p>
-              ) : null}
-              {row.proposedState ? (
-                <p className="text-sm">{m.library_anilist_proposed({ state: row.proposedState })}</p>
-              ) : null}
-              <ImportTarget target={row.target} />
-              {row.current ? (
-                <p className="text-sm">
-                  {m.library_anilist_current({ state: row.current.state, revision: row.current.revision })}
+            <li key={row.ordinal} className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5" data-anilist-confirm={row.ordinal}>
+              <header className="space-y-1">
+                <h3 className="text-lg font-semibold [overflow-wrap:anywhere]">{row.title}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {aniListMediaLabel(row.mediaType)} · {aniListMatchLabel(row.match, row.skip)}
                 </p>
-              ) : (
-                <p className="text-sm">{m.library_anilist_absence()}</p>
-              )}
+                <ImportTarget target={row.target} />
+              </header>
+              <section className="min-w-0 space-y-2 border-t pt-3" data-anilist-confirm-state>
+                <h4 className="font-semibold">{m.library_import_state()}</h4>
+                <p className="text-sm">
+                  {m.library_anilist_confirm_fields({
+                    fields: fields.length ? fields.join(', ') : m.library_anilist_match_skipped(),
+                  })}
+                </p>
+                {row.replace ? <p className="text-sm">{m.library_anilist_confirm_replace()}</p> : null}
+                {row.replace && row.scoreReview?.currentVote === 'present' ? (
+                  <p className="text-sm">{m.library_anilist_confirm_replace_vote()}</p>
+                ) : null}
+                {row.proposedState ? (
+                  <p className="text-sm">{m.library_anilist_proposed({ state: row.proposedState })}</p>
+                ) : null}
+                {row.current ? (
+                  <p className="text-sm">
+                    {m.library_anilist_current({ state: row.current.state, revision: row.current.revision })}
+                  </p>
+                ) : (
+                  <p className="text-sm">{m.library_anilist_absence()}</p>
+                )}
+              </section>
               <ImportDetails>
                 <ImportSourceEvidence preview={row.sourcePreview} />
               </ImportDetails>
               {row.scoreSource ? (
-                <div className="space-y-2 rounded-md border p-3" data-anilist-confirm-score={row.ordinal}>
+                <section className="min-w-0 space-y-3 rounded-lg border bg-muted/20 p-3" data-anilist-confirm-score={row.ordinal}>
+                  <h4 className="font-semibold">{m.library_import_score()}</h4>
                   <p className="font-medium">
                     {m.library_anilist_score_source({
                       value:
@@ -102,9 +102,12 @@ export function AniListConfirmPage({
                         </p>
                       ) : null}
                       {row.scoreReview.targetId ? (
-                        <p className="text-sm [overflow-wrap:anywhere]">
-                          {m.library_anilist_score_target({ target: row.scoreReview.targetId })}
-                        </p>
+                        <ImportDetails>
+                          <p className="text-sm [overflow-wrap:anywhere]">
+                            {m.library_anilist_score_target({ target: row.scoreReview.targetId })}
+                            {row.scoreReview.identityEpoch ? ` · ${row.scoreReview.identityEpoch}` : ''}
+                          </p>
+                        </ImportDetails>
                       ) : null}
                       {row.scoreReview.currentVote === 'present' ? (
                         <p>{m.library_anilist_review_vote_present({ units: row.scoreReview.currentVoteUnits ?? 0 })}</p>
@@ -143,7 +146,7 @@ export function AniListConfirmPage({
                   ) : (
                     <p>{m.library_anilist_score_keep()}</p>
                   )}
-                </div>
+                </section>
               ) : null}
             </li>
           );
@@ -151,22 +154,16 @@ export function AniListConfirmPage({
       </ul>
       <p className="text-sm text-muted-foreground">{m.library_anilist_not_vote()}</p>
       <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
-      <ImportSourceChecks
-        prefix="anilist"
-        privacy={confirmPrivacy}
-        timestamps={confirmTimestamps}
-        disabled={busy}
-        onPrivacy={(privacy) => onConfirmSource({ privacy })}
-        onTimestamps={(timestamps) => onConfirmSource({ timestamps })}
-      />
-      <div className="flex flex-wrap gap-3">
-        <AniListAction type="button" variant="outline" disabled={busy} onClick={onBack}>
-          {m.library_anilist_return_review()}
-        </AniListAction>
-        <AniListAction type="button" disabled={gated} onClick={onConfirm} aria-busy={busy}>
-          {busy ? m.library_anilist_confirming() : m.library_anilist_confirm()}
-        </AniListAction>
-      </div>
+      <section className="min-w-0 space-y-3 rounded-xl border bg-card p-4 sm:p-5" data-anilist-confirm-source>
+        <ImportSourceChecks
+          prefix="anilist"
+          privacy={confirmPrivacy}
+          timestamps={confirmTimestamps}
+          disabled={busy}
+          onPrivacy={(privacy) => onConfirmSource({ privacy })}
+          onTimestamps={(timestamps) => onConfirmSource({ timestamps })}
+        />
+      </section>
     </section>
   );
 }

@@ -5,7 +5,6 @@ import { ImportDetails, ImportEmpty } from '../personal-list-import/presentation
 import { m } from '../../paraglide/messages.js';
 import type { AniListJourneySnapshot } from './controller';
 import { AniListAction } from './controls';
-import { aniListWrapperLabel } from './meaning';
 import { AniListRowReview, type RowDraft } from './row';
 
 export function AniListReviewPage({
@@ -16,7 +15,6 @@ export function AniListReviewPage({
   onNext,
   onPrevious,
   onFirst,
-  onConfirm,
   onRefreshQuestion,
   renderLabels,
 }: {
@@ -27,36 +25,25 @@ export function AniListReviewPage({
   onNext: () => void;
   onPrevious: () => void;
   onFirst: () => void;
-  onConfirm: () => void;
   onRefreshQuestion: () => void;
   renderLabels?: (row: AniListRow, meta: AniListRowMeta | undefined) => ReactNode;
 }) {
   const pageStatus = useImportPageFocus(snap.pageRevision);
   const metadata = new Map(snap.meta.map((row) => [row.ordinal, row]));
-  const reviewed = snap.meta.filter((row) => row.reviewId).length;
   return (
     <section className="space-y-6" data-anilist-stage="review">
-      <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
-      <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
+      <div className="space-y-2">
+        <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
+        <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
+      </div>
       <p
         ref={pageStatus}
         role="status"
         tabIndex={-1}
         className="rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
       >
-        {m.library_anilist_page_status({
-          shown: snap.page.length,
-          total: snap.count,
-          after: snap.after + 1,
-        })}
+        {m.library_anilist_page_status({ shown: snap.page.length, total: snap.count, after: snap.after + 1 })}
       </p>
-      {snap.completeness ? (
-        <p className="text-sm text-muted-foreground">
-          {aniListWrapperLabel(snap.completeness)}
-          {snap.completeness.hasNextChunk ? ` · ${m.library_anilist_completeness_chunk()}` : ''}
-        </p>
-      ) : null}
-      {snap.completeness?.hasNextChunk ? <p>{m.library_anilist_slice()}</p> : <p>{m.library_anilist_not_complete()}</p>}
       {snap.cancelled ? <p role="status">{m.library_anilist_canceled()}</p> : null}
       <ImportDetails title={m.library_import_score()}>
         <div className="flex flex-wrap items-start justify-between gap-3" data-anilist-standard-question>
@@ -88,11 +75,11 @@ export function AniListReviewPage({
         </div>
       </ImportDetails>
       {snap.page.length === 0 ? <ImportEmpty /> : null}
-      <ul className="space-y-6">
+      <ul className="grid min-w-0 gap-4 xl:grid-cols-2">
         {snap.page.map((row) => {
           const meta = metadata.get(row.ordinal);
           return (
-            <li key={row.ordinal}>
+            <li key={row.ordinal} className="min-w-0">
               <AniListRowReview
                 row={row}
                 {...(meta ? { meta } : {})}
@@ -119,11 +106,6 @@ export function AniListReviewPage({
         onPrevious={onPrevious}
         onNext={onNext}
       />
-      <div className="flex flex-wrap gap-3">
-        <AniListAction type="button" disabled={busy || snap.cancelled || reviewed === 0} onClick={onConfirm}>
-          {m.library_anilist_continue_confirm()}
-        </AniListAction>
-      </div>
     </section>
   );
 }
