@@ -16,12 +16,14 @@ import { GLOBAL, PUBLIC_RATING_SCALE, QUESTION } from '../features/pages/subject
 import { readSearchPage } from './search-request';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { currentEvidenceMatches, evidencePageWithinLimit, matchEvidenceSchema } from './match-evidence';
+import { admitWorkContext, isWorkContextShape } from './work-context/admission';
 
 type NativePage = Extract<
   NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>,
   { subjects: unknown }
 >;
 type NativeHit = NativePage['subjects'][number];
+type NativeWorkContext = NonNullable<NativeHit['workContext']>;
 
 // Keep the opt-in envelope separate from the generated Subject compatibility response.
 // Validate unknown wire data before allowing it to reach the page.
@@ -127,6 +129,9 @@ const contextList = v.strictObject({
   next: v.boolean(),
 });
 const characterPersonContexts = v.strictObject({ credits: contextList, appearances: contextList });
+// The HTTP route owns full wire validation. Keep its released generated union here and
+// separately admit the optional capability against the matching Subject row.
+const workContext: v.GenericSchema<NativeWorkContext> = v.custom<NativeWorkContext>(isWorkContextShape);
 const legacyHit = v.object({
   id: v.string(),
   type: v.string(),
@@ -270,6 +275,7 @@ const hit = v.union([
     summary: v.object({ kind: v.literal('subject'), value: subjectSummary }),
     ...catalogueFields,
     contexts: v.exactOptional(characterPersonContexts),
+    workContext: v.exactOptional(workContext),
     creditMatch: v.exactOptional(creditMatch),
   }),
   v.object({
@@ -463,6 +469,14 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
     return;
   if (!evidencePageWithinLimit(result.hits.map((hit) => hit.matchEvidence ?? { state: 'unavailable' }))) return;
   let reviewBytes = 0;
+  const hits: DiscoveryPage['hits'] = result.hits.map((hit) => {
+    if (hit.summary.kind !== 'subject' || hit.workContext === undefined) return hit;
+    const context = admitWorkContext(hit.workContext, hit.summary.value);
+    if (context) return { ...hit, workContext: context };
+    const { workContext: _retiredContext, ...currentHit } = hit;
+    return currentHit;
+  });
+  result.hits = hits;
   for (const hit of result.hits) {
     if (hit.key.id !== hit.summary.value.id) return;
     const matchEvidence = hit.matchEvidence ?? {
