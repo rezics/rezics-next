@@ -286,7 +286,10 @@ function FactValue({
   const navigation = useContext(Navigation);
   return (
     <section className="min-w-0 space-y-2" data-property={fact.property}>
-      <h3 lang={fact.label.lang ?? undefined} className="text-sm font-medium text-muted-foreground">
+      <h3
+        lang={fact.label.lang ?? undefined}
+        className="break-words text-sm font-medium text-muted-foreground [overflow-wrap:anywhere]"
+      >
         {fact.label.text || m.candidate_value_unavailable({}, o)}
       </h3>
       <ol className="min-w-0 space-y-3">
@@ -297,41 +300,43 @@ function FactValue({
               statement={statement}
               locale={visit.locale}
             >
-              <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
-                <div className="min-w-0 [overflow-wrap:anywhere]">
-                  <FileValue
-                    part={statement}
-                    publicRead={visit.public}
-                    locale={visit.locale}
-                    link={link}
-                    visit={visit}
-                    selection={{ key: assertionKey(visit, fact.property, statement), group, kind: 'assertion' }}
-                    historical={statement.rezics.release !== visit.digest}
-                  />
+              <ContentItemFrame as="div" className="min-w-0 p-4">
+                <div className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                  <div className="min-w-0 break-words [overflow-wrap:anywhere]">
+                    <FileValue
+                      part={statement}
+                      publicRead={visit.public}
+                      locale={visit.locale}
+                      link={link}
+                      visit={visit}
+                      selection={{ key: assertionKey(visit, fact.property, statement), group, kind: 'assertion' }}
+                      historical={statement.rezics.release !== visit.digest}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className={`${readerControlClass} w-full sm:w-auto`}
+                    data-inspection-trigger
+                    data-inspection-kind="assertion"
+                    ref={(element) => navigation.trigger?.(assertionKey(visit, fact.property, statement), element)}
+                    aria-controls={
+                      reading.selection?.key === assertionKey(visit, fact.property, statement)
+                        ? 'catalogue-file-inspection'
+                        : undefined
+                    }
+                    aria-expanded={reading.selection?.key === assertionKey(visit, fact.property, statement)}
+                    onClick={(event) =>
+                      reading.select(
+                        { key: assertionKey(visit, fact.property, statement), group, kind: 'assertion' },
+                        event.currentTarget,
+                        heading(),
+                        event.detail === 0,
+                      )
+                    }
+                  >
+                    {m.catalogue_file_inspect_assertion({}, o)}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className={readerControlClass}
-                  data-inspection-trigger
-                  data-inspection-kind="assertion"
-                  ref={(element) => navigation.trigger?.(assertionKey(visit, fact.property, statement), element)}
-                  aria-controls={
-                    reading.selection?.key === assertionKey(visit, fact.property, statement)
-                      ? 'catalogue-file-inspection'
-                      : undefined
-                  }
-                  aria-expanded={reading.selection?.key === assertionKey(visit, fact.property, statement)}
-                  onClick={(event) =>
-                    reading.select(
-                      { key: assertionKey(visit, fact.property, statement), group, kind: 'assertion' },
-                      event.currentTarget,
-                      heading(),
-                      event.detail === 0,
-                    )
-                  }
-                >
-                  {m.catalogue_file_inspect_assertion({}, o)}
-                </button>
               </ContentItemFrame>
             </EvidenceGate>
           </li>
@@ -406,79 +411,89 @@ function AssociationList({
                 statement={association.statement}
                 locale={visit.locale}
               >
-                <ContentItemFrame as="div" className="min-w-0 space-y-2 p-4">
-                  <p className="text-sm text-muted-foreground">{kindLabel}</p>
-                  <p
-                    className="min-w-0 [overflow-wrap:anywhere]"
-                    aria-label={`${sourceLabel} ${relationLabel} ${targetLabel}`}
-                    data-direction={association.direction}
-                  >
-                    <span
-                      lang={
-                        association.direction === 'forward'
-                          ? (current.lang ?? undefined)
-                          : association.readability === 'concealed'
-                            ? undefined
-                            : association.source.lang
-                      }
-                    >
-                      {sourceLabel}
-                    </span>{' '}
-                    <span lang={association.label.lang ?? undefined} className="text-muted-foreground">
-                      {relationLabel}
-                    </span>{' '}
-                    <span
-                      lang={
-                        association.direction === 'inverse'
-                          ? (current.lang ?? undefined)
-                          : association.readability === 'concealed'
-                            ? undefined
-                            : association.target.lang
-                      }
-                    >
-                      {targetLabel}
-                    </span>
-                  </p>
-                  {readable && href ? (
-                    <Link className={`${readerLinkClass} ${linkClass} ${linkColor}`} href={href}>
-                      {related.label || m.subject_value_unlabelled({}, o)}
-                    </Link>
-                  ) : null}
-                  {association.historical && (
-                    <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
-                  )}
-                  {association.readability === 'concealed' ? (
-                    <p>{concealed}</p>
-                  ) : association.readability === 'unreadable' ? (
-                    <p>{m.release_fidelity_work_unreadable({}, o)}</p>
-                  ) : null}
-                  <button
-                    type="button"
-                    className={readerControlClass}
-                    data-inspection-trigger
-                    data-inspection-kind="association"
-                    ref={(element) => navigation.trigger?.(associationKey(visit, association), element)}
-                    aria-controls={
-                      reading.selection?.key === associationKey(visit, association)
-                        ? 'catalogue-file-inspection'
-                        : undefined
-                    }
-                    aria-expanded={reading.selection?.key === associationKey(visit, association)}
-                    onClick={(event) =>
-                      reading.select(
-                        {
-                          key: associationKey(visit, association),
-                          group: 'associations',
-                          kind: 'association',
-                        },
-                        event.currentTarget,
-                        undefined,
-                        event.detail === 0,
-                      )
-                    }
-                  >
-                    {m.catalogue_file_inspect_association({}, o)}
-                  </button>
+                <ContentItemFrame as="div" className="min-w-0 p-4">
+                  <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(12rem,auto)] md:items-start">
+                    <div className="min-w-0 space-y-2">
+                      <p className="text-sm text-muted-foreground">{kindLabel}</p>
+                      <p
+                        className="min-w-0 break-words [overflow-wrap:anywhere]"
+                        aria-label={`${sourceLabel} ${relationLabel} ${targetLabel}`}
+                        data-direction={association.direction}
+                      >
+                        <span
+                          lang={
+                            association.direction === 'forward'
+                              ? (current.lang ?? undefined)
+                              : association.readability === 'concealed'
+                                ? undefined
+                                : association.source.lang
+                          }
+                        >
+                          {sourceLabel}
+                        </span>{' '}
+                        <span lang={association.label.lang ?? undefined} className="text-muted-foreground">
+                          {relationLabel}
+                        </span>{' '}
+                        <span
+                          lang={
+                            association.direction === 'inverse'
+                              ? (current.lang ?? undefined)
+                              : association.readability === 'concealed'
+                                ? undefined
+                                : association.target.lang
+                          }
+                        >
+                          {targetLabel}
+                        </span>
+                      </p>
+                      {association.historical && (
+                        <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+                      )}
+                      {association.readability === 'concealed' ? (
+                        <p>{concealed}</p>
+                      ) : association.readability === 'unreadable' ? (
+                        <p>{m.release_fidelity_work_unreadable({}, o)}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-2 md:items-stretch">
+                      {readable && href ? (
+                        <Link
+                          className={`${readerLinkClass} ${linkClass} ${linkColor} w-full justify-start md:w-auto`}
+                          href={href}
+                          lang={related.lang ?? undefined}
+                        >
+                          {related.label || m.subject_value_unlabelled({}, o)}
+                        </Link>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={`${readerControlClass} w-full md:justify-start`}
+                        data-inspection-trigger
+                        data-inspection-kind="association"
+                        ref={(element) => navigation.trigger?.(associationKey(visit, association), element)}
+                        aria-controls={
+                          reading.selection?.key === associationKey(visit, association)
+                            ? 'catalogue-file-inspection'
+                            : undefined
+                        }
+                        aria-expanded={reading.selection?.key === associationKey(visit, association)}
+                        onClick={(event) =>
+                          reading.select(
+                            {
+                              key: associationKey(visit, association),
+                              group: 'associations',
+                              kind: 'association',
+                            },
+                            event.currentTarget,
+                            undefined,
+                            event.detail === 0,
+                          )
+                        }
+                      >
+                        {m.catalogue_file_inspect_association({}, o)}
+                      </button>
+                    </div>
+                  </div>
                 </ContentItemFrame>
               </EvidenceGate>
             </li>
@@ -626,15 +641,22 @@ function InspectionPanel({
         data-slot="catalogue-file-inspection"
         role="region"
         aria-labelledby="catalogue-file-inspection-heading"
-        className="space-y-3"
+        className="min-w-0 space-y-3 rounded-lg border border-border bg-muted/30 p-4"
       >
-        <h2 id="catalogue-file-inspection-heading" ref={heading} tabIndex={-1}>
-          {m.catalogue_file_inspection_title({}, o)}
-        </h2>
+        <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <h2
+            id="catalogue-file-inspection-heading"
+            ref={heading}
+            tabIndex={-1}
+            className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {m.catalogue_file_inspection_title({}, o)}
+          </h2>
+          <button type="button" className={readerControlClass} onClick={() => reading.close(fallback())}>
+            {m.catalogue_file_inspection_close({}, o)}
+          </button>
+        </header>
         <p>{concealed ?? m.candidate_value_unavailable({}, o)}</p>
-        <button type="button" className={readerControlClass} onClick={() => reading.close(fallback())}>
-          {m.catalogue_file_inspection_close({}, o)}
-        </button>
       </section>
     );
 
@@ -706,9 +728,15 @@ function InspectionPanel({
             </span>
           </p>
           {destinationAllowed && destination && related ? (
-            <Link className={`${readerLinkClass} ${linkClass} ${linkColor}`} href={destination}>
-              {related.label || m.subject_value_unlabelled({}, o)}
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                className={`${readerLinkClass} ${linkClass} ${linkColor} w-full justify-start sm:w-auto`}
+                href={destination}
+                lang={related.lang ?? undefined}
+              >
+                {related.label || m.subject_value_unlabelled({}, o)}
+              </Link>
+            </div>
           ) : null}
           {association.historical && (
             <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
@@ -1043,17 +1071,24 @@ export function CatalogueFileReader({
         data-slot="catalogue-file-reader"
         aria-busy={visit.state === 'loading' || reading.recovery?.state === 'pending'}
       >
-        <header className="min-w-0 space-y-2">
-          <ContentItemHeading level={2} className="text-xl font-semibold">
-            {m.catalogue_file_title({}, o)}
-          </ContentItemHeading>
-          <p className="text-muted-foreground">{m.catalogue_file_intro({}, o)}</p>
-          <p>{m.catalogue_file_disclaimer({}, o)}</p>
-          <p>{m.catalogue_file_owned_copy_boundary({}, o)}</p>
-          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1" data-slot="catalogue-file-reader-identity">
-            <span>{title}</span>
-            <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
-          </p>
+        <header className="min-w-0 space-y-4">
+          <div className="min-w-0 space-y-1" data-slot="catalogue-file-reader-identity">
+            <p className="text-sm font-medium text-muted-foreground">{m.catalogue_file_title({}, o)}</p>
+            <ContentItemHeading level={2} className="break-words text-2xl font-semibold [overflow-wrap:anywhere]">
+              <span lang={pickedTitle.lang ?? undefined}>{title}</span>
+            </ContentItemHeading>
+            <p
+              className="min-w-0 break-words text-muted-foreground [overflow-wrap:anywhere]"
+              lang={visit.grain.lang ?? undefined}
+            >
+              {visit.grain.text}
+            </p>
+          </div>
+          <div className="min-w-0 space-y-2 border-s border-border ps-4 text-sm">
+            <p className="text-muted-foreground">{m.catalogue_file_intro({}, o)}</p>
+            <p>{m.catalogue_file_disclaimer({}, o)}</p>
+            <p>{m.catalogue_file_owned_copy_boundary({}, o)}</p>
+          </div>
         </header>
         {returnOutcome && (
           <p role="status" data-slot="catalogue-file-return-outcome">
@@ -1075,25 +1110,33 @@ export function CatalogueFileReader({
           </p>
         )}
         {visit.state === 'unavailable' && (
-          <div className="flex min-w-0 flex-wrap gap-2" data-slot="catalogue-file-reader-recovery">
-            <button
-              ref={recoveryButton}
-              type="button"
-              className={readerControlClass}
-              disabled={reading.recovery?.state === 'pending'}
-              aria-busy={reading.recovery?.state === 'pending'}
-              data-recovery-state={reading.recovery?.state ?? 'idle'}
-              onClick={() => void reading.retry()}
-            >
-              {reading.recovery?.state === 'pending'
-                ? m.catalogue_file_reader_retrying({}, o)
-                : m.catalogue_file_reader_retry({}, o)}
-            </button>
-            {currentHref ? (
-              <a className={`${readerControlClass} ${linkClass} ${linkColor}`} href={currentHref}>
-                {m.catalogue_file_reader_open_again({}, o)}
-              </a>
-            ) : null}
+          <div
+            className="min-w-0 space-y-3 rounded-lg border border-border bg-muted/20 p-4"
+            data-slot="catalogue-file-reader-recovery"
+          >
+            <div className="flex min-w-0 flex-wrap gap-2">
+              <button
+                ref={recoveryButton}
+                type="button"
+                className={`${readerControlClass} w-full sm:w-auto`}
+                disabled={reading.recovery?.state === 'pending'}
+                aria-busy={reading.recovery?.state === 'pending'}
+                data-recovery-state={reading.recovery?.state ?? 'idle'}
+                onClick={() => void reading.retry()}
+              >
+                {reading.recovery?.state === 'pending'
+                  ? m.catalogue_file_reader_retrying({}, o)
+                  : m.catalogue_file_reader_retry({}, o)}
+              </button>
+              {currentHref ? (
+                <a
+                  className={`${readerControlClass} ${linkClass} ${linkColor} w-full sm:w-auto`}
+                  href={currentHref}
+                >
+                  {m.catalogue_file_reader_open_again({}, o)}
+                </a>
+              ) : null}
+            </div>
             {reading.recovery?.state === 'failed' && (
               <p className="w-full" role="alert">
                 {m.catalogue_file_reader_retry_failed({}, o)}
@@ -1151,14 +1194,20 @@ export function CatalogueFileReader({
             <ProfileBoundNotes bounds={visit.bounds} locale={visit.locale} />
             <ProfileSourceList sources={visit.sources} locale={visit.locale} />
             {!visit.correction && correctionAvailability && correctionAvailability !== 'allowed' && (
-              <p data-slot="catalogue-file-correction-advice">
+              <p
+                className="rounded-lg border border-border bg-muted/20 p-4"
+                data-slot="catalogue-file-correction-advice"
+              >
                 {correctionAvailability === 'denied'
                   ? m.changes_correction_denied({}, o)
                   : m.correction_actions_unavailable({}, o)}
               </p>
             )}
             {visit.correction && visit.release ? (
-              <nav className="flex flex-wrap gap-2" data-slot="catalogue-file-reader-correction">
+              <nav
+                className="flex flex-wrap gap-2 border-t border-border pt-4"
+                data-slot="catalogue-file-reader-correction"
+              >
                 <CatalogueFileProfileEntry
                   id={visit.correction.id}
                   type={visit.public.subject.type}
