@@ -57,6 +57,7 @@ import {
   publishRemoteRunEvidence,
   readRemoteRunEvidence,
   remoteRunCustodyPath,
+  runnerReadyPath,
   validControllerProofRegistration,
   withCheckFence,
   writeAtomicJson,
@@ -1618,6 +1619,46 @@ test('a locally live or identity-unknown runner is not finalized by a remote abo
   expect(await waitWorkerCheck(lost.id, fixture.root, 30, { pollMs: 1, remoteReconcile, write: () => {} })).toBe(75);
   expect(reconciliations).toBe(0);
   expect(readWorkerCheckRecord(lost.id, fixture.root).status).toBe('running');
+});
+
+test('worker-check --wait derives terminal ownership for a legacy pre-dispatch binding failure', async () => {
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-pre-dispatch-binding-failure-'));
+  dirs.push(root);
+  const { id, physicalRunId } = await writeLostRemoteCheck(root, 'missing');
+  const resultPath = join(root, '.temp/goal/checks/results', `${id}.json`);
+  writeAtomicJson(resultPath, { ...readWorkerCheckRecord(id, root), status: 'finished', exitCode: 1 });
+  const historyPath = physicalHistoryPath(root, id, physicalRunId);
+  writeAtomicJson(historyPath, {
+    ...readWorkerCheckHistory(id, physicalRunId, root)!,
+    status: 'finished',
+    exitCode: 1,
+    finishedAt: new Date().toISOString(),
+  });
+  writeFileSync(join(root, readWorkerCheckRecord(id, root).log), 'worker-check: invalid remote custody binding\n');
+  writeAtomicJson(runnerReadyPath(root, id, physicalRunId), {
+    status: 'failed',
+    physicalRunId,
+    error: 'worker-check: invalid remote custody binding',
+  });
+  const original = readWorkerCheckRecord(id, root);
+  const cancellation = workerCheckCancellation(id, root);
+  requestExecutionCancellation(cancellation);
+  const cancellationBytes = readFileSync(cancellation.file);
+  const output: string[] = [];
+
+  expect(await waitWorkerCheck(id, root, 0, { write: (chunk) => output.push(chunk) })).toBe(1);
+  expect(output.join('')).toContain('check: exit status 1');
+  expect(readWorkerCheckRecord(id, root)).toEqual(original);
+  expect(readFileSync(cancellation.file)).toEqual(cancellationBytes);
+  expect(readWorkerCheckHistory(id, physicalRunId, root)).toMatchObject({
+    status: 'finished',
+    remoteExpected: true,
+    ownership: original.ownership,
+    exitCode: 1,
+    terminalProof: { local: true, remote: null, resultKnown: true },
+    terminalHistory: [{ local: true, remote: null, resultKnown: true }],
+  });
+  expect(existsSync(remoteRunCustodyPath(root, physicalRunId))).toBe(false);
 });
 
 test('missing, empty or mismatched physical identity keeps a lost remote check unknown', async () => {

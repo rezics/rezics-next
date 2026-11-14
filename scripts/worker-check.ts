@@ -256,6 +256,23 @@ export type CheckPhysicalRecord = {
   finishedAt?: string;
 };
 
+function failedRemoteBindingBeforeDispatch(
+  root: string,
+  id: string,
+  physicalRunId: string,
+  history: CheckPhysicalRecord,
+): boolean {
+  const error = 'worker-check: invalid remote custody binding';
+  const receipt = readyReceipt(root, id, physicalRunId);
+  return (
+    !existsSync(remoteRunCustodyPath(root, physicalRunId)) &&
+    receipt?.status === 'failed' &&
+    receipt.physicalRunId === physicalRunId &&
+    receipt.error === error &&
+    latestLogLine(join(resolve(root), history.log)) === error
+  );
+}
+
 export type CheckCancellationAuthorization = {
   version: 1;
   issuer: 'rezics-root';
@@ -1561,7 +1578,6 @@ export async function runWorkerCheck(
           if (checkCancelled(root, logicalCheckId) || checkStopIntent(root, logicalCheckId, physicalRunId)) {
             throw new CheckCancelled();
           }
-          updatePhysicalRecord(root, logicalCheckId, physicalRunId, (record) => ({ ...record, remoteExpected: true }));
         });
       } catch (error) {
         if (artifactPrepared) cleanupArtifactRun(root, physicalRunId);
@@ -1694,14 +1710,35 @@ export async function runWorkerCheck(
         if (current.status !== 'running' || current.physicalRunId !== physicalRunId) {
           throw new Error('worker-check: physical run changed before remote custody reservation');
         }
+        if (
+          logicalCheckId &&
+          (checkCancelled(root, logicalCheckId) || checkStopIntent(root, logicalCheckId, physicalRunId))
+        )
+          throw new CheckCancelled();
         updatePhysicalRecord(root, recorded.id, physicalRunId, (physical) => ({
           ...physical,
           remoteArgv: [...handedOffCommand],
+          ...(logicalCheckId === undefined ? {} : { remoteExpected: true }),
         }));
       }
     };
     if (recorded) await withCheckFence(root, recorded.id, initializeRemoteCustody);
     else initializeRemoteCustody();
+    if (logicalCheckId && !recorded) {
+      await withCheckFence(root, logicalCheckId, () => {
+        if (checkCancelled(root, logicalCheckId) || checkStopIntent(root, logicalCheckId, physicalRunId)) {
+          throw new CheckCancelled();
+        }
+        const current = readRecord(root, logicalCheckId);
+        if (current.status !== 'running' || current.physicalRunId !== physicalRunId) {
+          throw new Error('worker-check: physical run changed before remote custody reservation');
+        }
+        updatePhysicalRecord(root, logicalCheckId, physicalRunId, (physical) => ({
+          ...physical,
+          remoteExpected: true,
+        }));
+      });
+    }
     let remote: ReturnType<typeof spawn>;
     try {
       const spawnRemote = () =>
@@ -2726,8 +2763,13 @@ export async function observeWorkerCheckTerminal(
       )
         return undefined;
     }
-    const remote = history.remoteExpected ? remoteTerminalState(cwd, physicalRunId).terminal : null;
-    if (history.remoteExpected && remote !== true) return undefined;
+    const remoteTerminal = history.remoteExpected ? remoteTerminalState(cwd, physicalRunId).terminal : null;
+    const remoteNeverDispatched =
+      history.remoteExpected &&
+      remoteTerminal !== true &&
+      failedRemoteBindingBeforeDispatch(cwd, id, physicalRunId, history);
+    if (history.remoteExpected && remoteTerminal !== true && !remoteNeverDispatched) return undefined;
+    const remote = remoteNeverDispatched ? null : remoteTerminal;
     const proof =
       history.terminalProof?.resultKnown && history.terminalProof.remote === remote
         ? history.terminalProof
@@ -4407,6 +4449,8 @@ export async function waitWorkerCheck(
       !retainedRemotePhysicalReceipt(record, root, readJsonFile(remoteRunCustodyPath(root, record.physicalRunId))))
   )
     return unknownCustodyResult(record, write);
+  if (record.status === 'finished' && record.physicalRunId)
+    await observeWorkerCheckTerminal(id, root, record.physicalRunId);
   if (checkCancelled(root, id)) {
     write('worker-check: logically cancelled; physical cleanup remains unknown\n');
     return 125;
