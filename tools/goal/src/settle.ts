@@ -81,6 +81,63 @@ function ordinaryProofWaitingChecks(
   return fallback?.length ? fallback : undefined;
 }
 
+type ProofSourceStatus = ReturnType<typeof proofSourceStatus>;
+type PersistedProofOutcome = { observation?: ProofObservation; sourceStatus?: ProofSourceStatus };
+type StoppedProofDisposition = {
+  verified: boolean;
+  recordOutcome: 'verified' | 'stopped';
+  eventKind: 'proof-verified' | 'proof-capture-not-current' | 'proof-failed';
+  failureKind: 'tool' | null;
+};
+
+function latestOrdinaryProofOutcome(store: WorkerTasks['store'], ref: AttemptRef): PersistedProofOutcome | undefined {
+  const event = store
+    .events(ref.taskId, ref.attempt)
+    .findLast((item) => ['proof-verified', 'proof-capture-not-current', 'proof-failed'].includes(item.kind));
+  if (!event) return;
+  try {
+    return JSON.parse(event.body) as PersistedProofOutcome;
+  } catch {
+    return;
+  }
+}
+
+function sameProofObservation(left: ProofObservation | undefined, right: ProofObservation): boolean {
+  return left !== undefined && JSON.stringify(left) === JSON.stringify(right);
+}
+
+function stoppedProofDisposition(
+  observation: ProofObservation,
+  sourceStatus: ProofSourceStatus,
+): StoppedProofDisposition {
+  const verified = observation.passed && sourceStatus === 'current';
+  const captureOnly = observation.passed && sourceStatus === 'integration-not-current';
+  return {
+    verified,
+    recordOutcome: verified ? 'verified' : 'stopped',
+    eventKind: verified ? 'proof-verified' : captureOnly ? 'proof-capture-not-current' : 'proof-failed',
+    failureKind: verified || captureOnly ? null : 'tool',
+  };
+}
+
+function stoppedProofResultEvidence(
+  previousObservation: ProofObservation | undefined,
+  previousSourceStatus: ProofSourceStatus | undefined,
+  observation: ProofObservation,
+  sourceStatus: ProofSourceStatus,
+): string[] {
+  const sourceDiagnostic =
+    sourceStatus === 'capture-changed'
+      ? '; captured source changed'
+      : sourceStatus === 'integration-not-current'
+        ? '; capture is not current integration'
+        : '';
+  return [
+    previousObservation?.cause === observation.cause ? '' : observation.cause,
+    previousSourceStatus === sourceStatus ? '' : sourceDiagnostic,
+  ].filter(Boolean);
+}
+
 const SQLITE_CONTENTION = /SQLITE_(?:BUSY|LOCKED)|database (?:table )?is locked/i;
 /** Another process held the store's write lock longer than the busy timeout. */
 export function isSqliteContention(error: unknown): boolean {
@@ -863,36 +920,46 @@ export async function reconcileStoppedOrdinaryProof(tasks: WorkerTasks, ref: Att
             tasks.settings.integrationBranch,
             tasks.settings.policy?.proof,
           );
-          const passed = observation.passed;
-          const verified = passed && sourceStatus === 'current';
-          const captureOnly = passed && sourceStatus === 'integration-not-current';
+          const previousRecord = store.record(ref);
+          const previousOutcome = latestOrdinaryProofOutcome(store, ref);
+          // The complete observation retains the original wrapper UUID as part of replay identity.
+          if (
+            previousOutcome?.observation &&
+            sameProofObservation(previousOutcome.observation, observation) &&
+            previousOutcome.sourceStatus === sourceStatus &&
+            sameProofObservation(previousRecord?.proof, observation)
+          )
+            return;
+          const previousObservation = previousOutcome?.observation ?? previousRecord?.proof;
+          const disposition = stoppedProofDisposition(observation, sourceStatus);
+          const resultEvidence = stoppedProofResultEvidence(
+            previousObservation,
+            previousOutcome?.sourceStatus,
+            observation,
+            sourceStatus,
+          );
           const measurement = readMeasurement(currentAttempt, {
             policy: tasks.settings.policy ?? defaultPolicy,
           });
-          const proofRecord = makeRecord(currentTask, currentAttempt, measurement, verified ? 'verified' : 'stopped');
+          const proofRecord = makeRecord(currentTask, currentAttempt, measurement, disposition.recordOutcome);
           proofRecord.proof = observation;
           store.putRecord(proofRecord);
           store.updateTask(ref, (value) => {
-            value.state = verified ? 'verified' : 'stopped';
+            value.state = disposition.verified ? 'verified' : 'stopped';
           });
           store.updateAttempt(ref, (value) => {
             value.state = 'exited';
             value.endedAt = value.endedAt ?? new Date().toISOString();
             value.process = null;
             value.driver = null;
-            value.failureKind = verified || captureOnly ? null : 'tool';
-            value.result = `${currentAttempt.result}\n${observation.cause}${
-              sourceStatus === 'capture-changed'
-                ? '; captured source changed'
-                : sourceStatus === 'integration-not-current'
-                  ? '; capture is not current integration'
-                  : ''
-            }`;
+            value.failureKind = disposition.failureKind;
+            if (resultEvidence.length)
+              value.result = `${value.result}${value.result ? '\n' : ''}${resultEvidence.join('\n')}`;
             const actualId = proofObservationCheckId(observation);
             if (actualId) value.checks = [actualId];
           });
           store.releaseExitedProofReservations(ref);
-          store.event(ref, verified ? 'proof-verified' : captureOnly ? 'proof-capture-not-current' : 'proof-failed', {
+          store.event(ref, disposition.eventKind, {
             observation,
             sourceStatus,
             unchanged: sourceStatus === 'current',
