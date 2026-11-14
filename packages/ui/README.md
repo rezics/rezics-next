@@ -127,7 +127,42 @@ and Done control, and keeps safe-area padding below its scrollable body.
 
 ## Editor and document body
 
-The rich-text editor keeps Tiptap and the document model (`@rezics/document`) and draws its controls from the shadcn primitives: `dropdown-menu` for the block menu, `toggle`, `button` and `tooltip` for the selection menu and the touch bar, `sheet` for the touch block picker, `command` for the slash menu, and `field` with `input` for the link and image forms. Two things stay in our own components, because shadcn has no equivalent: Tiptap's bubble menu places the selection and link menus against a range of text (a shadcn popover anchors to a trigger element), and the toolbar role with one tab stop and arrow-key travel is not in the registry.
+Adopt the complete controls and interaction composition of
+[Reactjs Tiptap Editor 1.0.48](https://github.com/hunghg255/reactjs-tiptap-editor/tree/496b84967ef58b85465edb1c4eae517de11fba73)
+at revision `496b84967ef58b85465edb1c4eae517de11fba73` as the source for the shared editing experience.
+Tiptap primitives and a locally assembled generic toolbar alone do not meet this requirement. Adapt the upstream
+formatting, block/slash, link/media and table controls around the existing Tiptap instance, `RichTextEditor` public
+contract and `@rezics/document` schema. Preserve the current pinned engine; upstream node definitions, a second
+StarterKit, a second editor/history instance, demo persistence and external services are not part of this adoption.
+
+Keep copied or substantially adapted source together with its upstream path, exact revision, local adaptation notes
+and the upstream MIT copyright and permission notice. Reuse the complete applicable controls rather than only
+their visual styling. Bind their action registry to the existing schema-aware commands and media/mention ports;
+preserve stable block IDs, language/direction, ruby, footnotes, mentions, opaque extension payloads and table content.
+Do not convert the document through HTML, Markdown or another block model to accommodate a control. Table controls
+use maintained ProseMirror table mechanics against the existing table roles. Scope upstream global editable, locale
+and slash state to the editing visit; a second editor or read-only preview cannot change another editor's state.
+
+The source comparison considered these pinned alternatives:
+
+| Product | Revision and license | Decision |
+| --- | --- | --- |
+| Reactjs Tiptap Editor | `496b84967ef58b85465edb1c4eae517de11fba73`, MIT | Adopt its complete Tiptap 3 control composition with the adapters above. |
+| [Tiptap UI](https://github.com/ueberdosis/tiptap-ui-components) | `799929bea4804c73767562b69f8acc2acdb8ac86`, MIT | Public Simple template lacks the full table/slash experience; its accessible toolbar is an available adaptation source with its own notice. Paid templates are outside this adoption. |
+| [Novel](https://github.com/steven-tey/novel) | `fa95098e66476c466faebb8211baa5869c101a9c`, Apache-2.0 | Inspected composition uses Tiptap 2 and lacks a complete table experience. |
+| [BlockNote](https://github.com/TypeCellOS/BlockNote) | `58a40d2f55553110266de6bd644026b863ae5445`, MPL-2.0 core/UI | Complete block product, but its blockGroup/blockContainer schema would require a separate document-model migration; XL has separate GPL/commercial terms. |
+
+Shared UI owns command/schema adaptation, instance isolation, selection and composition continuity, translated
+accessible names/pressed states, keyboard toolbar entry/travel and touch/RTL integration. These are explicit gaps
+in the adopted source, not assumed library guarantees. Ordinary command menus still use the public `Menu`
+contract; text-range formatting uses the editor selection layer. Domain hosts retain account/session replacement,
+permission and disclosure, private-draft departure, uncertain commands, revisions, save/publication review and
+authorized media access. These business rules justify custom integration; generic editor controls do not.
+
+This is the adopted implementation direction, not a claim that adaptation is installed or usable. The existing
+shared editor owner implements it once for all callers. Web owns subsequent rich-document round trips, table and
+media operations, keyboard/touch/IME/RTL/screen-reader use, native undo, two-editor isolation and caller save/publish
+continuity. Root owns publication and sampled review. Those checks are separately scheduled after the code-only window.
 
 shadcn menus and sheets render in a portal on the page, not inside the story canvas, so a story finds them with `screen`. A layer that takes focus must hand it back through Tiptap's frame-deferred restore (`returnFocus` in `editor-selection-menu.tsx`); wait for the editor to hold focus before sending the next key. A controlled echo of the same document keeps the current ProseMirror selection and an open link draft; the address field returns focus only when the editor does not already hold it, and never restores a retired visit's selection.
 
