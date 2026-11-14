@@ -21,6 +21,7 @@ export function LiteraryFacts({
   linkFor,
   currentFocus,
   properties,
+  secondary = false,
 }: {
   work: Subject;
   related: Related;
@@ -34,6 +35,7 @@ export function LiteraryFacts({
   linkFor: (returnTo: string) => PageLink;
   currentFocus: string | undefined;
   properties?: readonly string[];
+  secondary?: boolean;
 }) {
   const o = { locale: locale as never };
   const facts = (properties ?? literaryFields(view)).flatMap((property) => {
@@ -115,7 +117,12 @@ export function LiteraryFacts({
   });
   if (!facts.length) return null;
   return (
-    <section data-slot="literary-facts" className="min-w-0" aria-label={m.literary_reader_facts({}, o)}>
+    <section
+      data-slot="literary-facts"
+      className={secondary ? style.separator : 'min-w-0'}
+      aria-label={secondary ? m.subject_details({}, o) : m.literary_reader_facts({}, o)}
+    >
+      {secondary && <h3 className="text-lg font-semibold">{m.subject_details({}, o)}</h3>}
       <dl className="grid min-w-0 gap-x-10 gap-y-6 sm:grid-cols-2">{facts}</dl>
     </section>
   );

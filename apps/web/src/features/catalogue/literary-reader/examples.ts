@@ -111,12 +111,25 @@ export function literaryGrainExample(
     ...literaryStatement('rezics:crossMediaCounterpart', literaryIds.anime),
     id: 'literary-series-anime-counterpart',
   };
+  const labels =
+    type === 'schema:BookSeries'
+      ? { en: 'Harbour stories', ja: '港の物語', 'zh-Hant': '海港的故事' }
+      : type === 'schema:Book'
+        ? { en: 'Harbour work', ja: '港の小説', 'zh-Hant': '海港小說' }
+        : { en: 'Harbour, 2nd edition', ja: '港の小説・第2版', 'zh-Hant': '海港小說第二版' };
   const subject = {
     id,
     type,
-    labels: { en: 'Harbour stories', ja: '港の物語', 'zh-Hant': '海港的故事' },
+    labels,
     aliases: {},
-    descriptions: {},
+    descriptions: {
+      en:
+        type === 'schema:BookSeries'
+          ? 'A series of novels set around a changing port town. Each supplied volume keeps its own work identity.'
+          : type === 'schema:Book'
+            ? 'A novel in the Harbour stories series. Its editions are separate publications of this work.'
+            : 'A second edition of Harbour work. Its publication identity is distinct from the work it presents.',
+    },
     context: '00000000-0000-8000-8000-000000000000',
     release: literaryDigest,
     revision: 1,
@@ -143,7 +156,7 @@ export function literaryGrainExample(
             },
   } as unknown as Subject;
   const related = {
-    [literaryIds.series]: { id: literaryIds.series, type: 'schema:BookSeries', labels: { en: 'Harbour series' } },
+    [literaryIds.series]: { id: literaryIds.series, type: 'schema:BookSeries', labels: { en: 'Harbour stories' } },
     [literaryIds.member]: { id: literaryIds.member, type: 'schema:Book', labels: { en: 'Harbour work' } },
     [literaryIds.author]: { id: literaryIds.author, type: 'schema:Person', labels: { en: 'Supplied author' } },
     [literaryIds.anime]: { id: literaryIds.anime, type: 'schema:Movie', labels: { en: 'First viewpoint' } },
@@ -156,7 +169,7 @@ export function literaryGrainExample(
     label: 'Harbour work',
     type: 'schema:Book',
     related: {},
-    summary: { id: literaryIds.member, type: 'schema:Book', label: { value: 'Harbour work', language: 'ja' } },
+    summary: { id: literaryIds.member, type: 'schema:Book', label: { value: 'Harbour work', language: 'en' } },
   };
   const editionStatement = literaryStatement('schema:exampleOfWork', literaryIds.member);
   const editionRow: LiteraryGrainRow = {

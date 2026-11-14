@@ -179,12 +179,8 @@ export function LiteraryReader({
                 {grainLabel}
               </div>
             )}
-            {view === 'overview' && !composed && (
-              <>
-                <LiteraryDescription identity={identity} locale={locale} />
-                <LiteraryNames identity={identity} locale={locale} />
-              </>
-            )}
+            <LiteraryDescription identity={identity} locale={locale} />
+            {view === 'overview' && !composed && <LiteraryNames identity={identity} locale={locale} />}
             {view !== 'overview' && <p className={style.muted}>{m.literary_reader_detail_hint({}, o)}</p>}
           </>
         )}

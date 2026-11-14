@@ -16,6 +16,10 @@ Overview keeps the composition-owned cover, title, synopsis, available rating/re
 Its concise destination links start existing full views without a preview node or cursor. Open neutral sections,
 separators and whitespace carry the hierarchy in both themes; names and long descriptions expand in place.
 The Subject header appears once. Native tabs stay with the page shell.
+Contents and Editions keep the shared Subject identity and tabs, repeat the supplied description for orientation,
+then show the one selected native stream before secondary details and actions. The original grain-visit story ID
+mounts the ordinary routed Subject for its main Series, Work and Edition visits. Its narrower reader states use
+labelled synthetic windows; neither fixture family claims a provider recording or native acceptance.
 
 Every supplied membership and Edition window stays discoverable in native order in its own destination. A selected node, released property
 and direction stay paired with its view, Realm and opaque cursor; changing streams starts that node without another

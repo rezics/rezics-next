@@ -365,19 +365,6 @@ export function LiteraryReaderEntry({
         <LiteraryStatus state={descriptorState === 'unsupported' ? 'unsupported' : 'unavailable'} locale={locale} />
       ) : (
         <>
-          <LiteraryFacts
-            work={work}
-            related={related}
-            definitions={definitions}
-            directions={directions}
-            digest={digest}
-            reader={reader}
-            locale={locale}
-            view={presentationView}
-            returnToFor={returnAddressFor}
-            linkFor={linkFor}
-            currentFocus={currentFocus}
-          />
           {presentationView === 'overview' && (
             <LiteraryOverviewDestinations
               subject={work.id}
@@ -521,6 +508,20 @@ export function LiteraryReaderEntry({
               })}
             </div>
           )}
+          <LiteraryFacts
+            work={work}
+            related={related}
+            definitions={definitions}
+            directions={directions}
+            digest={digest}
+            reader={reader}
+            locale={locale}
+            view={presentationView}
+            returnToFor={returnAddressFor}
+            linkFor={linkFor}
+            currentFocus={currentFocus}
+            secondary={presentationView !== 'overview'}
+          />
         </>
       )}
     </LiteraryReader>

@@ -1,8 +1,13 @@
-import { useEffect, useRef, type ComponentProps } from 'react';
+import { useCallback, useEffect, useRef, type ComponentProps } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LiteraryReaderEntry } from '../features/catalogue/literary-reader/entry';
 import { literaryGrainExample, literaryGrainRow, literaryIds } from '../features/catalogue/literary-reader/examples';
+import { book, bookEditions, bookSeries, bookSummary } from '../kernel/fixtures/book-showcase';
+import { prepareBookShowcase, type BookScenario } from '../kernel/fake/book-showcase';
+import { getLocale } from '../paraglide/runtime';
+import { subjectViewHref } from '../subject/subject-href';
+import { PageStory } from './page';
 
 const client = new QueryClient();
 const realm = '0192f3a0-6c1e-7b2a-9d4e-000000000941';
@@ -44,23 +49,68 @@ function Addressed({ args, search = '' }: { args: ComponentProps<typeof Literary
   );
 }
 
+/** The ordinary Subject route supplies the frame, tabs, synopsis, reviews and current reader. */
+function LiteraryVisit({
+  subject,
+  view,
+  state = 'rich',
+}: {
+  subject: 'series' | 'work' | 'edition';
+  view: 'overview' | 'contents' | 'editions';
+  state?: BookScenario;
+}) {
+  const locale = getLocale();
+  const prepareFixture = useCallback(() => prepareBookShowcase(state), [state]);
+  const id = subject === 'series' ? bookSeries.id : subject === 'edition' ? bookEditions[2]!.id : book.id;
+  const label = bookSummary(id, locale).label.value;
+  return (
+    <PageStory
+      previewNewTabs
+      visitor="Signed In"
+      path={subjectViewHref({ id, label }, locale, view)}
+      prepareFixture={prepareFixture}
+      ratingsFixture="subject-ratings-global"
+    />
+  );
+}
+
 const meta = {
   title: 'Catalogue/Literary reader/Visit',
   id: 'pages-subjects-literary-grain-visit',
   component: LiteraryReaderEntry,
   args: grainExample(),
   render: (args) => <Addressed args={args} />,
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'The main visits use the ordinary Subject route, shell and literary reader with the invented Book showcase bibliography. Its titles, volumes, editions, reviews and native-format windows are synthetic examples, not provider recordings or native acceptance. Open a supplied row and return to its exact reading; tabs deliberately change views. The remaining Reader states mount the same LiteraryReaderEntry with labelled synthetic finite windows to isolate disclosure, partial dates, independent stream failure and return recovery. Runtime and browser review are deferred.',
+      },
+    },
+  },
 } satisfies Meta<typeof LiteraryReaderEntry>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const SeriesAndVolume: Story = {};
-export const VolumeAndEdition: Story = { args: grainExample('schema:Book') };
+export const SeriesAndVolume: Story = {
+  render: () => <LiteraryVisit subject="series" view="contents" />,
+  parameters: { controls: { disable: true } },
+};
+export const VolumeAndEdition: Story = {
+  render: () => <LiteraryVisit subject="work" view="editions" />,
+  parameters: { controls: { disable: true } },
+};
+export const EditionAndWork: Story = {
+  render: () => <LiteraryVisit subject="edition" view="overview" />,
+  parameters: { controls: { disable: true } },
+};
 
 const concealed = grainExample();
 const concealedWindow = concealed.windows[0]!;
 const concealedRow = literaryGrainRow(concealedWindow.rows[0]);
 export const SpoilerConcealed: Story = {
+  name: 'Reader · Spoiler concealed',
   args: {
     ...concealed,
     windows: [
@@ -85,13 +135,14 @@ export const SpoilerConcealed: Story = {
   },
 };
 
-const book = grainExample('schema:Book');
 export const EditionUnavailable: Story = {
-  args: { ...book, windows: [{ ...book.windows[0]!, status: 503 }] },
+  render: () => <LiteraryVisit subject="work" view="editions" state="failure" />,
+  parameters: { controls: { disable: true } },
 };
 
 const instance = grainExample('bf:Instance');
 export const SourceSuppliedWorkOnly: Story = {
+  name: 'Reader · Source supplied work only',
   args: {
     ...instance,
     work: { ...instance.work, statements: {} },
@@ -100,6 +151,7 @@ export const SourceSuppliedWorkOnly: Story = {
 
 const datedEdition = grainExample('bf:Instance');
 export const PartialPublicationDate: Story = {
+  name: 'Reader · Partial publication date',
   args: {
     ...datedEdition,
     work: {
@@ -130,6 +182,7 @@ export const PartialPublicationDate: Story = {
 
 const longLabels = grainExample();
 export const LongNamesAndJapaneseLabels: Story = {
+  name: 'Reader · Long names and Japanese labels',
   args: {
     ...longLabels,
     locale: 'ja',
@@ -159,6 +212,7 @@ export const LongNamesAndJapaneseLabels: Story = {
 };
 
 export const ContextRoundTrip: Story = {
+  name: 'Reader · Context round trip',
   args: { ...literaryGrainExample(), context, realm },
   render: (args) => <Addressed args={args} search={`?realm=${realm}&context=${realmContext}`} />,
 };
@@ -166,6 +220,7 @@ export const ContextRoundTrip: Story = {
 const current = literaryGrainExample();
 const history = [{ view: 'overview' }, { view: 'contents', node: 'members', cursor: 'native/opaque?cursor=previous' }];
 export const CurrentPrevious: Story = {
+  name: 'Reader · Current and previous',
   args: {
     ...current,
     context,
@@ -183,6 +238,7 @@ export const CurrentPrevious: Story = {
 
 const removed = literaryGrainExample();
 export const RemovedVolumeOnReturn: Story = {
+  name: 'Reader · Removed volume on return',
   args: {
     ...removed,
     context,
@@ -202,6 +258,7 @@ export const RemovedVolumeOnReturn: Story = {
 };
 
 export const RetiredContext: Story = {
+  name: 'Reader · Retired context',
   args: { ...literaryGrainExample(), context, realm },
   render: (args) => <Addressed args={args} search={`?realm=${realm}&context=0192f3a0-6c1e-7b2a-9d4e-000000000949`} />,
 };
@@ -221,13 +278,14 @@ const memberWindow = {
       summary: {
         id: literaryIds.series,
         type: 'schema:BookSeries',
-        label: { value: 'Harbour series', language: 'en' },
+        label: { value: 'Harbour stories', language: 'en' },
       },
       related: { [literaryIds.series]: independent.related[literaryIds.series]! },
     },
   ],
 };
 export const IndependentStreamRetry: Story = {
+  name: 'Reader · Independent stream retry',
   args: {
     ...independent,
     view: 'contents',
