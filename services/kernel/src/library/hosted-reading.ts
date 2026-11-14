@@ -168,16 +168,22 @@ async function readHostedReadingCheckpoint(
   deadline: number,
   signal?: AbortSignal,
 ): Promise<HostedReadingCheckpointSelection> {
-  return withHostedReadingOwnerHome(dependencies, owner, deadline, async (client, home) => {
-    const row = await readCheckpoint.run(client, {
-      route: home.route,
-      account_id: owner.accountId,
-      subject_id: subjectId,
-    });
-    await authorizeOwner(client, home.route, owner);
-    const found = Array.isArray(row) ? row[0] : row;
-    return { epoch: home.epoch, row: found ? (found as HostedReadingRow) : null };
-  }, signal);
+  return withHostedReadingOwnerHome(
+    dependencies,
+    owner,
+    deadline,
+    async (client, home) => {
+      const row = await readCheckpoint.run(client, {
+        route: home.route,
+        account_id: owner.accountId,
+        subject_id: subjectId,
+      });
+      await authorizeOwner(client, home.route, owner);
+      const found = Array.isArray(row) ? row[0] : row;
+      return { epoch: home.epoch, row: found ? (found as HostedReadingRow) : null };
+    },
+    signal,
+  );
 }
 
 async function confirmHostedReadingOwnerCurrent(
@@ -187,9 +193,15 @@ async function confirmHostedReadingOwnerCurrent(
   deadline: number,
   signal?: AbortSignal,
 ): Promise<void> {
-  await withHostedReadingOwnerHome(dependencies, owner, deadline, async (_client, current) => {
-    if (current.epoch !== selectedEpoch) throw new ProblemError('stale_cursor');
-  }, signal);
+  await withHostedReadingOwnerHome(
+    dependencies,
+    owner,
+    deadline,
+    async (_client, current) => {
+      if (current.epoch !== selectedEpoch) throw new ProblemError('stale_cursor');
+    },
+    signal,
+  );
 }
 
 export function createHostedReadingReads(dependencies: HostedReadingDependencies) {
@@ -217,36 +229,42 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
       alive();
       const now = (dependencies.clock ?? systemClock)().getTime();
       const binding = listBinding(owner, route, limit);
-      const selected = await withHostedReadingOwnerHome(dependencies, owner, deadline, async (client, home) => {
-        let afterSequence: string | null = null;
-        let afterSubjectId: string | null = null;
-        if (query.cursor !== undefined) {
-          const cursor = decodeCursor(dependencies.tokens, binding, query.cursor, now);
-          if (!cursor.ok) throw new ProblemError(cursor.reason === 'expired' ? 'stale_cursor' : 'invalid_cursor');
-          if (cursor.epoch !== home.epoch) throw new ProblemError('stale_cursor');
-          const [sequence, subjectId] = cursor.after;
-          if (
-            cursor.after.length !== 2 ||
-            typeof sequence !== 'string' ||
-            !/^[1-9][0-9]{0,18}$/.test(sequence) ||
-            BigInt(sequence) > 9_223_372_036_854_775_807n ||
-            !hostedReadingUuid(subjectId)
-          )
-            throw new ProblemError('invalid_cursor');
-          afterSequence = sequence;
-          afterSubjectId = subjectId;
-        }
-        alive();
-        const rows = await checkpointPage.run(client, {
-          route,
-          account_id: owner.accountId,
-          after_sequence: afterSequence,
-          after_subject_id: afterSubjectId,
-          limit: limit + 1,
-        });
-        await authorizeOwner(client, home.route, owner);
-        return { epoch: home.epoch, rows: rows as HostedReadingPageRow[] };
-      }, signal);
+      const selected = await withHostedReadingOwnerHome(
+        dependencies,
+        owner,
+        deadline,
+        async (client, home) => {
+          let afterSequence: string | null = null;
+          let afterSubjectId: string | null = null;
+          if (query.cursor !== undefined) {
+            const cursor = decodeCursor(dependencies.tokens, binding, query.cursor, now);
+            if (!cursor.ok) throw new ProblemError(cursor.reason === 'expired' ? 'stale_cursor' : 'invalid_cursor');
+            if (cursor.epoch !== home.epoch) throw new ProblemError('stale_cursor');
+            const [sequence, subjectId] = cursor.after;
+            if (
+              cursor.after.length !== 2 ||
+              typeof sequence !== 'string' ||
+              !/^[1-9][0-9]{0,18}$/.test(sequence) ||
+              BigInt(sequence) > 9_223_372_036_854_775_807n ||
+              !hostedReadingUuid(subjectId)
+            )
+              throw new ProblemError('invalid_cursor');
+            afterSequence = sequence;
+            afterSubjectId = subjectId;
+          }
+          alive();
+          const rows = await checkpointPage.run(client, {
+            route,
+            account_id: owner.accountId,
+            after_sequence: afterSequence,
+            after_subject_id: afterSubjectId,
+            limit: limit + 1,
+          });
+          await authorizeOwner(client, home.route, owner);
+          return { epoch: home.epoch, rows: rows as HostedReadingPageRow[] };
+        },
+        signal,
+      );
 
       const shown = selected.rows.slice(0, limit);
       const items = await boundedReadWindow(

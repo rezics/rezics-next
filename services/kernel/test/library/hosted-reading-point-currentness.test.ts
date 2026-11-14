@@ -159,10 +159,8 @@ test('point resume and metadata bind saved and empty results to the current owne
   const ownerRoute = routeOf(ownerId)!;
   let subjectKey = crypto.randomUUID();
   while (
-    anchorRoute(
-      f.native.system.routeKey,
-      `${f.native.author.actor.accountId}\nsubject.create\n${subjectKey}`,
-    ) !== ownerRoute
+    anchorRoute(f.native.system.routeKey, `${f.native.author.actor.accountId}\nsubject.create\n${subjectKey}`) !==
+    ownerRoute
   )
     subjectKey = crypto.randomUUID();
   const createdSubject = await f.native.call(
@@ -246,10 +244,12 @@ test('point resume and metadata bind saved and empty results to the current owne
     ]);
   const restorePartition = async () => updatePartition(partition.write_state, partition.moved_to);
   const restoreAccount = async () =>
-    f.native.pool.query(
-      'UPDATE access.account SET state=$3,minimum_authn_epoch=$4 WHERE route=$1 AND account_id=$2',
-      [ownerRoute, ownerId, account.state, account.minimum_authn_epoch],
-    );
+    f.native.pool.query('UPDATE access.account SET state=$3,minimum_authn_epoch=$4 WHERE route=$1 AND account_id=$2', [
+      ownerRoute,
+      ownerId,
+      account.state,
+      account.minimum_authn_epoch,
+    ]);
   try {
     const resumePending = ownerRead(getPath);
     await controlled.waitForCalls(1);
