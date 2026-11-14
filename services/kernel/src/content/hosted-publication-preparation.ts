@@ -13,7 +13,6 @@ import { requestDigest } from '../command/request.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import {
   ContentNotFoundError,
-  RevisionPreconditionError,
   hostedPostAuthorization,
   type ContentCommandDependencies,
 } from './commands.ts';
@@ -214,20 +213,12 @@ export function startHostedPublicationPreparation(
     input,
     context,
     async (tx, time) => {
-      const current = await hostedCatalogue(tx as AccessClient, catalogueId, true);
-      if (!current) throw new ContentNotFoundError();
-      if (
-        current.head_revision_id !== input.expectedRevisionId ||
-        current.publication_id !== input.expectedPublicationId
-      )
-        throw new RevisionPreconditionError();
-
       const expiresAt = new Date(Date.parse(authoritativeTimeValue(time)) + PREPARATION_LIFETIME_MS);
       const begun = await beginHostedPublicationStaging(tx as AccessClient, actor, {
         catalogueId,
         stageId: input.stageId,
-        expectedHeadRevisionId: current.head_revision_id,
-        expectedPublicationId: current.publication_id,
+        expectedHeadRevisionId: input.expectedRevisionId,
+        expectedPublicationId: input.expectedPublicationId,
         mode: input.mode,
         expiresAt,
       });

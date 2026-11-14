@@ -390,6 +390,11 @@ source-pinned stage a 24-hour lifetime from native command time, and returns ret
 only the stage's immutable source revision, expected draft and expected publication IDs; preparation never selects
 the publication pointer.
 
+Decision: the native command gate serializes same-Pool work per partition, but separate service pools share only row
+locks. Preparation start locks an existing stage before the current catalogue row, matching fresh source-step lock
+order. A missing stage key still serializes first creation on the catalogue row; stale pointers and exact source, mode
+and native-deadline mismatches keep their existing precondition outcomes.
+
 Decision: preparation progress inspects the optional retained candidate by exact stage, source seal and owner epoch,
 returning null before materialization and its existing checkpoint afterwards. It never seals, allocates or advances
 a candidate. Later draft/publication movement does not reject this retained observation or relabel the stage;

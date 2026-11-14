@@ -328,7 +328,9 @@ function orderedSourceRow(placement: OrderedHostedPlacement): SourceRow {
 }
 
 /** Pin one current structure and its exact ordered, prefix or legacy source descriptor.
- * Call only after current native catalogue author/container admission. */
+ * Existing stage rows are locked before the current catalogue row so preparation
+ * start follows the same stage-to-catalogue order as fresh source steps. The
+ * catalogue lock still serializes concurrent first creation for a missing stage. */
 export async function beginHostedPublicationStaging(
   client: AccessClient,
   actorInput: Actor,
@@ -344,6 +346,23 @@ export async function beginHostedPublicationStaging(
   const existing = (
     await client.query<StageRow>(`${STAGE_SELECT} FOR UPDATE`, [route, input.catalogueId, input.stageId])
   ).rows[0];
+
+  const current = (
+    await client.query<QueryResultRow & { head_revision_id: string; publication_id: string | null }>(
+      `SELECT head_revision_id,publication_id
+       FROM content.hosted_catalogue
+       WHERE route=$1 AND catalogue_id=$2
+       FOR UPDATE`,
+      [route, input.catalogueId],
+    )
+  ).rows[0];
+  if (
+    !current ||
+    current.head_revision_id !== input.expectedHeadRevisionId ||
+    !sameOptional(current.publication_id, input.expectedPublicationId)
+  )
+    throw stagingConflict('The expected draft or publication is stale');
+
   if (existing) {
     assertActorBinding(existing, actor);
     if (
