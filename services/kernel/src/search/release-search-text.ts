@@ -36,9 +36,7 @@ export async function filterReleaseSearchNameGroups(
   workTypes: ReadonlySet<string>,
   matchesText: ReleaseSearchCurrentText,
 ): Promise<ReleaseSearchGroupPage> {
-  const workIds = [
-    ...new Set(page.keys.flatMap((candidate) => (candidate.kind === 'work' ? [candidate.id] : []))),
-  ];
+  const workIds = [...new Set(page.keys.flatMap((candidate) => (candidate.kind === 'work' ? [candidate.id] : [])))];
   if (!workIds.length) return page;
 
   const current = await readCurrent(workIds);

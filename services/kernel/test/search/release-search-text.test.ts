@@ -96,7 +96,10 @@ test('name order uses current work text and does not trust a retired alias', asy
     },
     async (ids) => {
       read.push([...ids]);
-      return new Map([[older.id, older], [restored.id, restored]]);
+      return new Map([
+        [older.id, older],
+        [restored.id, restored],
+      ]);
     },
     new Set(['work']),
     check,
@@ -126,9 +129,7 @@ test('a stale relevance alias cannot claim a work before a later current edition
   const later = subject(laterId, 'Needle revised edition');
   const subjects = new Map([work, older, later].map((value) => [value.id, value] as const));
   const links = new Map<string, NativeWorkLinkEvidence>(
-    [older, later].map(
-      (value) => [value.id, { complete: true, values: [{ kind: 'work', id: work.id }] }] as const,
-    ),
+    [older, later].map((value) => [value.id, { complete: true, values: [{ kind: 'work', id: work.id }] }] as const),
   );
   const partition = subjectPartition(work.id);
   const home = { partition, generation: '1', epoch: 1, position: '0' };
