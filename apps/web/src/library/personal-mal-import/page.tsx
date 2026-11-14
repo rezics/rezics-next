@@ -1,3 +1,4 @@
+import { ImportDetails, ImportJourney, ImportReturn } from '../personal-list-import/presentation';
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
@@ -558,9 +559,11 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
 
   const locked = busy || unknownCommand !== null;
   const currentRows = page?.rows ?? [];
+  const rowByIndex = new Map(currentRows.map((row) => [row.index, row]));
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_mal_title()}</PageHeading>
+      <ImportJourney stage={stage} />
       {noticeText(notice) ? <p role="status">{noticeText(notice)}</p> : null}
       {unknownCommand ? (
         <div className="space-y-2 rounded-md border p-3" role="group" aria-label={m.library_mal_uncertain()}>
@@ -584,10 +587,13 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       ) : null}
       {page ? (
         <>
-          <p className="break-all">
-            {m.library_mal_label_upload_id()}: {page.id}
-          </p>
-          <MalRetainedSource key={page.id} id={page.id} />
+          <ImportDetails title={m.library_import_retained()}>
+            <p>{m.library_import_reopen_help()}</p>
+            <p className="break-all">
+              {m.library_mal_label_upload_id()}: {page.id}
+            </p>
+            <MalRetainedSource key={page.id} id={page.id} />
+          </ImportDetails>
         </>
       ) : null}
       {stage === 'review' && page ? (
@@ -603,7 +609,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
           onReadQuestion={() => void readQuestion()}
           onReadVote={(row, draft) => void readVote(row, draft.target)}
           onChangeDraft={(draft) => {
-            const previous = drafts[draft.row] ?? draftFromRow(page.rows.find((row) => row.index === draft.row)!);
+            const previous = drafts[draft.row] ?? draftFromRow(rowByIndex.get(draft.row)!);
             if (previous.target !== draft.target) {
               setVoteReadbacks(new Map());
               setDrafts((current) => ({ ...current, [draft.row]: { ...draft, score: undefined } }));
@@ -714,6 +720,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
           {m.library_mal_discard()}
         </MalAction>
       ) : null}
+      {stage !== 'results' ? <ImportReturn /> : null}
       <MalDeparture active={!!uploadId.current} locked={locked} onDiscard={() => void discard()} />
     </main>
   );

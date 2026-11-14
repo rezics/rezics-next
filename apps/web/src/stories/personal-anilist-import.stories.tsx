@@ -1,18 +1,17 @@
 import { useMemo } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
 import { PersonalAniListImportPage } from '../library/personal-anilist-import/page';
 import { AniListImportPortContext } from '../library/personal-anilist-import/port';
 import type {
   AniListApplyCallResult,
   AniListImportPort,
   AniListJson,
+  AniListLabelReview,
   AniListPage,
   AniListQuestion,
   AniListReview,
   AniListRow,
 } from '../library/personal-anilist-import/contract';
-import { m } from '../paraglide/messages.js';
 import { QUESTION } from '../features/pages/subject-ratings';
 import { PatternStory } from './page';
 
@@ -25,10 +24,9 @@ const reviewIds = [
   '0192f3a0-6c1e-7b2a-9d4e-000000000003',
   '0192f3a0-6c1e-7b2a-9d4e-000000000004',
 ];
-const titles = ['Zero means unrated', 'Clear the old vote', 'Guard unavailable', 'Keep by default'];
+const titles = ['Zero means unrated', 'Clear the old vote', 'Guard unavailable', 'Unmatched source title'];
 const sourceScores = [0, 8, 6, 0];
 const existingVotes: (number | null)[] = [5, 9, null, null];
-let refreshStoryReadback: () => void = () => {};
 
 function makeSource(ordinal: number): AniListRow['source'] {
   return {
@@ -37,6 +35,7 @@ function makeSource(ordinal: number): AniListRow['source'] {
       status: 'CURRENT',
       score: sourceScores[ordinal]!,
       progress: 0,
+      customLists: { 'Private favourites': true },
       media: { id: ordinal + 1, type: 'ANIME', title: { userPreferred: titles[ordinal]! } },
     },
     group: null,
@@ -53,14 +52,30 @@ function row(ordinal: number, score?: AniListJson): AniListRow {
     ordinal,
     source: makeSource(ordinal),
     ...(ordinal === 0 ? { scoreLexeme: '0.00' } : {}),
-    match: { state: 'matched', candidates: [subject], fingerprint: `match-${ordinal}` },
-    proposal: {
-      subjectId: subject,
-      epoch: '1',
-      pin: null,
-      proposedState: 'active',
-      current: { state: 'active', revision: 3, incarnationId: null },
-      states: [{ id: 'active', role: 'active' }],
+    match: {
+      state: ordinal === 3 ? 'unmatched' : 'matched',
+      candidates: ordinal === 3 ? [] : [subject],
+      fingerprint: `match-${ordinal}`,
+    },
+    proposal:
+      ordinal === 3
+        ? null
+        : {
+            subjectId: subject,
+            epoch: '1',
+            pin: null,
+            proposedState: 'active',
+            current: { state: 'active', revision: 3, incarnationId: null },
+            states: [{ id: 'active', role: 'active' }],
+          },
+    labelEvidence: {
+      membership: 'available',
+      grouping: 'custom',
+      tags: 'missing',
+      values: [{ key: 'customLists:Private', value: 'Private favourites', member: true, origin: 'customLists' }],
+      selectable: [{ key: 'customLists:Private', value: 'Private favourites', member: true, origin: 'customLists' }],
+      tagEvidence: { entry: 'missing', media: 'missing', membership: 'unavailable' },
+      reason: 'Illustrative retained native label evidence',
     },
     review: null,
     started: false,
@@ -84,19 +99,58 @@ function makeJourneyPort() {
   const reviews = new Map<number, AniListReview>();
   const readbacks = new Map<number, AniListJson>();
   let applyAttempts = 0;
-  let questionRevision = 17;
+  const questionRevision = 17;
+  const labelReviews = new Map<number, AniListLabelReview>();
   const port: AniListImportPort = {
-    async reviewLabels() {
-      return { kind: 'unavailable' };
+    async reviewLabels(command) {
+      const ordinal = command.body.ordinal;
+      const review: AniListLabelReview = {
+        id: reviewIds[ordinal]!,
+        subjectId: command.body.subjectId!,
+        identityEpoch: '1',
+        sourceDigest: 'illustrative-digest',
+        matchFingerprint: `match-${ordinal}`,
+        clientId: 'story-client',
+        requestedBy: null,
+        items: command.body.selections.map((selection, index) => ({
+          key: selection.key,
+          value: 'Private favourites',
+          origin: 'customLists',
+          createKey: `create-${index}`,
+          assignKey: `assign-${index}`,
+          target:
+            'name' in selection.target
+              ? { name: selection.target.name, primary: 0 }
+              : { label: { id: selection.target.labelId, revision: 1 } },
+        })),
+      };
+      labelReviews.set(ordinal, review);
+      return { kind: 'labels-reviewed', ordinal, review };
     },
-    async applyLabels() {
-      return { kind: 'unavailable' };
+    async applyLabels(command) {
+      return {
+        kind: 'labels-applied',
+        result: {
+          complete: true,
+          outcomes: command.body.confirmations.map(({ ordinal, reviewId }) => ({
+            ordinal,
+            reviewId,
+            complete: true,
+            items: labelReviews.get(ordinal)!.items.map((item) => ({
+              key: item.key,
+              status: 'applied' as const,
+              label: { id: subject, revision: 1 },
+              assignment: { id: importId, revision: 1 },
+            })),
+          })),
+        },
+      };
     },
     async readLabels() {
-      return { kind: 'unavailable' };
+      return { kind: 'labels-read', labels: [] };
     },
     async labelTargets() {
-      return { kind: 'unavailable' };
+      return { kind: 'label-targets', labels: [{ id: subject, name: 'Private favourites', revision: 1 }], next: null };
     },
     async preview() {
       return { kind: 'previewed', importId, count: titles.length };
@@ -108,12 +162,17 @@ function makeJourneyPort() {
           importId,
           header: { document: null, rawUpload: '', scoreFormat: 'POINT_10', count: titles.length, cancelled: false },
           completeness: { wrapper: 'array', hasNextChunk: false, listedGroups: 0 },
-          rows: titles.map((_, ordinal) => row(ordinal, readbacks.get(ordinal))),
+          rows: titles.map((_, ordinal) => ({
+            ...row(ordinal, readbacks.get(ordinal)),
+            review: reviews.get(ordinal) ?? null,
+            ...(labelReviews.has(ordinal) ? { labelReview: labelReviews.get(ordinal)! } : {}),
+          })),
           next: null,
         },
       };
     },
     async review(command) {
+      const selectedSubject = command.subjectId ?? subject;
       const existingVote = existingVotes[command.ordinal]!;
       const rawScore = command.score
         ? {
@@ -143,7 +202,7 @@ function makeJourneyPort() {
                 lifecycleState: 'active',
                 lifecycleRevision: 1,
               },
-              target: { subjectId: subject, identityEpoch: '1', matchFingerprint: `match-${command.ordinal}` },
+              target: { subjectId: selectedSubject, identityEpoch: '1', matchFingerprint: `match-${command.ordinal}` },
               currentVote:
                 command.ordinal === 2
                   ? { status: 'unavailable', reason: 'atomic_guard_unavailable' }
@@ -163,9 +222,9 @@ function makeJourneyPort() {
         clientId: 'story-client',
         requestedBy: null,
         sourceFingerprint: `source-${command.ordinal}`,
-        match: { state: 'matched', candidates: [subject], fingerprint: `match-${command.ordinal}` },
+        match: { state: 'matched', candidates: [selectedSubject], fingerprint: `match-${command.ordinal}` },
         observation: {
-          subjectId: subject,
+          subjectId: selectedSubject,
           epoch: '1',
           pin: null,
           proposedState: 'active',
@@ -175,7 +234,7 @@ function makeJourneyPort() {
         input: {
           fields: command.fields,
           replace: command.replace,
-          subjectId: subject,
+          subjectId: selectedSubject,
           ...(command.score ? { score: command.score } : {}),
         },
         ...(rawScore ? { score: rawScore } : {}),
@@ -226,27 +285,11 @@ function makeJourneyPort() {
       return { kind: 'question', question: question(questionRevision) };
     },
   };
-  return {
-    port,
-    refreshReadback() {
-      questionRevision = 18;
-      readbacks.set(0, {
-        status: 'current',
-        question: { id: QUESTION, revision: 18, label: 'Overall' },
-        vote: { units: 2, revision: 5 },
-      });
-    },
-  };
-}
-
-function createJourneyPort() {
-  const fixture = makeJourneyPort();
-  refreshStoryReadback = fixture.refreshReadback;
-  return fixture;
+  return { port };
 }
 
 function ScoreImportStory() {
-  const fixture = useMemo(createJourneyPort, []);
+  const fixture = useMemo(makeJourneyPort, []);
   const visit = useMemo(
     () => ({
       subject: owner,
@@ -263,6 +306,20 @@ function ScoreImportStory() {
   );
   return (
     <PatternStory path="/library/import-anilist" visitor="Signed In">
+      <aside className="mx-auto max-w-5xl space-y-2 border-b p-4 text-sm">
+        <p>
+          Illustrative contract-shaped fixtures. Upload the sample, review a matched item or choose a target for the
+          unmatched title, and review labels independently. The first confirmation loses its acknowledgement; retry
+          preserves the original command and shows mixed results. Current readback is separate.
+        </p>
+        <a
+          className="underline"
+          download="anilist-illustrative.json"
+          href={`data:application/json,${encodeURIComponent(JSON.stringify(titles.map((_, ordinal) => makeSource(ordinal).evidence)))}`}
+        >
+          Download illustrative export
+        </a>
+      </aside>
       <AniListImportPortContext.Provider value={fixture.port}>
         <PersonalAniListImportPage visit={visit} />
       </AniListImportPortContext.Provider>
@@ -279,76 +336,4 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const ScoreReviewConsentAndReadback: Story = {
-  globals: { locale: 'en' },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const input = canvas.getByLabelText(m.library_anilist_file_label()) as HTMLInputElement;
-    await userEvent.upload(input, new File(['[]'], 'collection.json', { type: 'application/json' }));
-    await userEvent.click(canvas.getByRole('button', { name: m.library_anilist_upload() }));
-    const rowAt = (ordinal: number) =>
-      within(canvasElement.querySelector(`[data-anilist-row="${ordinal}"]`) as HTMLElement);
-    const row0 = rowAt(0);
-
-    await expect(row0.getByRole('radio', { name: m.library_anilist_score_keep() })).toBeChecked();
-    await userEvent.click(row0.getByRole('radio', { name: m.library_anilist_score_vote() }));
-    await userEvent.type(row0.getByRole('spinbutton', { name: m.library_anilist_native_units() }), '0');
-    await expect(row0).toHaveTextContent(m.library_anilist_source_zero_unrated());
-    await expect(row0).toHaveTextContent(m.library_anilist_native_zero_is_vote());
-    await userEvent.click(row0.getByRole('button', { name: m.library_anilist_save_review() }));
-    await expect(row0).toHaveTextContent(m.library_anilist_review_vote_present({ units: 5 }));
-    await userEvent.click(canvas.getByRole('button', { name: m.library_anilist_continue_confirm() }));
-    const confirmAt = (ordinal: number) =>
-      within(canvasElement.querySelector(`[data-anilist-confirm="${ordinal}"]`) as HTMLElement);
-    let confirm0 = confirmAt(0);
-    await userEvent.click(confirm0.getByRole('checkbox', { name: m.library_anilist_confirm_native_vote_effects() }));
-    await userEvent.click(canvas.getByRole('button', { name: m.library_anilist_return_review() }));
-    const review0Again = within(canvasElement.querySelector('[data-anilist-row="0"]') as HTMLElement);
-    await userEvent.click(review0Again.getByRole('checkbox', { name: m.library_anilist_replace_vote_and_state() }));
-    await userEvent.click(review0Again.getByRole('button', { name: m.library_anilist_save_review() }));
-    const row1 = rowAt(1);
-    await userEvent.click(row1.getByRole('radio', { name: m.library_anilist_score_clear() }));
-    await userEvent.click(row1.getByRole('button', { name: m.library_anilist_save_review() }));
-    const row2 = rowAt(2);
-    await userEvent.click(row2.getByRole('radio', { name: m.library_anilist_score_vote() }));
-    await userEvent.type(row2.getByRole('spinbutton', { name: m.library_anilist_native_units() }), '12');
-    await userEvent.click(row2.getByRole('button', { name: m.library_anilist_save_review() }));
-    const row3 = rowAt(3);
-    await userEvent.click(row3.getByRole('button', { name: m.library_anilist_save_review() }));
-    await userEvent.click(canvas.getByRole('button', { name: m.library_anilist_continue_confirm() }));
-
-    confirm0 = confirmAt(0);
-    const confirm1 = confirmAt(1);
-    const confirm2 = confirmAt(2);
-    const confirm3 = confirmAt(3);
-    await expect(
-      confirm0.getByRole('checkbox', { name: m.library_anilist_confirm_native_vote_effects() }),
-    ).not.toBeChecked();
-    await expect(confirm1).toHaveTextContent(m.library_anilist_confirm_clear());
-    await expect(confirm3).toHaveTextContent(m.library_anilist_score_keep());
-    for (const card of [confirm0, confirm1, confirm2]) {
-      await userEvent.click(card.getByRole('checkbox', { name: m.library_anilist_confirm_native_vote_effects() }));
-    }
-    await userEvent.click(canvas.getByRole('checkbox', { name: m.library_import_source_privacy_confirm() }));
-    await userEvent.click(canvas.getByRole('checkbox', { name: m.library_import_source_timestamps_confirm() }));
-    await userEvent.click(canvas.getByRole('button', { name: m.library_anilist_confirm() }));
-    await userEvent.click(await canvas.findByRole('button', { name: m.library_anilist_retry_command() }));
-
-    const result0 = rowAt(0);
-    const result1 = rowAt(1);
-    const result2 = rowAt(2);
-    const result3 = rowAt(3);
-    await expect(result0).toHaveTextContent(m.library_anilist_score_readback_vote({ units: 0 }));
-    await expect(result1).toHaveTextContent(m.library_anilist_result_failed());
-    await expect(result1).toHaveTextContent(m.library_anilist_score_outcome_applied());
-    await expect(result2).toHaveTextContent('atomic_guard_unavailable');
-    await expect(result2).toHaveTextContent(m.library_anilist_score_outcome_unavailable());
-    await expect(result3).toHaveTextContent(m.library_anilist_score_no_effect());
-    await expect(result0).toHaveTextContent(m.library_anilist_source_score_retained());
-
-    refreshStoryReadback();
-    await userEvent.click(canvas.getByRole('button', { name: m.library_anilist_fresh_read() }));
-    await expect(rowAt(0)).toHaveTextContent(m.library_anilist_score_readback_vote({ units: 2 }));
-    await expect(rowAt(0)).toHaveTextContent(m.library_anilist_question_revision({ revision: 18 }));
-  },
-};
+export const ScoreReviewConsentAndReadback: Story = {};

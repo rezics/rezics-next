@@ -1,3 +1,4 @@
+import { ImportEmpty } from './presentation';
 import { m } from '../../paraglide/messages.js';
 import type { VndbJourneySnapshot } from './controller';
 import { VndbAction } from './controls';
@@ -27,14 +28,16 @@ export function VndbReviewPage({
   onHideSource: () => void;
 }) {
   const current = snap.page?.rows ?? [];
+  const scoreNotices = new Map(snap.scoreNotices.map((item) => [item.ordinal, item]));
   const reviewed = snap.rows.reduce((count, row) => count + Number(!!row.decision) + Number(!!row.scoreDecision), 0);
   return (
     <section className="min-w-0 space-y-6" data-vndb-stage="review" tabIndex={-1}>
+      <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
       <p role="status">
         {m.library_vndb_page_progress({ shown: current.length, loaded: snap.rows.length, total: snap.total, reviewed })}
       </p>
       <VndbPendingReview snap={snap} />
-      {snap.page?.state === 'cancelled' ? <p role="status">{m.library_bangumi_canceled()}</p> : null}
+      {snap.page?.state === 'cancelled' ? <p role="status">{m.library_vndb_stopped_cancelled()}</p> : null}
       <div className="flex flex-wrap gap-3">
         <VndbAction type="button" variant="outline" disabled={busy || snap.sourceVisible} onClick={onSource}>
           {m.library_vndb_source_button()}
@@ -52,9 +55,10 @@ export function VndbReviewPage({
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-sm">{snap.sourceXML}</pre>
         </details>
       ) : null}
+      {current.length === 0 ? <ImportEmpty /> : null}
       <ul className="space-y-6">
         {current.map((row) => {
-          const scoreNotice = snap.scoreNotices.find((item) => item.ordinal === row.ordinal);
+          const scoreNotice = scoreNotices.get(row.ordinal);
           return (
             <li key={`${snap.uploadId}:${row.ordinal}`}>
               <VndbRowReview

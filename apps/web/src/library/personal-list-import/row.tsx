@@ -1,3 +1,4 @@
+import { ImportChoice, ImportDetails, ImportTarget } from './presentation';
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
@@ -156,8 +157,135 @@ export function VndbRowReview({
           <p className="break-words text-sm">{m.library_vndb_candidates({ ids: row.match.candidates.join(', ') })}</p>
         ) : null}
         {row.decision ? <p role="status">{m.library_vndb_review_status({ status: row.decision.status })}</p> : null}
+        <ImportTarget target={targetId ?? row.decision?.targetId} />
       </header>
-      <VndbEvidence row={row} />
+      <ImportChoice title={m.library_import_state()}>
+        {row.kind === 'retained' ? <p>{m.library_vndb_metadata_row()}</p> : null}
+        <fieldset className="space-y-3">
+          <legend className="font-medium">{m.library_vndb_review_action()}</legend>
+          <div className="flex flex-wrap gap-2">
+            {(notMappable
+              ? (['skip', 'retain'] as const)
+              : hasMinutes
+                ? (['progress', 'skip', 'retain'] as const)
+                : (['state', 'skip', 'retain'] as const)
+            ).map((choice) => (
+              <VndbAction
+                key={choice}
+                type="button"
+                variant={action === choice ? 'default' : 'outline'}
+                disabled={busy}
+                aria-pressed={action === choice}
+                onClick={() => selectAction(choice)}
+              >
+                {choice === 'progress'
+                  ? m.library_vndb_progress_title()
+                  : choice === 'state'
+                    ? m.library_vndb_action_state()
+                    : choice === 'skip'
+                      ? m.library_vndb_action_skip()
+                      : m.library_vndb_action_retain()}
+              </VndbAction>
+            ))}
+          </div>
+        </fieldset>
+        {(action === 'state' || action === 'progress') && !notMappable ? (
+          <div className="space-y-3">
+            {row.target ? (
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="break-words text-sm">{m.library_vndb_target_id({ id: row.target.targetId })}</p>
+                <VndbAction
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  aria-pressed={nativeChosen}
+                  onClick={() => {
+                    setTarget(null);
+                    setNativeChosen(true);
+                    setStateId('');
+                    setReplace(false);
+                  }}
+                >
+                  {row.match.status === 'matched' ? m.library_vndb_use_match() : m.library_vndb_use_reviewed_target()}
+                </VndbAction>
+              </div>
+            ) : null}
+            <VndbTargetSearch
+              disabled={busy}
+              value={target}
+              onChange={(next) => {
+                setTarget(next);
+                setNativeChosen(false);
+                setStateId('');
+                setReplace(false);
+              }}
+            />
+            {targetId && action === 'state' ? (
+              <Field>
+                <FieldLabel id={`${id}-state-label`} htmlFor={`${id}-state`} className="min-h-11 items-center">
+                  {m.library_vndb_state_label()}
+                </FieldLabel>
+                <Select<string, false>
+                  items={stateOptions}
+                  disabled={busy || loading || states.length === 0}
+                  value={stateId || null}
+                  onValueChange={(value) => setStateId(value ?? '')}
+                >
+                  <SelectTrigger
+                    id={`${id}-state`}
+                    aria-labelledby={`${id}-state-label`}
+                    className="min-h-11 w-full rounded-md border bg-background px-3"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectGroup>
+                      {stateOptions.map(({ value, label, ...itemProps }) => (
+                        <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {loading ? <p role="status">{m.library_vndb_states_loading()}</p> : null}
+                {!loading && states.length === 0 ? <p role="status">{m.library_vndb_states_unavailable()}</p> : null}
+              </Field>
+            ) : null}
+            {row.suggestedRole ? <p>{m.library_vndb_role_is_only_suggestion({ role: row.suggestedRole })}</p> : null}
+            {baseline ? (
+              <p>{m.library_bangumi_current({ state: baseline.state, revision: baseline.revision })}</p>
+            ) : null}
+            {baseline && action === 'state' ? (
+              <VndbCheck
+                id={`${id}-replace`}
+                checked={replace}
+                disabled={busy}
+                label={m.library_bangumi_replace()}
+                onToggle={setReplace}
+              />
+            ) : null}
+          </div>
+        ) : null}
+        {action === 'progress' ? (
+          <VndbProgressReview
+            row={row}
+            targetId={targetId ?? row.target?.targetId ?? null}
+            busy={busy}
+            onReview={onReview}
+          />
+        ) : null}
+        {notMappable ? <p>{m.library_vndb_unmappable_help()}</p> : null}
+        {action !== 'progress' ? (
+          <VndbAction
+            type="button"
+            disabled={busy || (action === 'state' && (!targetId || !stateId || loading))}
+            onClick={save}
+          >
+            {m.library_bangumi_save_review()}
+          </VndbAction>
+        ) : null}
+      </ImportChoice>
       {row.kind === 'vn' ? (
         <VndbScoreReview
           row={row}
@@ -167,129 +295,9 @@ export function VndbRowReview({
           onReview={onReview}
         />
       ) : null}
-      {row.kind === 'retained' ? <p>{m.library_vndb_metadata_row()}</p> : null}
-      <fieldset className="space-y-3">
-        <legend className="font-medium">{m.library_vndb_review_action()}</legend>
-        <div className="flex flex-wrap gap-2">
-          {(notMappable
-            ? (['skip', 'retain'] as const)
-            : hasMinutes
-              ? (['progress', 'skip', 'retain'] as const)
-              : (['state', 'skip', 'retain'] as const)
-          ).map((choice) => (
-            <VndbAction
-              key={choice}
-              type="button"
-              variant={action === choice ? 'default' : 'outline'}
-              disabled={busy}
-              aria-pressed={action === choice}
-              onClick={() => selectAction(choice)}
-            >
-              {choice === 'progress'
-                ? m.library_vndb_progress_title()
-                : choice === 'state'
-                  ? m.library_vndb_action_state()
-                  : choice === 'skip'
-                    ? m.library_vndb_action_skip()
-                    : m.library_vndb_action_retain()}
-            </VndbAction>
-          ))}
-        </div>
-      </fieldset>
-      {(action === 'state' || action === 'progress') && !notMappable ? (
-        <div className="space-y-3">
-          {row.target ? (
-            <div className="space-y-2 rounded-md border p-3">
-              <p className="break-words text-sm">{m.library_vndb_target_id({ id: row.target.targetId })}</p>
-              <VndbAction
-                type="button"
-                variant="outline"
-                disabled={busy}
-                aria-pressed={nativeChosen}
-                onClick={() => {
-                  setTarget(null);
-                  setNativeChosen(true);
-                  setStateId('');
-                  setReplace(false);
-                }}
-              >
-                {row.match.status === 'matched' ? m.library_vndb_use_match() : m.library_vndb_use_reviewed_target()}
-              </VndbAction>
-            </div>
-          ) : null}
-          <VndbTargetSearch
-            disabled={busy}
-            value={target}
-            onChange={(next) => {
-              setTarget(next);
-              setNativeChosen(false);
-              setStateId('');
-              setReplace(false);
-            }}
-          />
-          {targetId && action === 'state' ? (
-            <Field>
-              <FieldLabel id={`${id}-state-label`} htmlFor={`${id}-state`} className="min-h-11 items-center">
-                {m.library_vndb_state_label()}
-              </FieldLabel>
-              <Select<string, false>
-                items={stateOptions}
-                disabled={busy || loading || states.length === 0}
-                value={stateId || null}
-                onValueChange={(value) => setStateId(value ?? '')}
-              >
-                <SelectTrigger
-                  id={`${id}-state`}
-                  aria-labelledby={`${id}-state-label`}
-                  className="min-h-11 w-full rounded-md border bg-background px-3"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  <SelectGroup>
-                    {stateOptions.map(({ value, label, ...itemProps }) => (
-                      <SelectItem key={value ?? ''} value={value} {...itemProps}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              {loading ? <p role="status">{m.library_vndb_states_loading()}</p> : null}
-              {!loading && states.length === 0 ? <p role="status">{m.library_vndb_states_unavailable()}</p> : null}
-            </Field>
-          ) : null}
-          {row.suggestedRole ? <p>{m.library_vndb_role_is_only_suggestion({ role: row.suggestedRole })}</p> : null}
-          {baseline ? <p>{m.library_bangumi_current({ state: baseline.state, revision: baseline.revision })}</p> : null}
-          {baseline && action === 'state' ? (
-            <VndbCheck
-              id={`${id}-replace`}
-              checked={replace}
-              disabled={busy}
-              label={m.library_bangumi_replace()}
-              onToggle={setReplace}
-            />
-          ) : null}
-        </div>
-      ) : null}
-      {action === 'progress' ? (
-        <VndbProgressReview
-          row={row}
-          targetId={targetId ?? row.target?.targetId ?? null}
-          busy={busy}
-          onReview={onReview}
-        />
-      ) : null}
-      {notMappable ? <p>{m.library_vndb_unmappable_help()}</p> : null}
-      {action !== 'progress' ? (
-        <VndbAction
-          type="button"
-          disabled={busy || (action === 'state' && (!targetId || !stateId || loading))}
-          onClick={save}
-        >
-          {m.library_bangumi_save_review()}
-        </VndbAction>
-      ) : null}
+      <ImportDetails>
+        <VndbEvidence row={row} />
+      </ImportDetails>
     </article>
   );
 }

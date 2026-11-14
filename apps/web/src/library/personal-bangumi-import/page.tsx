@@ -1,3 +1,4 @@
+import { ImportDetails, ImportJourney, ImportReturn } from '../personal-list-import/presentation';
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
@@ -53,7 +54,10 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
 
   async function act(run: (current: BangumiJourney) => Promise<BangumiJourneySnapshot> | BangumiJourneySnapshot) {
     if (!journey.current) return;
-    setSnap(await run(journey.current));
+    const result = run(journey.current);
+    setSnap(journey.current.snapshot());
+    const next = await result;
+    if (visit.current()) setSnap(next);
   }
 
   async function saveReview(draft: RowDraft) {
@@ -70,11 +74,13 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
     });
   }
 
+  const [inspectCancelled, setInspectCancelled] = useState(false);
   const labelPending = Object.values(labelPanels).some((panel) => panel.busy || panel.command !== null);
   const locked = snap.busy || snap.notice?.kind === 'unknown' || labelPending;
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_bangumi_title()}</PageHeading>
+      <ImportJourney stage={snap.stage} />
       {noticeText(snap.notice) ? (
         <p role="status" aria-live="polite">
           {noticeText(snap.notice)}
@@ -86,25 +92,33 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
         </BangumiAction>
       ) : null}
       {snap.stage === 'upload' ? (
-        <BangumiUploadForm busy={locked} onUpload={(upload) => void act((current) => current.preview(upload))} />
-      ) : null}
-      {snap.stage === 'review' ? (
-        <BangumiReviewPage
-          snap={snap}
-          busy={snap.busy}
-          port={port}
-          visit={visit}
-          labelPanels={labelPanels}
-          onLabelPanelChange={changeLabelPanel}
-          onSave={(draft) => void saveReview(draft)}
-          onChoose={(draft) =>
-            act((current) =>
-              current.choose(draft.ordinal, { state: draft.state, skip: draft.skip, target: draft.target }),
-            )
-          }
-          onNext={() => void act((current) => current.nextPage())}
-          onConfirm={() => act((current) => current.openConfirm())}
+        <BangumiUploadForm
+          busy={locked}
+          onUpload={(upload) => void act((current) => current.preview(upload))}
+          onReopen={(uploadId) => void act((current) => current.loadPage(uploadId, -1))}
         />
+      ) : null}
+      {snap.uploadId && snap.stage !== 'removed' ? (
+        <div hidden={snap.stage !== 'review' && !(snap.stage === 'cancelled' && inspectCancelled)}>
+          <BangumiReviewPage
+            key={snap.uploadId}
+            snap={snap}
+            busy={snap.busy || snap.notice?.kind === 'unknown' || snap.stage !== 'review'}
+            navigationLocked={locked}
+            port={port}
+            visit={visit}
+            labelPanels={labelPanels}
+            onLabelPanelChange={changeLabelPanel}
+            onSave={(draft) => void saveReview(draft)}
+            onChoose={(draft) =>
+              act((current) =>
+                current.choose(draft.ordinal, { state: draft.state, skip: draft.skip, target: draft.target }),
+              )
+            }
+            onNext={() => void act((current) => current.nextPage())}
+            onConfirm={() => act((current) => current.openConfirm())}
+          />
+        </div>
       ) : null}
       {snap.stage === 'confirm' ? (
         <BangumiConfirmPage
@@ -122,6 +136,8 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
       {snap.stage === 'results' ? (
         <BangumiResultPage
           outcomes={snap.outcomes}
+          uploadId={snap.uploadId}
+          labelPanels={labelPanels}
           remaining={snap.remaining}
           meta={snap.meta}
           busy={locked}
@@ -133,9 +149,7 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
           onInspect={(ordinal) => void act((current) => current.inspectCurrent(ordinal))}
         />
       ) : null}
-      {snap.stage === 'cancelled' ? (
-        <BangumiCancelledNotice onReturn={() => act((current) => current.backToReview())} />
-      ) : null}
+      {snap.stage === 'cancelled' ? <BangumiCancelledNotice onReturn={() => setInspectCancelled(true)} /> : null}
       {snap.stage === 'removed' ? <BangumiRemovedNotice /> : null}
       {snap.uploadId && snap.stage !== 'removed' ? (
         <div className="flex flex-wrap gap-3">
@@ -171,6 +185,13 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
           </BangumiAction>
         </div>
       ) : null}
+      {snap.uploadId && snap.stage !== 'removed' ? (
+        <ImportDetails title={m.library_import_retained()}>
+          <p>{m.library_import_reopen_help()}</p>
+          <p className="break-all">{snap.uploadId}</p>
+        </ImportDetails>
+      ) : null}
+      {snap.stage !== 'results' && snap.stage !== 'cancelled' && snap.stage !== 'removed' ? <ImportReturn /> : null}
       <BangumiDeparture
         active={!!snap.uploadId && snap.stage !== 'removed'}
         locked={locked}

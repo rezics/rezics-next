@@ -1,3 +1,4 @@
+import { ImportDetails, ImportTarget } from '../personal-list-import/presentation';
 import { useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { ImportSourceChecks, ImportSourceEvidence } from '../rich-private-entry/source-confirm';
@@ -55,6 +56,7 @@ export function MalConfirmPage({
     });
   return (
     <section className="space-y-4" data-mal-stage="confirm">
+      <h2 className="text-xl font-semibold">{m.library_import_confirm()}</h2>
       <p>{m.library_mal_confirm_help({ count: ready.length })}</p>
       <ul className="space-y-3">
         {ready.map((row) => {
@@ -163,15 +165,19 @@ export function MalConfirmPage({
               ) : (
                 <p className="text-sm">{m.library_mal_score_effect_none()}</p>
               )}
-              {review.target ? <p className="text-sm [overflow-wrap:anywhere]">{review.target}</p> : null}
-              <p className="break-all">{review.version}</p>
+              <ImportTarget target={review.target} />
+              <ImportDetails>
+                <p className="break-all">{review.version}</p>
+              </ImportDetails>
               <MalReviewedLabels review={review.labels} />
-              <p className="text-sm font-medium">{m.library_mal_source_evidence_label()}</p>
-              <ImportSourceEvidence preview={row.sourcePreview ?? malSourcePreview(row)} />
+              <ImportDetails title={m.library_mal_source_evidence_label()}>
+                <ImportSourceEvidence preview={row.sourcePreview ?? malSourcePreview(row)} />
+              </ImportDetails>
             </li>
           );
         })}
       </ul>
+      <p className="text-sm text-muted-foreground">{m.library_mal_not_vote()}</p>
       <ImportSourceChecks
         prefix="mal"
         privacy={confirmPrivacy}
