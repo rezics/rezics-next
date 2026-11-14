@@ -552,6 +552,7 @@ export async function freezeHostedPublicationSelection(
   if (live.mode !== 'selection') throw stagingConflict('Whole-source staging has no imported selection');
   if (live.input_frozen_version !== null) return checkpoint(live);
   if (live.status !== 'collecting') throw stagingConflict('Selection input cannot be frozen in its current state');
+  await requireCurrentPinnedSource(client, live);
   const nextState = BigInt(live.input_count) === 0n ? 'closing' : 'building';
   const updated = await client.query(
     `UPDATE content.hosted_publication_staging

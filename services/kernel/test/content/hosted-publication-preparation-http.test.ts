@@ -245,7 +245,8 @@ test('mounted whole and nested selection builds complete private candidates with
     occurrenceIds: [book.nestedChapter],
   });
   expect(secondBatch.status).toBe(200);
-  const frozen = await f.native.call('POST', `${selectedStage}:freezeSelection`, {});
+  const freezeKey = crypto.randomUUID();
+  const frozen = await f.native.call('POST', `${selectedStage}:freezeSelection`, {}, { key: freezeKey });
   expect(frozen.status).toBe(200);
   expect(frozen.value.stage).toMatchObject({ state: 'building', inputCount: '3' });
 
@@ -275,6 +276,17 @@ test('mounted whole and nested selection builds complete private candidates with
     candidateReady: true,
   });
 
+  const revisedDraft = await f.native.call('POST', `${book.path}:appendRootChapter`, {
+    expectedRevisionId: book.created.revisionId,
+    occurrenceId: book.newId(),
+    title: 'A later draft edit',
+    target: book.target,
+  });
+  expect(revisedDraft.status).toBe(200);
+  const frozenNoOp = await f.native.call('POST', `${selectedStage}:freezeSelection`, {}, { key: crypto.randomUUID() });
+  expect(frozenNoOp.status).toBe(200);
+  expect(frozenNoOp.value.stage.state).toBe('sealed');
+
   const eventsBeforeExpiryReplay = await preparationEventCount(book.catalogueId);
   await f.native.pool.query(
     `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
@@ -300,6 +312,11 @@ test('mounted whole and nested selection builds complete private candidates with
   expect(replayedBatch.status).toBe(200);
   expect(replayedBatch.value).toEqual(firstBatch.value);
   expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeExpiryReplay + 1);
+  const eventsBeforeFreezeReplay = await preparationEventCount(book.catalogueId);
+  const replayedFreeze = await f.native.call('POST', `${selectedStage}:freezeSelection`, {}, { key: freezeKey });
+  expect(replayedFreeze.status).toBe(200);
+  expect(replayedFreeze.value).toEqual(frozen.value);
+  expect(await preparationEventCount(book.catalogueId)).toBe(eventsBeforeFreezeReplay);
   expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
 });
 
@@ -348,8 +365,12 @@ test('selection progress exposes only its pinned binding and rejects new batches
     occurrenceIds: [draftBook.childPart],
   });
   expect(blockedDraftBatch.status).toBe(412);
+  const blockedDraftFreeze = await f.native.call('POST', `${draftStage}:freezeSelection`, {});
+  expect(blockedDraftFreeze.status).toBe(412);
   const draftProgress = await f.native.call('POST', `${draftStage}:progress`, {});
   expect(draftProgress.value.stage).toMatchObject({
+    state: 'collecting',
+    inputVersion: '1',
     inputCount: '1',
     sourceRevisionId: draftBook.created.revisionId,
     expectedHeadRevisionId: draftBook.created.revisionId,
@@ -389,13 +410,17 @@ test('selection progress exposes only its pinned binding and rejects new batches
     occurrenceIds: [releaseBook.rootPart],
   });
   expect(blockedReleaseBatch.status).toBe(412);
+  const blockedReleaseFreeze = await f.native.call('POST', `${releaseStage}:freezeSelection`, {});
+  expect(blockedReleaseFreeze.status).toBe(412);
   const releaseProgress = await f.native.call('POST', `${releaseStage}:progress`, {});
   expect(releaseProgress.value.stage).toMatchObject({
+    state: 'collecting',
     inputCount: '0',
     sourceRevisionId: releaseBook.created.revisionId,
     expectedHeadRevisionId: releaseBook.created.revisionId,
     expectedPublicationId: releaseBook.published.revisionId,
   });
+  expect(await selectedRelease(releaseBook.catalogueId)).toBe(changedRelease.value.revisionId);
 });
 
 test('selection advance replays acknowledged steps and fences stale settlement and closure', async () => {

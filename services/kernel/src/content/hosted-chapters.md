@@ -479,6 +479,10 @@ is not substituted. A new selection batch locks and compares both current pointe
 exact batch receipt replays before that stale-pointer check. Empty explicit selection is deliberate atomic
 withdrawal, never incomplete preparation.
 
+Decision: a fresh selection Freeze locks its stage, then the current catalogue row, and compares both pinned draft
+and publication IDs before persisting the frozen input version or phase. A stale pointer leaves collection progress
+untouched; already frozen stages remain no-ops, and exact authorized command receipts replay before this check.
+
 Persist a small control row, indexed input/output, selected snapshot roots and a durable raw traversal frontier.
 Use existing Book page 20 plus lookahead for one processing step (1,024 is at most an ingestion batch). Each step
 bounds metadata checks, memory and writes, including O(H log N) path changes per admitted row; it commits output,
