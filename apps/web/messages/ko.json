@@ -12912,5 +12912,14 @@
   "library_archive_recovery_receiving_empty": "이 페이지에는 멤버가 없으며 다음 페이지도 제공되지 않았습니다.",
   "library_archive_recovery_receiving_navigation": "복원 대상 컬렉션 페이지",
   "library_archive_recovery_receiving_next": "다음 컬렉션 페이지",
-  "library_archive_recovery_receiving_retry": "요청한 컬렉션 페이지 다시 시도"
+  "library_archive_recovery_receiving_retry": "요청한 컬렉션 페이지 다시 시도",
+  "library_import_cleanup_title": "이전 업로드 삭제 완료하기",
+  "library_import_cleanup_sending": "이전 업로드를 삭제하고 있습니다. 이전 검토와 동의는 폐기되었습니다.",
+  "library_import_cleanup_help": "삭제 완료가 확인되지 않았습니다. 다른 업로드를 시작하기 전에 원래 삭제 요청을 다시 시도하세요.",
+  "library_import_cleanup_selected": "삭제가 확인되면 선택한 대체 파일의 미리보기가 열립니다. 파일이나 형식을 변경하면 이 선택이 취소됩니다.",
+  "library_import_cleanup_choose": "아래에서 대체 파일을 선택해 제출하거나 새 업로드 없이 삭제를 완료하세요.",
+  "library_import_cleanup_retry": "원래 삭제 요청 다시 시도",
+  "library_import_cleanup_withdraw": "대체 파일 없이 삭제 계속",
+  "library_import_cleanup_receipts": "확인된 결과 {count}개는 유지됩니다. 업로드를 삭제해도 라이브러리나 평점 변경은 취소되지 않습니다.",
+  "library_import_replace": "업로드 교체"
 }

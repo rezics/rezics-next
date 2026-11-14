@@ -12912,5 +12912,14 @@
   "library_archive_recovery_receiving_empty": "本页没有成员，且服务未返回后续页面。",
   "library_archive_recovery_receiving_navigation": "恢复目标 Collection 的页面",
   "library_archive_recovery_receiving_next": "Collection 下一页",
-  "library_archive_recovery_receiving_retry": "重试请求的 Collection 页面"
+  "library_archive_recovery_receiving_retry": "重试请求的 Collection 页面",
+  "library_import_cleanup_title": "完成移除上一次上传",
+  "library_import_cleanup_sending": "正在移除上一次上传。旧的审阅内容与同意已撤销。",
+  "library_import_cleanup_help": "尚未确认移除完成。开始另一次上传前，请重试原来的移除请求。",
+  "library_import_cleanup_selected": "确认移除后，将预览已选的替换文件。更改文件或格式会撤销此选择。",
+  "library_import_cleanup_choose": "请在下方选择并提交替换文件，也可以不再上传，直接完成移除。",
+  "library_import_cleanup_retry": "重试原来的移除请求",
+  "library_import_cleanup_withdraw": "继续移除，不再替换",
+  "library_import_cleanup_receipts": "已保留 {count} 项已确认的结果。移除上传不会撤销书库或评分的更改。",
+  "library_import_replace": "替换上传"
 }

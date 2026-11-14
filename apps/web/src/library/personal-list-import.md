@@ -78,6 +78,17 @@ upload identifier and exact cleanup/new-preview retry commands until native clea
 retired source, recover its selection or confirm an older review. A lost cleanup acknowledgement retries the same
 deletion before submitting the replacement XML.
 
+Decision: VNDB, AniList/MAL and Bangumi replacement and discard retire review rows, confirmation, question/score
+consent and late reads before cleanup. Keep the original cleanup command and visit credential separate from one
+selected replacement payload within the provider's file cap. A cleanup refusal or lost acknowledgement offers only
+that exact cleanup retry; no current read infers deletion. Acknowledgement continues the latest explicitly submitted
+replacement once. Editing its file or format withdraws that pending preview, including while cleanup is in flight;
+discard withdraws it without changing the original cleanup intent. Acknowledged apply receipts survive cleanup,
+which never rolls back Library or score effects. Recovery actions wrap at 44px and own focus when review retires.
+Design sources: this owner; each provider's controller preview/discard/retry paths, contract, port, native lifecycle
+adapter, upload/page components, cost ledger and focused tests. Source-only delivery leaves runtime acceptance to
+the verifier.
+
 Decision: all four import visits share browser-observation retirement, including a same-credential A→B→A round trip,
 and remount private state for each observation and locale. Bind AniList through the callable generated client surface;
 copy retained-label selections before review, withdraw old confirmation before replacement review, and retry only the

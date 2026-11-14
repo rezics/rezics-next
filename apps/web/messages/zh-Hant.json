@@ -12912,5 +12912,14 @@
   "library_archive_recovery_receiving_empty": "本頁沒有成員，且服務未傳回後續頁面。",
   "library_archive_recovery_receiving_navigation": "還原目標 Collection 的頁面",
   "library_archive_recovery_receiving_next": "Collection 下一頁",
-  "library_archive_recovery_receiving_retry": "重試要求的 Collection 頁面"
+  "library_archive_recovery_receiving_retry": "重試要求的 Collection 頁面",
+  "library_import_cleanup_title": "完成移除上一次上傳",
+  "library_import_cleanup_sending": "正在移除上一次上傳。舊的審閱內容與同意已撤銷。",
+  "library_import_cleanup_help": "尚未確認移除完成。開始另一次上傳前，請重試原來的移除請求。",
+  "library_import_cleanup_selected": "確認移除後，將預覽已選的替換檔案。變更檔案或格式會撤銷此選擇。",
+  "library_import_cleanup_choose": "請在下方選擇並提交替換檔案，也可以不再上傳，直接完成移除。",
+  "library_import_cleanup_retry": "重試原來的移除請求",
+  "library_import_cleanup_withdraw": "繼續移除，不再替換",
+  "library_import_cleanup_receipts": "已保留 {count} 項已確認的結果。移除上傳不會撤銷書庫或評分的變更。",
+  "library_import_replace": "替換上傳"
 }

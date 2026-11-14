@@ -1,3 +1,4 @@
+import { ImportCleanupRecovery, ImportCleanupReceipts } from '../personal-list-import/cleanup';
 import { ImportPageReadRecovery } from '../personal-list-import/page-navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
@@ -78,17 +79,23 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
   }
 
   const [inspectCancelled, setInspectCancelled] = useState(false);
-  const locked = snap.busy || snap.notice?.kind === 'unknown';
+  const stageFocus = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (snap.stage !== 'cleanup') stageFocus.current?.focus({ preventScroll: true });
+  }, [snap.stage]);
+  const locked = snap.busy || snap.notice?.kind === 'unknown' || snap.cleanupPending;
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_anilist_title()}</PageHeading>
-      <ImportJourney stage={snap.stage} />
+      <div ref={stageFocus} tabIndex={-1}>
+        <ImportJourney stage={snap.stage} />
+      </div>
       {noticeText(snap.notice) ? (
         <p role="status" aria-live="polite">
           {noticeText(snap.notice)}
         </p>
       ) : null}
-      {snap.notice?.kind === 'unknown' ? (
+      {snap.notice?.kind === 'unknown' && !snap.cleanupPending ? (
         <AniListAction type="button" disabled={snap.busy} onClick={() => void act((current) => current.retryUnknown())}>
           {m.library_anilist_retry_command()}
         </AniListAction>
@@ -96,14 +103,29 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
       {snap.pageReadFailed ? (
         <ImportPageReadRecovery busy={locked} onRetry={() => void act((current) => current.retryPage())} />
       ) : null}
-      {snap.stage === 'upload' ? (
-        <AniListUploadForm
-          busy={locked}
-          onUpload={(upload, scoreFormat) => void act((current) => current.preview(upload, scoreFormat))}
-          onReopen={(importId) => void act((current) => current.loadPage(importId, -1))}
+      <ImportCleanupReceipts count={snap.cleanupReceipts.length} />
+      {snap.cleanupPending ? (
+        <ImportCleanupRecovery
+          busy={snap.busy}
+          replacementPending={snap.replacementPending}
+          onRetry={() => void act((current) => current.retryUnknown())}
+          onDiscardReplacement={() => void act((current) => current.discard())}
         />
       ) : null}
-      {snap.importId ? (
+      {snap.stage === 'upload' || snap.stage === 'cleanup' ? (
+        <AniListUploadForm
+          busy={snap.cleanupPending ? false : snap.busy}
+          disabled={!snap.cleanupPending && locked}
+          onEdit={() => void act((current) => current.editReplacement())}
+          onUpload={(upload, scoreFormat) => void act((current) => current.preview(upload, scoreFormat))}
+          onReopen={
+            snap.cleanupPending || snap.importId
+              ? undefined
+              : (importId) => void act((current) => current.loadPage(importId, -1))
+          }
+        />
+      ) : null}
+      {snap.importId && snap.stage !== 'upload' && !snap.cleanupPending ? (
         <ImportDetails title={m.library_import_retained()}>
           <p>{m.library_import_reopen_help()}</p>
           <p className="break-all">
@@ -111,7 +133,7 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           </p>
         </ImportDetails>
       ) : null}
-      {snap.importId && snap.stage !== 'removed' ? (
+      {snap.importId && !snap.cleanupPending && snap.stage !== 'upload' && snap.stage !== 'removed' ? (
         <div hidden={snap.stage !== 'review' && !(snap.stage === 'cancelled' && inspectCancelled)}>
           <AniListReviewPage
             key={snap.importId}
@@ -184,8 +206,18 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
       ) : null}
       {snap.stage === 'cancelled' ? <AniListCancelledNotice onReturn={() => setInspectCancelled(true)} /> : null}
       {snap.stage === 'removed' ? <AniListRemovedNotice /> : null}
-      {snap.importId && snap.stage !== 'removed' ? (
+      {snap.importId && !snap.cleanupPending && snap.stage !== 'upload' && snap.stage !== 'removed' ? (
         <div className="flex flex-wrap gap-3">
+          {snap.stage !== 'applying' ? (
+            <AniListAction
+              type="button"
+              variant="outline"
+              disabled={locked}
+              onClick={() => void act((current) => current.replaceSource())}
+            >
+              {m.library_import_replace()}
+            </AniListAction>
+          ) : null}
           {snap.stage === 'applying' || snap.stage === 'review' || snap.stage === 'confirm' ? (
             <AniListAction
               type="button"
@@ -205,6 +237,16 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
             {m.library_anilist_discard()}
           </AniListAction>
         </div>
+      ) : null}
+      {snap.importId && snap.stage === 'upload' ? (
+        <AniListAction
+          type="button"
+          variant="outline"
+          disabled={locked}
+          onClick={() => void act((current) => current.discard())}
+        >
+          {m.library_anilist_discard()}
+        </AniListAction>
       ) : null}
       {snap.stage !== 'results' ? <ImportReturn /> : null}
       <AniListDeparture

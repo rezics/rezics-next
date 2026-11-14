@@ -12912,5 +12912,14 @@
   "library_archive_recovery_receiving_empty": "Aucun membre sur cette page et aucune continuation fournie.",
   "library_archive_recovery_receiving_navigation": "Pages de la Collection de destination",
   "library_archive_recovery_receiving_next": "Page suivante de la Collection",
-  "library_archive_recovery_receiving_retry": "Réessayer la page demandée de la Collection"
+  "library_archive_recovery_receiving_retry": "Réessayer la page demandée de la Collection",
+  "library_import_cleanup_title": "Terminer la suppression de l’import précédent",
+  "library_import_cleanup_sending": "Suppression de l’import précédent. Sa révision et ses consentements ont été retirés.",
+  "library_import_cleanup_help": "La suppression n’a pas été confirmée. Réessayez la suppression initiale avant de commencer un autre import.",
+  "library_import_cleanup_selected": "L’aperçu du remplacement choisi s’ouvrira après confirmation de la suppression. Changer le fichier ou le format annule cette sélection.",
+  "library_import_cleanup_choose": "Choisissez et envoyez un remplacement ci-dessous, ou terminez la suppression sans autre import.",
+  "library_import_cleanup_retry": "Réessayer la suppression initiale",
+  "library_import_cleanup_withdraw": "Poursuivre la suppression sans remplacement",
+  "library_import_cleanup_receipts": "{count} résultats confirmés sont conservés. Supprimer un import n’annule pas les modifications de la Bibliothèque ou des notes.",
+  "library_import_replace": "Remplacer l’import"
 }

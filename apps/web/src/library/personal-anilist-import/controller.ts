@@ -28,7 +28,7 @@ import { sourceAdmissionBlock, sourceAdmissionBody } from '../rich-private-entry
 import { aniListSourcePreview } from './source';
 import type { AniListVisit } from './visit';
 
-export type AniListStage = 'upload' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
+export type AniListStage = 'upload' | 'cleanup' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
 
 export type AniListNotice =
   | AniListFailure
@@ -42,6 +42,9 @@ export type AniListJourneySnapshot = {
   stage: AniListStage;
   busy: boolean;
   notice: AniListNotice;
+  cleanupPending: boolean;
+  replacementPending: boolean;
+  cleanupReceipts: AniListOutcome[];
   importId: string | null;
   count: number;
   after: number;
@@ -244,6 +247,12 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   let applied = 0;
   let uploadText: string | null = null;
   let unknown: AniListCommand | null = null;
+  let cleanupCommand: Extract<AniListCommand, { kind: 'cancel' }> | null = null;
+  let replacement: Extract<AniListCommand, { kind: 'preview' }> | null = null;
+  let cleanupReceipts: AniListOutcome[] = [];
+  let cleanupDestination: 'upload' | 'removed' = 'removed';
+  let sourceRetired = false;
+  let retired = false;
   let applyCommand: Extract<AniListCommand, { kind: 'apply' }> | null = null;
   let applyQueue: AniListConfirmation[][] = [];
   let admitQueue: Extract<AniListCommand, { kind: 'admit-source' }>[] = [];
@@ -260,17 +269,21 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   let questionNotice: AniListFailure | null = null;
 
   function live(): boolean {
-    return (
-      visit.current() &&
-      sender.subject === visit.subject &&
-      sender.csrfToken === visit.csrfToken &&
-      !visit.controller.signal.aborted
-    );
+    if (
+      !retired &&
+      (!visit.current() || sender.subject !== visit.subject ||
+        sender.csrfToken !== visit.csrfToken || visit.controller.signal.aborted)
+    ) {
+      retired = true;
+      clearPrivate();
+      cleanupReceipts = [];
+    }
+    return !retired;
   }
 
   function retain(): void {
     cost.retain({
-      upload: uploadText,
+      upload: replacement?.upload ?? uploadText,
       page: page.length
         ? pageForRetain({
             importId: importId ?? '',
@@ -286,7 +299,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
           })
         : null,
       meta: meta.values(),
-      command: unknown,
+      command: cleanupCommand ?? unknown,
     });
     cost.recordRender(page.length);
   }
@@ -305,6 +318,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       stage,
       busy,
       notice,
+      cleanupPending: cleanupCommand !== null,
+      replacementPending: replacement !== null,
+      cleanupReceipts,
       importId,
       count,
       after,
@@ -336,6 +352,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     coordinates.retire();
     pageRequest = null;
     unknown = null;
+    cleanupCommand = null;
+    replacement = null;
+    sourceRetired = false;
     applyCommand = null;
     applyQueue = [];
     admitQueue = [];
@@ -371,10 +390,16 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     send: () => Promise<T | AniListFailure | AniListUnknown>,
     retry = false,
   ): Promise<T | undefined> {
-    if (!live() || busy || (unknown !== null && !retry)) return;
+    if (!live() || sourceRetired || busy || (unknown !== null && !retry)) return;
     const token = generation;
     busy = true;
-    const response = await send();
+    if (command.kind !== 'admit-source') cost.recordCall(command.kind, retry);
+    let response: T | AniListFailure | AniListUnknown;
+    try {
+      response = await send();
+    } finally {
+      if (token === generation) busy = false;
+    }
     if (token !== generation) return;
     if (!live()) {
       // Retiring display/callbacks must not discard an uncertain original label sender.
@@ -386,7 +411,6 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       return;
     }
     busy = false;
-    if (command.kind !== 'admit-source') cost.recordCall(command.kind, retry);
     if (response.kind === 'unknown') {
       unknown = (response as AniListUnknown).command;
       notice = response as AniListUnknown;
@@ -420,7 +444,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     retry = false,
     loadedStage: 'review' | 'results' = 'review',
   ): Promise<AniListJourneySnapshot> {
-    if (!live() || busy || (unknown !== null && !retry)) return snapshot();
+    if (!live() || sourceRetired || busy || (unknown !== null && !retry)) return snapshot();
     const token = generation;
     const command: Extract<AniListCommand, { kind: 'page' }> = { kind: 'page', importId: id, after: cursor };
     pageRequest = { command, loadedStage };
@@ -460,7 +484,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   async function readQuestion(): Promise<AniListJourneySnapshot> {
-    if (!live() || busy) return snapshot();
+    if (!live() || sourceRetired || busy) return snapshot();
     const token = ++questionGeneration;
     questionPending = true;
     questionNotice = null;
@@ -478,45 +502,33 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     return snapshot();
   }
 
-  async function preview(upload: string, format?: AniListScoreFormat | null): Promise<AniListJourneySnapshot> {
-    if (!live() || busy || unknown || stage === 'applying') return snapshot();
-    if (!upload) {
-      notice = { kind: 'empty' };
-      return snapshot();
-    }
-    if (encodedBytes(upload) > ANILIST_UPLOAD_BYTES) {
-      notice = { kind: 'too-large' };
-      return snapshot();
-    }
-    const previous = importId;
-    const token = ++generation;
-    coordinates.retire();
-    pageRequest = null;
-    if (previous) {
-      const remove: Extract<AniListCommand, { kind: 'cancel' }> = {
-        kind: 'cancel',
-        importId: previous,
-        key: newCommandKey(),
-        remove: true,
-      };
-      busy = true;
-      try {
-        await port.cancel(remove);
-      } finally {
-        if (token === generation) busy = false;
-      }
-      cost.recordCall('cancel');
-      if (!live() || token !== generation) return snapshot();
-      clearPrivate();
-    }
-    uploadText = upload;
-    const command: Extract<AniListCommand, { kind: 'preview' }> = {
-      kind: 'preview',
-      key: newCommandKey(),
-      upload,
-      ...(format ? { scoreFormat: format } : {}),
-    };
-    const response = await run(command, () => port.preview(command));
+  function retireForCleanup(): void {
+    const id = importId;
+    const receipts = outcomes;
+    clearPrivate();
+    outcomes = receipts;
+    importId = id;
+    cleanupReceipts = receipts.length ? receipts : cleanupReceipts;
+    sourceRetired = true;
+  }
+
+  function editReplacement(): AniListJourneySnapshot {
+    if (!live()) return snapshot();
+    // File or format editing withdraws auto-continuation, never the original cleanup request.
+    replacement = null;
+    retain();
+    return snapshot();
+  }
+
+  function replaceSource(): AniListJourneySnapshot {
+    if (!live() || busy || unknown || cleanupCommand || stage === 'applying') return snapshot();
+    retireForCleanup();
+    return snapshot();
+  }
+
+  async function sendPreview(command: Extract<AniListCommand, { kind: 'preview' }>, retry = false) {
+    uploadText = command.upload;
+    const response = await run(command, () => port.preview(command), retry);
     if (!response || response.kind !== 'previewed' || !live()) return snapshot();
     importId = response.importId;
     count = response.count;
@@ -524,10 +536,71 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     return loadPage(response.importId, -1);
   }
 
+  async function cleanup(retry = false): Promise<AniListJourneySnapshot> {
+    const command = cleanupCommand;
+    if (!command || !live() || busy) return snapshot();
+    const token = generation;
+    busy = true;
+    cost.recordCall('cancel', retry);
+    let response;
+    try {
+      response = await port.cancel(command);
+    } finally {
+      if (token === generation) busy = false;
+    }
+    if (!live() || token !== generation) return snapshot();
+    if (response.kind !== 'cancelled' || !response.removed) {
+      notice =
+        response.kind === 'unknown' || response.kind === 'cancelled'
+          ? { kind: 'unknown', command }
+          : response;
+      retain();
+      return snapshot();
+    }
+    const nextPreview = replacement;
+    clearPrivate(cleanupDestination);
+    if (nextPreview) return sendPreview(nextPreview);
+    outcomes = cleanupReceipts;
+    return snapshot();
+  }
+
+  async function preview(upload: string, format?: AniListScoreFormat | null): Promise<AniListJourneySnapshot> {
+    if (!live() || (busy && !cleanupCommand) || (unknown && !cleanupCommand) || stage === 'applying')
+      return snapshot();
+    if (!upload || encodedBytes(upload) > ANILIST_UPLOAD_BYTES) {
+      replacement = null;
+      // Keep an uncertain cleanup notice visible when a replacement file fails admission.
+      if (!cleanupCommand) notice = { kind: upload ? 'too-large' : 'empty' };
+      return snapshot();
+    }
+    const command: Extract<AniListCommand, { kind: 'preview' }> = {
+      kind: 'preview',
+      key: newCommandKey(),
+      upload,
+      ...(format ? { scoreFormat: format } : {}),
+    };
+    if (cleanupCommand) {
+      replacement = command;
+      cleanupDestination = 'upload';
+      return snapshot();
+    }
+    const id = importId;
+    if (id) {
+      retireForCleanup();
+      replacement = command;
+      cleanupDestination = 'upload';
+      cleanupCommand = Object.freeze({ kind: 'cancel', importId: id, key: newCommandKey(), remove: true });
+      stage = 'cleanup';
+      return cleanup();
+    }
+    sourceRetired = false;
+    return sendPreview(command);
+  }
+
   async function review(ordinal: number, target?: string | null): Promise<AniListJourneySnapshot> {
     const id = importId;
     const current = meta.get(ordinal);
-    if (!id || !live() || heldUnknown() || busy) return snapshot();
+    if (!id || !live() || sourceRetired || heldUnknown() || busy) return snapshot();
     if (stage === 'applying') return snapshot();
     if (current?.started) {
       notice = { kind: 'started-locked' };
@@ -814,6 +887,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   async function retryUnknown(): Promise<AniListJourneySnapshot> {
+    if (cleanupCommand) return cleanup(true);
     const command = unknown;
     if (!command || !live()) return snapshot();
     if (command.kind === 'preview') {
@@ -898,7 +972,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
 
   async function cancelAdmission(): Promise<AniListJourneySnapshot> {
     const id = importId;
-    if (!id || !live() || heldUnknown()) return snapshot();
+    if (!id || !live() || sourceRetired || heldUnknown()) return snapshot();
     stopApply = true;
     const command: Extract<AniListCommand, { kind: 'cancel' }> = {
       kind: 'cancel',
@@ -919,20 +993,22 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   async function discard(): Promise<AniListJourneySnapshot> {
-    if (heldUnknown()) return snapshot();
-    const id = importId;
-    if (id) {
-      const command: Extract<AniListCommand, { kind: 'cancel' }> = {
-        kind: 'cancel',
-        importId: id,
-        key: newCommandKey(),
-        remove: true,
-      };
-      await run(command, () => port.cancel(command));
+    if (!live()) return snapshot();
+    if (cleanupCommand) {
+      cleanupDestination = 'removed';
+      return editReplacement();
     }
-    if (live()) clearPrivate(id ? 'removed' : 'upload');
-    retain();
-    return snapshot();
+    if (busy || unknown || stage === 'applying') return snapshot();
+    const id = importId;
+    retireForCleanup();
+    if (!id) {
+      clearPrivate('removed');
+      return snapshot();
+    }
+    cleanupCommand = Object.freeze({ kind: 'cancel', importId: id, key: newCommandKey(), remove: true });
+    cleanupDestination = 'removed';
+    stage = 'cleanup';
+    return cleanup();
   }
 
   function chooseLabels(
@@ -1076,13 +1152,15 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   function backToReview(): AniListJourneySnapshot {
-    if (stage === 'applying' || heldUnknown()) return snapshot();
+    if (sourceRetired || stage === 'applying' || heldUnknown()) return snapshot();
     stage = cancelled ? 'cancelled' : 'review';
     return snapshot();
   }
 
   return {
     snapshot,
+    replaceSource,
+    editReplacement,
     chooseLabels,
     reviewLabels,
     confirmLabels,

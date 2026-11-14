@@ -9,10 +9,12 @@ export function BangumiUploadForm({
   busy,
   disabled,
   onUpload,
+  onEdit,
   onReopen,
 }: {
   busy: boolean;
   disabled?: boolean;
+  onEdit?: () => void;
   onUpload: (upload: string) => void;
   onReopen?: (uploadId: string) => void;
 }) {
@@ -23,14 +25,21 @@ export function BangumiUploadForm({
   const formatId = useId();
   const attestId = useId();
   const input = useRef<HTMLInputElement>(null);
+  const revision = useRef(0);
+  function edit() {
+    revision.current += 1;
+    onEdit?.();
+  }
   async function submit() {
+    const token = ++revision.current;
     const file = input.current?.files?.[0];
     if (!file) return;
     if (file.size > BANGUMI_UPLOAD_BYTES) {
       onUpload('');
       return;
     }
-    onUpload(await file.text());
+    const upload = await file.text();
+    if (token === revision.current) onUpload(upload);
   }
   return (
     <form
@@ -60,6 +69,7 @@ export function BangumiUploadForm({
           ref={input}
           id={inputId}
           type="file"
+          onChange={edit}
           accept="application/json,.json"
           aria-describedby={`${attestId} ${formatId} ${helpId}`}
           disabled={busy || disabled}

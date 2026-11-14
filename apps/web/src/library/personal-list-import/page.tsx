@@ -1,3 +1,4 @@
+import { ImportCleanupRecovery, ImportCleanupReceipts } from './cleanup';
 import { ImportDetails, ImportJourney, ImportReturn } from './presentation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLibraryWorkspaceAdmission } from '../library-workspace-admission';
@@ -21,6 +22,7 @@ import { vndbReviewHref, type VndbReviewAddress } from './address';
 function noticeText(notice: VndbNotice): string | null {
   if (!notice) return null;
   if (notice.kind === 'unknown') return m.library_bangumi_uncertain();
+  if (notice.kind === 'file-too-large') return m.library_vndb_bounds();
   if (notice.kind === 'file-read') return m.library_vndb_file_read_error();
   if (notice.kind === 'admission') return m.library_vndb_admission_error({ code: notice.code ?? 'HTTP 400' });
   if (notice.kind === 'wire-too-large') return m.library_vndb_wire_error({ code: notice.code ?? 'HTTP 413' });
@@ -140,7 +142,7 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
       onAddressChange?.({ uploadId: next.page.uploadId, offset: next.offset });
   }
 
-  const locked = snap.busy || !!snap.retryCommand;
+  const locked = snap.busy || !!snap.retryCommand || snap.cleanupPending;
   const showSourceRetry = snap.notice?.kind === 'unknown' && snap.notice.command.kind === 'source';
   return (
     <main ref={main} className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
@@ -167,16 +169,26 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
           {noticeText(snap.notice)}
         </p>
       ) : null}
-      {snap.retryCommand ? (
+      {snap.retryCommand && !snap.cleanupPending ? (
         <VndbAction type="button" disabled={snap.busy} onClick={() => void act((current) => current.retryUnknown())}>
           {m.library_bangumi_retry_command()}
         </VndbAction>
       ) : null}
       {showSourceRetry ? <p className="text-sm">{m.library_vndb_source_retry_help()}</p> : null}
-      {snap.stage === 'upload' ? (
-        <VndbUploadForm
+      <ImportCleanupReceipts count={snap.cleanupReceipts.length} />
+      {snap.cleanupPending ? (
+        <ImportCleanupRecovery
           busy={snap.busy}
-          disabled={locked}
+          replacementPending={snap.replacementPending}
+          onRetry={() => void act((current) => current.retryUnknown())}
+          onDiscardReplacement={() => void act((current) => current.discard())}
+        />
+      ) : null}
+      {snap.stage === 'upload' || snap.stage === 'cleanup' ? (
+        <VndbUploadForm
+          busy={snap.cleanupPending ? false : snap.busy}
+          onEdit={() => void act((current) => current.editReplacement())}
+          disabled={!snap.cleanupPending && locked}
           onUpload={(xml) => void act((current) => current.preview(xml))}
           onReadFailure={() => void act((current) => current.fileReadFailed())}
         />
@@ -245,7 +257,7 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
           {m.library_vndb_download_source()}
         </VndbAction>
       ) : null}
-      {snap.uploadId && snap.stage !== 'removed' ? (
+      {snap.uploadId && !snap.cleanupPending && snap.stage !== 'removed' ? (
         <div className="flex flex-wrap gap-3">
           {snap.stage === 'review' || snap.stage === 'results' ? (
             <VndbAction

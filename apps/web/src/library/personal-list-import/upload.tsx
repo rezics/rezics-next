@@ -7,24 +7,33 @@ export function VndbUploadForm({
   busy,
   disabled,
   onUpload,
+  onEdit,
   onReadFailure,
 }: {
   busy: boolean;
   disabled?: boolean;
+  onEdit?: () => void;
   onUpload: (xml: string) => void;
   onReadFailure: () => void;
 }) {
   const inputId = useId();
   const helpId = useId();
   const input = useRef<HTMLInputElement>(null);
+  const revision = useRef(0);
+  function edit() {
+    revision.current += 1;
+    onEdit?.();
+  }
 
   async function submit() {
+    const token = ++revision.current;
     const file = input.current?.files?.[0];
     if (!file) return;
     try {
-      onUpload(await file.text());
+      const xml = await file.text();
+      if (token === revision.current) onUpload(xml);
     } catch {
-      onReadFailure();
+      if (token === revision.current) onReadFailure();
     }
   }
 
@@ -51,6 +60,7 @@ export function VndbUploadForm({
           ref={input}
           id={inputId}
           type="file"
+          onChange={edit}
           accept="application/xml,text/xml,.xml"
           aria-describedby={helpId}
           disabled={busy || disabled}

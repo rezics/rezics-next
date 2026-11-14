@@ -22,7 +22,7 @@ import { bangumiTitle } from './meaning';
 import { bangumiSourcePreview } from './source';
 import type { BangumiVisit } from './visit';
 
-export type BangumiStage = 'upload' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
+export type BangumiStage = 'upload' | 'cleanup' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
 
 /** Label commands run in the labels panel, outside the journey's retry and cost ledger. */
 type JourneyCommand = Exclude<BangumiCommand, { kind: 'tags' | 'review-labels' | 'apply-labels' }>;
@@ -33,6 +33,9 @@ export type BangumiJourneySnapshot = {
   stage: BangumiStage;
   busy: boolean;
   notice: BangumiNotice;
+  cleanupPending: boolean;
+  replacementPending: boolean;
+  cleanupReceipts: BangumiOutcome[];
   uploadId: string | null;
   count: number;
   after: number;
@@ -105,6 +108,12 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   let applied = 0;
   let uploadText: string | null = null;
   let unknown: BangumiCommand | null = null;
+  let cleanupCommand: Extract<BangumiCommand, { kind: 'delete' }> | null = null;
+  let replacement: Extract<BangumiCommand, { kind: 'preview' }> | null = null;
+  let cleanupReceipts: BangumiOutcome[] = [];
+  let cleanupDestination: 'upload' | 'removed' = 'removed';
+  let sourceRetired = false;
+  let retired = false;
   let applyCommand: Extract<BangumiCommand, { kind: 'apply' }> | null = null;
   let applyQueue: BangumiChoice[][] = [];
   let admitQueue: Extract<BangumiCommand, { kind: 'admit-source' }>[] = [];
@@ -117,20 +126,24 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   let generation = 0;
 
   function live(): boolean {
-    return (
-      visit.current() &&
-      sender.subject === visit.subject &&
-      sender.csrfToken === visit.csrfToken &&
-      !visit.controller.signal.aborted
-    );
+    if (
+      !retired &&
+      (!visit.current() || sender.subject !== visit.subject ||
+        sender.csrfToken !== visit.csrfToken || visit.controller.signal.aborted)
+    ) {
+      retired = true;
+      clearPrivate();
+      cleanupReceipts = [];
+    }
+    return !retired;
   }
 
   function retain(): void {
     cost.retain({
-      upload: uploadText,
+      upload: replacement?.upload ?? uploadText,
       page: page.length ? { uploadId: uploadId ?? '', cancelled, rows: page, next } : null,
       meta: meta.values(),
-      command: unknown,
+      command: cleanupCommand ?? unknown,
     });
     cost.recordRender(page.length);
   }
@@ -150,6 +163,9 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       stage,
       busy,
       notice,
+      cleanupPending: cleanupCommand !== null,
+      replacementPending: replacement !== null,
+      cleanupReceipts,
       uploadId,
       count,
       after,
@@ -175,6 +191,9 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     coordinates.retire();
     pageRequest = null;
     unknown = null;
+    cleanupCommand = null;
+    replacement = null;
+    sourceRetired = false;
     applyCommand = null;
     applyQueue = [];
     admitQueue = [];
@@ -205,9 +224,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     send: () => Promise<T | BangumiFailure | BangumiUnknown>,
     retry = false,
   ): Promise<T | undefined> {
-    if (!live() || busy || (unknown !== null && !retry)) return;
+    if (!live() || sourceRetired || busy || (unknown !== null && !retry)) return;
     const token = generation;
     busy = true;
+    if (command.kind !== 'admit-source') cost.recordCall(command.kind, retry);
     let response: T | BangumiFailure | BangumiUnknown;
     try {
       response = await send();
@@ -215,7 +235,6 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       if (token === generation) busy = false;
     }
     if (!live() || token !== generation) return;
-    if (command.kind !== 'admit-source') cost.recordCall(command.kind, retry);
     if (response.kind === 'unknown') {
       unknown = (response as BangumiUnknown).command;
       notice = response as BangumiUnknown;
@@ -262,7 +281,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     retry = false,
     loadedStage: 'review' | 'results' = 'review',
   ): Promise<BangumiJourneySnapshot> {
-    if (!live() || busy || (unknown !== null && !retry)) return snapshot();
+    if (!live() || sourceRetired || busy || (unknown !== null && !retry)) return snapshot();
     const token = generation;
     const command: Extract<BangumiCommand, { kind: 'page' }> = { kind: 'page', uploadId: id, after: cursor };
     pageRequest = { command, loadedStage };
@@ -301,44 +320,98 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       : Promise.resolve(snapshot());
   }
 
-  async function preview(upload: string): Promise<BangumiJourneySnapshot> {
-    if (!live() || busy || unknown || stage === 'applying') return snapshot();
-    if (!upload) {
-      notice = { kind: 'too-large' };
-      return snapshot();
-    }
-    if (encodedBytes(upload) > BANGUMI_UPLOAD_BYTES) {
-      notice = { kind: 'too-large' };
-      return snapshot();
-    }
-    const previous = uploadId;
-    const token = ++generation;
-    coordinates.retire();
-    pageRequest = null;
-    if (previous) {
-      const remove: Extract<BangumiCommand, { kind: 'delete' }> = {
-        kind: 'delete',
-        uploadId: previous,
-        key: newCommandKey(),
-      };
-      busy = true;
-      try {
-        await port.delete(remove);
-      } finally {
-        if (token === generation) busy = false;
-      }
-      cost.recordCall('delete');
-      if (!live() || token !== generation) return snapshot();
-      clearPrivate();
-    }
-    uploadText = upload;
-    const command: Extract<BangumiCommand, { kind: 'preview' }> = { kind: 'preview', key: newCommandKey(), upload };
-    const response = await run(command, () => port.preview(command));
+  function retireForCleanup(): void {
+    const id = uploadId;
+    const receipts = outcomes;
+    clearPrivate();
+    outcomes = receipts;
+    uploadId = id;
+    cleanupReceipts = receipts.length ? receipts : cleanupReceipts;
+    sourceRetired = true;
+  }
+
+  function editReplacement(): BangumiJourneySnapshot {
+    if (!live()) return snapshot();
+    // File or format editing withdraws auto-continuation, never the original cleanup request.
+    replacement = null;
+    retain();
+    return snapshot();
+  }
+
+  function replaceSource(): BangumiJourneySnapshot {
+    if (!live() || busy || unknown || cleanupCommand || stage === 'applying') return snapshot();
+    retireForCleanup();
+    return snapshot();
+  }
+
+  async function sendPreview(command: Extract<BangumiCommand, { kind: 'preview' }>, retry = false) {
+    uploadText = command.upload;
+    const response = await run(command, () => port.preview(command), retry);
     if (!response || response.kind !== 'previewed' || !live()) return snapshot();
     uploadId = response.uploadId;
     count = response.count;
     uploadText = null;
     return loadPage(response.uploadId, -1);
+  }
+
+  async function cleanup(retry = false): Promise<BangumiJourneySnapshot> {
+    const command = cleanupCommand;
+    if (!command || !live() || busy) return snapshot();
+    const token = generation;
+    busy = true;
+    cost.recordCall('delete', retry);
+    let response;
+    try {
+      response = await port.delete(command);
+    } finally {
+      if (token === generation) busy = false;
+    }
+    if (!live() || token !== generation) return snapshot();
+    if (response.kind !== 'deleted') {
+      notice =
+        response.kind === 'unknown' || response.kind === 'cancelled'
+          ? { kind: 'unknown', command }
+          : response;
+      retain();
+      return snapshot();
+    }
+    const nextPreview = replacement;
+    clearPrivate(cleanupDestination);
+    if (nextPreview) return sendPreview(nextPreview);
+    outcomes = cleanupReceipts;
+    return snapshot();
+  }
+
+  async function preview(upload: string): Promise<BangumiJourneySnapshot> {
+    if (!live() || (busy && !cleanupCommand) || (unknown && !cleanupCommand) || stage === 'applying')
+      return snapshot();
+    if (!upload || encodedBytes(upload) > BANGUMI_UPLOAD_BYTES) {
+      replacement = null;
+      // Keep an uncertain cleanup notice visible when a replacement file fails admission.
+      if (!cleanupCommand) notice = { kind: upload ? 'too-large' : 'empty' };
+      return snapshot();
+    }
+    const command: Extract<BangumiCommand, { kind: 'preview' }> = {
+      kind: 'preview',
+      key: newCommandKey(),
+      upload,
+    };
+    if (cleanupCommand) {
+      replacement = command;
+      cleanupDestination = 'upload';
+      return snapshot();
+    }
+    const id = uploadId;
+    if (id) {
+      retireForCleanup();
+      replacement = command;
+      cleanupDestination = 'upload';
+      cleanupCommand = Object.freeze({ kind: 'delete', uploadId: id, key: newCommandKey() });
+      stage = 'cleanup';
+      return cleanup();
+    }
+    sourceRetired = false;
+    return sendPreview(command);
   }
 
   async function review(
@@ -347,7 +420,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     score?: BangumiScoreSelection,
   ): Promise<BangumiJourneySnapshot> {
     const id = uploadId;
-    if (!id || !live() || unknown || busy) return snapshot();
+    if (!id || !live() || sourceRetired || unknown || busy) return snapshot();
     if (stage === 'applying') return snapshot();
     const command: Extract<BangumiCommand, { kind: 'review' }> = {
       kind: 'review',
@@ -554,6 +627,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   }
 
   async function retryUnknown(): Promise<BangumiJourneySnapshot> {
+    if (cleanupCommand) return cleanup(true);
     const command = unknown;
     if (!command || !live()) return snapshot();
     if (command.kind === 'preview') {
@@ -627,7 +701,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
 
   async function cancelAdmission(): Promise<BangumiJourneySnapshot> {
     const id = uploadId;
-    if (!id || !live() || unknown) return snapshot();
+    if (!id || !live() || sourceRetired || unknown) return snapshot();
     stopApply = true;
     const command: Extract<BangumiCommand, { kind: 'cancel' }> = { kind: 'cancel', uploadId: id, key: newCommandKey() };
     const response = await run(command, () => port.cancel(command));
@@ -641,19 +715,22 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   }
 
   async function discard(): Promise<BangumiJourneySnapshot> {
-    const id = uploadId;
-    if (!live() || busy || unknown) return snapshot();
-    if (id) {
-      const command: Extract<BangumiCommand, { kind: 'delete' }> = {
-        kind: 'delete',
-        uploadId: id,
-        key: newCommandKey(),
-      };
-      await run(command, () => port.delete(command));
+    if (!live()) return snapshot();
+    if (cleanupCommand) {
+      cleanupDestination = 'removed';
+      return editReplacement();
     }
-    if (live()) clearPrivate(id ? 'removed' : 'upload');
-    retain();
-    return snapshot();
+    if (busy || unknown || stage === 'applying') return snapshot();
+    const id = uploadId;
+    retireForCleanup();
+    if (!id) {
+      clearPrivate('removed');
+      return snapshot();
+    }
+    cleanupCommand = Object.freeze({ kind: 'delete', uploadId: id, key: newCommandKey() });
+    cleanupDestination = 'removed';
+    stage = 'cleanup';
+    return cleanup();
   }
 
   function openConfirm(): BangumiJourneySnapshot {
@@ -682,6 +759,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   }
 
   async function inspectCurrent(ordinal: number): Promise<BangumiJourneySnapshot> {
+    if (sourceRetired) return snapshot();
+    const token = generation;
     const row = meta.get(ordinal);
     const outcome = outcomes.find((item) => item.ordinal === ordinal);
     const acknowledged = outcome?.status === 'applied' || outcome?.score?.status === 'applied';
@@ -698,7 +777,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     } finally {
       busy = false;
     }
-    if (!live()) return snapshot();
+    if (!live() || token !== generation) return snapshot();
     row.entryReadback = result.entry;
     row.voteReadback = result.vote ?? {
       status: 'unavailable',
@@ -712,13 +791,15 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   }
 
   function backToReview(): BangumiJourneySnapshot {
-    if (stage === 'applying' || unknown) return snapshot();
+    if (sourceRetired || stage === 'applying' || unknown) return snapshot();
     stage = cancelled ? 'cancelled' : 'review';
     return snapshot();
   }
 
   return {
     snapshot,
+    replaceSource,
+    editReplacement,
     preview,
     loadPage,
     review,

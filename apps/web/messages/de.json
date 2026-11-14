@@ -12912,5 +12912,14 @@
   "library_archive_recovery_receiving_empty": "Keine Mitglieder auf dieser Seite; es wurde keine Fortsetzung geliefert.",
   "library_archive_recovery_receiving_navigation": "Seiten der Ziel-Collection",
   "library_archive_recovery_receiving_next": "Nächste Collection-Seite",
-  "library_archive_recovery_receiving_retry": "Angeforderte Collection-Seite erneut lesen"
+  "library_archive_recovery_receiving_retry": "Angeforderte Collection-Seite erneut lesen",
+  "library_import_cleanup_title": "Vorherigen Upload vollständig entfernen",
+  "library_import_cleanup_sending": "Der vorherige Upload wird entfernt. Seine Prüfung und Zustimmungen wurden aufgehoben.",
+  "library_import_cleanup_help": "Die Entfernung wurde noch nicht bestätigt. Wiederhole die ursprüngliche Entfernung, bevor ein neuer Upload beginnt.",
+  "library_import_cleanup_selected": "Die gewählte Ersatzdatei wird nach bestätigter Entfernung zur Vorschau geöffnet. Ein Datei- oder Formatwechsel hebt diese Auswahl auf.",
+  "library_import_cleanup_choose": "Wähle unten eine Ersatzdatei und reiche sie ein, oder schließe die Entfernung ohne neuen Upload ab.",
+  "library_import_cleanup_retry": "Ursprüngliche Entfernung wiederholen",
+  "library_import_cleanup_withdraw": "Ohne Ersatzdatei weiter entfernen",
+  "library_import_cleanup_receipts": "{count} bestätigte Ergebnisse bleiben erhalten. Das Entfernen eines Uploads macht Änderungen an Bibliothek oder Bewertungen nicht rückgängig.",
+  "library_import_replace": "Upload ersetzen"
 }

@@ -11,10 +11,12 @@ export function AniListUploadForm({
   busy,
   disabled,
   onUpload,
+  onEdit,
   onReopen,
 }: {
   busy: boolean;
   disabled?: boolean;
+  onEdit?: () => void;
   onUpload: (upload: string, scoreFormat: AniListScoreFormat | null) => void;
   onReopen?: (importId: string) => void;
 }) {
@@ -24,10 +26,16 @@ export function AniListUploadForm({
   const attestId = useId();
   const scoreId = useId();
   const input = useRef<HTMLInputElement>(null);
+  const revision = useRef(0);
+  function edit() {
+    revision.current += 1;
+    onEdit?.();
+  }
   const [scoreFormat, setScoreFormat] = useState<AniListScoreFormat | ''>('');
   const [retainedId, setRetainedId] = useState('');
   const retainedIdInput = useId();
   async function submit() {
+    const token = ++revision.current;
     const file = input.current?.files?.[0];
     if (!file) {
       onUpload('', null);
@@ -37,7 +45,8 @@ export function AniListUploadForm({
       onUpload('', null);
       return;
     }
-    onUpload(await file.text(), scoreFormat || null);
+    const upload = await file.text();
+    if (token === revision.current) onUpload(upload, scoreFormat || null);
   }
   const scoreFormatOptions = [
     { value: null, label: aniListScoreFormatLabel(null) },
@@ -72,7 +81,10 @@ export function AniListUploadForm({
           items={scoreFormatOptions}
           disabled={busy || disabled}
           value={scoreFormat || null}
-          onValueChange={(value) => setScoreFormat((value ?? '') as AniListScoreFormat | '')}
+          onValueChange={(value) => {
+            edit();
+            setScoreFormat((value ?? '') as AniListScoreFormat | '');
+          }}
         >
           <SelectTrigger
             id={scoreId}
@@ -101,6 +113,7 @@ export function AniListUploadForm({
           ref={input}
           id={inputId}
           type="file"
+          onChange={edit}
           accept="application/json,.json"
           aria-describedby={`${attestId} ${formatId} ${helpId}`}
           disabled={busy || disabled}

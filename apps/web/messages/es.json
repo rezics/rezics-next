@@ -12912,5 +12912,14 @@
   "library_archive_recovery_receiving_empty": "No hay miembros en esta página y no se recibió ninguna continuación.",
   "library_archive_recovery_receiving_navigation": "Páginas de la colección de destino",
   "library_archive_recovery_receiving_next": "Siguiente página de la colección",
-  "library_archive_recovery_receiving_retry": "Reintentar la página solicitada de la colección"
+  "library_archive_recovery_receiving_retry": "Reintentar la página solicitada de la colección",
+  "library_import_cleanup_title": "Termina de eliminar la carga anterior",
+  "library_import_cleanup_sending": "Eliminando la carga anterior. Su revisión y sus consentimientos ya se han retirado.",
+  "library_import_cleanup_help": "La eliminación aún no se ha confirmado. Reintenta la eliminación original antes de iniciar otra carga.",
+  "library_import_cleanup_selected": "Se mostrará la vista previa del reemplazo elegido al confirmarse la eliminación. Cambiar el archivo o el formato retira esta selección.",
+  "library_import_cleanup_choose": "Elige y envía un reemplazo abajo, o termina la eliminación sin otra carga.",
+  "library_import_cleanup_retry": "Reintentar eliminación original",
+  "library_import_cleanup_withdraw": "Continuar eliminación sin reemplazo",
+  "library_import_cleanup_receipts": "Se conservan {count} resultados confirmados. Eliminar una carga no deshace cambios en la Biblioteca ni en las puntuaciones.",
+  "library_import_replace": "Reemplazar carga"
 }

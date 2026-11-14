@@ -12912,5 +12912,14 @@
   "library_archive_recovery_receiving_empty": "このページにメンバーはなく、続きのページも返されていません。",
   "library_archive_recovery_receiving_navigation": "復元先コレクションのページ",
   "library_archive_recovery_receiving_next": "コレクションの次のページ",
-  "library_archive_recovery_receiving_retry": "指定したコレクションのページを再試行"
+  "library_archive_recovery_receiving_retry": "指定したコレクションのページを再試行",
+  "library_import_cleanup_title": "前のアップロードの削除を完了",
+  "library_import_cleanup_sending": "前のアップロードを削除しています。以前の確認内容と同意は破棄されました。",
+  "library_import_cleanup_help": "削除の完了を確認できていません。別のアップロードを始める前に、元の削除操作を再試行してください。",
+  "library_import_cleanup_selected": "削除の完了後、選択した差し替えファイルのプレビューを開きます。ファイルや形式を変更すると、この選択は取り消されます。",
+  "library_import_cleanup_choose": "下で差し替えファイルを選択して送信するか、新たにアップロードせずに削除を完了してください。",
+  "library_import_cleanup_retry": "元の削除操作を再試行",
+  "library_import_cleanup_withdraw": "差し替えずに削除を続行",
+  "library_import_cleanup_receipts": "確認済みの結果 {count} 件は保持されます。アップロードを削除しても、ライブラリや評価への変更は取り消されません。",
+  "library_import_replace": "アップロードを差し替え"
 }

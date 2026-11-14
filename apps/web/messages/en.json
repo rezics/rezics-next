@@ -12919,5 +12919,14 @@
   "library_archive_recovery_receiving_empty": "No members on this page, and no continuation was supplied.",
   "library_archive_recovery_receiving_navigation": "Receiving Collection pages",
   "library_archive_recovery_receiving_next": "Next Collection page",
-  "library_archive_recovery_receiving_retry": "Retry requested Collection page"
+  "library_archive_recovery_receiving_retry": "Retry requested Collection page",
+  "library_import_cleanup_title": "Finish removing the previous upload",
+  "library_import_cleanup_sending": "Removing the previous upload. Its review and consent have been retired.",
+  "library_import_cleanup_help": "Removal has not been acknowledged. Retry the original removal before another upload can start.",
+  "library_import_cleanup_selected": "Your selected replacement will be previewed once removal is acknowledged. Changing the file or format withdraws this selection.",
+  "library_import_cleanup_choose": "Choose and submit a replacement below, or finish removal without another upload.",
+  "library_import_cleanup_retry": "Retry original removal",
+  "library_import_cleanup_withdraw": "Continue removal without replacement",
+  "library_import_cleanup_receipts": "{count} acknowledged results are preserved. Removing an upload does not undo Library or score changes.",
+  "library_import_replace": "Replace upload"
 }

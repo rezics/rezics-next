@@ -5,7 +5,7 @@ import type { AniListCommand, AniListImportPort } from './contract';
 
 export const AniListImportPortContext = createContext<AniListImportPort | null>(null);
 
-async function labelDelivery<T>(command: AniListCommand, send: () => Promise<T>) {
+export async function aniListCommandDelivery<T>(command: AniListCommand, send: () => Promise<T>) {
   try {
     return await send();
   } catch (error) {
@@ -22,7 +22,7 @@ const productionPort: AniListImportPort = {
       const captured = await captureAniListLabelSender({ data: command.custody, headers });
       if (captured !== undefined) command.custody.sender = captured;
     }
-    return labelDelivery(command, () => reviewAniListLabels({ data: command, headers }));
+    return aniListCommandDelivery(command, () => reviewAniListLabels({ data: command, headers }));
   },
   async applyLabels(command) {
     const { captureAniListLabelSender, applyAniListLabels } = await import('./server');
@@ -31,7 +31,7 @@ const productionPort: AniListImportPort = {
       const captured = await captureAniListLabelSender({ data: command.custody, headers });
       if (captured !== undefined) command.custody.sender = captured;
     }
-    return labelDelivery(command, () => applyAniListLabels({ data: command, headers }));
+    return aniListCommandDelivery(command, () => applyAniListLabels({ data: command, headers }));
   },
   async readLabels(command) {
     const { readAniListLabels } = await import('./server');
@@ -86,8 +86,11 @@ const productionPort: AniListImportPort = {
     return mapSourceAdmissionPort(result, retryCommand);
   },
   async cancel(command) {
-    const { cancelAniListImport } = await import('./server');
-    return cancelAniListImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
+    const headers = { 'X-CSRF-Token': sessionCsrfToken() ?? '' };
+    return aniListCommandDelivery(command, async () => {
+      const { cancelAniListImport } = await import('./server');
+      return cancelAniListImport({ data: command, headers });
+    });
   },
   async question() {
     const { readAniListStandardQuestion } = await import('./server');

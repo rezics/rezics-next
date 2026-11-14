@@ -1,8 +1,18 @@
 import { createContext, useContext } from 'react';
 import { sessionCsrfToken } from '../../session';
-import type { BangumiImportPort, BangumiTagPageResult } from './contract';
+import { archiveTransportLost } from '../archive-entry-recovery/native';
+import type { BangumiCommand, BangumiImportPort, BangumiTagPageResult } from './contract';
 
 export const BangumiImportPortContext = createContext<BangumiImportPort | null>(null);
+
+export async function bangumiCleanupDelivery<T>(command: BangumiCommand, send: () => Promise<T>) {
+  try {
+    return await send();
+  } catch (error) {
+    if (archiveTransportLost(error)) return { kind: 'unknown' as const, command };
+    throw error;
+  }
+}
 
 const productionPort: BangumiImportPort = {
   async preview(command) {
@@ -58,8 +68,11 @@ const productionPort: BangumiImportPort = {
     return cancelBangumiImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
   },
   async delete(command) {
-    const { deleteBangumiImport } = await import('./server');
-    return deleteBangumiImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
+    const headers = { 'X-CSRF-Token': sessionCsrfToken() ?? '' };
+    return bangumiCleanupDelivery(command, async () => {
+      const { deleteBangumiImport } = await import('./server');
+      return deleteBangumiImport({ data: command, headers });
+    });
   },
   async tags(command): Promise<BangumiTagPageResult> {
     const { readBangumiTags } = await import('./server');

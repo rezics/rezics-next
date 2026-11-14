@@ -5,7 +5,7 @@ import { importLibraryReturnHref } from '../showcase-import-return/navigation';
 
 /** Presentation only: providers retain their own admission, review and command custody. */
 export function ImportJourney({ stage }: { stage: string }) {
-  const index = stage === 'upload' ? 0 : stage === 'review' ? 1 : stage === 'confirm' ? 2 : 3;
+  const index = stage === 'upload' || stage === 'cleanup' ? 0 : stage === 'review' ? 1 : stage === 'confirm' ? 2 : 3;
   const steps = [
     m.library_import_upload(),
     m.library_import_review(),

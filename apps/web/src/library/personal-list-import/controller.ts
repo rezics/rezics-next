@@ -2,6 +2,7 @@ import {
   freezeVndbCommand,
   newVndbKey,
   VNDB_ID,
+  VNDB_XML_BYTES,
   type VndbApplyRow,
   type VndbCommand,
   type VndbFailure,
@@ -18,8 +19,8 @@ import {
 import type { VndbVisit } from './visit';
 import type { VndbReviewAddress } from './address';
 
-export type VndbStage = 'upload' | 'review' | 'confirm' | 'applying' | 'results' | 'removed';
-export type VndbNotice = VndbFailure | VndbUnknown | { kind: 'file-read' } | null;
+export type VndbStage = 'upload' | 'cleanup' | 'review' | 'confirm' | 'applying' | 'results' | 'removed';
+export type VndbNotice = VndbFailure | VndbUnknown | { kind: 'file-read' | 'file-too-large' } | null;
 export type VndbScoreNotice = {
   ordinal: number;
   reason: string;
@@ -37,6 +38,9 @@ export type VndbJourneySnapshot = {
   stage: VndbStage;
   busy: boolean;
   notice: VndbNotice;
+  cleanupPending: boolean;
+  replacementPending: boolean;
+  cleanupReceipts: VndbOutcome[];
   uploadId: string | null;
   total: number;
   page: VndbPage | null;
@@ -237,7 +241,9 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   let confirmed: Extract<VndbCommand, { kind: 'apply' }>[] = [];
   let unknown: VndbCommand | null = null;
   let pendingPreview: Extract<VndbCommand, { kind: 'preview' }> | null = null;
-  let replacementXML: string | null = null;
+  let cleanupCommand: Extract<VndbCommand, { kind: 'delete' }> | null = null;
+  let cleanupDestination: 'upload' | 'removed' = 'removed';
+  let cleanupReceipts: VndbOutcome[] = [];
   let limits: VndbPreview['limits'] | null = null;
   let cancelled = false;
   let stopped: 'cancelled' | 'deadline' | null = null;
@@ -253,6 +259,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     if (!retired && (!visit.current() || sender.subject !== visit.subject || sender.csrfToken !== visit.csrfToken)) {
       retired = true;
       clearForReplacement();
+      cleanupReceipts = [];
     }
     return !retired;
   }
@@ -333,6 +340,9 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
       stage,
       busy: live() && pending > 0,
       notice,
+      cleanupPending: cleanupCommand !== null,
+      replacementPending: pendingPreview !== null,
+      cleanupReceipts,
       uploadId,
       total,
       page,
@@ -377,7 +387,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     confirmed = [];
     unknown = null;
     pendingPreview = null;
-    replacementXML = null;
+    cleanupCommand = null;
     limits = null;
     cancelled = false;
     stopped = null;
@@ -512,7 +522,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     const response = await run(command, () => port.preview(command), { retry });
     if (!response || response.kind !== 'previewed' || !live()) return snapshot();
     pendingPreview = null;
-    replacementXML = null;
+    sourceRetired = false;
     uploadId = response.value.uploadId;
     total = response.value.rows;
     limits = response.value.limits;
@@ -520,29 +530,70 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     return loadPage(0);
   }
 
-  async function preview(xml: string): Promise<VndbJourneySnapshot> {
-    if (!live() || pending > 0 || unknown) return snapshot();
-    const command: Extract<VndbCommand, { kind: 'preview' }> = { kind: 'preview', key: newVndbKey(), xml };
+  function retireForCleanup(): void {
+    const id = uploadId;
+    const receipts = [...outcomes.values()];
+    const references = [...effectReferences.entries()];
+    const unsettled = rows.size ? unappliedEffects([...rows.values()], outcomes) : retiredUnattempted;
     generation += 1;
-    pendingPreview = command;
-    if (uploadId) {
-      const previousUploadId = uploadId;
-      // Replacement retires private review authority before cleanup can fail or lose its acknowledgement.
-      clearForReplacement();
-      uploadId = previousUploadId;
-      sourceRetired = true;
+    clearForReplacement();
+    uploadId = id;
+    sourceRetired = true;
+    cleanupReceipts = receipts.length ? receipts : cleanupReceipts;
+    receipts.forEach((receipt) => outcomes.set(outcomeKey(receipt), receipt));
+    references.forEach(([key, effect]) => effectReferences.set(key, effect));
+    retiredUnattempted = unsettled;
+  }
+
+  function editReplacement(): VndbJourneySnapshot {
+    if (!live()) return snapshot();
+    pendingPreview = null;
+    return snapshot();
+  }
+
+  async function cleanup(retry = false): Promise<VndbJourneySnapshot> {
+    const command = cleanupCommand;
+    if (!command || !live() || pending > 0) return snapshot();
+    const response = await run(command, () => port.delete(command), { retry });
+    if (response?.kind !== 'deleted' || !live()) return snapshot();
+    const next = pendingPreview;
+    const destination = cleanupDestination;
+    const unsettled = retiredUnattempted;
+    const references = [...effectReferences.entries()];
+    clearForReplacement();
+    if (next) return sendPreview(next);
+    cleanupReceipts.forEach((receipt) => outcomes.set(outcomeKey(receipt), receipt));
+    references.forEach(([key, effect]) => effectReferences.set(key, effect));
+    retiredUnattempted = unsettled;
+    stage = destination;
+    return snapshot();
+  }
+
+  async function preview(xml: string): Promise<VndbJourneySnapshot> {
+    if (!live() || (pending > 0 && !cleanupCommand) || (unknown && !cleanupCommand)) return snapshot();
+    if (new TextEncoder().encode(xml).byteLength > VNDB_XML_BYTES) {
+      pendingPreview = null;
+      if (!cleanupCommand) notice = { kind: 'file-too-large' };
+      return snapshot();
+    }
+    const command: Extract<VndbCommand, { kind: 'preview' }> = Object.freeze({
+      kind: 'preview',
+      key: newVndbKey(),
+      xml,
+    });
+    if (cleanupCommand) {
       pendingPreview = command;
-      replacementXML = xml;
-      const remove: Extract<VndbCommand, { kind: 'delete' }> = {
-        kind: 'delete',
-        uploadId,
-        key: newVndbKey(),
-      };
-      const response = await run(remove, () => port.delete(remove));
-      if (!response || response.kind !== 'deleted' || !live()) {
-        return snapshot();
-      }
-      clearForReplacement();
+      cleanupDestination = 'upload';
+      return snapshot();
+    }
+    const id = uploadId;
+    if (id) {
+      retireForCleanup();
+      pendingPreview = command;
+      cleanupDestination = 'upload';
+      cleanupCommand = Object.freeze({ kind: 'delete', uploadId: id, key: newVndbKey() });
+      stage = 'cleanup';
+      return cleanup();
     }
     return sendPreview(command);
   }
@@ -565,17 +616,14 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
 
   function replaceSource(): VndbJourneySnapshot {
     if (!live() || pending > 0 || unknown) return snapshot();
-    const previousUploadId = uploadId;
-    generation += 1;
-    clearForReplacement();
-    uploadId = previousUploadId;
-    sourceRetired = true;
+    retireForCleanup();
     return snapshot();
   }
 
   function retire(): void {
     retired = true;
     clearForReplacement();
+    cleanupReceipts = [];
   }
 
   async function review(
@@ -748,6 +796,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   async function retryUnknown(): Promise<VndbJourneySnapshot> {
+    if (cleanupCommand) return cleanup(true);
     const command = unknown;
     if (!command || !live() || pending > 0) return snapshot();
     if (command.kind === 'preview') return sendPreview(command, true);
@@ -776,23 +825,6 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
         }
       }
       return snapshot();
-    }
-    const response = await run(command, () => port.delete(command), { retry: true });
-    if (response?.kind === 'deleted') {
-      const xml = replacementXML;
-      const next = pendingPreview;
-      const receipts = [...outcomes.values()];
-      const references = [...effectReferences.entries()];
-      const unsettled = rows.size ? unappliedEffects([...rows.values()], outcomes) : retiredUnattempted;
-      clearForReplacement();
-      if (xml === null) {
-        receipts.forEach((receipt) => outcomes.set(outcomeKey(receipt), receipt));
-        references.forEach(([key, effect]) => effectReferences.set(key, effect));
-        retiredUnattempted = unsettled;
-        stage = 'removed';
-        return snapshot();
-      }
-      return sendPreview(next ?? { kind: 'preview', key: newVndbKey(), xml });
     }
     return snapshot();
   }
@@ -831,21 +863,18 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   async function discard(): Promise<VndbJourneySnapshot> {
-    const id = uploadId;
-    if (!id || !live() || pending > 0 || unknown) return snapshot();
-    const command: Extract<VndbCommand, { kind: 'delete' }> = { kind: 'delete', uploadId: id, key: newVndbKey() };
-    const response = await run(command, () => port.delete(command));
-    if (response?.kind === 'deleted' && live()) {
-      const receipts = [...outcomes.values()];
-      const references = [...effectReferences.entries()];
-      const unsettled = rows.size ? unappliedEffects([...rows.values()], outcomes) : retiredUnattempted;
-      clearForReplacement();
-      receipts.forEach((receipt) => outcomes.set(outcomeKey(receipt), receipt));
-      references.forEach(([key, effect]) => effectReferences.set(key, effect));
-      retiredUnattempted = unsettled;
-      stage = 'removed';
+    if (!live()) return snapshot();
+    if (cleanupCommand) {
+      cleanupDestination = 'removed';
+      return editReplacement();
     }
-    return snapshot();
+    const id = uploadId;
+    if (!id || pending > 0 || unknown) return snapshot();
+    retireForCleanup();
+    cleanupCommand = Object.freeze({ kind: 'delete', uploadId: id, key: newVndbKey() });
+    cleanupDestination = 'removed';
+    stage = 'cleanup';
+    return cleanup();
   }
 
   function retryVisibleSource(): Promise<VndbJourneySnapshot> {
@@ -859,6 +888,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
 
   return {
     snapshot,
+    editReplacement,
     preview,
     reopen,
     loadPage,
