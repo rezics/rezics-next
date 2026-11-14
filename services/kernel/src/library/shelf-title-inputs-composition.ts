@@ -10,10 +10,9 @@ type CurrentDecision = { subjectId: string; allowed: boolean };
 type CurrentAccessSession = {
   status: 'current';
   version: string;
-  decide(subjects: readonly string[]): Promise<
-    | { status: 'unavailable' }
-    | { status: 'current'; version: string; decisions: readonly CurrentDecision[] }
-  >;
+  decide(
+    subjects: readonly string[],
+  ): Promise<{ status: 'unavailable' } | { status: 'current'; version: string; decisions: readonly CurrentDecision[] }>;
   currentVersion(): Promise<CurrentVersion>;
 };
 

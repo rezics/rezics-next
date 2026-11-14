@@ -20,10 +20,7 @@ const FENCE_BATCH_SIZE = 100;
 const MAX_FENCE_TUPLES = Math.ceil(SEMANTIC_TITLE_PROVENANCE_MAX_BYTES / 16);
 const languageTag = /^[a-z]{1,8}(?:-[a-z0-9]{1,8})*$(?![\s\S])/i;
 
-type FenceReader = (
-  tuples: readonly SourceFenceTuple[],
-  deadline: number,
-) => Promise<readonly SourceFence[]>;
+type FenceReader = (tuples: readonly SourceFenceTuple[], deadline: number) => Promise<readonly SourceFence[]>;
 
 function tupleKey(tuple: SourceFenceTuple): string {
   return JSON.stringify([tuple.route, tuple.source, tuple.external_id, tuple.field_group]);
@@ -79,7 +76,9 @@ function exactEntries(
       !entry.labels ||
       typeof entry.labels !== 'object' ||
       Array.isArray(entry.labels) ||
-      (entry.originalLanguage !== null && entry.originalLanguage !== undefined && typeof entry.originalLanguage !== 'object')
+      (entry.originalLanguage !== null &&
+        entry.originalLanguage !== undefined &&
+        typeof entry.originalLanguage !== 'object')
     )
       return undefined;
     if (routeOf(entry.subjectId) === null) return undefined;
@@ -182,7 +181,8 @@ export function createContentShelfTitleProvenanceObserver(
             if (tuple === undefined) throw new TypeError('Invalid original-language provenance');
             if (tuple === null || fences.get(tupleKey(tuple)) === false)
               originalLanguage = entry.originalLanguage.value;
-            else if (!fences.has(tupleKey(tuple))) throw new TypeError('Missing original-language source-fence observation');
+            else if (!fences.has(tupleKey(tuple)))
+              throw new TypeError('Missing original-language source-fence observation');
           }
           return {
             subjectId: entry.subjectId,

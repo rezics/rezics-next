@@ -1,5 +1,8 @@
 import { expect, test } from 'bun:test';
-import type { SemanticTitleProvenance, SemanticTitleProvenanceEntry } from '../../src/semantic/adapters/title-inputs-provenance.ts';
+import type {
+  SemanticTitleProvenance,
+  SemanticTitleProvenanceEntry,
+} from '../../src/semantic/adapters/title-inputs-provenance.ts';
 import { createContentShelfTitleProvenanceObserver } from '../../src/content/shelf-title-provenance.ts';
 import { newId } from '../../src/route/route.ts';
 

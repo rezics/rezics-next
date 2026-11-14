@@ -120,10 +120,7 @@ export function composeNativeContentShelfTitleInputs(
   resolveAccess: () => Access,
 ): ContentShelfTitleInputs {
   const titles = createNativeContentShelfTitleProvenanceObserver(pool, routeKey);
-  return composeContentShelfTitleInputs(
-    titles,
-    createNativeContentShelfTitleCurrentAccess(pool, resolveAccess),
-  );
+  return composeContentShelfTitleInputs(titles, createNativeContentShelfTitleCurrentAccess(pool, resolveAccess));
 }
 
 /** Library hosted-reading save/get consume this Content mapper. Kernel supplies live hosted deps. */

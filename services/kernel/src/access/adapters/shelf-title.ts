@@ -35,19 +35,15 @@ export function contentShelfTitleAccessBasis(rows: readonly ContentShelfTitleAut
 
 async function readAccessBasis(pool: Pool, deadline: number) {
   return within(deadline, () =>
-    withBoundedReadOnlyTransaction(
-      pool,
-      deadline,
-      async (client) => {
-        requireAccessDeadline(deadline);
-        const { rows } = await deadlineClient(client, deadline).query<ContentShelfTitleAuthorityRow>(
-          `SELECT home_no AS "homeNo",generation::text,epoch::text
+    withBoundedReadOnlyTransaction(pool, deadline, async (client) => {
+      requireAccessDeadline(deadline);
+      const { rows } = await deadlineClient(client, deadline).query<ContentShelfTitleAuthorityRow>(
+        `SELECT home_no AS "homeNo",generation::text,epoch::text
            FROM core.publication_authority_epoch ORDER BY home_no`,
-        );
-        const version = contentShelfTitleAccessBasis(rows);
-        return version ? { status: 'current' as const, version } : unavailable;
-      },
-    ),
+      );
+      const version = contentShelfTitleAccessBasis(rows);
+      return version ? { status: 'current' as const, version } : unavailable;
+    }),
   );
 }
 
@@ -72,11 +68,7 @@ export function createNativeContentShelfTitleCurrentAccess(
         const access = resolveAccess();
         const start = await readAccessBasis(pool, deadline);
         if (start.status !== 'current') return unavailable;
-        const time = await withBoundedReadOnlyTransaction(
-          pool,
-          deadline,
-          (client) => mintReadTime(client),
-        );
+        const time = await withBoundedReadOnlyTransaction(pool, deadline, (client) => mintReadTime(client));
 
         const prepare = () =>
           prepareReadDecisions(access, {
