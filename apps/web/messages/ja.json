@@ -12897,5 +12897,20 @@
   "library_import_retained": "保持中のアップロードと再開情報",
   "library_import_review_help": "続行前に各項目を確認してください。ラベルには個別の確認と確定が必要です。",
   "library_import_reopen_help": "この識別子を控えると、この提供元のアップロード画面から保持中のデータを再度開けます。",
-  "library_import_retained_page": "このページには保存済みの項目が{shown}件あります。"
+  "library_import_retained_page": "このページには保存済みの項目が{shown}件あります。",
+  "library_archive_recovery_receiving_title": "現在の復元先コレクション",
+  "library_archive_recovery_receiving_scope": "現在のコレクションを1ページ、最大{limit}件のメンバーまで表示します。復元結果とは別の情報です。順序はこのネイティブページ内のものだけを示します。",
+  "library_archive_recovery_receiving_loading": "指定したコレクションのページを読み込んでいます…",
+  "library_archive_recovery_receiving_denied": "このコレクションを読む権限がありません。復元結果は引き続き確認できます。",
+  "library_archive_recovery_receiving_missing": "このコレクションが見つかりません。復元結果は引き続き確認できます。",
+  "library_archive_recovery_receiving_stale": "このコレクションのページアドレスは受け付けられなくなりました。再試行するか、最初のページに戻ってください。",
+  "library_archive_recovery_receiving_unavailable": "指定したコレクションのページを読み込めません。同じページを再試行するか、最初のページに戻ってください。",
+  "library_archive_recovery_receiving_previous_displayed": "前に読み込んだページを表示しています。読み込みの失敗によって表示位置は変わっていません。",
+  "library_archive_recovery_receiving_shown": "このページのメンバーは{count}件です。",
+  "library_archive_recovery_receiving_members": "現在のコレクションページのメンバー",
+  "library_archive_recovery_receiving_sparse": "このページにメンバーはいません。「次へ」で返された続きのページを読み込めます。コレクション全体が空という意味ではありません。",
+  "library_archive_recovery_receiving_empty": "このページにメンバーはなく、続きのページも返されていません。",
+  "library_archive_recovery_receiving_navigation": "復元先コレクションのページ",
+  "library_archive_recovery_receiving_next": "コレクションの次のページ",
+  "library_archive_recovery_receiving_retry": "指定したコレクションのページを再試行"
 }

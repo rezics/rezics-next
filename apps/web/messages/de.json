@@ -12897,5 +12897,20 @@
   "library_import_retained": "Aufbewahrter Upload und erneutes Öffnen",
   "library_import_review_help": "Prüfe jeden Eintrag, bevor du fortfährst. Labels werden separat geprüft und bestätigt.",
   "library_import_reopen_help": "Bewahre diese Kennung auf, um den gespeicherten Upload auf der Uploadseite dieses Anbieters erneut zu öffnen.",
-  "library_import_retained_page": "Auf dieser Seite werden {shown} gespeicherte Einträge angezeigt."
+  "library_import_retained_page": "Auf dieser Seite werden {shown} gespeicherte Einträge angezeigt.",
+  "library_archive_recovery_receiving_title": "Aktuelle Ziel-Collection",
+  "library_archive_recovery_receiving_scope": "Eine aktuelle Collection-Seite mit bis zu {limit} Mitgliedern. Wiederherstellungsergebnisse sind separat; die Reihenfolge gilt nur innerhalb dieser nativen Seite.",
+  "library_archive_recovery_receiving_loading": "Die angeforderte Collection-Seite wird gelesen…",
+  "library_archive_recovery_receiving_denied": "Du darfst diese Collection nicht lesen. Die Wiederherstellungsergebnisse bleiben verfügbar.",
+  "library_archive_recovery_receiving_missing": "Diese Collection wurde nicht gefunden. Die Wiederherstellungsergebnisse bleiben verfügbar.",
+  "library_archive_recovery_receiving_stale": "Diese Collection-Seitenadresse wird nicht mehr akzeptiert. Versuche es erneut oder gehe zur ersten Seite.",
+  "library_archive_recovery_receiving_unavailable": "Die angeforderte Collection-Seite ist nicht verfügbar. Lies dieselbe Seite erneut oder gehe zur ersten Seite.",
+  "library_archive_recovery_receiving_previous_displayed": "Die zuvor gelesene Seite wird weiter angezeigt. Die fehlgeschlagene Anfrage hat deine Position nicht verändert.",
+  "library_archive_recovery_receiving_shown": "{count} Mitglieder auf dieser Seite.",
+  "library_archive_recovery_receiving_members": "Mitglieder auf der aktuellen Collection-Seite",
+  "library_archive_recovery_receiving_sparse": "Keine Mitglieder auf dieser Seite. Weiter liest die gelieferte Fortsetzung; die Collection kann trotzdem Mitglieder enthalten.",
+  "library_archive_recovery_receiving_empty": "Keine Mitglieder auf dieser Seite; es wurde keine Fortsetzung geliefert.",
+  "library_archive_recovery_receiving_navigation": "Seiten der Ziel-Collection",
+  "library_archive_recovery_receiving_next": "Nächste Collection-Seite",
+  "library_archive_recovery_receiving_retry": "Angeforderte Collection-Seite erneut lesen"
 }

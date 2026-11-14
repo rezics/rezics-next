@@ -51,7 +51,7 @@ const productionPort: RecoveryPort = {
   },
   async receivingCollection(collectionId, cursor) {
     const { readReceivingCollection } = await import('./server');
-    return readReceivingCollection({ data: { collectionId, ...(cursor ? { cursor } : {}) } });
+    return readReceivingCollection({ data: { collectionId, ...(cursor !== undefined ? { cursor } : {}) } });
   },
 };
 

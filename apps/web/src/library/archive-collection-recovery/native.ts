@@ -186,9 +186,10 @@ export function kernelArchiveCollectionRecoveryPort(
           });
           if (collection.error) return collection;
           const members = await client.collections({ collectionId: id }).members.get({
-            query: cursor
-              ? { view: 'FULL', limit: RECEIVING_COLLECTION_PAGE, cursor }
-              : { view: 'FULL', limit: RECEIVING_COLLECTION_PAGE },
+            query:
+              cursor !== undefined
+                ? { view: 'FULL', limit: RECEIVING_COLLECTION_PAGE, cursor }
+                : { view: 'FULL', limit: RECEIVING_COLLECTION_PAGE },
             headers,
           });
           if (members.error) return members;

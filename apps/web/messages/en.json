@@ -12904,5 +12904,20 @@
   "library_import_retained": "Retained upload and reopen details",
   "library_import_review_help": "Review each item before continuing. Labels use their own review and confirmation.",
   "library_import_reopen_help": "Keep this identifier to reopen your retained upload through this provider’s upload page.",
-  "library_import_retained_page": "Showing {shown} retained items on this page."
+  "library_import_retained_page": "Showing {shown} retained items on this page.",
+  "library_archive_recovery_receiving_title": "Current receiving Collection",
+  "library_archive_recovery_receiving_scope": "One current Collection page, up to {limit} members. Recovery outcomes are separate; member order is shown only within this native page.",
+  "library_archive_recovery_receiving_loading": "Reading the requested Collection page…",
+  "library_archive_recovery_receiving_denied": "You do not have access to read this Collection. Recovery outcomes remain available.",
+  "library_archive_recovery_receiving_missing": "This Collection could not be found. Recovery outcomes remain available.",
+  "library_archive_recovery_receiving_stale": "This Collection page address is no longer accepted. Retry it or return to First.",
+  "library_archive_recovery_receiving_unavailable": "The requested Collection page is unavailable. Retry the same page or return to First.",
+  "library_archive_recovery_receiving_previous_displayed": "The previously read page is still displayed. The failed request has not moved your position.",
+  "library_archive_recovery_receiving_shown": "{count} members on this page.",
+  "library_archive_recovery_receiving_members": "Members on the current Collection page",
+  "library_archive_recovery_receiving_sparse": "No members on this page. Next reads the supplied continuation; this does not mean the Collection is empty.",
+  "library_archive_recovery_receiving_empty": "No members on this page, and no continuation was supplied.",
+  "library_archive_recovery_receiving_navigation": "Receiving Collection pages",
+  "library_archive_recovery_receiving_next": "Next Collection page",
+  "library_archive_recovery_receiving_retry": "Retry requested Collection page"
 }

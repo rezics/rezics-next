@@ -12897,5 +12897,20 @@
   "library_import_retained": "보관된 업로드 및 다시 열기 정보",
   "library_import_review_help": "계속하기 전에 각 항목을 검토하세요. 레이블은 별도로 검토하고 확인합니다.",
   "library_import_reopen_help": "이 식별자를 보관하면 해당 제공자의 업로드 페이지에서 보관된 업로드를 다시 열 수 있습니다.",
-  "library_import_retained_page": "이 페이지에 보관된 항목 {shown}개를 표시합니다."
+  "library_import_retained_page": "이 페이지에 보관된 항목 {shown}개를 표시합니다.",
+  "library_archive_recovery_receiving_title": "현재 복원 대상 컬렉션",
+  "library_archive_recovery_receiving_scope": "현재 컬렉션의 한 페이지에 멤버를 최대 {limit}개 표시합니다. 복구 결과와는 별개이며, 순서는 이 네이티브 페이지 안에서만 표시됩니다.",
+  "library_archive_recovery_receiving_loading": "요청한 컬렉션 페이지를 읽는 중…",
+  "library_archive_recovery_receiving_denied": "이 컬렉션을 읽을 권한이 없습니다. 복구 결과는 계속 확인할 수 있습니다.",
+  "library_archive_recovery_receiving_missing": "이 컬렉션을 찾을 수 없습니다. 복구 결과는 계속 확인할 수 있습니다.",
+  "library_archive_recovery_receiving_stale": "이 컬렉션 페이지 주소는 더 이상 허용되지 않습니다. 다시 시도하거나 첫 페이지로 돌아가세요.",
+  "library_archive_recovery_receiving_unavailable": "요청한 컬렉션 페이지를 읽을 수 없습니다. 같은 페이지를 다시 시도하거나 첫 페이지로 돌아가세요.",
+  "library_archive_recovery_receiving_previous_displayed": "이전에 읽은 페이지가 계속 표시됩니다. 요청 실패로 표시 위치가 바뀌지는 않았습니다.",
+  "library_archive_recovery_receiving_shown": "이 페이지의 멤버 {count}개.",
+  "library_archive_recovery_receiving_members": "현재 컬렉션 페이지의 멤버",
+  "library_archive_recovery_receiving_sparse": "이 페이지에는 멤버가 없습니다. 다음을 누르면 제공된 다음 페이지를 읽습니다. 컬렉션 전체가 비었다는 뜻은 아닙니다.",
+  "library_archive_recovery_receiving_empty": "이 페이지에는 멤버가 없으며 다음 페이지도 제공되지 않았습니다.",
+  "library_archive_recovery_receiving_navigation": "복원 대상 컬렉션 페이지",
+  "library_archive_recovery_receiving_next": "다음 컬렉션 페이지",
+  "library_archive_recovery_receiving_retry": "요청한 컬렉션 페이지 다시 시도"
 }

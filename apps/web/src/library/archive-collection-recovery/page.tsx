@@ -119,27 +119,37 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
 
   function moveReader(
     event: MouseEvent<HTMLButtonElement>,
-    reader: RecoveryReader,
+    reader: RecoveryReader | 'receiving',
     revision: number,
     headingId: string,
-    action: Promise<void>,
+    action: () => Promise<void>,
   ) {
-    if (event.detail !== 0 || document.activeElement !== event.currentTarget) {
-      touch(action);
+    movementFocus.current?.cancel();
+    movementFocus.current = null;
+    const trigger = event.currentTarget;
+    if (event.detail !== 0 || document.activeElement !== trigger) {
+      touch(action());
       return;
     }
-    movementFocus.current?.cancel();
     let cancelled = false;
+    const release = () => {
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', cancel, true);
+    };
     const cancel = () => {
       cancelled = true;
-      document.removeEventListener('focusin', onFocusIn, true);
+      release();
     };
-    const onFocusIn = () => cancel();
     const request = { cancel };
     movementFocus.current = request;
-    document.addEventListener('focusin', onFocusIn, true);
-    void action.then(() => {
-      document.removeEventListener('focusin', onFocusIn, true);
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', cancel, true);
+    const pending = action();
+    const admitted = journey.snapshot().receivingWindow;
+    void pending.then(() => {
+      release();
       if (movementFocus.current === request) movementFocus.current = null;
       const current = journey.snapshot();
       const nextRevision =
@@ -147,11 +157,27 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           ? current.collectionsWindow.revision
           : reader === 'occurrences'
             ? current.occurrencesWindow.revision
-            : current.outcomesWindow.revision;
+            : reader === 'receiving'
+              ? current.receivingWindow.revision
+              : current.outcomesWindow.revision;
       const nextStage = reader === 'collections' ? 'collections' : reader === 'occurrences' ? 'occurrences' : 'results';
-      if (cancelled || !visit.current() || current.stage !== nextStage || nextRevision <= revision) return;
+      const readbackRetired =
+        reader === 'receiving' &&
+        (current.receivingWindow.lifetime !== admitted.lifetime ||
+          current.receivingWindow.request !== admitted.request ||
+          current.receivingWindow.loading ||
+          current.receivingWindow.failure !== null);
+      if (
+        cancelled ||
+        !visit.current() ||
+        current.stage !== nextStage ||
+        nextRevision <= revision ||
+        readbackRetired ||
+        (document.activeElement !== trigger && document.activeElement !== document.body)
+      )
+        return;
       document.getElementById(headingId)?.focus();
-    });
+    }).finally(release);
   }
 
   bindArchiveCustodyOwner(visit.subject);
@@ -245,7 +271,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
               'collections',
               snapshot.collectionsWindow.revision,
               'recovery-collections-title',
-              journey.loadCollections(),
+              () => journey.loadCollections(),
             )
           }
           onPrevious={(event) =>
@@ -254,7 +280,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
               'collections',
               snapshot.collectionsWindow.revision,
               'recovery-collections-title',
-              journey.previousCollections(),
+              () => journey.previousCollections(),
             )
           }
           onNext={(cursor, event) =>
@@ -263,7 +289,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
               'collections',
               snapshot.collectionsWindow.revision,
               'recovery-collections-title',
-              journey.loadCollections(cursor),
+              () => journey.loadCollections(cursor),
             )
           }
         />
@@ -284,7 +310,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
               'occurrences',
               snapshot.occurrencesWindow.revision,
               'recovery-occurrences-title',
-              journey.loadOccurrences(cursor),
+              () => journey.loadOccurrences(cursor),
             )
           }
           onFirst={(event) =>
@@ -293,7 +319,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
               'occurrences',
               snapshot.occurrencesWindow.revision,
               'recovery-occurrences-title',
-              journey.loadOccurrences(),
+              () => journey.loadOccurrences(),
             )
           }
           onPrevious={(event) =>
@@ -302,7 +328,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
               'occurrences',
               snapshot.occurrencesWindow.revision,
               'recovery-occurrences-title',
-              journey.previousOccurrences(),
+              () => journey.previousOccurrences(),
             )
           }
           onCollections={() => touch(journey.loadCollections())}
@@ -359,7 +385,26 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
             receiving={snapshot.receiving}
             busy={snapshot.busy || locked || Boolean(snapshot.readRetry)}
             canPrevious={snapshot.outcomesWindow.canPrevious}
-            onReadCollection={(cursor) => touch(journey.readReceivingCollection(cursor))}
+            receivingWindow={snapshot.receivingWindow}
+            receivingBusy={snapshot.busy}
+            receivingActions={{
+              onFirst: (event) =>
+                moveReader(event, 'receiving', snapshot.receivingWindow.revision, 'recovery-receiving-title', () =>
+                  journey.readReceivingCollection(),
+                ),
+              onPrevious: (event) =>
+                moveReader(event, 'receiving', snapshot.receivingWindow.revision, 'recovery-receiving-title', () =>
+                  journey.previousReceivingCollection(),
+                ),
+              onNext: (cursor, event) =>
+                moveReader(event, 'receiving', snapshot.receivingWindow.revision, 'recovery-receiving-title', () =>
+                  journey.readReceivingCollection(cursor),
+                ),
+              onRetry: (event) =>
+                moveReader(event, 'receiving', snapshot.receivingWindow.revision, 'recovery-receiving-title', () =>
+                  journey.retryReceivingCollection(),
+                ),
+            }}
             onRead={() => touch(journey.loadOutcomes())}
             onFirst={(event) =>
               moveReader(
@@ -367,7 +412,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
                 'outcomes',
                 snapshot.outcomesWindow.revision,
                 'recovery-results-title',
-                journey.loadOutcomes(),
+                () => journey.loadOutcomes(),
               )
             }
             onPrevious={(event) =>
@@ -376,7 +421,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
                 'outcomes',
                 snapshot.outcomesWindow.revision,
                 'recovery-results-title',
-                journey.previousOutcomes(),
+                () => journey.previousOutcomes(),
               )
             }
             onNext={(cursor, event) =>
@@ -385,7 +430,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
                 'outcomes',
                 snapshot.outcomesWindow.revision,
                 'recovery-results-title',
-                journey.loadOutcomes(cursor),
+                () => journey.loadOutcomes(cursor),
               )
             }
           />

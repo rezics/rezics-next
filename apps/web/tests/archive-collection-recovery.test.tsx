@@ -19,6 +19,8 @@ import {
 } from '../src/library/archive-collection-recovery/contract';
 import type { CollectionTypeOption } from '../src/library/collection-presentation';
 import { makeReviewBody } from '../src/library/archive-collection-recovery/selection';
+import type { ReceivingCollectionReadback } from '../src/library/archive-collection-recovery/readback';
+import { emptyReceivingReadWindow } from '../src/library/archive-collection-recovery/receiving-window';
 import type { RecoveryVisit } from '../src/library/archive-collection-recovery/visit';
 import {
   commitRecoveryRead,
@@ -980,8 +982,10 @@ test('another account is refused at the restored Collection reader', async () =>
     await journey.reviewSelection();
     await journey.apply();
     await journey.readReceivingCollection();
-    expect(journey.snapshot().stage).toBe('denied');
-    expect(journey.snapshot().notice).toEqual({ kind: 'denied' });
+    expect(journey.snapshot().stage).toBe('results');
+    expect(journey.snapshot().notice).toBeNull();
+    expect(journey.snapshot().receivingWindow.failure).toBe('denied');
+    expect(journey.snapshot().outcomesPage).not.toBeNull();
     expect(journey.snapshot().receiving).toBeNull();
   } finally {
     journey.retire();
@@ -1171,7 +1175,9 @@ test('presentation outcomes stay separate from complete membership in all four n
             onFirst: () => {},
             onPrevious: () => {},
             onNext: () => {},
-            onReadCollection: () => {},
+            receivingWindow: emptyReceivingReadWindow(),
+            receivingBusy: false,
+            receivingActions: { onFirst: () => {}, onPrevious: () => {}, onNext: () => {}, onRetry: () => {} },
           }),
         ),
       );
@@ -1272,3 +1278,228 @@ afterAll(async () => {
   }
   await window.happyDOM.abort();
 });
+
+function receivingPage(
+  title = 'Current native page',
+  next: string | null = null,
+  members: ReceivingCollectionReadback['members'] = [],
+  id = receivingCollectionId,
+): ReceivingCollectionReadback {
+  return {
+    id, title, next, members,
+    visibility: 'private', presentationKind: null, presentationKindSource: 'mixed', memberCount: 400,
+  };
+}
+
+async function appliedJourney(fake = fakePort()) {
+  const { createArchiveCollectionRecoveryJourney } =
+    await import('../src/library/archive-collection-recovery/controller');
+  const journey = createArchiveCollectionRecoveryJourney({ port: fake.port, visit: visit() });
+  await journey.upload('e30=');
+  await journey.chooseCollection(collection);
+  journey.setSelection(new Map([[occurrenceOne, firstOccurrence]]));
+  journey.setTarget(subjectId, target);
+  journey.prepareReview();
+  await journey.reviewSelection();
+  await journey.apply();
+  return journey;
+}
+
+function deferredReceiving() {
+  let finish!: (result: Awaited<ReturnType<RecoveryPort['receivingCollection']>>) => void;
+  const promise = new Promise<Awaited<ReturnType<RecoveryPort['receivingCollection']>>>((resolve) => {
+    finish = resolve;
+  });
+  return { promise, finish };
+}
+
+test('three Collection addresses, sparse continuation and exact retry keep the outcome frontier and sealed review independent', async () => {
+  const fake = fakePort();
+  const second = 'native/second?opaque=+%2F';
+  const third = 'native/third==#unchanged';
+  const pages = new Map<string | undefined, ReceivingCollectionReadback>([
+    [undefined, receivingPage('First native page', second)],
+    [second, receivingPage('Sparse native page', third)],
+    [third, receivingPage('Last native page')],
+  ]);
+  let failed = false;
+  fake.port.receivingCollection = async (id, cursor) => {
+    fake.calls.readbacks.push({ id, cursor });
+    if (cursor === third && !failed) {
+      failed = true;
+      return { kind: 'unavailable' };
+    }
+    return { kind: 'ok', value: pages.get(cursor)! };
+  };
+  const journey = await appliedJourney(fake);
+  try {
+    await journey.loadOutcomes('native/outcome-frontier');
+    const before = journey.snapshot();
+    await journey.readReceivingCollection();
+    await journey.readReceivingCollection(second);
+    expect(journey.snapshot().receivingWindow).toMatchObject({
+      displayed: { collectionId: receivingCollectionId, cursor: second }, previous: [null],
+    });
+    await journey.readReceivingCollection(third);
+    expect(journey.snapshot()).toMatchObject({
+      receiving: { title: 'Sparse native page', members: [], next: third },
+      receivingWindow: { displayed: { cursor: second }, requested: { cursor: third }, failure: 'unavailable', previous: [null] },
+    });
+    await journey.retryReceivingCollection();
+    expect(journey.snapshot().receivingWindow).toMatchObject({
+      displayed: { cursor: third }, requested: null, failure: null, previous: [null, second],
+    });
+    await journey.previousReceivingCollection();
+    await journey.previousReceivingCollection();
+    await journey.readReceivingCollection();
+    expect(fake.calls.readbacks).toEqual(
+      [undefined, second, third, third, second, undefined, undefined].map((cursor) => ({ id: receivingCollectionId, cursor })),
+    );
+    expect(journey.snapshot().outcomesWindow).toEqual(before.outcomesWindow);
+    expect(journey.snapshot().outcomesPage).toBe(before.outcomesPage);
+    expect(journey.snapshot().review).toBe(before.review);
+    expect(journey.snapshot().notice).toBe(before.notice);
+    expect(fake.calls.applies).toHaveLength(1);
+    expect(fake.calls.outcomes).toHaveLength(2);
+    const reading = journey.snapshot().receivingWindow;
+    await journey.previousOutcomes();
+    expect(journey.snapshot().receivingWindow).toBe(reading);
+  } finally {
+    journey.retire();
+  }
+});
+
+test('Collection Back retains only eight observed predecessors and First rereads its explicit address', async () => {
+  const fake = fakePort();
+  fake.port.receivingCollection = async (id, cursor) => {
+    fake.calls.readbacks.push({ id, cursor });
+    return { kind: 'ok', value: receivingPage() };
+  };
+  const journey = await appliedJourney(fake);
+  try {
+    await journey.readReceivingCollection();
+    for (let index = 1; index <= 12; index++) await journey.readReceivingCollection(`opaque-${index}`);
+    expect(journey.snapshot().receivingWindow.previous).toEqual(
+      Array.from({ length: 8 }, (_, index) => `opaque-${index + 4}`),
+    );
+    for (let index = 0; index < 8; index++) await journey.previousReceivingCollection();
+    expect(journey.snapshot().receivingWindow).toMatchObject({ displayed: { cursor: 'opaque-4' }, previous: [] });
+    const reads = fake.calls.readbacks.length;
+    await journey.previousReceivingCollection();
+    expect(fake.calls.readbacks).toHaveLength(reads);
+    await journey.readReceivingCollection();
+    expect(journey.snapshot().receivingWindow).toMatchObject({ displayed: { cursor: null }, previous: [] });
+    expect(fake.calls.readbacks.at(-1)).toEqual({ id: receivingCollectionId, cursor: undefined });
+  } finally {
+    journey.retire();
+  }
+});
+
+test('destination replacement retires coordinates and late responses; a newer same-Collection reading wins', async () => {
+  const fake = fakePort();
+  const pending = deferredReceiving();
+  fake.port.receivingCollection = () => pending.promise;
+  const journey = await appliedJourney(fake);
+  try {
+    const old = journey.readReceivingCollection();
+    const replacement = '00000000-0000-4000-8000-000000000099';
+    fake.port.status = async () => ({ kind: 'ok', value: status('partial', { collectionId: replacement }) });
+    await journey.readStatus();
+    expect(journey.snapshot().receivingWindow).toMatchObject({ displayed: null, requested: null, previous: [] });
+    const newer = deferredReceiving();
+    fake.port.receivingCollection = () => newer.promise;
+    const superseded = journey.readReceivingCollection();
+    fake.port.receivingCollection = async (id) => ({ kind: 'ok', value: receivingPage('Latest page', null, [], id) });
+    await journey.readReceivingCollection();
+    newer.finish({ kind: 'ok', value: receivingPage('Superseded page', null, [], replacement) });
+    pending.finish({ kind: 'ok', value: receivingPage('Retired destination page') });
+    await Promise.all([old, superseded]);
+    expect(journey.snapshot()).toMatchObject({
+      receiving: { id: replacement, title: 'Latest page' },
+      receivingWindow: { displayed: { collectionId: replacement, cursor: null }, revision: 1, request: 2 },
+    });
+    // The old outcome page cannot redirect a read to the former destination.
+    expect(journey.snapshot().outcomesPage?.collection?.id).toBe(receivingCollectionId);
+  } finally {
+    journey.retire();
+  }
+});
+
+test.each(['restart', 'expire', 'retire'] as const)('%s retires a pending Collection address and ignores its response', async (boundary) => {
+  const fake = fakePort();
+  const pending = deferredReceiving();
+  fake.port.receivingCollection = () => pending.promise;
+  const journey = await appliedJourney(fake);
+  try {
+    const reading = journey.readReceivingCollection('retired/native-address');
+    journey[boundary]();
+    pending.finish({ kind: 'ok', value: receivingPage('Retired page') });
+    await reading;
+    expect(journey.snapshot()).toMatchObject({
+      receiving: null, receivingWindow: { displayed: null, requested: null, previous: [], loading: false },
+    });
+  } finally {
+    journey.retire();
+  }
+});
+
+test('Collection denial and reads preserve an original uncertain apply command for its own exact retry', async () => {
+  const fake = fakePort();
+  const journey = await appliedJourney(fake);
+  const apply = fake.port.apply;
+  fake.port.apply = async (command) => {
+    fake.calls.applies.push(structuredClone(command));
+    return { kind: 'unknown', command };
+  };
+  fake.port.receivingCollection = async () => ({ kind: 'denied' });
+  try {
+    await journey.continueApply();
+    const uncertain = journey.snapshot().notice;
+    const review = journey.snapshot().review;
+    await journey.readReceivingCollection();
+    expect(journey.snapshot()).toMatchObject({ stage: 'results', receivingWindow: { failure: 'denied' } });
+    expect(journey.snapshot().notice).toEqual(uncertain);
+    expect(journey.snapshot().review).toBe(review);
+    expect(fake.calls.applies).toHaveLength(2);
+    fake.port.apply = apply;
+    await journey.retryUnknown();
+    expect(fake.calls.applies[2]).toEqual(fake.calls.applies[1]);
+  } finally {
+    journey.retire();
+  }
+});
+
+test.each(['keyboard', 'moved-focus', 'pointer', 'replacement'] as const)(
+  'Collection reading recovers focus only for a current, unmoved keyboard request: %s',
+  async (mode) => {
+    const fake = fakePort();
+    const pending = deferredReceiving();
+    fake.port.receivingCollection = () => pending.promise;
+    const view = await mount(fake.port);
+    try {
+      await openPresentationReview(view.host);
+      await chooseCurrentTarget(view.host);
+      await click(button(view.host, m.library_archive_recovery_review_action()));
+      await click(view.host.querySelector('input[type=checkbox]')!);
+      await click(button(view.host, m.library_archive_recovery_apply_action()));
+      const trigger = button(view.host, m.library_archive_recovery_read_collection());
+      if (mode === 'pointer') {
+        trigger.focus();
+        await act(async () => {
+          trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 }));
+        });
+      } else await keyboardClick(trigger);
+      const returnLink = view.host.querySelector<HTMLAnchorElement>('a[href$="/library"]')!;
+      if (mode === 'moved-focus') returnLink.focus();
+      if (mode === 'replacement') await view.replaceVisit(visit('viewer-b', 'epoch-b'));
+      await act(async () => pending.finish({ kind: 'ok', value: receivingPage('New native page') }));
+      const heading = view.host.querySelector('#recovery-receiving-title');
+      if (mode === 'keyboard') expect(window.document.activeElement).toBe(heading);
+      else if (mode === 'moved-focus') expect(window.document.activeElement).toBe(returnLink);
+      else if (mode === 'replacement') expect(heading).toBeNull();
+      else expect(window.document.activeElement).not.toBe(heading);
+    } finally {
+      await view.close();
+    }
+  },
+);

@@ -154,9 +154,13 @@ test('native binding forwards the explicit review and replays only the original 
 test.each(['owner', 'mixed'] as const)(
   'Collection readback projects the current %s presentation independently of archive outcomes',
   async (source) => {
+    const reads: URL[] = [];
     const client = createKernelClient('https://kernel.test', {
       fetch: (async (input, init) => {
-        const url = new URL(new Request(input, init).url);
+        const request = new Request(input, init);
+        const url = new URL(request.url);
+        reads.push(url);
+        expect(request.headers.get('authorization')).toBe('Bearer current-viewer');
         return Response.json(
           url.pathname.endsWith('/members')
             ? {
@@ -197,5 +201,18 @@ test.each(['owner', 'mixed'] as const)(
         members: [{ note: 'Same occurrence note' }],
       },
     });
+    for (const cursor of ['opaque/+?==%2F', '']) {
+      expect(await port.receivingCollection(uploadId, cursor)).toMatchObject({ kind: 'ok' });
+      const members = reads.at(-1)!;
+      expect(members.pathname.endsWith('/members')).toBe(true);
+      expect(members.searchParams.get('cursor')).toBe(cursor);
+    }
+    expect(reads).toHaveLength(6);
+    expect(reads[1]!.searchParams.has('cursor')).toBe(false);
+    for (let index = 0; index < reads.length; index += 2) {
+      expect(reads[index]!.pathname.endsWith('/members')).toBe(false);
+      expect(reads[index + 1]!.searchParams.get('limit')).toBe('100');
+      expect(reads[index + 1]!.searchParams.get('view')).toBe('FULL');
+    }
   },
 );

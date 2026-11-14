@@ -12897,5 +12897,20 @@
   "library_import_retained": "保留的上傳與重新開啟資訊",
   "library_import_review_help": "繼續前請逐項核對。標籤使用獨立的核對與確認。",
   "library_import_reopen_help": "請保留此識別碼，以便在此提供方的上傳頁重新開啟保留檔案。",
-  "library_import_retained_page": "此頁顯示 {shown} 個保留的項目。"
+  "library_import_retained_page": "此頁顯示 {shown} 個保留的項目。",
+  "library_archive_recovery_receiving_title": "目前接收還原內容的 Collection",
+  "library_archive_recovery_receiving_scope": "顯示目前 Collection 的一頁，最多 {limit} 個成員。還原結果獨立保留；順序僅表示此原生頁面內的順序。",
+  "library_archive_recovery_receiving_loading": "正在讀取要求的 Collection 頁面…",
+  "library_archive_recovery_receiving_denied": "你沒有讀取此 Collection 的權限。還原結果仍可查看。",
+  "library_archive_recovery_receiving_missing": "找不到此 Collection。還原結果仍可查看。",
+  "library_archive_recovery_receiving_stale": "此 Collection 頁面位址已不再被接受。請重試或返回第一頁。",
+  "library_archive_recovery_receiving_unavailable": "要求的 Collection 頁面暫時無法使用。請重試同一頁或返回第一頁。",
+  "library_archive_recovery_receiving_previous_displayed": "仍顯示先前讀取的頁面。要求失敗沒有改變目前顯示的位置。",
+  "library_archive_recovery_receiving_shown": "本頁有 {count} 個成員。",
+  "library_archive_recovery_receiving_members": "目前 Collection 頁面的成員",
+  "library_archive_recovery_receiving_sparse": "本頁沒有成員。下一頁會讀取服務傳回的後續頁面；這不代表整個 Collection 為空。",
+  "library_archive_recovery_receiving_empty": "本頁沒有成員，且服務未傳回後續頁面。",
+  "library_archive_recovery_receiving_navigation": "還原目標 Collection 的頁面",
+  "library_archive_recovery_receiving_next": "Collection 下一頁",
+  "library_archive_recovery_receiving_retry": "重試要求的 Collection 頁面"
 }

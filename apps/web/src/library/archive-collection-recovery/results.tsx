@@ -6,6 +6,8 @@ import { EvidenceDetails } from '../archive-progress-recovery/review';
 import { actionClass } from '../private-export/controls';
 import type { RecoveryOutcomesPage, RecoveryStatus } from './contract';
 import type { ReceivingCollectionReadback } from './readback';
+import { ArchiveReceivingCollection, type ReceivingCollectionActions } from './receiving';
+import type { ReceivingReadWindow } from './receiving-window';
 import { RecoveryPresentationOutcome } from './presentation';
 
 function stateText(state: string): string {
@@ -163,7 +165,9 @@ export function ArchiveRecoveryResults({
   onFirst,
   onPrevious,
   onNext,
-  onReadCollection,
+  receivingWindow,
+  receivingBusy,
+  receivingActions,
   targets,
   sourceTitle,
 }: {
@@ -178,9 +182,11 @@ export function ArchiveRecoveryResults({
   onFirst: (event: MouseEvent<HTMLButtonElement>) => void;
   onPrevious: (event: MouseEvent<HTMLButtonElement>) => void;
   onNext: (cursor: string, event: MouseEvent<HTMLButtonElement>) => void;
-  onReadCollection: (cursor?: string) => void;
+  receivingWindow: ReceivingReadWindow;
+  receivingBusy: boolean;
+  receivingActions: ReceivingCollectionActions;
 }) {
-  const collectionId = page?.collection?.id ?? status.collectionId;
+  const collectionId = status.collectionId;
   const state = status.state;
   const titles = new Map<string, string>([...(targets?.values() ?? [])].map((target) => [target.id, target.title]));
   const targetTitle = (id: string | null) => (id ? titles.get(id) : undefined);
@@ -216,61 +222,21 @@ export function ArchiveRecoveryResults({
         </p>
         <RecoveryPresentationOutcome presentation={status.presentation} />
         {collectionId ? (
-          <>
-            <a
-              className={`${actionClass} inline-flex w-fit items-center underline`}
-              href={localizeHref(`/collections/${collectionId}`)}
-            >
-              {m.library_archive_recovery_open_collection()}
-            </a>
-            <button className={actionClass} type="button" disabled={busy} onClick={() => onReadCollection()}>
-              {m.library_archive_recovery_read_collection()}
-            </button>
-          </>
+          <a
+            className={`${actionClass} inline-flex w-fit items-center underline`}
+            href={localizeHref(`/collections/${collectionId}`)}
+          >
+            {m.library_archive_recovery_open_collection()}
+          </a>
         ) : null}
-        {receiving ? (
-          <section className="grid gap-3 rounded-lg border p-4" data-receiving-collection={receiving.id}>
-            <h3 className="font-semibold">{receiving.title}</h3>
-            <p className="text-sm [overflow-wrap:anywhere]" data-receiving-presentation>
-              <span className="font-medium">{m.library_archive_recovery_presentation_current()}: </span>
-              {receiving.presentationKindSource === 'owner'
-                ? receiving.presentationKind
-                : m.library_collection_mixed_label()}
-            </p>
-            <p>
-              {receiving.visibility === 'private'
-                ? m.library_visibility_private()
-                : receiving.visibility === 'public'
-                  ? m.library_visibility_public()
-                  : receiving.visibility === 'unlisted'
-                    ? m.library_visibility_unlisted()
-                    : m.library_archive_present_unavailable()}
-              {' · '}
-              {m.library_archive_recovery_collection_members({ count: receiving.memberCount })}
-            </p>
-            <ol className="grid gap-2">
-              {receiving.members.map((member, index) => (
-                <li key={member.id} className="rounded-md border p-3 text-sm">
-                  <p>
-                    {m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} ·{' '}
-                    {targetTitle(member.subjectId) || m.library_archive_present_title_unavailable()}
-                  </p>
-                  {member.note ? <p>{member.note}</p> : null}
-                </li>
-              ))}
-            </ol>
-            <EvidenceDetails value={receiving} title={m.library_archive_entry_current()} />
-            {receiving.next ? (
-              <button
-                className={actionClass}
-                type="button"
-                disabled={busy}
-                onClick={() => onReadCollection(receiving.next ?? undefined)}
-              >
-                {m.library_archive_recovery_next_results()}
-              </button>
-            ) : null}
-          </section>
+        {collectionId ? (
+          <ArchiveReceivingCollection
+            page={receiving}
+            window={receivingWindow}
+            busy={receivingBusy}
+            targets={targets}
+            {...receivingActions}
+          />
         ) : null}
         <p className="text-sm text-muted-foreground">{m.library_archive_recovery_evidence_independence()}</p>
         {status.pin.state === 'unsupported' ? (

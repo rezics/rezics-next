@@ -12897,5 +12897,20 @@
   "library_import_retained": "Import conservé et informations de réouverture",
   "library_import_review_help": "Examinez chaque élément avant de continuer. Les étiquettes ont leur propre examen et confirmation.",
   "library_import_reopen_help": "Conservez cet identifiant pour rouvrir cet import depuis la page d’envoi de ce fournisseur.",
-  "library_import_retained_page": "Cette page affiche {shown} éléments conservés."
+  "library_import_retained_page": "Cette page affiche {shown} éléments conservés.",
+  "library_archive_recovery_receiving_title": "Collection de destination actuelle",
+  "library_archive_recovery_receiving_scope": "Une page actuelle de la Collection, contenant au plus {limit} membres. Les résultats de récupération sont séparés ; l’ordre est présenté uniquement au sein de cette page native.",
+  "library_archive_recovery_receiving_loading": "Lecture de la page demandée de la Collection…",
+  "library_archive_recovery_receiving_denied": "Vous n’avez pas accès à cette Collection. Les résultats de récupération restent disponibles.",
+  "library_archive_recovery_receiving_missing": "Cette Collection est introuvable. Les résultats de récupération restent disponibles.",
+  "library_archive_recovery_receiving_stale": "Cette adresse de page de la Collection n’est plus acceptée. Réessayez ou revenez à la première page.",
+  "library_archive_recovery_receiving_unavailable": "La page demandée de la Collection est indisponible. Réessayez la même page ou revenez à la première.",
+  "library_archive_recovery_receiving_previous_displayed": "La page lue précédemment reste affichée. La demande échouée n’a pas changé votre position.",
+  "library_archive_recovery_receiving_shown": "{count} membres sur cette page.",
+  "library_archive_recovery_receiving_members": "Membres sur la page actuelle de la Collection",
+  "library_archive_recovery_receiving_sparse": "Aucun membre sur cette page. Suivant lit la continuation fournie ; cela ne signifie pas que la Collection est vide.",
+  "library_archive_recovery_receiving_empty": "Aucun membre sur cette page et aucune continuation fournie.",
+  "library_archive_recovery_receiving_navigation": "Pages de la Collection de destination",
+  "library_archive_recovery_receiving_next": "Page suivante de la Collection",
+  "library_archive_recovery_receiving_retry": "Réessayer la page demandée de la Collection"
 }

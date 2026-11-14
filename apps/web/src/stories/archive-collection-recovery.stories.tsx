@@ -26,6 +26,21 @@ import type {
 import type { OccurrenceSelection } from '../library/archive-collection-recovery/selection';
 import { RecoveryPresentationTypesContext } from '../library/archive-collection-recovery/presentation';
 import { useState } from 'react';
+import { ArchiveReceivingCollection } from '../library/archive-collection-recovery/receiving';
+import type { ReceivingCollectionReadback } from '../library/archive-collection-recovery/readback';
+import {
+  commitReceivingRead,
+  emptyReceivingReadWindow,
+  receivingReadTarget,
+  type ReceivingReadWindow,
+} from '../library/archive-collection-recovery/receiving-window';
+
+const idleReceivingActions = {
+  onFirst: () => undefined,
+  onPrevious: () => undefined,
+  onNext: () => undefined,
+  onRetry: () => undefined,
+};
 
 const subject: EntityPickerSubject = {
   id: '00000000-0000-4000-8000-000000000026',
@@ -312,7 +327,9 @@ export const PartialResult: Story = {
         onFirst={() => undefined}
         onPrevious={() => undefined}
         onNext={() => undefined}
-        onReadCollection={() => undefined}
+        receivingWindow={emptyReceivingReadWindow()}
+        receivingBusy={false}
+        receivingActions={idleReceivingActions}
       />
     </div>
   ),
@@ -438,7 +455,13 @@ export const CompletedResult: Story = {
         onFirst={() => undefined}
         onPrevious={() => undefined}
         onNext={() => undefined}
-        onReadCollection={() => undefined}
+        receivingWindow={{
+          ...emptyReceivingReadWindow(),
+          displayed: { collectionId: status.collectionId!, cursor: null },
+          revision: 1,
+        }}
+        receivingBusy={false}
+        receivingActions={idleReceivingActions}
       />
     </div>
   ),
@@ -570,7 +593,9 @@ function PresentationResultStory({ stale }: { stale: boolean }) {
         onFirst={() => undefined}
         onPrevious={() => undefined}
         onNext={() => undefined}
-        onReadCollection={() => undefined}
+        receivingWindow={emptyReceivingReadWindow()}
+        receivingBusy={false}
+        receivingActions={idleReceivingActions}
       />
     </div>
   );
@@ -584,4 +609,133 @@ export const AdoptedPresentation: Story = {
 export const StalePresentation: Story = {
   name: 'Unsupported or stale presentation · new review required',
   render: () => <PresentationResultStory stale />,
+};
+
+const receivingFirst: ReceivingCollectionReadback = {
+  id: status.collectionId!,
+  title: 'Current receiving Collection',
+  visibility: 'private',
+  presentationKind: null,
+  presentationKindSource: 'mixed',
+  memberCount: 237,
+  members: [
+    { id: 'native-member-a', subjectId: subject.id, note: 'Current first-page note', addedAt: '2026-11-14T00:00:00Z' },
+  ],
+  next: 'native/second+opaque==',
+};
+const receivingSparse: ReceivingCollectionReadback = {
+  ...receivingFirst,
+  members: [],
+  next: 'native/third+opaque==',
+};
+const receivingLast: ReceivingCollectionReadback = {
+  ...receivingFirst,
+  members: [
+    { id: 'native-member-c', subjectId: subject.id, note: 'Current last-page note', addedAt: '2026-11-14T00:00:02Z' },
+  ],
+  next: null,
+};
+
+type ReceivingStoryState = 'first' | 'sparse' | 'failed' | 'denied' | 'empty' | 'unavailable';
+
+function ReceivingCollectionStory({ initial }: { initial: ReceivingStoryState }) {
+  const firstWindow: ReceivingReadWindow = {
+    ...emptyReceivingReadWindow(),
+    displayed: { collectionId: receivingFirst.id, cursor: null },
+    revision: 1,
+  };
+  const [window, setWindow] = useState<ReceivingReadWindow>(() => {
+    if (initial === 'unavailable') return {
+      ...emptyReceivingReadWindow(),
+      requested: { collectionId: receivingFirst.id, cursor: null, direction: 'first' },
+      failure: 'unavailable',
+    };
+    if (initial === 'sparse') return commitReceivingRead(firstWindow, {
+      collectionId: receivingFirst.id, cursor: receivingFirst.next, direction: 'next',
+    });
+    if (initial === 'failed' || initial === 'denied') return {
+      ...firstWindow,
+      requested: { collectionId: receivingFirst.id, cursor: receivingFirst.next, direction: 'next' },
+      failure: initial === 'denied' ? 'denied' : 'unavailable',
+    };
+    return firstWindow;
+  });
+  const [page, setPage] = useState<ReceivingCollectionReadback | null>(
+    initial === 'unavailable' ? null
+      : initial === 'sparse' ? receivingSparse
+        : initial === 'empty' ? { ...receivingFirst, members: [], next: null, memberCount: 0 }
+          : receivingFirst,
+  );
+  function read(direction: 'first' | 'next' | 'previous' | 'retry', cursor?: string) {
+    const target = receivingReadTarget(window, receivingFirst.id, direction, cursor);
+    if (!target) return;
+    setPage(target.cursor === null ? receivingFirst : target.cursor === receivingFirst.next ? receivingSparse : receivingLast);
+    setWindow(commitReceivingRead(window, target));
+  }
+  return (
+    <div className="mx-auto max-w-4xl p-4">
+      <ArchiveReceivingCollection
+        page={page}
+        window={window}
+        busy={false}
+        targets={new Map([[subject.id, subject]])}
+        onFirst={() => read('first')}
+        onPrevious={() => read('previous')}
+        onNext={(cursor) => read('next', cursor)}
+        onRetry={() => read('retry')}
+      />
+    </div>
+  );
+}
+
+export const ReceivingCollectionPages: Story = {
+  name: 'Receiving Collection · three observed pages, Back and First',
+  render: () => <ReceivingCollectionStory initial="first" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const next = () => canvas.getByRole('button', { name: m.library_archive_recovery_receiving_next() });
+    await userEvent.click(next());
+    await expect(canvas.getByText(m.library_archive_recovery_receiving_sparse())).toBeVisible();
+    await userEvent.click(next());
+    await expect(canvas.getByText('Current last-page note')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_archive_recovery_receiving_next() })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_window_previous() }));
+    await expect(canvas.getByText(m.library_archive_recovery_receiving_sparse())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_recovery_first_page() }));
+    await expect(canvas.getByText('Current first-page note')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_window_previous() })).toBeNull();
+  },
+};
+
+export const ReceivingCollectionFailedPage: Story = {
+  name: 'Receiving Collection · failed request and displayed page stay distinct',
+  render: () => <ReceivingCollectionStory initial="failed" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Current first-page note')).toBeVisible();
+    await expect(canvas.getByText(m.library_archive_recovery_receiving_previous_displayed())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_recovery_receiving_retry() }));
+    await expect(canvas.getByText(m.library_archive_recovery_receiving_sparse())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_archive_recovery_receiving_retry() })).toBeNull();
+  },
+};
+
+export const ReceivingCollectionSparsePage: Story = {
+  name: 'Receiving Collection · empty page with native continuation',
+  render: () => <ReceivingCollectionStory initial="sparse" />,
+};
+
+export const ReceivingCollectionEmptyPage: Story = {
+  name: 'Receiving Collection · empty page without continuation',
+  render: () => <ReceivingCollectionStory initial="empty" />,
+};
+
+export const ReceivingCollectionDenied: Story = {
+  name: 'Receiving Collection · native denial hides the former page',
+  render: () => <ReceivingCollectionStory initial="denied" />,
+};
+
+export const ReceivingCollectionUnavailable: Story = {
+  name: 'Receiving Collection · first request unavailable with exact retry',
+  render: () => <ReceivingCollectionStory initial="unavailable" />,
 };

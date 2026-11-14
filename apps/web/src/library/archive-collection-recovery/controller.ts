@@ -18,6 +18,12 @@ import {
 } from './contract';
 import { RecoveryCostLedger, type RecoveryCost } from './cost';
 import type { ReceivingCollectionReadback } from './readback';
+import {
+  commitReceivingRead,
+  emptyReceivingReadWindow,
+  receivingReadTarget,
+  type ReceivingReadWindow,
+} from './receiving-window';
 import { makeReviewBody, type OccurrenceSelection } from './selection';
 import type { RecoveryVisit } from './visit';
 import {
@@ -66,6 +72,7 @@ export type RecoverySnapshot = {
   outcomesWindow: RecoveryWindowSnapshot;
   readRetry: RecoveryReader | null;
   receiving: ReceivingCollectionReadback | null;
+  receivingWindow: ReceivingReadWindow;
   hasOriginalArchive: boolean;
   cost: RecoveryCost;
 };
@@ -97,6 +104,8 @@ export type ArchiveCollectionRecoveryJourney = {
   restart: () => void;
   adoptOriginalArchive: () => Promise<void>;
   readReceivingCollection: (cursor?: string) => Promise<void>;
+  previousReceivingCollection: () => Promise<void>;
+  retryReceivingCollection: () => Promise<void>;
   expire: () => void;
   retire: () => void;
 };
@@ -132,6 +141,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
   };
   let readRetry: RecoveryReader | null = null;
   let receiving: ReceivingCollectionReadback | null = null;
+  let receivingWindow = emptyReceivingReadWindow();
   let originalArchiveBase64: string | null = null;
   let unknown: RecoveryEffectCommand | null = null;
   let expiredTimer: ReturnType<typeof setTimeout> | undefined;
@@ -165,6 +175,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
       outcomesWindow: { canPrevious: windows.outcomes.previous.length > 0, revision: windows.outcomes.revision },
       readRetry,
       receiving,
+      receivingWindow,
       hasOriginalArchive: originalArchiveBase64 !== null,
       cost: ledger.snapshot(),
     };
@@ -185,9 +196,14 @@ export function createArchiveCollectionRecoveryJourney(input: {
     presentationKind = null;
     review = null;
     outcomePageData = null;
-    receiving = null;
+    clearReceivingReadback();
     unknown = null;
     clearReadWindows();
+  }
+
+  function clearReceivingReadback() {
+    receiving = null;
+    receivingWindow = emptyReceivingReadWindow(receivingWindow.lifetime + 1);
   }
 
   function clearReadWindows() {
@@ -258,6 +274,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
 
   function acceptStatus(value: RecoveryStatus) {
     const previousState = status?.state;
+    if (uploadId !== value.uploadId || status?.collectionId !== value.collectionId) clearReceivingReadback();
     status = value;
     uploadId = value.uploadId;
     setExpiry(value.expiresAt);
@@ -551,6 +568,47 @@ export function createArchiveCollectionRecoveryJourney(input: {
     }
   }
 
+  async function readReceivingPage(direction: 'first' | 'next' | 'previous' | 'retry', cursor?: string) {
+    // The latest native status owns the destination, independently of the displayed outcomes page.
+    const collectionId = status?.collectionId;
+    if (!collectionId || !live() || busy || stage !== 'results') return;
+    const target = receivingReadTarget(receivingWindow, collectionId, direction, cursor);
+    if (!target) return;
+    const ticket = generation;
+    receivingWindow = {
+      ...receivingWindow,
+      requested: target,
+      loading: true,
+      failure: null,
+      request: receivingWindow.request + 1,
+    };
+    ledger.call('readback', direction === 'retry');
+    publish();
+    const result = await port.receivingCollection(collectionId, target.cursor ?? undefined);
+    // A newer request, replacement destination, source or viewer retires this response.
+    if (
+      ticket !== generation ||
+      !live() ||
+      receivingWindow.requested !== target ||
+      status?.collectionId !== collectionId
+    )
+      return;
+    if (result.kind !== 'ok') {
+      if (result.kind === 'denied' || result.kind === 'not-found') receiving = null;
+      receivingWindow = {
+        ...receivingWindow,
+        loading: false,
+        failure: result.kind === 'unknown' ? 'unavailable' : result.kind,
+      };
+      publish();
+      return;
+    }
+    receiving = result.value;
+    receivingWindow = commitReceivingRead(receivingWindow, target);
+    ledger.pageResult(result.value.members.length);
+    publish();
+  }
+
   return {
     snapshot,
     subscribe(listener: () => void) {
@@ -575,6 +633,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
     },
     async chooseCollection(collection: RecoveryCollection) {
       if (!live() || busy || unknown || !collection.eligible) return;
+      clearReceivingReadback();
       selectedCollection = structuredClone(collection);
       clearReadWindow('occurrences');
       clearReadWindow('outcomes');
@@ -732,30 +791,14 @@ export function createArchiveCollectionRecoveryJourney(input: {
         body: { archiveBase64: originalArchiveBase64 },
       });
     },
-    async readReceivingCollection(cursor) {
-      const collectionId = outcomePageData?.collection?.id ?? status?.collectionId;
-      if (!collectionId || !live() || busy || unknown) return;
-      const ticket = generation;
-      busy = true;
-      notice = null;
-      ledger.call('readback');
-      publish();
-      let result: Awaited<ReturnType<RecoveryPort['receivingCollection']>>;
-      try {
-        result = await port.receivingCollection(collectionId, cursor);
-      } catch {
-        result = { kind: 'unavailable' };
-      }
-      if (ticket !== generation || !live()) return;
-      busy = false;
-      if (result.kind !== 'ok') {
-        fail(result.kind === 'unknown' ? { kind: 'unavailable' } : result);
-        publish();
-        return;
-      }
-      receiving = result.value;
-      ledger.pageResult(result.value.members.length);
-      publish();
+    readReceivingCollection(cursor?: string) {
+      return readReceivingPage(cursor === undefined ? 'first' : 'next', cursor);
+    },
+    previousReceivingCollection() {
+      return readReceivingPage('previous');
+    },
+    retryReceivingCollection() {
+      return readReceivingPage('retry');
     },
     expire,
     retire,
