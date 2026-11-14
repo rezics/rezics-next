@@ -360,17 +360,16 @@ function relationWindow(
           ? row.value.content
           : undefined;
       const current = target ? fixture.subjects.get(target) : undefined;
-      if (!current) return [];
       return [
         {
-          subject: target,
-          target,
+          subject: current?.subject.id ?? null,
+          target: current?.subject.id ?? null,
           external: null,
           property,
-          label: pickText(current.subject.labels, locale).text,
-          type: current.subject.type,
-          summary: summary(current, locale),
-          statement: row,
+          label: current ? pickText(current.subject.labels, locale).text : null,
+          type: current?.subject.type ?? null,
+          summary: current ? summary(current, locale) : null,
+          statement: inverse ? row.id : row,
           assertion: row,
           related: owner.related,
         },
