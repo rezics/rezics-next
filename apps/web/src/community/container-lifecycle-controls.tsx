@@ -143,7 +143,7 @@ function LifecycleControlsView({
   const presentation = lifecycleControlsPresentation(state);
   const visible = useCommunityManagementAdmission(
     target.kind === 'space' ? 'space-lifecycle' : 'realm-lifecycle',
-    caller.ready && caller.lifetime.current() && presentation.visible,
+    caller.ready && caller.lifetime.current(),
   );
   const actions = offeredActions(state);
   useEffect(() => {
@@ -271,22 +271,36 @@ function LifecycleControlsView({
     else if (state.read.kind === 'ready' && state.read.snapshot.state !== 'active')
       onRestriction?.(state.read.snapshot.state);
   }, [state, onRestriction, caller.lifetime, caller.connectionRevision, caller.ready]);
-  const readOnly = presentation.readOnly;
+  const readOnly =
+    state.read.kind === 'ready' && state.read.snapshot.actions.length === 0 && !presentation.canRetry;
   const problem = state.problem ?? (state.read.kind === 'refused' ? state.read : null);
   const locked = state.busy || state.intent !== null;
+  const showFreshActions = state.outcome === 'none' && actions.length > 0;
   const reasonCanBeSubmitted =
+    showFreshActions &&
     state.read.kind === 'ready' &&
     state.read.snapshot.state === 'active' &&
     state.read.snapshot.actions.includes('remove');
   const changedReason = state.reason !== reasonBaseline.current.value;
   const reasonDraft = changedReason && (state.read.kind !== 'ready' || reasonCanBeSubmitted);
+  const showRetainedReason =
+    Boolean(state.reason) &&
+    !reasonCanBeSubmitted &&
+    (state.intent?.action === 'remove' ||
+      (state.intent === null && (state.read.kind !== 'ready' || state.read.snapshot.state === 'active')));
   const reviewedConfirmation =
+    showFreshActions &&
     confirmation !== null &&
     state.read.kind === 'ready' &&
     state.read.snapshot.state !== 'orphaned' &&
     state.read.snapshot.actions.includes(confirmation);
   const unresolvedIntent = state.intent !== null && (state.outcome === 'sending' || state.outcome === 'uncertain');
   const acknowledgement = state.outcome === 'confirmed' ? (state.intent?.idempotencyKey ?? '') : '';
+  const reviewAvailable =
+    !state.busy &&
+    state.reviewed &&
+    state.read.kind === 'ready' &&
+    (state.outcome === 'refused' || state.outcome === 'conflict' || state.outcome === 'confirmed');
   const departureActive = caller.ready && caller.lifetime.current();
   useAuthoringDeparture(
     departureActive && (reasonDraft || reviewedConfirmation || unresolvedIntent),
@@ -304,137 +318,125 @@ function LifecycleControlsView({
   if (!visible || !caller.ready || !caller.lifetime.current()) return null;
   return (
     <section aria-labelledby={`${id}-heading`}>
-      <ContentItemFrame as="div" data-slot="content-item-frame" className="w-full min-w-0 space-y-4 p-5 sm:p-6">
-        <header className="min-w-0 space-y-1">
-          <ContentItemHeading level={2} id={`${id}-heading`} className="text-lg font-semibold">
-            {target.kind === 'realm' ? m.container_lifecycle_realm() : m.container_lifecycle_space()}
-          </ContentItemHeading>
-          <p className="min-w-0 font-medium [overflow-wrap:anywhere]">{title}</p>
-          <p ref={readStatusRef} tabIndex={-1} role="status" className="text-sm text-muted-foreground">
-            {readMessage(state)}
-          </p>
-        </header>
-        {readOnly ? <p className="text-sm text-muted-foreground">{m.container_lifecycle_read_only()}</p> : null}
-        {actions.includes('remove') || state.reason || state.intent?.action === 'remove' ? (
-          <Field>
-            <FieldLabel htmlFor={`${id}-reason`}>{m.container_lifecycle_reason()}</FieldLabel>
-            <Textarea
-              id={`${id}-reason`}
-              value={state.reason}
-              readOnly={locked || !reasonCanBeSubmitted}
-              aria-describedby={`${id}-reason-help`}
-              onChange={(event) => control.setReason(event.target.value)}
-            />
-            <p id={`${id}-reason-help`} className="text-sm text-muted-foreground">
-              {m.container_lifecycle_reason_help()}
+      <ContentItemFrame as="div" data-slot="content-item-frame" className="w-full min-w-0 space-y-5 p-5 sm:p-6">
+        <header className="min-w-0 space-y-3">
+          <div className="min-w-0 space-y-1">
+            <ContentItemHeading level={2} id={`${id}-heading`} className="text-lg font-semibold">
+              {target.kind === 'realm' ? m.container_lifecycle_realm() : m.container_lifecycle_space()}
+            </ContentItemHeading>
+            <p className="min-w-0 text-lg font-medium [overflow-wrap:anywhere]">{title}</p>
+          </div>
+          <div className="min-w-0 space-y-2 rounded-xl border bg-muted/40 p-4">
+            <p ref={readStatusRef} tabIndex={-1} role="status" className="text-sm font-medium [overflow-wrap:anywhere]">
+              {readMessage(state)}
             </p>
-          </Field>
-        ) : null}
-        {state.outcome === 'confirmed' ? (
+            {readOnly ? <p className="text-sm text-muted-foreground">{m.container_lifecycle_read_only()}</p> : null}
+          </div>
+        </header>
+        {state.outcome !== 'none' || problem ? (
           <div
             ref={(element) => {
               resultBoundaryRef.current = element;
             }}
             tabIndex={-1}
-            role="status"
-            className="space-y-2 rounded-xl bg-muted p-4 text-sm"
+            className="min-w-0 space-y-3"
           >
-            <p>
-              {state.intent?.action === 'remove' ? m.container_lifecycle_removed() : m.container_lifecycle_restored()}
-            </p>
-            {state.intent?.action === 'restore' ? (
-              state.destination ? (
-                <a href={state.destination} className="font-medium underline underline-offset-4">
-                  {m.container_lifecycle_open()}
-                </a>
-              ) : (
-                <p>{m.container_lifecycle_link_unavailable()}</p>
-              )
+            {state.outcome === 'sending' && state.intent ? (
+              <div role="status" className="space-y-1 rounded-xl bg-muted p-4 text-sm">
+                <p className="font-medium [overflow-wrap:anywhere]">
+                  {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()} ·{' '}
+                  {title}
+                </p>
+                <p>{m.container_lifecycle_working()}</p>
+              </div>
+            ) : null}
+            {state.outcome === 'confirmed' ? (
+              <div role="status" className="space-y-2 rounded-xl bg-muted p-4 text-sm">
+                <p className="font-medium [overflow-wrap:anywhere]">
+                  {state.intent?.action === 'remove' ? m.container_lifecycle_removed() : m.container_lifecycle_restored()}
+                </p>
+                {state.intent?.action === 'restore' ? (
+                  state.destination ? (
+                    <a
+                      href={state.destination}
+                      className="inline-flex min-h-11 items-center whitespace-normal font-medium underline underline-offset-4 [overflow-wrap:anywhere]"
+                    >
+                      {m.container_lifecycle_open()}
+                    </a>
+                  ) : (
+                    <p className="[overflow-wrap:anywhere]">{m.container_lifecycle_link_unavailable()}</p>
+                  )
+                ) : null}
+              </div>
+            ) : null}
+            {state.outcome === 'uncertain' ? (
+              <div role="alert" className="space-y-1 rounded-xl border border-border p-4 text-sm">
+                {state.intent ? (
+                  <p className="font-medium [overflow-wrap:anywhere]">
+                    {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()} ·{' '}
+                    {title}
+                  </p>
+                ) : null}
+                <p>{m.container_lifecycle_uncertain()}</p>
+              </div>
+            ) : null}
+            {state.outcome === 'conflict' ? (
+              <div role="alert" className="space-y-1 rounded-xl border border-border p-4 text-sm">
+                {state.intent ? (
+                  <p className="font-medium [overflow-wrap:anywhere]">
+                    {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()} ·{' '}
+                    {title}
+                  </p>
+                ) : null}
+                <p>{m.container_lifecycle_conflict()}</p>
+              </div>
+            ) : null}
+            {problem ? (
+              <div className="min-w-0 space-y-2 text-sm">
+                {state.outcome !== 'conflict' ? <p role="alert">{m.container_lifecycle_refused()}</p> : null}
+                <details className="min-w-0">
+                  <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                    {m.community_management_details_problem_summary()}
+                  </summary>
+                  <dl className="grid min-w-0 gap-2 pt-2 sm:grid-cols-2">
+                    <div className="min-w-0 space-y-1">
+                      <dt className="text-muted-foreground">{m.community_management_details_status()}</dt>
+                      <dd className="select-all font-mono">{problem.status}</dd>
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <dt className="text-muted-foreground">{m.community_management_details_code()}</dt>
+                      <dd className="select-all break-all font-mono">{problem.code}</dd>
+                    </div>
+                    {problem.detail ? (
+                      <div className="min-w-0 space-y-1 sm:col-span-2">
+                        <dt className="text-muted-foreground">{m.community_management_details_explanation()}</dt>
+                        <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{problem.detail}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                </details>
+              </div>
             ) : null}
           </div>
         ) : null}
-        {state.outcome === 'uncertain' ? (
-          <p
-            ref={(element) => {
-              resultBoundaryRef.current = element;
-            }}
-            tabIndex={-1}
-            role="alert"
-            className="text-sm"
-          >
-            {m.container_lifecycle_uncertain()}
-          </p>
-        ) : null}
-        {state.outcome === 'conflict' ? (
-          <p
-            ref={(element) => {
-              resultBoundaryRef.current = element;
-            }}
-            tabIndex={-1}
-            role="alert"
-            className="text-sm"
-          >
-            {m.container_lifecycle_conflict()}
-          </p>
-        ) : null}
-        {problem ? (
-          <div
-            ref={(element) => {
-              resultBoundaryRef.current = element;
-            }}
-            tabIndex={-1}
-            className="space-y-2 text-sm"
-          >
-            {state.outcome !== 'conflict' ? <p role="alert">{m.container_lifecycle_refused()}</p> : null}
-            <details className="min-w-0">
-              <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                {m.community_management_details_problem_summary()}
-              </summary>
-              <dl className="grid min-w-0 gap-2 pt-2 sm:grid-cols-2">
-                <div className="min-w-0 space-y-1">
-                  <dt className="text-muted-foreground">{m.community_management_details_status()}</dt>
-                  <dd className="select-all font-mono">{problem.status}</dd>
-                </div>
-                <div className="min-w-0 space-y-1">
-                  <dt className="text-muted-foreground">{m.community_management_details_code()}</dt>
-                  <dd className="select-all break-all font-mono">{problem.code}</dd>
-                </div>
-                {problem.detail ? (
-                  <div className="min-w-0 space-y-1 sm:col-span-2">
-                    <dt className="text-muted-foreground">{m.community_management_details_explanation()}</dt>
-                    <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{problem.detail}</dd>
-                  </div>
-                ) : null}
-              </dl>
-            </details>
+        {presentation.canRetry ? (
+          <div className="space-y-2 rounded-xl border p-4">
+            {state.intent ? (
+              <p className="text-sm font-medium [overflow-wrap:anywhere]">
+                {state.intent.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()} · {title}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button className="min-h-11 whitespace-normal [overflow-wrap:anywhere]" onClick={() => void control.retry()}>
+                {m.container_lifecycle_retry()}
+              </Button>
+            </div>
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-2">
-          {actions.map((action) => (
+        {reviewAvailable ? (
+          <div className="flex flex-wrap gap-2">
             <Button
-              key={action}
-              ref={(element) => {
-                if (element) actionButtonRefs.current.set(action, element);
-                else actionButtonRefs.current.delete(action);
-              }}
-              variant={action === 'remove' ? 'destructive' : 'default'}
-              disabled={action === 'remove' && !state.reason.trim()}
-              onClick={(event) => {
-                requestFocus('confirmation', action, event.currentTarget);
-                setConfirmation(action);
-              }}
-            >
-              {action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()}
-            </Button>
-          ))}
-          {presentation.canRetry ? (
-            <Button onClick={() => void control.retry()}>{m.container_lifecycle_retry()}</Button>
-          ) : null}
-          {!state.busy &&
-          state.reviewed &&
-          state.read.kind === 'ready' &&
-          (state.outcome === 'refused' || state.outcome === 'conflict' || state.outcome === 'confirmed') ? (
-            <Button
+              className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
               variant="outline"
               onClick={() => {
                 setConfirmation(null);
@@ -443,8 +445,125 @@ function LifecycleControlsView({
             >
               {m.container_lifecycle_review()}
             </Button>
-          ) : null}
+          </div>
+        ) : null}
+        {showFreshActions ? (
+          <div className="min-w-0 space-y-4 rounded-xl border p-4">
+            {actions.includes('remove') ? (
+              <Field>
+                <FieldLabel htmlFor={`${id}-reason`}>{m.container_lifecycle_reason()}</FieldLabel>
+                <Textarea
+                  id={`${id}-reason`}
+                  className="min-w-0 [overflow-wrap:anywhere]"
+                  value={state.reason}
+                  readOnly={locked || !reasonCanBeSubmitted}
+                  aria-describedby={`${id}-reason-help`}
+                  onChange={(event) => control.setReason(event.target.value)}
+                />
+                <p id={`${id}-reason-help`} className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                  {m.container_lifecycle_reason_help()}
+                </p>
+              </Field>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {actions.map((action) => (
+                <Button
+                  key={action}
+                  className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
+                  ref={(element) => {
+                    if (element) actionButtonRefs.current.set(action, element);
+                    else actionButtonRefs.current.delete(action);
+                  }}
+                  variant={action === 'remove' ? 'destructive' : 'default'}
+                  disabled={action === 'remove' && !state.reason.trim()}
+                  onClick={(event) => {
+                    requestFocus('confirmation', action, event.currentTarget);
+                    setConfirmation(action);
+                  }}
+                >
+                  {action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()}
+                </Button>
+              ))}
+            </div>
+            {reviewedConfirmation ? (
+              <div role="group" aria-labelledby={`${id}-confirm`} className="space-y-3 rounded-xl bg-muted p-4">
+                <p id={`${id}-confirm`} className="text-sm [overflow-wrap:anywhere]">
+                  {confirmation === 'remove'
+                    ? m.container_lifecycle_confirm_remove({ title })
+                    : m.container_lifecycle_confirm_restore({ title })}
+                </p>
+                <p className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  {target.kind === 'realm' ? m.container_lifecycle_realm() : m.container_lifecycle_space()} ·{' '}
+                  <code className="break-all font-mono">{target.id}</code>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
+                    variant={confirmation === 'remove' ? 'destructive' : 'default'}
+                    onClick={(event) => {
+                      const action = confirmation;
+                      const previousIntentKey = control.getSnapshot().intent?.idempotencyKey;
+                      const generation =
+                        event.detail === 0 ? requestFocus('settlement', action, event.currentTarget) : null;
+                      setConfirmation(null);
+                      const submission = control.submit(action);
+                      const intent = control.getSnapshot().intent;
+                      if (
+                        generation !== null &&
+                        focusRequestRef.current?.generation === generation &&
+                        intent?.action === action &&
+                        intent.idempotencyKey !== previousIntentKey
+                      )
+                        focusRequestRef.current.intentKey = intent.idempotencyKey;
+                      void submission.then(() => {
+                        if (generation !== null && focusRequestRef.current?.generation === generation)
+                          setSettlementRevision((revision) => revision + 1);
+                      });
+                    }}
+                  >
+                    {m.container_lifecycle_confirm()}
+                  </Button>
+                  <Button
+                    className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
+                    ref={cancelButtonRef}
+                    variant="outline"
+                    onClick={(event) => {
+                      requestFocus('action', confirmation, event.currentTarget);
+                      setConfirmation(null);
+                    }}
+                  >
+                    {m.container_lifecycle_cancel()}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {showRetainedReason ? (
+          <details className="min-w-0">
+            <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              {m.container_lifecycle_reason()}
+            </summary>
+            <div className="pt-2">
+              <Field>
+                <FieldLabel htmlFor={`${id}-reason`}>{m.container_lifecycle_reason()}</FieldLabel>
+                <Textarea
+                  id={`${id}-reason`}
+                  className="min-w-0 [overflow-wrap:anywhere]"
+                  value={state.reason}
+                  readOnly
+                  aria-describedby={`${id}-reason-help`}
+                />
+                <p id={`${id}-reason-help`} className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                  {m.container_lifecycle_reason_help()}
+                </p>
+              </Field>
+            </div>
+          </details>
+        ) : null}
+        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
           <Button
+            className="min-h-11 whitespace-normal [overflow-wrap:anywhere]"
             variant="outline"
             disabled={state.busy}
             onClick={() => {
@@ -455,52 +574,6 @@ function LifecycleControlsView({
             {state.busy ? m.container_lifecycle_working() : m.container_lifecycle_refresh()}
           </Button>
         </div>
-        {confirmation && actions.includes(confirmation) ? (
-          <div role="group" aria-labelledby={`${id}-confirm`} className="space-y-3 rounded-xl bg-muted p-4">
-            <p id={`${id}-confirm`} className="text-sm">
-              {confirmation === 'remove'
-                ? m.container_lifecycle_confirm_remove({ title })
-                : m.container_lifecycle_confirm_restore({ title })}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={confirmation === 'remove' ? 'destructive' : 'default'}
-                onClick={(event) => {
-                  const action = confirmation;
-                  const previousIntentKey = control.getSnapshot().intent?.idempotencyKey;
-                  const generation =
-                    event.detail === 0 ? requestFocus('settlement', action, event.currentTarget) : null;
-                  setConfirmation(null);
-                  const submission = control.submit(action);
-                  const intent = control.getSnapshot().intent;
-                  if (
-                    generation !== null &&
-                    focusRequestRef.current?.generation === generation &&
-                    intent?.action === action &&
-                    intent.idempotencyKey !== previousIntentKey
-                  )
-                    focusRequestRef.current.intentKey = intent.idempotencyKey;
-                  void submission.then(() => {
-                    if (generation !== null && focusRequestRef.current?.generation === generation)
-                      setSettlementRevision((revision) => revision + 1);
-                  });
-                }}
-              >
-                {m.container_lifecycle_confirm()}
-              </Button>
-              <Button
-                ref={cancelButtonRef}
-                variant="outline"
-                onClick={(event) => {
-                  requestFocus('action', confirmation, event.currentTarget);
-                  setConfirmation(null);
-                }}
-              >
-                {m.container_lifecycle_cancel()}
-              </Button>
-            </div>
-          </div>
-        ) : null}
       </ContentItemFrame>
     </section>
   );
