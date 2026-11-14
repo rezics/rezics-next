@@ -10,6 +10,29 @@ The generated `thread.create` operation receives draft visibility and one stable
 use the current exact-resume reader and the conditional revision writer for later edits. The editor retains one
 selection and one working document; it does not add a second body store.
 
+## Structured initial drafts
+
+Decision: native creation uses the installed shared rich editor and its admitted `DocumentSnapshot` from the first
+keystroke. Write and private preview retain one editor lifetime; pending or invalid snapshots cannot create or preview
+an older body. The supplied destination ID stays explicit, with no inferred board choices or permission. Licence,
+Subject IDs and media IDs keep native admission and live in labelled disclosures. Saving remains private and
+publication requires its separate review.
+
+The creation form contributes unsent edits to the workspace's existing departure protection. Cancel requires an
+explicit local discard choice. Sending and unknown recovery retain the controller's frozen command, credential and
+key; edits made afterwards remain local, and replay sends the original intent. An acknowledgement opens the exact
+created Post and clears the creation form only if it still represents that submitted version. Account/session,
+locale and workspace replacement retire the local editor and its callbacks. No creation transport, upload authority,
+lookup or parser is added.
+
+Sources read before design: `workspace.tsx`'s native composer and shared editor integration, `contract.ts`'s
+`NativeDraftCreate`, `controller.ts`'s creation/retry and visit lifetime, `account-port.ts`,
+[editing language](workspace-language.md), the shared editor/snapshot contract, Web's `document-body.tsx`, existing
+native-draft tests and stories, and the read-only main checkout's `.reference/INDEX.md`.
+Acceptance source covers structured first creation, preview, pending/invalid snapshots, failure and same-intent
+recovery, acknowledgement with newer edits, cancellation and visit replacement. Execution, native create/continue,
+keyboard and phone/desktop visual acceptance are deferred to the separate verifier.
+
 Before account publication, Studio freezes the acknowledged Post revision and digest, body, board, licence, subjects
 and media IDs in a local review. Editing retires that review. Publication uses the installed conditional revision
 command with the exact `If-Match`, captured session credential and original idempotency key. An uncertain outcome

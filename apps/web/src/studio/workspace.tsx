@@ -8,13 +8,13 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { fromPlainText, hasDocumentContent } from '@rezics/document';
 import { RichTextEditor } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { DocumentBody } from '../document-body';
 import type { BookOrganizerPort, StudioInput, StudioPort, StudioPresentation } from './contract';
 import { StudioController } from './controller';
+import { NativeDraftComposer } from './native-draft-composer';
 import { workspaceEditorLabels, workspaceFailureMessage } from './workspace-language';
 import { BookOrganizer } from './book-organizer';
 import { ExactVersionDetails, StudioVersions } from './revisions';
@@ -61,7 +61,7 @@ export type StudioWorkspaceProps = {
 /** Production composition surface. No route, generated-operation binding or public authority is inferred here. */
 export function StudioWorkspace(props: StudioWorkspaceProps) {
   if (!props.port.isCurrent()) return <p role="status">{m.studio_workspace_ended({}, { locale: getLocale() })}</p>;
-  return <StudioVisit key={props.input.visitKey} {...props} />;
+  return <StudioVisit key={`${props.input.visitKey}:${getLocale()}`} {...props} />;
 }
 function StudioVisit(props: StudioWorkspaceProps) {
   const [controller] = useState(
@@ -101,6 +101,7 @@ export function StudioWorkbench({
   const [navigation, setNavigation] = useState(false);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
+  const [nativeDraftRisk, setNativeDraftRisk] = useState(false);
   const editorHeading = useRef<HTMLHeadingElement>(null);
   const previousPost = useRef<string | null>(
     state.historical ? (state.selected?.source.revision.exact.postId ?? null) : null,
@@ -122,6 +123,7 @@ export function StudioWorkbench({
   const editorCurrent = () => postId !== null && controller.isEditorCurrent(postId, editorGeneration);
   const unresolved = controller.hasUnresolvedCommand();
   const atRisk = Boolean(
+    nativeDraftRisk ||
     selected?.dirty ||
     selected?.snapshotPending ||
     selected?.uploading ||
@@ -381,8 +383,10 @@ export function StudioWorkbench({
                 ) : null}
                 {input.nativeDrafts ? (
                   <NativeDraftComposer
+                    key={`${input.visitKey}:${locale}`}
                     controller={controller}
                     disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
+                    onDepartureRiskChange={setNativeDraftRisk}
                   />
                 ) : input.canCreateDraft ? (
                   <NewDraft
@@ -646,117 +650,6 @@ function NewDraft({ controller, disabled }: { controller: StudioController; disa
         {m.studio_workspace_create({}, options)}
       </Button>
       {disabled ? <p className="studio-help">{m.studio_workspace_create_wait({}, options)}</p> : null}
-    </form>
-  );
-}
-
-function NativeDraftComposer({ controller, disabled }: { controller: StudioController; disabled: boolean }) {
-  const [boardId, setBoardId] = useState('');
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [licence, setLicence] = useState('LicenseRef-rezics-terms');
-  const [subjects, setSubjects] = useState('');
-  const [media, setMedia] = useState('');
-  const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
-  const selectedId = state.selected?.source.revision.exact.postId ?? null;
-  const lastCreatedId = useRef<string | null>(null);
-  const id = useId();
-  const locale = getLocale();
-  useEffect(() => {
-    if (!selectedId || selectedId === lastCreatedId.current || state.result !== 'native-created') return;
-    lastCreatedId.current = selectedId;
-    setBoardId('');
-    setTitle('');
-    setBody('');
-    setSubjects('');
-    setMedia('');
-  }, [selectedId, state.result]);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const document = fromPlainText(body, 'blocks');
-    if (
-      !(await controller.createNativeDraft({
-        boardId,
-        title,
-        body: document,
-        licence,
-        subjectIds: subjects.split(/[\s,]+/).filter(Boolean),
-        mediaIds: media.split(/[\s,]+/).filter(Boolean),
-      }))
-    )
-      return;
-  }
-  const bodyReady = hasDocumentContent(fromPlainText(body, 'blocks'));
-  return (
-    <form
-      className="studio-native-create studio-stack"
-      onSubmit={(event) => void submit(event)}
-      aria-labelledby={`${id}-heading`}
-    >
-      <h2 id={`${id}-heading`}>{m.studio_account_create({}, { locale })}</h2>
-      <p className="studio-help">{m.studio_account_intro({}, { locale })}</p>
-      <label htmlFor={`${id}-board`}>{m.studio_account_board({}, { locale })}</label>
-      <Input
-        id={`${id}-board`}
-        value={boardId}
-        required
-        maxLength={128}
-        disabled={disabled}
-        onChange={(event) => setBoardId(event.target.value)}
-      />
-      <label htmlFor={`${id}-title`}>{m.studio_account_title({}, { locale })}</label>
-      <Input
-        id={`${id}-title`}
-        value={title}
-        required
-        maxLength={512}
-        disabled={disabled}
-        onChange={(event) => setTitle(event.target.value)}
-      />
-      <label htmlFor={`${id}-body`}>{m.studio_account_body({}, { locale })}</label>
-      <textarea
-        id={`${id}-body`}
-        value={body}
-        required
-        rows={5}
-        disabled={disabled}
-        onChange={(event) => setBody(event.target.value)}
-        className="studio-native-body"
-      />
-      <label htmlFor={`${id}-licence`}>{m.own_drafts_licence({}, { locale })}</label>
-      <Input
-        id={`${id}-licence`}
-        value={licence}
-        required
-        maxLength={128}
-        disabled={disabled}
-        onChange={(event) => setLicence(event.target.value)}
-      />
-      <label htmlFor={`${id}-subjects`}>{m.own_drafts_subjects({}, { locale })}</label>
-      <Input
-        id={`${id}-subjects`}
-        value={subjects}
-        disabled={disabled}
-        aria-describedby={`${id}-subject-help`}
-        onChange={(event) => setSubjects(event.target.value)}
-      />
-      <p id={`${id}-subject-help`} className="studio-help">
-        {m.studio_account_subject_help({}, { locale })}
-      </p>
-      <label htmlFor={`${id}-media`}>{m.own_drafts_media({}, { locale })}</label>
-      <Input
-        id={`${id}-media`}
-        value={media}
-        disabled={disabled}
-        aria-describedby={`${id}-media-help`}
-        onChange={(event) => setMedia(event.target.value)}
-      />
-      <p id={`${id}-media-help`} className="studio-help">
-        {m.studio_account_media_help({}, { locale })}
-      </p>
-      <Button type="submit" disabled={disabled || !boardId.trim() || !title.trim() || !licence.trim() || !bodyReady}>
-        {m.studio_account_create({}, { locale })}
-      </Button>
     </form>
   );
 }
