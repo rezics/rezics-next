@@ -10,8 +10,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { activeRelease } from '../semantic/definitions.ts';
 import { searchSourcePublicationApplication } from './source-publication-application.ts';
 import { createWorkClient } from '../work/client.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { readListPresentationFacts } from '../semantic/copy-work-application.ts';
 import {
   prepareViewerFacts,
@@ -160,26 +159,16 @@ async function enrichDiscoveryPage(
       viewerActor = undefined;
     }
   }
-  const snapshot = await withConnection(config.pool, async (connection) => {
-    const client = deadlineClient(connection, context.deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+  const snapshot = await withBoundedReadOnlyTransaction(
+    config.pool,
+    context.deadline,
+    async (client) => {
       const viewerFacts = prepared && viewerActor ? await readViewerFacts(client, viewerActor, prepared) : null;
       const figures = await readPublicFigureViews(client, figureIds);
-      await client.query('COMMIT');
       return { viewerFacts, figures };
-    } catch (error) {
-      try {
-        await connection.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(
-          connection,
-          rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)),
-        );
-      }
-      throw error;
-    }
-  });
+    },
+    { deadlineError: () => new SearchUnavailableError('Search discovery read deadline expired') },
+  );
   if (prepared && viewerActor) viewerFacts = snapshot.viewerFacts;
   if (snapshot.figures) {
     for (const id of figureIds)
@@ -229,25 +218,12 @@ async function enrichDiscoveryPage(
 }
 
 async function readDiscoveryFigures(config: DefaultDiscoverySearchConfig, ids: readonly string[], deadline: number) {
-  return withConnection(config.pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const figures = await readPublicFigureViews(client, ids);
-      await client.query('COMMIT');
-      return figures;
-    } catch (error) {
-      try {
-        await connection.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(
-          connection,
-          rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)),
-        );
-      }
-      throw error;
-    }
-  });
+  return withBoundedReadOnlyTransaction(
+    config.pool,
+    deadline,
+    (client) => readPublicFigureViews(client, ids),
+    { deadlineError: () => new SearchUnavailableError('Search discovery read deadline expired') },
+  );
 }
 
 /** Default public catalogue/Account candidates, also consumed by the home feed with its current Actor.
