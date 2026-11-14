@@ -8,7 +8,6 @@ import type { RecoveryOutcomesPage, RecoveryStatus } from './contract';
 import type { ReceivingCollectionReadback } from './readback';
 import { ArchiveReceivingCollection, type ReceivingCollectionActions } from './receiving';
 import type { ReceivingReadWindow } from './receiving-window';
-import { RecoveryPresentationOutcome } from './presentation';
 
 function stateText(state: string): string {
   switch (state) {
@@ -143,14 +142,57 @@ export function ArchiveRecoveryUnknown({ busy, onRetry }: { busy: boolean; onRet
   );
 }
 
-export function ArchiveRecoveryConflict({ onRefresh, busy }: { onRefresh: () => void; busy: boolean }) {
+export function ArchiveRecoveryConflict({
+  onRefresh,
+  busy,
+  showRefreshAction = true,
+}: {
+  onRefresh: () => void;
+  busy: boolean;
+  showRefreshAction?: boolean;
+}) {
   return (
     <section className="grid gap-4 rounded-xl border p-4" data-recovery-state="conflict">
       <h2 className="text-lg font-semibold">{m.library_archive_recovery_conflict_title()}</h2>
       <p role="status">{m.library_archive_recovery_conflict_help()}</p>
-      <button className={actionClass} type="button" disabled={busy} onClick={onRefresh}>
-        {m.library_archive_recovery_refresh()}
-      </button>
+      {showRefreshAction ? (
+        <button className={actionClass} type="button" disabled={busy} onClick={onRefresh}>
+          {m.library_archive_recovery_refresh()}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+function presentationOutcomeText(presentation: RecoveryStatus['presentation']): string {
+  switch (presentation.state) {
+    case 'mixed':
+      return m.library_archive_recovery_presentation_mixed();
+    case 'adopted':
+      return m.library_archive_recovery_presentation_adopted();
+    case 'unsupported_or_stale':
+      return m.library_archive_recovery_presentation_stale();
+    case 'unattempted':
+      return m.library_archive_recovery_presentation_unattempted();
+  }
+}
+
+function PresentationOutcome({ presentation }: { presentation: RecoveryStatus['presentation'] }) {
+  return (
+    <section
+      className="grid min-w-0 gap-3 rounded-xl border p-4"
+      aria-labelledby="recovery-presentation-result-title"
+      data-recovery-presentation={presentation.state}
+    >
+      <h3 id="recovery-presentation-result-title" className="font-semibold">
+        {m.library_archive_recovery_presentation_result()}
+      </h3>
+      <p role="status">{presentationOutcomeText(presentation)}</p>
+      {presentation.state === 'unsupported_or_stale' ? (
+        <p className="text-sm">{m.library_archive_recovery_presentation_stale_help()}</p>
+      ) : null}
+      <p className="text-sm text-muted-foreground">{m.library_archive_recovery_presentation_partial_scope()}</p>
+      <EvidenceDetails value={presentation} title={m.library_archive_progress_exact()} />
     </section>
   );
 }
@@ -170,6 +212,7 @@ export function ArchiveRecoveryResults({
   receivingActions,
   targets,
   sourceTitle,
+  showReadAction = true,
 }: {
   status: RecoveryStatus;
   targets?: ReadonlyMap<string, EntityPickerSubject>;
@@ -185,6 +228,7 @@ export function ArchiveRecoveryResults({
   receivingWindow: ReceivingReadWindow;
   receivingBusy: boolean;
   receivingActions: ReceivingCollectionActions;
+  showReadAction?: boolean;
 }) {
   const collectionId = status.collectionId;
   const state = status.state;
@@ -220,7 +264,7 @@ export function ArchiveRecoveryResults({
                     ? m.library_archive_recovery_applying_help()
                     : m.library_archive_recovery_result_help()}
         </p>
-        <RecoveryPresentationOutcome presentation={status.presentation} />
+        <PresentationOutcome presentation={status.presentation} />
         {collectionId ? (
           <a
             className={`${actionClass} inline-flex w-fit items-center underline`}
@@ -228,15 +272,6 @@ export function ArchiveRecoveryResults({
           >
             {m.library_archive_recovery_open_collection()}
           </a>
-        ) : null}
-        {collectionId ? (
-          <ArchiveReceivingCollection
-            page={receiving}
-            window={receivingWindow}
-            busy={receivingBusy}
-            targets={targets}
-            {...receivingActions}
-          />
         ) : null}
         <p className="text-sm text-muted-foreground">{m.library_archive_recovery_evidence_independence()}</p>
         {status.pin.state === 'unsupported' ? (
@@ -246,42 +281,63 @@ export function ArchiveRecoveryResults({
         )}
       </div>
       {state === 'applying' ? <p role="status">{m.library_archive_recovery_continue_apply_help()}</p> : null}
-      <div className="flex flex-wrap gap-2">
-        <button className={actionClass} type="button" disabled={busy} onClick={onRead}>
-          {m.library_archive_recovery_read_outcomes()}
-        </button>
-        {page ? (
-          <button className={actionClass} type="button" disabled={busy} onClick={onFirst}>
-            {m.library_archive_recovery_first_page()}
-          </button>
+      <section
+        className="grid gap-4 rounded-xl border p-4 sm:p-6"
+        aria-label={m.library_archive_recovery_evidence_independence()}
+      >
+        <div className="flex flex-wrap gap-2">
+          {showReadAction ? (
+            <button className={actionClass} type="button" disabled={busy} onClick={onRead}>
+              {m.library_archive_recovery_read_outcomes()}
+            </button>
+          ) : null}
+          {page ? (
+            <button className={actionClass} type="button" disabled={busy} onClick={onFirst}>
+              {m.library_archive_recovery_first_page()}
+            </button>
+          ) : null}
+          {canPrevious ? (
+            <button className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
+              {m.library_window_previous()}
+            </button>
+          ) : null}
+          {page?.next ? (
+            <button
+              className={actionClass}
+              type="button"
+              disabled={busy}
+              onClick={(event) => onNext(page.next!, event)}
+            >
+              {m.library_archive_recovery_next_results()}
+            </button>
+          ) : null}
+        </div>
+        <EvidenceDetails value={status} />
+        {page?.outcomes.length ? (
+          <ol className="grid gap-3">
+            {page.outcomes.map((item, index) => (
+              <OutcomeRow
+                key={item.sourceOccurrenceId}
+                item={item}
+                index={index}
+                title={targetTitle(item.targetSubjectId)}
+              />
+            ))}
+          </ol>
+        ) : page ? (
+          <p role="status" className="rounded-lg border p-4">
+            {m.library_archive_recovery_no_outcomes()}
+          </p>
         ) : null}
-        {canPrevious ? (
-          <button className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
-            {m.library_window_previous()}
-          </button>
-        ) : null}
-        {page?.next ? (
-          <button className={actionClass} type="button" disabled={busy} onClick={(event) => onNext(page.next!, event)}>
-            {m.library_archive_recovery_next_results()}
-          </button>
-        ) : null}
-      </div>
-      <EvidenceDetails value={status} />
-      {page?.outcomes.length ? (
-        <ol className="grid gap-3">
-          {page.outcomes.map((item, index) => (
-            <OutcomeRow
-              key={item.sourceOccurrenceId}
-              item={item}
-              index={index}
-              title={targetTitle(item.targetSubjectId)}
-            />
-          ))}
-        </ol>
-      ) : page ? (
-        <p role="status" className="rounded-lg border p-4">
-          {m.library_archive_recovery_no_outcomes()}
-        </p>
+      </section>
+      {collectionId ? (
+        <ArchiveReceivingCollection
+          page={receiving}
+          window={receivingWindow}
+          busy={receivingBusy}
+          targets={targets}
+          {...receivingActions}
+        />
       ) : null}
     </section>
   );

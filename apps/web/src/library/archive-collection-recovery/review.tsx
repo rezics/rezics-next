@@ -13,9 +13,10 @@ import {
   type RecoveryOccurrence,
   type RecoveryOccurrencesPage,
   type RecoveryReview,
+  type RecoveryPresentationChoice,
   type RecoveryPresentationEvidence,
 } from './contract';
-import { RecoveryPresentationChoices, RecoverySealedPresentation } from './presentation';
+import { RecoveryPresentationChoices } from './presentation';
 import { canSelectOccurrence, selectionLimitReached, type OccurrenceSelection } from './selection';
 
 function Coverage({ page }: { page: RecoveryCollectionsPage }) {
@@ -106,7 +107,7 @@ export function ArchiveCollectionChooser({
   onNext: (cursor: string, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-6 xl:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.5fr)]">
       <Coverage page={page} />
       <section className="grid gap-4" aria-labelledby="recovery-collections-title">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -223,6 +224,7 @@ export function ArchiveOccurrenceChooser({
   onToggle,
   onTogglePage,
   onReview,
+  showReviewAction = true,
   onPage,
   onFirst,
   canPrevious,
@@ -234,7 +236,8 @@ export function ArchiveOccurrenceChooser({
   busy: boolean;
   onToggle: (row: RecoveryOccurrence) => void;
   onTogglePage: (rows: readonly RecoveryOccurrence[]) => void;
-  onReview: () => void;
+  onReview?: () => void;
+  showReviewAction?: boolean;
   onPage: (cursor: string, event: MouseEvent<HTMLButtonElement>) => void;
   onFirst: (event: MouseEvent<HTMLButtonElement>) => void;
   canPrevious: boolean;
@@ -248,13 +251,6 @@ export function ArchiveOccurrenceChooser({
         <h2 id="recovery-occurrences-title" tabIndex={-1} className="text-lg font-semibold">
           {m.library_archive_recovery_occurrences_title()}
         </h2>
-        {page.collection ? (
-          <div className="grid gap-2 rounded-lg border p-4">
-            <p className="break-words font-medium">{page.collection.title ?? m.library_archive_recovery_untitled()}</p>
-            {page.collection.description ? <p className="break-words text-sm">{page.collection.description}</p> : null}
-            <p className="text-sm text-muted-foreground">{m.library_archive_recovery_destination_private()}</p>
-          </div>
-        ) : null}
         <p className="text-sm text-muted-foreground">
           {m.library_archive_recovery_selection_count({ count: selected.size, maximum: RECOVERY_SELECTED_OCCURRENCES })}
         </p>
@@ -279,9 +275,11 @@ export function ArchiveOccurrenceChooser({
             {m.library_window_previous()}
           </button>
         ) : null}
-        <button className={actionClass} type="button" disabled={busy || !selected.size} onClick={onReview}>
-          {m.library_archive_recovery_open_review()}
-        </button>
+        {showReviewAction && onReview ? (
+          <button className={actionClass} type="button" disabled={busy || !selected.size} onClick={onReview}>
+            {m.library_archive_recovery_open_review()}
+          </button>
+        ) : null}
         {page.next ? (
           <button className={actionClass} type="button" disabled={busy} onClick={(event) => onPage(page.next!, event)}>
             {m.library_archive_recovery_next_page()}
@@ -319,6 +317,39 @@ function subjectSources(selected: OccurrenceSelection): string[] {
       ),
     ),
   ].sort();
+}
+
+function presentationSourceText(source: RecoveryPresentationChoice['source']): string {
+  switch (source) {
+    case 'mixed':
+      return m.library_archive_recovery_presentation_source_mixed();
+    case 'archived':
+      return m.library_archive_recovery_presentation_source_archived();
+    case 'alternative':
+      return m.library_archive_recovery_presentation_source_alternative();
+    case null:
+      return m.library_archive_recovery_presentation_source_unreviewed();
+  }
+}
+
+function SealedPresentationChoice({ choice }: { choice: RecoveryPresentationChoice }) {
+  return (
+    <section className="grid min-w-0 gap-3 rounded-lg border p-4" data-recovery-presentation="sealed">
+      <h4 className="font-semibold">{m.library_archive_recovery_presentation_sealed()}</h4>
+      <dl className="grid min-w-0 gap-2 text-sm sm:grid-cols-2">
+        <div className="grid min-w-0 gap-1">
+          <dt className="font-medium">{m.library_archive_recovery_presentation_kind()}</dt>
+          <dd className="[overflow-wrap:anywhere]">{choice.kind ?? m.library_collection_mixed_label()}</dd>
+        </div>
+        <div className="grid min-w-0 gap-1">
+          <dt className="font-medium">{m.library_archive_recovery_presentation_source()}</dt>
+          <dd>{presentationSourceText(choice.source)}</dd>
+        </div>
+      </dl>
+      <p className="text-sm text-muted-foreground">{m.library_archive_recovery_presentation_sealed_help()}</p>
+      <EvidenceDetails value={choice} title={m.library_archive_progress_exact()} />
+    </section>
+  );
 }
 
 export function ArchiveRecoveryReview({
@@ -396,16 +427,15 @@ export function ArchiveRecoveryReview({
         />
       ) : null}
 
-      <div className="grid gap-3">
-        <h3 className="font-semibold">{m.library_archive_recovery_mappings_title()}</h3>
+      <section className="grid gap-3 rounded-xl border p-4 sm:p-5" aria-labelledby="recovery-mappings-title">
+        <h3 id="recovery-mappings-title" className="font-semibold">
+          {m.library_archive_recovery_mappings_title()}
+        </h3>
         <p className="text-sm text-muted-foreground">{m.library_archive_recovery_mappings_help()}</p>
         {sources.length ? (
           sources.map((sourceSubjectId, index) => (
             <div key={sourceSubjectId} className="grid min-w-0 gap-2 rounded-lg border p-4">
-              <p className="font-medium">
-                {m.library_archive_present_item({ number: index + 1 })} ·{' '}
-                {m.library_archive_present_title_unavailable()}
-              </p>
+              <p className="font-medium">{m.library_archive_present_item({ number: index + 1 })}</p>
               <EvidenceDetails value={{ sourceSubjectId }} />
               <CopyEditionPicker
                 value={targets.get(sourceSubjectId) ?? null}
@@ -417,10 +447,15 @@ export function ArchiveRecoveryReview({
         ) : (
           <p role="status">{m.library_archive_recovery_no_mappings()}</p>
         )}
-      </div>
+      </section>
 
-      <div className="grid gap-3">
-        <h3 className="font-semibold">{m.library_archive_recovery_notes_title()}</h3>
+      <section
+        className="grid gap-3 rounded-xl border p-4 sm:p-5"
+        aria-labelledby="recovery-selected-occurrences-title"
+      >
+        <h3 id="recovery-selected-occurrences-title" className="font-semibold">
+          {m.library_archive_recovery_notes_title()}
+        </h3>
         <ol className="grid max-h-[30rem] gap-3 overflow-auto rounded-lg border p-3">
           {[...selected.values()].map((row, index) => (
             <li key={row.sourceOccurrenceId} className="grid gap-1 border-b pb-3 last:border-0 last:pb-0">
@@ -442,12 +477,12 @@ export function ArchiveRecoveryReview({
             </li>
           ))}
         </ol>
-      </div>
+      </section>
 
       {review ? (
         <div className="grid gap-3 rounded-xl border border-primary/40 p-4" role="status">
           <h3 className="font-semibold">{m.library_archive_recovery_native_review_title()}</h3>
-          {review.review ? <RecoverySealedPresentation choice={review.review.presentation} /> : null}
+          {review.review ? <SealedPresentationChoice choice={review.review.presentation} /> : null}
           <p>
             {review.completeMembership
               ? m.library_archive_recovery_membership_complete()
