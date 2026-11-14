@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { FileText } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { SidebarMenu, SidebarMenuItem } from '@rezics/ui/shadcn/sidebar';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { StudioDocument } from './contract';
@@ -19,7 +20,7 @@ export function StudioDraftNavigation({
   onOpen: (postId: string) => void;
 }) {
   return (
-    <ol className="studio-navigation-branch">
+    <SidebarMenu className="studio-navigation-branch">
       {documents.map((document) => (
         <DraftEntry
           key={document.postId}
@@ -29,7 +30,7 @@ export function StudioDraftNavigation({
           onOpen={onOpen}
         />
       ))}
-    </ol>
+    </SidebarMenu>
   );
 }
 
@@ -62,7 +63,7 @@ function DraftEntry({
             ? m.studio_workspace_taken_down({}, options)
             : m.studio_workspace_private_draft({}, options);
   return (
-    <li>
+    <SidebarMenuItem>
       <Button
         type="button"
         variant="ghost"
@@ -81,6 +82,6 @@ function DraftEntry({
           </span>
         </span>
       </Button>
-    </li>
+    </SidebarMenuItem>
   );
 }

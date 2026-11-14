@@ -97,22 +97,6 @@
   color: var(--muted-foreground);
 }
 
-.studio-navigation-menu[data-slot='dropdown-menu-content'] {
-  inline-size: max-content;
-  min-inline-size: min(14rem, calc(100vw - 2rem));
-  max-inline-size: min(20rem, calc(100vw - 2rem));
-}
-
-.studio-navigation-menu [data-slot='dropdown-menu-label'],
-.studio-navigation-menu [data-slot='dropdown-menu-item'] {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.studio-navigation-menu [data-slot='dropdown-menu-item'] {
-  min-block-size: 2.75rem;
-}
-
 .studio-navigation-document-copy {
   display: grid;
   gap: 0.1rem;

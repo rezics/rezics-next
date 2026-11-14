@@ -145,6 +145,13 @@ selected document editor remains mounted and inert while hidden. **Return to doc
 same editor, selection and Write/Preview/history choice without a read; it retains the organization draft. Hidden
 organization fields and their Select popups are inert. Column keeps its article navigation and creation workflow.
 
+Navigation overflow uses public `Menu` from `@rezics/ui/menu`, sharing desktop dropdown and phone-sheet behavior.
+Book parts use controlled `Collapsible` with `keepMounted` panels so collapsing a parent retains nested disclosure
+state. Book and Column lists use context-free `SidebarMenu` and `SidebarMenuItem`; Shell alone owns the sidebar
+provider and drawer. Document and part rows compose `Button` because the same guarded navigation also works outside
+Shell. Studio keeps capped native-depth indentation, wrapping titles, touch-sized rows, current-document treatment
+and visibility descriptions; shared primitives own menus, disclosure semantics and list structure.
+
 Opening organization from dirty document work uses the existing Save and switch / Discard and switch / Keep editing
 review. A cancelled review cannot resume after a late save. Changing an organization action or selecting another
 document while organization values are dirty requires Discard and switch / Keep changes. Returning to the same
@@ -172,7 +179,7 @@ unknown replay and current-structure rechecks. `studio-workspace-continuity.test
 cancelled late save, caret/editor return, incompatible dirty switching and pending replay beside newer document work. `studio-book-selection.test.tsx` supplies
 the new presentation callback with all selection assertions unchanged; the mounted outline in
 `studio-hosted-draft-picker.test.tsx` supplies the same callback without changing its attachment assertions. `BookOrganizationDraft` is the named retained
-form story. Execution is deferred: formatting and diff review are the source-only checks; compiler, focused tests,
+form story. The code-only window permits source edits and commits only. Formatting, compiler, focused tests,
 Storybook/browser/captures, native phone/desktop/keyboard interactions and original/promoted acceptance remain
 unverified and belong to the separate verifier.
 

@@ -1,15 +1,9 @@
-import { useId, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronRight, FileText, MoreHorizontal, Plus } from 'lucide-react';
+import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@rezics/ui/shadcn/dropdown-menu';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
+import { SidebarMenu, SidebarMenuItem } from '@rezics/ui/shadcn/sidebar';
 import { bookTocIndex, moveBookOccurrence, type BookTocIndex, type BookTocRow } from './book-toc';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -103,12 +97,10 @@ export function BookOrganizer({
 function TocBranch({
   parent,
   outline,
-  id,
   ...props
 }: {
   parent: string | null;
   outline: BookTocIndex;
-  id?: string;
   state: StudioState;
   controller: StudioController;
   editable: boolean;
@@ -117,11 +109,11 @@ function TocBranch({
 }) {
   const siblings = outline.children.get(parent) ?? [];
   return (
-    <ol id={id} className="studio-navigation-branch">
+    <SidebarMenu className="studio-navigation-branch">
       {siblings.map((row) => (
         <TocEntry key={row.placement.occurrenceId} row={row} outline={outline} {...props} />
       ))}
-    </ol>
+    </SidebarMenu>
   );
 }
 function TocEntry({
@@ -142,7 +134,6 @@ function TocEntry({
   onOrganize: (request: BookOrganizationRequest) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const branchId = useId();
   const { placement } = row;
   const locale = getLocale();
   const target = placement.target;
@@ -158,8 +149,70 @@ function TocEntry({
     !sameExact(current.source.revision.exact, target.document)
       ? current.source.revision.exact
       : null;
-  return (
-    <li>
+  const actions: MenuEntry[] = [
+    {
+      type: 'item',
+      label: m.studio_book_move_to({}, { locale }),
+      disabled: !editable,
+      onSelect: () => onOrganize({ kind: 'move', occurrenceId: placement.occurrenceId }),
+    },
+    ...(
+      [
+        {
+          direction: 'up',
+          label: m.studio_book_move_up_title({ title: placement.title }, { locale }),
+        },
+        {
+          direction: 'down',
+          label: m.studio_book_move_down_title({ title: placement.title }, { locale }),
+        },
+        {
+          direction: 'in',
+          label: m.studio_book_nest_title({ title: placement.title }, { locale }),
+        },
+        {
+          direction: 'out',
+          label: m.studio_book_unnest_title({ title: placement.title }, { locale }),
+        },
+      ] as const
+    ).map(({ direction, label }): MenuEntry => ({
+      type: 'item',
+      label,
+      disabled: !editable || !moveBookOccurrence(row, direction, outline),
+      onSelect: () => {
+        const structure = controller.snapshot().structure;
+        if (!structure) return;
+        const latest = bookTocIndex(structure);
+        const source = latest.byId.get(placement.occurrenceId);
+        const current = source ? moveBookOccurrence(source, direction, latest) : null;
+        if (current) void controller.organize(current);
+      },
+    })),
+  ];
+  if (pin)
+    actions.push({
+      type: 'item',
+      label: m.studio_book_use_saved_version({}, { locale }),
+      disabled: !editable,
+      onSelect: () => void controller.organize({ kind: 'pin', occurrenceId: placement.occurrenceId, document: pin }),
+    });
+  actions.push(
+    { type: 'separator' },
+    {
+      type: 'item',
+      label: m.studio_book_rename({}, { locale }),
+      disabled: !editable,
+      onSelect: () => onOrganize({ kind: 'rename', occurrenceId: placement.occurrenceId }),
+    },
+    {
+      type: 'destructive',
+      label: m.studio_book_remove({}, { locale }),
+      disabled: !editable,
+      onSelect: () => onOrganize({ kind: 'remove', occurrenceId: placement.occurrenceId }),
+    },
+  );
+  const entry = (
+    <>
       <div
         className="studio-navigation-entry"
         data-current={active || undefined}
@@ -178,110 +231,32 @@ function TocEntry({
             <span>{placement.title}</span>
           </Button>
         ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            className="studio-navigation-row studio-navigation-part"
-            aria-expanded={expanded}
-            aria-controls={branchId}
-            onClick={() => setExpanded((value) => !value)}
+          <CollapsibleTrigger
+            render={<Button type="button" variant="ghost" className="studio-navigation-row studio-navigation-part" />}
           >
             <ChevronRight className="studio-navigation-chevron" aria-hidden="true" />
             <span>{placement.title}</span>
-          </Button>
+          </CollapsibleTrigger>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            type="button"
-            className="studio-navigation-actions"
-            aria-label={m.studio_book_organize_title({ title: placement.title }, { locale })}
-          >
-            <MoreHorizontal aria-hidden="true" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="studio-navigation-menu">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>{placement.title}</DropdownMenuLabel>
-              <DropdownMenuItem
-                disabled={!editable}
-                onClick={() => onOrganize({ kind: 'move', occurrenceId: placement.occurrenceId })}
-              >
-                {m.studio_book_move_to({}, { locale })}
-              </DropdownMenuItem>
-              {(
-                [
-                  {
-                    direction: 'up',
-                    label: m.studio_book_move_up({}, { locale }),
-                    name: m.studio_book_move_up_title({ title: placement.title }, { locale }),
-                  },
-                  {
-                    direction: 'down',
-                    label: m.studio_book_move_down({}, { locale }),
-                    name: m.studio_book_move_down_title({ title: placement.title }, { locale }),
-                  },
-                  {
-                    direction: 'in',
-                    label: m.studio_book_nest({}, { locale }),
-                    name: m.studio_book_nest_title({ title: placement.title }, { locale }),
-                  },
-                  {
-                    direction: 'out',
-                    label: m.studio_book_unnest({}, { locale }),
-                    name: m.studio_book_unnest_title({ title: placement.title }, { locale }),
-                  },
-                ] as const
-              ).map(({ direction, label, name }) => {
-                const change = moveBookOccurrence(row, direction, outline);
-                return (
-                  <DropdownMenuItem
-                    key={direction}
-                    disabled={!editable || !change}
-                    aria-label={name}
-                    onClick={() => {
-                      const structure = controller.snapshot().structure;
-                      if (!structure) return;
-                      const latest = bookTocIndex(structure);
-                      const source = latest.byId.get(placement.occurrenceId);
-                      const current = source ? moveBookOccurrence(source, direction, latest) : null;
-                      if (current) void controller.organize(current);
-                    }}
-                  >
-                    {label}
-                  </DropdownMenuItem>
-                );
-              })}
-              {pin ? (
-                <DropdownMenuItem
-                  disabled={!editable}
-                  onClick={() =>
-                    void controller.organize({ kind: 'pin', occurrenceId: placement.occurrenceId, document: pin })
-                  }
-                >
-                  {m.studio_book_use_saved_version({}, { locale })}
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!editable}
-                onClick={() => onOrganize({ kind: 'rename', occurrenceId: placement.occurrenceId })}
-              >
-                {m.studio_book_rename({}, { locale })}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                disabled={!editable}
-                onClick={() => onOrganize({ kind: 'remove', occurrenceId: placement.occurrenceId })}
-              >
-                {m.studio_book_remove({}, { locale })}
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Menu
+          title={m.studio_book_organize_title({ title: placement.title }, { locale })}
+          entries={actions}
+          navigationScope={controller}
+          trigger={
+            <Button
+              type="button"
+              variant="ghost"
+              className="studio-navigation-actions"
+              aria-label={m.studio_book_organize_title({ title: placement.title }, { locale })}
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </Button>
+          }
+        />
       </div>
       {target.kind === 'part' ? (
-        <div hidden={!expanded}>
+        <CollapsibleContent keepMounted>
           <TocBranch
-            id={branchId}
             parent={placement.occurrenceId}
             outline={outline}
             state={state}
@@ -290,8 +265,15 @@ function TocEntry({
             onOpen={onOpen}
             onOrganize={onOrganize}
           />
-        </div>
+        </CollapsibleContent>
       ) : null}
-    </li>
+    </>
+  );
+  return target.kind === 'part' ? (
+    <Collapsible open={expanded} onOpenChange={setExpanded} render={<SidebarMenuItem />}>
+      {entry}
+    </Collapsible>
+  ) : (
+    <SidebarMenuItem>{entry}</SidebarMenuItem>
   );
 }
