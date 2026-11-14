@@ -289,9 +289,12 @@ test('large raw windows batch independent frontiers without reading the whole Bo
     const ranks = Array.from({ length: limit + 1 }, (_, offset) =>
       direction === 'next' ? originRank + offset : originRank - 1 - offset,
     );
-    expect(page.candidates.map(({ value, rank }) => [value, rank])).toEqual(
-      ranks.map((rank) => [chapterValues[rank], BigInt(rank)]),
-    );
+    const expected = ranks.map((rank) => {
+      const value = chapterValues[rank];
+      if (value === undefined) throw new Error(`Missing chapter at rank ${rank}`);
+      return [value, BigInt(rank)];
+    });
+    expect(page.candidates.map(({ value, rank }) => [value, rank])).toEqual(expected);
     expect(batches.some((ids) => ids.length > 1)).toBe(true);
     expect(batches.length).toBeLessThan(limit);
     expect(batches.every((ids) => ids.length <= 512)).toBe(true);

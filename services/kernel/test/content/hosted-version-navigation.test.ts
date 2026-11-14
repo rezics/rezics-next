@@ -102,8 +102,9 @@ test('mounted chapter navigation pages exact nested snapshots in both directions
 
   const client: AccessClient = f.native.pool;
   const snapshot = await readHostedDraftPointSnapshot(client, catalogue.firstPost.id, revisionId);
-  if (!snapshot?.chapterRootId || !snapshot.preorderRootId)
+  if (snapshot === null || !snapshot.chapterRootId || !snapshot.preorderRootId)
     throw new Error('Converted hosted catalogue revision has no selected sequence roots');
+  const selectedSnapshot = snapshot;
   const heightWrite = createHostedVersionWrite<HostedVersionPointValue>(client, snapshot);
   const chapterIndex = hostedVersionSequence(heightWrite, 'chapter');
   const preorderIndex = hostedVersionSequence(heightWrite, 'preorder');
@@ -166,13 +167,13 @@ test('mounted chapter navigation pages exact nested snapshots in both directions
   const chapterHeight = (await hostedVersionSequence(heightBoundWrite, 'chapter').readNode(snapshot.chapterRootId))!
     .height;
   async function nativePage(direction: 'previous' | 'next', originNodeId: string) {
-    const write = createHostedVersionWrite<HostedVersionPointValue>(client, snapshot);
+    const write = createHostedVersionWrite<HostedVersionPointValue>(client, selectedSnapshot);
     const preorder: HostedVersionReadIndex<HostedVersionPointValue> = {
-      rootId: snapshot.preorderRootId,
+      rootId: selectedSnapshot.preorderRootId,
       access: hostedVersionSequence(write, 'preorder'),
     };
     const chapters: HostedVersionReadIndex<HostedVersionPointValue> = {
-      rootId: snapshot.chapterRootId,
+      rootId: selectedSnapshot.chapterRootId,
       access: hostedVersionSequence(write, 'chapter'),
     };
     return readHostedVersionChapterPage(preorder, chapters, { originNodeId, direction, limit: 3 });

@@ -599,7 +599,7 @@ test('FULL point keeps an inaccessible agent Follow target withheld while BASIC 
 });
 
 test('mounted FULL Follow reads recheck the owner after delayed contribution enrichment', async () => {
-  const targetId = await subject('Owner fence during enrichment');
+  const targetId = await subject();
   await json(await request('PUT', `/v1/follows/${targetId}`));
   const floor = await db.admin.query<{ minimum_authn_epoch: string }>(
     'SELECT minimum_authn_epoch::text FROM access.account WHERE route=$1 AND account_id=$2',

@@ -329,6 +329,10 @@ holds one atomic publication pointer. No full manifest copy or unbounded delta c
 Old release IDs, occurrence links, cursors and checkpoints keep their exact selections under current native access.
 Both paths use the shared structural primitive; neither changes Knowledge's individual-document publication.
 
+Decision: publication preparation imports its advance phase from the staging source; publication and release-candidate
+sequence adapters forward `readNodes` to the selected immutable snapshot workspace. Staging remains at 20 placements
+per step, and sequence reads keep physical node batches capped at 512.
+
 ### Point publication for serial Books
 
 Define owner operations `publishChapter` and `replacePublishedChapter` (contract names, not installed routes).

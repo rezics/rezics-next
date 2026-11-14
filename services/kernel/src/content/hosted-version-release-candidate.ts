@@ -336,6 +336,16 @@ function asStringIndex(
       nodeReads.set(id, node);
       return node;
     },
+    async readNodes(ids) {
+      const selected = await inner.readNodes(ids);
+      const nodes = new Map<string, VersionedOutlineSequenceNode<string> | null>();
+      for (const [id, node] of selected) {
+        const projected = project(node);
+        nodeReads.set(id, projected);
+        nodes.set(id, projected);
+      }
+      return nodes;
+    },
     writeNode(node) {
       const current = inner.nodeWrites.get(node.id) ?? inner.nodeReads.get(node.id);
       const value = payloads.get(node.id) ?? current?.value;

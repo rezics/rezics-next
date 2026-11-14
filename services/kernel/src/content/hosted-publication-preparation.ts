@@ -32,9 +32,9 @@ import {
   prepareHostedPublicationStagingAdvance,
   sealHostedPublicationStaging,
   type HostedPublicationStagingAdvancePreparation,
+  type HostedPublicationAdvancePhase,
 } from './hosted-publication-staging.ts';
 import type {
-  HostedPublicationAdvancePhase,
   HostedPublicationStagingBatchResult,
   HostedPublicationStagingCheckpoint,
   HostedPublicationStagingLocator,

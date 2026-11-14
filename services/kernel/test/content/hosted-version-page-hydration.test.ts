@@ -130,7 +130,7 @@ test('outline and chapter windows hydrate only visible rows with bounded tempora
       expect(batch.parameters[5]).toBe(selectedSnapshot.sequence.toString());
     }
     if (ids.length === 10) expect(nodeBatches.length).toBeLessThan(ids.length);
-    expect(result.placements.map(({ occurrenceId }) => occurrenceId)).toEqual(ids);
+    expect(result.placements.map(({ occurrenceId }) => occurrenceId)).toEqual([...ids]);
     return result;
   }
 
