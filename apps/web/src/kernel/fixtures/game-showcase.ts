@@ -4,7 +4,7 @@ import type { Release } from '@rezics/definitions';
 import definitions from '../recorded/definitions-release.json';
 
 /** Invented game, release catalogue and people. Never a provider recording or a real game's bibliography. */
-export const gameId = (n: number) => `0193c000-0000-7000-8000-${String(n).padStart(12, '0')}`;
+export const gameId = (n: number) => `0193d000-0000-7000-8000-${String(n).padStart(12, '0')}`;
 export const game = { id: gameId(1), label: 'Harbour Lights' };
 export const gameSparse = { id: gameId(2), label: 'Harbour Lights: The Uncharted Shore' };
 export const gameStudio = { id: gameId(3), label: 'North Quay Studio' };
