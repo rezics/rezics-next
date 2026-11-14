@@ -119,7 +119,8 @@ Mention nodes store only account IDs; resolving a current handle belongs to the 
 Decision: Text and Blocks snapshots store inline `footnoteReference` nodes keyed by case-sensitive labels and
 top-level `footnoteDefinition` blocks with ordinary profile content; definitions keep normal unique block IDs,
 imports accept `[^label]` and `[^label]:` with indented continuations, and the `DocumentBody` export from
-`@rezics/ui/document-body` renders local references plus one accessible disclosure per definition. Labels are unique and every reference resolves; the
+`@rezics/ui/document-body` renders local references to each focusable summary and one accessible disclosure per definition.
+Labels are unique and every reference resolves; the
 shared reader owns disclosure state per document visit. Labels match `[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}`; note
 definitions cannot contain nested footnote references.
 
