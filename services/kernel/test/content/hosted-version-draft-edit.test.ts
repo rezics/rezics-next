@@ -775,8 +775,19 @@ function nativePreflightFixture() {
   const select = (selectedInput = input) =>
     createHostedVersionDraftMoveNativeAdapter().selectExpectedSnapshot(tx, catalogueId, selectedInput, descriptor);
   return {
-    select, input, facts, batches, occurrenceBatches, siblingRootBatches,
-    outer, parentA, source, parentB, empty, tail, preorder,
+    select,
+    input,
+    facts,
+    batches,
+    occurrenceBatches,
+    siblingRootBatches,
+    outer,
+    parentA,
+    source,
+    parentB,
+    empty,
+    tail,
+    preorder,
   };
 }
 
