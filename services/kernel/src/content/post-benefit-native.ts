@@ -1,8 +1,8 @@
 import type { AuthoritativeTime } from '../command/command.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { withConnection } from '../database/pool.ts';
-import type { Access, AccessClient, Actor } from '../request/access.ts';
+import type { AccessClient, Actor } from '../request/access.ts';
 import { accessCheck, deadlineClient } from './access-port.ts';
 import { prepareEditionSource } from './reads.ts';
 import { editionSnapshot, withEditionReadTime } from './edition-store.ts';
@@ -27,7 +27,6 @@ type SourceRow = {
   threadVisibility: string;
   threadAvailability: string;
   boardVisibility: string;
-  boardAvailability: string;
 };
 
 function sourceOf(row: SourceRow, targetSubjectId: string): ContentEditionSource {
@@ -61,7 +60,6 @@ async function readSource(client: AccessClient, postId: string): Promise<SourceR
     row.threadVisibility !== 'published' ||
     row.threadAvailability !== 'available' ||
     row.boardVisibility !== 'published' ||
-    row.boardAvailability !== 'available' ||
     !Array.isArray(row.subjectIds) ||
     row.subjectIds.some((id) => routeOf(id) === null) ||
     !/^[a-f0-9]{64}$/.test(row.sha256) ||

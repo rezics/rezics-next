@@ -3,7 +3,7 @@ SELECT p.route, p.thread_id AS "threadId", p.post_id AS "postId",
        encode(r.body_sha256, 'hex') AS sha256, r.licence, r.subject_ids AS "subjectIds",
        p.visibility AS "postVisibility", p.availability AS "postAvailability", p.deleted_at AS "deletedAt",
        t.visibility AS "threadVisibility", t.availability AS "threadAvailability",
-       b.visibility AS "boardVisibility", b.availability AS "boardAvailability"
+       b.visibility AS "boardVisibility"
 FROM content.post p
 JOIN content.revision r ON r.route=p.route AND r.thread_id=p.thread_id
   AND r.post_id=p.post_id AND r.revision_id=p.head_revision_id
