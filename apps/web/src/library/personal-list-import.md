@@ -137,3 +137,17 @@ fixtures. The importer pin is `showcase-personal-list.test.ts` for sealed previe
 Progress, cancel/delete and independent FULL Library. Native HTTP, coordinator and entry-metadata keep existing
 assertions. Native guard and exact-self cases remain Kernel capability repairs; native, browser and growth acceptance
 stay with controller verification.
+
+Decision: compose all four private import visits as upload, bounded item review, explicit confirmation and results.
+Keep supplied title, provider identity, matching state and chosen target together; place independent Library, score
+and label controls in that item's card. Source evidence, exact keys and reopen identifiers use labelled secondary
+details. Keep AniList's review subtree mounted through confirmation and results so label-search intent and native
+review ownership survive returning; label confirmation remains a separate native operation. Use one metadata index
+per bounded render, without row hydration or refill. Preserve replacement/privacy warnings and unknown-command
+custody at confirmation. Empty pages and unacknowledged results offer review and Library return.
+
+Verification decision: author focused composition acceptance for the dev verifier and run the changed Web workspace's
+installed typecheck; test execution, native mounted journeys and keyboard/eight-locale phone/desktop review are deferred.
+Design sources: this owner; the AniList, MAL and Bangumi presentation owners; and each provider's existing page,
+review, row, confirmation and results components. Installed Impeccable `reference/craft-floor.md` was absent from the
+available skill/reference directories; it is guidance, not a prerequisite.

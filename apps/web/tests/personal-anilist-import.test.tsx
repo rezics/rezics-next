@@ -996,3 +996,46 @@ test('replacement question refusal retires prior vote consent before native revi
   await journey.review(0, subject);
   expect(journey.openConfirm().meta[0]?.nativeVoteConsent).toBeNull();
 });
+
+test('item review keeps independent labels beside identity and preserves mounted search intent across confirmation', async () => {
+  const f = recordingPort(1);
+  const readPage = f.port.page;
+  f.port.page = async (command) => {
+    const response = await readPage(command);
+    if (response.kind === 'page')
+      response.page.rows[0]!.labelEvidence = {
+        membership: 'available',
+        grouping: 'custom',
+        values: [{ key: 'customLists:Private', value: 'Private', member: true, origin: 'customLists' }],
+        selectable: [{ key: 'customLists:Private', value: 'Private', member: true, origin: 'customLists' }],
+        tagEvidence: { entry: 'missing', media: 'missing', membership: 'unavailable' },
+        tags: 'missing',
+        reason: 'Illustrative retained label evidence',
+      };
+    return response;
+  };
+  await mount(f.port);
+  await uploadCollection();
+  const card = host.querySelector('article[data-anilist-row="0"]')!;
+  const labels = card.querySelector('[data-anilist-label-row="0"]')!;
+  expect(labels).not.toBeNull();
+  expect(card.textContent).toContain('Show 1');
+  expect(card.textContent).toContain(m.library_import_state());
+  expect(card.textContent).toContain(m.library_anilist_score_choice());
+  const search = labels.querySelector<HTMLInputElement>('input[id$="-search"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(search, 'My labels');
+    search.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+  await setTarget();
+  await click(m.library_anilist_save_review());
+  await click(m.library_anilist_continue_confirm());
+  expect(labels.isConnected).toBe(true);
+  expect(labels.closest('[hidden]')).not.toBeNull();
+  expect(f.applies).toHaveLength(0);
+  await click(m.library_anilist_return_review());
+  expect(card.querySelector('input[id$="-search"]')).toBe(search);
+  expect(search.value).toBe('My labels');
+  expect(labels.closest('[hidden]')).toBeNull();
+  expect(f.applies).toHaveLength(0);
+});

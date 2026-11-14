@@ -12430,5 +12430,22 @@
   "studio_source_consent_stale": "来源服务判定已审阅来源过期并拒绝了操作。请重新审阅所选的已保存版本。许可状态未知。",
   "studio_source_consent_unavailable": "你的当前访问权限无法使用此来源许可。其状态未知；这并不表示缺少许可。",
   "studio_source_consent_failed": "此许可操作被拒绝。许可状态未知；这并不表示缺少许可。",
-  "studio_source_consent_revoke_help": "撤销此许可可能导致 Book 读者无法打开此版本。"
+  "studio_source_consent_revoke_help": "撤销此许可可能导致 Book 读者无法打开此版本。",
+  "library_import_steps": "导入步骤",
+  "library_import_upload": "上传",
+  "library_import_review": "逐项核对",
+  "library_import_confirm": "确认更改",
+  "library_import_results": "结果",
+  "library_import_private_help": "这是你的私人导出文件。上传仅生成预览。请分别选择藏书库、评分和标签操作；来源笔记保持私密。",
+  "library_import_evidence": "来源证据与准确标识",
+  "library_import_target": "已选目录条目",
+  "library_import_unmatched": "尚未选择条目。请搜索目录，或保持此项不变。",
+  "library_import_state": "藏书库状态",
+  "library_import_score": "评分",
+  "library_import_labels": "私人标签",
+  "library_import_empty": "本页没有条目。请打开其他保留页面，或返回藏书库。",
+  "library_import_no_results": "尚无已确认的更改。请返回核对并选择要应用的内容。",
+  "library_import_retained": "保留的上传及重新打开信息",
+  "library_import_review_help": "继续前请逐项核对。标签使用独立的核对与确认。",
+  "library_import_reopen_help": "请保留此标识，以便在该提供方的上传页重新打开保留文件。"
 }

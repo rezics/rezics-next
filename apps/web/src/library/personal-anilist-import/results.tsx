@@ -1,7 +1,8 @@
+import { ImportEmpty, ImportTarget } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
-import type { AniListOutcome, AniListRowMeta } from './contract';
+import type { AniListOutcome, AniListRow, AniListRowMeta } from './contract';
 import { AniListAction } from './controls';
 import { aniListOutcomeLabel, aniListValidityLabel } from './meaning';
 
@@ -160,7 +161,9 @@ export function AniListResultPage({
   onRetry,
   onReview,
   onRefresh,
+  page = [],
 }: {
+  page?: AniListRow[];
   outcomes: AniListOutcome[];
   remaining: number[];
   meta: AniListRowMeta[];
@@ -177,6 +180,8 @@ export function AniListResultPage({
   const locale = getLocale();
   return (
     <section className="space-y-4" data-anilist-stage="results">
+      <h2 className="text-xl font-semibold">{m.library_import_results()}</h2>
+      {outcomes.length === 0 && remaining.length === 0 ? <ImportEmpty results /> : null}
       {cancelled ? (
         <p role="status">{m.library_anilist_stopped()}</p>
       ) : (
@@ -205,6 +210,21 @@ export function AniListResultPage({
           </li>
         ))}
       </ul>
+      {page
+        .filter((row) => rows.get(row.ordinal)?.labels)
+        .map((row) => (
+          <section
+            key={row.ordinal}
+            className="space-y-3 rounded-md border p-4"
+            data-anilist-label-result-row={row.ordinal}
+          >
+            <h3 className="font-medium">
+              {titles.get(row.ordinal)} · {m.library_import_labels()}
+            </h3>
+            <ImportTarget target={rows.get(row.ordinal)!.labels!.subjectId} />
+            <AniListLabelResult row={row} labels={rows.get(row.ordinal)!.labels!} />
+          </section>
+        ))}
       <div className="flex flex-wrap gap-3">
         <AniListAction type="button" variant="outline" disabled={busy} onClick={onReview}>
           {m.library_anilist_return_review()}

@@ -13,6 +13,7 @@ import { useAniListImportPort } from './port';
 import { AniListResultPage } from './results';
 import { AniListReviewPage } from './review';
 import type { RowDraft } from './row';
+import { ImportDetails, ImportJourney, ImportReturn } from '../personal-list-import/presentation';
 import { AniListApplying, AniListCancelledNotice, AniListRemovedNotice, AniListSignedOut } from './states';
 import { AniListUploadForm } from './upload';
 import { useAniListVisit, type AniListVisit } from './visit';
@@ -77,8 +78,9 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
 
   const locked = snap.busy || snap.notice?.kind === 'unknown';
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_anilist_title()}</PageHeading>
+      <ImportJourney stage={snap.stage} />
       {noticeText(snap.notice) ? (
         <p role="status" aria-live="polite">
           {noticeText(snap.notice)}
@@ -97,56 +99,59 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
         />
       ) : null}
       {snap.importId ? (
-        <p className="break-all text-sm">
-          {m.library_anilist_retained_id()}: {snap.importId}
-        </p>
+        <ImportDetails title={m.library_import_retained()}>
+          <p>{m.library_import_reopen_help()}</p>
+          <p className="break-all">
+            {m.library_anilist_retained_id()}: {snap.importId}
+          </p>
+        </ImportDetails>
       ) : null}
-      {snap.stage === 'review' ? (
-        <AniListReviewPage
-          snap={snap}
-          busy={locked}
-          onSave={(draft) => void saveReview(draft)}
-          onChoose={(draft) =>
-            act((current) =>
-              current.choose(draft.ordinal, {
-                skip: draft.skip,
-                replace: draft.replace,
-                applyStatus: draft.applyStatus,
-                scoreAction: draft.scoreAction,
-                scoreUnits: draft.scoreUnits,
-              }),
-            )
-          }
-          onRefreshQuestion={() => void act((current) => current.readQuestion())}
-          onNext={() => void act((current) => current.nextPage())}
-          onConfirm={() => act((current) => current.openConfirm())}
-        />
+      {snap.importId && snap.stage !== 'removed' ? (
+        <div hidden={snap.stage !== 'review'}>
+          <AniListReviewPage
+            key={snap.importId}
+            snap={snap}
+            busy={locked}
+            onSave={(draft) => void saveReview(draft)}
+            onChoose={(draft) =>
+              act((current) =>
+                current.choose(draft.ordinal, {
+                  skip: draft.skip,
+                  replace: draft.replace,
+                  applyStatus: draft.applyStatus,
+                  scoreAction: draft.scoreAction,
+                  scoreUnits: draft.scoreUnits,
+                }),
+              )
+            }
+            onRefreshQuestion={() => void act((current) => current.readQuestion())}
+            onNext={() => void act((current) => current.nextPage())}
+            onConfirm={() => act((current) => current.openConfirm())}
+            renderLabels={(row, meta) =>
+              row.labelEvidence && meta?.labels ? (
+                <AniListLabelAdoption
+                  row={row}
+                  meta={meta}
+                  busy={locked || snap.stage !== 'review'}
+                  cancelled={snap.cancelled}
+                  current={() => journey.current!.live()}
+                  onChoose={(subjectId, selections) =>
+                    void act((current) => current.chooseLabels(row.ordinal, subjectId, selections))
+                  }
+                  onReview={() => void act((current) => current.reviewLabels(row.ordinal))}
+                  onConfirm={() => void act((current) => current.confirmLabels(row.ordinal))}
+                  onRead={() => void act((current) => current.readLabels(row.ordinal))}
+                  onSearch={(query, cursor) => journey.current!.labelTargets(query, cursor)}
+                />
+              ) : null
+            }
+          />
+        </div>
       ) : null}
-      {snap.stage === 'review' || snap.stage === 'results' || snap.stage === 'cancelled'
-        ? snap.page
-            .filter((row) => row.labelEvidence)
-            .map((row) => (
-              <AniListLabelAdoption
-                key={`${snap.importId}:${row.ordinal}`}
-                row={row}
-                meta={snap.meta.find((item) => item.ordinal === row.ordinal)!}
-                busy={locked}
-                cancelled={snap.cancelled}
-                current={() => journey.current!.live()}
-                onChoose={(subjectId, selections) =>
-                  void act((current) => current.chooseLabels(row.ordinal, subjectId, selections))
-                }
-                onReview={() => void act((current) => current.reviewLabels(row.ordinal))}
-                onConfirm={() => void act((current) => current.confirmLabels(row.ordinal))}
-                onRead={() => void act((current) => current.readLabels(row.ordinal))}
-                onSearch={(query, cursor) => journey.current!.labelTargets(query, cursor)}
-              />
-            ))
-        : null}
       {snap.stage === 'confirm' ? (
         <AniListConfirmPage
           rows={snap.meta}
-          busy={snap.busy}
+          busy={locked}
           confirmPrivacy={snap.confirmPrivacy}
           confirmTimestamps={snap.confirmTimestamps}
           onBack={() => act((current) => current.backToReview())}
@@ -161,7 +166,8 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           outcomes={snap.outcomes}
           remaining={snap.remaining}
           meta={snap.meta}
-          busy={snap.busy}
+          page={snap.page}
+          busy={locked}
           cancelled={snap.cancelled}
           canRetry={snap.outcomes.some((item) => item.status === 'failed')}
           onRetry={() => void act((current) => current.retryFailed())}
@@ -195,6 +201,7 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           </AniListAction>
         </div>
       ) : null}
+      {snap.stage !== 'results' ? <ImportReturn /> : null}
       <AniListDeparture
         active={!!snap.importId && snap.stage !== 'removed'}
         locked={locked}

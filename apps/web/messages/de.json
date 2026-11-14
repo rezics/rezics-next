@@ -12430,5 +12430,22 @@
   "studio_source_consent_stale": "Der Quelldienst hat die geprüfte Quelle als veraltet abgelehnt. Prüfe die ausgewählte gespeicherte Version erneut. Der Erlaubnisstatus ist unbekannt.",
   "studio_source_consent_unavailable": "Diese Quellerlaubnis ist mit deinem aktuellen Zugriff nicht verfügbar. Ihr Status ist unbekannt; daraus folgt nicht, dass eine Erlaubnis fehlt.",
   "studio_source_consent_failed": "Diese Erlaubnisaktion wurde abgelehnt. Der Erlaubnisstatus ist unbekannt; daraus folgt nicht, dass eine Erlaubnis fehlt.",
-  "studio_source_consent_revoke_help": "Der Widerruf dieser Erlaubnis kann diese Version für Buchleser unzugänglich machen."
+  "studio_source_consent_revoke_help": "Der Widerruf dieser Erlaubnis kann diese Version für Buchleser unzugänglich machen.",
+  "library_import_steps": "Importschritte",
+  "library_import_upload": "Hochladen",
+  "library_import_review": "Einträge prüfen",
+  "library_import_confirm": "Änderungen bestätigen",
+  "library_import_results": "Ergebnisse",
+  "library_import_private_help": "Dies ist dein privater Export. Das Hochladen erstellt nur eine Vorschau. Wähle Änderungen an Bibliothek, Bewertungen und Labels getrennt; Quellnotizen bleiben privat.",
+  "library_import_evidence": "Quelldaten und genaue Kennungen",
+  "library_import_target": "Gewählter Katalogeintrag",
+  "library_import_unmatched": "Kein Ziel gewählt. Suche im Katalog oder lasse diesen Eintrag unverändert.",
+  "library_import_state": "Bibliotheksstatus",
+  "library_import_score": "Bewertung",
+  "library_import_labels": "Private Labels",
+  "library_import_empty": "Keine Einträge auf dieser Seite. Öffne eine andere aufbewahrte Seite oder kehre zur Bibliothek zurück.",
+  "library_import_no_results": "Noch keine bestätigten Änderungen. Kehre zur Prüfung zurück und wähle die gewünschten Änderungen.",
+  "library_import_retained": "Aufbewahrter Upload und erneutes Öffnen",
+  "library_import_review_help": "Prüfe jeden Eintrag, bevor du fortfährst. Labels werden separat geprüft und bestätigt.",
+  "library_import_reopen_help": "Bewahre diese Kennung auf, um den gespeicherten Upload auf der Uploadseite dieses Anbieters erneut zu öffnen."
 }

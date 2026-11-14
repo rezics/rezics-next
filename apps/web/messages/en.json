@@ -12437,5 +12437,22 @@
   "literary_reader_detail_hint": "Open a title in a new tab to keep your place here.",
   "literary_reader_about_reading": "About this reading",
   "literary_reader_more_values": "Show all values",
-  "literary_reader_no_stream": "No list was supplied for this view."
+  "literary_reader_no_stream": "No list was supplied for this view.",
+  "library_import_steps": "Import steps",
+  "library_import_upload": "Upload",
+  "library_import_review": "Review items",
+  "library_import_confirm": "Confirm changes",
+  "library_import_results": "Results",
+  "library_import_private_help": "This is your private export. Uploading only previews it. Choose Library, score and label effects separately; source notes stay private.",
+  "library_import_evidence": "Source evidence and exact keys",
+  "library_import_target": "Chosen catalogue target",
+  "library_import_unmatched": "No target chosen. Search the catalogue or leave this item unchanged.",
+  "library_import_state": "Library state",
+  "library_import_score": "Score",
+  "library_import_labels": "Private labels",
+  "library_import_empty": "No items on this page. Open another retained page or return to Library.",
+  "library_import_no_results": "No acknowledged changes yet. Return to review to choose what to apply.",
+  "library_import_retained": "Retained upload and reopen details",
+  "library_import_review_help": "Review each item before continuing. Labels use their own review and confirmation.",
+  "library_import_reopen_help": "Keep this identifier to reopen your retained upload through this provider’s upload page."
 }

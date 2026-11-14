@@ -12430,5 +12430,22 @@
   "studio_source_consent_stale": "ソースサービスが確認済みのソースを古いものとして拒否しました。選択した保存済み版を再確認してください。許可状態は不明です。",
   "studio_source_consent_unavailable": "現在のアクセス条件では、このソースの許可を利用できません。状態は不明であり、許可がないことを示すものではありません。",
   "studio_source_consent_failed": "この許可操作は拒否されました。許可状態は不明であり、許可がないことを示すものではありません。",
-  "studio_source_consent_revoke_help": "この許可を取り消すと、Bookの読者がこの版を開けなくなる場合があります。"
+  "studio_source_consent_revoke_help": "この許可を取り消すと、Bookの読者がこの版を開けなくなる場合があります。",
+  "library_import_steps": "インポートの手順",
+  "library_import_upload": "アップロード",
+  "library_import_review": "項目を確認",
+  "library_import_confirm": "変更を確定",
+  "library_import_results": "結果",
+  "library_import_private_help": "個人用のエクスポートです。アップロードではプレビューのみ作成します。ライブラリ、評価、ラベルへの反映を個別に選択してください。元のメモは非公開のままです。",
+  "library_import_evidence": "元データと正確な識別子",
+  "library_import_target": "選択したカタログ項目",
+  "library_import_unmatched": "項目が未選択です。カタログを検索するか、この項目を変更せずに残してください。",
+  "library_import_state": "ライブラリの状態",
+  "library_import_score": "評価",
+  "library_import_labels": "非公開ラベル",
+  "library_import_empty": "このページには項目がありません。保持中の別のページを開くか、ライブラリに戻ってください。",
+  "library_import_no_results": "確定済みの変更はまだありません。確認画面に戻り、反映する内容を選択してください。",
+  "library_import_retained": "保持中のアップロードと再開情報",
+  "library_import_review_help": "続行前に各項目を確認してください。ラベルには個別の確認と確定が必要です。",
+  "library_import_reopen_help": "この識別子を控えると、この提供元のアップロード画面から保持中のデータを再度開けます。"
 }

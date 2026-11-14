@@ -12430,5 +12430,22 @@
   "studio_source_consent_stale": "El servicio de la fuente ha rechazado la fuente revisada por estar desactualizada. Revisa de nuevo la versión guardada seleccionada. El estado del permiso es desconocido.",
   "studio_source_consent_unavailable": "Este permiso de fuente no está disponible con tu acceso actual. Su estado es desconocido; esto no demuestra que falte el permiso.",
   "studio_source_consent_failed": "Esta acción de permiso ha sido rechazada. El estado del permiso es desconocido; esto no demuestra que falte el permiso.",
-  "studio_source_consent_revoke_help": "Revocar este permiso puede impedir que los lectores del libro accedan a esta versión."
+  "studio_source_consent_revoke_help": "Revocar este permiso puede impedir que los lectores del libro accedan a esta versión.",
+  "library_import_steps": "Pasos de la importación",
+  "library_import_upload": "Subir",
+  "library_import_review": "Revisar elementos",
+  "library_import_confirm": "Confirmar cambios",
+  "library_import_results": "Resultados",
+  "library_import_private_help": "Tu exportación es privada. Subirla solo crea una vista previa. Elige por separado los efectos en la biblioteca, las puntuaciones y las etiquetas; las notas originales siguen siendo privadas.",
+  "library_import_evidence": "Datos originales e identificadores exactos",
+  "library_import_target": "Destino elegido en el catálogo",
+  "library_import_unmatched": "No se ha elegido un destino. Busca en el catálogo o deja este elemento sin cambios.",
+  "library_import_state": "Estado en la biblioteca",
+  "library_import_score": "Puntuación",
+  "library_import_labels": "Etiquetas privadas",
+  "library_import_empty": "No hay elementos en esta página. Abre otra página conservada o vuelve a la biblioteca.",
+  "library_import_no_results": "Todavía no hay cambios confirmados. Vuelve a revisar y elige qué aplicar.",
+  "library_import_retained": "Archivo conservado e información para reabrirlo",
+  "library_import_review_help": "Revisa cada elemento antes de continuar. Las etiquetas tienen su propia revisión y confirmación.",
+  "library_import_reopen_help": "Guarda este identificador para reabrir el archivo conservado desde la página de subida de este proveedor."
 }

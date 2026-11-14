@@ -12430,5 +12430,22 @@
   "studio_source_consent_stale": "來源服務判定已審閱來源過期並拒絕了操作。請重新審閱所選的已儲存版本。許可狀態未知。",
   "studio_source_consent_unavailable": "你的目前存取權限無法使用此來源許可。其狀態未知；這並不表示缺少許可。",
   "studio_source_consent_failed": "此許可操作遭到拒絕。許可狀態未知；這並不表示缺少許可。",
-  "studio_source_consent_revoke_help": "撤銷此許可可能導致 Book 讀者無法開啟此版本。"
+  "studio_source_consent_revoke_help": "撤銷此許可可能導致 Book 讀者無法開啟此版本。",
+  "library_import_steps": "匯入步驟",
+  "library_import_upload": "上傳",
+  "library_import_review": "逐項核對",
+  "library_import_confirm": "確認變更",
+  "library_import_results": "結果",
+  "library_import_private_help": "這是你的私人匯出檔案。上傳只會產生預覽。請分別選擇藏書庫、評分與標籤操作；來源筆記保持私密。",
+  "library_import_evidence": "來源證據與完整識別碼",
+  "library_import_target": "已選目錄條目",
+  "library_import_unmatched": "尚未選擇條目。請搜尋目錄，或保持此項不變。",
+  "library_import_state": "藏書庫狀態",
+  "library_import_score": "評分",
+  "library_import_labels": "私人標籤",
+  "library_import_empty": "本頁沒有條目。請開啟其他保留頁面，或返回藏書庫。",
+  "library_import_no_results": "尚無已確認的變更。請返回核對並選擇要套用的內容。",
+  "library_import_retained": "保留的上傳與重新開啟資訊",
+  "library_import_review_help": "繼續前請逐項核對。標籤使用獨立的核對與確認。",
+  "library_import_reopen_help": "請保留此識別碼，以便在此提供方的上傳頁重新開啟保留檔案。"
 }

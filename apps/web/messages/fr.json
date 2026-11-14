@@ -12430,5 +12430,22 @@
   "studio_source_consent_stale": "Le service de la source a rejeté la source vérifiée comme obsolète. Vérifiez à nouveau la version enregistrée choisie. L’état de l’autorisation est inconnu.",
   "studio_source_consent_unavailable": "Cette autorisation de source est indisponible avec votre accès actuel. Son état est inconnu ; cela ne prouve pas qu’une autorisation manque.",
   "studio_source_consent_failed": "Cette action d’autorisation a été rejetée. L’état de l’autorisation est inconnu ; cela ne prouve pas qu’une autorisation manque.",
-  "studio_source_consent_revoke_help": "Révoquer cette autorisation peut rendre cette version inaccessible aux lecteurs du livre."
+  "studio_source_consent_revoke_help": "Révoquer cette autorisation peut rendre cette version inaccessible aux lecteurs du livre.",
+  "library_import_steps": "Étapes de l’import",
+  "library_import_upload": "Importer",
+  "library_import_review": "Examiner les éléments",
+  "library_import_confirm": "Confirmer les modifications",
+  "library_import_results": "Résultats",
+  "library_import_private_help": "Votre export est privé. Son envoi crée seulement un aperçu. Choisissez séparément les effets sur la bibliothèque, les notes et les étiquettes ; les commentaires source restent privés.",
+  "library_import_evidence": "Données source et identifiants exacts",
+  "library_import_target": "Cible choisie dans le catalogue",
+  "library_import_unmatched": "Aucune cible choisie. Recherchez dans le catalogue ou laissez cet élément inchangé.",
+  "library_import_state": "État dans la bibliothèque",
+  "library_import_score": "Note",
+  "library_import_labels": "Étiquettes privées",
+  "library_import_empty": "Cette page ne contient aucun élément. Ouvrez une autre page conservée ou revenez à la bibliothèque.",
+  "library_import_no_results": "Aucune modification confirmée pour le moment. Revenez à l’examen pour choisir les effets à appliquer.",
+  "library_import_retained": "Import conservé et informations de réouverture",
+  "library_import_review_help": "Examinez chaque élément avant de continuer. Les étiquettes ont leur propre examen et confirmation.",
+  "library_import_reopen_help": "Conservez cet identifiant pour rouvrir cet import depuis la page d’envoi de ce fournisseur."
 }
