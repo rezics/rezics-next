@@ -75,11 +75,21 @@ document or reading visit changes. Its focused acceptance belongs in:
   [reading output](../../../../../packages/ui/tests/document-body.test.ts) and
   [disclosure lifetime](../../../../../packages/ui/tests/document-disclosure-lifetime.test.tsx).
 
-The producer's adopted format and public port are the inputs to the later integration brief. Own drafts consumes them
-through its existing private `PostReadingBody` caller, preserving separate server, browser and current-readback source
-and visit identities. A disclosure in one preview cannot reveal another preview; source, revision or visit replacement
-retires its state, including replacement by equal bytes. Supported structured nodes, authored language, spoiler
-disclosure, heading anchors and wide inspection retain their existing behaviour.
+Decision: Consume footnotes unchanged through the existing private `PostReadingBody` caller after Document adopts
+and delivers its snapshot format and public reading disclosure port. Scheduling completion alone does not supply
+those contracts; consumer fixtures and stories require the producer's supported representation and controls.
+
+The integration preserves separate server, browser and current-readback source and visit identities:
+
+| Source | Required acceptance |
+| --- | --- |
+| Selected server revision | Inspect its supplied footnotes before choosing the server body; the explicit choice retains them in the editor and command submission. |
+| Browser writing revision | Inspect its independent footnotes before choosing the browser body; the explicit choice retains them in the editor and submission against the selected server revision. |
+| Later current read | Inspect only its returned footnotes under the readback identity; acknowledgement continues to describe the submitted source and revision independently. |
+
+A disclosure in one preview cannot reveal another preview; source, revision or visit replacement retires its state,
+including replacement by equal bytes. Supported structured nodes, authored language, spoiler disclosure, heading
+anchors and wide inspection retain their existing behaviour.
 
 Extend the existing [resume](../../../tests/own-drafts-resume.test.tsx) and
 [command](../../../tests/own-drafts-commands.test.tsx) suites for the adopted format: inspect supplied footnotes in each
