@@ -727,107 +727,152 @@ test('native revision restriction rollback, hard denial, and appealed lift prese
   expect(consent.value.state).toBe('issued');
 });
 
-test.each([true, false])('cancellation and activation serialize on the stage (cancel first: %s)', async (cancelFirst) => {
-  const catalogue = await f.native.thread('published');
-  const catalogueId = catalogue.firstPost.id;
-  const path = `/v1/hostedCatalogues/${catalogueId}`;
-  const placement: HostedPlacement = {
-    occurrenceId: f.newOccurrenceIdFor(catalogueId),
-    parentId: null,
-    position: 0,
-    title: 'Original edition',
-    kind: 'chapter',
-    target: f.target(await f.native.thread('published')),
-  };
-  const initial = await f.native.command('/v1/hostedCatalogues', {
-    postId: catalogueId, threadId: catalogue.id, placements: [placement],
-  });
-  const releaseA = await f.native.command(`${path}:publish`, {
-    expectedRevisionId: initial.revisionId, expectedPublicationId: null, occurrenceIds: [placement.occurrenceId],
-  }, 200);
-  const revised = await f.native.command(`${path}:revise`, {
-    expectedRevisionId: initial.revisionId, placements: [{ ...placement, title: 'Prepared edition' }],
-  }, 200);
-  const { stageId } = await preparedCandidate(catalogueId, path, revised.revisionId, releaseA.revisionId);
-  const deps = dependencies(f.native.pool);
-  const actor = f.native.author.actor;
-  const locator = { catalogueId, stageId };
-  const route = routeOf(catalogueId)!;
-  const observer = observeSql(f.native.pool);
-  const cancellingClient = await secondPool.connect();
-  let activation: ReturnType<typeof activateHostedPublicationCandidate> | undefined;
-  let cancellation: ReturnType<typeof cancelHostedPublicationStaging> | undefined;
-  try {
-    await startHostedPublicationActivation(deps, actor, catalogueId, stageId, commandContext());
-    const ready = await advanceHostedPublicationActivationAuthority(deps, actor, catalogueId, stageId, commandContext());
-    expect(ready.value.state).toBe('ready');
-    // Discover the real statements from the same fixture, rather than duplicating
-    // private SQL. Advancement uses the same candidate point read as activation.
-    const stageSql = observer.records.find(({ statement }) =>
-      statement.includes('FROM content.hosted_publication_staging\n') && statement.endsWith('FOR UPDATE'))!.statement;
-    const candidateSql = observer.records.find(({ statement }) =>
-      statement.includes('FROM content.hosted_version_release_candidate candidate') &&
-      !statement.includes('FOR UPDATE'))!.statement;
-    const boundary = observer.hold({ statement: cancelFirst ? stageSql : candidateSql }, cancelFirst ? 'before' : 'after');
-    await cancellingClient.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-    if (cancelFirst) {
-      const cancelled = await cancelHostedPublicationStaging(cancellingClient as AccessClient, actor, locator);
-      expect(cancelled.state).toBe('cancelled');
+test.each([true, false])(
+  'cancellation and activation serialize on the stage (cancel first: %s)',
+  async (cancelFirst) => {
+    const catalogue = await f.native.thread('published');
+    const catalogueId = catalogue.firstPost.id;
+    const path = `/v1/hostedCatalogues/${catalogueId}`;
+    const placement: HostedPlacement = {
+      occurrenceId: f.newOccurrenceIdFor(catalogueId),
+      parentId: null,
+      position: 0,
+      title: 'Original edition',
+      kind: 'chapter',
+      target: f.target(await f.native.thread('published')),
+    };
+    const initial = await f.native.command('/v1/hostedCatalogues', {
+      postId: catalogueId,
+      threadId: catalogue.id,
+      placements: [placement],
+    });
+    const releaseA = await f.native.command(
+      `${path}:publish`,
+      {
+        expectedRevisionId: initial.revisionId,
+        expectedPublicationId: null,
+        occurrenceIds: [placement.occurrenceId],
+      },
+      200,
+    );
+    const revised = await f.native.command(
+      `${path}:revise`,
+      {
+        expectedRevisionId: initial.revisionId,
+        placements: [{ ...placement, title: 'Prepared edition' }],
+      },
+      200,
+    );
+    const { stageId } = await preparedCandidate(catalogueId, path, revised.revisionId, releaseA.revisionId);
+    const deps = dependencies(f.native.pool);
+    const actor = f.native.author.actor;
+    const locator = { catalogueId, stageId };
+    const route = routeOf(catalogueId)!;
+    const observer = observeSql(f.native.pool);
+    const cancellingClient = await secondPool.connect();
+    let activation: ReturnType<typeof activateHostedPublicationCandidate> | undefined;
+    let cancellation: ReturnType<typeof cancelHostedPublicationStaging> | undefined;
+    try {
+      await startHostedPublicationActivation(deps, actor, catalogueId, stageId, commandContext());
+      const ready = await advanceHostedPublicationActivationAuthority(
+        deps,
+        actor,
+        catalogueId,
+        stageId,
+        commandContext(),
+      );
+      expect(ready.value.state).toBe('ready');
+      // Discover the real statements from the same fixture, rather than duplicating
+      // private SQL. Advancement uses the same candidate point read as activation.
+      const stageSql = observer.records.find(
+        ({ statement }) =>
+          statement.includes('FROM content.hosted_publication_staging\n') && statement.endsWith('FOR UPDATE'),
+      )!.statement;
+      const candidateSql = observer.records.find(
+        ({ statement }) =>
+          statement.includes('FROM content.hosted_version_release_candidate candidate') &&
+          !statement.includes('FOR UPDATE'),
+      )!.statement;
+      const boundary = observer.hold(
+        { statement: cancelFirst ? stageSql : candidateSql },
+        cancelFirst ? 'before' : 'after',
+      );
+      await cancellingClient.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+      if (cancelFirst) {
+        const cancelled = await cancelHostedPublicationStaging(cancellingClient as AccessClient, actor, locator);
+        expect(cancelled.state).toBe('cancelled');
+      }
+      const context = commandContext();
+      activation = activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, context);
+      // A cancellation may make the command reject while the test is coordinating it.
+      void activation.catch(() => undefined);
+      await Promise.race([
+        boundary.entered,
+        activation.then(() => {
+          throw new Error('Activation bypassed its lifecycle boundary');
+        }),
+      ]);
+      if (cancelFirst) {
+        await cancellingClient.query('COMMIT');
+        boundary.release();
+        await expect(activation).rejects.toBeInstanceOf(HostedPublicationActivationNotFoundError);
+        expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
+        const retained = await secondPool.query<{ state: string; publication_id: string | null }>(
+          `SELECT state,publication_id FROM content.hosted_publication_activation
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+          [route, catalogueId, stageId],
+        );
+        expect(retained.rows[0]).toEqual({ state: 'ready', publication_id: null });
+      } else {
+        // The candidate has already been read, but the pointer has not moved. A
+        // NOWAIT probe proves the stage is fenced without timing sleeps or polling.
+        expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
+        await cancellingClient.query('SAVEPOINT stage_probe');
+        await expect(
+          cancellingClient.query(
+            `SELECT stage_id FROM content.hosted_publication_staging
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 FOR UPDATE NOWAIT`,
+            [route, catalogueId, stageId],
+          ),
+        ).rejects.toMatchObject({ code: '55P03' });
+        await cancellingClient.query('ROLLBACK TO SAVEPOINT stage_probe');
+        cancellation = cancelHostedPublicationStaging(cancellingClient as AccessClient, actor, locator);
+        void cancellation.catch(() => undefined);
+        boundary.release();
+        const activated = await activation;
+        expect(activated.value).toMatchObject({
+          state: 'activated',
+          candidateGenerationId: ready.value.candidateGenerationId,
+        });
+        expect((await cancellation).state).toBe('cancelled');
+        await cancellingClient.query('COMMIT');
+        expect(activated.value.publicationId).not.toBeNull();
+        expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
+        await secondPool.query(
+          `UPDATE content.hosted_publication_staging SET expires_at='2000-01-01T00:00:00Z'
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+          [route, catalogueId, stageId],
+        );
+        const replayed = await activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, context);
+        expect(replayed).toMatchObject({
+          replayed: true,
+          value: activated.value,
+          transactionId: activated.transactionId,
+          position: activated.position,
+        });
+        await expect(
+          activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, commandContext()),
+        ).rejects.toBeInstanceOf(HostedPublicationActivationNotFoundError);
+        expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
+      }
+    } finally {
+      await observer.close();
+      await cancellingClient.query('ROLLBACK');
+      await Promise.allSettled([activation, cancellation]);
+      cancellingClient.release();
     }
-    const context = commandContext();
-    activation = activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, context);
-    // A cancellation may make the command reject while the test is coordinating it.
-    void activation.catch(() => undefined);
-    await Promise.race([
-      boundary.entered,
-      activation.then(() => { throw new Error('Activation bypassed its lifecycle boundary'); }),
-    ]);
-    if (cancelFirst) {
-      await cancellingClient.query('COMMIT');
-      boundary.release();
-      await expect(activation).rejects.toBeInstanceOf(HostedPublicationActivationNotFoundError);
-      expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
-      const retained = await secondPool.query<{ state: string; publication_id: string | null }>(
-        `SELECT state,publication_id FROM content.hosted_publication_activation
-         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`, [route, catalogueId, stageId]);
-      expect(retained.rows[0]).toEqual({ state: 'ready', publication_id: null });
-    } else {
-      // The candidate has already been read, but the pointer has not moved. A
-      // NOWAIT probe proves the stage is fenced without timing sleeps or polling.
-      expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
-      await cancellingClient.query('SAVEPOINT stage_probe');
-      await expect(cancellingClient.query(
-        `SELECT stage_id FROM content.hosted_publication_staging
-         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 FOR UPDATE NOWAIT`, [route, catalogueId, stageId],
-      )).rejects.toMatchObject({ code: '55P03' });
-      await cancellingClient.query('ROLLBACK TO SAVEPOINT stage_probe');
-      cancellation = cancelHostedPublicationStaging(cancellingClient as AccessClient, actor, locator);
-      void cancellation.catch(() => undefined);
-      boundary.release();
-      const activated = await activation;
-      expect(activated.value).toMatchObject({ state: 'activated', candidateGenerationId: ready.value.candidateGenerationId });
-      expect((await cancellation).state).toBe('cancelled');
-      await cancellingClient.query('COMMIT');
-      expect(activated.value.publicationId).not.toBeNull();
-      expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
-      await secondPool.query(
-        `UPDATE content.hosted_publication_staging SET expires_at='2000-01-01T00:00:00Z'
-         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`, [route, catalogueId, stageId]);
-      const replayed = await activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, context);
-      expect(replayed).toMatchObject({
-        replayed: true, value: activated.value, transactionId: activated.transactionId, position: activated.position,
-      });
-      await expect(activateHostedPublicationCandidate(deps, actor, catalogueId, stageId, commandContext()))
-        .rejects.toBeInstanceOf(HostedPublicationActivationNotFoundError);
-      expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
-    }
-  } finally {
-    await observer.close();
-    await cancellingClient.query('ROLLBACK');
-    await Promise.allSettled([activation, cancellation]);
-    cancellingClient.release();
-  }
-});
+  },
+);
 
 test('dependency locking sorts reversed homes, releases on rollback, and permits an unrelated home writer', async () => {
   const vector = await capturePublicationAuthorityVector(f.native.system.database.pool as unknown as AccessClient);
