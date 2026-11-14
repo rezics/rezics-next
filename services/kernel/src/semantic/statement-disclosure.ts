@@ -12,6 +12,7 @@ import { LINKS_CHANGED } from './events.ts';
 import { factDataTypes, SubjectInputError, type FactRow } from './item.ts';
 import { holderFacts, holderKeys, labelOrderKey } from './link-keys.ts';
 import { contextLinkChanges, linkChanges } from './link-changes.ts';
+import { readContextDefaults, type ContextRecord } from './context.ts';
 import listRelationContexts from './relation-context-list.sql';
 import { readLabels } from './public-subject-facts.ts';
 import readRetraction from './statement-disclosure-retraction.sql';
@@ -196,16 +197,18 @@ export async function privateLinks(
 type DisclosureSlot = { subject_id: string; property: string; slot_id: string };
 async function disclosureViews(tx: CommandTransaction, slot: DisclosureSlot) {
   const global = (await slotView(tx, slot.subject_id, slot.property, GLOBAL_CONTEXT, {}, slot.slot_id)).facts;
-  const contexts = new Map<string, FactRow[]>();
+  const contexts = new Map<string, { defaults: ContextRecord['defaults']; facts: FactRow[] }>();
   for (const row of await listRelationContexts.run(tx, {
     route: routeOf(slot.subject_id)!,
     subject_id: slot.subject_id,
     slot_id: slot.slot_id,
-  }))
-    contexts.set(
-      row.context_id,
-      (await slotView(tx, slot.subject_id, slot.property, row.context_id, {}, slot.slot_id)).facts,
-    );
+  })) {
+    const defaults = await readContextDefaults(tx, row.context_id);
+    contexts.set(row.context_id, {
+      defaults,
+      facts: (await slotView(tx, slot.subject_id, slot.property, row.context_id, defaults, slot.slot_id)).facts,
+    });
+  }
   return { global, contexts };
 }
 
@@ -220,8 +223,9 @@ async function disclosureChanges(
   const holder = await holderFacts(tx, slot.subject_id, release);
   const metadata = { subject: slot.subject_id, release, type: holder.type, identityFacts: holder.facts };
   const changes = linkChanges(before.global, after, factDataTypes(release, [...before.global, ...after]), metadata);
-  for (const [context, previous] of before.contexts) {
-    const selected = (await slotView(tx, slot.subject_id, slot.property, context, {}, slot.slot_id)).facts;
+  for (const [context, view] of before.contexts) {
+    const previous = view.facts;
+    const selected = (await slotView(tx, slot.subject_id, slot.property, context, view.defaults, slot.slot_id)).facts;
     changes.push(
       ...contextLinkChanges(
         before.global,

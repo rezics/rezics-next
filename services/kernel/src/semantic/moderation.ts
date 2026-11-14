@@ -34,6 +34,7 @@ import readRedirect from './read-redirect.sql';
 import readVisibility from './read-visibility.sql';
 import { recordPrivacyReduction } from './public-filter-source.ts';
 import { expandSlot, slotView } from './slots.ts';
+import { readContextDefaults, type ContextRecord } from './context.ts';
 
 export type SubjectVisibility = 'visible' | 'hidden' | 'taken_down';
 export type SubjectVisibilityState = { visibility: SubjectVisibility; securityRevision: string };
@@ -385,17 +386,20 @@ export async function moderateStatement(
           ? await subjectPageSlot(tx, options.subject, property, slot, publicationRelease, options.routeKey)
           : new Map();
       const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property, slot) : [];
-      const contexts = new Map<string, { before: FactRow[]; after: FactRow[] }>();
+      const contexts = new Map<string, { defaults: ContextRecord['defaults']; before: FactRow[]; after: FactRow[] }>();
       if (located.relation && current.visibility === 'visible')
         for (const { context_id } of await listRelationContexts.run(tx, {
           route,
           subject_id: options.subject,
           slot_id: slot,
-        }))
+        })) {
+          const defaults = await readContextDefaults(tx, context_id);
           contexts.set(context_id, {
-            before: (await slotView(tx, options.subject, property, context_id, {}, slot)).facts,
+            defaults,
+            before: (await slotView(tx, options.subject, property, context_id, defaults, slot)).facts,
             after: [],
           });
+        }
       await expandSlot(tx, options.subject, property, transactionId, slot, located.relation);
       const updated = await moderationBumpSecurity.run(tx, {
         route,
@@ -441,7 +445,7 @@ export async function moderateStatement(
       const securityRevision = Number(revision);
       const after = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property, slot) : [];
       for (const [context, facts] of contexts)
-        facts.after = (await slotView(tx, options.subject, property, context, {}, slot)).facts;
+        facts.after = (await slotView(tx, options.subject, property, context, facts.defaults, slot)).facts;
       const events: { type: string; subject: string; data: unknown }[] = [
         {
           type: 'com.rezics.subject.statement_visibility_changed.v1',

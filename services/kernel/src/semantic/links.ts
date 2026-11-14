@@ -18,7 +18,7 @@ import { holderFacts, labelOrderKey, readHolderKeys } from './link-keys.ts';
 import { factDataTypes, resolveItem, type Statement, type FactRow } from './item.ts';
 import { contextLinkChanges, linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
-import { contextSnapshot } from './context.ts';
+import { contextSnapshot, readContextDefaults, type ContextRecord } from './context.ts';
 import {
   readSubjectSummaries,
   type RelatedSubjectSummary,
@@ -718,12 +718,15 @@ async function applyVisibilityPage(pool: Pool, data: LinksVisibilityChanged): Pr
     const metadata = { subject: data.subject, release, type: identity.type, identityFacts: identity.facts };
     const links = await withConnection(pool, async (client) => {
       const result = [];
+      const defaults = new Map<string, ContextRecord['defaults']>();
+      for (const { context } of slots.values())
+        if (!defaults.has(context)) defaults.set(context, await readContextDefaults(client, context));
       for (const { property, slot, context } of slots.values()) {
         const global = (await slotView(client, data.subject, property, GLOBAL_CONTEXT, {}, slot)).facts;
         if (context === GLOBAL_CONTEXT) {
           result.push(...linkChanges([], global, factDataTypes(release, global), metadata));
         } else {
-          const selected = (await slotView(client, data.subject, property, context, {}, slot)).facts;
+          const selected = (await slotView(client, data.subject, property, context, defaults.get(context)!, slot)).facts;
           result.push(
             ...contextLinkChanges(
               global,
