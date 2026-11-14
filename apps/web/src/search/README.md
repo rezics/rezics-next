@@ -303,6 +303,11 @@ A malformed or over-limit native Members page is a 422 failed page before projec
 
 The released-edition journey consumes native grouped responses without reconstructing groups or cursors. Each work
 starts collapsed with its native preview (at most three children); rendering and expanding never read a continuation.
+Decision: grouped identity is the native role plus Subject UUID (`work:id` or `release:id`), so a work UUID may also
+occur as a standalone release or another work's release preview. Repeated work identities and repeated release
+identities (across previews and standalone releases) remain invalid. Supplied group order, complete cards and exact
+destinations, standalone `workLink`, page status/checkpoint and each work's opaque child token remain unchanged.
+Identity validation takes O(groups + preview cards), bounded by 20 groups and 60 previews, with no additional I/O.
 An explicit Continue captures one request synchronously per work. Different works can read independently. The first
 successful ready child read replaces the preview; each later ready read replaces the accepted window, including an
 empty sparse window. Preparing retains the preview or last accepted window and exposes explicit Retry using the

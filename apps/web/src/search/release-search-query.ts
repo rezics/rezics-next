@@ -131,10 +131,13 @@ export function parseReleaseSearchGroupsPage(value: unknown): ReleaseSearchGroup
         return;
       const releases = raw.releases.map(releaseCard);
       if (releases.some((release) => !release)) return;
-      const cards = [work, ...(releases as ReleaseSearchCard[])];
-      for (const card of cards) {
-        if (identities.has(card.id)) return;
-        identities.add(card.id);
+      const workIdentity = `work:${work.id}`;
+      if (identities.has(workIdentity)) return;
+      identities.add(workIdentity);
+      for (const release of releases as ReleaseSearchCard[]) {
+        const identity = `release:${release.id}`;
+        if (identities.has(identity)) return;
+        identities.add(identity);
       }
       groups.push({ kind: 'work', id: raw.id, work, releases: releases as ReleaseSearchCard[], next: raw.next });
     } else if (raw.kind === 'release') {
@@ -143,10 +146,10 @@ export function parseReleaseSearchGroupsPage(value: unknown): ReleaseSearchGroup
         !release ||
         release.id !== raw.id ||
         !['missing', 'unknown', 'conflicting', 'unavailable', 'unproven'].includes(String(raw.workLink)) ||
-        identities.has(release.id)
+        identities.has(`release:${release.id}`)
       )
         return;
-      identities.add(release.id);
+      identities.add(`release:${release.id}`);
       groups.push({
         kind: 'release',
         id: raw.id,
@@ -155,7 +158,6 @@ export function parseReleaseSearchGroupsPage(value: unknown): ReleaseSearchGroup
       });
     } else return;
   }
-  if (new Set(groups.map(({ id }) => id)).size !== groups.length) return;
   return { status: value.status, groups, next: value.next, as_of: value.as_of };
 }
 
