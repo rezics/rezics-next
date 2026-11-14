@@ -276,7 +276,7 @@ test('Freeze emits once for the first input version and not for exact or fresh-k
 });
 
 test('mounted whole and nested selection builds complete private candidates with exact retry and resume', async () => {
-  const book = await newBook(17);
+  const book = await newBook(37);
   const startBody = {
     stageId: book.newId(),
     expectedRevisionId: book.created.revisionId,
@@ -307,6 +307,27 @@ test('mounted whole and nested selection builds complete private candidates with
   expect(eventsAfterStart).toBe(++events);
   expect([freshStartReplay.value, await preparationEventCount(book.catalogueId)]).toEqual([started.value, events]);
   const wrongRouteStepId = newId((routeOf(book.catalogueId)! + 1) % ROUTES);
+  const retainedCounts = async (retainedStageId: string) =>
+    (
+      await f.native.pool.query<{
+        candidates: string;
+        nativeSteps: string;
+        advanceReceipts: string;
+        candidatePages: string;
+      }>(
+        `SELECT
+           (SELECT count(*)::text FROM content.hosted_publication_staging_candidate
+            WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS candidates,
+           (SELECT count(*)::text FROM content.hosted_publication_staging_step
+            WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS "nativeSteps",
+           (SELECT count(*)::text FROM content.hosted_publication_staging_step
+            WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND result_preparation IS NOT NULL)
+            AS "advanceReceipts",
+           (SELECT count(*)::text FROM content.hosted_version_release_candidate_page
+            WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS "candidatePages"`,
+        [routeOf(book.catalogueId), book.catalogueId, retainedStageId],
+      )
+    ).rows[0];
 
   const wholeStepId = book.newId();
   const wholeStepKey = crypto.randomUUID();
@@ -321,12 +342,39 @@ test('mounted whole and nested selection builds complete private candidates with
     { key: crypto.randomUUID() },
   );
   expect([freshStepReplay.value, await preparationEventCount(book.catalogueId)]).toEqual([wholeStep.value, events]);
-  const sourceRemainder = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
-  expect(sourceRemainder.value.stage).toMatchObject({ state: 'ready', sourceExhausted: true, candidateCount: '21' });
+  const sourceMiddle = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
+  expect(sourceMiddle.value.stage).toMatchObject({ state: 'building', sourceFrontier: '39', candidateCount: '40' });
+  expect(await preparationEventCount(book.catalogueId)).toBe(++events);
+  const lastSourceStepId = book.newId();
+  const sourceRemainder = await f.native.call(
+    'POST',
+    `${stagePath}:advance`,
+    { stepId: lastSourceStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(sourceRemainder.value.stage).toMatchObject({ state: 'ready', sourceExhausted: true, candidateCount: '41' });
+  expect(await preparationEventCount(book.catalogueId)).toBe(++events);
+  const afterLastSource = await retainedCounts(stageId);
+  const lastSourceReplay = await f.native.call(
+    'POST',
+    `${stagePath}:advance`,
+    { stepId: lastSourceStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(lastSourceReplay.value).toEqual(sourceRemainder.value);
+  expect(await retainedCounts(stageId)).toEqual(afterLastSource);
+  expect(await preparationEventCount(book.catalogueId)).toBe(events);
+  expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
   const wrongMaterialization = await f.native.call('POST', `${stagePath}:advance`, { stepId: wrongRouteStepId });
   expect(wrongMaterialization.status).toBe(412);
 
-  const stageSeal = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
+  const candidateBeginStepId = book.newId();
+  const stageSeal = await f.native.call(
+    'POST',
+    `${stagePath}:advance`,
+    { stepId: candidateBeginStepId },
+    { key: crypto.randomUUID() },
+  );
   expect(stageSeal.status).toBe(200);
   expect(stageSeal.value.stage.state).toBe('sealed');
   expect(stageSeal.value.candidate).toMatchObject({ coverageComplete: false, sealed: false });
@@ -335,23 +383,66 @@ test('mounted whole and nested selection builds complete private candidates with
   expect(wrongPage.status).toBe(412);
   const beforeCandidatePage = await f.native.call('POST', `${stagePath}:progress`, {});
   expect(beforeCandidatePage.value.candidate).toMatchObject({ placementCount: '0', coverageComplete: false });
-  for (const [placementCount, coverageComplete] of [
-    ['20', false],
-    ['21', true],
-  ] as const) {
-    const page = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
-    expect(page.status).toBe(200);
-    expect(page.value.candidate).toMatchObject({ placementCount, coverageComplete, sealed: false });
-    expect(await preparationEventCount(book.catalogueId)).toBe(++events);
-  }
-  const exhaustedAdvance = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
-  expect(exhaustedAdvance.value.candidate).toMatchObject({ placementCount: '21', coverageComplete: true });
+  const firstCandidatePageStepId = book.newId();
+  const firstCandidatePage = await f.native.call(
+    'POST',
+    `${stagePath}:advance`,
+    { stepId: firstCandidatePageStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(firstCandidatePage.status).toBe(200);
+  expect(firstCandidatePage.value.candidate).toMatchObject({ placementCount: '20', coverageComplete: false });
+  expect(await preparationEventCount(book.catalogueId)).toBe(++events);
+  const secondCandidatePage = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
+  expect(secondCandidatePage.status).toBe(200);
+  expect(secondCandidatePage.value.candidate).toMatchObject({ placementCount: '40', coverageComplete: false });
+  expect(await preparationEventCount(book.catalogueId)).toBe(++events);
+
+  const beforeCandidateReplays = await retainedCounts(stageId);
+  const beforeCandidateReplayEvents = await preparationEventCount(book.catalogueId);
+  const previousRelease = await selectedRelease(book.catalogueId);
+  const candidateBeginReplay = await f.native.call(
+    'POST',
+    `${stagePath}:advance`,
+    { stepId: candidateBeginStepId },
+    { key: crypto.randomUUID() },
+  );
+  const firstCandidatePageReplay = await f.native.call(
+    'POST',
+    `${stagePath}:advance`,
+    { stepId: firstCandidatePageStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(candidateBeginReplay.value).toEqual(stageSeal.value);
+  expect(firstCandidatePageReplay.value).toEqual(firstCandidatePage.value);
+  expect(await retainedCounts(stageId)).toEqual(beforeCandidateReplays);
+  expect(await preparationEventCount(book.catalogueId)).toBe(beforeCandidateReplayEvents);
+  expect(previousRelease).toBe(book.published.revisionId);
+  expect(await selectedRelease(book.catalogueId)).toBe(previousRelease);
+
+  const thirdCandidatePage = await f.native.call('POST', `${stagePath}:advance`, { stepId: book.newId() });
+  expect(thirdCandidatePage.status).toBe(200);
+  expect(thirdCandidatePage.value.candidate).toMatchObject({ placementCount: '41', coverageComplete: true });
+  expect(await preparationEventCount(book.catalogueId)).toBe(++events);
+  const exhaustedStepId = book.newId();
+  const exhaustedAdvance = await f.native.call('POST', `${stagePath}:advance`, { stepId: exhaustedStepId });
+  expect(exhaustedAdvance.value.candidate).toMatchObject({ placementCount: '41', coverageComplete: true });
+  expect(await preparationEventCount(book.catalogueId)).toBe(events);
+  const afterExhaustedAdvance = await retainedCounts(stageId);
+  const exhaustedReplay = await f.native.call(
+    'POST',
+    `${stagePath}:advance`,
+    { stepId: exhaustedStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(exhaustedReplay.value).toEqual(exhaustedAdvance.value);
+  expect(await retainedCounts(stageId)).toEqual(afterExhaustedAdvance);
   expect(await preparationEventCount(book.catalogueId)).toBe(events);
   const sealedCandidate = await f.native.call('POST', `${stagePath}:seal`, {});
   expect(sealedCandidate.status).toBe(200);
   expect(sealedCandidate.value).toMatchObject({
     stage: { state: 'sealed' },
-    candidate: { placementCount: '21', rootCount: '19', chapterCount: '19', coverageComplete: true, sealed: true },
+    candidate: { placementCount: '41', rootCount: '39', chapterCount: '39', coverageComplete: true, sealed: true },
     candidateReady: true,
   });
   expect(await preparationEventCount(book.catalogueId)).toBe(++events);
@@ -373,6 +464,27 @@ test('mounted whole and nested selection builds complete private candidates with
   );
   expect(replayedStep.status).toBe(200);
   expect(replayedStep.value).toEqual(wholeStep.value);
+
+  const secondStageStartBody = {
+    stageId: book.newId(),
+    expectedRevisionId: book.created.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'whole',
+  } as const;
+  const secondStageStart = await f.native.call('POST', `${book.path}:prepareRelease`, secondStageStartBody);
+  expect(secondStageStart.status).toBe(202);
+  const secondStagePath = prepPath(book.path, secondStageStartBody.stageId);
+  const foreignStageStep = await f.native.call(
+    'POST',
+    `${secondStagePath}:advance`,
+    { stepId: wholeStepId },
+    { key: crypto.randomUUID() },
+  );
+  expect(foreignStageStep.status).toBe(200);
+  expect(foreignStageStep.value).toMatchObject({
+    stageId: secondStageStartBody.stageId,
+    stage: { state: 'building', candidateCount: '20' },
+  });
 
   const selectedStartBody = {
     stageId: book.newId(),

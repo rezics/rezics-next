@@ -22,11 +22,14 @@ import {
   cancelHostedPublicationStagingWithEvidence,
   freezeHostedPublicationSelectionWithEvidence,
   requireRoute,
+  readHostedPublicationAdvanceReplay,
   readHostedPublicationStagingProgress,
   readHostedPublicationStagingProgressWithExpiry,
+  retainHostedPublicationAdvanceReceipt,
   sealHostedPublicationStaging,
 } from './hosted-publication-staging.ts';
 import type {
+  HostedPublicationAdvancePhase,
   HostedPublicationStagingBatchResult,
   HostedPublicationStagingCheckpoint,
   HostedPublicationStagingLocator,
@@ -322,10 +325,23 @@ export function advanceHostedPublicationPreparation(
       // fresh-work precondition covers candidate phases before any stage or candidate work.
       requireRoute(stepId, routeOf(catalogueId)!);
       const stageLocator = locator(catalogueId, stageId);
+      const replay = await readHostedPublicationAdvanceReplay(tx as AccessClient, actor, stageLocator, stepId);
+      if (replay?.kind === 'preparation')
+        return preparationResult(replay.response as HostedPublicationPreparationProgress, false);
+      if (replay?.kind === 'staging')
+        return preparationResult(progress(catalogueId, replay.progress), false);
+
       const stageRead = await readHostedPublicationStagingProgressWithExpiry(tx as AccessClient, actor, stageLocator);
       const stage = stageRead.progress;
+      let phase: HostedPublicationAdvancePhase;
+      let processed = 0;
+      let fromFrontier = stage.sourceFrontier;
+      let toFrontier = stage.sourceFrontier;
+      let retainPreparationReceipt = true;
+      let result: PreparationWorkResult;
 
       if (stage.state === 'building' || stage.state === 'closing' || stage.state === 'collecting') {
+        let acknowledged: PreparationWorkResult | undefined;
         const advanced = await advanceHostedPublicationStaging(
           deps,
           tx as AccessClient,
@@ -333,42 +349,74 @@ export function advanceHostedPublicationPreparation(
           stageLocator,
           stepId,
           context.deadline,
+          (sourceResult) => {
+            acknowledged = preparationResult(
+              progress(catalogueId, sourceResult.progress),
+              stageRead.expired || !sourceResult.replayed,
+            );
+            return acknowledged.value;
+          },
         );
         // A zero-row step can still persist phase or failure progress, so native replay evidence decides the event.
-        return preparationResult(progress(catalogueId, advanced.progress), stageRead.expired || !advanced.replayed);
-      }
-
-      if (stage.state === 'ready') {
+        phase = advanced.phase;
+        processed = advanced.processed;
+        retainPreparationReceipt = false;
+        result =
+          acknowledged ??
+          preparationResult(progress(catalogueId, advanced.progress), stageRead.expired || !advanced.replayed);
+      } else if (stage.state === 'ready') {
         const source = await sealHostedPublicationStaging(tx as AccessClient, actor, stageLocator);
         const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
         const sealedStage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
-        return preparationResult(
+        phase = 'candidate_begin';
+        fromFrontier = '-1';
+        toFrontier = candidate.checkpoint.afterSourceOrder ?? '-1';
+        result = preparationResult(
           progress(catalogueId, sealedStage, candidateProgress(candidate.checkpoint)),
           stageRead.expired || !source.replayed || !candidate.replayed,
         );
-      }
-
-      if (stage.state === 'sealed') {
+      } else if (stage.state === 'sealed') {
         const materialization = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
         const checkpoint = materialization.checkpoint;
-        if (checkpoint.coverageComplete)
-          return preparationResult(
+        if (checkpoint.coverageComplete) {
+          phase = materialization.changed ? 'candidate_begin' : 'exhausted';
+          fromFrontier = checkpoint.afterSourceOrder ?? '-1';
+          toFrontier = checkpoint.afterSourceOrder ?? '-1';
+          result = preparationResult(
             progress(catalogueId, stage, candidateProgress(checkpoint)),
             stageRead.expired || materialization.changed,
           );
-        const advanced = await applyHostedVersionReleaseCandidatePage(
-          tx,
-          actor,
-          checkpoint.sourceSeal,
-          checkpoint.afterSourceOrder,
-        );
-        return preparationResult(
-          progress(catalogueId, stage, candidateProgress(advanced.checkpoint)),
-          stageRead.expired || materialization.changed || !advanced.replayed,
-        );
+        } else {
+          const advanced = await applyHostedVersionReleaseCandidatePage(
+            tx,
+            actor,
+            checkpoint.sourceSeal,
+            checkpoint.afterSourceOrder,
+          );
+          phase = 'candidate_page';
+          processed = advanced.processed;
+          fromFrontier = checkpoint.afterSourceOrder ?? '-1';
+          toFrontier = advanced.checkpoint.afterSourceOrder ?? '-1';
+          result = preparationResult(
+            progress(catalogueId, stage, candidateProgress(advanced.checkpoint)),
+            stageRead.expired || materialization.changed || !advanced.replayed,
+          );
+        }
+      } else {
+        phase = 'terminal';
+        result = preparationResult(progress(catalogueId, stage), stageRead.expired);
       }
 
-      return preparationResult(progress(catalogueId, stage), stageRead.expired);
+      if (retainPreparationReceipt)
+        await retainHostedPublicationAdvanceReceipt(tx as AccessClient, actor, stageLocator, stepId, {
+          phase,
+          processed,
+          fromFrontier,
+          toFrontier,
+          progress: result.value.stage,
+          response: result.value,
+        });
+      return result;
     },
     { stageId, allowMissing: false },
   );

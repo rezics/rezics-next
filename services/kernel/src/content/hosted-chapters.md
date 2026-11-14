@@ -442,6 +442,10 @@ materialization/page writes occur; otherwise the wrong-route ID can consume a pa
 The pure route precondition runs only on a receipt miss after current authorization; exact committed receipts replay
 unchanged. It reuses the staging conflict response and adds no storage query.
 
+Decision: one immutable receipt keyed by catalogue, stage and routed `stepId` preserves the exact preparation response
+across source pages, candidate creation/pages and exhausted acknowledgements; indexed legacy source receipts remain
+intact and are consulted before phase dispatch.
+
 Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
 
 Decision: advertise and enforce a 1,024-ID selection batch cap, based on an isolated interleaved 40-sample benchmark;

@@ -100,11 +100,31 @@ type TargetIdentityRow = QueryResultRow & {
   target_revision_id: string;
   sha256: string;
 };
-type StepReceiptRow = QueryResultRow & {
-  phase: 'whole' | 'selection' | 'closure';
+type PreparationAdvanceReceiptRow = QueryResultRow & {
+  phase: HostedPublicationAdvancePhase;
   processed: number;
   result_checkpoint: HostedPublicationStagingCheckpoint;
+  result_preparation: unknown | null;
 };
+export type HostedPublicationAdvanceReplay =
+  | Readonly<{ kind: 'preparation'; response: unknown }>
+  | Readonly<{ kind: 'staging'; progress: HostedPublicationStagingCheckpoint }>;
+export type HostedPublicationAdvancePhase =
+  | 'whole'
+  | 'selection'
+  | 'closure'
+  | 'candidate_begin'
+  | 'candidate_page'
+  | 'exhausted'
+  | 'terminal';
+export type HostedPublicationAdvanceReceipt = Readonly<{
+  phase: Exclude<HostedPublicationAdvancePhase, 'whole' | 'selection' | 'closure'>;
+  processed: number;
+  fromFrontier: string;
+  toFrontier: string;
+  progress: HostedPublicationStagingCheckpoint;
+  response: unknown;
+}>;
 type PinnedSourceRow = QueryResultRow & {
   head_revision_id: string;
   publication_id: string | null;
@@ -229,6 +249,66 @@ async function lockStage(client: AccessClient, locator: HostedPublicationStaging
   const row = result.rows[0];
   if (!row) throw new HostedPublicationStagingNotFoundError();
   return row;
+}
+
+/** Lock the stage and find an acknowledged step before expiry or phase dispatch.
+ * The indexed native receipt owns every new reply; old rows without a public
+ * response still replay their immutable source checkpoint. */
+export async function readHostedPublicationAdvanceReplay(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+  stepId: string,
+): Promise<HostedPublicationAdvanceReplay | null> {
+  const route = validateLocator(locator);
+  requireRoute(stepId, route);
+  const stage = await lockStage(client, locator);
+  assertActorBinding(stage, actorInput);
+  const prior = (
+    await client.query<PreparationAdvanceReceiptRow>(
+      `SELECT phase,processed,result_checkpoint,result_preparation
+       FROM content.hosted_publication_staging_step
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND step_id=$4`,
+      [route, locator.catalogueId, locator.stageId, stepId],
+    )
+  ).rows[0];
+  if (!prior) return null;
+  return prior.result_preparation !== null
+    ? { kind: 'preparation', response: prior.result_preparation }
+    : { kind: 'staging', progress: prior.result_checkpoint };
+}
+
+/** Retain one bounded immutable non-source response in the native step index. */
+export async function retainHostedPublicationAdvanceReceipt(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+  stepId: string,
+  receipt: HostedPublicationAdvanceReceipt,
+): Promise<void> {
+  const route = validateLocator(locator);
+  requireRoute(stepId, route);
+  const stage = await lockStage(client, locator);
+  assertActorBinding(stage, actorInput);
+  await client.query(
+    `INSERT INTO content.hosted_publication_staging_step
+       (route,catalogue_id,stage_id,step_id,phase,from_frontier,to_frontier,processed,result_state,
+        result_checkpoint,result_preparation)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb)`,
+    [
+      route,
+      locator.catalogueId,
+      locator.stageId,
+      stepId,
+      receipt.phase,
+      receipt.fromFrontier,
+      receipt.toFrontier,
+      receipt.processed,
+      receipt.progress.state === 'failed' ? 'failed' : receipt.progress.state === 'ready' ? 'ready' : 'more',
+      JSON.stringify(receipt.progress),
+      JSON.stringify(receipt.response),
+    ],
+  );
 }
 
 async function requireCurrentPinnedSource(client: AccessClient, stage: StageRow): Promise<void> {
@@ -604,6 +684,7 @@ export async function advanceHostedPublicationStaging(
   locator: HostedPublicationStagingLocator,
   stepId: string,
   deadline: number,
+  preparationResponse?: (result: HostedPublicationStagingStepResult) => unknown,
 ): Promise<HostedPublicationStagingStepResult> {
   const actor = accountActor(actorInput);
   const route = validateLocator(locator);
@@ -611,20 +692,23 @@ export async function advanceHostedPublicationStaging(
   const row = await lockStage(client, locator);
   assertActorBinding(row, actor);
   const prior = (
-    await client.query<StepReceiptRow>(
-      `SELECT phase,processed,result_checkpoint
+    await client.query<PreparationAdvanceReceiptRow>(
+      `SELECT phase,processed,result_checkpoint,result_preparation
        FROM content.hosted_publication_staging_step
        WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND step_id=$4`,
       [route, locator.catalogueId, locator.stageId, stepId],
     )
   ).rows[0];
-  if (prior)
+  if (prior) {
+    if (prior.phase !== 'whole' && prior.phase !== 'selection' && prior.phase !== 'closure')
+      throw stagingConflict('Advance step belongs to another preparation phase');
     return {
       replayed: true,
       phase: prior.phase,
       processed: prior.processed,
       progress: prior.result_checkpoint,
     };
+  }
   const live = await requireLiveStage(client, row);
   let result: HostedPublicationStagingStepResult;
   if (
@@ -637,10 +721,12 @@ export async function advanceHostedPublicationStaging(
   } else if (live.status === 'building') result = await advanceSelection(deps, client, actor, live, deadline);
   else if (live.status === 'closing') result = await advanceClosure(client, live);
   else throw stagingConflict('Staging is not ready for another step');
+  const response = preparationResponse ? JSON.stringify(preparationResponse(result)) : null;
   await client.query(
     `INSERT INTO content.hosted_publication_staging_step
-       (route,catalogue_id,stage_id,step_id,phase,from_frontier,to_frontier,processed,result_state,result_checkpoint)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)`,
+       (route,catalogue_id,stage_id,step_id,phase,from_frontier,to_frontier,processed,result_state,
+        result_checkpoint,result_preparation)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb)`,
     [
       route,
       locator.catalogueId,
@@ -660,6 +746,7 @@ export async function advanceHostedPublicationStaging(
       result.processed,
       result.progress.state === 'failed' ? 'failed' : result.progress.state === 'ready' ? 'ready' : 'more',
       JSON.stringify(result.progress),
+      response,
     ],
   );
   return result;
