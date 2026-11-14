@@ -233,70 +233,92 @@ export function RealmMembersPage({
             }
           }}
         >
-          <h2 id={`${id}-inspection`} ref={inspection} tabIndex={-1} className="text-xl font-semibold">
-            {m.realm_members_inspection()}
-          </h2>
-          {selected.kind === 'ready' ? (
-            <>
-              <div className="space-y-3 border-b pb-4">
-                <Identity identity={selected.identity} />
-                <p className="text-sm font-medium">
-                  {selected.membership === 'current'
-                    ? m.realm_members_current()
-                    : selected.membership === 'pending'
-                      ? m.realm_members_pending()
-                      : selected.membership === 'none'
-                        ? m.realm_members_nonmember()
-                        : m.realm_members_actions_unavailable()}
-                </p>
-                <ManagementReferences>
-                  <ManagementField label={m.realm_bans_details_account()}>
-                    <ManagementReference>{selected.identity.accountId}</ManagementReference>
-                  </ManagementField>
-                  <ManagementField label={m.realm_review_realm()}>
-                    <ManagementReference>{realmId}</ManagementReference>
-                  </ManagementField>
-                </ManagementReferences>
-              </div>
-            </>
-          ) : null}
-          {actionableSelected && read.kind === 'ready' ? (
-            <MemberAddition
-              key={`${selection.address.accountId}:${selection.address.authority}:${selection.address.membershipInterval ?? 'entered'}:${actionableSelected.membershipEpisode}`}
-              realmLabel={read.page.realm.label}
-              selected={actionableSelected}
-              address={selection.address}
-              current={() => selected?.kind === 'ready' && selectedMember?.current() === true}
-              sameSelection={() => {
-                if (!visit.isCurrent()) return false;
-                const current = visit.snapshot().selection?.address;
-                return (
-                  current?.realmId === selection.address.realmId &&
-                  current.accountId === selection.address.accountId &&
-                  current.authority === selection.address.authority &&
-                  current.membershipInterval === selection.address.membershipInterval
-                );
-              }}
-              addMember={source.addMember ?? addWithAccountsWorkflow}
-              refreshSelected={visit.refreshSelected}
-            />
-          ) : null}
-          {selected.kind === 'ready' ? (
-            <>
-              {read.kind === 'ready' && selected.kind === 'ready' ? (
-                <SelectedRealmMemberContext.Provider value={selectedMember}>
-                  <div className="space-y-4">
-                    {selected.advice.ban === 'available' || selected.advice.unban === 'available' ? (
-                      <RealmBansPanel realmId={realmId} />
-                    ) : selected.advice.ban === 'unknown' || selected.advice.unban === 'unknown' ? (
-                      <p role="status" className="text-sm text-muted-foreground">
-                        {m.realm_members_actions_unavailable()}
-                      </p>
-                    ) : null}
-                  </div>
-                </SelectedRealmMemberContext.Provider>
+          <header className="flex min-w-0 flex-wrap items-start justify-between gap-x-6 gap-y-4 border-b pb-4">
+            <div className="min-w-0 flex-1 basis-64 space-y-3">
+              <h2 id={`${id}-inspection`} ref={inspection} tabIndex={-1} className="text-xl font-semibold">
+                {m.realm_members_inspection()}
+              </h2>
+              {selected.kind === 'ready' ? (
+                <div className="min-w-0 space-y-2">
+                  <Identity identity={selected.identity} />
+                  <p className="inline-flex max-w-full rounded-md bg-muted px-3 py-1.5 text-sm font-medium leading-5 [overflow-wrap:anywhere]">
+                    {selected.membership === 'current'
+                      ? m.realm_members_current()
+                      : selected.membership === 'pending'
+                        ? m.realm_members_pending()
+                        : selected.membership === 'none'
+                          ? m.realm_members_nonmember()
+                          : m.realm_members_actions_unavailable()}
+                  </p>
+                </div>
               ) : null}
-            </>
+            </div>
+            <div className="flex min-w-0 max-w-full flex-wrap gap-2">
+              {selected.kind === 'failed' || selected.kind === 'unavailable' ? (
+                <Button
+                  variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                  onClick={() => void visit.retrySelected()}
+                >
+                  {m.realm_members_retry_selected()}
+                </Button>
+              ) : null}
+              <Button
+                variant="outline"
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                onClick={close}
+              >
+                {m.realm_members_back()}
+              </Button>
+            </div>
+          </header>
+          {selected.kind === 'ready' ? (
+            <div className="min-w-0 space-y-5">
+              <ManagementReferences>
+                <ManagementField label={m.realm_bans_details_account()}>
+                  <ManagementReference>{selected.identity.accountId}</ManagementReference>
+                </ManagementField>
+                <ManagementField label={m.realm_review_realm()}>
+                  <ManagementReference>{realmId}</ManagementReference>
+                </ManagementField>
+              </ManagementReferences>
+              <div className="min-w-0 space-y-4">
+                {actionableSelected && read.kind === 'ready' ? (
+                  <MemberAddition
+                    key={`${selection.address.accountId}:${selection.address.authority}:${selection.address.membershipInterval ?? 'entered'}:${actionableSelected.membershipEpisode}`}
+                    realmLabel={read.page.realm.label}
+                    selected={actionableSelected}
+                    address={selection.address}
+                    current={() => selected?.kind === 'ready' && selectedMember?.current() === true}
+                    sameSelection={() => {
+                      if (!visit.isCurrent()) return false;
+                      const current = visit.snapshot().selection?.address;
+                      return (
+                        current?.realmId === selection.address.realmId &&
+                        current.accountId === selection.address.accountId &&
+                        current.authority === selection.address.authority &&
+                        current.membershipInterval === selection.address.membershipInterval
+                      );
+                    }}
+                    addMember={source.addMember ?? addWithAccountsWorkflow}
+                    refreshSelected={visit.refreshSelected}
+                  />
+                ) : null}
+                {read.kind === 'ready' && selected.kind === 'ready' ? (
+                  <SelectedRealmMemberContext.Provider value={selectedMember}>
+                    <div className="min-w-0 space-y-4">
+                      {selected.advice.ban === 'available' || selected.advice.unban === 'available' ? (
+                        <RealmBansPanel realmId={realmId} />
+                      ) : selected.advice.ban === 'unknown' || selected.advice.unban === 'unknown' ? (
+                        <p role="status" className="text-sm text-muted-foreground">
+                          {m.realm_members_actions_unavailable()}
+                        </p>
+                      ) : null}
+                    </div>
+                  </SelectedRealmMemberContext.Provider>
+                ) : null}
+              </div>
+            </div>
           ) : (
             <ManagementNotice>
               {selected.kind === 'loading'
@@ -312,24 +334,6 @@ export function RealmMembersPage({
                         : m.realm_members_selected_unavailable()}
             </ManagementNotice>
           )}
-          <div className="flex flex-wrap gap-3">
-            {selected.kind === 'failed' || selected.kind === 'unavailable' ? (
-              <Button
-                variant="outline"
-                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-                onClick={() => void visit.retrySelected()}
-              >
-                {m.realm_members_retry_selected()}
-              </Button>
-            ) : null}
-            <Button
-              variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-              onClick={close}
-            >
-              {m.realm_members_back()}
-            </Button>
-          </div>
         </section>
       ) : read.kind === 'ready' ? (
         <section aria-labelledby={id} className="space-y-5">
