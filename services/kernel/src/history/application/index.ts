@@ -3,6 +3,11 @@
  */
 export { historyComposition, installHistoryComposition } from './composition.ts';
 export {
+  installLibraryBulkReceiptDispositionPort,
+  settleLibraryBulkReceiptDisposition,
+  verifyLibraryBulkReceiptDisposition,
+} from './library-bulk-receipts.ts';
+export {
   AGENT_IDENTITY_HISTORY_ABSENCE_COST,
   AGENT_IDENTITY_HISTORY_GUARD_COST,
   IDENTITY_HISTORY_ACCOUNTS_DECLARATION,

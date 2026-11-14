@@ -4,7 +4,7 @@ import { withConnection } from '../database/pool.ts';
 import {
   settleLibraryBulkReceiptDisposition,
   verifyLibraryBulkReceiptDisposition,
-} from '../history/application/library-bulk-receipts.ts';
+} from '../history/application/index.ts';
 import type { LibraryBulkReceiptBinding, LibraryBulkReceiptDisposition } from '../history/contract/index.ts';
 import { routeOf } from '../route/route.ts';
 import type { BulkAdmission } from './bulk-contract.ts';
