@@ -14,12 +14,18 @@ const names = [
   'HTMLElement',
   'HTMLInputElement',
   'HTMLTextAreaElement',
+  'HTMLAnchorElement',
   'Element',
   'Node',
   'Document',
   'Event',
   'MouseEvent',
   'MutationObserver',
+  'ResizeObserver',
+  'getComputedStyle',
+  'matchMedia',
+  'requestAnimationFrame',
+  'cancelAnimationFrame',
   'IS_REACT_ACT_ENVIRONMENT',
 ];
 const previous = names.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
@@ -27,7 +33,13 @@ for (const key of names)
   Object.defineProperty(globalThis, key, {
     configurable: true,
     writable: true,
-    value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : Reflect.get(window, key),
+    value: key === 'window'
+      ? window
+      : key === 'IS_REACT_ACT_ENVIRONMENT'
+        ? true
+        : ['getComputedStyle', 'matchMedia', 'requestAnimationFrame', 'cancelAnimationFrame'].includes(key)
+          ? Reflect.get(window, key).bind(window)
+          : Reflect.get(window, key),
   });
 afterAll(async () => {
   mock.restore();
@@ -37,9 +49,10 @@ afterAll(async () => {
   await window.happyDOM.close();
 });
 let owner = 'owner';
+let credential = 'csrf';
 let allowed = true;
 mock.module('../src/session/query', () => ({
-  useSession: () => ({ state: 'signed-in', subject: owner, csrfToken: owner + '-csrf' }),
+  useSession: () => ({ state: 'signed-in', subject: owner, csrfToken: owner + '-' + credential }),
 }));
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => allowed }));
 const journal = (sessionId: string, reflection = sessionId, revision = 3, units: number | null = null) => ({
@@ -53,7 +66,7 @@ const journal = (sessionId: string, reflection = sessionId, revision = 3, units:
 const read = mock(async ({ data }: { data: { sessionId: string } }): Promise<JournalReadResult> => ({
   kind: 'ready',
   viewer: owner,
-  csrfToken: owner + '-csrf',
+  csrfToken: owner + '-' + credential,
   journal: journal(data.sessionId, data.sessionId, 3, data.sessionId === 'second' ? 13 : null),
 }));
 let finish!: (result: JournalCommandResult) => void;
@@ -101,6 +114,7 @@ function session(id: string): ProgressSessionView {
 }
 async function mount() {
   owner = 'owner';
+  credential = 'csrf';
   allowed = true;
   write.mockClear();
   setLocale('en', { reload: false });
@@ -110,22 +124,23 @@ async function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const base = createRootRoute();
   const route = createRoute({ getParentRoute: () => base, path: '/library/progress/$id' });
+  const history = createRoute({ getParentRoute: () => base, path: '/library/history' });
   const router = createRouter({
-    routeTree: base.addChildren([route]),
+    routeTree: base.addChildren([route, history]),
     history: createMemoryHistory({ initialEntries: ['/library/progress/exact'] }),
   });
   await router.load();
   const click = (label: string) =>
     act(async () => {
-      [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
+      [...document.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-  const show = async (id = 'exact', openEditor = true) => {
+  const show = async (id = 'exact', openEditor = true, lifetime?: object) => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
           <RouterContextProvider router={router}>
-            <PrivateOccurrenceControls session={session(id)} isCurrent={() => true} />
+            <PrivateOccurrenceControls session={session(id)} isCurrent={() => true} lifetime={lifetime} />
           </RouterContextProvider>
         </QueryClientProvider>,
       );
@@ -156,6 +171,16 @@ async function mount() {
     });
   return {
     host,
+    router,
+    depart: () => act(async () => {
+      void router.navigate({ href: '/library/history' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }),
+    unload: () => {
+      const event = new window.Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    },
     show,
     submit,
     review,
@@ -196,8 +221,15 @@ test('assessment omission preserves absence; exact journal intent and independen
         },
       },
     ]);
+    expect(h.host.querySelector('textarea')!.disabled).toBe(false);
+    await h.edit('later local edit');
     await act(async () => finish({ kind: 'acknowledged', revision: 4 }));
     expect(h.host.textContent).toContain(m.library_occurrence_acknowledged());
+    await h.depart();
+    expect(document.querySelector('[role="alertdialog"]')!.textContent).toContain(
+      m.library_journal_draft_navigation_acknowledged(),
+    );
+    await h.click(m.library_progress_draft_navigation_stay());
     const retry = [...h.host.querySelectorAll('button')].find(
       (button) => button.textContent === m.library_rich_entry_retry(),
     )!;
@@ -205,7 +237,11 @@ test('assessment omission preserves absence; exact journal intent and independen
     expect(write.mock.calls[1]).toEqual(original);
     await act(async () => finish({ kind: 'saved', journal: journal('exact', 'private edit', 4) }));
     expect(session('exact').revision).toBe(7);
-    expect(h.host.querySelector('textarea')!.value).toBe('private edit');
+    expect(h.host.querySelector('[aria-label="' + m.library_journal_current_value() + '"]')!.textContent).toContain(
+      'private edit',
+    );
+    expect(h.host.querySelector('textarea')!.value).toBe('later local edit');
+    expect(h.unload()).toBe(true);
   } finally {
     await h.close();
   }
@@ -219,11 +255,18 @@ test('same-Subject occurrence, credential and exposure replacements discard priv
     await h.edit('old draft');
     await h.submit();
     const oldFinish = finish;
+    await h.depart();
+    expect(document.querySelector('[role="alertdialog"]')!.textContent).toContain(
+      m.library_journal_draft_navigation_pending(),
+    );
     await h.show('second');
     await h.show('second');
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(h.router.state.location.pathname).toBe('/library/progress/exact');
     expect(h.host.querySelector('textarea')!.value).toBe('second');
     await act(async () => oldFinish({ kind: 'saved', journal: journal('exact', 'late old private value', 4) }));
     expect(h.host.textContent).not.toContain('late old private value');
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     expect(h.host.querySelector('textarea')!.value).toBe('second');
     owner = 'replacement';
     await h.show('second');
@@ -264,6 +307,7 @@ test('selected occurrence sets zero, explicitly clears, and keeps independent re
     await h.submit();
     expect(write.mock.calls[1]).toMatchObject([{ data: { body: { revision: 4, assessment: null } } }]);
     await act(async () => finish({ kind: 'saved', journal: journal('exact', 'keep unrelated draft', 5) }));
+    expect(h.unload()).toBe(false);
     await h.show('second');
     await h.show('second');
     expect(h.host.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!.value).toBe('6.5');
@@ -299,7 +343,9 @@ test('stale journal review retains edited fields while adopting unrelated fresh 
     await h.submit();
     expect(write.mock.calls[1]).toMatchObject([{ data: { body: { revision: 4, assessment: { units: 17 } } } }]);
     expect(write.mock.calls[1]![0].data.body).toEqual({ revision: 4, assessment: { units: 17 } });
+    await h.depart();
     await act(async () => finish({ kind: 'missing' }));
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     expect(h.host.querySelector('input[inputmode="decimal"]')).toBeNull();
   } finally {
     await h.close();
@@ -348,12 +394,16 @@ test('journal opens as private reading and explicit cancel discards only the uns
     expect(write).toHaveBeenCalledTimes(0);
     expect(h.host.textContent).toContain(m.library_journal_original_value());
     expect(h.host.querySelector('em')).toBeNull();
+    await h.click(m.library_journal_correct_draft());
+    expect(h.host.querySelector('textarea')!.value).toBe('私人感想\nA long second paragraph. <em>literal</em>');
+    await h.review();
     await h.click(m.library_progress_cancel());
     expect(h.host.querySelector('form')).toBeNull();
     expect(h.host.textContent).not.toContain('A long second paragraph.');
     expect(document.activeElement?.textContent).toBe(m.library_journal_edit_entry());
     await h.click(m.library_journal_edit_entry());
     expect(h.host.querySelector('textarea')!.value).toBe('exact');
+    expect(h.unload()).toBe(false);
     expect(write).toHaveBeenCalledTimes(0);
   } finally {
     await h.close();
@@ -386,10 +436,44 @@ test('a fresh read cannot replace the original comparison or exact retry after a
     expect(
       [...h.host.querySelectorAll('button')].some((button) => button.textContent === m.library_progress_cancel()),
     ).toBe(false);
+    await h.depart();
+    expect(document.querySelector('[role="alertdialog"]')!.textContent).toContain(
+      m.library_journal_draft_navigation_uncertain(),
+    );
+    await h.click(m.library_progress_draft_navigation_stay());
     await h.click(m.library_rich_entry_retry());
     expect(write.mock.calls[1]).toEqual(original);
     await act(async () => finish({ kind: 'saved', journal: journal('exact', 'Proposed private note', 4) }));
     expect(session('exact').revision).toBe(7);
+    expect(h.unload()).toBe(false);
+    await h.depart();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(h.router.state.location.pathname).toBe('/library/history');
+  } finally {
+    await h.close();
+  }
+});
+
+test('credential and reader-source replacements close the old decision and discard only unsent fields', async () => {
+  const h = await mount();
+  try {
+    let lifetime = {};
+    await h.show('exact', true, lifetime);
+    await h.show('exact', true, lifetime);
+    for (const change of ['credential', 'source', 'account'] as const) {
+      await h.edit('private draft from ' + change);
+      await h.depart();
+      expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+      if (change === 'credential') credential = 'renewed-csrf';
+      else if (change === 'source') lifetime = {};
+      else owner = 'another-account';
+      await h.show('exact', true, lifetime);
+      await h.show('exact', true, lifetime);
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(h.host.querySelector('textarea')!.value).toBe('exact');
+      expect(h.unload()).toBe(false);
+      expect(write).toHaveBeenCalledTimes(0);
+    }
   } finally {
     await h.close();
   }

@@ -38,12 +38,12 @@ type DraftOptions = {
   discard: () => void;
 };
 
-/** A Progress page has one navigation decision for its editor and publication note. */
+/** A Progress page has one navigation decision for its editor, private journal and publication note. */
 class ProgressDeparture {
   private drafts = new Set<DraftRegistration>();
   private listeners = new Set<() => void>();
   private revision = 0;
-  private decision: { resolve: (stay: boolean) => void } | null = null;
+  private decision: { resolve: (stay: boolean) => void; owners: DraftRegistration[] } | null = null;
   private focusTarget: HTMLElement | null = null;
   private suppressFocusReturn = false;
 
@@ -88,7 +88,8 @@ class ProgressDeparture {
 
   refresh = () => {
     // Retirement cancels the old navigation. It cannot approve movement for a replacement reader.
-    if (this.decision && !this.needsDecision()) this.settle(true, true);
+    if (this.decision && (!this.needsDecision() || this.decision.owners.some((owner) => !owner.state().active)))
+      this.retire();
     else this.notify();
   };
 
@@ -98,12 +99,16 @@ class ProgressDeparture {
     this.focusTarget = focused;
     this.suppressFocusReturn = false;
     return new Promise<boolean>((resolve) => {
-      this.decision = { resolve };
+      this.decision = {
+        resolve,
+        owners: this.current().filter(({ state }) => state.dirty || state.locked).map(({ draft }) => draft),
+      };
       this.notify();
     });
   };
 
   stay = () => this.settle(true);
+  retire = () => this.settle(true, true);
 
   discard = () => {
     if (this.isLocked()) return;
@@ -146,7 +151,7 @@ function ProgressDepartureBoundary({
   const stayButton = useRef<HTMLButtonElement>(null);
   const journal = navigation.journalState();
 
-  useLayoutEffect(() => () => navigation.stay(), [navigation]);
+  useLayoutEffect(() => () => navigation.retire(), [navigation]);
 
   useBlocker({
     shouldBlockFn: ({ current, next }) => {
@@ -210,13 +215,13 @@ function ProgressDepartureBoundary({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel ref={stayButton} onClick={navigation.stay}>
+            <AlertDialogCancel ref={stayButton} className="min-h-11 whitespace-normal" onClick={navigation.stay}>
               {messages === 'progress'
                 ? m.library_progress_draft_navigation_stay()
                 : m.library_publication_note_draft_navigation_stay()}
             </AlertDialogCancel>
             {!navigation.isLocked() ? (
-              <AlertDialogAction onClick={navigation.discard}>
+              <AlertDialogAction className="min-h-11 whitespace-normal" onClick={navigation.discard}>
                 {journal
                   ? m.library_journal_draft_navigation_leave()
                   : messages === 'progress'
