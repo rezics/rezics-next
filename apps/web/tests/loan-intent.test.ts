@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { LoanCommandIntent, type LoanCommand, type LoanIntent, type LoansOrigin } from '../src/library/loan-intent';
 import type { LoanWriteResult } from '../src/library/loans-read';
+import { illustrativeLoan, loanStoryBoundary } from '../src/kernel/fake/loans';
 
 const command: LoanCommand = {
   operation: 'create',
@@ -75,9 +76,20 @@ test.each(['rotate', 'retire'] as const)('%s prevents retry and late receipt eff
   await machine.start(command);
   expect(calls).toBe(1);
   visit[change]();
-  finish({ ok: false, reason: 'unavailable' });
+  finish({ ok: true, loan: illustrativeLoan(), boundary: loanStoryBoundary });
   await pending;
   await machine.retry();
   expect(calls).toBe(1);
+  expect(machine.snapshot().phase).toBe('retired');
+});
+
+test('unmount closes an in-flight visit before its receipt arrives', async () => {
+  let finish!: (result: LoanWriteResult) => void;
+  const machine = new LoanCommandIntent(scope().origin, () => new Promise((resolve) => { finish = resolve; }));
+  const unmount = machine.mount();
+  const pending = machine.start(command);
+  unmount();
+  finish({ ok: true, loan: illustrativeLoan(), boundary: loanStoryBoundary });
+  await pending;
   expect(machine.snapshot().phase).toBe('retired');
 });

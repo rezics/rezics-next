@@ -23,7 +23,7 @@ export function loanCounterparty(loan: Loan) {
   return m.library_loans_counterparty_concealed();
 }
 
-export function loanCopyTitle(item: LoanItem) {
+export function loanCopyTitle(item: LoanItem): { text: string; lang?: string | null } {
   if (item.copy.state === 'deleted') return { text: m.library_loans_copy_deleted() };
   if (item.copy.state === 'missing') return { text: m.library_loans_copy_missing() };
   const context = item.copy.context;

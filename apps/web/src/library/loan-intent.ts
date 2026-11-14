@@ -11,7 +11,7 @@ export type LoanCommand =
   | { operation: 'extend'; input: { loanId: string; revision: number; dueOn: string } }
   | { operation: 'return'; input: { loanId: string; revision: number; returnedOn: string } };
 export type LoanIntent = LoanCommand & { idempotencyKey: string };
-export type LoanDispatch = (intent: LoanIntent, headers: HeadersInit) => Promise<LoanWriteResult>;
+export type LoanDispatch = (intent: LoanIntent, headers: HeadersInit, current: () => boolean) => Promise<LoanWriteResult | null>;
 export type LoanIntentState =
   | { phase: 'idle' | 'retired' }
   | { phase: 'pending'; intent: LoanIntent; uncertain: boolean }
@@ -96,15 +96,15 @@ export class LoanCommandIntent {
   };
   private async send(intent: LoanIntent, uncertain: boolean) {
     this.publish({ phase: 'pending', intent, uncertain });
-    let result: LoanWriteResult;
+    let result: LoanWriteResult | null;
     try {
-      result = await this.dispatch(intent, new Headers(this.capturedHeaders!));
+      result = await this.dispatch(intent, new Headers(this.capturedHeaders!), this.current);
     } catch {
       if (!this.current()) { this.retire(); return; }
       this.publish({ phase: 'uncertain', intent });
       return;
     }
-    if (!this.current()) { this.retire(); return; }
+    if (!this.current() || !result) { this.retire(); return; }
     if (result.ok) this.publish({ phase: 'saved', intent, result });
     else if (uncertain || result.reason === 'unavailable')
       this.publish({ phase: 'uncertain', intent, refusal: result });
@@ -112,8 +112,9 @@ export class LoanCommandIntent {
   }
 }
 
-export const dispatchLoan: LoanDispatch = async (intent, headers) => {
+export const dispatchLoan: LoanDispatch = async (intent, headers, current) => {
   const { createLoan, updateLoanDue, completeLoan } = await import('./loans-actions');
+  if (!current()) return null;
   const data = { ...intent.input, idempotencyKey: intent.idempotencyKey };
   if (intent.operation === 'create') return createLoan({ data, headers });
   if (intent.operation === 'extend') return updateLoanDue({ data, headers });

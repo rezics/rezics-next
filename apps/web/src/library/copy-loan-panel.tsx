@@ -27,7 +27,7 @@ function CopyLoanVisit({ copy, originating, disabled }: { copy: CopyItem; origin
   const [source] = useState(originating);
   const current = !retired && source.isCurrent('copy.list');
   useEffect(() => { if (!current) setRetired(true); }, [current]);
-  useLayoutEffect(() => { if (expanded) heading.current?.focus(); else trigger.current?.focus(); }, [expanded]);
+  useLayoutEffect(() => { if (expanded) heading.current?.focus(); else trigger.current?.focus(); }, [expanded, read]);
   useEffect(() => {
     let active = true;
     if (!source.isCurrent('copy.list')) return;

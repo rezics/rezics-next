@@ -31,11 +31,13 @@ export function LoanControls({
   const id = useId();
   const formHeading = useRef<HTMLHeadingElement>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
+  const receipt = useRef<HTMLParagraphElement>(null);
   const locked = state.phase === 'pending' || state.phase === 'uncertain';
   useLayoutEffect(() => machine.mount(), [machine]);
   useEffect(() => { if (!current) machine.retire(); }, [current, machine]);
-  useEffect(() => { onLockChange?.(locked); }, [locked, onLockChange]);
+  useLayoutEffect(() => { onLockChange?.(locked); }, [locked, onLockChange]);
   useLayoutEffect(() => { if (operation) formHeading.current?.focus(); else trigger.current?.focus(); }, [operation]);
+  useLayoutEffect(() => { if (state.phase === 'saved') receipt.current?.focus(); }, [state.phase]);
   if (!current || state.phase === 'retired') return null;
 
   const choose = (value: LoanCommand['operation'], button: HTMLButtonElement) => {
@@ -55,7 +57,7 @@ export function LoanControls({
 
   if (state.phase === 'saved') return (
     <div className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
-      <p role="status" className="font-medium">{m.library_loans_receipt()}</p>
+      <p ref={receipt} tabIndex={-1} role="status" className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">{m.library_loans_receipt()}</p>
       <LoanFacts loan={state.result.loan} today={state.result.boundary.today} />
       <p className="text-sm text-muted-foreground">{m.library_loans_read_distinct()}</p>
       <button type="button" className={loanQuiet} onClick={() => machine.current() && onRefresh()}>{m.library_loans_refresh()}</button>
