@@ -136,9 +136,9 @@ outcome, tracked per Goal, task class and model profile. It improves in three wa
 Fold repairs into the journey they serve. An estimate predicts landed source; it is not a task label. Price each
 new refusal, bound or guard as required by [agent conduct](agent-conduct.md#briefs).
 
-For an explicitly authorized code-only window, use isolated worktrees outside controller-owned task custody.
-Checkpoint coherent source and record the exact deferred acceptance. Count saved source, integrated code and
-accepted journeys separately. Compare the whole delivery cost before changing routine models or worker width.
+Follow [direct source integration](delivery.md#direct-source-integration) whenever integration is the bottleneck,
+for every task type. During an authorized code-first window, keep source checkpoints and deferred acceptance. Count
+saved source, integrated code and accepted journeys separately. Compare delivery cost before changing models or width.
 
 The brief writer picks the model by the task's difficulty. A simple, well-specified brief pins `model: gpt-6-luna` and
 `effort: max` in its front matter. Examples: exact edits the brief names, fixture, data or translation work, and wiring
@@ -171,8 +171,12 @@ exploration. Use event-driven waits and fresh continuations rather than polling 
 Apply the [brief preflight](delivery.md#brief-preflight) before spending an attempt. Keep independent and overlapping
 work moving under the delivery dependency rules; remove artificial dependencies. Avoid restarting unchanged work or repeating checks without new evidence.
 
-Set concurrency from measured worker memory, check capacity, queueing and journey throughput. Worker and heavy-check
-admission are separate controls. More workers are useful only when journey throughput justifies their cost.
+Set implementation width from runnable outcomes, writing progress, observed worker memory and accepted delivery.
+Raise or lower it as those conditions change. Running experiments or checks are a separate load: admit and measure
+them separately, and use the configured a/b check hosts when heavy verification is scheduled. Apply
+[direct source integration](delivery.md#direct-source-integration) before adding a worker-check prerequisite.
+Scheduled broader tests use a pinned revision in the verifier; report failures together and keep unrelated
+implementation moving while results are pending.
 
 Keep routing policy in tracked configuration and private allowance settings locally. Compare profiles on representative
 accepted work before changing defaults.

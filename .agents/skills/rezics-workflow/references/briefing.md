@@ -2,7 +2,9 @@
 
 Read [delivery rules](../../../../docs/development/delivery.md), the relevant
 [Goal definition](../../../../docs/goals/README.md) and the [brief schema](../../../../tools/goal/README.md#briefs-and-routing).
-Use that schema directly; this skill does not define another one.
+Use that schema directly; this skill does not define another one. Apply
+[direct source integration](../../../../docs/development/delivery.md#direct-source-integration) to every task type
+when integration is the bottleneck; the acceptance-writing steps below then belong to deferred verification.
 
 Managers:
 
@@ -49,7 +51,8 @@ contract in your summary and its owning document; hand off an owning-document ch
 while continuing independent work. Routine implementation and test choices that preserve the contract belong in the
 handoff and do not require an owning-document edit. For product work on dev, tell your manager with an `info` message.
 For a minimal adjacent correction, check risk ownership, cover every changed outside-path file with its affected tests and list the reason in
-the handoff for owner notice. Do not rebase. Merge or cherry-pick only a branch or commit the contract names
-explicitly, and only for product work on dev in your own worktree; never in a shared workspace. Keep temporary files
+the handoff for owner notice. Follow the direct-integration owner policy when it applies; otherwise do not rebase,
+and merge or cherry-pick only a branch or commit the contract names explicitly, for product work on dev in your own
+worktree. Never move another worker's changes in a shared workspace. Keep temporary files
 under `.temp/`; a continuation brief for the rest of your outcome goes to `.temp/continuation/`. Report a blocker only
 for two existing requirements that cannot both hold, quoting both, or for missing access.

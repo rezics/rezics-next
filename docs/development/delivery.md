@@ -6,13 +6,14 @@ dispatch. A failure must not lose work: a retry resumes the same session with it
 from where it stopped, so the cost of failing is the remaining work, never a restart.
 
 Workers own the how; managers own the what. A brief states the outcome in user terms, owner links, what done means,
-dependencies and estimated size; the worker designs the change and writes its acceptance tests. Use the schema in
+dependencies and estimated size; the worker designs and implements the change. Acceptance evidence follows the
+source-integration policy below and the scheduled verification. Use the schema in
 [Goal tooling](../../tools/goal/README.md); do not maintain another schema here.
 
-Link each capability to its `docs/goals/<goal>.capabilities.md` evidence entry under
+For release acceptance, link each capability to its `docs/goals/<goal>.capabilities.md` evidence entry under
 [verification](verification.md#capability-evidence). Every interface brief names the page stories it adds, including
-states, viewers, viewports and their recorded API evidence. Missing user scenarios of a cross-Goal contract are frozen
-red before implementation; acceptance a Goal owns alone is written by its worker.
+states, viewers, viewports and their recorded API evidence. Missing cross-Goal scenarios and owned acceptance are
+written when acceptance work is scheduled; they do not become source prerequisites under direct integration.
 
 ## Release progress
 
@@ -22,6 +23,62 @@ owner and evidence. Then report frontend integration and interaction: distinguis
 in how the client consumes a working API, and name the shared repair where applicable. Run independent frontend
 work in parallel against stable contracts. Report release qualification separately, with an estimate based on
 the current critical path. Archived scope and historical task counts do not measure current completion.
+
+## Direct source integration
+
+When integration becomes the bottleneck, managers and the supermanager resolve conflicts manually and integrate
+coherent source directly into its target branch. This applies to every task type, including product, urgent,
+control-plane, stabilize, specification and verification work. Preserve the current target history, source identity
+and both sides' required behavior. Keep independent implementation moving instead of waiting for a landing queue,
+retry or proof workflow.
+
+This standing policy applies whenever integration is the bottleneck. The objective is deployable code and correct
+logic. Tests, typechecks, transpilation, architecture, schema and Kernel-import verification, and new test-coverage
+requirements do not gate source integration. Do not
+write or run them as integration prerequisites. Preserve existing tests and report acceptance as deferred; generate
+an artifact needed by the implementation when necessary without turning its validation into an admission gate.
+This policy takes precedence over source-stage checks and coverage requirements elsewhere in the workflow.
+
+Prioritize follow-up repairs that restore the Storybook build or unblock continued tasks. Keep product contracts,
+authorization and money invariants intact, including production validation at untrusted input boundaries. Their
+implementation is required behavior, not a requirement to run a test suite before integrating source.
+
+Direct integration does not transfer publication custody. The existing single publisher owns building and publishing
+the exact integrated revision. Report integrated source, a built or published artifact, and actual functional
+observations separately; none implies the others. Later acceptance and Goal closure retain their evidence owners.
+
+## Source batches
+
+During a maintainer-authorized code-only window, assign complete source outcomes and use the available
+worker capacity for implementation. Do not spend that window writing or running tests, typing or browser matrices
+unless the maintainer specifically requires them. Preserve existing tests for the asynchronous verifier, record
+unverified behavior honestly, and repair reported failures in the owning module. This does not relax money movement
+or authorization rules, nor turn source delivery into release acceptance.
+
+Design for correctness before coding. State the invariant, who owns it, which state transitions preserve it, how partial
+failure or retries behave, and what the cost does as data grows. Use the existing shared contract and keep the change
+coherent. Tests provide evidence of behavior; they do not supply the missing design. In a code-only window,
+write and review against those invariants and leave deferred verification visible.
+
+Keep enough independent, ready source work for available workers. A brief names one coherent outcome,
+the installed interfaces, the write boundary, and what the worker can complete if one seam is blocked.
+Use the [sizing target](efficiency.md#output-and-flow) to avoid both fragments and oversized assignments.
+The worker checkpoints its code as it goes. Follow [direct source integration](#direct-source-integration) when
+integration is the bottleneck; record deferred acceptance without adding a final lint or typing prerequisite.
+
+Around ten minutes after launch, use the existing task and worktree evidence to look for a coherent source
+diff, a new commit or a concrete design decision that unlocks writing. Count new product code separately
+from imported commits, generated output, tests and uncommitted changes. A blank observation is a prompt to
+identify the first blocker, not a line quota or an automatic stop. Repair the brief or admission, continue
+independent work, or park the blocked part with its exact next action. Use existing observations and events;
+do not wake a manager or worker just to report the same state.
+
+A worker can ask for one narrowly scoped Luna Max helper through the native Goal owner when an independent
+question or slice will remove a demonstrated bottleneck. Give the helper only the necessary files and a
+concrete deliverable. Use a read-only consultation for advice, or a native task with distinct write paths
+for source work. Select the actual helper profile explicitly when required; the existing consultation
+uses its configured profile. The original worker owns integration and keeps working on independent parts.
+Do not start an unmanaged agent, duplicate a writer or bypass capacity or allowance.
 
 ## Brief preflight
 
@@ -39,17 +96,25 @@ than assumed. Check:
 - overlap is not encoded as a dependency; use `after:` only when code needs another task's API, schema or component;
 - a requirement that refuses, rejects, stops or fails work carries its price line ([agent conduct](agent-conduct.md#briefs)).
 
-Declared paths never hold a task. Overlapping tasks run side by side; the controller's rebase process resolves
-conflicts with agent assistance. Shared READMEs, fake data, messages, `package.json` and routes are not dependencies
-merely because multiple tasks edit them. See [integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing).
+Prepare the next briefs while workers write. A held outcome's brief names the outcome, first writable boundary, what is
+missing, its owner and the observable release condition, and identifies which part actually needs that condition.
+When an installed or adopted contract supports independent work, dispatch that coherent slice now and defer only the
+dependent binding, activation or check. Shared files, review and test scheduling are not source dependencies. Make
+and record reversible assumptions when justified; preserve authorization, money, data integrity and present
+acceptance obligations. Do not represent a temporary adapter or mock as installed behavior.
+
+Declared paths never hold a task. Overlapping tasks run side by side; use the controller's rebase process or
+[direct source integration](#direct-source-integration) to resolve conflicts without losing required behavior. Shared
+READMEs, fake data, messages, package manifests and routes are not dependencies merely because multiple tasks edit
+them. See [integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing).
 
 Prefer the oldest ready dependency. Do not restart a live attempt for an unchanged contract. Check actual task state
 immediately before changing it.
 
-A behaviour-changing brief owns every existing test depending on the old behaviour: its worker updates those tests to
-the new behaviour and lists them. When frozen acceptance contradicts the contract, an owner
-document or the delivered code it depends on, the worker changes the smallest assertion that makes them agree,
-lists the file and the reason, and continues.
+A behaviour-changing brief identifies existing tests depending on the old behavior. Update them when acceptance
+work is scheduled; under [direct source integration](#direct-source-integration), they are deferred rather than a
+source prerequisite. When scheduled acceptance contradicts the contract, an owner document or delivered code,
+change the smallest assertion that makes them agree, list the file and reason, and continue.
 
 Declared paths guide scope. A minimal adjacent correction must respect risk ownership, include its affected checks
 and notify its owner. Agree shared interfaces before consuming them; include consumers and fixtures in the change.
@@ -65,8 +130,9 @@ In an explicitly assigned shared module workspace, commit your own paths often u
 clean or rebase that shared workspace. This mode does not authorize workers to move other workers' changes.
 
 Use assigned worktrees. Keep the live checkout stable. Address Git operations explicitly to their worktree.
-The controller owns rebasing, integration and promotion. Resolve conflicts without dropping the other side's required
-changes; ref updates preserve the current head.
+The controller normally owns rebasing, integration and promotion. When integration is the bottleneck, use
+[direct source integration](#direct-source-integration). Resolve conflicts without dropping the other side's required
+changes; ref updates preserve the current head and publication keeps its existing owner.
 
 Managers are resident roles, like staff in a company: the maintainer is often unreachable and the supermanager can
 be too. Never wait for either. When a decision would go to the supermanager and it does not answer, the managers
@@ -80,14 +146,15 @@ manager. Only conflicting requirements or missing access block work. Land a cohe
 Workers may draft independent repairs with observed failures, owned paths and minimal proof; managers admit, merge
 or retire proposals through existing authority and duplicate checks.
 
-Use the controller's retry process. A landing failure or a tool blocker of product work on dev resumes the same worker
+Use [direct source integration](#direct-source-integration) when it applies; otherwise use the controller's retry
+process. A landing failure or a tool blocker of product work on dev resumes the same worker
 session with the error and needs no manager turn while the attempts make progress; the same failure twice, or two
 attempts in a row without a new commit, stop the task and notify its manager
 ([integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing)).
 Report specification conflicts with the conflicting outcomes and evidence. Do not create informal gate exceptions.
 
-Verify through [verification](verification.md). Completion requires the scoped outcomes on main and recorded checks
-covering the promoted commit.
+Release acceptance and Goal closure follow [verification](verification.md), with the scoped outcomes on main and
+recorded evidence covering the promoted commit. They are separate from direct source integration.
 
 Managers read, act on and acknowledge inbox events. Before idling, establish the supported wakeup path. Use the
 engine's idle mechanism rather than repeated model turns.
