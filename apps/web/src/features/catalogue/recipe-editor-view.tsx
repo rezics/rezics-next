@@ -84,14 +84,14 @@ type Ready = Extract<RecipeRead, { ok: true }>;
 const recipeActionClassName =
   'relative z-10 h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const recipeInputClassName = 'relative z-10 min-h-11 min-w-0 max-w-full';
-// Raise native targets individually; supplied reading text keeps the shared frame's normal flow.
-const recipePanelClassName =
-  'min-w-0 space-y-4 p-4 [overflow-wrap:anywhere] sm:p-6 ' +
+const recipePanelClassName = 'min-w-0 space-y-5 p-4 [overflow-wrap:anywhere] sm:p-6';
+// Keep raised, wrapping controls local to the authoring or source-value surface.
+const recipePanelControlsClassName =
+  'min-w-0 [overflow-wrap:anywhere] ' +
   '[&_label]:relative [&_label]:z-10 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap ' +
   '[&_input]:relative [&_input]:z-10 [&_input]:min-h-11 [&_input]:min-w-0 ' +
-  'relative z-10 min-h-11 min-w-11 ' +
   '[&_textarea]:relative [&_textarea]:z-10 [&_textarea]:min-h-11 [&_textarea]:min-w-0 ' +
-  '[&_a]:relative [&_a]:z-10 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center ' +
+  '[&_a]:relative [&_a]:z-10 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:break-words ' +
   '[&_button]:relative [&_button]:z-10 [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:break-words ' +
   '[&_:is(a,button,input,select,textarea):focus-visible]:outline-2 ' +
   '[&_:is(a,button,input,select,textarea):focus-visible]:outline-offset-2 ' +
@@ -775,39 +775,54 @@ function RecipeEditorLive({
       : undefined;
   const Workspace = id ? 'div' : 'form';
   return (
-    <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 px-4 py-8 [overflow-wrap:anywhere] sm:px-6 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap">
-      <PageHeading ref={readingHeading} tabIndex={-1}>
-        {id ? m.recipe_edit({}, o) : m.recipe_title({}, o)}
-        {read?.public && <> · {pickText(read.public.subject.labels, locale).text}</>}
-      </PageHeading>
-      {id && (
-        <p>
-          {context === candidateContext ? m.recipe_visit_context_global({}, o) : m.recipe_visit_context_selected({}, o)}
-        </p>
-      )}
-      {id && currentHref && !draftRead && (
-        <a className="inline-flex min-h-11 items-center underline" href={currentHref}>
-          {m.recipe_visit_return({}, o)}
-        </a>
-      )}
-      {returnedRow && (
-        <div className="space-y-2" data-recipe-current-return="">
-          {acknowledgedReturnHref ? (
-            <a className="inline-flex min-h-11 items-center underline" href={acknowledgedReturnHref}>
-              {m.recipe_visit_return({}, o)}
-            </a>
-          ) : (
-            <>
-              <p role="status">{m.recipe_return_unsupported({}, o)}</p>
-              {currentHref && (
-                <a className="inline-flex min-h-11 items-center underline" href={currentHref}>
-                  {m.candidate_view_public({}, o)}
-                </a>
-              )}
-            </>
+    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 px-4 py-8 [overflow-wrap:anywhere] sm:px-6">
+      <header className="min-w-0 space-y-4 border-b border-border pb-5">
+        <div className="max-w-prose space-y-2">
+          <PageHeading ref={readingHeading} tabIndex={-1}>
+            {id ? m.recipe_edit({}, o) : m.recipe_title({}, o)}
+            {read?.public && <> · {pickText(read.public.subject.labels, locale).text}</>}
+          </PageHeading>
+          {id && (
+            <p>
+              {context === candidateContext
+                ? m.recipe_visit_context_global({}, o)
+                : m.recipe_visit_context_selected({}, o)}
+            </p>
           )}
         </div>
-      )}
+        {id && currentHref && (
+          <a
+            className={`${recipeActionClassName} inline-flex items-center underline`}
+            href={currentHref}
+          >
+            {draftRead ? m.candidate_view_public({}, o) : m.recipe_visit_return({}, o)}
+          </a>
+        )}
+        {returnedRow && (
+          <div className="space-y-2" data-recipe-current-return="">
+            {acknowledgedReturnHref ? (
+              <a
+                className={`${recipeActionClassName} inline-flex items-center underline`}
+                href={acknowledgedReturnHref}
+              >
+                {m.recipe_visit_return({}, o)}
+              </a>
+            ) : (
+              <>
+                <p role="status">{m.recipe_return_unsupported({}, o)}</p>
+                {currentHref && (
+                  <a
+                    className={`${recipeActionClassName} inline-flex items-center underline`}
+                    href={currentHref}
+                  >
+                    {m.candidate_view_public({}, o)}
+                  </a>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </header>
       {!id && (
         <a
           className={buttonVariants({ variant: 'outline', className: recipeActionClassName })}
@@ -816,50 +831,62 @@ function RecipeEditorLive({
           {m.catalogue_create_search({}, o)}
         </a>
       )}
-      {observesCreate && !created ? (
-        <CreateAuthorityStatus
-          locale={locale}
-          authority={observedAuthority}
-          href={`/${locale}/catalogue/recipe`}
-          {...(eligibilityQuery.isPending || eligibilityQuery.isFetching ? { pending: true } : {})}
-          onRetry={() => {
-            void refreshCreateEligibility();
-          }}
-        />
-      ) : session !== 'signed-in' ? (
-        <p role="status">
-          {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
-        </p>
-      ) : null}
-      {(query.isPending || query.isFetching) && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {readUnavailable && (
-        <div ref={unavailableReading} tabIndex={-1} className="space-y-3">
-          {query.data && !query.data.ok && query.data.reason === 'unsupported-context' ? (
-            <RecipeVisitNotice
+      {(
+        (observesCreate && !created) ||
+        session !== 'signed-in' ||
+        query.isPending ||
+        query.isFetching ||
+        readUnavailable ||
+        (read && selectedOccurrence && !occurrenceAvailable) ||
+        (read && read.fields.length === 0)
+      ) && (
+        <section className="min-w-0 space-y-3 rounded-xl border border-border bg-muted/20 p-4 sm:p-5">
+          {observesCreate && !created ? (
+            <CreateAuthorityStatus
               locale={locale}
-              sourceHref={sourceHref}
-              globalHref={sourceHref ? `${sourceHref.split('?')[0]}/recipe?context=${candidateContext}` : undefined}
+              authority={observedAuthority}
+              href={`/${locale}/catalogue/recipe`}
+              {...(eligibilityQuery.isPending || eligibilityQuery.isFetching ? { pending: true } : {})}
+              onRetry={() => {
+                void refreshCreateEligibility();
+              }}
             />
-          ) : query.data && !query.data.ok && query.data.reason === 'concealed' ? (
-            <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
-          ) : (
-            <EditorFailure locale={locale} reason="unavailable" />
+          ) : session !== 'signed-in' ? (
+            <p role="status">
+              {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
+            </p>
+          ) : null}
+          {(query.isPending || query.isFetching) && <p role="status">{m.candidate_loading({}, o)}</p>}
+          {readUnavailable && (
+            <div ref={unavailableReading} tabIndex={-1} className="space-y-3">
+              {query.data && !query.data.ok && query.data.reason === 'unsupported-context' ? (
+                <RecipeVisitNotice
+                  locale={locale}
+                  sourceHref={sourceHref}
+                  globalHref={sourceHref ? `${sourceHref.split('?')[0]}/recipe?context=${candidateContext}` : undefined}
+                />
+              ) : query.data && !query.data.ok && query.data.reason === 'concealed' ? (
+                <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
+              ) : (
+                <EditorFailure locale={locale} reason="unavailable" />
+              )}
+              <Button className={recipeActionClassName} type="button" disabled={busy} onClick={() => void retryRead()}>
+                {m.correction_retry({}, o)}
+              </Button>
+            </div>
           )}
-          <Button className={recipeActionClassName} type="button" disabled={busy} onClick={() => void retryRead()}>
-            {m.correction_retry({}, o)}
-          </Button>
-        </div>
-      )}
-      {read && selectedOccurrence && !occurrenceAvailable && (
-        <p role="status">{m.recipe_visit_occurrence_missing({}, o)}</p>
-      )}
-      {read && read.fields.length === 0 && (
-        <p ref={emptyReading} tabIndex={-1} role="status">
-          {m.recipe_empty({}, o)}
-        </p>
+          {read && selectedOccurrence && !occurrenceAvailable && (
+            <p role="status">{m.recipe_visit_occurrence_missing({}, o)}</p>
+          )}
+          {read && read.fields.length === 0 && (
+            <p ref={emptyReading} tabIndex={-1} role="status">
+              {m.recipe_empty({}, o)}
+            </p>
+          )}
+        </section>
       )}
       {created ? (
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4 rounded-xl border border-border bg-muted/20 p-4 sm:p-6">
           <p role="status">{m.recipe_created({}, o)}</p>
           {created.reader.state === 'ready' ? (
             <a className={buttonVariants({ className: recipeActionClassName })} href={created.reader.href}>
@@ -939,16 +966,11 @@ function RecipeEditorLive({
               void create();
             }}
           >
-            {currentHref && (
-              <a
-                className={`${recipeActionClassName} inline-flex items-center self-start underline underline-offset-4`}
-                href={currentHref}
-              >
-                {m.candidate_view_public({}, o)}
-              </a>
-            )}
             {!id && (
-              <fieldset disabled={locked || session !== 'signed-in'} className="space-y-5">
+              <fieldset
+                disabled={locked || session !== 'signed-in'}
+                className={`${recipePanelControlsClassName} min-w-0 space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6`}
+              >
                 <legend className="mb-4 font-semibold">{m.catalogue_create_terms({}, o)}</legend>
                 {terms.map((term, index) => (
                   <fieldset key={term.id} id={`${termsId}-${term.id}`} className="min-w-0 space-y-3">
@@ -1037,227 +1059,251 @@ function RecipeEditorLive({
                 </Button>
               </fieldset>
             )}
-            <p className="text-sm text-muted-foreground">{m.recipe_ingredients_help({}, o)}</p>
-            {id &&
-              read?.public &&
-              currentFields.map((field) => (
-                <section key={field} className="min-w-0">
-                  <ContentItemFrame as="div" className={recipePanelClassName}>
-                    <ContentItemHeading id={`${termsId}-current-${field}`} className="font-semibold">
-                      {name(field)}
-                    </ContentItemHeading>
-                    {(read!.public!.subject.statements[field] ?? []).map((source) => {
-                      const gated = spoilerLevel(source) > defaultReader.spoilerLevel;
-                      const content = (
-                        <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
-                          <div data-content-item-slot="preview" className="min-w-0 break-words sm:flex-1">
-                            <CandidateValue snak={source} related={read!.public!.related} locale={locale} />
+            {id && read?.public && currentFields.length > 0 && (
+              <section className="min-w-0 space-y-4" aria-label={m.recipe_review_current({}, o)}>
+                <ContentItemHeading level={2} className="text-lg font-semibold">
+                  {m.recipe_review_current({}, o)}
+                </ContentItemHeading>
+                {currentFields.map((field) => (
+                  <section key={field} className="min-w-0">
+                    <ContentItemFrame as="div" className={recipePanelClassName}>
+                      <ContentItemHeading
+                        id={`${termsId}-current-${field}`}
+                        level={3}
+                        className="max-w-prose font-semibold"
+                      >
+                        {name(field)}
+                      </ContentItemHeading>
+                      {(read!.public!.subject.statements[field] ?? []).map((source) => {
+                        const gated = spoilerLevel(source) > defaultReader.spoilerLevel;
+                        const content = (
+                          <div
+                            className={`${recipePanelControlsClassName} flex min-w-0 flex-col items-start gap-3 sm:flex-row`}
+                          >
+                            <div
+                              data-content-item-slot="preview"
+                              className="min-w-0 [overflow-wrap:anywhere] sm:flex-1"
+                            >
+                              <CandidateValue snak={source} related={read!.public!.related} locale={locale} />
+                            </div>
+                            {read!.fields.includes(field) && (
+                              <Button
+                                data-content-item-slot="actions"
+                                type="button"
+                                variant="outline"
+                                className={recipeActionClassName}
+                                disabled={rows.some((row) => row.source?.id === source.id)}
+                                onClick={(event) => {
+                                  const current = fieldAdmission.current;
+                                  if (
+                                    !lifetime.active() ||
+                                    !isReadEpochCurrent(readEpoch) ||
+                                    !current.read ||
+                                    current.read !== read ||
+                                    !current.read.fields.includes(field) ||
+                                    current.rows.some((row) => row.source?.id === source.id)
+                                  )
+                                    return;
+                                  const admittedSource = (current.read.public?.subject.statements[field] ?? []).find(
+                                    (statement) => statement.id === source.id,
+                                  );
+                                  const definition = current.read.release.properties[field];
+                                  if (!admittedSource || !definition) return;
+                                  const row = {
+                                    id: crypto.randomUUID(),
+                                    source: admittedSource,
+                                    sourceFocus: event.detail === 0 ? ('keyboard' as const) : ('pointer' as const),
+                                    definition: structuredClone(definition),
+                                    statement: statementInput(admittedSource),
+                                  };
+                                  current.rows = [...current.rows, row];
+                                  setLatestCorrectionRow(row.id);
+                                  orientSourceCorrection(
+                                    row.id,
+                                    admittedSource.id,
+                                    readEpoch,
+                                    event.currentTarget,
+                                    event.detail === 0,
+                                  );
+                                  setRows(current.rows);
+                                }}
+                              >
+                                {m.recipe_correct({}, o)}
+                              </Button>
+                            )}
                           </div>
-                          {read!.fields.includes(field) && (
-                            <Button
-                              data-content-item-slot="actions"
-                              type="button"
-                              variant="outline"
-                              className={recipeActionClassName}
-                              disabled={rows.some((row) => row.source?.id === source.id)}
-                              onClick={(event) => {
-                                const current = fieldAdmission.current;
-                                if (
-                                  !lifetime.active() ||
-                                  !isReadEpochCurrent(readEpoch) ||
-                                  !current.read ||
-                                  current.read !== read ||
-                                  !current.read.fields.includes(field) ||
-                                  current.rows.some((row) => row.source?.id === source.id)
-                                )
-                                  return;
-                                const admittedSource = (current.read.public?.subject.statements[field] ?? []).find(
-                                  (statement) => statement.id === source.id,
-                                );
-                                const definition = current.read.release.properties[field];
-                                if (!admittedSource || !definition) return;
-                                const row = {
-                                  id: crypto.randomUUID(),
-                                  source: admittedSource,
-                                  sourceFocus: event.detail === 0 ? ('keyboard' as const) : ('pointer' as const),
-                                  definition: structuredClone(definition),
-                                  statement: statementInput(admittedSource),
-                                };
-                                current.rows = [...current.rows, row];
-                                setLatestCorrectionRow(row.id);
-                                orientSourceCorrection(
-                                  row.id,
-                                  admittedSource.id,
-                                  readEpoch,
-                                  event.currentTarget,
-                                  event.detail === 0,
-                                );
-                                setRows(current.rows);
-                              }}
-                            >
-                              {m.recipe_correct({}, o)}
-                            </Button>
-                          )}
-                        </div>
-                      );
-                      return (
-                        <div
-                          key={source.id}
-                          {...(!gated ? { tabIndex: -1, 'data-recipe-current-statement': source.id } : {})}
-                        >
-                          {gated ? (
-                            <SpoilerGate
-                              label={m.subject_spoiler_show({}, o)}
-                              hideLabel={m.subject_spoiler_hide({}, o)}
-                            >
-                              {content}
-                            </SpoilerGate>
-                          ) : (
-                            content
-                          )}
-                        </div>
-                      );
-                    })}
-                  </ContentItemFrame>
-                </section>
+                        );
+                        return (
+                          <div
+                            key={source.id}
+                            {...(!gated ? { tabIndex: -1, 'data-recipe-current-statement': source.id } : {})}
+                          >
+                            {gated ? (
+                              <SpoilerGate
+                                label={m.subject_spoiler_show({}, o)}
+                                hideLabel={m.subject_spoiler_hide({}, o)}
+                              >
+                                {content}
+                              </SpoilerGate>
+                            ) : (
+                              content
+                            )}
+                          </div>
+                        );
+                      })}
+                    </ContentItemFrame>
+                  </section>
+                ))}
+              </section>
+            )}
+            <section className="min-w-0 space-y-4" aria-label={m.recipe_review_statement({}, o)}>
+              <div className="min-w-0 space-y-2">
+                <ContentItemHeading level={2} className="text-lg font-semibold">
+                  {m.recipe_review_statement({}, o)}
+                </ContentItemHeading>
+                <p className="max-w-prose text-sm text-muted-foreground">{m.recipe_ingredients_help({}, o)}</p>
+              </div>
+              {rows.map((row) => (
+                <RecipeField
+                  key={row.id}
+                  row={row}
+                  feedbackId={recipeRowId(termsId, row.id)}
+                  corrections={corrections}
+                  clearCorrection={(target) => clearCorrections((error) => error.target === target)}
+                  read={draftRead}
+                  currentRead={read}
+                  readEpoch={readEpoch}
+                  isReadEpochCurrent={isReadEpochCurrent}
+                  locale={locale}
+                  search={search}
+                  disabled={locked || session !== 'signed-in'}
+                  editAllowed={() => fieldEditAllowed(row.id)}
+                  removalAllowed={() => !running.current && !pending.current && !locked && !created}
+                  transport={transport}
+                  refreshDefinitions={() => refreshCurrentDefinitions(readEpoch)}
+                  onState={(patch) => {
+                    const returnVisit = patch.result?.ok ? crypto.randomUUID() : undefined;
+                    setRows((previous) =>
+                      previous.map((entry) =>
+                        entry.id === row.id
+                          ? {
+                              ...entry,
+                              ...patch,
+                              ...(returnVisit ? { returnVisit } : {}),
+                            }
+                          : entry,
+                      ),
+                    );
+                  }}
+                  {...(review ? { review } : {})}
+                  onChange={(update) => {
+                    if (!fieldEditAllowed(row.id)) return;
+                    const current = fieldAdmission.current.rows.find((entry) => entry.id === row.id)!;
+                    const next = update(current);
+                    if (next === current) return;
+                    if (next.statement.value.type !== current.statement.value.type) {
+                      const prefix = `${recipeRowId(termsId, row.id)}-fact-`;
+                      clearCorrections((error) => !!error.target?.startsWith(prefix));
+                    }
+                    fieldAdmission.current.rows = fieldAdmission.current.rows.map((entry) =>
+                      entry.id === row.id ? next : entry,
+                    );
+                    setRows((previous) => previous.map((entry) => (entry.id === row.id ? update(entry) : entry)));
+                  }}
+                  onOriginal={(original) => {
+                    if (!fieldEditAllowed(row.id)) return;
+                    setRows((previous) =>
+                      previous.map((entry) => (entry.id === row.id ? { ...entry, original } : entry)),
+                    );
+                  }}
+                  onRemove={() => {
+                    if (
+                      !lifetime.active() ||
+                      !isReadEpochCurrent(readEpoch) ||
+                      running.current ||
+                      pending.current ||
+                      locked ||
+                      created
+                    )
+                      return;
+                    setRows((previous) => previous.filter((entry) => entry.id !== row.id));
+                    clearCorrections((error) => error.owner === recipeRowId(termsId, row.id));
+                  }}
+                />
               ))}
-            {rows.map((row) => (
-              <RecipeField
-                key={row.id}
-                row={row}
-                feedbackId={recipeRowId(termsId, row.id)}
-                corrections={corrections}
-                clearCorrection={(target) => clearCorrections((error) => error.target === target)}
-                read={draftRead}
-                currentRead={read}
-                readEpoch={readEpoch}
-                isReadEpochCurrent={isReadEpochCurrent}
-                locale={locale}
-                search={search}
-                disabled={locked || session !== 'signed-in'}
-                editAllowed={() => fieldEditAllowed(row.id)}
-                removalAllowed={() => !running.current && !pending.current && !locked && !created}
-                transport={transport}
-                refreshDefinitions={() => refreshCurrentDefinitions(readEpoch)}
-                onState={(patch) => {
-                  const returnVisit = patch.result?.ok ? crypto.randomUUID() : undefined;
-                  setRows((previous) =>
-                    previous.map((entry) =>
-                      entry.id === row.id
-                        ? {
-                            ...entry,
-                            ...patch,
-                            ...(returnVisit ? { returnVisit } : {}),
-                          }
-                        : entry,
-                    ),
-                  );
-                }}
-                {...(review ? { review } : {})}
-                onChange={(update) => {
-                  if (!fieldEditAllowed(row.id)) return;
-                  const current = fieldAdmission.current.rows.find((entry) => entry.id === row.id)!;
-                  const next = update(current);
-                  if (next === current) return;
-                  if (next.statement.value.type !== current.statement.value.type) {
-                    const prefix = `${recipeRowId(termsId, row.id)}-fact-`;
-                    clearCorrections((error) => !!error.target?.startsWith(prefix));
-                  }
-                  fieldAdmission.current.rows = fieldAdmission.current.rows.map((entry) =>
-                    entry.id === row.id ? next : entry,
-                  );
-                  setRows((previous) => previous.map((entry) => (entry.id === row.id ? update(entry) : entry)));
-                }}
-                onOriginal={(original) => {
-                  if (!fieldEditAllowed(row.id)) return;
-                  setRows((previous) =>
-                    previous.map((entry) => (entry.id === row.id ? { ...entry, original } : entry)),
-                  );
-                }}
-                onRemove={() => {
-                  if (
-                    !lifetime.active() ||
-                    !isReadEpochCurrent(readEpoch) ||
-                    running.current ||
-                    pending.current ||
-                    locked ||
-                    created
-                  )
-                    return;
-                  setRows((previous) => previous.filter((entry) => entry.id !== row.id));
-                  clearCorrections((error) => error.owner === recipeRowId(termsId, row.id));
-                }}
-              />
-            ))}
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
-              <Field className="w-full min-w-0 sm:flex-1">
-                <FieldLabel htmlFor={`${termsId}-recipe-field`}>{m.character_add_fact({}, o)}</FieldLabel>
-                <Select
-                  disabled={locked}
-                  value={selectedAdditionalField === '' ? null : selectedAdditionalField}
-                  onValueChange={(nextSelectValue) => setProperty(nextSelectValue ?? '')}
-                >
-                  <SelectTrigger
-                    id={`${termsId}-recipe-field`}
-                    className="w-full min-w-0 relative z-10 min-h-11 min-w-11 [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring"
-                    aria-describedby={withdrawnChoice ? `${termsId}-recipe-field-stale` : undefined}
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
+                <Field className="w-full min-w-0 sm:flex-1">
+                  <FieldLabel htmlFor={`${termsId}-recipe-field`}>{m.character_add_fact({}, o)}</FieldLabel>
+                  <Select
+                    disabled={locked}
+                    value={selectedAdditionalField === '' ? null : selectedAdditionalField}
+                    onValueChange={(nextSelectValue) => setProperty(nextSelectValue ?? '')}
                   >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
-                      {offeredAdditionalFields.map((field) => (
-                        <SelectItem key={field} value={field}>
-                          {name(field)}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-              {withdrawnChoice && (
-                <p id={`${termsId}-recipe-field-stale`} role="status">
-                  {m.correction_stale({}, o)}
-                </p>
-              )}
-              <Button
-                type="button"
-                className={recipeActionClassName}
-                variant="outline"
-                disabled={locked || session !== 'signed-in' || !selectedAdditionalField}
-                onClick={(event) => {
-                  const current = fieldAdmission.current;
-                  if (
-                    !lifetime.active() ||
-                    !isReadEpochCurrent(readEpoch) ||
-                    !current.read ||
-                    current.locked ||
-                    current.created ||
-                    current.session !== 'signed-in' ||
-                    running.current ||
-                    pending.current ||
-                    current.property !== property
-                  )
-                    return;
-                  if (!availableAdditionalFields(current.read, current.rows).includes(property)) return;
-                  const definition = current.read.release.properties[property];
-                  if (!definition) return;
-                  const row = newRow(property, definition);
-                  orientAddition(row.id, event.currentTarget, event.detail === 0);
-                  current.rows = [...current.rows, row];
-                  current.property = '';
-                  setRows((previous) => [...previous, row]);
-                  setProperty('');
-                }}
-              >
-                {m.correction_add({}, o)}
-              </Button>
-            </div>
+                    <SelectTrigger
+                      id={`${termsId}-recipe-field`}
+                      className="w-full min-w-0 relative z-10 min-h-11 min-w-11 [&:focus-visible]:outline-2 [&:focus-visible]:outline-offset-2 [&:focus-visible]:outline-ring"
+                      aria-describedby={withdrawnChoice ? `${termsId}-recipe-field-stale` : undefined}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value={null}>{m.correction_choose({}, o)}</SelectItem>
+                        {offeredAdditionalFields.map((field) => (
+                          <SelectItem key={field} value={field}>
+                            {name(field)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {withdrawnChoice && (
+                  <p id={`${termsId}-recipe-field-stale`} role="status">
+                    {m.correction_stale({}, o)}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  className={recipeActionClassName}
+                  variant="outline"
+                  disabled={locked || session !== 'signed-in' || !selectedAdditionalField}
+                  onClick={(event) => {
+                    const current = fieldAdmission.current;
+                    if (
+                      !lifetime.active() ||
+                      !isReadEpochCurrent(readEpoch) ||
+                      !current.read ||
+                      current.locked ||
+                      current.created ||
+                      current.session !== 'signed-in' ||
+                      running.current ||
+                      pending.current ||
+                      current.property !== property
+                    )
+                      return;
+                    if (!availableAdditionalFields(current.read, current.rows).includes(property)) return;
+                    const definition = current.read.release.properties[property];
+                    if (!definition) return;
+                    const row = newRow(property, definition);
+                    orientAddition(row.id, event.currentTarget, event.detail === 0);
+                    current.rows = [...current.rows, row];
+                    current.property = '';
+                    setRows((previous) => [...previous, row]);
+                    setProperty('');
+                  }}
+                >
+                  {m.correction_add({}, o)}
+                </Button>
+              </div>
+            </section>
             {!id && (
-              <>
+              <section
+                className="min-w-0 space-y-4 border-t border-border pt-5"
+                aria-label={m.recipe_review_title({}, o)}
+              >
                 {failure && (failure.reason !== 'invalid' || corrections.length > 0) && (
-                  <div role="alert" className="space-y-2">
+                  <div role="alert" className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
                     <p>
                       {failure.reason === 'conflict'
                         ? m.catalogue_create_conflict({}, o)
@@ -1344,7 +1390,7 @@ function RecipeEditorLive({
                     }}
                   />
                 )}
-                <div className="flex min-w-0 flex-wrap gap-3">
+                <footer className="flex min-w-0 flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-center">
                   {!pending.current && (
                     <Button
                       type="button"
@@ -1380,8 +1426,8 @@ function RecipeEditorLive({
                         ? m.correction_retry({}, o)
                         : m.recipe_title({}, o)}
                   </Button>
-                </div>
-              </>
+                </footer>
+              </section>
             )}
           </Workspace>
         )
@@ -1690,10 +1736,14 @@ function RecipeFieldLive({
   return (
     <section ref={section} id={fieldId} className="min-w-0">
       <ContentItemFrame as="div" className={recipePanelClassName}>
-        <ContentItemHeading id={`${fieldId}-heading`} tabIndex={-1} className="font-semibold">
+        <ContentItemHeading id={`${fieldId}-heading`} level={3} tabIndex={-1} className="max-w-prose font-semibold">
           {label}
         </ContentItemHeading>
-        <fieldset data-content-item-slot="preview" disabled={frozen} className="min-w-0 space-y-4">
+        <fieldset
+          data-content-item-slot="preview"
+          disabled={frozen}
+          className={`${recipePanelControlsClassName} min-w-0 space-y-4`}
+        >
           <StatementFields
             creation={!row.source}
             localDraft
@@ -1902,8 +1952,8 @@ function RecipeFieldLive({
             </Field>
           )}
         </fieldset>
-        {reviewRequired && <p role="alert">{m.catalogue_create_invalid_field({}, o)}</p>}
-        <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3">
+        {reviewRequired && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 p-3">{m.catalogue_create_invalid_field({}, o)}</p>}
+        <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3 border-t border-border pt-4">
           {confirmingRemoval ? (
             <div
               role="group"
@@ -1959,6 +2009,32 @@ function RecipeFieldLive({
         ) : (
           result && !result.ok && <EditorFailure reason={result.reason} locale={locale} />
         )}
+        {!result?.ok && statementReview && currentRead && (
+          <RecipeCorrectionReview
+            row={{
+              id: row.id,
+              statement: recipeEvidence(row.statement),
+              definition,
+              original: row.original,
+              source: row.source ? { ...statementInput(row.source), rank: row.source.rank } : undefined,
+            }}
+            read={{
+              release: read.release,
+              source: row.source ?? null,
+              public: {
+                related: currentRead.public?.related ?? {},
+                subject: { type: currentRead.public?.subject.type ?? 'schema:Recipe' },
+              },
+            }}
+            locale={locale}
+            stale={!statementReviewCurrent}
+            onJump={() => {
+              if (!lifetime.active()) return;
+              setStatementReview(undefined);
+              focusRecipeCorrection(section.current?.ownerDocument ?? document, `${fieldId}-heading`);
+            }}
+          />
+        )}
         {result?.ok ? (
           <div className="space-y-3">
             <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -2006,32 +2082,6 @@ function RecipeFieldLive({
                   {m.catalogue_create_review_new({}, o)}
                 </Button>
               )}
-            {statementReview && currentRead && (
-              <RecipeCorrectionReview
-                row={{
-                  id: row.id,
-                  statement: recipeEvidence(row.statement),
-                  definition,
-                  original: row.original,
-                  source: row.source ? { ...statementInput(row.source), rank: row.source.rank } : undefined,
-                }}
-                read={{
-                  release: read.release,
-                  source: row.source ?? null,
-                  public: {
-                    related: currentRead.public?.related ?? {},
-                    subject: { type: currentRead.public?.subject.type ?? 'schema:Recipe' },
-                  },
-                }}
-                locale={locale}
-                stale={!statementReviewCurrent}
-                onJump={() => {
-                  if (!lifetime.active()) return;
-                  setStatementReview(undefined);
-                  focusRecipeCorrection(section.current?.ownerDocument ?? document, `${fieldId}-heading`);
-                }}
-              />
-            )}
             {(currentRead?.public || (command && wasUncertain)) && (
               <>
                 {!command && (
