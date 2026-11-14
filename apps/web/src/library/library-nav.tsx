@@ -1,6 +1,7 @@
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
+import { ListRow, ListRowLink } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ChevronDownIcon } from 'lucide-react';
+import { CheckIcon, ChevronDownIcon } from 'lucide-react';
 import { useId } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -113,7 +114,7 @@ export function libraryNavigationEntries(
 
 function DestinationLink({ entry }: { entry: LibraryNavigationEntry }) {
   const className =
-    'min-w-0 max-w-48 shrink-0 truncate rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground';
+    'inline-flex min-h-11 min-w-11 max-w-48 shrink-0 items-center rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-[current=page]:bg-muted aria-[current=page]:font-semibold aria-[current=page]:text-foreground';
   return entry.href ? (
     <a
       href={entry.href}
@@ -122,7 +123,7 @@ function DestinationLink({ entry }: { entry: LibraryNavigationEntry }) {
       data-library-pin={entry.pin?.collectionId}
       className={className}
     >
-      {entry.label}
+      <span className="truncate">{entry.label}</span>
     </a>
   ) : (
     <span
@@ -131,7 +132,7 @@ function DestinationLink({ entry }: { entry: LibraryNavigationEntry }) {
       data-library-pin={entry.pin?.collectionId}
       className={`${className} cursor-default`}
     >
-      {entry.label}
+      <span className="truncate">{entry.label}</span>
     </span>
   );
 }
@@ -141,6 +142,40 @@ function destinationMenuEntries(entries: readonly LibraryNavigationEntry[]): Men
     entry.href
       ? { type: 'link', label: entry.label, href: entry.href, current: entry.current }
       : { type: 'item', label: entry.label, disabled: true, current: entry.current, onSelect: () => {} },
+  );
+}
+
+/** Supplied identities stay readable even when the one-row shortcuts have to clip their labels. */
+function DestinationList({ entries }: { entries: readonly LibraryNavigationEntry[] }) {
+  return (
+    <ul data-library-destinations className="m-0 min-w-0 max-w-full list-none space-y-1 p-1">
+      {entries.map((entry) => (
+        <ListRow
+          key={entry.id}
+          data-library-destination={entry.id}
+          data-library-pin={entry.pin?.collectionId}
+          className="min-h-13 min-w-0 p-1 aria-[current=page]:bg-muted"
+          aria-current={entry.current && !entry.href ? 'page' : undefined}
+        >
+          <div
+            aria-hidden={entry.href ? true : undefined}
+            className={`flex min-h-11 min-w-11 items-start gap-3 rounded-lg px-3 py-3 text-sm leading-5 ${entry.current ? 'bg-muted font-semibold' : ''} ${entry.href ? '' : 'text-muted-foreground'}`}
+          >
+            <span className="min-w-0 flex-1 whitespace-normal [overflow-wrap:anywhere]">{entry.label}</span>
+            {entry.current ? <CheckIcon aria-hidden="true" className="size-5 shrink-0" /> : null}
+          </div>
+          {entry.href ? (
+            <ListRowLink
+              href={entry.href}
+              aria-current={entry.current ? 'page' : undefined}
+              className="min-h-11 min-w-11"
+            >
+              {entry.label}
+            </ListRowLink>
+          ) : null}
+        </ListRow>
+      ))}
+    </ul>
   );
 }
 
@@ -184,13 +219,14 @@ function DestinationMenu({
   return (
     <Menu
       title={m.library_nav_selector()}
-      entries={destinationMenuEntries(entries)}
+      content={<DestinationList entries={entries} />}
+      closeOnNavigation
       trigger={
         <Button
           aria-label={m.library_nav_selector()}
           aria-labelledby={`${titleId} ${purposeId}`}
           variant="outline"
-          className="min-w-0 max-w-48 shrink-0"
+          className="min-h-11 min-w-11 max-w-48 shrink-0"
         >
           <span id={titleId} className="truncate">
             {current ?? m.library_more()}
@@ -205,7 +241,7 @@ function DestinationMenu({
   );
 }
 
-/** One nonwrapping navigation row at either viewport, with the remaining real Collections in a responsive Menu. */
+/** One navigation row and one complete responsive reading/selection surface at either viewport. */
 export function LibraryNavigation({
   current,
   pins,
@@ -231,23 +267,21 @@ export function LibraryNavigation({
   return (
     <div data-library-navigation data-collections-state={collectionsState} className="min-w-0 space-y-2">
       <nav
-        data-library-navigation-desktop
         aria-label={m.library_nav_sidebar_label()}
-        className="hidden min-w-0 items-center gap-1 lg:flex"
+        className="flex min-w-0 items-center gap-1"
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <div
+          data-library-navigation-desktop
+          className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 lg:flex"
+        >
           {tabs.map((entry) => (
             <DestinationLink key={entry.id} entry={entry} />
           ))}
         </div>
-        {overflow.length ? <DestinationMenu entries={overflow} /> : null}
-      </nav>
-      <nav
-        data-library-navigation-phone
-        aria-label={m.library_nav_sidebar_label()}
-        className="flex min-w-0 items-center gap-1 lg:hidden"
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <div
+          data-library-navigation-phone
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 lg:hidden"
+        >
           {phonePins.map((entry) => (
             <DestinationLink key={entry.id} entry={entry} />
           ))}

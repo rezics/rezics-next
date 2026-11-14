@@ -341,18 +341,15 @@ export const CollectionsNinePins: Story = {
     if (!phone) throw new globalThis.Error('Missing phone Library navigation');
     await expect(phone).toBeVisible();
     expect(phone.querySelectorAll('a[data-library-pin]')).toHaveLength(3);
-    const selector = within(phone).getByRole('button', {
+    const selector = within(context.canvasElement).getByRole('button', {
       name: `${m.library_nav_all_collections()} ${m.library_nav_selector()}`,
     });
     await expect(selector).toBeVisible();
     await expect(selector).toHaveTextContent(m.library_nav_all_collections());
     await userEvent.click(selector);
 
-    const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
-    const menu = sheet
-      ? await within(document.body).findByRole('dialog', { name: m.library_nav_selector() })
-      : await within(document.body).findByRole('menu');
-    const destination = within(menu).getByRole(sheet ? 'link' : 'menuitem', {
+    const menu = await within(document.body).findByRole('dialog', { name: m.library_nav_selector() });
+    const destination = within(menu).getByRole('link', {
       name: m.library_nav_all_collections(),
     });
     destination.scrollIntoView({ block: 'nearest' });

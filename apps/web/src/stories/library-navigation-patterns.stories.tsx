@@ -3,6 +3,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { LibraryNavigation } from '../library/library-nav';
+import type { LibraryPinsRead } from '../library/pins-read';
 import { PatternStory } from './page';
 import collectionRecording from '../kernel/recorded/library-collection.json';
 
@@ -15,37 +16,26 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const destinations = [
-  {
-    id: 'story-everything',
-    membershipKind: 'dynamic' as const,
-    builtinKind: 'everything',
-    title: null,
-  },
-  {
-    id: 'story-liked',
-    membershipKind: 'dynamic' as const,
-    builtinKind: 'liked',
-    title: null,
-  },
+  { id: 'story-everything', membershipKind: 'dynamic' as const, builtinKind: 'everything', title: null },
+  { id: 'story-liked', membershipKind: 'dynamic' as const, builtinKind: 'liked', title: null },
 ];
-
-const pins = {
-  state: 'loaded' as const,
+const prefix = 'Collected journeys through the illustrated archive — annotated international reading edition — ';
+const unbrokenTitle = 'UnbrokenCollectionTitle'.repeat(16);
+const selectedCollection = { ...collectionRecording.collection, title: `${prefix}Volume nine: ${collectionRecording.collection.title}` };
+const pins: Extract<LibraryPinsRead, { state: 'loaded' }> = {
+  state: 'loaded',
   revision: 4,
   next: null,
   pins: [
-    {
-      collectionId: 'story-pinned-1',
-      target: { id: 'story-pinned-1', title: 'Pinned collection one', membershipKind: 'curated' as const },
-    },
-    {
-      collectionId: 'story-pinned-2',
-      target: { id: 'story-pinned-2', title: 'Pinned collection two', membershipKind: 'curated' as const },
-    },
-    {
-      collectionId: 'story-pinned-3',
-      target: { id: 'story-pinned-3', title: 'Pinned collection three', membershipKind: 'curated' as const },
-    },
+    ...Array.from({ length: 8 }, (_, index) => ({
+      collectionId: `story-pinned-${index + 1}`,
+      target: index === 5 ? null : {
+        id: `story-pinned-${index + 1}`,
+        title: index === 2 ? unbrokenTitle : `${prefix}Volume ${index + 1}`,
+        membershipKind: 'curated' as const,
+      },
+    })),
+    { collectionId: selectedCollection.id, target: selectedCollection },
   ],
 };
 
@@ -55,67 +45,58 @@ export const SelectorOpen: Story = {
       <LibraryNavigation current="tracked" pins={pins} collections={destinations} />
     </PatternStory>
   ),
-  play: async (context) => {
-    const canvas = within(context.canvasElement);
-    await userEvent.click(
-      await canvas.findByRole('button', { name: `${m.library_nav_tracked_entries()} ${m.library_nav_selector()}` }),
-    );
-    const sheet = document.querySelector('[data-slot="drawer-content"]');
-    await expect(sheet).toBeVisible();
-    const menu = within(sheet as HTMLElement);
-    await expect(menu.getByRole('link', { name: m.library_dynamic_everything() })).toBeVisible();
-    await expect(menu.getByRole('link', { name: m.library_dynamic_liked() })).toBeVisible();
-    await expect(menu.getByRole('link', { name: 'Pinned collection one' })).toBeVisible();
-    await expect(menu.getByRole('link', { name: m.library_nav_all_collections() })).toBeVisible();
-    await expect(
-      within(context.canvasElement.querySelector('[data-library-navigation-phone]') as HTMLElement).getAllByRole(
-        'link',
-        {
-          name: /Pinned collection/,
-        },
-      ),
-    ).toHaveLength(3);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', {
+      name: `${m.library_nav_tracked_entries()} ${m.library_nav_selector()}`,
+    }));
+    const surface = await within(document.body).findByRole('dialog', { name: m.library_nav_selector() });
+    const menu = within(surface);
+    for (const pin of pins.pins) {
+      if (!pin.target) continue;
+      const link = menu.getByRole('link', { name: pin.target.title! });
+      link.scrollIntoView({ block: 'nearest' });
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute('href', `/${getLocale()}/collections/${encodeURIComponent(pin.collectionId)}`);
+      await expect(menu.getByText(pin.target.title!, { exact: true, selector: 'span:not(.sr-only)' })).toBeVisible();
+    }
+    await expect(menu.getByRole('link', { name: m.library_dynamic_everything() })).toBeInTheDocument();
+    await expect(menu.getByRole('link', { name: m.library_dynamic_liked() })).toBeInTheDocument();
+    const unavailable = surface.querySelector('[data-library-destination="story-pinned-6"]')!;
+    await expect(unavailable).toHaveTextContent(m.library_pin_unavailable());
+    await expect(unavailable.querySelector('a, button, [tabindex]')).toBeNull();
+    await expect(menu.getByRole('link', { name: m.library_nav_tracked_entries() })).toHaveAttribute('aria-current', 'page');
+    await expect(canvasElement.querySelector('[data-library-navigation-phone]')?.querySelectorAll('[data-library-pin]')).toHaveLength(3);
+    await expect(canvasElement.querySelector('[data-library-navigation-desktop]')?.querySelectorAll('[data-library-pin]')).toHaveLength(8);
   },
 };
 
 export const SelectedCollectionSelector: Story = {
-  name: 'Selected Collection title and keyboard focus',
-  parameters: { ...SelectorOpen.parameters },
+  name: 'Current ninth pin, complete title and keyboard focus',
   render: () => (
     <PatternStory>
-      <LibraryNavigation
-        current={{ collectionId: collectionRecording.collection.id }}
-        pins={{
-          ...pins,
-          pins: [
-            { collectionId: collectionRecording.collection.id, target: collectionRecording.collection },
-            ...pins.pins,
-          ],
-        }}
-        collections={destinations}
-      />
+      <LibraryNavigation current={{ collectionId: selectedCollection.id }} pins={pins} collections={destinations} />
     </PatternStory>
   ),
   play: async ({ canvasElement }) => {
-    const phone = canvasElement.querySelector<HTMLElement>('[data-library-navigation-phone]');
-    if (!phone) throw new Error('Missing phone Library navigation.');
-    const title = collectionRecording.collection.title;
-    const selector = within(phone).getByRole('button', { name: `${title} ${m.library_nav_selector()}` });
+    const selector = within(canvasElement).getByRole('button', {
+      name: `${selectedCollection.title} ${m.library_nav_selector()}`,
+    });
     await expect(selector).toBeVisible();
-    await expect(selector).toHaveTextContent(title);
+    await expect(selector).toHaveTextContent(selectedCollection.title);
     selector.focus();
     await userEvent.keyboard('{Enter}');
-    const menu = await within(document.body).findByRole('dialog', { name: m.library_nav_selector() });
-    const destination = within(menu).getByRole('link', { name: title });
+    const surface = await within(document.body).findByRole('dialog', { name: m.library_nav_selector() });
+    const destination = within(surface).getByRole('link', { name: selectedCollection.title });
+    destination.scrollIntoView({ block: 'nearest' });
     await expect(destination).toBeVisible();
-    await expect(destination).toHaveAttribute(
-      'href',
-      `/${getLocale()}/collections/${encodeURIComponent(collectionRecording.collection.id)}`,
-    );
+    await expect(destination).toHaveAttribute('href', `/${getLocale()}/collections/${encodeURIComponent(selectedCollection.id)}`);
     await expect(destination).toHaveAttribute('aria-current', 'page');
+    await expect(destination.closest('[data-library-destination]')?.querySelector('svg')).toBeVisible();
+    destination.focus();
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(selector).toHaveFocus());
-    await expect(selector).toHaveAccessibleName(`${title} ${m.library_nav_selector()}`);
+    await expect(selector).toHaveAccessibleName(`${selectedCollection.title} ${m.library_nav_selector()}`);
     await expect(within(document.body).queryByRole('dialog', { name: m.library_nav_selector() })).toBeNull();
   },
 };

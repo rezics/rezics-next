@@ -92,11 +92,11 @@ test('Collection outer page keeps a visible reachable All Collections destinatio
     const html = renderToStaticMarkup(
       createElement(LibraryNavigation, { current: 'collections', pins, collections: [], locale: 'en' }),
     );
-    const phone = html.match(/<nav\b[^>]*data-library-navigation-phone[\s\S]*?<\/nav>/)?.[0];
+    const phone = html.match(/<div\b[^>]*data-library-navigation-phone[\s\S]*?<\/div>/)?.[0];
     expect(phone).toBeDefined();
     expect(phone!.match(/data-library-pin=/g)).toHaveLength(3);
-    expectSelectorName(phone!, m.library_nav_all_collections());
-    expect(phone).toContain(m.library_nav_all_collections());
+    expectSelectorName(html, m.library_nav_all_collections());
+    expect(html).toContain(m.library_nav_all_collections());
     expect(html).not.toContain(`href="/en/collections/collection-${unavailableIndex}"`);
   }
 });
@@ -123,9 +123,10 @@ test('Shared Library selector accessible name includes actual selected visible t
         const html = renderToStaticMarkup(
           createElement(LibraryNavigation, { current, collections, locale, pins: { state: 'closed' } }),
         );
-        const phone = html.match(/<nav\b[^>]*data-library-navigation-phone[\s\S]*?<\/nav>/)?.[0];
+        const phone = html.match(/<div\b[^>]*data-library-navigation-phone[\s\S]*?<\/div>/)?.[0];
         expect(phone).toBeDefined();
-        expectSelectorName(phone!, title);
+        expectSelectorName(html, title);
+        expect(html.match(/<button\b/g)).toHaveLength(1);
       }
     }
   } finally {
@@ -133,7 +134,7 @@ test('Shared Library selector accessible name includes actual selected visible t
   }
 });
 
-test('selected overflow and unavailable pins retain actual titles, current destinations and distinct selector labels', () => {
+test('selected overflow and unavailable pins retain actual titles, current destinations and one shared selector label', () => {
   const collection = collectionRecording.collection;
   const pins: LibraryPinsRead = {
     state: 'loaded',
@@ -157,12 +158,13 @@ test('selected overflow and unavailable pins retain actual titles, current desti
     const html = renderToStaticMarkup(
       createElement(LibraryNavigation, { current, pins, collections: [], locale: 'en' }),
     );
-    const desktop = html.match(/<nav\b[^>]*data-library-navigation-desktop[\s\S]*?<\/nav>/)?.[0];
-    const phone = html.match(/<nav\b[^>]*data-library-navigation-phone[\s\S]*?<\/nav>/)?.[0];
+    const desktop = html.match(/<div\b[^>]*data-library-navigation-desktop[\s\S]*?<\/div>/)?.[0];
+    const phone = html.match(/<div\b[^>]*data-library-navigation-phone[\s\S]*?<\/div>/)?.[0];
     expect(desktop).toBeDefined();
     expect(phone).toBeDefined();
-    const labelIds = [...expectSelectorName(desktop!, m.library_more()), ...expectSelectorName(phone!, title)];
-    expect(new Set(labelIds).size).toBe(4);
+    const labelIds = expectSelectorName(html, title);
+    expect(new Set(labelIds).size).toBe(2);
+    expect(html.match(/<button\b/g)).toHaveLength(1);
     const { tabs, overflow } = libraryNavigationEntries(current, pins, [], 'en');
     const selected = [...tabs, ...overflow].filter((entry) => entry.current);
     expect(selected).toHaveLength(1);
