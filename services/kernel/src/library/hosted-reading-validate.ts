@@ -1,4 +1,5 @@
 import { ProblemError } from '../http/problem-error.ts';
+import { isHostedReadingBodyLanguage } from './hosted-reading-language.ts';
 import {
   HOSTED_READING_POSITION_BLOCK_MAX,
   HOSTED_READING_POSITION_OFFSET_MAX,
@@ -16,6 +17,8 @@ export type HostedReadingRow = Readonly<{
   catalogue_id: string;
   publication_revision_id: string;
   occurrence_id: string;
+  body_language: string | null;
+  target_post_id: string;
   target_revision_id: string;
   target_sha256: string;
   document_block_id: string | null;
@@ -45,6 +48,8 @@ export function addressFromRow(row: HostedReadingRow): HostedReadingAddress {
     catalogueId: row.catalogue_id,
     publicationRevisionId: row.publication_revision_id,
     occurrenceId: row.occurrence_id,
+    ...(row.body_language == null ? {} : { bodyLanguage: row.body_language }),
+    targetPostId: row.target_post_id,
     targetRevisionId: row.target_revision_id,
     targetSha256: row.target_sha256,
     documentPosition: hostedReadingPositionFromRow(row.document_block_id, row.document_offset),
@@ -79,18 +84,22 @@ export function validateHostedReadingSave(value: unknown): HostedReadingSaveInpu
     'catalogueId',
     'publicationRevisionId',
     'occurrenceId',
+    'bodyLanguage',
+    'targetPostId',
     'targetRevisionId',
     'targetSha256',
     'documentPosition',
     'expectedRevision',
   ];
-  if (keys.some((key) => !allowed.includes(key)) || keys.length < 7 || keys.length > 8)
+  if (keys.some((key) => !allowed.includes(key)) || keys.length < 8 || keys.length > 10)
     throw new ProblemError('invalid_request');
   if (
     !hostedReadingUuid(value.subjectId) ||
     !hostedReadingUuid(value.catalogueId) ||
     !hostedReadingUuid(value.publicationRevisionId) ||
     !hostedReadingUuid(value.occurrenceId) ||
+    (value.bodyLanguage !== undefined && !isHostedReadingBodyLanguage(value.bodyLanguage)) ||
+    !hostedReadingUuid(value.targetPostId) ||
     !hostedReadingUuid(value.targetRevisionId) ||
     typeof value.targetSha256 !== 'string' ||
     !DIGEST.test(value.targetSha256) ||
@@ -105,6 +114,8 @@ export function validateHostedReadingSave(value: unknown): HostedReadingSaveInpu
     catalogueId: value.catalogueId,
     publicationRevisionId: value.publicationRevisionId,
     occurrenceId: value.occurrenceId,
+    ...(value.bodyLanguage === undefined ? {} : { bodyLanguage: value.bodyLanguage as string }),
+    targetPostId: value.targetPostId,
     targetRevisionId: value.targetRevisionId,
     targetSha256: value.targetSha256,
     documentPosition: parseHostedReadingPosition(value.documentPosition ?? null),

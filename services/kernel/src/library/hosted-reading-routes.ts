@@ -1,6 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { MAX_LANGUAGE_KEY_LENGTH } from '@rezics/definitions/language';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
@@ -34,6 +35,7 @@ const id = t.String({
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const revision = t.String({ pattern: '^[1-9][0-9]{0,18}$' });
 const readPosition = t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
+const bodyLanguage = t.String({ minLength: 1, maxLength: MAX_LANGUAGE_KEY_LENGTH });
 const position = t.Object(
   {
     blockId: t.String({ minLength: 1, maxLength: HOSTED_READING_POSITION_BLOCK_MAX }),
@@ -45,6 +47,8 @@ const address = {
   catalogueId: id,
   publicationRevisionId: id,
   occurrenceId: id,
+  bodyLanguage: t.Optional(bodyLanguage),
+  targetPostId: id,
   targetRevisionId: id,
   targetSha256: digest,
   documentPosition: t.Union([position, t.Null()]),
@@ -69,6 +73,7 @@ const resume = t.Union([
       position: readPosition,
       kind: t.Literal('chapter'),
       title: t.String({ minLength: 1, maxLength: 256 }),
+      bodyLanguage: t.Optional(bodyLanguage),
       target,
       document,
     },
@@ -92,6 +97,7 @@ const metadata = t.Union([
       position: readPosition,
       kind: t.Literal('chapter'),
       title: t.String({ minLength: 1, maxLength: 256 }),
+      bodyLanguage: t.Optional(bodyLanguage),
       target,
     },
     closed,
@@ -366,7 +372,9 @@ export function hostedReadingRoutes(app: DefinitionRoutes, dependencies: HostedR
             publicationRevisionId: id,
             occurrenceId: id,
             targetRevisionId: id,
+            targetPostId: id,
             targetSha256: digest,
+            bodyLanguage: t.Optional(bodyLanguage),
             documentPosition: t.Optional(t.Union([position, t.Null()])),
             expectedRevision: t.Union([revision, t.Null()]),
           },

@@ -4,6 +4,8 @@ WITH input AS NOT MATERIALIZED (
 SELECT catalogue_id,
        publication_revision_id,
        occurrence_id,
+       body_language,
+       target_post_id,
        target_revision_id,
        encode(target_sha256, 'hex') AS target_sha256,
        document_block_id,

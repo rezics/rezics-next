@@ -29,6 +29,7 @@ function saveBody(overrides: Record<string, unknown> = {}) {
     catalogueId: id,
     publicationRevisionId: id,
     occurrenceId: id,
+    targetPostId: id,
     targetRevisionId: id,
     targetSha256: digest,
     documentPosition: { blockId: 'opening', offset: 0 },
@@ -41,6 +42,12 @@ test('save input keeps exact identities and optional bounded position', () => {
   const parsed = validateHostedReadingSave(saveBody());
   expect(parsed.documentPosition).toEqual({ blockId: 'opening', offset: 0 });
   expect(parsed.expectedRevision).toBeNull();
+  expect(parsed.targetPostId).toBe(id);
+  for (const targetPostId of [undefined, null, 'not-a-post'])
+    expect(() => validateHostedReadingSave(saveBody({ targetPostId }))).toThrow(ProblemError);
+  expect(validateHostedReadingSave(saveBody({ bodyLanguage: 'zh-Hant' })).bodyLanguage).toBe('zh-Hant');
+  for (const bodyLanguage of ['', 'zh-hant', 'en_US', 'en\n', 'x'.repeat(64), null])
+    expect(() => validateHostedReadingSave(saveBody({ bodyLanguage }))).toThrow(ProblemError);
   expect(() => validateHostedReadingSave(saveBody({ targetSha256: 'zz' }))).toThrow(ProblemError);
   expect(() => validateHostedReadingSave(saveBody({ extra: true }))).toThrow(ProblemError);
   expect(() => parseHostedReadingPosition({ blockId: 'x'.repeat(129), offset: 0 })).toThrow(ProblemError);
@@ -64,6 +71,8 @@ test('stored rows round-trip the exact address without substituting a later publ
     catalogue_id: id,
     publication_revision_id: '00000000-0000-7000-8000-000000000002',
     occurrence_id: '00000000-0000-7000-8000-000000000003',
+    body_language: 'zh-Hant',
+    target_post_id: id,
     target_revision_id: '00000000-0000-7000-8000-000000000004',
     target_sha256: digest,
     document_block_id: 'block-9',
@@ -74,10 +83,13 @@ test('stored rows round-trip the exact address without substituting a later publ
     catalogueId: id,
     publicationRevisionId: row.publication_revision_id,
     occurrenceId: row.occurrence_id,
+    bodyLanguage: 'zh-Hant',
+    targetPostId: id,
     targetRevisionId: row.target_revision_id,
     targetSha256: digest,
     documentPosition: { blockId: 'block-9', offset: 44 },
   });
+  expect(addressFromRow({ ...row, body_language: null })).not.toHaveProperty('bodyLanguage');
 });
 
 test('erasure and export hooks page owner-private checkpoints without granting read access', () => {
@@ -93,6 +105,8 @@ test('resume withholds bytes when current Access conceals the saved chapter and 
     catalogue_id: id,
     publication_revision_id: id,
     occurrence_id: id,
+    body_language: null,
+    target_post_id: id,
     target_revision_id: id,
     target_sha256: digest,
     document_block_id: 'keep-me',
