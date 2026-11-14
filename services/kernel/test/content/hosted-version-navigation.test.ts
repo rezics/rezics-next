@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import type { AccessClient } from '../../src/request/access.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
-import { readHostedDraftPointSnapshot, type HostedVersionPointValue } from '../../src/content/hosted-version-draft-write.ts';
+import {
+  readHostedDraftPointSnapshot,
+  type HostedVersionPointValue,
+} from '../../src/content/hosted-version-draft-write.ts';
 import { readHostedVersionChapterPage } from '../../src/content/hosted-version-read-pages.ts';
 import type { HostedVersionReadIndex } from '../../src/content/hosted-version-read-pages-model.ts';
 import { createHostedVersionWrite, hostedVersionSequence } from '../../src/content/hosted-version-store.ts';
@@ -209,19 +212,11 @@ test('mounted chapter navigation pages exact nested snapshots in both directions
   const oldFirstAfterMove = await navigate(originPartIds[3]!, 'next', revisionId, 3);
   const oldContinuationAfterMove = await navigate(originPartIds[3]!, 'next', revisionId, 3, nextFirst.nextCursor!);
   const currentFirst = await navigate(originPartIds[3]!, 'next', movedRevisionId, 3);
-  expect(oldFirstAfterMove.items.map((item) => item.occurrenceId)).toEqual([
-    chapterId(4),
-    chapterId(5),
-    chapterId(6),
-  ]);
+  expect(oldFirstAfterMove.items.map((item) => item.occurrenceId)).toEqual([chapterId(4), chapterId(5), chapterId(6)]);
   expect(oldContinuationAfterMove.items.map((item) => item.occurrenceId)).toEqual([
     chapterId(7),
     chapterId(8),
     chapterId(9),
   ]);
-  expect(currentFirst.items.map((item) => item.occurrenceId)).toEqual([
-    chapterId(5),
-    chapterId(6),
-    chapterId(7),
-  ]);
+  expect(currentFirst.items.map((item) => item.occurrenceId)).toEqual([chapterId(5), chapterId(6), chapterId(7)]);
 });
