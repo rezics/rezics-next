@@ -39,13 +39,16 @@ function CopyLoanVisit({
   const id = useId();
   const [source] = useState(originating);
   const current = !retired && source.isCurrent('copy.list');
+  useLayoutEffect(() => {
+    const destination = focusAfterExpansion.current;
+    focusAfterExpansion.current = null;
+    if (!current) return;
+    if (destination === 'heading' && expanded) heading.current?.focus();
+    if (destination === 'trigger' && !expanded) trigger.current?.focus();
+  }, [current, expanded]);
   useEffect(() => {
     if (!current) setRetired(true);
   }, [current]);
-  useLayoutEffect(() => {
-    if (expanded) heading.current?.focus();
-    else trigger.current?.focus();
-  }, [expanded, read]);
   useEffect(() => {
     let active = true;
     if (!source.isCurrent('copy.list')) return;
@@ -89,13 +92,6 @@ function CopyLoanVisit({
     if (pending.moved || !source.isCurrent('copy.list')) return;
     (failed || unavailable ? retry.current : trigger.current)?.focus();
   }, [failed, read, refreshing, source, unavailable]);
-  useLayoutEffect(() => {
-    const destination = focusAfterExpansion.current;
-    focusAfterExpansion.current = null;
-    if (!current) return;
-    if (destination === 'heading' && expanded) heading.current?.focus();
-    if (destination === 'trigger' && !expanded) trigger.current?.focus();
-  }, [current, expanded]);
   const refresh = (button: HTMLButtonElement) => {
     if (!source.isCurrent('copy.list')) return;
     refreshFocus.current = { trigger: button, moved: false };
@@ -189,7 +185,7 @@ function CopyLoanVisit({
             />
           </section>
         </>
-      )}
+      ) : null}
     </section>
   );
 }
