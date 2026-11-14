@@ -272,9 +272,7 @@ export async function runWorkerCommand(
                   task.state === 'ready' &&
                   current !== undefined &&
                   current.attempt.state === 'exited' &&
-                  store
-                    .events(task.id, current.attempt.attempt)
-                    .some(isSourceAmendmentCompilerHoldEvent);
+                  store.events(task.id, current.attempt.attempt).some(isSourceAmendmentCompilerHoldEvent);
                 return compilerCustodyHold
                   ? {
                       reason: 'compiler-custody',
