@@ -69,8 +69,8 @@ function currentText() {
     return [...text.matchAll(/[a-z0-9]+/giu)].map((match, position) => ({
       token: match[0]!.toLowerCase(),
       position,
-      start_offset: match.index,
-      end_offset: match.index + match[0]!.length,
+      startOffset: match.index,
+      endOffset: match.index + match[0]!.length,
     }));
   });
   const check = bindReleaseSearchText(matcher, parseText('needle'), () => {
@@ -124,9 +124,11 @@ test('a stale relevance alias cannot claim a work before a later current edition
   const work = subject(workId, 'Series', 'work');
   const older = subject(olderId, 'Earlier edition'); // Its former Needle alias is absent from current source.
   const later = subject(laterId, 'Needle revised edition');
-  const subjects = new Map([work, older, later].map((value) => [value.id, value]));
+  const subjects = new Map([work, older, later].map((value) => [value.id, value] as const));
   const links = new Map<string, NativeWorkLinkEvidence>(
-    [older, later].map((value) => [value.id, { complete: true, values: [{ kind: 'work', id: work.id }] }]),
+    [older, later].map(
+      (value) => [value.id, { complete: true, values: [{ kind: 'work', id: work.id }] }] as const,
+    ),
   );
   const partition = subjectPartition(work.id);
   const home = { partition, generation: '1', epoch: 1, position: '0' };
@@ -191,7 +193,7 @@ test('current matching releases fill previews and their own child continuation w
     [olderId, subject(olderId, 'Earlier edition')],
     [laterId, subject(laterId, 'Needle first match')],
     [finalId, subject(finalId, 'Needle next match')],
-  ]);
+  ] as const);
   const childIds = [olderId, laterId, finalId];
   let childReads = 0;
   let releaseReads = 0;
@@ -208,7 +210,7 @@ test('current matching releases fill previews and their own child continuation w
       const keys = childIds.slice(start, start + size);
       return { keys, after: String(start + keys.length), exhausted: start + keys.length === childIds.length };
     },
-    works: async (_request, ids) => new Map(ids.map((id) => [id, `Work ${id}`])),
+    works: async (_request, ids) => new Map(ids.map((id) => [id, `Work ${id}`] as const)),
     releases: async (_request, ids) => {
       releaseReads++;
       const values: [string, { card: string; link: { kind: 'linked'; work: string } }][] = [];
