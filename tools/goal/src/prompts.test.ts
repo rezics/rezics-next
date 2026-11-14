@@ -238,10 +238,11 @@ test('manager and worker roles apply operating discipline within their prompt bu
   expect(standard.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerRoleBytes);
   const workerPrompt = renderWorkerPrompt({ task: worker(contract()), mainCheckout: MAIN }).prompt;
   expect(standard.prompt).toMatch(
-    /one concrete user outcome[\s\S]*worker-owned write boundary[\s\S]*smallest\s+required check[\s\S]*efficiency.md#operating-discipline[\s\S]*choose repair\s+order[\s\S]*next independent\s+writable slice ready/,
+    /one concrete user outcome[\s\S]*worker-owned write boundary[\s\S]*smallest\s+required check[\s\S]*efficiency.md#operating-discipline[\s\S]*Let the worker choose repair\s+order and take the next evidenced fix within the owned boundary/,
   );
-  expect(workerPrompt).toMatch(
-    /source-writing attempts[\s\S]*efficiency.md#operating-discipline[\s\S]*Checkpoint coherent source[\s\S]*next evidenced fix within your owned paths[\s\S]*park that part and hand off any remainder once/,
+  expect(standard.prompt).toContain('Replenish before others finish; dependencies never pause independent work.');
+  expect(workerPrompt).toContain(
+    'Keep in-scope work. Send distinct ready gaps (outcome/source evidence/first edit/prerequisite) to manager for merge/dispatch/refill.',
   );
   const rendered = renderManagerOpening({
     ...input,
