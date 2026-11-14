@@ -14,6 +14,7 @@ import type { BuyerEntitlement, BuyerEntitlementsPage, EntitlementsRead } from '
 import { entitlementHistoryRepairHref } from './entitlement-history-address';
 import { subjectCover } from './subject-cover';
 import { capturedBenefit } from './benefit';
+import { EntitlementDirectoryFrame } from './entitlement-workspace';
 
 export function EntitlementStatus({ record }: { record: BuyerEntitlement }) {
   return (
@@ -39,13 +40,18 @@ export function EntitlementsAddressRecovery({
   history?: PurchaseHistoryPosition | undefined;
 }) {
   return (
-    <section className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlements-heading">
-      <header className="space-y-3">
-        <PageHeading id="entitlements-heading">{m.entitlements_heading()}</PageHeading>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_intro()}</p>
+    <EntitlementDirectoryFrame>
+      <header className="grid min-w-0 gap-5 border-b border-border pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="min-w-0 space-y-3">
+          <PageHeading id="entitlements-heading">{m.entitlements_heading()}</PageHeading>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_intro()}</p>
+        </div>
         <a
           href={purchaseHistoryHref(locale, 'orders', history)}
-          className={buttonVariants({ variant: 'link', className: 'min-h-11 px-0' })}
+          className={buttonVariants({
+            variant: 'link',
+            className: 'min-h-11 w-fit max-w-full justify-start whitespace-normal px-0 text-left',
+          })}
         >
           {m.entitlements_orders()}
         </a>
@@ -61,7 +67,7 @@ export function EntitlementsAddressRecovery({
           </a>
         </AlertDescription>
       </Alert>
-    </section>
+    </EntitlementDirectoryFrame>
   );
 }
 
@@ -122,15 +128,20 @@ export function EntitlementsPage({
   history?: PurchaseHistoryPosition | undefined;
 }) {
   return (
-    <section className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlements-heading">
-      <header className="space-y-3">
-        <PageHeading id="entitlements-heading" tabIndex={-1}>
-          {m.entitlements_heading()}
-        </PageHeading>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_intro()}</p>
+    <EntitlementDirectoryFrame>
+      <header className="grid min-w-0 gap-5 border-b border-border pb-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="min-w-0 space-y-3">
+          <PageHeading id="entitlements-heading" tabIndex={-1}>
+            {m.entitlements_heading()}
+          </PageHeading>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_intro()}</p>
+        </div>
         <a
           href={purchaseHistoryHref(locale, 'orders', history)}
-          className={buttonVariants({ variant: 'link', className: 'min-h-11 px-0' })}
+          className={buttonVariants({
+            variant: 'link',
+            className: 'min-h-11 w-fit max-w-full justify-start whitespace-normal px-0 text-left',
+          })}
         >
           {m.entitlements_orders()}
         </a>
@@ -147,7 +158,7 @@ export function EntitlementsPage({
           </EmptyHeader>
         </Empty>
       ) : (
-        <ul className="space-y-3">
+        <ul className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
           {page.data.entitlements.map((record) => {
             const { subject, cover } = subjectCover(
               locale,
@@ -166,14 +177,15 @@ export function EntitlementsPage({
                 visual={<Cover subject={subject} cover={cover} size="xs" src={coverSrc} decorative />}
                 state={<EntitlementStatus record={record} />}
                 metadata={
-                  <>
+                  <div className="min-w-0 space-y-1 text-sm [overflow-wrap:anywhere]">
                     <p>
-                      {m.entitlements_granted()} <EntitlementTime value={record.grantedAt} locale={locale} />
+                      <span className="text-muted-foreground">{m.entitlements_granted()}</span>{' '}
+                      <EntitlementTime value={record.grantedAt} locale={locale} />
                     </p>
                     {capturedBenefit(record.contentEdition, record.targetSubjectId).kind === 'mapped' ? (
-                      <p>{m.benefit_heading()}</p>
+                      <p className="text-muted-foreground">{m.benefit_heading()}</p>
                     ) : null}
-                  </>
+                  </div>
                 }
               />
             );
@@ -181,7 +193,7 @@ export function EntitlementsPage({
         </ul>
       )}
       {page.kind === 'ready' ? (
-        <>
+        <div className="space-y-4 border-t border-border pt-5">
           <p className="sr-only" role="status" aria-live="polite">
             {m.buyer_history_ready()}
           </p>
@@ -194,8 +206,8 @@ export function EntitlementsPage({
             navigation={navigation}
             label={m.entitlements_pagination()}
           />
-        </>
+        </div>
       ) : null}
-    </section>
+    </EntitlementDirectoryFrame>
   );
 }
