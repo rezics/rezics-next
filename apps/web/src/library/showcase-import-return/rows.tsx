@@ -1,7 +1,9 @@
-import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
+import { Fragment, type ReactNode } from 'react';
+import { CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
+import { MemberReadingItem } from '@rezics/ui/list-presentation';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { RelativeTime } from '@rezics/ui/relative-time';
-import { ShelfList, ShelfListRow } from '@rezics/ui/shelf-list';
+import { ShelfList } from '@rezics/ui/shelf-list';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@rezics/ui/shadcn/table';
 import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
@@ -41,12 +43,20 @@ export function ImportLibraryRows({
   layout,
   size,
   onInspect,
+  selectedIndex,
+  detailId,
+  detail,
+  onClose,
 }: {
   rows: readonly ImportLibraryRow[];
   locale: string;
   layout: ShelfLayout;
   size: ShelfSize;
-  onInspect?: (index: number, launcher: HTMLButtonElement) => void;
+  onInspect: (index: number, launcher: HTMLButtonElement) => void;
+  selectedIndex: number | null;
+  detailId: string;
+  detail: ReactNode;
+  onClose: () => void;
 }) {
   const ratio = rowRatio(rows.map((row) => row.subject));
   const cover = (row: ImportLibraryRow) => ({
@@ -61,43 +71,24 @@ export function ImportLibraryRows({
       via: m.thread_cover_via(),
     },
   });
-  const inspect = (row: ImportLibraryRow, index: number) =>
-    onInspect ? (
-      <VndbAction
-        type="button"
-        variant="outline"
-        aria-label={m.library_vndb_browse_inspect_label({ title: row.title })}
-        onClick={(event) => onInspect(index, event.currentTarget)}
-      >
-        {m.library_vndb_browse_inspect()}
-      </VndbAction>
-    ) : undefined;
-
-  if (layout === 'grid') {
-    return (
-      <CoverGrid density={density[size]} ratio={ratio}>
-        {rows.map((row, index) => (
-          <div key={row.key} className="min-w-0" data-vndb-current-entry={index}>
-            <CoverCard
-              {...(importLibraryWorkHref(row, locale) ? { href: importLibraryWorkHref(row, locale)! } : {})}
-              cover={cover(row)}
-              title={row.title}
-              {...(row.titleLanguage ? { titleLang: row.titleLanguage } : {})}
-              status={{ label: row.state }}
-              {...(progress(row) ? { progress: progress(row)! } : {})}
-              meta={
-                <>
-                  <ImportLibraryVote row={row} />
-                  <Activity row={row} locale={locale} />
-                </>
-              }
-              menuTrigger={inspect(row, index)}
-            />
-          </div>
-        ))}
-      </CoverGrid>
-    );
-  }
+  const inspect = (row: ImportLibraryRow, index: number) => (
+    <VndbAction
+      type="button"
+      variant="outline"
+      aria-label={`${m.library_vndb_browse_inspect()}: ${m.library_member_occurrence({ title: row.title, position: index + 1 })}`}
+      aria-expanded={selectedIndex === index}
+      aria-controls={detailId}
+      onClick={(event) => onInspect(index, event.currentTarget)}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && selectedIndex === index && !event.defaultPrevented) {
+          event.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      {m.library_vndb_browse_inspect()}
+    </VndbAction>
+  );
 
   if (layout === 'table') {
     // Shared table primitives allow an unavailable identity to remain plain text in its original position.
@@ -112,44 +103,53 @@ export function ImportLibraryRows({
               <TableHead>{m.library_entry_progress()}</TableHead>
               <TableHead>{m.subject_rating_control_label()}</TableHead>
               <TableHead>{m.library_sort_activity()}</TableHead>
-              {onInspect ? <TableHead>{m.library_column_actions()}</TableHead> : null}
+              <TableHead>{m.library_column_actions()}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row, index) => {
               const href = importLibraryWorkHref(row, locale);
               return (
-                <TableRow key={row.key} data-vndb-current-entry={index}>
-                  <TableCell className="min-w-48 max-w-80 whitespace-normal">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <SubjectCover subject={row.subject} ratio={ratio} size="xs" />
-                      {href ? (
-                        <a
-                          href={href}
-                          lang={row.titleLanguage}
-                          className="min-w-0 break-words text-primary underline-offset-4 hover:underline"
-                        >
-                          {row.title}
-                        </a>
-                      ) : (
-                        <span>{row.title}</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="max-w-48 whitespace-normal">
-                    <State row={row} />
-                  </TableCell>
-                  <TableCell className="min-w-28 whitespace-normal">
-                    {progress(row) ? <ProgressRow {...progress(row)!} /> : <span aria-hidden>—</span>}
-                  </TableCell>
-                  <TableCell className="min-w-40 whitespace-normal">
-                    <ImportLibraryVote row={row} />
-                  </TableCell>
-                  <TableCell className="max-w-48 whitespace-normal text-muted-foreground">
-                    <Activity row={row} locale={locale} />
-                  </TableCell>
-                  {onInspect ? <TableCell>{inspect(row, index)}</TableCell> : null}
-                </TableRow>
+                <Fragment key={row.key}>
+                  <TableRow data-vndb-current-entry={index}>
+                    <TableCell className="min-w-48 max-w-80 whitespace-normal">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <SubjectCover subject={row.subject} ratio={ratio} size="xs" />
+                        {href ? (
+                          <a
+                            href={href}
+                            lang={row.titleLanguage}
+                            className="min-w-0 break-words text-primary underline-offset-4 hover:underline"
+                          >
+                            {row.title}
+                          </a>
+                        ) : (
+                          <span>{row.title}</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-48 whitespace-normal">
+                      <State row={row} />
+                    </TableCell>
+                    <TableCell className="min-w-28 whitespace-normal">
+                      {progress(row) ? <ProgressRow {...progress(row)!} /> : <span aria-hidden>—</span>}
+                    </TableCell>
+                    <TableCell className="min-w-40 whitespace-normal">
+                      <ImportLibraryVote row={row} />
+                    </TableCell>
+                    <TableCell className="max-w-48 whitespace-normal text-muted-foreground">
+                      <Activity row={row} locale={locale} />
+                    </TableCell>
+                    <TableCell>{inspect(row, index)}</TableCell>
+                  </TableRow>
+                  {selectedIndex === index ? (
+                    <TableRow data-vndb-detail-row={index}>
+                      <TableCell colSpan={6} className="whitespace-normal">
+                        {detail}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </Fragment>
               );
             })}
           </TableBody>
@@ -158,46 +158,39 @@ export function ImportLibraryRows({
     );
   }
 
-  return (
-    <ShelfList>
-      {rows.map((row, index) => {
-        const href = importLibraryWorkHref(row, locale);
-        if (href) {
-          return (
-            <li key={row.key} className="min-w-0" data-vndb-current-entry={index}>
-              <ShelfListRow
-                href={href}
-                cover={cover(row)}
-                title={row.title}
-                {...(row.titleLanguage ? { titleLang: row.titleLanguage } : {})}
-                status={<State row={row} />}
-                meta={<ImportLibraryVote row={row} />}
-                {...(progress(row) ? { progress: progress(row)! } : {})}
-                date={<Activity row={row} locale={locale} />}
-                labels={{ select: row.title, menu: row.title }}
-                menu={inspect(row, index)}
-              />
-            </li>
-          );
+  const items = rows.map((row, index) => {
+    const href = importLibraryWorkHref(row, locale);
+    return (
+      <MemberReadingItem
+        key={row.key}
+        layout={layout}
+        {...(href ? { href } : {})}
+        cover={cover(row)}
+        title={row.title}
+        {...(row.titleLanguage ? { titleLang: row.titleLanguage } : {})}
+        occurrenceLabel={m.library_member_occurrence({ title: row.title, position: index + 1 })}
+        metadata={
+          <div className="space-y-1" data-vndb-current-entry={index}>
+            <State row={row} />
+            {progress(row) ? <ProgressRow {...progress(row)!} /> : null}
+            <ImportLibraryVote row={row} />
+          </div>
         }
-        return (
-          <li key={row.key} className="flex min-w-0 items-center gap-3 py-3" data-vndb-current-entry={index}>
-            <SubjectCover subject={null} ratio={ratio} />
-            <div className="min-w-0 space-y-1">
-              <p className="font-medium">{row.title}</p>
-              <p className="text-sm text-muted-foreground">
-                <State row={row} />
-              </p>
-              {progress(row) ? <ProgressRow {...progress(row)!} /> : null}
-              <ImportLibraryVote row={row} />
-              <p className="text-xs text-muted-foreground">
-                <Activity row={row} locale={locale} />
-              </p>
-              {inspect(row, index)}
-            </div>
-          </li>
-        );
-      })}
-    </ShelfList>
+        position={<Activity row={row} locale={locale} />}
+        detailId={detailId}
+        expanded={selectedIndex === index}
+        inspectLabel={m.library_vndb_browse_inspect()}
+        onInspect={(launcher) => onInspect(index, launcher)}
+        onClose={onClose}
+        detail={selectedIndex === index ? detail : null}
+      />
+    );
+  });
+  return layout === 'grid' ? (
+    <CoverGrid density={density[size]} ratio={ratio}>
+      {items}
+    </CoverGrid>
+  ) : (
+    <ShelfList>{items}</ShelfList>
   );
 }

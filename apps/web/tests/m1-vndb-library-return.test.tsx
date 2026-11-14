@@ -625,6 +625,111 @@ test('fresh native vote projection keeps zero, absence and unavailable distinct 
   }
 });
 
+test('later occurrences keep local shared detail and a semantic adjacent table row without disclosing withheld work', async () => {
+  setLocale('en', { reload: false });
+  const { ImportLibraryRows } = await import('../src/library/showcase-import-return/rows');
+  const { ImportLibraryInspection } = await import('../src/library/showcase-import-return/inspection');
+  const { vndbLifecycleLibraryPage } = await import('../src/library/personal-list-import/lifecycle');
+  const page = vndbLifecycleLibraryPage();
+  const first = page.libraryEntries[0]!;
+  page.libraryEntries = [
+    first,
+    {
+      ...first,
+      updatedAt: '2026-11-05T12:34:00Z',
+      activeProgressSession: {
+        mode: 'scalar_amount',
+        unit: 'page',
+        amount: '0',
+        total: '12',
+        completedUnitCount: 0,
+        locator: null,
+      },
+    },
+    {
+      ...first,
+      subject: null,
+      activeProgressSession: {
+        mode: 'cursor_position',
+        unit: 'page',
+        amount: null,
+        total: null,
+        completedUnitCount: 0,
+        locator: 'Native position without a total',
+      },
+    },
+  ];
+  if (page.viewerFacts?.state !== 'current') throw new Error('The fixture needs current native vote facts.');
+  const zeroVote = page.viewerFacts.rows[0]!.vote;
+  page.viewerFacts.rows = page.viewerFacts.rows.map((facts, index) => ({
+    ...facts,
+    subjectId: first.subjectId,
+    entry: { state: 'present', incarnationId: null, entryState: first.state, revision: first.revision },
+    vote: index === 1 ? zeroVote : facts.vote,
+  }));
+  const rows = importLibraryRows(page, 'en');
+  expect(new Set(rows.map((row) => row.key)).size).toBe(3);
+  for (const layout of ['list', 'grid', 'table'] as const) {
+    for (const selectedIndex of [1, 2]) {
+      const row = rows[selectedIndex]!;
+      const detail = (
+        <ImportLibraryInspection
+          row={row}
+          id="native-detail"
+          opener={{} as HTMLButtonElement}
+          locale="en"
+          layout={layout}
+          size="m"
+          onClose={nothing}
+        />
+      );
+      const html = await render(
+        <ImportLibraryRows
+          rows={rows}
+          locale="en"
+          layout={layout}
+          size="m"
+          selectedIndex={selectedIndex}
+          detailId="native-detail"
+          detail={detail}
+          onInspect={nothing}
+          onClose={nothing}
+        />,
+      );
+      const start = html.indexOf(`data-vndb-current-entry="${selectedIndex}"`);
+      const detailStart = html.indexOf('data-slot="member-reading-detail"');
+      const next = html.indexOf(`data-vndb-current-entry="${selectedIndex + 1}"`);
+      expect(detailStart).toBeGreaterThan(start);
+      if (next !== -1) expect(detailStart).toBeLessThan(next);
+      expect(html.match(/data-vndb-inspected-entry/g)).toHaveLength(1);
+      expect(html.match(/aria-expanded="true"/g)).toHaveLength(1);
+      expect(html).not.toContain('role="dialog"');
+      expect(html).not.toContain('Private source note');
+      if (layout === 'table') {
+        expect(html).toMatch(
+          new RegExp(`</tr><tr[^>]*data-vndb-detail-row="${selectedIndex}"[^>]*><td[^>]*colspan="6"`, 'i'),
+        );
+      } else expect(html).toContain(layout === 'list' ? 'member-reading-summary' : 'collection-member-card');
+      const body = await render(detail);
+      expect(body).toContain(row.entry.createdAt);
+      expect(body).toContain(row.entry.updatedAt);
+      expect(body).toContain(importLibraryShelfHref('en', layout, 'm').replaceAll('&', '&amp;'));
+      if (selectedIndex === 1) {
+        expect(body).toContain('0 / 12');
+        expect(body).toContain('data-vndb-native-vote-zero');
+        expect(body).toContain('Current vote: 0 units, revision 4.');
+        expect(body).toContain('Open work');
+      } else {
+        expect(body).toContain('Native position without a total');
+        expect(body).not.toContain('role="progressbar"');
+        expect(body).toContain('The current vote could not be read.');
+        expect(body).not.toContain('Open work');
+        expect(body).not.toContain(first.subjectId);
+      }
+    }
+  }
+});
+
 test('non-current viewer facts keep occurrence order and withhold question and vote rows', async () => {
   setLocale('en', { reload: false });
   const { vndbLifecycleUnavailableFactsPage, vndbLifecycleOtherViewerPage } =

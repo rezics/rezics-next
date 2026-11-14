@@ -151,6 +151,18 @@ One FULL page supplies these facts with no per-row query. Normal Library navigat
 to source review repeats its native page read. Result and Library work links retain the public-safe return landmark
 without carrying the private upload address.
 
+Decision: VNDB results and deliberate return use `MemberReadingItem` for list/grid and its local
+`MemberReadingDetail` outlet for the one selected native occurrence, following the
+[shared member reading pattern](../../../../packages/ui/src/components/list-presentation.mdx#member-reading).
+The column-oriented semantic table remains an exception: detail follows its occurrence in an adjacent row with a
+six-column cell. Equal Subjects keep separate positions. Opening preserves Inspect focus and viewport; Close or
+unhandled Escape returns to the live opener with `preventScroll`. Layout, successful observation, viewer, locale,
+admission replacement and unmount retire selection and focus ownership. Pending and failed reads retain only the
+current page admitted by the existing browser; exact failed cursors and departure fences stay with that owner.
+There is no inspection I/O: one FULL page of at most eight, O(N) projection and one selected detail. The existing
+VNDB return regression and original Results/LibraryReturn stories cover shared-family placement, table semantics,
+native facts, keyboard/pointer behavior and retirement as source; compiler, test and browser acceptance are deferred.
+
 Selecting another catalogue target reads that owner's current Entry before replacement consent. The extra cost is
 one authenticated point read per selection and one eight-row native page refresh after a changed-target review.
 

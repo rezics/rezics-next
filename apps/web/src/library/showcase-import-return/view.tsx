@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent, type Ref } from 'react';
+import { useEffect, useId, useRef, useState, type MouseEvent, type Ref } from 'react';
 import { Link } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -47,11 +47,20 @@ export function ImportLibraryView({
     position: number;
     launcher: HTMLButtonElement;
   } | null>(null);
-  const pageHeading = useRef<HTMLParagraphElement>(null);
-  const pageIdentity = useRef<{ source: CurrentImportLibraryRead | null; generation: number; revision: number }>({
+  const detailId = useId();
+  const liveLauncher = useRef<HTMLButtonElement | null>(null);
+  const pageIdentity = useRef<{
+    source: CurrentImportLibraryRead | null;
+    generation: number;
+    revision: number;
+    layout: ShelfLayout;
+    locale: string;
+  }>({
     source: null,
     generation: 0,
     revision: 0,
+    layout,
+    locale,
   });
   const snapshot: ImportLibrarySnapshot = suppliedSnapshot ?? {
     visible: result?.state === 'current' ? result : null,
@@ -66,6 +75,8 @@ export function ImportLibraryView({
   const href = importLibraryShelfHref(locale, layout, size);
   if (
     pageIdentity.current.source !== visible ||
+    pageIdentity.current.layout !== layout ||
+    pageIdentity.current.locale !== locale ||
     (!snapshot.pending && !snapshot.failed && pageIdentity.current.revision !== snapshot.revision)
   ) {
     // Equal successful replacements retire an inspection too; page-object equality grants no read authority.
@@ -73,12 +84,32 @@ export function ImportLibraryView({
       source: visible,
       generation: pageIdentity.current.generation + 1,
       revision: snapshot.revision,
+      layout,
+      locale,
     };
   }
   const inspected =
     inspection && inspection.generation === pageIdentity.current.generation
       ? (rows[inspection.position] ?? null)
       : null;
+  const inspectionCurrent = inspected !== null;
+  useEffect(() => {
+    liveLauncher.current = inspection?.launcher ?? null;
+    if (inspection && !inspectionCurrent) {
+      // Retire only focus still owned by the obsolete occurrence; replacement never restores focus.
+      if (inspection.launcher.ownerDocument.activeElement === inspection.launcher) inspection.launcher.blur();
+      liveLauncher.current = null;
+      setInspection(null);
+    }
+  }, [inspection, inspectionCurrent]);
+  useEffect(
+    () => () => {
+      const launcher = liveLauncher.current;
+      if (launcher?.ownerDocument.activeElement === launcher) launcher.blur();
+      liveLauncher.current = null;
+    },
+    [],
+  );
 
   return (
     <section
@@ -98,11 +129,7 @@ export function ImportLibraryView({
       >
         {m.library_vndb_library_title()}
       </h2>
-      <p
-        ref={pageHeading}
-        tabIndex={-1}
-        className="text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
-      >
+      <p tabIndex={-1} className="text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
         {m.library_vndb_library_help()}
       </p>
       <ImportLibraryReadState snapshot={snapshot} available={available} returned={returned} />
@@ -129,6 +156,23 @@ export function ImportLibraryView({
               locale={locale}
               layout={layout}
               size={size}
+              selectedIndex={inspected && inspection ? inspection.position : null}
+              detailId={detailId}
+              onClose={() => setInspection(null)}
+              detail={
+                inspected && inspection ? (
+                  <ImportLibraryInspection
+                    key={`${inspection.generation}:${inspection.position}`}
+                    row={inspected}
+                    id={detailId}
+                    opener={inspection.launcher}
+                    locale={locale}
+                    layout={layout}
+                    size={size}
+                    onClose={() => setInspection(null)}
+                  />
+                ) : null
+              }
               onInspect={(position, launcher) => {
                 if (available) setInspection({ generation: pageIdentity.current.generation, position, launcher });
               }}
@@ -143,20 +187,6 @@ export function ImportLibraryView({
         </>
       ) : null}
       <p className="text-sm text-muted-foreground">{m.library_vndb_browse_return_help()}</p>
-      <ImportLibraryInspection
-        row={inspected}
-        locale={locale}
-        layout={layout}
-        size={size}
-        onClose={() => setInspection(null)}
-        finalFocus={() =>
-          available && inspection?.generation === pageIdentity.current.generation
-            ? inspection.launcher.isConnected
-              ? inspection.launcher
-              : (pageHeading.current ?? false)
-            : false
-        }
-      />
     </section>
   );
 }
