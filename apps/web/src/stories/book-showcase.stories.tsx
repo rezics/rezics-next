@@ -2,8 +2,22 @@ import { useCallback } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { View } from '@rezics/composition';
-import { book, bookEditions, bookSeries, bookSummary, bookRealm } from '../kernel/fixtures/book-showcase';
-import { bookStorySubject, prepareBookShowcase, type BookScenario } from '../kernel/fake/book-showcase';
+import {
+  book,
+  bookContents,
+  bookEditions,
+  bookParts,
+  bookSeries,
+  bookStoryLabels,
+  bookSummary,
+  bookRealm,
+} from '../kernel/fixtures/book-showcase';
+import {
+  bookDiscussionTitles,
+  bookStorySubject,
+  prepareBookShowcase,
+  type BookScenario,
+} from '../kernel/fake/book-showcase';
 import { recordedBookState } from '../kernel/fake/library-entry-states';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -52,7 +66,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'An invented, comprehensive bibliography combining characteristics of several books. All names, editions, community writing and cover artwork are synthetic interface fixtures, using the current API, definitions and viewer contracts; they are not recorded responses or native API acceptance. The real application shell, Book composition and router serve the complete visit. Explore every tab, open an edition or series, and use browser Back/Forward. Hosted chapter reading has its own Books/Hosted Book reader stories. Review entries stay at their named state until you act. Interaction entries run scripted journeys with the same controls and fixtures. Use shared Locale, Theme and phone390/desktop1280 globals on every entry.',
+          'An invented, comprehensive bibliography combining characteristics of several books. All names, editions, community writing and cover artwork are synthetic interface fixtures, using the current API, definitions and viewer contracts; they are not recorded responses or native API acceptance. The real application shell, Book composition and router serve the complete visit. The Contents view uses three synthetic catalogue Parts with five interludes each; those rows contain no hosted chapter text, which remains in the separate Books/Hosted Book reader stories. Explore every tab, open an edition or series, and use browser Back/Forward. Review entries stay at their named state until you act. Interaction entries run scripted journeys with the same controls and fixtures. Use shared Locale, Theme and phone390/desktop1280 globals on every entry.',
       },
     },
   },
@@ -99,7 +113,9 @@ async function bookReady(context: Context) {
   await waitFor(() => {
     const image = context.canvasElement.querySelector<HTMLImageElement>('[data-slot="subject-header"] img');
     expect(image?.naturalWidth).toBeGreaterThan(0);
+    expect(image?.currentSrc).toContain(`/media/${bookSummary(book.id, getLocale()).cover?.media}/webp-`);
   });
+  await expect(context.canvasElement).not.toHaveTextContent(/unlabelled/i);
 }
 async function historyTo(context: Context, direction: 'back' | 'forward', view: View) {
   window.history[direction]();
@@ -130,7 +146,12 @@ export const Editions: Story = {
 };
 export const Contents: Story = {
   render: () => <BookStory view="contents" />,
-  play: (context) => atView(context, 'contents'),
+  play: async (context) => {
+    await atView(context, 'contents');
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByRole('link', { name: bookParts[0]!.labels.en! })).toBeVisible();
+    await expect(await canvas.findByRole('link', { name: bookParts[1]!.labels.en! })).toBeVisible();
+  },
 };
 export const Characters: Story = {
   render: () => <BookStory view="characters" />,
@@ -155,13 +176,21 @@ export const Reviews: Story = {
 };
 export const Discussion: Story = {
   render: () => <BookStory view="discussion" />,
-  play: (context) => atView(context, 'discussion'),
+  play: async (context) => {
+    await atView(context, 'discussion');
+    await expect(
+      await within(context.canvasElement).findByRole('link', { name: bookDiscussionTitles[0] }),
+    ).toBeVisible();
+  },
 };
 export const Lists: Story = { render: () => <BookStory view="lists" />, play: (context) => atView(context, 'lists') };
 export const Details: Story = {
   render: () => <BookStory view="details" />,
   play: async (context) => {
     await atView(context, 'details');
+    await expect(
+      await within(context.canvasElement).findByText(bookStoryLabels.author!, { exact: true }),
+    ).toBeVisible();
     await expect(
       await within(context.canvasElement).findByRole('link', { name: 'Lantern Quay bibliography' }),
     ).toBeVisible();
@@ -280,11 +309,57 @@ export const EditionsPaginationInteraction: Story = {
     await atView(context, 'editions');
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByRole('link', { name: bookEditions[0]!.labels.en! })).toBeVisible();
+    await expect(await canvas.findByRole('link', { name: bookEditions[2]!.labels.en! })).toBeVisible();
     const next = await canvas.findByRole('link', { name: m.subject_section_more({ label: m.subject_editions() }) });
+    const cursor = new URL(next.getAttribute('href')!, window.location.origin).searchParams.get('cursor');
+    await expect(cursor).toMatch(/^book-window-/);
     await userEvent.click(next);
     await expect(await canvas.findByRole('link', { name: bookEditions[14]!.labels.en! })).toBeVisible();
     await historyTo(context, 'back', 'editions');
     await expect(await canvas.findByRole('link', { name: bookEditions[0]!.labels.en! })).toBeVisible();
+  },
+};
+export const NestedContentsReturnInteraction: Story = {
+  name: 'Interaction · nested contents item and exact return',
+  render: () => <BookStory view="contents" />,
+  tags: ['interaction'],
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Summary: Three released catalogue Parts group the 15 synthetic interludes; opening an item preserves the exact originating Book address.',
+      },
+    },
+  },
+  play: async (context) => {
+    const rootContents = window.location.href;
+    await atView(context, 'contents');
+    const canvas = within(context.canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: bookParts[0]!.labels.en! }));
+    await expect(
+      await canvas.findByRole('heading', { level: 1, name: bookParts[0]!.labels.en! }),
+    ).toBeVisible();
+    await visit(context, 'contents');
+    const partContents = window.location.href;
+    const item = await canvas.findByRole('link', { name: bookContents[0]!.labels.en! });
+    await expect(item.closest('li')!).toHaveTextContent(bookStoryLabels.bookType!);
+    const itemReturn = new URL(
+      new URL(item.getAttribute('href')!, window.location.origin).searchParams.get('via')!,
+      window.location.origin,
+    );
+    await expect(itemReturn.pathname).toContain(`/subjects/${bookParts[0]!.id}/contents`);
+    await expect(itemReturn.searchParams.get('streamProperty')).toBe('wdt:P361');
+    await expect(itemReturn.searchParams.get('streamDirection')).toBe('inverse');
+    await expect(itemReturn.hash).toBe('#literary-reader');
+    await userEvent.click(item);
+    await expect(
+      await canvas.findByRole('heading', { level: 1, name: bookContents[0]!.labels.en! }),
+    ).toBeVisible();
+    await historyTo(context, 'back', 'contents');
+    await expect(window.location.href).toBe(partContents);
+    await historyTo(context, 'back', 'overview');
+    await historyTo(context, 'back', 'contents');
+    await expect(window.location.href).toBe(rootContents);
   },
 };
 export const ReviewReturnInteraction: Story = {
