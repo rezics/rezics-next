@@ -653,7 +653,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       tokens,
       current: (actor, collectionId, deadline) => read().readCollection(actor, collectionId, deadline),
     }));
-  async function written(value: Collection, actor: Actor, includeOwnerManagement = false) {
+  async function written(value: Collection, actor: Actor, deadline: number, includeOwnerManagement = false) {
     // Receipt values retain their native revision. Only the current viewer's readable descriptor is added.
     const hasCover = value.coverMediaId != null;
     const ownerManagement =
@@ -667,7 +667,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
     if (includeOwnerManagement && !ownerManagement) throw new ProblemError('not_found');
     if (actor.kind !== 'account' || !actor.scopes.includes('collection:read'))
       return { ...collectionView(value), coverMediaId: value.coverMediaId };
-    const current = await read().readCollection(actor, value.id, undefined, undefined, ownerManagement);
+    const current = await read().readCollection(actor, value.id, deadline, undefined, ownerManagement);
     if (ownerManagement && (current.revision !== value.revision || current.visibility !== value.visibility))
       throw new ProblemError('dependency_unavailable');
     const cover =
@@ -685,8 +685,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       ...(hasCover ? { ...collectionPresentation(value, cover), coverMediaId: value.coverMediaId } : {}),
     };
   }
-  async function writtenCurated(value: Collection, actor: Actor) {
-    const view = await written(value, actor);
+  async function writtenCurated(value: Collection, actor: Actor, deadline: number) {
+    const view = await written(value, actor, deadline);
     if (!('memberCount' in view)) throw new ProblemError('dynamic_membership_immutable');
     return view;
   }
@@ -770,7 +770,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           mapped(() => publish().publishSelected(actor, params.collectionId, body, key)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-        const collection = await written(result.value.collection, actor);
+        const collection = await written(result.value.collection, actor, job.deadline);
         if (collection.membershipKind !== 'dynamic') throw new ProblemError('dependency_unavailable');
         return { collection, publication: result.value.publication };
       },
@@ -842,7 +842,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           position: result.position,
         });
         set.status = 201;
-        return { collection: await written(result.value, actor) };
+        return { collection: await written(result.value, actor, job.deadline) };
       },
     )
     .get(
@@ -1137,7 +1137,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           epoch: result.epoch,
           position: result.position,
         });
-        return { collection: await written(result.value, actor) };
+        return { collection: await written(result.value, actor, job.deadline) };
       },
     )
     .patch(
@@ -1174,7 +1174,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           epoch: result.epoch,
           position: result.position,
         });
-        return { collection: await written(result.value, actor, query.ownerManagement === true) };
+        return { collection: await written(result.value, actor, job.deadline, query.ownerManagement === true) };
       },
     )
     .delete(
@@ -1260,7 +1260,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           position: result.position,
         });
         return withCollectionRetentionDeclaration('restoreResponse', async () => ({
-          collection: await written(result.value, actor),
+          collection: await written(result.value, actor, job.deadline),
         }));
       },
     )
@@ -1425,7 +1425,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           position: result.position,
         });
         return {
-          collection: await writtenCurated(result.value.collection, actor),
+          collection: await writtenCurated(result.value.collection, actor, job.deadline),
           removed: result.value.removed,
         };
       },
@@ -1472,8 +1472,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           position: result.position,
         });
         return {
-          source: await writtenCurated(result.value.source, actor),
-          destination: await writtenCurated(result.value.destination, actor),
+          source: await writtenCurated(result.value.source, actor, job.deadline),
+          destination: await writtenCurated(result.value.destination, actor, job.deadline),
           members: result.value.members.map(memberView),
         };
       },
