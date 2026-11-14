@@ -1,7 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import type { DocumentMentions } from '@rezics/ui/document-body';
-import type { MentionAccount } from '@rezics/ui/editor-mention';
+import type { DocumentMentions } from '@rezics/editor/reader';
+import type { MentionAccount } from '@rezics/editor';
 
 const handlePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 

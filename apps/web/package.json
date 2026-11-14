@@ -40,8 +40,10 @@
     "@rezics/composition": "workspace:*",
     "@rezics/definitions": "workspace:*",
     "@rezics/document": "workspace:*",
+    "@rezics/editor": "workspace:*",
     "@rezics/filter": "workspace:*",
     "@rezics/money": "workspace:*",
+    "@rezics/progress": "workspace:*",
     "@rezics/ui": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "5.105.0",
@@ -56,8 +58,7 @@
     "satori": "0.63.2",
     "tailwindcss": "4.3.3",
     "typebox": "1.4.3",
-    "valibot": "1.5.0",
-    "@rezics/progress": "workspace:*"
+    "valibot": "1.5.0"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "11.0.0-alpha.8",

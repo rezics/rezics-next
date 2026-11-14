@@ -1,9 +1,9 @@
-import { DocumentBody as SharedDocumentBody } from '@rezics/ui/document-body';
+import { DocumentBody as SharedDocumentBody } from '@rezics/editor/reader';
 import type { ComponentProps } from 'react';
 import { m } from './paraglide/messages.js';
 import { getLocale } from './paraglide/runtime.js';
 
-export type { DocumentMentions } from '@rezics/ui/document-body';
+export type { DocumentMentions } from '@rezics/editor/reader';
 
 /** Supply Web's reader locale and messages while retaining the caller's image renderer. */
 export function DocumentBody({ locale = getLocale(), labels, ...props }: ComponentProps<typeof SharedDocumentBody>) {

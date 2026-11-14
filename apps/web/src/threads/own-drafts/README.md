@@ -76,9 +76,9 @@ retirement of its state when the supplied document or reading visit changes. Its
 
 - [Document behaviour](../../../../../packages/document/tests/document.test.ts) and
   [public contract](../../../../../packages/document/tests/contract.test.ts).
-- [Editor extensions](../../../../../packages/ui/tests/document-extensions.test.ts),
-  [reading output](../../../../../packages/ui/tests/document-body.test.ts) and
-  [disclosure lifetime](../../../../../packages/ui/tests/document-disclosure-lifetime.test.tsx).
+- [Editor extensions](../../../../../packages/editor/tests/document-extensions.test.ts),
+  [reading output](../../../../../packages/editor/tests/document-body.test.ts) and
+  [disclosure lifetime](../../../../../packages/editor/tests/document-disclosure-lifetime.test.tsx).
 
 Decision: Bind the consumer dependency to the delivered snapshot format and public reading disclosure port implementation
 change in `packages/document` and `packages/ui`, confirmed through their public entries and a linked integration brief

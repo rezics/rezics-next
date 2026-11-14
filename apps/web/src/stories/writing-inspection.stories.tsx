@@ -11,7 +11,7 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { fromPlainText, normalizeDocument, withDocumentIds, type DocumentSnapshot } from '@rezics/document';
-import { RichTextEditor } from '@rezics/ui';
+import { RichTextEditor } from '@rezics/editor';
 import { Button } from '@rezics/ui/shadcn/button';
 import { InlinePostEditor, PostComposer } from '../threads/composer';
 import {

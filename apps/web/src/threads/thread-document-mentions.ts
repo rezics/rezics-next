@@ -1,6 +1,6 @@
 import type { ReadingPageResponse } from '@rezics/client';
 import type { DocumentNode } from '@rezics/document';
-import type { DocumentMentions } from '@rezics/ui/document-body';
+import type { DocumentMentions } from '@rezics/editor/reader';
 import type { ThreadPost } from './thread-page';
 
 export type ThreadMentionProjection = NonNullable<ReadingPageResponse['mentions']>;

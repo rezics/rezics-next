@@ -2,6 +2,7 @@
 @import '@fontsource-variable/source-serif-4';
 @import '@fontsource-variable/geist-mono';
 @import '@rezics/ui/styles.css';
+@import '@rezics/editor/styles.css';
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
 
 header [data-slot='input-group'] {

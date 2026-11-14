@@ -4,7 +4,6 @@ import type { StorybookConfig } from '@storybook/react-vite';
 import tailwindcss from '@tailwindcss/vite';
 
 const local = (path: string) => fileURLToPath(new URL(path, import.meta.url));
-const components = local('../src/components');
 // The shadcn components import their primitives from many packages. Pre-bundle them up front: Vite otherwise
 // optimizes each on first use, reloads the page mid-run, and loads React twice.
 const shadcn = local('../src/shadcn');
@@ -21,6 +20,8 @@ const shadcnEntries = [
   ),
 ].sort();
 
+const testPackage = process.env.REZICS_STORYBOOK_TEST_PACKAGE;
+
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
   // Match Web's local JSON/MCP contract instead of the alpha's server-side docgen default.
@@ -30,7 +31,8 @@ const config: StorybookConfig = {
     docgenServer: false,
   } as NonNullable<StorybookConfig['features']> & { viewportStoryGlobals: true },
   stories: [
-    '../src/**/*.stories.tsx',
+    ...(testPackage !== 'editor' ? ['../src/**/*.stories.tsx'] : []),
+    ...(testPackage !== 'ui' ? ['../../editor/src/**/*.stories.tsx'] : []),
     ...(process.env.REZICS_UI_ACCESSIBILITY_PROBE === '1' ? ['../tests/fixtures/accessibility-probe.stories.tsx'] : []),
   ],
   storySorts: [{ order: ['Components', 'shadcn'] }],

@@ -26,8 +26,8 @@ export function tableMapFitsBudget(table: DocumentNode, budget: number): boolean
   let totalColumnSpan = 0;
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
     const row = rows[rowIndex]!;
-    if (row.type !== 'tableRow' || !row.content?.length) return false;
-    for (const cell of row.content) {
+    if (row.type !== 'tableRow') return false;
+    for (const cell of row.content ?? []) {
       if (cell.type !== 'tableCell' && cell.type !== 'tableHeader') return false;
       const rawColspan = cell.attrs?.colspan;
       const rawRowspan = cell.attrs?.rowspan;
@@ -50,7 +50,7 @@ export function tableMapFitsBudget(table: DocumentNode, budget: number): boolean
   }
 
   const expandedCells = safeMultiply(rows.length, totalColumnSpan);
-  return expandedCells !== null && expandedCells <= budget;
+  return totalColumnSpan > 0 && expandedCells !== null && expandedCells <= budget;
 }
 
 /** Check all tables in a block before ProseMirror can create a dense TableMap. */

@@ -10,7 +10,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { RichTextEditor } from '@rezics/ui';
+import { PreferredRichTextEditor as RichTextEditor } from '../editor/preferred-rich-text-editor';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { PostReadingBody } from '../threads/post-reading-body';

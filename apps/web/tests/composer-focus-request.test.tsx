@@ -32,7 +32,7 @@ test('reply focus is delivered once, cancelled by movement or retirement, and ho
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   mock.module('cloudflare:workers', () => ({ env: {} }));
-  mock.module('@rezics/ui', () => ({
+  mock.module('@rezics/editor', () => ({
     RichTextEditor: () => {
       const props = {
         className: richReady ? 'ProseMirror' : 'fallback-editor',

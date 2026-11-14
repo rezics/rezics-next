@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import type { DocumentMentions } from '@rezics/ui/document-body';
+import type { DocumentMentions } from '@rezics/editor/reader';
 import { readPageAuthors, type PageAuthors } from '../identity/read';
 import { readDocumentMentions } from '../kernel/mentions';
 import { isPlatformClosedError } from '../kernel/platform-closed';

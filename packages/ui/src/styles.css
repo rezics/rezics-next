@@ -3,7 +3,6 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import './hitbox.css';
-@import './prose.css';
 
 /* shadcn's Rhea defaults come first; the Aura tokens below are layered after them. The cloned components in
    src/shadcn/ use shadcn's data-selected="true", while the Ark components set a bare data-selected, so the variant

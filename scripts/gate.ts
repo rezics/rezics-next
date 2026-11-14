@@ -26,6 +26,8 @@ export const DEFAULT_DURATIONS: Record<string, number> = {
   'services/auth': 1810,
   'apps/auth': 1257,
   'packages/ui': 565,
+  // Reuse the former combined UI estimate for the extracted browser suite until measured independently.
+  'packages/editor': 565,
   'services/importer': 304,
   'packages/document': 211,
   'packages/definitions': 73,

@@ -10,8 +10,11 @@ const storybookPackage = realpathSync(
 );
 const dependencyStoreModules = resolve(storybookPackage, '../../../../../');
 
+// The shared Storybook publishes both packages; each package suite runs only its own stories.
+process.env.REZICS_STORYBOOK_TEST_PACKAGE = process.cwd().endsWith('/packages/editor') ? 'editor' : 'ui';
+
 export default defineConfig({
-  server: { fs: { allow: [process.cwd(), dependencyStoreModules] } },
+  server: { fs: { allow: [fileURLToPath(new URL('../..', import.meta.url)), dependencyStoreModules] } },
   test: {
     maxWorkers: Number(process.env.STORYBOOK_MAX_WORKERS) || 4,
     projects: [
