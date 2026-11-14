@@ -194,9 +194,12 @@ test('operator plans two aliases for one person and imports exact roles through 
     expect(proposed.some((command) => command.statement.property.id === 'schema:musicBy')).toBe(false);
     const keys = proposed.map((command) => command.key);
     const count = commands.length;
-    reviewedSubjects[scenarioId] = nativeSubject(scenarioId, 'skos:Concept', [
-      rankedValue(creditTypeConceptUri('scenario'), 'deprecated'),
-    ], [rankedValue(schemeId, 'deprecated')]);
+    reviewedSubjects[scenarioId] = nativeSubject(
+      scenarioId,
+      'skos:Concept',
+      [rankedValue(creditTypeConceptUri('scenario'), 'deprecated')],
+      [rankedValue(schemeId, 'deprecated')],
+    );
     const withheld = await readCreditTypeBindings(reviewedPort([]), {
       schemeId,
       concepts: [
@@ -205,11 +208,16 @@ test('operator plans two aliases for one person and imports exact roles through 
       ],
     });
     expect(withheld.concepts.map((item) => item.code)).toEqual(['chardesign']);
-    reviewedSubjects[scenarioId] = nativeSubject(scenarioId, 'skos:Concept', [
-      rankedValue(creditTypeConceptUri('scenario'), 'deprecated'),
-      rankedValue('https://vndb.org/credit-types/retired-scenario'),
-      rankedValue(creditTypeConceptUri('scenario'), 'preferred'),
-    ], [rankedValue('another-scheme', 'deprecated'), rankedValue(schemeId)]);
+    reviewedSubjects[scenarioId] = nativeSubject(
+      scenarioId,
+      'skos:Concept',
+      [
+        rankedValue(creditTypeConceptUri('scenario'), 'deprecated'),
+        rankedValue('https://vndb.org/credit-types/retired-scenario'),
+        rankedValue(creditTypeConceptUri('scenario'), 'preferred'),
+      ],
+      [rankedValue('another-scheme', 'deprecated'), rankedValue(schemeId)],
+    );
     const restored = await readCreditTypeBindings(reviewedPort(commands), {
       schemeId,
       concepts: [
