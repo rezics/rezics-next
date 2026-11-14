@@ -3,7 +3,7 @@ import type { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { formatLifecycleMetrics } from './report.ts';
 import { openDb } from './db.ts';
-import { WIDTH_BUCKET_MS, sweepWidthGovernor, type WidthSnapshotOptions } from './width-governor.ts';
+import { WIDTH_BUCKET_MS, readWidthSnapshot, sweepWidthGovernor, type WidthSnapshotOptions } from './width-governor.ts';
 import { INBOX_DEDUPE_WINDOW_MS, SqliteManagerInbox } from './inbox.ts';
 import { emitHourlyLifecycleMetrics, lifecycleMetrics, readHourlyLifecycleMetrics } from './lifecycle-metrics.ts';
 import { processIdentity, type ProcessIdentity } from './process.ts';
@@ -55,7 +55,7 @@ function addTask(
 }
 
 function identity(pid: number, overrides: Partial<ProcessIdentity> = {}): ProcessIdentity {
-  return { pid, start: `start-${pid}`, boot: 'test-boot', group: pid, ...overrides };
+  return { pid, start: String(pid), boot: 'test-boot', group: pid, ...overrides };
 }
 
 function addAttempt(
@@ -218,7 +218,7 @@ test('hourly lifecycle and flow report expose live system and Codex counts with 
   addTask(f.db, 'live-codex', 1, 'running', 1);
   addAttempt(f.db, 'live-codex', 1, 'running', 'codex', current!);
   addTask(f.db, 'stale-codex', 2, 'running', 1);
-  addAttempt(f.db, 'stale-codex', 1, 'running', 'codex', { ...current!, start: `${current!.start}-stale` });
+  addAttempt(f.db, 'stale-codex', 1, 'running', 'codex', { ...current!, start: String(Number(current!.start) + 1) });
   addTask(f.db, 'unknown-codex', 3, 'running', 1);
   addAttempt(f.db, 'unknown-codex', 1, 'running', 'codex', null);
 
@@ -285,4 +285,43 @@ test('held work waiting on a progressing predecessor stays visible without wakin
   expect(result.deliveredGoals).toEqual(['goal-b']);
   expect(f.inbox.pending('goal-a')).toHaveLength(0);
   expect(f.inbox.pending('goal-b')).toHaveLength(1);
+});
+
+test('numeric process starts retain exact live width without accepting rounded or mismatched identities', () => {
+  const f = fixture();
+  const current = processIdentity()!;
+  const projected = [
+    { id: 'numeric-live', start: Number(current.start), process: current },
+    { id: 'decimal-live', start: current.start, process: current },
+    { id: 'unsafe', start: Number.MAX_SAFE_INTEGER + 1, process: current },
+    { id: 'fractional', start: 1.5, process: current },
+    { id: 'negative', start: -1, process: current },
+    { id: 'malformed', start: 'not-a-start', process: current },
+    { id: 'stale-boot', start: Number(current.start), process: { ...current, boot: 'another-boot' } },
+    { id: 'stale-group', start: Number(current.start), process: { ...current, group: current.group + 1 } },
+    { id: 'stale-start', start: Number(current.start) + 1, process: current },
+  ];
+  for (const [index, row] of projected.entries()) {
+    addTask(f.db, row.id, index + 1, 'running', 1);
+    addAttempt(f.db, row.id, 1, 'running', 'codex', row.process);
+    f.db.query('UPDATE worker_current_attempts SET process_start=? WHERE task_id=?').run(row.start, row.id);
+  }
+  expect(
+    f.db.query("SELECT typeof(process_start) AS kind FROM worker_current_attempts WHERE task_id='numeric-live'").get(),
+  ).toEqual({ kind: 'integer' });
+  const raw = f.db.query('SELECT task_id, body FROM worker_attempts ORDER BY task_id').all();
+  const snapshot = readWidthSnapshot(f.db);
+  expect(snapshot.system).toMatchObject({ running: 2, codexRunning: 2, unknownRunning: 4, unknownCodexRunning: 4 });
+  expect(f.db.query('SELECT task_id, body FROM worker_attempts ORDER BY task_id').all()).toEqual(raw);
+
+  const exactLargeStart = '9007199254740993';
+  f.db.query("UPDATE worker_current_attempts SET process_start=? WHERE task_id='decimal-live'").run(exactLargeStart);
+  const observed: string[] = [];
+  readWidthSnapshot(f.db, undefined, {
+    processIsLive: (process) => {
+      observed.push(process.start);
+      return false;
+    },
+  });
+  expect(observed).toContain(exactLargeStart);
 });

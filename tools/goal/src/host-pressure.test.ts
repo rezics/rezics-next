@@ -10,6 +10,7 @@ import {
   workerMemoryCurrentMiB,
   workerReservationMiB,
   workerScopeIncarnation,
+  type WorkerScopeReservation,
 } from './host-pressure.ts';
 import { temporaryDirectory } from './test-support.ts';
 
@@ -167,6 +168,48 @@ test('unsupported reclaim files and fully dirty inactive pages produce no reques
     expect(reclaimCleanFileCache(4096, directory.path)).toBe(0);
     expect(readFileSync(join(directory.path, 'memory.reclaim'), 'utf8')).toBe('');
     expect(reclaimCleanFileCache(4096, join(directory.path, 'unsupported'))).toBe(0);
+  } finally {
+    directory.close();
+  }
+});
+
+test('source working sets require exact active ownership and retain peaks, unknown scopes and missing writers', () => {
+  const directory = temporaryDirectory();
+  const gib = 1024 ** 3;
+  const put = (path: string, value: number) => writeFileSync(join(directory.path, path), String(value * gib));
+  const active = new Map<string, WorkerScopeReservation>();
+  const scope = (name: string, current: number, peak: number, reservationMiB?: number) => {
+    const fullName = `rezics-worker-${name}.scope`;
+    mkdirSync(join(directory.path, fullName));
+    put(`${fullName}/memory.current`, current);
+    put(`${fullName}/memory.peak`, peak);
+    active.set(fullName, {
+      ...workerScopeIncarnation(directory.path, fullName)!,
+      ...(reservationMiB === undefined ? {} : { reservationMiB }),
+    });
+  };
+  try {
+    put('memory.max', 32);
+    put('memory.current', 5.25); // Six scopes plus one GiB of support services.
+    scope('source', 0.25, 0.5, 2048);
+    scope('control', 0.25, 0.5, 4096);
+    scope('unclassified', 0.25, 0.5);
+    scope('peak', 0.25, 5, 2048);
+    scope('actual', 3, 2, 2048);
+    scope('stale', 0.25, 0.5, 2048);
+    active.get('rezics-worker-stale.scope')!.inode = 'stale';
+    const headroom = workerHeadroomMiB(5, directory.path, new Map(), active);
+    expect(headroom).toBe(9 * 1024);
+    expect(workerHeadroomMiB(6, directory.path, new Map(), active)).toBe(5 * 1024);
+    const contradictoryParked = new Map([['rezics-worker-source.scope', active.get('rezics-worker-source.scope')!]]);
+    expect(workerHeadroomMiB(5, directory.path, contradictoryParked, active)).toBe(headroom);
+    active.get('rezics-worker-source.scope')!.reservationMiB = 1;
+    expect(workerHeadroomMiB(5, directory.path, new Map(), active)).toBe(headroom - 2048);
+    active.get('rezics-worker-source.scope')!.reservationMiB = 2048;
+    active.get('rezics-worker-source.scope')!.ctimeNs = 'stale';
+    expect(workerHeadroomMiB(5, directory.path, new Map(), active)).toBe(headroom - 6144);
+    expect(readFileSync(join(directory.path, 'memory.max'), 'utf8')).toBe(String(32 * gib));
+    expect(readFileSync(join(directory.path, 'memory.current'), 'utf8')).toBe(String(5.25 * gib));
   } finally {
     directory.close();
   }
