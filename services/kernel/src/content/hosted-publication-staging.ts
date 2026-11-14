@@ -1396,7 +1396,9 @@ async function existingTargetKeys(
       [stage.route, stage.catalogue_id, stage.stage_id, JSON.stringify(requested)],
     )
   ).rows;
-  return new Set(found.map((target) => `${target.thread_id}/${target.post_id}/${target.target_revision_id}/${target.sha256}`));
+  return new Set(
+    found.map((target) => `${target.thread_id}/${target.post_id}/${target.target_revision_id}/${target.sha256}`),
+  );
 }
 
 async function observeTargets(
@@ -1463,7 +1465,9 @@ async function storePreparedTargetObservations(
 }
 
 function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && new Set(left).size === left.length && left.every((value) => right.includes(value));
+  return (
+    left.length === right.length && new Set(left).size === left.length && left.every((value) => right.includes(value))
+  );
 }
 async function insertCandidates(
   client: AccessClient,
