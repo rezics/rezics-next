@@ -60,10 +60,33 @@ also names the selected server revision used by the native command.
 Decision: Footnotes require an independent Document outcome that owns the snapshot format, editor and Markdown
 import support, accessible shared reading disclosure, owner documentation and focused acceptance. Own drafts
 integrates only after Document delivers its adopted public format and disclosure port; it does not invent footnote
-payloads. The installed schema has neither a footnote node nor that port, so this caller continues to preserve its
-supported structured nodes and spoiler disclosure. Existing reader, command and native acceptance remains in place;
-rich-preview acceptance extends the resume and command suites, while execution and rich-document keyboard/visual
-review belong to the separate verifier.
+payloads. Schedule the Document prerequisite before briefing the dependent Own drafts integration.
+
+## Footnote prerequisite
+
+[Document ownership](../../../../../packages/document/README.md) adopts the public snapshot representation and shared
+reading disclosure port. That independent outcome includes profile validation and public schema artifacts, preservation
+through editor changes and Markdown import, accessible reading disclosure and retirement of its state when the supplied
+document or reading visit changes. Its focused acceptance belongs in:
+
+- [Document behaviour](../../../../../packages/document/tests/document.test.ts) and
+  [public contract](../../../../../packages/document/tests/contract.test.ts).
+- [Editor extensions](../../../../../packages/ui/tests/document-extensions.test.ts),
+  [reading output](../../../../../packages/ui/tests/document-body.test.ts) and
+  [disclosure lifetime](../../../../../packages/ui/tests/document-disclosure-lifetime.test.tsx).
+
+The producer's adopted format and public port are the inputs to the later integration brief. Own drafts consumes them
+through its existing private `PostReadingBody` caller, preserving separate server, browser and current-readback source
+and visit identities. A disclosure in one preview cannot reveal another preview; source, revision or visit replacement
+retires its state, including replacement by equal bytes. Supported structured nodes, authored language, spoiler
+disclosure, heading anchors and wide inspection retain their existing behaviour.
+
+Extend the existing [resume](../../../tests/own-drafts-resume.test.tsx) and
+[command](../../../tests/own-drafts-commands.test.tsx) suites for the adopted format: inspect supplied footnotes in each
+source, retain them through the explicit body choice and command submission, and keep acknowledged submitted bytes
+separate from the later current read. Keep the independent reader, command and native assertions whose behaviour does
+not change. New fixtures and stories use the producer's public snapshot format rather than a caller-defined payload.
+Execution, rich-document keyboard interaction and visual review belong to the separate verifier.
 
 ## Cost
 
