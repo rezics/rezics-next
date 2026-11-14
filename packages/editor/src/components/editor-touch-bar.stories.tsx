@@ -1,7 +1,7 @@
 import { checkDocument, fromPlainText, type DocumentProfile, type DocumentSnapshot } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { Editor } from '@tiptap/core';
-import { closeHistory } from '@tiptap/pm/history';
+import { closeHistory, undoDepth, redoDepth } from '@tiptap/pm/history';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { RichTextEditorLabels } from './editor-labels.ts';
@@ -166,18 +166,20 @@ export const UndoRedo: Story = {
     const toolbar = within(toolbarElement);
     const undo = toolbar.getByRole('button', { name: 'Undo' });
     const redo = toolbar.getByRole('button', { name: 'Redo' });
-    expect(undo).toBeDisabled();
-    expect(redo).toBeDisabled();
+    await waitFor(() => {
+      expect(undo).toBeDisabled();
+      expect(redo).toBeDisabled();
+    });
 
     await userEvent.click(textbox);
     await userEvent.type(textbox, 'History');
     await waitFor(() => expect(plainText(history.latest.current)).toBe('History'));
     expect(checked(history.latest.current)).toBeTruthy();
-    expect(undo).toBeEnabled();
+    await waitFor(() => expect(undo).toBeEnabled());
     await userEvent.click(undo);
     await waitFor(() => expect(plainText(history.latest.current)).toBe(''));
     expect(checked(history.latest.current)).toBeTruthy();
-    expect(redo).toBeEnabled();
+    await waitFor(() => expect(redo).toBeEnabled());
     await userEvent.click(redo);
     await waitFor(() => expect(plainText(history.latest.current)).toBe('History'));
     expect(checked(history.latest.current)).toBeTruthy();
@@ -188,7 +190,11 @@ export const UndoRedo: Story = {
         ? new InputEvent('beforeinput', { inputType: key, bubbles: true, cancelable: true, ...init })
         : new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true, ...init });
       expect(textbox.dispatchEvent(event)).toBe(!handled);
-      await waitFor(() => expect(textbox.textContent).toBe(expected));
+      await waitFor(() => {
+        expect(textbox.textContent).toBe(expected);
+        expect((undo as HTMLButtonElement).disabled).toBe(undoDepth(view.state) === 0);
+        expect((redo as HTMLButtonElement).disabled).toBe(redoDepth(view.state) === 0);
+      });
       if (handled) expect(textbox).toHaveFocus();
     };
     const control = async (name: string) => userEvent.click(canvas.getByRole('button', { name }));
@@ -243,13 +249,15 @@ export const UndoRedo: Story = {
     const keyboardCallback = () => {
       const surface = textbox.closest('[data-slot="rich-text-editor"]')!;
       const props = Object.getOwnPropertyNames(surface).find((key) => key.startsWith('__reactProps$'))!;
-      return (surface as unknown as Record<string, { onKeyDown: (event: unknown) => void }>)[props]!.onKeyDown;
+      return (surface as unknown as Record<string, { onKeyDownCapture: (event: unknown) => void }>)[props]!
+        .onKeyDownCapture;
     };
     const retired = keyboardCallback();
     await control('Replace');
     await userEvent.type(textbox, 'New');
     const currentText = textbox.textContent!;
-    const staleKey = Object.assign(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }), { nativeEvent: {} });
+    const nativeKey = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, cancelable: true });
+    const staleKey = Object.assign(nativeKey, { nativeEvent: nativeKey });
     expect(retiredInput(view, staleInput)).toBe(false);
     retired(staleKey);
     expect(textbox.textContent).toBe(currentText);
@@ -276,8 +284,10 @@ export const UndoRedo: Story = {
     await userEvent.keyboard('{End}{ArrowLeft}{Enter}');
     await waitFor(() => expect(plainText(history.latest.current)).toBe(''));
     expect(textbox).toHaveFocus();
-    expect(undo).toBeDisabled();
-    expect(redo).toBeEnabled();
+    await waitFor(() => {
+      expect(undo).toBeDisabled();
+      expect(redo).toBeEnabled();
+    });
     expect(tabEntries()).toEqual([bold]);
     await userEvent.tab();
     expect(bold).toHaveFocus();
@@ -285,8 +295,10 @@ export const UndoRedo: Story = {
     await userEvent.keyboard('{End}{ArrowLeft}{Enter}');
     await waitFor(() => expect(plainText(history.latest.current)).toBe('History'));
     expect(textbox).toHaveFocus();
-    expect(undo).toBeEnabled();
-    expect(redo).toBeDisabled();
+    await waitFor(() => {
+      expect(undo).toBeEnabled();
+      expect(redo).toBeDisabled();
+    });
     expect(tabEntries()).toEqual([bold]);
     await userEvent.keyboard('{Shift>}{Home}{/Shift}');
     await userEvent.tab();

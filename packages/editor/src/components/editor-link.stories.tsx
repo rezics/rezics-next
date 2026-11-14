@@ -309,7 +309,7 @@ function checkJourneyDocument(snapshot: DocumentSnapshot) {
   return snapshot;
 }
 
-function postControl(canvas: ReturnType<typeof within>) {
+function postControl(canvas: ReturnType<typeof within>): HTMLElement {
   return canvas.queryByRole('textbox', { name: 'Post' }) ?? canvas.getByRole('combobox', { name: 'Post' });
 }
 
@@ -592,7 +592,14 @@ export const InlineLifetimeJourney: Story = {
     await userEvent.type(address, 'https://retired-draft.example');
     const retainedSubmit = reactCallback(address.closest('form')!, 'onSubmit');
     await userEvent.click(canvas.getByRole('button', { name: 'Replace with selection target' }));
-    retainedSubmit({ preventDefault: () => undefined } as never);
+    let stoppedRetiredSubmit = false;
+    retainedSubmit({
+      preventDefault: () => undefined,
+      stopPropagation: () => {
+        stoppedRetiredSubmit = true;
+      },
+    } as never);
+    expect(stoppedRetiredSubmit).toBe(true);
     expect(canvas.queryByRole('textbox', { name: 'URL' })).toBeNull();
     expect(JSON.stringify(evidence.latest)).not.toContain('https://retired-draft.example');
 
@@ -625,23 +632,13 @@ export const InlineLifetimeJourney: Story = {
     expect(postControl(canvas)).toHaveAttribute('aria-controls');
 
     // A retained option and keyboard callback from the old visit cannot affect the replacement document.
-    const editorSurface = canvasElement.querySelector<HTMLElement>('[data-slot="rich-text-editor"]')!;
-    const retainedKeyboard = reactCallback(editorSurface, 'onKeyDown');
+    const editorSurface = postControl(canvas).closest<HTMLElement>('[data-slot="rich-text-editor"]')!;
+    const retainedKeyboard = reactCallback(editorSurface, 'onKeyDownCapture');
     await userEvent.click(canvas.getByRole('button', { name: 'Replace with fresh document' }));
     const freshSnapshot = evidence.latest;
     const publicationsBeforeStaleCallbacks = evidence.publications;
-    const syntheticKey = {
-      nativeEvent: { isComposing: false, keyCode: 0 },
-      defaultPrevented: false,
-      key: 'k',
-      ctrlKey: true,
-      metaKey: false,
-      altKey: false,
-      shiftKey: false,
-      preventDefault() {
-        this.defaultPrevented = true;
-      },
-    };
+    const nativeKey = new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, cancelable: true });
+    const syntheticKey = Object.assign(nativeKey, { nativeEvent: nativeKey });
     retainedKeyboard(syntheticKey as never);
     retainedPointer();
     expect(evidence.latest).toBe(freshSnapshot);
