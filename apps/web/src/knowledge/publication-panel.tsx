@@ -1,6 +1,13 @@
 import { KnowledgeDetails, KnowledgeValue, knowledgeControl, knowledgeLink } from './workspace';
 import { KnowledgePublicationReaderLink } from './publication-return';
-import { useEffect, useId, useRef, useState } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { KnowledgeReferenceBody } from './reference-view';
 import { m } from '../paraglide/messages.js';
@@ -18,6 +25,14 @@ import {
 } from './publication';
 
 type Review = ReturnType<typeof reviewKnowledgePublication>;
+type PresentationKind = 'review' | 'return' | 'command' | 'read';
+type PresentationRequest = Readonly<{
+  id: number;
+  source: object;
+  owner: HTMLButtonElement;
+  kind: PresentationKind;
+  returnTo: HTMLElement | null;
+}>;
 export type KnowledgePublicationOperations = Readonly<{
   read: (
     address: { notebookId: string; documentId: string },
@@ -54,9 +69,19 @@ export function KnowledgePublicationPanel({
   const options = { locale: locale as never };
   const headingId = useId();
   const reviewId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const savedSourceRef = useRef<HTMLParagraphElement>(null);
+  const reviewHeadingRef = useRef<HTMLHeadingElement>(null);
+  const commandResultRef = useRef<HTMLParagraphElement>(null);
+  const readResultRef = useRef<HTMLParagraphElement>(null);
   const active = useRef(true);
   const commandBusy = useRef(false);
   const readSequence = useRef(0);
+  const presentationSource = useRef({ observation: '', binding, locale });
+  const presentation = useRef<PresentationRequest | null>(null);
+  const presentationListeners = useRef<(() => void) | null>(null);
+  const nextPresentationId = useRef(0);
+  const opener = useRef<{ element: HTMLElement; source: object } | null>(null);
   const [review, setReview] = useState<Review | null>(null);
   const [intent, setIntent] = useState<KnowledgePublicationIntent | null>(null);
   const intentRef = useRef(intent);
@@ -72,6 +97,15 @@ export function KnowledgePublicationPanel({
   const observation = knowledgePublicationObservation(head);
   const latestObservation = useRef(observation);
   latestObservation.current = observation;
+  if (
+    presentationSource.current.observation !== observation ||
+    presentationSource.current.binding !== binding ||
+    presentationSource.current.locale !== locale
+  ) {
+    presentationSource.current = { observation, binding, locale };
+    presentation.current = null;
+    opener.current = null;
+  }
   const currentReview = review?.observation === observation ? review : null;
   const currentReceipt =
     receipt && (receipt.before === observation || receipt.value.publicationId === head.publicationId)
@@ -84,8 +118,49 @@ export function KnowledgePublicationPanel({
     return () => {
       active.current = false;
       readSequence.current++;
+      cancelPresentation();
+      opener.current = null;
     };
   }, []);
+
+  useLayoutEffect(() => {
+    stopPresentationListeners();
+  }, [observation, binding, locale]);
+
+  useLayoutEffect(() => {
+    const request = presentation.current;
+    if (!request) return;
+    stopPresentationListeners();
+    const document = request.owner.ownerDocument;
+    const focused = document.activeElement;
+    const focusWasRetained =
+      focused === request.owner ||
+      focused === document.body ||
+      focused === document.documentElement;
+    if (
+      !active.current ||
+      request.source !== presentationSource.current ||
+      !focusWasRetained
+    ) {
+      presentation.current = null;
+      return;
+    }
+    presentation.current = null;
+
+    const target =
+      request.kind === 'review'
+        ? currentReview
+          ? reviewHeadingRef.current
+          : null
+        : request.kind === 'return'
+          ? isVisibleFocusTarget(request.returnTo)
+            ? request.returnTo
+            : headingRef.current
+          : request.kind === 'command'
+            ? commandResultRef.current ?? readResultRef.current
+            : readResultRef.current ?? savedSourceRef.current;
+    (isVisibleFocusTarget(target) ? target : headingRef.current)?.focus();
+  });
 
   useEffect(() => {
     if (review && review.observation !== observation) setReview(null);
@@ -97,13 +172,74 @@ export function KnowledgePublicationPanel({
     onBusyChange(reading || state === 'pending');
   }, [reading, state, onBusyChange]);
 
-  function clearReview() {
+  function stopPresentationListeners() {
+    presentationListeners.current?.();
+    presentationListeners.current = null;
+  }
+
+  function cancelPresentation() {
+    presentation.current = null;
+    stopPresentationListeners();
+  }
+
+  function requestPresentation(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    kind: PresentationKind,
+    returnTo: HTMLElement | null = null,
+  ) {
+    cancelPresentation();
+    const owner = event.currentTarget;
+    const document = owner.ownerDocument;
+    if (event.detail !== 0 || document.activeElement !== owner) return null;
+
+    const request: PresentationRequest = {
+      id: ++nextPresentationId.current,
+      source: presentationSource.current,
+      owner,
+      kind,
+      returnTo,
+    };
+    presentation.current = request;
+    const cancelIfMoved = () => {
+      if (presentation.current?.id === request.id) cancelPresentation();
+    };
+    const cancelOnFocusMove = (focusEvent: FocusEvent) => {
+      if (
+        focusEvent.target !== owner &&
+        focusEvent.target !== document.body &&
+        focusEvent.target !== document.documentElement
+      )
+        cancelIfMoved();
+    };
+    document.addEventListener('pointerdown', cancelIfMoved, true);
+    document.addEventListener('keydown', cancelIfMoved, true);
+    document.addEventListener('focusin', cancelOnFocusMove, true);
+    presentationListeners.current = () => {
+      document.removeEventListener('pointerdown', cancelIfMoved, true);
+      document.removeEventListener('keydown', cancelIfMoved, true);
+      document.removeEventListener('focusin', cancelOnFocusMove, true);
+    };
+    return request;
+  }
+
+  function clearReview(event?: ReactMouseEvent<HTMLButtonElement>) {
+    if (event) {
+      const source = presentationSource.current;
+      const returnTo = opener.current?.source === source ? opener.current.element : null;
+      requestPresentation(event, 'return', returnTo);
+      opener.current = null;
+    } else {
+      cancelPresentation();
+      opener.current = null;
+    }
     setReview(null);
   }
 
   function retire() {
     active.current = false;
     readSequence.current++;
+    cancelPresentation();
+    opener.current = null;
     setReview(null);
     setReceipt(null);
     setIntent(null);
@@ -122,15 +258,19 @@ export function KnowledgePublicationPanel({
     retire,
   );
 
-  function begin(action: 'publish' | 'withdraw') {
+  function begin(action: 'publish' | 'withdraw', event: ReactMouseEvent<HTMLButtonElement>) {
     if (blocked || unresolved || reading || needsRead || admission !== 'available') return;
     if (action === 'withdraw' && head.publicationId === null) return;
+    const request = requestPresentation(event, 'review');
+    opener.current = request ? { element: request.owner, source: request.source } : null;
     setReview(reviewKnowledgePublication(head, binding, action));
     setState('idle');
   }
 
-  async function reread(acknowledged?: KnowledgePublicationReceipt) {
+  async function reread(acknowledged?: KnowledgePublicationReceipt, event?: ReactMouseEvent<HTMLButtonElement>) {
     if (!active.current) return;
+    if (event) requestPresentation(event, 'read');
+    opener.current = null;
     const sequence = ++readSequence.current;
     setReading(true);
     setReadState('preparing');
@@ -157,7 +297,10 @@ export function KnowledgePublicationPanel({
         const failure = result.state === 'ready' ? 'retired' : result.state;
         setReadState(failure);
         setNeedsRead(true);
-        if (failure === 'retired' || failure === 'signed-out' || failure === 'denied') onRetire(failure);
+        if (failure === 'retired' || failure === 'signed-out' || failure === 'denied') {
+          cancelPresentation();
+          onRetire(failure);
+        }
         if (failure === 'not-found') setReceipt(null);
       }
     } catch {
@@ -170,16 +313,18 @@ export function KnowledgePublicationPanel({
     }
   }
 
-  async function submit(replay: boolean) {
+  async function submit(replay: boolean, event: ReactMouseEvent<HTMLButtonElement>) {
     if (!active.current || commandBusy.current || admission !== 'available' || blocked) return;
     const selected = replay ? intentRef.current : currentReview?.intent;
     if (!selected || (!replay && needsRead)) return;
+    requestPresentation(event, 'command');
     const before = latestObservation.current;
     intentRef.current = selected;
     setIntent(selected);
     commandBusy.current = true;
     setState('pending');
     setReview(null);
+    opener.current = null;
     // Starting an update or withdrawal retires the previous current-publication links.
     setReceipt(null);
     try {
@@ -205,8 +350,10 @@ export function KnowledgePublicationPanel({
           intentRef.current = null;
           setNeedsRead(true);
         }
-        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
+        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied') {
+          cancelPresentation();
           onRetire(result.state);
+        }
       }
     } catch {
       if (active.current) setState('uncertain');
@@ -234,26 +381,77 @@ export function KnowledgePublicationPanel({
   };
   const canReview = admission === 'available' && !blocked && !unresolved && !reading && !needsRead;
   const failure = !['idle', 'pending', 'acknowledged'].includes(state);
+  const commandMessage =
+    state === 'pending'
+      ? m.knowledge_publication_pending({}, options)
+      : failure
+        ? failureText(state)
+        : currentReceipt
+          ? currentReceipt.publicationId === null
+            ? m.knowledge_publication_withdrawn({}, options)
+            : m.knowledge_publication_acknowledged({}, options)
+          : null;
+  const readMessage =
+    readState === 'preparing'
+      ? m.knowledge_private_readback({}, options)
+      : readState === 'observed'
+        ? m.knowledge_publication_observed({}, options)
+        : readState === 'changed'
+          ? m.knowledge_publication_changed({}, options)
+          : ['unavailable', 'not-found', 'denied'].includes(readState)
+            ? failureText(readState)
+            : null;
+  const readFailed = ['unavailable', 'not-found', 'denied'].includes(readState);
   return (
     <section
       id="knowledge-publication"
       className="min-w-0 scroll-mt-6 space-y-5 border-t border-border pt-6"
       aria-labelledby={headingId}
     >
-      <h2 id={headingId} className="text-lg font-semibold leading-snug">
+      <h2
+        id={headingId}
+        ref={headingRef}
+        tabIndex={-1}
+        className="text-lg font-semibold leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         {m.knowledge_publication_heading({}, options)}
       </h2>
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
         {m.knowledge_publication_intro({}, options)}
       </p>
       {admission !== 'available' ? <p role="status">{failureText(admission)}</p> : null}
+      <p
+        ref={savedSourceRef}
+        tabIndex={-1}
+        className="text-xl font-semibold leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {head.title}
+      </p>
+      {commandMessage ? (
+        <p
+          ref={commandResultRef}
+          tabIndex={-1}
+          role={failure ? 'alert' : 'status'}
+          className="text-sm leading-relaxed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {commandMessage}
+        </p>
+      ) : null}
+      {readMessage ? (
+        <p
+          ref={readResultRef}
+          tabIndex={-1}
+          role={readFailed ? 'alert' : 'status'}
+          className="text-sm leading-relaxed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {readMessage}
+        </p>
+      ) : null}
+      {head.publicationId !== null && !currentReceipt ? (
+        <p className="text-sm font-medium">{m.knowledge_workspace_publication_selected({}, options)}</p>
+      ) : null}
       {currentReceipt ? (
-        <div className="min-w-0 space-y-3" aria-live="polite">
-          <p role="status">
-            {currentReceipt.publicationId === null
-              ? m.knowledge_publication_withdrawn({}, options)
-              : m.knowledge_publication_acknowledged({}, options)}
-          </p>
+        <div className="min-w-0 space-y-3">
           {currentReceipt.publicationId !== null && currentReceipt.revisionId !== null ? (
             <>
               <KnowledgeDetails label={m.knowledge_workspace_saved({}, options)}>
@@ -298,28 +496,23 @@ export function KnowledgePublicationPanel({
           ) : null}
         </div>
       ) : null}
-      {head.publicationId !== null && !currentReceipt ? (
-        <p className="text-sm font-medium">{m.knowledge_workspace_publication_selected({}, options)}</p>
-      ) : null}
-      {head.publicationId !== null && !currentReceipt ? (
-        <KnowledgeDetails label={m.knowledge_workspace_saved({}, options)}>
-          <PublicationIdentity label={m.knowledge_publication_identity({}, options)} value={head.publicationId} />
-        </KnowledgeDetails>
-      ) : null}
-      {failure ? <p role="alert">{failureText(state)}</p> : null}
-      {state === 'pending' ? <p role="status">{m.knowledge_publication_pending({}, options)}</p> : null}
       {intent ? (
         <div className="min-w-0 space-y-3">
-          <PublicationIdentity
-            label={m.knowledge_private_revision({}, options)}
-            value={intent.expectedHeadRevisionId}
-          />
-          {intent.expectedPublicationId ? (
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <PublicationIdentity label={m.knowledge_private_document_id({}, options)} value={intent.documentId} />
+            <PublicationIdentity
+              label={m.knowledge_workspace_saved({}, options)}
+              value={intent.expectedHeadRevisionId}
+            />
             <PublicationIdentity
               label={m.knowledge_publication_identity({}, options)}
-              value={intent.expectedPublicationId}
+              value={intent.expectedPublicationId ?? '—'}
             />
-          ) : null}
+            <PublicationIdentity
+              label={m.knowledge_private_revision({}, options)}
+              value={intent.revisionId ?? '—'}
+            />
+          </div>
           <p className="text-sm">
             {intent.revisionId === null
               ? m.knowledge_publication_withdraw_review({}, options)
@@ -330,23 +523,29 @@ export function KnowledgePublicationPanel({
             variant="outline"
             className={control}
             disabled={state === 'pending' || blocked || admission !== 'available'}
-            onClick={() => void submit(true)}
+            onClick={(event) => void submit(true, event)}
           >
             {m.knowledge_publication_replay({}, options)}
           </Button>
         </div>
       ) : null}
-      {readState === 'preparing' ? <p role="status">{m.knowledge_private_readback({}, options)}</p> : null}
-      {readState === 'observed' ? <p role="status">{m.knowledge_publication_observed({}, options)}</p> : null}
-      {readState === 'changed' ? <p role="status">{m.knowledge_publication_changed({}, options)}</p> : null}
-      {['unavailable', 'not-found', 'denied'].includes(readState) ? <p role="alert">{failureText(readState)}</p> : null}
+      <KnowledgeDetails label={m.knowledge_workspace_saved({}, options)}>
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <KnowledgeValue label={m.knowledge_private_revision({}, options)} value={head.revisionId} exact />
+          <KnowledgeValue
+            label={m.knowledge_publication_identity({}, options)}
+            value={head.publicationId ?? '—'}
+            exact
+          />
+        </dl>
+      </KnowledgeDetails>
       <div className="flex min-w-0 flex-wrap gap-3">
         <Button
           type="button"
           variant="outline"
           className={control}
           disabled={!canReview}
-          onClick={() => begin('publish')}
+          onClick={(event) => begin('publish', event)}
         >
           {m.knowledge_publication_review({}, options)}
         </Button>
@@ -356,7 +555,7 @@ export function KnowledgePublicationPanel({
             variant="outline"
             className={control}
             disabled={!canReview}
-            onClick={() => begin('withdraw')}
+            onClick={(event) => begin('withdraw', event)}
           >
             {m.knowledge_publication_withdraw_review({}, options)}
           </Button>
@@ -366,7 +565,7 @@ export function KnowledgePublicationPanel({
           variant="outline"
           className={control}
           disabled={reading || state === 'pending' || blocked}
-          onClick={() => void reread()}
+          onClick={(event) => void reread(undefined, event)}
         >
           {m.knowledge_publication_reread({}, options)}
         </Button>
@@ -374,7 +573,12 @@ export function KnowledgePublicationPanel({
       {review && !currentReview ? <p role="status">{m.knowledge_publication_changed({}, options)}</p> : null}
       {currentReview ? (
         <section className="min-w-0 space-y-4 border-t border-border pt-5" aria-labelledby={reviewId}>
-          <h3 id={reviewId} className="text-lg font-semibold">
+          <h3
+            id={reviewId}
+            ref={reviewHeadingRef}
+            tabIndex={-1}
+            className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {currentReview.intent.revisionId === null
               ? m.knowledge_publication_withdraw_review({}, options)
               : m.knowledge_publication_review({}, options)}
@@ -386,7 +590,7 @@ export function KnowledgePublicationPanel({
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <PublicationIdentity
               label={m.knowledge_private_document_id({}, options)}
-              value={currentReview.head.documentId}
+              value={currentReview.intent.documentId}
             />
             <PublicationIdentity
               label={m.knowledge_private_language({}, options)}
@@ -394,15 +598,17 @@ export function KnowledgePublicationPanel({
             />
             <PublicationIdentity label={m.knowledge_private_licence({}, options)} value={currentReview.head.licence} />
             <PublicationIdentity
-              label={m.knowledge_private_revision({}, options)}
-              value={currentReview.head.revisionId}
+              label={m.knowledge_workspace_saved({}, options)}
+              value={currentReview.intent.expectedHeadRevisionId}
             />
-            {currentReview.head.publicationId ? (
-              <PublicationIdentity
-                label={m.knowledge_publication_identity({}, options)}
-                value={currentReview.head.publicationId}
-              />
-            ) : null}
+            <PublicationIdentity
+              label={m.knowledge_publication_identity({}, options)}
+              value={currentReview.intent.expectedPublicationId ?? '—'}
+            />
+            <PublicationIdentity
+              label={m.knowledge_private_revision({}, options)}
+              value={currentReview.intent.revisionId ?? '—'}
+            />
           </div>
           <div className="min-w-0 space-y-2">
             <h4 className="font-medium">{m.knowledge_private_subject_ids({}, options)}</h4>
@@ -429,12 +635,17 @@ export function KnowledgePublicationPanel({
             </div>
           )}
           <div className="flex min-w-0 flex-wrap gap-3">
-            <Button type="button" className={control} disabled={!canReview} onClick={() => void submit(false)}>
+            <Button
+              type="button"
+              className={control}
+              disabled={!canReview}
+              onClick={(event) => void submit(false, event)}
+            >
               {currentReview.intent.revisionId === null
                 ? m.knowledge_publication_confirm_withdraw({}, options)
                 : m.knowledge_publication_confirm({}, options)}
             </Button>
-            <Button type="button" variant="outline" className={control} onClick={clearReview}>
+            <Button type="button" variant="outline" className={control} onClick={(event) => clearReview(event)}>
               {m.editor_cancel({}, options)}
             </Button>
           </div>
@@ -451,4 +662,16 @@ function PublicationIdentity({ label, value }: { label: string; value: string })
       <p className="min-w-0 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{value}</p>
     </div>
   );
+}
+
+function isVisibleFocusTarget(target: HTMLElement | null): target is HTMLElement {
+  if (!target || !target.isConnected) return false;
+  if (
+    target.getClientRects().length === 0 ||
+    target.closest('[hidden], [inert], [aria-hidden="true"]')
+  )
+    return false;
+  if ('disabled' in target && Boolean((target as HTMLButtonElement).disabled)) return false;
+  const visibility = target.ownerDocument.defaultView?.getComputedStyle(target).visibility;
+  return visibility !== 'hidden' && visibility !== 'collapse';
 }
