@@ -23,8 +23,7 @@ export function moderationReadSnapshot<T>(
       const partitionNo = partitionOf(route);
       const partition = await readPartition(client, partitionNo);
       if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-      if (partition.writeState === 'moved')
-        throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+      if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
       const value = await read(client, partition);
       await client.query('COMMIT');
       beginAttempted = false;

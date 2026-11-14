@@ -86,12 +86,7 @@ for (const blocked of ['BEGIN', 'partition', 'SELECT source', 'COMMIT']) {
 test('a checkout that arrives after expiry dispatches no SQL', async () => {
   let resolveCheckout!: (client: PoolClient) => void;
   const checkout = new Promise<PoolClient>((resolve) => (resolveCheckout = resolve));
-  const attempt = moderationReadSnapshot(
-    { connect: () => checkout } as unknown as Pool,
-    route,
-    Date.now() + 100,
-    read,
-  );
+  const attempt = moderationReadSnapshot({ connect: () => checkout } as unknown as Pool, route, Date.now() + 100, read);
 
   await expect(attempt).rejects.toBeInstanceOf(AccessUnavailableError);
   const late = connection();
