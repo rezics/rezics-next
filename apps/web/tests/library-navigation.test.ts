@@ -270,9 +270,13 @@ test('navigation notices keep pin precedence and distinguish empty, preparing an
       ];
       for (const [props, text] of cases) {
         const html = renderToStaticMarkup(createElement(LibraryNavigationNotice, props));
-        expect(html).toBe(text === null ? '' : renderToStaticMarkup(
-          createElement('p', { role: 'status', className: 'text-sm text-muted-foreground' }, text),
-        ));
+        expect(html).toBe(
+          text === null
+            ? ''
+            : renderToStaticMarkup(
+                createElement('p', { role: 'status', className: 'text-sm text-muted-foreground' }, text),
+              ),
+        );
       }
     }
   } finally {

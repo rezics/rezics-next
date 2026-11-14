@@ -283,10 +283,7 @@ export function LibraryNavigation({
   );
   return (
     <div data-library-navigation data-collections-state={collectionsState} className="min-w-0 space-y-2">
-      <nav
-        aria-label={m.library_nav_sidebar_label()}
-        className="flex min-w-0 items-center gap-1"
-      >
+      <nav aria-label={m.library_nav_sidebar_label()} className="flex min-w-0 items-center gap-1">
         <div
           data-library-navigation-desktop
           className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 lg:flex"
