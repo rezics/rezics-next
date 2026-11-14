@@ -24,24 +24,30 @@ WITH write_input AS (
   RETURNING generation.route,generation.catalogue_id,generation.generation_id,generation.head_sequence
 ), node_rows AS (
   INSERT INTO content.hosted_order_node_version
-    (route,catalogue_id,generation_id,index_kind,node_id,sequence,tree_parent_id,node_state,is_deleted)
+    (route,catalogue_id,generation_id,index_kind,node_id,sequence,tree_parent_id,node_state,is_deleted,
+     subtree_height,maximum_subtree_height,maximum_subtree_occurrence_id)
   SELECT head.route,head.catalogue_id,head.generation_id,node.index_kind,node.node_id,head.head_sequence,
-    node.tree_parent_id,node.node_state,node.is_deleted
+    node.tree_parent_id,node.node_state,node.is_deleted,node.subtree_height,node.maximum_subtree_height,
+    node.maximum_subtree_occurrence_id
   FROM advanced head
   CROSS JOIN write_input
   CROSS JOIN LATERAL jsonb_to_recordset(write_input.node_rows) AS node(
-    index_kind text,node_id uuid,tree_parent_id uuid,node_state jsonb,is_deleted boolean
+    index_kind text,node_id uuid,tree_parent_id uuid,node_state jsonb,is_deleted boolean,
+    subtree_height smallint,maximum_subtree_height smallint,maximum_subtree_occurrence_id uuid
   )
   RETURNING node_id
 ), occurrence_rows AS (
   INSERT INTO content.hosted_occurrence_state_version
-    (route,catalogue_id,generation_id,occurrence_id,sequence,parent_occurrence_id,subtree_size,occurrence_state,is_deleted)
+    (route,catalogue_id,generation_id,occurrence_id,sequence,parent_occurrence_id,subtree_size,
+     occurrence_state,is_deleted,subtree_height)
   SELECT head.route,head.catalogue_id,head.generation_id,occurrence.occurrence_id,head.head_sequence,
-    occurrence.parent_occurrence_id,occurrence.subtree_size,occurrence.occurrence_state,occurrence.is_deleted
+    occurrence.parent_occurrence_id,occurrence.subtree_size,occurrence.occurrence_state,occurrence.is_deleted,
+    occurrence.subtree_height
   FROM advanced head
   CROSS JOIN write_input
   CROSS JOIN LATERAL jsonb_to_recordset(write_input.occurrence_rows) AS occurrence(
-    occurrence_id uuid,parent_occurrence_id uuid,subtree_size bigint,occurrence_state jsonb,is_deleted boolean
+    occurrence_id uuid,parent_occurrence_id uuid,subtree_size bigint,occurrence_state jsonb,is_deleted boolean,
+    subtree_height smallint
   )
   RETURNING occurrence_id
 ), sibling_roots AS (

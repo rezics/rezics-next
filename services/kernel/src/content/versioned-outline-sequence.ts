@@ -19,6 +19,12 @@ export type VersionedOutlineSequenceNode<Value> = Readonly<{
   count: bigint;
   chapterWeight?: VersionedOutlineChapterWeight;
   chapterCount: bigint;
+  /** The ordered value's optional subtree-depth measure. */
+  subtreeHeight?: number | null;
+  /** Maximum subtreeHeight in this AVL subtree; null means a legacy/unmeasured child is present. */
+  maximumSubtreeHeight?: number | null;
+  /** Stable value ID that supplied maximumSubtreeHeight, with lexical tie-breaking. */
+  maximumSubtreeOccurrenceId?: string | null;
 }>;
 
 export type VersionedOutlineSequenceSnapshotReader<Value> = (
@@ -109,6 +115,12 @@ export type VersionedOutlineSequenceMove = Readonly<{
   rootId: string | null;
 }>;
 
+export type VersionedOutlineSequenceMaximum = Readonly<{
+  complete: boolean;
+  subtreeHeight: number | null;
+  occurrenceId: string | null;
+}>;
+
 function chapterWeightOf<Value>(node: VersionedOutlineSequenceNode<Value>): bigint {
   return node.chapterWeight ?? 0n;
 }
@@ -164,6 +176,38 @@ async function rebuild<Value>(
   if (left !== null && left.treeParentId !== id) access.writeNode({ ...left, treeParentId: id });
   if (right !== null && right.treeParentId !== id) access.writeNode({ ...right, treeParentId: id });
 
+  const tracksSubtreeHeight =
+    node.subtreeHeight !== undefined ||
+    left?.maximumSubtreeHeight !== undefined ||
+    right?.maximumSubtreeHeight !== undefined;
+  const hasCompleteChildren =
+    (left === null ||
+      (left.maximumSubtreeHeight !== null &&
+        left.maximumSubtreeHeight !== undefined &&
+        left.maximumSubtreeOccurrenceId !== null &&
+        left.maximumSubtreeOccurrenceId !== undefined)) &&
+    (right === null ||
+      (right.maximumSubtreeHeight !== null &&
+        right.maximumSubtreeHeight !== undefined &&
+        right.maximumSubtreeOccurrenceId !== null &&
+        right.maximumSubtreeOccurrenceId !== undefined));
+  const maximum =
+    tracksSubtreeHeight && node.subtreeHeight !== null && node.subtreeHeight !== undefined && hasCompleteChildren
+      ? [
+          { height: node.subtreeHeight, occurrenceId: node.id },
+          ...(left === null
+            ? []
+            : [{ height: left.maximumSubtreeHeight!, occurrenceId: left.maximumSubtreeOccurrenceId! }]),
+          ...(right === null
+            ? []
+            : [{ height: right.maximumSubtreeHeight!, occurrenceId: right.maximumSubtreeOccurrenceId! }]),
+        ].reduce((best, candidate) =>
+          candidate.height > best.height ||
+          (candidate.height === best.height && candidate.occurrenceId < best.occurrenceId)
+            ? candidate
+            : best,
+        )
+      : null;
   const updated: VersionedOutlineSequenceNode<Value> = {
     ...node,
     leftId,
@@ -172,6 +216,12 @@ async function rebuild<Value>(
     height: Math.max(left?.height ?? 0, right?.height ?? 0) + 1,
     count: 1n + (left?.count ?? 0n) + (right?.count ?? 0n),
     chapterCount: chapterWeightOf(node) + (left?.chapterCount ?? 0n) + (right?.chapterCount ?? 0n),
+    ...(tracksSubtreeHeight
+      ? {
+          maximumSubtreeHeight: maximum?.height ?? null,
+          maximumSubtreeOccurrenceId: maximum?.occurrenceId ?? null,
+        }
+      : {}),
   };
   if (
     node.leftId !== updated.leftId ||
@@ -179,7 +229,9 @@ async function rebuild<Value>(
     node.treeParentId !== updated.treeParentId ||
     node.height !== updated.height ||
     node.count !== updated.count ||
-    node.chapterCount !== updated.chapterCount
+    node.chapterCount !== updated.chapterCount ||
+    node.maximumSubtreeHeight !== updated.maximumSubtreeHeight ||
+    node.maximumSubtreeOccurrenceId !== updated.maximumSubtreeOccurrenceId
   ) {
     access.writeNode(updated);
   }
@@ -346,6 +398,7 @@ export async function insertVersionedOutlineSequenceNode<Value>(
   id: string,
   value: Value,
   chapterWeight?: VersionedOutlineChapterWeight,
+  subtreeHeight?: number,
 ): Promise<string> {
   const count = await sequenceCount(access, rootId);
   assertIndex(index, count, 'insertion rank');
@@ -363,10 +416,77 @@ export async function insertVersionedOutlineSequenceNode<Value>(
     count: 1n,
     ...(chapterWeight === undefined ? {} : { chapterWeight }),
     chapterCount: chapterWeight ?? 0n,
+    ...(subtreeHeight === undefined
+      ? {}
+      : {
+          subtreeHeight,
+          maximumSubtreeHeight: subtreeHeight,
+          maximumSubtreeOccurrenceId: id,
+        }),
   };
   access.writeNode(node);
   const split = await splitAt(access, rootId, index);
   return (await joinRoots(access, await joinRoots(access, split.leftRootId, id), split.rightRootId))!;
+}
+
+/** Read the maximum measured value in one selected sequence root without visiting its entries. */
+export async function maximumVersionedOutlineSequenceSubtreeHeight<Value>(
+  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  rootId: string | null,
+): Promise<VersionedOutlineSequenceMaximum> {
+  if (rootId === null) return { complete: true, subtreeHeight: null, occurrenceId: null };
+  const root = await requireNode(access, rootId);
+  if (root.treeParentId !== null) throw new Error('Versioned outline sequence maximum requires a selected root');
+  if (
+    root.maximumSubtreeHeight === undefined ||
+    root.maximumSubtreeHeight === null ||
+    root.maximumSubtreeOccurrenceId === undefined ||
+    root.maximumSubtreeOccurrenceId === null
+  ) {
+    return { complete: false, subtreeHeight: null, occurrenceId: null };
+  }
+  return {
+    complete: true,
+    subtreeHeight: root.maximumSubtreeHeight,
+    occurrenceId: root.maximumSubtreeOccurrenceId ?? null,
+  };
+}
+
+/** Change one selected value's measure and repair only its AVL ancestor path. */
+export async function setVersionedOutlineSequenceSubtreeHeight<Value>(
+  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  rootId: string | null,
+  occurrenceId: string,
+  subtreeHeight: number,
+): Promise<void> {
+  if (!Number.isSafeInteger(subtreeHeight) || subtreeHeight < 0) {
+    throw new RangeError('Versioned outline sequence subtree height must be a nonnegative safe integer');
+  }
+  if (rootId === null) throw new Error('Versioned outline sequence subtree height target is absent');
+
+  const node = await access.readNode(occurrenceId);
+  if (node === null) throw new Error('Versioned outline sequence subtree height target is absent');
+  const ancestors: VersionedOutlineSequenceNode<Value>[] = [];
+  const visited = new Set<string>([occurrenceId]);
+  let current = node;
+  while (current.treeParentId !== null) {
+    const parent = await requireNode(access, current.treeParentId);
+    if (visited.has(parent.id)) throw new Error('Versioned outline sequence tree-parent links contain a cycle');
+    const isLeft = parent.leftId === current.id;
+    const isRight = parent.rightId === current.id;
+    if (isLeft === isRight) throw new Error('Versioned outline sequence tree-parent link is inconsistent');
+    visited.add(parent.id);
+    ancestors.push(parent);
+    current = parent;
+  }
+  if (current.id !== rootId) throw new Error('Versioned outline sequence subtree height target left its selected root');
+
+  if (node.subtreeHeight !== subtreeHeight) {
+    access.writeNode({ ...node, subtreeHeight });
+  }
+  for (const parent of ancestors) {
+    await rebuild(access, parent.id, parent.leftId, parent.rightId, parent.treeParentId);
+  }
 }
 
 /** Exact zero-based rank; null means the node is absent from this selected root. */

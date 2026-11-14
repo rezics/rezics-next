@@ -4,12 +4,14 @@ import {
   createVersionedOutlineSequenceReadWriteSet,
   insertVersionedOutlineSequenceNode,
   joinVersionedOutlineSequences,
+  maximumVersionedOutlineSequenceSubtreeHeight,
   moveVersionedOutlineSequenceRange,
   rankVersionedOutlineSequenceNode,
   selectVersionedOutlineSequenceChapter,
   selectVersionedOutlineSequenceNode,
   splitVersionedOutlineSequence,
   spliceVersionedOutlineSequence,
+  setVersionedOutlineSequenceSubtreeHeight,
   type VersionedOutlineSequenceNode,
   type VersionedOutlineSequenceSnapshotReader,
 } from '../../src/content/versioned-outline-sequence.ts';
@@ -287,4 +289,55 @@ test('invalid ranks and ranges are rejected before sequence writes', async () =>
 
   expect(access.work().writtenNodeCount).toBe(before.writtenNodeCount);
   verifyTree(seeded.nodes, seeded.rootId, seeded.ids);
+});
+
+test('cached subtree maximum shrinks along indexed AVL paths and preserves older roots', async () => {
+  const original = new Map<string, VersionedOutlineSequenceNode<string>>();
+  const access = workspace(original);
+  let rootId = await insertVersionedOutlineSequenceNode(access, null, 0n, 'a', 'a', undefined, 4);
+  rootId = await insertVersionedOutlineSequenceNode(access, rootId, 1n, 'b', 'b', undefined, 4);
+  rootId = await insertVersionedOutlineSequenceNode(access, rootId, 2n, 'c', 'c', undefined, 2);
+  const oldSnapshot = commit(original, access);
+  const oldRoot = rootId;
+
+  expect(await maximumVersionedOutlineSequenceSubtreeHeight(workspace(oldSnapshot), oldRoot)).toEqual({
+    complete: true,
+    subtreeHeight: 4,
+    occurrenceId: 'a',
+  });
+
+  await setVersionedOutlineSequenceSubtreeHeight(access, rootId, 'a', 1);
+  expect(await maximumVersionedOutlineSequenceSubtreeHeight(access, rootId)).toEqual({
+    complete: true,
+    subtreeHeight: 4,
+    occurrenceId: 'b',
+  });
+  await setVersionedOutlineSequenceSubtreeHeight(access, rootId, 'b', 0);
+  expect(await maximumVersionedOutlineSequenceSubtreeHeight(access, rootId)).toEqual({
+    complete: true,
+    subtreeHeight: 2,
+    occurrenceId: 'c',
+  });
+  expect(await maximumVersionedOutlineSequenceSubtreeHeight(workspace(oldSnapshot), oldRoot)).toMatchObject({
+    subtreeHeight: 4,
+    occurrenceId: 'a',
+  });
+  expect(access.work().writtenNodeCount).toBeLessThan(12);
+});
+
+test('legacy sequence maxima stay explicitly incomplete until all selected values are measured', async () => {
+  const legacy = seedBalanced(63, 'legacy-');
+  const access = workspace(legacy.nodes);
+  expect(await maximumVersionedOutlineSequenceSubtreeHeight(access, legacy.rootId)).toEqual({
+    complete: false,
+    subtreeHeight: null,
+    occurrenceId: null,
+  });
+
+  await setVersionedOutlineSequenceSubtreeHeight(access, legacy.rootId, legacy.ids[0]!, 3);
+  expect(await maximumVersionedOutlineSequenceSubtreeHeight(access, legacy.rootId)).toEqual({
+    complete: false,
+    subtreeHeight: null,
+    occurrenceId: null,
+  });
 });
