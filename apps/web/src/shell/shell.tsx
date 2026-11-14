@@ -59,7 +59,11 @@ import manropeFontUrl from '@fontsource-variable/manrope/files/manrope-latin-wgh
 import { resolveAccountSecurity } from './account-menu-security';
 import { PhoneNavigationClearance } from './phone-navigation-clearance';
 import { ShellStyleNonceProvider, useShellStyleNonce } from './csp-rendering/style-nonce';
-import { ShellContextNavigationOutlet, ShellContextNavigationProvider } from './contextual-navigation';
+import {
+  ShellContextNavigationOutlet,
+  ShellContextNavigationProvider,
+  useShellContextNavigationMenuScope,
+} from './contextual-navigation';
 type ShellSession = NavigationSession;
 
 /** Hidden until the first Tab press; the sr-only utilities reveal it on focus. */
@@ -220,6 +224,7 @@ export function NavigationToggle({
   session: ShellSession;
 }) {
   const hydrated = useHydrated();
+  const navigationScope = useShellContextNavigationMenuScope();
   const { isMobile } = useSidebar();
   const communities = useSideNavCommunities();
   const navigation = (
@@ -240,6 +245,7 @@ export function NavigationToggle({
         <Menu
           title={m.shell_navigation()}
           closeOnNavigation
+          navigationScope={navigationScope}
           content={navigation}
           trigger={
             <Button

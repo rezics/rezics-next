@@ -36,7 +36,7 @@ import type { HostedDraftPicker } from './hosted-draft-picker';
 import { HostedReleaseReaderLink } from './hosted-release-reader-link-action';
 import type { HostedReleaseReaderBinding } from './hosted-release-reader-link';
 import { WorkbenchRegion, useAuthoringSelection } from './workbench-region';
-import { ShellContextNavigation } from '../shell/contextual-navigation';
+import { ShellContextNavigation, useShellContextNavigationSelection } from '../shell/contextual-navigation';
 import { workbenchCopy } from './workbench-copy';
 import './studio.css';
 
@@ -111,6 +111,7 @@ export function StudioWorkbench({
   const [nativeDraftRisk, setNativeDraftRisk] = useState(false);
   const [nativeCreationPending, setNativeCreationPending] = useState(false);
   const editorHeading = useRef<HTMLHeadingElement>(null);
+  const selectNavigation = useShellContextNavigationSelection(controller);
   const previousPost = useRef<string | null>(
     state.historical ? (state.selected?.source.revision.exact.postId ?? null) : null,
   );
@@ -231,14 +232,24 @@ export function StudioWorkbench({
   }, [focusHistory, historyOpen]);
 
   function open(post: string) {
-    if (post === postId) return;
+    const before = controller.snapshot();
+    if (post === postId) {
+      selectNavigation(!blocked && port.isCurrent(), () => editorHeading.current);
+      return;
+    }
     if (selected?.dirty || selected?.snapshotPending || selected?.uploading) {
       setPendingOpen(post);
+      selectNavigation(!blocked && port.isCurrent(), () =>
+        editorHeading.current
+          ?.closest('section.studio-workspace')
+          ?.querySelector<HTMLButtonElement>('.studio-navigation-confirm button:not(:disabled)'),
+      );
       return;
     }
     setView('write');
     setHistoryOpen(false);
     void controller.open(post);
+    selectNavigation(!blocked && !before.operation && controller.snapshot().operation === 'open');
   }
   async function continueToDraft(save: boolean) {
     const target = pendingOpen;
@@ -322,7 +333,14 @@ export function StudioWorkbench({
             >
               {m.studio_workspace_discard_switch({}, options)}
             </Button>
-            <Button type="button" variant="outline" onClick={() => setPendingOpen(null)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setPendingOpen(null);
+                selectNavigation(true, () => editorHeading.current);
+              }}
+            >
               {m.studio_workspace_keep_editing({}, options)}
             </Button>
           </div>

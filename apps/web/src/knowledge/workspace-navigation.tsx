@@ -7,7 +7,7 @@ import type { KnowledgePrivateAddress } from './private-knowledge';
 import type { KnowledgeNavigationRequest } from './navigation-read';
 import { KnowledgeNavigationEntry, type KnowledgeNavigationOperations } from './navigation-page';
 import { knowledgeControl, knowledgeLink } from './workspace';
-import { ShellContextNavigation } from '../shell/contextual-navigation';
+import { ShellContextNavigation, useShellContextNavigationSelection } from '../shell/contextual-navigation';
 
 /** Declare the editor's outline in the shell's existing sidebar or phone Menu. */
 export function KnowledgeWorkspaceNavigation({
@@ -57,9 +57,19 @@ export function KnowledgeWorkspaceNavigation({
     }),
     [operations, binding],
   );
+  const lifetime = useMemo(() => ({}), [binding.viewer, binding.csrfToken, address.documentId, operations]);
+  const selectNavigation = useShellContextNavigationSelection(lifetime);
   return (
     <ShellContextNavigation label={m.knowledge_workspace_documents({}, options)}>
-      <div className="min-w-0 space-y-4">
+      <div
+        className="min-w-0 space-y-4"
+        onClick={(event) => {
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+          const link = event.target instanceof Element ? event.target.closest('a[aria-current="page"]') : null;
+          // The same-document route keeps its path, so it needs no new path-focus effect.
+          if (link) selectNavigation(current(), () => document.getElementById('main-content'));
+        }}
+      >
         <p aria-current="page" className="border-l-2 border-primary py-2 pl-3 text-sm font-medium">
           {title}
         </p>

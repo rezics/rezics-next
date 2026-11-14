@@ -1,13 +1,14 @@
 import {
   createContext,
   isValidElement,
+  useCallback,
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactElement,
-  type MouseEvent,
   type ReactNode,
 } from 'react';
 import * as D from '../shadcn/dropdown-menu.tsx';
@@ -43,15 +44,40 @@ export interface MenuProps {
   trigger: ReactElement;
   title: string;
   backLabel?: string;
-  /** Close after an in-app link is followed from custom menu content. */
+  /** Close after a link or an explicitly admitted contextual selection. */
   closeOnNavigation?: boolean;
+  /** Identity of the admitted navigation visit; replacement retires pending opener focus. */
+  navigationScope?: object;
   children?: ReactNode;
   triggerSlot?: boolean;
 }
 
 const TriggerContext = createContext<ReactElement | null>(null);
+const navigationSelection = 'rezics-menu-navigation-selection';
+
+/** Signal an accepted selection through its physical host, including route-owned portals. */
+export function dismissMenuForNavigation(host: HTMLElement | null) {
+  if (!host) return false;
+  const Event = host.ownerDocument.defaultView!.Event;
+  return !host.dispatchEvent(new Event(navigationSelection, { bubbles: true, cancelable: true }));
+}
+
 export function MenuTriggerSlot() {
   return useContext(TriggerContext);
+}
+
+function isNavigationLink(
+  event: Pick<globalThis.MouseEvent, 'target' | 'button' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>,
+) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false;
+  const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  return (
+    anchor !== null &&
+    !anchor.hasAttribute('download') &&
+    !anchor.closest('[data-menu-navigation-selection]') &&
+    (!anchor.getAttribute('target') || anchor.getAttribute('target') === '_self') &&
+    anchor.getAttribute('aria-disabled') !== 'true'
+  );
 }
 
 function legacyEntries(content: ReactNode): MenuEntry[] {
@@ -163,6 +189,7 @@ export function Menu({
   title,
   backLabel,
   closeOnNavigation = false,
+  navigationScope,
   children,
   triggerSlot = false,
 }: MenuProps) {
@@ -194,10 +221,22 @@ export function Menu({
   const historyDepth = useRef(0);
   const formRef = useRef(form);
   const openingRef = useRef(false);
+  const openRef = useRef(false);
+  const navigationDismissed = useRef(false);
+  const returnFocus = useRef<number | null>(null);
+  const cancelReturnFocus = () => {
+    if (returnFocus.current !== null) cancelAnimationFrame(returnFocus.current);
+    returnFocus.current = null;
+  };
+  // Replacing the caller's visit must also retire a queued return to its opener.
+  useLayoutEffect(() => cancelReturnFocus, [navigationScope, closeOnNavigation ? content : undefined]);
   formRef.current = form;
   const page = stack.at(-1);
   const customContent = content !== undefined;
   const openMenu = () => {
+    cancelReturnFocus();
+    navigationDismissed.current = false;
+    openRef.current = true;
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     const next = sheet ? 'sheet' : 'dropdown';
     openingRef.current = true;
@@ -213,12 +252,54 @@ export function Menu({
     // A sheet's opening tap can dismiss through the same pointer as it opens.
     if (openingRef.current && formRef.current === 'sheet') return;
     openingRef.current = false;
+    openRef.current = false;
+    cancelReturnFocus();
     setOpen(false);
     setStack([]);
     if (historyDepth.current && !fromHistory) window.history.go(-historyDepth.current);
     historyDepth.current = 0;
-    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
+    if (restoreFocus && !navigationDismissed.current) {
+      const opener = triggerRef.current;
+      const owner = document.activeElement;
+      returnFocus.current = requestAnimationFrame(() => {
+        returnFocus.current = null;
+        const active = document.activeElement;
+        if (
+          !openRef.current &&
+          opener?.isConnected &&
+          triggerRef.current === opener &&
+          (active === owner || active === document.body)
+        )
+          opener.focus();
+      });
+    }
   };
+  const dismissNavigation = () => {
+    if (!closeOnNavigation || !openRef.current) return false;
+    navigationDismissed.current = true;
+    openingRef.current = false;
+    close(false, false);
+    return true;
+  };
+  const dismissRef = useRef(dismissNavigation);
+  dismissRef.current = dismissNavigation;
+  const physicalNavigationHost = useCallback((node: HTMLElement | null) => {
+    if (!node) return;
+    const selection = (event: Event) => {
+      // A retired route/reader can invalidate an already closed Menu's queued return.
+      cancelReturnFocus();
+      if (dismissRef.current()) event.preventDefault();
+    };
+    const link = (event: globalThis.MouseEvent) => {
+      if (isNavigationLink(event)) dismissRef.current();
+    };
+    node.addEventListener(navigationSelection, selection);
+    node.addEventListener('click', link, true);
+    return () => {
+      node.removeEventListener(navigationSelection, selection);
+      node.removeEventListener('click', link, true);
+    };
+  }, []);
   const ignoreOpeningDismiss = (reason: string | undefined) =>
     openingRef.current && (reason === 'outside-press' || reason === 'trigger-press');
   useEffect(() => {
@@ -252,8 +333,10 @@ export function Menu({
     }
     if (entry.type === 'link') close();
   };
-  const closeAfterNavigation = (event: MouseEvent<HTMLElement>) => {
-    if (closeOnNavigation && event.target instanceof Element && event.target.closest('a')) close();
+  const closeAfterNavigation = (
+    event: Pick<globalThis.MouseEvent, 'target' | 'button' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>,
+  ) => {
+    if (isNavigationLink(event)) dismissNavigation();
   };
   const triggerNode = (
     <span
@@ -317,6 +400,7 @@ export function Menu({
               }}
             />
             <PopoverContent
+              ref={physicalNavigationHost}
               side="bottom"
               align="start"
               sideOffset={4}
@@ -347,7 +431,11 @@ export function Menu({
               }}
             />
             {form === 'dropdown' && (
-              <D.DropdownMenuContent onClickCapture={closeAfterNavigation}>
+              <D.DropdownMenuContent
+                ref={physicalNavigationHost}
+                finalFocus={false}
+                onClickCapture={closeAfterNavigation}
+              >
                 {content ?? <DropdownEntries entries={entries} select={select} close={() => close()} />}
               </D.DropdownMenuContent>
             )}
@@ -355,6 +443,7 @@ export function Menu({
         ))}
       {form === 'sheet' && (
         <BottomSheet
+          finalFocus={false}
           open={open}
           onOpenChange={(value) => {
             if (value) openMenu();
@@ -369,7 +458,11 @@ export function Menu({
             ) : undefined
           }
         >
-          <div className="mt-2 flex min-w-0 max-w-full flex-col" onClickCapture={closeAfterNavigation}>
+          <div
+            ref={physicalNavigationHost}
+            className="mt-2 flex min-w-0 max-w-full flex-col"
+            onClickCapture={closeAfterNavigation}
+          >
             {content && entries.length === 0 && !page
               ? content
               : (page?.entries ?? entries).map((entry, index) => {

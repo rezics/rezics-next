@@ -83,6 +83,16 @@ Selecting a radio value closes the menu once. Escape closes either form, and foc
 Custom menu content with client-side links can set `closeOnNavigation` so following a link closes the menu without
 adding a sheet-history entry.
 
+Decision: accepted contextual document choices call `dismissMenuForNavigation(physicalHost)`; `closeOnNavigation`
+admits that event and primary same-window anchors through the physical DOM, including route-owned portals. Call
+only after admitting a choice or its existing dirty-switch review. Destination wrappers with
+`data-menu-navigation-selection` take responsibility for admitting both their anchors and buttons through this
+seam. Expansion, More, Retry and refused or pending selections do not signal selection. Modified links, downloads
+and new-window links retain native behavior. Ordinary dismissal restores the opener; navigation dismissal leaves
+destination/review focus to its owner and cancels queued opener restoration. Reopening, caller replacement and
+unmount also cancel that restoration. Hosts pass a `navigationScope` identity so retiring a route or reader also
+cancels pending focus after its panel has closed. The shell guide lists the installed consumer coverage.
+
 Caller-supplied content remains a form or link panel; `Menu` does not convert it to menu entries. On desktop, the
 panel uses the shared anchored Popover, sizes to its content between a 16rem minimum and 32rem maximum, and clamps
 both limits to the available viewport width. It flips or shifts around its trigger and bounds its height to the
