@@ -55,11 +55,7 @@ function dependencies(pool: Pool) {
   } satisfies HostedPublicationActivationDependencies;
 }
 
-function startActivation(
-  deps: HostedPublicationActivationDependencies,
-  catalogueId: string,
-  stageId: string,
-) {
+function startActivation(deps: HostedPublicationActivationDependencies, catalogueId: string, stageId: string) {
   const context = commandContext();
   return nativeRequest(f.native.author, deps, context, (actor, request) =>
     startHostedPublicationActivation(deps, actor, catalogueId, stageId, request),
@@ -150,11 +146,7 @@ test('target observations run outside command checkout and stale pages cannot ad
     kind: 'chapter' as const,
     target,
   }));
-  const revised = await f.native.command(
-    `${path}:revise`,
-    { expectedRevisionId: initial.revisionId, placements },
-    200,
-  );
+  const revised = await f.native.command(`${path}:revise`, { expectedRevisionId: initial.revisionId, placements }, 200);
   const deps = dependencies(f.native.pool);
   for (const { target } of ranked) {
     const context = commandContext();
@@ -209,8 +201,7 @@ test('target observations run outside command checkout and stale pages cannot ad
   expect(rejected).toHaveLength(1);
   const success = accepted[0];
   const failure = rejected[0];
-  if (success?.status !== 'fulfilled' || failure?.status !== 'rejected')
-    throw new Error('Expected one stale advance');
+  if (success?.status !== 'fulfilled' || failure?.status !== 'rejected') throw new Error('Expected one stale advance');
   expect(success.value.value).toMatchObject({ state: 'checking', checkedTargetCount: '20', totalTargetCount: '22' });
   expect(failure.reason).toBeInstanceOf(HostedPublicationActivationConflictError);
 

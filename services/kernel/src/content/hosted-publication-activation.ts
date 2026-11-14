@@ -698,16 +698,12 @@ function sameTarget(left: HostedChapterTarget, right: HostedChapterTarget): bool
   );
 }
 
-function sameCursor(
-  left: HostedPublicationTargetCursor | null,
-  right: HostedPublicationTargetCursor | null,
-): boolean {
+function sameCursor(left: HostedPublicationTargetCursor | null, right: HostedPublicationTargetCursor | null): boolean {
   return (left === null && right === null) || (left !== null && right !== null && sameTarget(left, right));
 }
 
 function sameActivationFrontier(left: ActivationRow, right: ActivationRow): boolean {
-  const sameBytes = (a: Buffer | null, b: Buffer | null) =>
-    a === null ? b === null : b !== null && a.equals(b);
+  const sameBytes = (a: Buffer | null, b: Buffer | null) => (a === null ? b === null : b !== null && a.equals(b));
   return (
     left.route === right.route &&
     left.catalogue_id === right.catalogue_id &&
@@ -763,10 +759,7 @@ function sameCandidate(left: CandidateRow, right: CandidateRow): boolean {
   );
 }
 
-function samePage(
-  left: PreparedActivationAdvance['page'],
-  right: PreparedActivationAdvance['page'],
-): boolean {
+function samePage(left: PreparedActivationAdvance['page'], right: PreparedActivationAdvance['page']): boolean {
   return (
     sameCursor(left.next, right.next) &&
     left.items.length === right.items.length &&
@@ -789,7 +782,8 @@ function observationsMatchPage(prepared: PreparedActivationAdvance): boolean {
   if (prepared.openingNeedsObservation)
     expected.push({ target: prepared.opening, occurrenceId: prepared.frontier.catalogue_id });
   for (const item of prepared.page.items)
-    if (!sameTarget(item.target, prepared.opening)) expected.push({ target: item.target, occurrenceId: item.occurrenceId });
+    if (!sameTarget(item.target, prepared.opening))
+      expected.push({ target: item.target, occurrenceId: item.occurrenceId });
   return (
     expected.length === prepared.observations.length &&
     expected.every((item, index) => {
@@ -934,13 +928,7 @@ async function resetPass(
        target_total_count=$5,opening_thread_id=NULL,opening_revision_id=NULL,
        opening_sha256=NULL,opening_checked=false,state='checking',updated_at=transaction_timestamp()
      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
-    [
-      row.route,
-      row.catalogue_id,
-      row.stage_id,
-      passId,
-      (targetCount + 1n).toString(),
-    ],
+    [row.route, row.catalogue_id, row.stage_id, passId, (targetCount + 1n).toString()],
   );
   await insertVector(tx, row.route, row.catalogue_id, row.stage_id, passId, vector);
   const updated = await readActivation(tx, row.route, row.catalogue_id, row.stage_id);
@@ -971,7 +959,8 @@ export function advanceHostedPublicationActivationAuthority(
       let row = await readActivation(tx, route, catalogueId, stageId, true);
       if (!row) throw activationNotFound();
       const candidate = await readCandidate(tx, route, catalogueId, stageId, time);
-      if (!candidate || !liveCandidate(candidate) || !candidateMatches(row, candidate, actor)) throw activationNotFound();
+      if (!candidate || !liveCandidate(candidate) || !candidateMatches(row, candidate, actor))
+        throw activationNotFound();
       if (row.state === 'activated' || row.state === 'ready') return noEffect(progress(row));
 
       if (
