@@ -26,25 +26,23 @@ the current critical path. Archived scope and historical task counts do not meas
 
 ## Direct source integration
 
-When integration becomes the bottleneck, the manager assigns a resolver to repair conflicts and integrate
-coherent source directly into its target branch. This applies to every task type, including product, urgent,
-control-plane, stabilize, specification and verification work. Preserve the current target history, source identity
-and both sides' required behavior. Keep independent implementation moving instead of waiting for a landing queue,
-retry or proof workflow.
+Each execution unit owns its source and manually merges each coherent committed increment directly into its target
+branch immediately. Preserve current target history, source identity and both sides' required behavior; repair
+conflicts in the owning module. Do not wait for a landing queue, another unit or the shared publisher before merging.
+This applies to product, urgent, control-plane, stabilize, specification and verification-source work.
 
-This standing policy applies whenever integration is the bottleneck. The objective is deployable code and correct
-logic. Tests, typechecks, transpilation, architecture, schema and Kernel-import verification, and new test-coverage
-requirements do not gate source integration. Do not
-write or run them as integration prerequisites. Preserve existing tests and report acceptance as deferred; generate
-an artifact needed by the implementation when necessary without turning its validation into an admission gate.
-This policy takes precedence over source-stage checks and coverage requirements elsewhere in the workflow.
+Source admission has no premerge verification: do not run tests, typechecks, transpilation, generators, architecture,
+schema or Kernel-import checks before merging. Preserve existing tests and record acceptance as deferred. The
+manager schedules unified verification and repairs after integration; a missing check or generated artifact does
+not turn into a per-unit source gate. This policy takes precedence over source-stage checks and coverage demands
+elsewhere in the workflow. Final release acceptance and publication remain separate from source integration.
 
 Prioritize follow-up repairs that restore the Storybook build or unblock continued tasks. Keep product contracts,
 authorization and money invariants intact, including production validation at untrusted input boundaries. Their
 implementation is required behavior, not a requirement to run a test suite before integrating source.
 
-Direct integration does not transfer publication custody. The existing single publisher owns building and publishing
-the exact integrated revision. Report integrated source, a built or published artifact, and actual functional
+The existing single publisher owns building and publishing the exact integrated revision after source integration.
+Units continue source delivery while that shared work runs; they do not wait on the publisher before merging. Report integrated source, a built or published artifact, and actual functional
 observations separately; none implies the others. Later acceptance and Goal closure retain their evidence owners.
 
 ## Source batches
@@ -84,7 +82,7 @@ Do not start an unmanaged agent, duplicate a writer or bypass capacity or allowa
 
 The worker of product work on dev verifies every concrete premise of its brief against its base before it designs
 the change: paths, counts, package ownership and where stories or fixtures actually live. It builds on what is there
-and records a premise that did not hold in its summary. Managers preflight control-plane, stabilize-target and
+and records a premise that did not hold in its summary. The manager preflights control-plane, stabilize-target and
 verification briefs before dispatch or reshape. A claim that all stories share one Storybook must be checked rather
 than assumed. Check:
 
