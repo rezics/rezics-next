@@ -330,6 +330,8 @@ export type HistoryEntry = {
   stabilize?: { previous: string; current: string };
   dev?: { previous: string; current: string };
   restores?: string;
+  /** Source was published while acceptance was explicitly deferred. */
+  acceptance?: 'deferred';
 };
 
 export function readHistory(file: string): HistoryEntry[] {
@@ -629,6 +631,8 @@ export type Options = {
   policy?: ControlPolicy;
   dryRun?: boolean;
   rollback?: boolean;
+  /** Publish during an authorized code-only window; defer checks, dependency installs and worker observations. */
+  sourceOnly?: boolean;
   resident?: ResidentControl;
   includes?: string[];
   keepWorktree?: boolean;
@@ -755,7 +759,7 @@ export async function sync(options: Options = {}): Promise<number> {
       const id = `${stamp(now)}-${short(source)}`;
       const logs = join(state, 'cp-sync', id);
       const worktree = join(options.worktreeRoot ?? join(dirname(checkout), 'worktrees'), `cp-sync-${id}`);
-      const checks = options.checks ?? syncChecks(checkout, options.full === true);
+      const checks = options.sourceOnly ? [] : (options.checks ?? syncChecks(checkout, options.full === true));
       // Main's failing tests come from its installs and suite alone; its smoke would only exercise main's own CLI.
       const baselineChecks = checks.filter((check) => check.kind === 'prepare' || check.kind === 'suite');
       mkdirSync(logs, { recursive: true });
@@ -844,9 +848,12 @@ export async function sync(options: Options = {}): Promise<number> {
         for (const missing of missingControlPlanePaths(checkout, main, tree))
           print(`cp-sync: WARNING: ${missing}, which the candidate lacks`);
 
-        // The checks run on the committed candidate, as the main-release proof does, so tests that read the checkout's
-        // HEAD see it. The commit stays unreachable on this detached worktree unless every step passes.
-        git(worktree, 'commit', '--quiet', '-m', `control-plane: sync tools/goal from dev ${short(source)}`);
+        // Checks, when scheduled, read the committed candidate. A code-only publication must not run commit hooks.
+        git(
+          worktree,
+          ...(options.sourceOnly ? ['-c', 'core.hooksPath=/dev/null'] : []),
+          'commit', '--quiet', '-m', `control-plane: sync tools/goal from dev ${short(source)}`,
+        );
         const commit = git(worktree, 'rev-parse', 'HEAD');
         if (
           git(worktree, 'rev-parse', `${commit}^{tree}`) !== tree ||
@@ -861,19 +868,23 @@ export async function sync(options: Options = {}): Promise<number> {
         }
 
         // A dry run reports the suite even after a failed type check; a real run stops at the first failed step.
-        const steps = await runChecks(checks, worktree, logs, '', options.dryRun === true, print);
-        const verdict = await gate(checks, steps, worktree, logs, mainBaseline, print);
-        if (verdict.known.length) {
+        const steps = options.sourceOnly ? [] : await runChecks(checks, worktree, logs, '', options.dryRun === true, print);
+        const verdict = options.sourceOnly ? undefined : await gate(checks, steps, worktree, logs, mainBaseline, print);
+        if (verdict?.known.length) {
           print(`cp-sync: ${verdict.known.length} failing tests also fail on unmodified ${MAIN}:`);
           for (const name of verdict.known) print(`  (fail on ${MAIN} too) ${name}`);
         }
-        for (const name of verdict.flaky) print(`  (failed, then passed on rerun) ${name}`);
-        for (const name of verdict.added) print(`  (NEW failure) ${name}`);
+        for (const name of verdict?.flaky ?? []) print(`  (failed, then passed on rerun) ${name}`);
+        for (const name of verdict?.added ?? []) print(`  (NEW failure) ${name}`);
         writeFileSync(
           join(logs, 'results.json'),
-          `${JSON.stringify({ main, source, commit, paths, steps, gate: verdict }, null, 2)}\n`,
+          `${JSON.stringify({ main, source, commit, paths, steps,
+            ...(verdict ? { gate: verdict } : {
+              checks: 'deferred', dependencyInstall: 'deferred', residentObservation: 'deferred', acceptance: 'deferred',
+            }),
+          }, null, 2)}\n`,
         );
-        if (!verdict.passed) {
+        if (verdict && !verdict.passed) {
           print(`cp-sync: refused: ${verdict.reason}; no ref moved. Logs: ${logs}`);
           return 1;
         }
@@ -882,7 +893,9 @@ export async function sync(options: Options = {}): Promise<number> {
           throw new Refusal(
             `The checks changed the candidate checkout:\n${touched.split('\n').slice(0, scriptPolicy().cpSync.changedPaths).join('\n')}`,
           );
-        print(`cp-sync: checks passed (${verdict.reason}); sync commit ${short(commit)}`);
+        print(verdict
+          ? `cp-sync: checks passed (${verdict.reason}); sync commit ${short(commit)}`
+          : `cp-sync: source-only commit ${short(commit)}; checks, dependency installs and acceptance deferred.`);
 
         if (options.dryRun) {
           const preview = planCpSyncRefs(refs, 'sync', main, commit, paths, source);
@@ -895,7 +908,7 @@ export async function sync(options: Options = {}): Promise<number> {
 
         const resident = options.resident ?? residentControl;
         await resident.preflight?.(checkout);
-        const before = await resident.observe(checkout, INSTANT);
+        const before = options.sourceOnly ? undefined : await resident.observe(checkout, INSTANT);
         publicationStarted = true;
         const published = publishCpSyncRefs(refs, 'sync', main, commit, paths, source, print);
         try {
@@ -910,6 +923,7 @@ export async function sync(options: Options = {}): Promise<number> {
             main: { previous: main, current: commit },
             paths,
             source,
+            ...(options.sourceOnly ? { acceptance: 'deferred' as const } : {}),
             ...(stabilizeMove ? { stabilize: stabilizeMove } : {}),
             ...(devMove ? { dev: devMove } : {}),
           });
@@ -917,7 +931,7 @@ export async function sync(options: Options = {}): Promise<number> {
             print(`cp-sync: moved ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
           for (const warning of published.warnings) print(`cp-sync: ${warning}`);
           // The published commit is the one just checked, so its suite failures are the next sync's baseline.
-          if (checks.some((check) => check.kind === 'suite'))
+          if (verdict && checks.some((check) => check.kind === 'suite'))
             writeBaseline(baselineFile(state, commit, baselineChecks), {
               version: 1,
               main: commit,
@@ -926,17 +940,21 @@ export async function sync(options: Options = {}): Promise<number> {
               ran: verdict.ran,
               failures: verdict.failures,
             });
-          if (!(await reinstall(checkout, main, commit, paths, logs, print)))
+          if (!options.sourceOnly && !(await reinstall(checkout, main, commit, paths, logs, print)))
             throw new Refusal('The main checkout install failed.');
           await resident.restart(checkout);
           if (interrupted) throw new Refusal('Publication interrupted.');
-          print('cp-sync: observing resident workers and gate outcomes for three minutes after publication.');
-          const after = await resident.observe(checkout, residentWindow());
-          print(`cp-sync: resident before ${JSON.stringify(before)}; after ${JSON.stringify(after)}`);
-          if (residentRegression(before, after))
-            throw new Refusal(
-              'Resident lost more than half of its live workers, or ordinary product landings pending before publication merged none.',
-            );
+          if (before) {
+            print('cp-sync: observing resident workers and gate outcomes for three minutes after publication.');
+            const after = await resident.observe(checkout, residentWindow());
+            print(`cp-sync: resident before ${JSON.stringify(before)}; after ${JSON.stringify(after)}`);
+            if (residentRegression(before, after))
+              throw new Refusal(
+                'Resident lost more than half of its live workers, or ordinary product landings pending before publication merged none.',
+              );
+          } else {
+            print('cp-sync: resident handoff completed; timed observations and functional acceptance remain deferred.');
+          }
         } catch (error) {
           print(`cp-sync: ${error instanceof Error ? error.message : String(error)}; rolling back.`);
           // Release this sync's lock before invoking the ordinary forward-only rollback transaction.
@@ -1032,13 +1050,14 @@ export async function rollback(options: Options = {}): Promise<number> {
           main: { previous: current, current: commit },
           paths,
           restores: target.main.previous,
+          ...(options.sourceOnly ? { acceptance: 'deferred' as const } : {}),
         });
         for (const update of published.updates)
           print(`cp-sync: moved ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
         for (const warning of published.warnings) print(`cp-sync: ${warning}`);
         const logs = join(state, 'cp-sync', `${stamp(now)}-rollback`);
         mkdirSync(logs, { recursive: true });
-        if (!(await reinstall(checkout, current, commit, paths, logs, print)))
+        if (!options.sourceOnly && !(await reinstall(checkout, current, commit, paths, logs, print)))
           throw new Refusal('The rolled-back checkout install failed.');
         await resident.restart(checkout);
         if (interrupted) throw new Refusal('Rollback interrupted.');
@@ -1065,7 +1084,7 @@ export async function rollback(options: Options = {}): Promise<number> {
         const logs = join(state, 'cp-sync', `${stamp(now)}-recovery`);
         try {
           mkdirSync(logs, { recursive: true });
-          await reinstall(checkout, failed, restored, paths, logs, print);
+          if (!options.sourceOnly) await reinstall(checkout, failed, restored, paths, logs, print);
         } finally {
           // An older installer may also have replaced the unit files. Restore them with the matching code.
           await resident.restart(checkout, { install: true });
@@ -1076,6 +1095,7 @@ export async function rollback(options: Options = {}): Promise<number> {
           paths,
           main: { previous: failed, current: restored },
           source: current,
+          ...(options.sourceOnly ? { acceptance: 'deferred' as const } : {}),
         });
         print('cp-sync: retained the published code with a running host; rollback failed.');
         return 1;
@@ -1089,14 +1109,15 @@ export async function rollback(options: Options = {}): Promise<number> {
 }
 
 const USAGE = `Usage: bun tools/goal/scripts/cp-sync.ts [--dry-run] [--rollback] [--include <path>]... [--keep-worktree]
-       [--full [--fresh-baseline]]
+       [--full [--fresh-baseline]] [--source-only]
 
 Checks dev's tools/goal on a temporary worktree of main (installs, type check, the candidate loaders against the live
 local settings and configured routing table, a CLI smoke against a copy of the live Goal state), then publishes it to
 main, stabilize and dev with one compare-and-swap and updates the main checkout's files. --full also runs the suite,
 which may only fail where unmodified main fails too; --fresh-baseline reruns main's suite instead of reusing its
 cached failures. --rollback restores the tools/goal of the main commit before the newest sync. --include also syncs a
-root path from dev.`;
+root path from dev. --source-only is for an authorized code-only window: publish through the same transaction and
+resident handoff, record checks/acceptance as deferred, and run no dependency installs or timed worker observations.`;
 
 export function parseArguments(args: readonly string[]): Options | undefined {
   const options: Options & { includes: string[] } = { includes: [] };
@@ -1104,6 +1125,7 @@ export function parseArguments(args: readonly string[]): Options | undefined {
     const arg = args[index];
     if (arg === '--dry-run') options.dryRun = true;
     else if (arg === '--rollback') options.rollback = true;
+    else if (arg === '--source-only') options.sourceOnly = true;
     else if (arg === '--keep-worktree') options.keepWorktree = true;
     else if (arg === '--fresh-baseline') options.freshBaseline = true;
     else if (arg === '--full') options.full = true;
