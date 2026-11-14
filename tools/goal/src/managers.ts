@@ -1534,8 +1534,11 @@ export class ManagerSessions {
     await this.transport.rebindCodexViewer(state, state.threadId!, client);
     state.goalState = await this.transport.getGoal(client, state.threadId!);
     if (idleWake) {
-      if (state.goalState?.status === 'paused')
+      if (state.goalState?.status === 'paused') {
+        // Native autonomy may start a turn as soon as the Goal becomes active.
+        await this.transport.applyModelOverride(client, state, state.threadId!);
         state.goalState = await this.transport.setGoalStatus(client, state.threadId!, 'active', 'automatic');
+      }
       if (state.goalState?.status !== 'active') {
         this.save(state);
         return;

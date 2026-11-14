@@ -224,6 +224,31 @@ test('a manager model override applies to its next turn on the same thread only'
   }
 });
 
+test('sets the configured model before a native Goal wake can start a turn', async () => {
+  let model: string | undefined;
+  const s = await setup(undefined, { autoStartGoalOnActive: true, codexManagerModel: () => model });
+  try {
+    const original = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: original.threadId, turn: { id: original.activeTurnId, status: 'completed' } },
+    });
+    await waitForPausedGoalSet(s, original.threadId!, 0);
+    const before = s.requests().length;
+    model = 'gpt-6-astra';
+    s.inbox.deliver({ managerId: s.spec.id, kind: 'instruction', summary: 'Continue' });
+    await s.managers.wake(s.spec.id);
+    await s.managers.flush();
+    const relevant = s.requests().slice(before).filter((r) =>
+      r.method === 'thread/settings/update' || r.method === 'thread/goal/set' && r.params.status === 'active');
+    expect(relevant.map((r) => r.method)).toEqual(['thread/settings/update', 'thread/goal/set']);
+    expect(relevant[0]?.params).toEqual({ threadId: original.threadId, model: 'gpt-6-astra', effort: 'high' });
+    expect(s.managers.get(s.spec.id).threadId).toBe(original.threadId);
+  } finally {
+    await s.close();
+  }
+});
+
 test('the Codex viewer resumes the thread on the remote endpoint without permission flags', async () => {
   const s = await setup();
   try {
