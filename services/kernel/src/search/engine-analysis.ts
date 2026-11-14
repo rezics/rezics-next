@@ -21,6 +21,8 @@ export type EngineAnalyzeRequest = Readonly<{
   filter?: readonly string[];
 }>;
 
+export type EngineAnalyzeManyRequest = Readonly<Omit<EngineAnalyzeRequest, 'text'> & { text: readonly string[] }>;
+
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -68,17 +70,72 @@ export async function analyzeInstalled(
   index: string | undefined,
   request: EngineAnalyzeRequest,
 ): Promise<readonly EngineToken[]> {
-  if (!request.text.isWellFormed()) throw new TypeError('Analysis text must be well-formed UTF-16');
+  const tokens = await readAnalysisTokens(search, index, request);
+  for (const token of tokens) sourceSpan(request.text, token);
+  return tokens;
+}
+
+/**
+ * Analyze independent values in one native multi-value request. OpenSearch flattens the tokens while adding
+ * cumulative UTF-16 offsets and positions; return one local token list per input, including duplicates and empties.
+ */
+export async function analyzeInstalledMany(
+  search: OpenSearch,
+  index: string | undefined,
+  request: EngineAnalyzeManyRequest,
+): Promise<readonly (readonly EngineToken[])[]> {
+  if (request.text.length === 0) return [];
+  const tokens = await readAnalysisTokens(search, index, request);
+  const starts: number[] = [];
+  let offset = 0;
+  for (let i = 0; i < request.text.length; i++) {
+    starts.push(offset);
+    offset += request.text[i]!.length + (i + 1 < request.text.length ? 1 : 0);
+  }
+  const values = request.text.map(() => [] as EngineToken[]);
+  for (const token of tokens) {
+    let low = 0;
+    let high = starts.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (starts[middle]! <= token.startOffset) low = middle + 1;
+      else high = middle;
+    }
+    const valueIndex = low - 1;
+    if (valueIndex < 0) unavailable();
+    const base = starts[valueIndex]!;
+    const text = request.text[valueIndex]!;
+    if (token.endOffset > base + text.length) unavailable();
+    const local = {
+      ...token,
+      startOffset: token.startOffset - base,
+      endOffset: token.endOffset - base,
+    };
+    sourceSpan(text, local);
+    values[valueIndex]!.push(local);
+  }
+  return values.map((group) => {
+    const firstPosition = group.reduce((first, token) => Math.min(first, token.position), Number.MAX_SAFE_INTEGER);
+    return group.map((token) => ({ ...token, position: token.position - firstPosition }));
+  });
+}
+
+type AnalysisRequest = Omit<EngineAnalyzeRequest, 'text'> & { text: string | readonly string[] };
+
+async function readAnalysisTokens(
+  search: OpenSearch,
+  index: string | undefined,
+  request: AnalysisRequest,
+): Promise<readonly EngineToken[]> {
+  const texts = typeof request.text === 'string' ? [request.text] : request.text;
+  if (texts.some((text) => !text.isWellFormed())) throw new TypeError('Analysis text must be well-formed UTF-16');
   const path = index ? `/${index}/_analyze` : '/_analyze';
   let response: { status: number; body: unknown };
   try {
+    const { text, ...options } = request;
     response = await search.request<unknown>('POST', path, {
-      text: request.text,
-      ...(request.analyzer === undefined ? {} : { analyzer: request.analyzer }),
-      ...(request.normalizer === undefined ? {} : { normalizer: request.normalizer }),
-      ...(request.tokenizer === undefined ? {} : { tokenizer: request.tokenizer }),
-      ...(request.char_filter === undefined ? {} : { char_filter: [...request.char_filter] }),
-      ...(request.filter === undefined ? {} : { filter: [...request.filter] }),
+      ...options,
+      text: Array.isArray(text) ? [...text] : text,
     });
   } catch (error) {
     if (error instanceof SearchUnavailableError) throw error;
@@ -100,7 +157,6 @@ export async function analyzeInstalled(
     tokens.some(({ token }) => token.length === 0)
   )
     unavailable();
-  for (const token of tokens) sourceSpan(request.text, token);
   return tokens;
 }
 

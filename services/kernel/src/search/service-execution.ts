@@ -38,7 +38,7 @@ import {
   createSearchIndexRequest,
   runSearchSource,
 } from './disclosure-application.ts';
-import { analyzeInstalled } from './engine-analysis.ts';
+import { analyzeInstalledMany } from './engine-analysis.ts';
 import { admitFacetCreditQualifiers, admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
@@ -278,7 +278,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     preparePublic,
     suggestionWorkContext,
     disclosure = createSearchDisclosureApplication({
-      analyze: (index, analyzer, text) => analyzeInstalled(client, index, { analyzer, text }),
+      analyze: (index, analyzer, texts) => analyzeInstalledMany(client, index, { analyzer, text: texts }),
     }),
     facetAccess,
     library,

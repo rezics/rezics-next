@@ -526,6 +526,11 @@ for terms/phrases, names for prefixes. Witnesses are true; absence requires comp
 Tokenless queries are false. The current-filter algebra preserves unknown through NOT/AND/OR; false decides AND,
 true decides OR. Disclosure retains decided hits and flags unknown text. Search/suggest require readiness for unknown: it cannot disclose, certify empty/exhausted pages, counts/facets or advance continuations.
 Omitted aliases supply no evidence.
+Decision: current disclosure sends distinct current names/descriptions and parsed query leaves through OpenSearch's
+multi-value Analyze API in 4 KiB analyzed-text batches; an admitted value larger than one batch stands alone.
+Cumulative UTF-16 offsets are mapped back to each input and token positions restart per value, so phrases stay within
+their original value. A 32 KiB current scan plus the 512-byte query limit needs at most nine requests per analyzer
+per Subject; each response keeps the 4,096-token cap and concurrency stays 16.
 `cjk_bigram_v2` and `name_prefix` omit empty terms: an empty returned token is unavailable, since accepting it
 would let an empty prefix match every current name. This boundary rule does not reject empty normalized keys.
 The native CJK case independently re-reads current source text before the writer catches up, checks that retired

@@ -88,7 +88,7 @@ export { observeComposedSlot, type ObservedSlotResult } from '../presentation/ht
 export { uniqueCanonicalRows } from '../presentation/slot-bodies.ts';
 
 import type { OpenSearch } from './opensearch.ts';
-import { analyzeInstalled } from './engine-analysis.ts';
+import { analyzeInstalledMany } from './engine-analysis.ts';
 import { createSearchDisclosureApplication } from './disclosure-application.ts';
 export type { SearchDisclosureApplication } from './disclosure-application.ts';
 
@@ -104,6 +104,6 @@ export { createNativeLibraryScopeWork } from './adapters/index.ts';
 /** Complete native application: one installed instance owns matching, owner hydration, concept admission and final disclosure. */
 export function createNativeSearchDisclosure(search: OpenSearch) {
   return createSearchDisclosureApplication({
-    analyze: (index, analyzer, text) => analyzeInstalled(search, index, { analyzer, text }),
+    analyze: (index, analyzer, texts) => analyzeInstalledMany(search, index, { analyzer, text: texts }),
   });
 }

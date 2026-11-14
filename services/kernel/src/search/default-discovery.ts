@@ -47,7 +47,7 @@ import {
 } from './generations.ts';
 import { discoveryIndexName } from './indices.ts';
 import { createSearchDisclosureApplication } from './disclosure-application.ts';
-import { analyzeInstalled } from './engine-analysis.ts';
+import { analyzeInstalledMany } from './engine-analysis.ts';
 import type { SearchDisclosureApplication } from './disclosure-application.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
 import { createFreshness } from './freshness.ts';
@@ -264,7 +264,7 @@ export function createDefaultDiscoverySearch(
   const disclosureApplication =
     config.disclosure ??
     createSearchDisclosureApplication({
-      analyze: (index, analyzer, text) => analyzeInstalled(config.search, index, { analyzer, text }),
+      analyze: (index, analyzer, texts) => analyzeInstalledMany(config.search, index, { analyzer, text: texts }),
     });
   const textDisclosures = new Map<string, ReturnType<SearchDisclosureApplication['currentText']>>();
   const currentTextMatches = (physicalTarget: string, subject: IndexedSubject, query: TextNode) => {
