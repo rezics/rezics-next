@@ -95,6 +95,44 @@ export function admitClassificationObservation(
   if (current && next.payload.asOf < current.payload.asOf) throw new ProblemError('conflict');
   return 'changed';
 }
+type CapturedSourceClassificationMutation = Readonly<{
+  actor: Actor;
+  association: ClassificationAssociation;
+  expectedObservation: string | null;
+  idempotencyKey: string;
+  deadline: number;
+  next: ImmutableClassificationObservation;
+  key: string;
+  route: number;
+  cleared: boolean;
+}>;
+function captureSourceClassificationMutation(
+  input: CommonCommand,
+  value: ClassificationPayload,
+): CapturedSourceClassificationMutation {
+  const actor = input.actor;
+  if (actor.kind !== 'account') throw new GrantDeniedError();
+  const expectedObservation = input.expectedObservation;
+  if (expectedObservation !== null && !/^[0-9a-f]{64}$/.test(expectedObservation))
+    throw new TypeError('Explicit expectedObservation digest or null is required');
+  const association = Object.freeze({ ...input.association });
+  const key = classificationAssociationKey(association);
+  const next = classificationObservation(association, value);
+  const cleared = 'cleared' in next.payload;
+  const route = routeOf(association.subjectId);
+  if (route === null || routeOf(association.candidateId) !== route) throw new ProblemError('not_found');
+  return Object.freeze({
+    actor,
+    association,
+    expectedObservation,
+    idempotencyKey: input.idempotencyKey,
+    deadline: input.deadline,
+    next,
+    key,
+    route,
+    cleared,
+  });
+}
 function tupleKey(tuple: SourceFenceTuple) {
   return JSON.stringify([tuple.route, tuple.source, tuple.external_id, tuple.field_group]);
 }
@@ -220,22 +258,14 @@ export function createSourceClassificationProducer(config: SourceClassificationC
   ): Promise<SourceClassificationRead> {
     return (await readBatch({ ...input, associations: [input.association], limit: 1 }))[0]!;
   }
-  async function mutate(input: CommonCommand & { value: ClassificationPayload }) {
-    if (input.actor.kind !== 'account') throw new GrantDeniedError();
-    if (input.expectedObservation !== null && !/^[0-9a-f]{64}$/.test(input.expectedObservation))
-      throw new TypeError('Explicit expectedObservation digest or null is required');
-    const association = { ...input.association };
-    const key = classificationAssociationKey(association);
-    const next = classificationObservation(association, input.value);
-    const cleared = 'cleared' in next.payload;
-    const route = routeOf(association.subjectId);
-    if (route === null || routeOf(association.candidateId) !== route) throw new ProblemError('not_found');
+  async function mutate(intent: CapturedSourceClassificationMutation) {
+    const { actor, association, expectedObservation, idempotencyKey, deadline, next, key, route, cleared } = intent;
     const writer = await accessCommandAuthorization(
       config.access,
-      input.actor,
+      actor,
       SOURCE_CLASSIFICATION_WRITE_ACTION,
       root,
-      { pool: config.pool, deadline: input.deadline },
+      { pool: config.pool, deadline },
       () => new GrantDeniedError(),
     );
     // Core calls prepare without a target checkout, then authorize before every receipt lookup,
@@ -248,8 +278,8 @@ export function createSourceClassificationProducer(config: SourceClassificationC
         const writerEvidence = await writer.prepare?.(attempt);
         const subjectIdentity = await identityEpochStore().readMapping(config.pool, association.subjectId);
         if (cleared) return { writerEvidence, subjectIdentity };
-        const semantic = (await observe(input.actor, [association], input.deadline)).get(key);
-        const fence = (await fences([tuple(next.payload)], input.deadline)).get(tupleKey(tuple(next.payload)));
+        const semantic = (await observe(actor, [association], deadline)).get(key);
+        const fence = (await fences([tuple(next.payload)], deadline)).get(tupleKey(tuple(next.payload)));
         return { writerEvidence, subjectIdentity, semantic, fence };
       },
       async authorize(tx, attempt, evidence) {
@@ -284,15 +314,15 @@ export function createSourceClassificationProducer(config: SourceClassificationC
     return (ratingCapabilities(config).command ?? runCommand)(
       config.pool,
       {
-        ...principalCommandIdentity(input.actor),
+        ...principalCommandIdentity(actor),
         partition: partitionOf(route),
-        deadline: input.deadline,
+        deadline,
         ...(config.clock ? { clock: config.clock } : {}),
         authorization,
         receipt: {
           kind: cleared ? 'rating.source_classification.clear' : 'rating.source_classification.put',
-          key: input.idempotencyKey,
-          digest: Buffer.from(classificationDigest([association, next.payload, input.expectedObservation]), 'hex'),
+          key: idempotencyKey,
+          digest: Buffer.from(classificationDigest([association, next.payload, expectedObservation]), 'hex'),
         },
       },
       async (tx, command) => {
@@ -302,7 +332,7 @@ export function createSourceClassificationProducer(config: SourceClassificationC
           observationDigest: next.digest,
           state: cleared ? 'cleared' : 'published',
         };
-        if (admitClassificationObservation(next, current, input.expectedObservation) === 'identical')
+        if (admitClassificationObservation(next, current, expectedObservation) === 'identical')
           return noEffect(value);
         // A retained clear cannot silently rebind an existing slot to an unrelated source record.
         if (
@@ -333,23 +363,26 @@ export function createSourceClassificationProducer(config: SourceClassificationC
     );
   }
   async function put(input: PutSourceClassification) {
-    validateClassificationObservation(input.value);
-    const outcome = await mutate(input);
+    const value = input.value;
+    validateClassificationObservation(value);
+    const intent = captureSourceClassificationMutation(input, value);
+    const outcome = await mutate(intent);
     const read = await readExact({
-      actor: input.actor,
-      subjectId: input.association.subjectId,
-      association: input.association,
-      deadline: input.deadline,
+      actor: intent.actor,
+      subjectId: intent.association.subjectId,
+      association: intent.association,
+      deadline: intent.deadline,
     });
     if (read.state !== 'available' || read.value.observation.digest !== outcome.value.observationDigest)
       throw new ProblemError('not_found', { effectStatus: 'not_applicable' });
     return { ...outcome, value: { ...outcome.value, figure: read.value } };
   }
   async function clear(input: ClearSourceClassification) {
-    validateClassificationClear(input.value);
+    const value = input.value;
+    validateClassificationClear(value);
     // Deliberately no public Semantic/fence read: current writer authority can clear a retained slot
     // after retraction, concealment or takedown. The exact association and CAS still apply.
-    return mutate(input);
+    return mutate(captureSourceClassificationMutation(input, value));
   }
   return { put, clear, readExact, readBatch };
 }
