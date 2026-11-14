@@ -170,8 +170,35 @@ Semantic snapshots finish before the observer returns and before Library can ope
 Decision: Semantic publishes one native, ID-independent home-position basis and exact one-hop title batches; Content
 continues to own viewer disclosure and composes its own current source evidence.
 
+Decision: title provenance rides the same exact title batch and whole-source basis, retaining each label's current
+term support and the selected Global original-language candidate/revision; verified native and agent origins remain
+explicit, incomplete bindings are unavailable, and imported tuples use Semantic's native tuple routing.
+
+`adapters/title-inputs-provenance.ts` exposes
+`createSemanticTitleProvenanceAdapter(pool, routeKey)`. It returns each exact original, one-hop terminal, identity
+epoch and terminal revision, plus a value-matched binding for every current label and the selected Global
+`schema:inLanguage` statement. Label support is the current term head's exact support revision, slot and sequence;
+original-language support is the selected compact fact or adopted candidate and its exact revision. Selection keeps
+the existing Global adoption, rank, visibility, hidden-candidate, retraction and lifecycle rules. A present source
+revision with null `source` is native; the closed `{kind: 'agent', subject}` source remains agent provenance. Missing
+revision/source evidence, malformed origins, value mismatch, redirect drift or incomplete binding bytes return
+`unavailable`. Imported Source metadata is carried only when read from that exact support revision; its tuple route
+comes from `importedTupleRouteOf(pool)` and the supplied route key. Semantic does not read Content fences or make an
+Access decision; Content still reads the returned tuples through `readFences` before title installation.
+
+The provenance adapter reuses the existing title observer and its basis, with no second title value reader or clock.
+For a nonempty observation, the title observer takes its ordinary two complete basis snapshots around the bounded
+title batch. The keyed provenance snapshot follows, then an empty observation checks the same basis after that read;
+all four basis snapshots must agree before the adapter returns. Empty input takes only the ordinary two basis
+snapshots and no batch statement. The source snapshot touches at most 100 terminal Subject keys, returns at most 100
+Subject rows, and uses one exact partition-admission statement plus one provenance statement per touched terminal
+home. Its support map is capped at 16,384 bytes per terminal; oversized support is marked incomplete instead of
+truncated. It joins one exact support revision for each current label and at most one for the selected
+original-language candidate; these keyed joins do not read revision history. The final provenance result is capped
+at 1 MiB. There is no per-Subject HTTP. Content and Library transactions begin only after the adapter has returned.
+
 Import boundary: the adapter and native reader use title contracts through `contract/index.ts` and partition reads
-through `database/pool.ts`; the existing focused acceptance stays unchanged because this repair changes no behavior.
+through `database/pool.ts`; Content's integrated receiver remains the acceptance owner for source-fence composition.
 
 ## Canonical identity boundary
 

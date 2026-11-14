@@ -56,3 +56,12 @@ export {
 export type { LibrarySubjectIdentityAdapter, LibrarySubjectReferenceResult } from './library-presentation.ts';
 export { createNativeLibraryObservationAdapter } from './library-observation.ts';
 export type { LibrarySubjectIdentityContext } from './library-presentation.ts';
+export {
+  createSemanticTitleProvenanceAdapter,
+  type SemanticTitleFieldBinding,
+  type SemanticTitleProvenance,
+  type SemanticTitleProvenanceEntry,
+  type SemanticTitleProvenanceObservation,
+  type SemanticTitleProvenanceOrigin,
+  type SemanticTitleProvenanceSupport,
+} from './title-inputs-provenance.ts';
