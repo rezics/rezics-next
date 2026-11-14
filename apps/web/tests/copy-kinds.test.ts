@@ -67,17 +67,21 @@ import fixtures from '../src/kernel/fixtures.json';
 import { loadCopiesPage, removeCopy, saveCopy } from '../src/library/copies-read';
 import { csrfTokenFromRequest } from '../src/session/csrf';
 
+const routerExports = { ...(await import('@tanstack/react-router')) };
 mock.module('../src/library/copies-actions', () => ({
   createCopy() {},
   updateCopy() {},
   deleteCopy() {},
   readCopySubject() {},
+  readCopyDetail() {},
+  undoCopy() {},
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({}) }));
 mock.module('../src/kernel/exposure', () => ({
   Exposure: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
 }));
 mock.module('@tanstack/react-router', () => ({
+  ...routerExports,
   Link: ({ children }: { children: ReactNode }) => createElement('a', null, children),
   notFound: () => new Error('not found'),
 }));

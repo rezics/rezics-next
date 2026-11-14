@@ -176,3 +176,70 @@ test('a distant subtree move writes one native draft revision with the same occu
   for (const chapter of structure.placements.slice(1))
     expect(revisions[0]!.placements.find((entry) => entry.occurrenceId === chapter.occurrenceId)).toEqual(chapter);
 });
+
+test('language association resolves the admitted exact source and retains original native CAS/key on unknown recovery', async () => {
+  const calls: {
+    catalogueId: string;
+    occurrenceId: string;
+    body: import('../src/studio/hosted-contract').HostedBindLanguage;
+    key: string;
+  }[] = [];
+  const later = { ...structure, revision: { ...structure.revision, revisionId: publicationRevisionId } };
+  const missing = async () => ({ ok: false as const, error: { kind: 'unavailable' as const, message: 'Unused' } });
+  const native: HostedBookNative = {
+    listHistory: missing,
+    listOwn: missing,
+    readOwn: missing,
+    read: async () => ok(structure),
+    create: missing,
+    revise: missing,
+    publish: missing,
+    bindLanguage: async (catalogueId, occurrenceId, body, key) => {
+      calls.push(structuredClone({ catalogueId, occurrenceId, body, key }));
+      return calls.length === 1 ? { ok: false, error: { kind: 'uncertain', message: 'Unknown' } } : ok(later);
+    },
+  };
+  const exact = { postId: firstPostId, revisionId: secondPostRevisionId, sha256: 'b'.repeat(64) };
+  let resolutions = 0;
+  const adapter = new HostedBookAdapter(
+    native,
+    () => true,
+    async (document) => {
+      resolutions++;
+      return ok({ threadId, ...document });
+    },
+  );
+  const signal = new AbortController().signal;
+  await adapter.load(catalogueId, signal);
+  const input = {
+    catalogueId,
+    expectedRevision: structureRevisionId,
+    idempotencyKey: '019a8c75-4e19-8d2f-8a36-94dd410dd880',
+    change: {
+      kind: 'bind-language' as const,
+      occurrenceId: firstChapterId,
+      language: 'fr',
+      title: 'Ouverture',
+      document: exact,
+      makeDefault: false,
+    },
+  };
+  expect((await adapter.change(input, signal)).ok).toBe(false);
+  expect(adapter.hasUnresolvedCommand()).toBe(true);
+  expect((await adapter.change(input, signal)).ok).toBe(true);
+  expect(calls).toHaveLength(2);
+  expect(calls[1]).toEqual(calls[0]);
+  expect(resolutions).toBe(1);
+  expect(calls[0]!.body).toEqual({
+    expectedRevisionId: structureRevisionId,
+    language: 'fr',
+    title: 'Ouverture',
+    target: { threadId, ...exact },
+    makeDefault: false,
+  });
+  expect(adapter.currentStructure()?.placements[1]?.target).toEqual({
+    kind: 'chapter',
+    document: { postId: firstPostId, revisionId: firstPostRevisionId, sha256: digest },
+  });
+  expect(adapter.currentStructure()?.revision).toBe(publicationRevisionId);
+});

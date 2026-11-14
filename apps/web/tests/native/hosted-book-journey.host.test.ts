@@ -1218,6 +1218,7 @@ nativeTest(
               catalogueId: string;
               publicationRevisionId: string;
               occurrenceId: string;
+              targetPostId: string;
               targetRevisionId: string;
               targetSha256: string;
               documentPosition: { blockId: string; offset: number } | null;
@@ -1230,6 +1231,7 @@ nativeTest(
               catalogueId: control!.catalogueId,
               publicationRevisionId: currentReleaseRevisionId,
               occurrenceId: control!.occurrenceId,
+              targetPostId: control!.chapter.postId,
               targetRevisionId: control!.chapter.revisionId,
               targetSha256: control!.chapter.sha256,
               documentPosition: { blockId: visibleBlockId, offset: 0 },

@@ -65,11 +65,12 @@ const saved: Extract<CheckpointView, { state: 'saved' }> = {
     catalogueId: id(1),
     publicationRevisionId: id(3),
     occurrenceId: id(4),
+    targetPostId: id(5),
     targetRevisionId: id(6),
     targetSha256: 'a'.repeat(64),
     documentPosition: { blockId: 'before', offset: 73 },
   },
-  resume: { availability: 'available', title: 'Previously saved chapter' },
+  resume: { availability: 'available', title: 'Previously saved chapter', targetPostId: id(5) },
 };
 const none: CheckpointView = { state: 'none', subjectId: id(7) };
 const observation = (value: CheckpointView = saved): CheckpointObservation => ({
@@ -203,7 +204,15 @@ test('lost save replays its original sender, envelope, exact body, CAS and posit
   const link = host.querySelector('a')!;
   const href = new URL(link.href);
   expect(href.pathname).toBe(`/en/books/${id(1)}/read`);
-  expect([...href.searchParams.keys()].sort()).toEqual(['occurrence', 'release', 'subject', 'view']);
+  expect([...href.searchParams.keys()].sort()).toEqual([
+    'bodyPost',
+    'bodyRevision',
+    'bodySha256',
+    'occurrence',
+    'release',
+    'subject',
+    'view',
+  ]);
   expect(href.hash).toBe('');
 });
 
@@ -227,7 +236,13 @@ test('unknown clear retains its supplied saved chapter, replays CAS and confirms
   expect(document.activeElement).toBe(host.querySelector('[role="status"]'));
 });
 
-for (const variation of ['conflict', 'different-digest', 'different-position', 'clear-still-saved'] as const) {
+for (const variation of [
+  'conflict',
+  'different-digest',
+  'different-language',
+  'different-position',
+  'clear-still-saved',
+] as const) {
   test(`${variation} requires explicit current-reading recovery and never claims the original action succeeded`, async () => {
     await mount({
       read: async () => observation(),
@@ -238,14 +253,16 @@ for (const variation of ['conflict', 'different-digest', 'different-position', '
               state: 'ready',
               value: {
                 ...saved,
-                resume: { availability: 'available', title: 'Independent current chapter' },
+                resume: { availability: 'available', title: 'Independent current chapter', targetPostId: id(5) },
                 address:
                   request.data.command.kind === 'save'
                     ? {
                         ...request.data.command.address,
                         ...(variation === 'different-digest'
                           ? { targetSha256: 'b'.repeat(64) }
-                          : { documentPosition: null }),
+                          : variation === 'different-language'
+                            ? { bodyLanguage: 'ja' }
+                            : { documentPosition: null }),
                       }
                     : saved.address,
               },
@@ -265,6 +282,32 @@ for (const variation of ['conflict', 'different-digest', 'different-position', '
     expect(props.reload).toHaveBeenCalledTimes(1);
   });
 }
+
+test('saving and resuming a language retains its full exact body while another language cannot restore its position', async () => {
+  const selected: BookChapterPage = {
+    ...page,
+    address: { ...page.address, selection: { ...page.address.selection, bodyLanguage: 'zh-Hant' } },
+  };
+  const checkpoint = { ...saved, address: { ...saved.address, bodyLanguage: 'zh-Hant' } };
+  const write = mock(async (request: CheckpointDispatch) => acknowledgement(request));
+  await mount({ read: async () => observation(checkpoint), write });
+  await render({ page: selected });
+  const href = new URL(host.querySelector('a')!.href);
+  expect(href.searchParams.get('bodyLanguage')).toBe('zh-Hant');
+  expect(href.searchParams.get('bodyPost')).toBe(id(5));
+  expect(href.searchParams.get('bodyRevision')).toBe(id(6));
+  expect(href.searchParams.get('bodySha256')).toBe('a'.repeat(64));
+  await click(button(m.book_reader_checkpoint_save()));
+  const command = write.mock.calls[0]![0].data.command;
+  if (command.kind !== 'save') throw new Error('Expected save');
+  expect(command.address.bodyLanguage).toBe('zh-Hant');
+  const { matchesCheckpointChapter } = await import('../src/books/reader/checkpoint-position');
+  expect(matchesCheckpointChapter(saved.address, selected)).toBe(true);
+  expect(matchesCheckpointChapter(checkpoint.address, selected)).toBe(true);
+  expect(matchesCheckpointChapter({ ...checkpoint.address, bodyLanguage: 'ja' }, selected)).toBe(false);
+  expect(matchesCheckpointChapter({ ...checkpoint.address, targetPostId: id(9) }, selected)).toBe(false);
+  expect(matchesCheckpointChapter(saved.address, selected)).toBe(false);
+});
 
 test('failed checkpoint read retries only its original reading operands, preserves a Library edit and focuses its result', async () => {
   let reads = 0;

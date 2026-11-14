@@ -34,7 +34,14 @@ async function resolve(
       deps,
       address.catalogueId,
       address.occurrenceId,
-      { revisionId: address.publicationRevisionId, kind: 'publication' },
+      {
+        revisionId: address.publicationRevisionId,
+        kind: 'publication',
+        targetPostId: address.targetPostId,
+        targetRevisionId: address.targetRevisionId,
+        targetSha256: address.targetSha256,
+        ...(address.bodyLanguage === undefined ? {} : { language: address.bodyLanguage }),
+      },
       { actor, deadline },
     );
     const occurrence = result.value.occurrence;
@@ -42,6 +49,7 @@ async function resolve(
     if (occurrence.availability !== 'available' || occurrence.kind !== 'chapter' || !result.value.document)
       return unavailable(address.occurrenceId, occurrence.kind);
     if (
+      (address.bodyLanguage !== undefined && occurrence.selectedLanguage !== address.bodyLanguage) ||
       occurrence.target.postId !== address.targetPostId ||
       occurrence.target.revisionId !== address.targetRevisionId ||
       occurrence.target.sha256 !== address.targetSha256 ||
@@ -55,6 +63,7 @@ async function resolve(
       position: occurrence.position,
       kind: 'chapter',
       title: occurrence.title,
+      ...(occurrence.selectedLanguage == null ? {} : { bodyLanguage: occurrence.selectedLanguage }),
       target: occurrence.target,
       document: result.value.document,
     };
@@ -93,6 +102,7 @@ export function createNativeHostedReadingPort(deps: HostedDependencies): HostedR
           targetPostId: resume.target.postId,
           targetRevisionId: resume.target.revisionId,
           targetSha256: resume.target.sha256,
+          ...(selection.bodyLanguage === undefined ? {} : { bodyLanguage: selection.bodyLanguage }),
           documentPosition: selection.documentPosition,
         },
       };
@@ -108,7 +118,14 @@ export function createNativeHostedReadingPort(deps: HostedDependencies): HostedR
           deps,
           address.catalogueId,
           address.occurrenceId,
-          { revisionId: address.publicationRevisionId, kind: 'publication' },
+          {
+            revisionId: address.publicationRevisionId,
+            kind: 'publication',
+            targetPostId: address.targetPostId,
+            targetRevisionId: address.targetRevisionId,
+            targetSha256: address.targetSha256,
+            ...(address.bodyLanguage === undefined ? {} : { language: address.bodyLanguage }),
+          },
           { actor: actor as Actor, deadline },
         );
         const occurrence = result.value.occurrence;
@@ -118,6 +135,7 @@ export function createNativeHostedReadingPort(deps: HostedDependencies): HostedR
           return hostedReadingUnavailable(address.occurrenceId, occurrence.kind);
         if (occurrence.kind !== 'chapter') return hostedReadingUnavailable(address.occurrenceId, 'part');
         if (
+          (address.bodyLanguage !== undefined && occurrence.selectedLanguage !== address.bodyLanguage) ||
           occurrence.target.postId !== address.targetPostId ||
           occurrence.target.revisionId !== address.targetRevisionId ||
           occurrence.target.sha256 !== address.targetSha256
@@ -130,6 +148,7 @@ export function createNativeHostedReadingPort(deps: HostedDependencies): HostedR
           position: occurrence.position,
           kind: 'chapter',
           title: occurrence.title,
+          ...(occurrence.selectedLanguage == null ? {} : { bodyLanguage: occurrence.selectedLanguage }),
           target: occurrence.target,
         };
       } catch (error) {

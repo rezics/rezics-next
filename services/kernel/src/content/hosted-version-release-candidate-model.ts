@@ -1,5 +1,5 @@
 import type { HostedPublicationStagingSeal } from './hosted-publication-staging-model.ts';
-import type { HostedChapterTarget } from './hosted-chapters-model.ts';
+import type { HostedChapterTarget, HostedChapterLanguages } from './hosted-chapters-model.ts';
 import type { HostedVersionSnapshot } from './hosted-version-model.ts';
 
 export const HOSTED_VERSION_RELEASE_CANDIDATE_PAGE_MAX = 20;
@@ -23,6 +23,7 @@ export type HostedVersionReleaseCandidateValue = Readonly<{
   subtreeHeight: number;
   chapterCount: bigint;
   target: HostedChapterTarget | null;
+  bodyLanguages?: HostedChapterLanguages;
 }>;
 
 export type HostedVersionReleaseCandidateProgress = Readonly<{

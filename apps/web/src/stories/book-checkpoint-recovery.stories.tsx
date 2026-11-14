@@ -32,11 +32,16 @@ function recoveryTransport(
       catalogueId: chapter.publication.id,
       publicationRevisionId: chapter.publication.releaseRevisionId!,
       occurrenceId: chapter.selection.occurrenceId,
+      targetPostId: chapter.selection.body.postId,
       targetRevisionId: chapter.selection.body.revisionId,
       targetSha256: chapter.selection.body.sha256,
       documentPosition: { blockId: 'opening', offset: 73 },
     },
-    resume: { availability: 'available', title: 'Dawn / 黎明 · The observatory and the long journey home' },
+    resume: {
+      availability: 'available',
+      title: 'Dawn / 黎明 · The observatory and the long journey home',
+      targetPostId: chapter.selection.body.postId,
+    },
   };
   let value: CheckpointView =
     scenario === 'saved' || scenario === 'unknown-clear' ? saved : { state: 'none', subjectId: ids.post };

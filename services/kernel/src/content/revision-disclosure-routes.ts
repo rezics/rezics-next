@@ -10,7 +10,7 @@ import { problemSchema } from '../http/problem-schema.ts';
 import { customMethod, defineRateLimit } from '../http/route-metadata.ts';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { contentRequestId } from './adapters/bind.ts';
-import type { hostedDraftConversionRoutes } from './hosted-draft-conversion-routes.ts';
+import type { knowledgeRoutes } from './knowledge-routes.ts';
 import { strictContentSchema } from './schema-validation.ts';
 import {
   ContentNotFoundError as CommandNotFoundError,
@@ -148,7 +148,7 @@ async function boundRevoke(
 
 /** Mount issue and revoke on the source Post. Catalogue routes do not admit these commands. */
 export function revisionDisclosureRoutes(
-  app: ReturnType<typeof hostedDraftConversionRoutes>,
+  app: ReturnType<typeof knowledgeRoutes>,
   dependencies: RevisionDisclosureDependencies,
 ) {
   return app

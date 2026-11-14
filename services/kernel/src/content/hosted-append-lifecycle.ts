@@ -6,6 +6,8 @@ import authority from './hosted-append-lifecycle-authority.sql';
 import revisions from './hosted-append-lifecycle-revisions.sql';
 import placements from './hosted-append-lifecycle-placements.sql';
 import stream from './hosted-append-lifecycle-stream.sql';
+import languageFacts from './hosted-language-lifecycle-facts.sql';
+import languageSnapshots from './hosted-language-lifecycle-snapshots.sql';
 
 /** Internal native-work receiving seam. No scheduler, HTTP or erasure initiation.
  * An exact author/anchor pair is required even when the account home differs.
@@ -23,6 +25,16 @@ export type HostedLifecycleStreamCursor = Readonly<{
   /** Captured only by the self-base inventory, never a dependent watermark. */
   highWater: string;
   afterOffset: string;
+}>;
+export type HostedLifecycleLanguageFactCursor = Readonly<{
+  afterOccurrence: string | null;
+  afterLanguage: string | null;
+  afterVersion: string | null;
+}>;
+export type HostedLifecycleLanguageSnapshotCursor = Readonly<{
+  afterNamespace: string | null;
+  afterOccurrence: string | null;
+  afterLanguage: string | null;
 }>;
 
 export type HostedLifecycleRevision = Readonly<{
@@ -61,14 +73,17 @@ type AppendRow = PlacementRow & { append_offset: string };
 type PageRequest =
   | { kind: 'revisions'; cursor: HostedLifecycleRevisionCursor }
   | { kind: 'placements'; cursor: HostedLifecyclePlacementCursor }
-  | { kind: 'stream'; cursor: HostedLifecycleStreamCursor };
+  | { kind: 'stream'; cursor: HostedLifecycleStreamCursor }
+  | { kind: 'language-facts'; cursor: HostedLifecycleLanguageFactCursor }
+  | { kind: 'language-snapshots'; cursor: HostedLifecycleLanguageSnapshotCursor }
+  | { kind: 'ordered-generations' | 'ordered-titles'; cursor: unknown };
 
 /** Each call owns one catalogue-home command and releases its connection before
  * returning. Native partition epoch, deadline, retry and receipt semantics apply.
  * Authorization precedes even receipt replay; a caller cannot invent eligibility
  * with an account-erasure boolean or a changed hosted head. No title is returned.
  */
-function executePage<T>(
+export function executeHostedLifecyclePage<T>(
   pool: Pool,
   anchor: HostedLifecycleAnchor,
   request: PageRequest,
@@ -143,7 +158,7 @@ export function pageHostedLifecycleRevisions(
 ) {
   anchor = structuredClone(anchor);
   cursor = structuredClone(cursor);
-  return executePage<HostedLifecyclePage<HostedLifecycleRevision, HostedLifecycleRevisionCursor>>(
+  return executeHostedLifecyclePage<HostedLifecyclePage<HostedLifecycleRevision, HostedLifecycleRevisionCursor>>(
     pool,
     anchor,
     { kind: 'revisions', cursor },
@@ -192,7 +207,7 @@ export function redactHostedLifecyclePlacements(
 ) {
   anchor = structuredClone(anchor);
   cursor = structuredClone(cursor);
-  return executePage<HostedLifecyclePage<HostedLifecyclePlacement, HostedLifecyclePlacementCursor>>(
+  return executeHostedLifecyclePage<HostedLifecyclePage<HostedLifecyclePlacement, HostedLifecyclePlacementCursor>>(
     pool,
     anchor,
     { kind: 'placements', cursor },
@@ -235,7 +250,7 @@ export function redactHostedLifecycleStream(
 ) {
   anchor = structuredClone(anchor);
   cursor = structuredClone(cursor);
-  return executePage<HostedLifecyclePage<HostedLifecycleAppend, HostedLifecycleStreamCursor>>(
+  return executeHostedLifecyclePage<HostedLifecyclePage<HostedLifecycleAppend, HostedLifecycleStreamCursor>>(
     pool,
     anchor,
     { kind: 'stream', cursor },
@@ -267,4 +282,98 @@ export function redactHostedLifecycleStream(
       };
     },
   );
+}
+
+/** Published language snapshots own their copied labels; all temporal draft facts may be redacted. */
+export function redactHostedLifecycleLanguageFacts(
+  pool: Pool,
+  anchor: HostedLifecycleAnchor,
+  cursor: HostedLifecycleLanguageFactCursor,
+  context: HostedLifecycleContext,
+) {
+  anchor = structuredClone(anchor);
+  cursor = structuredClone(cursor);
+  return executeHostedLifecyclePage<
+    HostedLifecyclePage<
+      Readonly<{ occurrenceId: string; language: string; version: string; changed: boolean }>,
+      HostedLifecycleLanguageFactCursor
+    >
+  >(pool, anchor, { kind: 'language-facts', cursor }, context, async (tx, route) => {
+    const parameters = {
+      route,
+      catalogue_id: anchor.catalogueId,
+      after_occurrence: cursor.afterOccurrence,
+      after_language: cursor.afterLanguage,
+      after_version: cursor.afterVersion,
+    };
+    const rows = (
+      await tx.query<{ occurrence_id: string; language: string; version: string; changed: boolean }>(
+        languageFacts.sql,
+        languageFacts.params.map((name) => parameters[name as keyof typeof parameters]),
+      )
+    ).rows;
+    const last = rows.at(-1);
+    return {
+      changed: rows.some((row) => row.changed),
+      value: {
+        items: rows.map((row) => ({
+          occurrenceId: row.occurrence_id,
+          language: row.language,
+          version: row.version,
+          changed: row.changed,
+        })),
+        next:
+          rows.length === 100 && last
+            ? { afterOccurrence: last.occurrence_id, afterLanguage: last.language, afterVersion: last.version }
+            : null,
+      },
+    };
+  });
+}
+
+/** Raw pages also include public rows, so eligibility filtering never restarts a namespace scan. */
+export function redactHostedLifecycleLanguageSnapshots(
+  pool: Pool,
+  anchor: HostedLifecycleAnchor,
+  cursor: HostedLifecycleLanguageSnapshotCursor,
+  context: HostedLifecycleContext,
+) {
+  anchor = structuredClone(anchor);
+  cursor = structuredClone(cursor);
+  return executeHostedLifecyclePage<
+    HostedLifecyclePage<
+      Readonly<{ namespaceId: string; occurrenceId: string; language: string; changed: boolean }>,
+      HostedLifecycleLanguageSnapshotCursor
+    >
+  >(pool, anchor, { kind: 'language-snapshots', cursor }, context, async (tx, route) => {
+    const parameters = {
+      route,
+      catalogue_id: anchor.catalogueId,
+      after_namespace: cursor.afterNamespace,
+      after_occurrence: cursor.afterOccurrence,
+      after_language: cursor.afterLanguage,
+    };
+    const rows = (
+      await tx.query<{ namespace_id: string; occurrence_id: string; language: string; changed: boolean }>(
+        languageSnapshots.sql,
+        languageSnapshots.params.map((name) => parameters[name as keyof typeof parameters]),
+      )
+    ).rows;
+    const last = rows.at(-1);
+    return {
+      changed: rows.some((row) => row.changed),
+      value: {
+        items: rows.map((row) => ({
+          namespaceId: row.namespace_id,
+          occurrenceId: row.occurrence_id,
+          language: row.language,
+          changed: row.changed,
+        })),
+        next:
+          rows.length === 100 && last
+            ? { afterNamespace: last.namespace_id, afterOccurrence: last.occurrence_id, afterLanguage: last.language }
+            : null,
+      },
+    };
+  });
 }

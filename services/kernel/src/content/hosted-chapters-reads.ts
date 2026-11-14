@@ -23,19 +23,18 @@ import {
   readHostedBookTarget,
 } from './hosted-book-revision-disclosure.ts';
 import type { RevisionDisclosureMembership } from './revision-disclosure.ts';
-import {
-  hostedCatalogue,
-  hostedRevision,
-  hostedReadPlacement,
-  hostedReadPlacementPage,
-} from './hosted-chapters-store.ts';
+import { hostedCatalogue } from './hosted-chapters-store.ts';
 import { readHostedDraftPointSnapshot } from './hosted-version-draft-write.ts';
 import type { HostedPointSelectionReads } from './hosted-publication-point-selection.ts';
 import { resolveHostedVersionRevision } from './hosted-version-revision.ts';
 import { readHostedVersionSnapshot } from './hosted-version-store.ts';
 import type { HostedVersionSnapshot } from './hosted-version-model.ts';
 import { pageVersionedHostedPlacements, readVersionedHostedPlacement } from './hosted-chapters-version-reads.ts';
-import { hostedAppendDescriptor } from './hosted-chapters-append.ts';
+import {
+  selectHostedChapterBody,
+  hostedLanguageQuery,
+  type HostedBodyLanguageQuery,
+} from './hosted-chapter-languages.ts';
 import { hostedCursorBinding, readHostedCursor, writeHostedCursor } from './hosted-chapters-cursor.ts';
 import {
   HOSTED_PAGE_LIMIT,
@@ -50,7 +49,6 @@ import {
   type OrderedHostedPlacement,
   type HostedPageView,
   type HostedResolutionView,
-  type HostedAppendDescriptor,
 } from './hosted-chapters-model.ts';
 
 function identity(catalogueId: string, revisionId?: string): number {
@@ -62,7 +60,7 @@ function identity(catalogueId: string, revisionId?: string): number {
 
 type HostedCatalogueReadSelection = HostedReadSelection & Readonly<{ includeTitle?: '1' }>;
 
-async function selectCatalogue(
+async function selectHostedCatalogue(
   deps: HostedDependencies,
   catalogueId: string,
   selection: HostedReadSelection,
@@ -84,13 +82,13 @@ async function selectCatalogue(
     selection.revisionId ?? (selection.kind === 'structure' ? catalogue.head_revision_id : catalogue.publication_id);
   if (!revisionId) throw new ContentNotFoundError();
   const selected = await snapshot(deps, catalogueId, context, async (client) => {
-    const revision = await hostedRevision(client, catalogueId, revisionId);
-    if (!revision) return null;
-    // Publications remain immutable manifests. A structure optionally selects
-    // one sealed base/prefix, in this same partition observation as its header.
-    const descriptor =
-      revision.kind === 'structure' ? await hostedAppendDescriptor(client, catalogueId, revisionId) : null;
-    return { ...revision, descriptor };
+    const revision = await resolveHostedVersionRevision(client, catalogueId, revisionId);
+    if (revision.kind !== 'ordered') return null;
+    return {
+      revision_id: revision.revisionId,
+      kind: revision.revisionKind,
+      source_revision_id: revision.sourceRevisionId,
+    };
   });
   if (!selected.value || selected.anchor.epoch !== initial.anchor.epoch) throw new ContentNotFoundError();
   if (selection.kind !== undefined && selected.value.kind !== selection.kind) throw new ContentNotFoundError();
@@ -122,7 +120,7 @@ async function selectCatalogue(
     kind: selected.value.kind,
     sourceRevisionId: selected.value.source_revision_id,
   };
-  return { route, epoch: initial.anchor.epoch, view, descriptor: selected.value.descriptor, finish };
+  return { route, epoch: initial.anchor.epoch, view, finish };
 }
 
 function slot(placement: OrderedHostedPlacement) {
@@ -133,7 +131,7 @@ function slot(placement: OrderedHostedPlacement) {
     kind: placement.kind,
   };
 }
-function available(placement: OrderedHostedPlacement): HostedOccurrenceView {
+function available(placement: OrderedHostedPlacement & { selectedLanguage?: string | null }): HostedOccurrenceView {
   return placement.kind === 'chapter'
     ? {
         ...slot(placement),
@@ -141,6 +139,7 @@ function available(placement: OrderedHostedPlacement): HostedOccurrenceView {
         availability: 'available',
         title: placement.title,
         target: placement.target,
+        ...(placement.selectedLanguage != null ? { selectedLanguage: placement.selectedLanguage } : {}),
       }
     : { ...slot(placement), kind: 'part', availability: 'available', title: placement.title, target: null };
 }
@@ -154,7 +153,7 @@ export async function readHostedCatalogue(
   selection: HostedCatalogueReadSelection,
   context: ReadContext,
 ) {
-  const selected = await selectCatalogue(deps, catalogueId, selection, context);
+  const selected = await selectHostedCatalogue(deps, catalogueId, selection, context);
   const final = await selected.finish();
   const title =
     selection.includeTitle === '1' &&
@@ -175,14 +174,27 @@ async function placementAt(
   revisionId: string,
   occurrenceId: string,
   context: ReadContext,
-  descriptor: HostedAppendDescriptor | null,
 ) {
   if (routeOf(occurrenceId) !== routeOf(catalogueId)) throw new InvalidHostedStructureError('Invalid occurrence');
   return snapshot(deps, catalogueId, context, async (client) => {
     const versioned = await readHostedDraftPointSnapshot(client, catalogueId, revisionId);
-    if (versioned) return readVersionedHostedPlacement(client, versioned, occurrenceId);
-    return hostedReadPlacement(client, catalogueId, revisionId, occurrenceId, descriptor);
+    if (!versioned) throw new ContentNotFoundError();
+    return readVersionedHostedPlacement(client, versioned, occurrenceId);
   });
+}
+
+/** Shared catalogue/occurrence admission for language metadata and body resolution. */
+export async function readHostedOccurrenceSelection(
+  deps: HostedDependencies,
+  catalogueId: string,
+  occurrenceId: string,
+  selection: HostedReadSelection,
+  context: ReadContext,
+) {
+  const selected = await selectHostedCatalogue(deps, catalogueId, selection, context);
+  const found = await placementAt(deps, catalogueId, selected.view.revisionId, occurrenceId, context);
+  if (!found.value || found.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
+  return { selected, placement: found.value, anchor: found.anchor };
 }
 
 /** Snapshot-bound readers for one publication point command. Each lookup names
@@ -233,21 +245,25 @@ export async function resolveHostedOccurrence(
   deps: HostedDependencies,
   catalogueId: string,
   occurrenceId: string,
-  selection: HostedReadSelection,
+  selection: HostedReadSelection & HostedBodyLanguageQuery,
   context: ReadContext,
 ) {
-  const selected = await selectCatalogue(deps, catalogueId, selection, context);
-  const found = await placementAt(
-    deps,
-    catalogueId,
-    selected.view.revisionId,
-    occurrenceId,
-    context,
-    selected.descriptor,
-  );
+  const selected = await selectHostedCatalogue(deps, catalogueId, selection, context);
+  const found = await placementAt(deps, catalogueId, selected.view.revisionId, occurrenceId, context);
   if (!found.value || found.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
-  const placement = found.value;
+  let placement: OrderedHostedPlacement & { selectedLanguage?: string | null } = found.value;
   const anchors: AnchoredPosition[] = [found.anchor];
+  if (placement.kind === 'chapter') {
+    const body = await selectHostedChapterBody(deps, selected.view, placement, selection, context);
+    if (!body) {
+      anchors.push((await selected.finish()).anchor);
+      return {
+        value: { ...selected.view, occurrence: unavailable(placement), document: null } as HostedResolutionView,
+        anchors,
+      };
+    }
+    placement = body;
+  }
   let occurrence = available(placement);
   let document: HostedResolutionView['document'] = null;
   if (placement.kind === 'chapter') {
@@ -283,27 +299,50 @@ export async function resolveHostedOccurrence(
   return { value, anchors };
 }
 
+/** Explicit body-address endpoint adds the actual selected language without changing ordinary resolution. */
+export async function resolveHostedOccurrenceBody(
+  deps: HostedDependencies,
+  catalogueId: string,
+  occurrenceId: string,
+  selection: HostedReadSelection & HostedBodyLanguageQuery,
+  context: ReadContext,
+) {
+  const result = await resolveHostedOccurrence(deps, catalogueId, occurrenceId, selection, context);
+  const occurrence = result.value.occurrence;
+  return {
+    ...result,
+    value: {
+      ...result.value,
+      selectedLanguage:
+        occurrence.availability === 'available' && occurrence.kind === 'chapter'
+          ? (occurrence.selectedLanguage ?? null)
+          : null,
+    },
+  };
+}
+
 /** Resolve the same historical occurrence and current Access as exact opening,
  * but disclose target metadata without selecting or serializing chapter bytes. */
 export async function resolveHostedOccurrenceMetadata(
   deps: HostedDependencies,
   catalogueId: string,
   occurrenceId: string,
-  selection: HostedReadSelection,
+  selection: HostedReadSelection & HostedBodyLanguageQuery,
   context: ReadContext,
 ) {
-  const selected = await selectCatalogue(deps, catalogueId, selection, context);
-  const found = await placementAt(
-    deps,
-    catalogueId,
-    selected.view.revisionId,
-    occurrenceId,
-    context,
-    selected.descriptor,
-  );
+  const selected = await selectHostedCatalogue(deps, catalogueId, selection, context);
+  const found = await placementAt(deps, catalogueId, selected.view.revisionId, occurrenceId, context);
   if (!found.value || found.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
-  const placement = found.value;
+  let placement: OrderedHostedPlacement & { selectedLanguage?: string | null } = found.value;
   const anchors: AnchoredPosition[] = [found.anchor];
+  if (placement.kind === 'chapter') {
+    const body = await selectHostedChapterBody(deps, selected.view, placement, selection, context);
+    if (!body) {
+      anchors.push((await selected.finish()).anchor);
+      return { value: { ...selected.view, occurrence: unavailable(placement) }, anchors };
+    }
+    placement = body;
+  }
   let occurrence = available(placement);
   if (placement.kind === 'chapter') {
     const disclosed =
@@ -377,6 +416,7 @@ async function page(
   context: ReadContext,
   query: { mode: 'children' | 'previous' | 'next' | 'outline'; parentId: string | null; occurrenceId: string | null },
 ) {
+  hostedLanguageQuery(input);
   const route = identity(catalogueId, input.revisionId);
   if (
     (query.parentId !== null && routeOf(query.parentId) !== route) ||
@@ -389,7 +429,7 @@ async function page(
   const cursor = readHostedCursor(deps, binding, catalogueId, input.cursor);
   if (cursor && input.revisionId !== undefined && cursor.revisionId !== input.revisionId)
     throw new InvalidHostedCursorError();
-  const selected = await selectCatalogue(
+  const selected = await selectHostedCatalogue(
     deps,
     catalogueId,
     cursor ? { ...input, revisionId: cursor.revisionId } : input,
@@ -417,9 +457,15 @@ async function page(
         (query.mode === 'previous' ? cursor.after >= mapped.value.origin : cursor.after <= mapped.value.origin))
     )
       throw new InvalidHostedCursorError();
-    const disclosed = await disclosePage(deps, catalogueId, selected.view, mapped.value.placements, context, [
-      mapped.anchor,
-    ]);
+    const disclosed = await disclosePage(
+      deps,
+      catalogueId,
+      selected.view,
+      mapped.value.placements,
+      context,
+      [mapped.anchor],
+      input,
+    );
     const lastAfter = mapped.value.lastAfter;
     const nextCursor =
       mapped.value.hasMore && lastAfter !== null
@@ -435,57 +481,7 @@ async function page(
     const value: HostedPageView = { ...selected.view, items: disclosed.items, nextCursor };
     return { value, anchors: disclosed.anchors };
   }
-  let origin = -1;
-  const referenceId = query.mode === 'children' ? query.parentId : query.occurrenceId;
-  if (referenceId !== null) {
-    const reference = await placementAt(
-      deps,
-      catalogueId,
-      selected.view.revisionId,
-      referenceId,
-      context,
-      selected.descriptor,
-    );
-    if (
-      !reference.value ||
-      reference.anchor.epoch !== selected.epoch ||
-      (query.mode === 'children' && reference.value.kind !== 'part')
-    )
-      throw new ContentNotFoundError();
-    origin = query.mode === 'children' ? -1 : reference.value.ordinal;
-  }
-  if (
-    cursor &&
-    (cursor.origin !== origin || (query.mode === 'previous' ? cursor.after >= origin : cursor.after <= origin))
-  )
-    throw new InvalidHostedCursorError();
-  const after = cursor?.after ?? origin;
-  const raw = await snapshot(deps, catalogueId, context, (client) =>
-    hostedReadPlacementPage(
-      client,
-      catalogueId,
-      selected.view.revisionId,
-      { mode: query.mode, parentId: query.parentId, after, limit: limit + 1 },
-      selected.descriptor,
-    ),
-  );
-  if (raw.anchor.epoch !== selected.epoch) throw new ContentNotFoundError();
-  const placements = raw.value.slice(0, limit);
-  const disclosed = await disclosePage(deps, catalogueId, selected.view, placements, context, [raw.anchor]);
-  const last = placements.at(-1);
-  const nextCursor =
-    raw.value.length > limit && last
-      ? writeHostedCursor(deps, binding, {
-          revisionId: selected.view.revisionId,
-          after: query.mode === 'children' ? last.position : last.ordinal,
-          origin,
-          issuedAt,
-          epoch: selected.epoch,
-        })
-      : null;
-  disclosed.anchors.push((await selected.finish()).anchor);
-  const value: HostedPageView = { ...selected.view, items: disclosed.items, nextCursor };
-  return { value, anchors: disclosed.anchors };
+  throw new ContentNotFoundError();
 }
 
 const HOSTED_PAGE_DISCLOSURE_CONCURRENCY = 4;
@@ -568,9 +564,15 @@ async function disclosePage(
   placements: readonly OrderedHostedPlacement[],
   context: ReadContext,
   initial: AnchoredPosition[],
+  languageQuery: HostedBodyLanguageQuery,
 ) {
+  const choices = await boundedReadWindow(placements, HOSTED_PAGE_DISCLOSURE_CONCURRENCY, async (placement) =>
+    placement.kind === 'chapter'
+      ? ((await selectHostedChapterBody(deps, view, placement, languageQuery, context)) ?? placement)
+      : placement,
+  );
   const targetAnchors = await discloseHostedPageTargets(
-    placements,
+    choices,
     (target) => prepareHostedTargetMetadata(deps, target, context),
     view.kind === 'publication'
       ? (placement) =>
@@ -588,7 +590,7 @@ async function disclosePage(
       : undefined,
   );
   const anchors = [...initial];
-  const items = placements.map((placement) => {
+  const items = choices.map((placement) => {
     if (placement.kind === 'part') return available(placement);
     const targetAnchor = targetAnchors.get(placement.occurrenceId) ?? null;
     if (!targetAnchor) return unavailable(placement);

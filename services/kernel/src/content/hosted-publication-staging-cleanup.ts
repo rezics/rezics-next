@@ -12,6 +12,7 @@ import {
 import deleteCandidates from './hosted-publication-staging-cleanup-candidates.sql';
 import deleteInputs from './hosted-publication-staging-cleanup-inputs.sql';
 import deleteTargets from './hosted-publication-staging-cleanup-targets.sql';
+import { cleanupHostedLanguageCandidate } from './hosted-language-candidate-cleanup.ts';
 
 export const HOSTED_PUBLICATION_STAGING_CLEANUP_STEP_LIMIT = 100;
 
@@ -414,12 +415,16 @@ async function advanceCleanup(
     while (phase !== 'done' && deletedRows < HOSTED_PUBLICATION_STAGING_CLEANUP_STEP_LIMIT) {
       const remaining = HOSTED_PUBLICATION_STAGING_CLEANUP_STEP_LIMIT - deletedRows;
       if (phase === 'candidate') {
-        const rows = await deleteCandidatePage(client, stage, candidateFrontier, remaining);
+        const languages = await cleanupHostedLanguageCandidate(client, locator, remaining);
+        deletedRows += languages.deletedRows;
+        if (!languages.complete || deletedRows === HOSTED_PUBLICATION_STAGING_CLEANUP_STEP_LIMIT) break;
+        const candidateLimit = HOSTED_PUBLICATION_STAGING_CLEANUP_STEP_LIMIT - deletedRows;
+        const rows = await deleteCandidatePage(client, stage, candidateFrontier, candidateLimit);
         if (rows.length) {
           candidateFrontier = maxDecimal(rows.map((row) => row.source_order));
           deletedRows += rows.length;
         }
-        if (rows.length < remaining) phase = advancePhase(phase);
+        if (rows.length < candidateLimit) phase = advancePhase(phase);
         continue;
       }
       if (phase === 'input') {

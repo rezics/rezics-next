@@ -2,7 +2,7 @@ import { expect, setDefaultTimeout, test } from 'bun:test';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
 import { appendHostedRootChapter, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
 import { hostedAppendDescriptor } from '../../src/content/hosted-chapters-append.ts';
-import { hostedReadPlacement } from '../../src/content/hosted-chapters-store.ts';
+import { hostedReadPlacement } from '../../src/content/hosted-maintenance-manifest.ts';
 import {
   pageHostedLifecycleRevisions,
   redactHostedLifecyclePlacements,

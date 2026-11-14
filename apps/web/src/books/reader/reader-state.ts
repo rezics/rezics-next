@@ -288,6 +288,7 @@ export function createBookReader(
             parentOccurrenceId: null,
             cursor: null,
             selection: snapshot.address.selection,
+            ...(snapshot.address.languagePreference ? { languagePreference: snapshot.address.languagePreference } : {}),
           });
       const selection = chapter?.address.selection ?? snapshot.address.selection;
       const selected = selection ? { ...target, selection } : target;

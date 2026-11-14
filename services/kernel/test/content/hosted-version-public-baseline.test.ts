@@ -306,7 +306,6 @@ test('receives a sealed legacy publication in replayable pages for its first poi
           before: anchor,
           changedPlacements: [selected],
         },
-        preparedBaseline: baseline,
       }),
     );
     expect(point.plan.insertions[0]).toMatchObject({

@@ -19,18 +19,12 @@ import { prepareHostedPublicationPoint, type HostedPublicationPointPreparation }
 import type { HostedPointSelectionReads, HostedPublicationPointInput } from './hosted-publication-point-selection.ts';
 import { commitHostedVersionPublicationPoint } from './hosted-version-publication-write.ts';
 import { HostedVersionPublicationWriteError } from './hosted-version-publication-write-model.ts';
-import { completedHostedLegacyPublicBaseline } from './hosted-legacy-public-baseline.ts';
 import { snapshot } from './reads.ts';
 import { validateHostedChapterAttachments } from './hosted-chapters-attachments.ts';
-import { insertHostedRootAppend } from './hosted-chapters-append.ts';
+import { commitHostedDirectSelection } from './hosted-direct-selection.ts';
 import { appendHostedOrderedRootChapter, hostedOrderedReleasePlacements } from './hosted-ordered-compatibility.ts';
 import { orderHostedPlacements, selectHostedRelease } from './hosted-chapters-tree.ts';
-import {
-  hostedCatalogue,
-  hostedRevision,
-  hostedReleasePlacements,
-  insertHostedPlacements,
-} from './hosted-chapters-store.ts';
+import { hostedCatalogue, hostedRevision } from './hosted-chapters-store.ts';
 import {
   InvalidHostedStructureError,
   type HostedCommandContext,
@@ -45,6 +39,14 @@ import {
   type OrderedHostedPlacement,
 } from './hosted-chapters-model.ts';
 import { commitHostedDraftPointWrite, type HostedDraftPointMutation } from './hosted-version-draft-write.ts';
+import {
+  prepareHostedChapterLanguageRows,
+  retainHostedChapterLanguageAssociations,
+  freezeHostedChapterLanguageNamespaces,
+  commitHostedChapterLanguageNamespace,
+  type HostedLanguageSnapshotRow,
+} from './hosted-chapter-languages.ts';
+import { HOSTED_PLACEMENT_LIMIT } from './hosted-chapters-limits.ts';
 
 export type HostedCommandDependencies = HostedDependencies & ContentCommandDependencies;
 type Mutation =
@@ -137,7 +139,11 @@ export async function prepareHostedPublicationPointCommand(
     digest: requestDigest(kind, actor, { catalogueId, input: operation.input }),
   };
   const base = hostedPostAuthorization(deps, actor, initial.thread_id, catalogueId, context, receipt);
-  const preparedByTime = new WeakMap<AuthoritativeTime, HostedPublicationPointPreparation>();
+  const namespaceId = newId(route);
+  const preparedByTime = new WeakMap<
+    AuthoritativeTime,
+    HostedPublicationPointPreparation & { languageRows: readonly HostedLanguageSnapshotRow[] | null }
+  >();
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
@@ -145,9 +151,43 @@ export async function prepareHostedPublicationPointCommand(
         actor,
         deadline: context.deadline,
       });
+      const languages = await prepareHostedChapterLanguageRows(
+        deps,
+        catalogueId,
+        prepared.selection.changedPlacements,
+        { actor, deadline: context.deadline },
+        HOSTED_PLACEMENT_LIMIT,
+      );
+      await validateHostedChapterAttachments(deps, languages.placements, { actor, deadline: context.deadline });
       // Mint current write authority after selection and foreign attachment reads.
       const evidence = await base.prepare!(attempt);
-      preparedByTime.set(attempt.time, prepared);
+      const frozen = new Map(
+        freezeHostedChapterLanguageNamespaces(prepared.selection.changedPlacements, namespaceId).map((placement) => [
+          placement.occurrenceId,
+          placement,
+        ]),
+      );
+      const selection =
+        prepared.selection.kind === 'publishChapter'
+          ? {
+              ...prepared.selection,
+              chapter: frozen.get(prepared.selection.chapter.occurrenceId) ?? prepared.selection.chapter,
+              changedPlacements: [...frozen.values()],
+            }
+          : {
+              ...prepared.selection,
+              draftChapter: frozen.get(prepared.selection.draftChapter.occurrenceId) ?? prepared.selection.draftChapter,
+              changedPlacements: [...frozen.values()],
+            };
+      preparedByTime.set(attempt.time, {
+        ...prepared,
+        selection,
+        languageRows: prepared.selection.changedPlacements.some(
+          (placement) => placement.kind === 'chapter' && placement.bodyLanguages !== undefined,
+        )
+          ? languages.rows
+          : null,
+      });
       return evidence;
     },
     async authorize(tx, attempt, evidence) {
@@ -163,6 +203,7 @@ export async function prepareHostedPublicationPointCommand(
 
   return {
     catalogueId,
+    namespaceId,
     threadId: initial.thread_id,
     partition: partitionOf(route),
     receipt,
@@ -201,7 +242,7 @@ export async function publishHostedPublicationPoint(
   });
   if (replay) return replay;
 
-  const revisionId = newId(routeOf(catalogueId)!);
+  const revisionId = command.namespaceId;
   return runCommand<HostedCommandValue>(
     deps.pool,
     { ...commandOptions, authorization: command.authorization },
@@ -215,20 +256,16 @@ export async function publishHostedPublicationPoint(
         throw new RevisionPreconditionError();
 
       try {
-        const preparedBaseline = await completedHostedLegacyPublicBaseline(
-          tx,
-          actor,
-          catalogueId,
-          operation.input.expectedPublicationId,
-        );
         await commitHostedVersionPublicationPoint(tx, {
           catalogueId,
           revisionId,
           recordedTransactionId: transactionId,
           recordedAt: authoritativeTimeValue(time),
           selection: command.prepared(time).selection,
-          preparedBaseline,
         });
+        const languageRows = command.prepared(time).languageRows;
+        if (languageRows !== null)
+          await commitHostedChapterLanguageNamespace(tx, catalogueId, command.namespaceId, revisionId, languageRows);
       } catch (error) {
         if (error instanceof HostedVersionPublicationWriteError) throw new RevisionPreconditionError();
         throw error;
@@ -296,10 +333,11 @@ async function mutate(
   };
   const base = hostedPostAuthorization(deps, actor, threadId, catalogueId, context, receipt);
   const prepared = new WeakMap<AuthoritativeTime, readonly OrderedHostedPlacement[]>();
+  const preparedLanguages = new WeakMap<AuthoritativeTime, readonly HostedLanguageSnapshotRow[] | null>();
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
-      const placements =
+      let placements =
         mutation.kind === 'publish'
           ? (
               await snapshot(deps, catalogueId, context, async (client) => {
@@ -312,21 +350,41 @@ async function mutate(
                   revision.revision_id,
                   selected.occurrenceIds,
                 );
-                return selectHostedRelease(
-                  ordered ??
-                    (await hostedReleasePlacements(client, catalogueId, revision.revision_id, selected.occurrenceIds)),
-                  selected.occurrenceIds,
-                );
+                return selectHostedRelease(ordered, selected.occurrenceIds);
               })
             ).value
           : authored!;
+      if (mutation.kind === 'revise')
+        placements = await retainHostedChapterLanguageAssociations(
+          deps,
+          catalogueId,
+          mutation.input.expectedRevisionId,
+          placements,
+          { actor, deadline: context.deadline },
+        );
       await validateHostedChapterAttachments(deps, placements, { actor, deadline: context.deadline });
+      let languageRows: readonly HostedLanguageSnapshotRow[] | null = null;
+      if (mutation.kind === 'publish') {
+        const languages = await prepareHostedChapterLanguageRows(
+          deps,
+          catalogueId,
+          placements,
+          { actor, deadline: context.deadline },
+          HOSTED_PLACEMENT_LIMIT,
+        );
+        await validateHostedChapterAttachments(deps, languages.placements, { actor, deadline: context.deadline });
+        if (placements.some((placement) => placement.kind === 'chapter' && placement.bodyLanguages !== undefined)) {
+          languageRows = languages.rows;
+          placements = freezeHostedChapterLanguageNamespaces(placements, revisionId);
+        }
+      }
       // Attachment currentness can outlast Access evidence. Mint the write
       // proof afterward; transactional authorization still rechecks authority.
       const evidence = await base.prepare!(attempt);
       // Only complete preparation supplies this attempt's immutable selection.
       // A retry repeats admission and selection outside the write transaction.
       prepared.set(attempt.time, placements);
+      preparedLanguages.set(attempt.time, languageRows);
       return evidence;
     },
   };
@@ -366,56 +424,33 @@ async function mutate(
         )
           throw new RevisionPreconditionError();
       }
-      const orderedAppend =
-        mutation.kind === 'append'
-          ? await appendHostedOrderedRootChapter(
-              tx,
-              catalogueId,
-              mutation.input.expectedRevisionId,
-              {
-                revisionId,
-                recordedTransactionId: transactionId,
-                recordedAt: authoritativeTimeValue(time),
-              },
-              prepared.get(time)![0] as Extract<OrderedHostedPlacement, { kind: 'chapter' }>,
-            )
-          : false;
-      if (!orderedAppend) {
-        await tx.query(
-          `INSERT INTO content.hosted_structure_revision
-       (route,catalogue_id,revision_id,kind,source_revision_id,recorded_transaction_id,created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [
-            route,
-            catalogueId,
-            revisionId,
-            mutation.kind === 'publish' ? 'publication' : 'structure',
-            mutation.kind === 'publish' ? mutation.input.expectedRevisionId : null,
-            transactionId,
-            authoritativeTimeValue(time),
-          ],
-        );
-      }
       if (mutation.kind === 'append') {
-        if (!orderedAppend) {
-          await insertHostedRootAppend(
-            tx,
-            catalogueId,
-            mutation.input.expectedRevisionId,
-            revisionId,
-            prepared.get(time)![0] as Extract<OrderedHostedPlacement, { kind: 'chapter' }>,
-          );
-        }
+        await appendHostedOrderedRootChapter(
+          tx,
+          catalogueId,
+          mutation.input.expectedRevisionId,
+          { revisionId, recordedTransactionId: transactionId, recordedAt: authoritativeTimeValue(time) },
+          prepared.get(time)![0] as Extract<OrderedHostedPlacement, { kind: 'chapter' }>,
+        );
       } else {
-        await insertHostedPlacements(tx, catalogueId, revisionId, prepared.get(time)!);
-      }
-      if (!orderedAppend) {
-        await tx.query(
-          `UPDATE content.hosted_catalogue SET ${mutation.kind === 'publish' ? 'publication_id' : 'head_revision_id'}=$3
-       WHERE route=$1 AND catalogue_id=$2`,
-          [route, catalogueId, revisionId],
+        const recorded = {
+          revisionId,
+          transactionId,
+          recordedAt: authoritativeTimeValue(time),
+          expectedDraftRevisionId: mutation.kind === 'create' ? revisionId : mutation.input.expectedRevisionId,
+        };
+        await commitHostedDirectSelection(
+          tx,
+          catalogueId,
+          prepared.get(time)!,
+          mutation.kind === 'publish'
+            ? { ...recorded, kind: 'publication', expectedPublicationId: mutation.input.expectedPublicationId }
+            : { ...recorded, kind: 'structure' },
         );
       }
+      const languageRows = preparedLanguages.get(time);
+      if (mutation.kind === 'publish' && languageRows != null)
+        await commitHostedChapterLanguageNamespace(tx, catalogueId, revisionId, revisionId, languageRows);
       const value = { catalogueId, revisionId };
       return {
         value,

@@ -6,7 +6,6 @@ import type { Dependencies as MediaDependencies } from './media-routes.ts';
 import { mediaRoutes } from './media-routes.ts';
 import { contentDeclaration } from './register.ts';
 import { hostedChapterRoutes } from './hosted-chapters-routes.ts';
-import { hostedDraftConversionRoutes } from './hosted-draft-conversion-routes.ts';
 import { knowledgeRoutes } from './knowledge-routes.ts';
 import { revisionDisclosureRoutes } from './revision-disclosure-routes.ts';
 import { NATIVE_CONTENT_ACTIONS } from './actions.ts';
@@ -29,8 +28,7 @@ export function mountContentHttp(
 ) {
   const chapters = hostedChapterRoutes(contentRoutes(searched, dependencies.content), dependencies.content);
   const knowledge = knowledgeRoutes(chapters, dependencies.content);
-  const converted = hostedDraftConversionRoutes(knowledge, dependencies.content);
-  const content = revisionDisclosureRoutes(converted, dependencies.content);
+  const content = revisionDisclosureRoutes(knowledge, dependencies.content);
   noticeRoutes(content as unknown as Parameters<typeof noticeRoutes>[0], dependencies.notice);
   subjectReactionRoutes(app, dependencies.content);
   const media = mediaRoutes(content as unknown as Parameters<typeof mediaRoutes>[0], dependencies.media);
@@ -40,7 +38,6 @@ export function mountContentHttp(
 /** The route surface Content contributes to the kernel's composed type. */
 export type ContentHttpRoutes = ReturnType<typeof contentRoutes> &
   ReturnType<typeof hostedChapterRoutes> &
-  ReturnType<typeof hostedDraftConversionRoutes> &
   ReturnType<typeof revisionDisclosureRoutes> &
   ReturnType<typeof knowledgeRoutes> &
   ReturnType<typeof noticeRoutes> &

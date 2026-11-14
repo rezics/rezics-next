@@ -1,5 +1,5 @@
 import type { AccessClient } from '../request/access.ts';
-import { newId, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
 import { ContentNotFoundError, RevisionPreconditionError } from './commands.ts';
 import { HOSTED_DEPTH_LIMIT } from './hosted-chapters-limits.ts';
 import {
@@ -7,6 +7,7 @@ import {
   type HostedChapterTarget,
   type HostedDraftPointInsertInput,
   type HostedDraftPointRemoveInput,
+  type HostedChapterLanguages,
 } from './hosted-chapters-model.ts';
 import {
   HostedVersionDraftPointError,
@@ -30,7 +31,6 @@ import {
 } from './hosted-version-revision.ts';
 import {
   commitHostedVersionWrite,
-  createHostedVersionGeneration,
   createHostedVersionWrite,
   hostedVersionSequence,
   readHostedVersionMaximumChildSubtreeHeight,
@@ -54,6 +54,7 @@ export type HostedVersionPointValue = Readonly<{
   subtreeHeight: number;
   chapterCount: bigint;
   target: HostedChapterTarget | null;
+  bodyLanguages?: HostedChapterLanguages;
 }>;
 
 export type { HostedDraftPointInsertInput, HostedDraftPointRemoveInput };
@@ -215,37 +216,6 @@ async function snapshotForDescriptor(
   return snapshot;
 }
 
-async function emptyLegacyPlacementCount(client: AccessClient, catalogueId: string, revisionId: string) {
-  const route = routeOf(catalogueId);
-  const count = (
-    await client.query<{ n: string }>(
-      `SELECT COUNT(*)::text AS n FROM content.hosted_placement
-     WHERE route=$1 AND catalogue_id=$2 AND revision_id=$3`,
-      [route, catalogueId, revisionId],
-    )
-  ).rows[0]!.n;
-  const appends =
-    (
-      await client.query<{ n: string }>(
-        `SELECT COUNT(*)::text AS n FROM content.hosted_append
-     WHERE route=$1 AND catalogue_id=$2 AND stream_id IN (
-       SELECT base_revision_id FROM content.hosted_append_descriptor
-       WHERE route=$1 AND catalogue_id=$2 AND revision_id=$3)`,
-        [route, catalogueId, revisionId],
-      )
-    ).rows[0]?.n ?? '0';
-  return BigInt(count) + BigInt(appends);
-}
-
-/** Activate one new empty draft generation for a compatibility empty head. Do not map that head. */
-async function activateEmptyDraftGeneration(client: AccessClient, catalogueId: string): Promise<HostedVersionSnapshot> {
-  const route = routeOf(catalogueId);
-  if (route === null) throw new InvalidHostedStructureError();
-  const snapshot = await createHostedVersionGeneration(client, catalogueId, newId(route), 'draft');
-  if (snapshot.generationKind !== 'draft') throw new ContentNotFoundError();
-  return snapshot;
-}
-
 export async function resolveHostedDraftPointSnapshot(
   client: AccessClient,
   catalogueId: string,
@@ -265,10 +235,7 @@ export async function resolveHostedDraftPointSnapshot(
       resolved.snapshot.sequence,
     );
   }
-  if ((await emptyLegacyPlacementCount(client, catalogueId, expectedRevisionId)) !== 0n) {
-    throw new InvalidHostedStructureError('Hosted draft point writes require an activated versioned draft');
-  }
-  return activateEmptyDraftGeneration(client, catalogueId);
+  throw new InvalidHostedStructureError('Hosted point writes require the canonical ordered draft');
 }
 
 export async function readHostedDraftPointSnapshot(

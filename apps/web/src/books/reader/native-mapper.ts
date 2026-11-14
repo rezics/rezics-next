@@ -1,3 +1,4 @@
+import { nativeBookPreference, nativeBookSelection, type BookLanguagePreference } from './languages';
 import { checkDocument, type DocumentSnapshot } from '@rezics/document';
 import {
   BOOK_ANCESTOR_LIMIT,
@@ -75,10 +76,11 @@ function sameRevision(a: HostedRevision, b: HostedRevision) {
     a.sourceRevisionId === b.sourceRevisionId
   );
 }
-function selectionOf(row: HostedOccurrence): BookSelection | null {
+export function bookSelectionFromNative(row: HostedOccurrence): BookSelection | null {
   return row.availability === 'available' && row.kind === 'chapter'
     ? {
         occurrenceId: row.occurrenceId,
+        ...(row.selectedLanguage ? { bodyLanguage: row.selectedLanguage } : {}),
         body: {
           postId: row.target.postId,
           revisionId: row.target.revisionId,
@@ -91,11 +93,23 @@ function contents(
   publication: BookPublication,
   parentOccurrenceId: string | null,
   selection: BookSelection | null,
+  languagePreference?: BookLanguagePreference,
 ): BookContentsAddress {
-  return { kind: 'contents', publication, parentOccurrenceId, selection, cursor: null };
+  return {
+    kind: 'contents',
+    publication,
+    parentOccurrenceId,
+    selection,
+    cursor: null,
+    ...(languagePreference ? { languagePreference } : {}),
+  };
 }
-function chapter(publication: BookPublication, selection: BookSelection): BookChapterAddress {
-  return { kind: 'chapter', publication, selection };
+function chapter(
+  publication: BookPublication,
+  selection: BookSelection,
+  languagePreference?: BookLanguagePreference,
+): BookChapterAddress {
+  return { kind: 'chapter', publication, selection, ...(languagePreference ? { languagePreference } : {}) };
 }
 
 /** Preserve unavailable slots without supplying a title or a target that Content withheld. */
@@ -103,6 +117,7 @@ export function mapHostedBookOccurrence(
   row: HostedOccurrence,
   publication: BookPublication,
   selected: BookSelection | null,
+  languagePreference?: BookLanguagePreference,
 ): BookOccurrence {
   const base = { occurrenceId: row.occurrenceId, parentOccurrenceId: row.parentId };
   if (row.availability === 'unavailable') return { ...base, kind: 'unavailable', title: '' };
@@ -111,11 +126,11 @@ export function mapHostedBookOccurrence(
       ...base,
       title: row.title,
       kind: 'container',
-      contents: contents(publication, row.occurrenceId, selected),
+      contents: contents(publication, row.occurrenceId, selected, languagePreference),
     };
-  const selection = selectionOf(row);
+  const selection = bookSelectionFromNative(row);
   requireCondition(selection);
-  return { ...base, title: row.title, kind: 'chapter', chapter: chapter(publication, selection) };
+  return { ...base, title: row.title, kind: 'chapter', chapter: chapter(publication, selection, languagePreference) };
 }
 
 /** A single nearest slot. An inaccessible slot never becomes a skip or a known publication end. */
@@ -123,14 +138,15 @@ export function mapHostedBookNavigation(
   page: HostedPage,
   publication: BookPublication,
   occurrenceId: string,
+  languagePreference?: BookLanguagePreference,
 ): BookNavigation {
   requireCondition(page.items.length <= 1);
   const row = page.items[0];
   if (!row) return { state: page.nextCursor === null ? 'end' : 'unavailable' };
   requireCondition(row.kind === 'chapter' && row.occurrenceId !== occurrenceId);
-  const selection = selectionOf(row);
+  const selection = bookSelectionFromNative(row);
   return selection && row.availability === 'available'
-    ? { state: 'available', title: row.title, address: chapter(publication, selection) }
+    ? { state: 'available', title: row.title, address: chapter(publication, selection, languagePreference) }
     : { state: 'unavailable' };
 }
 
@@ -142,9 +158,10 @@ export async function decodeHostedBookDocument(
   const body = resolution.document;
   if (
     !body ||
+    ('selectedLanguage' in resolution && resolution.selectedLanguage !== (selection.bodyLanguage ?? null)) ||
     body.encoding !== 'base64' ||
     body.sha256 !== selection.body.sha256 ||
-    !sameSelection(selectionOf(resolution.occurrence), selection) ||
+    !sameSelection(bookSelectionFromNative(resolution.occurrence), selection) ||
     body.canonicalBytes.length > Math.ceil(2097152 / 3) * 4
   )
     return null;
@@ -221,29 +238,36 @@ export async function readHostedBook(
     async function metadata(occurrenceId: string, revision: HostedRevision, query: HostedQuery) {
       return occurrence(occurrenceId, revision, () => api.metadata(publication.id, occurrenceId, query));
     }
-    async function ancestors(parentId: string | null): Promise<BookAncestor[]> {
+    async function ancestors(
+      parentId: string | null,
+      revision: HostedRevision = now,
+      query: HostedQuery = currentQuery,
+    ): Promise<BookAncestor[]> {
       const path: BookAncestor[] = [];
       const seen = new Set<string>();
       while (parentId !== null) {
         requireCondition(path.length < request.ancestorLimit && !seen.has(parentId));
         seen.add(parentId);
-        const value = await metadata(parentId, now, currentQuery);
+        const value = await metadata(parentId, revision, query);
         const row = value.occurrence;
         requireCondition(row.availability === 'available' && row.kind === 'part');
         path.push({
           occurrenceId: row.occurrenceId,
           title: row.title,
-          contents: contents(publication, row.occurrenceId, address.selection),
+          contents: contents(publication, row.occurrenceId, address.selection, address.languagePreference),
         });
         parentId = row.parentId;
       }
       return path.reverse();
     }
     async function selectedOccurrence(selection: BookSelection, exact: HostedMetadata) {
-      requireCondition(sameSelection(selectionOf(exact.occurrence), selection));
+      requireCondition(sameSelection(bookSelectionFromNative(exact.occurrence), selection));
       const currentOccurrence = sameRevision(now, frozen)
         ? exact
-        : await metadata(selection.occurrenceId, now, currentQuery);
+        : await metadata(selection.occurrenceId, now, {
+            ...currentQuery,
+            ...(selection.bodyLanguage ? { language: selection.bodyLanguage } : {}),
+          });
       requireCondition(
         currentOccurrence.occurrence.kind === 'chapter' && currentOccurrence.occurrence.availability === 'available',
       );
@@ -253,21 +277,38 @@ export async function readHostedBook(
     if (address.kind === 'chapter') {
       const selection = address.selection;
       const exact = await occurrence(selection.occurrenceId, frozen, () =>
-        api.resolve(publication.id, selection.occurrenceId, selectedQuery),
+        api.body
+          ? api.body(publication.id, selection.occurrenceId, { ...selectedQuery, ...nativeBookSelection(selection) })
+          : api.resolve(publication.id, selection.occurrenceId, selectedQuery),
       );
-      const row = await selectedOccurrence(selection, exact);
-      requireCondition(row.availability === 'available');
       const document = await decodeHostedBookDocument(exact, selection);
       live();
-      requireCondition(document);
-      const path = await ancestors(row.parentId);
+      requireCondition(document && exact.occurrence.availability === 'available');
+      let row = exact.occurrence;
+      let currentLocationUnavailable = false;
+      try {
+        row = await selectedOccurrence(selection, exact);
+      } catch (error) {
+        if (!(error instanceof FailedRead) || error.result.state === 'changed') throw error;
+        // Frozen bytes already passed their own current target gate. Current placement is independent context.
+        currentLocationUnavailable = true;
+      }
+      requireCondition(row.availability === 'available');
+      const path = currentLocationUnavailable
+        ? await ancestors(row.parentId, frozen, selectedQuery)
+        : await ancestors(row.parentId);
       async function navigation(direction: 'previous' | 'next'): Promise<BookNavigation> {
         try {
           const response = await read(() =>
-            api.navigate(publication.id, selection.occurrenceId, { ...selectedQuery, direction, limit: '1' }),
+            api.navigate(publication.id, selection.occurrenceId, {
+              ...selectedQuery,
+              ...nativeBookPreference(address.languagePreference),
+              direction,
+              limit: '1',
+            }),
           );
           requireCondition(sameRevision(response, frozen));
-          return mapHostedBookNavigation(response, publication, selection.occurrenceId);
+          return mapHostedBookNavigation(response, publication, selection.occurrenceId, address.languagePreference);
         } catch (error) {
           if (!(error instanceof FailedRead) || error.result.state === 'denied' || error.result.state === 'changed')
             throw error;
@@ -291,10 +332,11 @@ export async function readHostedBook(
           currentReleaseRevisionId: now.revisionId,
           title: exact.occurrence.availability === 'available' ? exact.occurrence.title : row.title,
           ancestors: path,
-          language: null,
+          language: selection.bodyLanguage ?? null,
+          ...(currentLocationUnavailable ? { currentLocationUnavailable: true as const } : {}),
           direction: 'auto',
           body: { document },
-          contents: contents(publication, row.parentId, address.selection),
+          contents: contents(publication, row.parentId, address.selection, address.languagePreference),
           previous,
           next,
         },
@@ -303,6 +345,7 @@ export async function readHostedBook(
       const response = await read(() =>
         api.children(publication.id, {
           ...selectedQuery,
+          ...nativeBookPreference(address.languagePreference),
           limit: String(HOSTED_BOOK_PAGE_LIMIT),
           ...(address.parentOccurrenceId === null ? {} : { parentId: address.parentOccurrenceId }),
           ...(address.cursor === null ? {} : { cursor: address.cursor }),
@@ -323,11 +366,16 @@ export async function readHostedBook(
         parentId = parent.occurrence.parentId;
       }
       const path = await ancestors(parentId);
-      const rows = response.items.map((row) => mapHostedBookOccurrence(row, publication, address.selection));
+      const rows = response.items.map((row) =>
+        mapHostedBookOccurrence(row, publication, address.selection, address.languagePreference),
+      );
       let selected: BookContentsPage['selected'] = null;
       if (address.selection !== null) {
         try {
-          const exact = await metadata(address.selection.occurrenceId, frozen, selectedQuery);
+          const exact = await metadata(address.selection.occurrenceId, frozen, {
+            ...selectedQuery,
+            ...nativeBookSelection(address.selection),
+          });
           const row = await selectedOccurrence(address.selection, exact);
           requireCondition(row.availability === 'available');
           selected = {
@@ -336,8 +384,8 @@ export async function readHostedBook(
               rows.some((item) => 'chapter' in item && sameSelection(item.chapter.selection, address.selection))
                 ? 'here'
                 : 'moved',
-            chapter: chapter(publication, address.selection),
-            contents: contents(publication, row.parentId, address.selection),
+            chapter: chapter(publication, address.selection, address.languagePreference),
+            contents: contents(publication, row.parentId, address.selection, address.languagePreference),
           };
         } catch (error) {
           if (!(error instanceof FailedRead) || error.result.state === 'denied' || error.result.state === 'changed')

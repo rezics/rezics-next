@@ -2,7 +2,7 @@ import { expect, setDefaultTimeout, test } from 'bun:test';
 import { appendHostedRootChapter, type HostedCommandDependencies } from '../../src/content/hosted-chapters-commands.ts';
 import { listHostedAuthorOutline, resolveHostedOccurrence } from '../../src/content/hosted-chapters-reads.ts';
 import { HOSTED_APPEND_DESCRIPTOR_SELECT } from '../../src/content/hosted-chapters-append.ts';
-import { HOSTED_PLACEMENT_SELECT } from '../../src/content/hosted-chapters-store.ts';
+import { HOSTED_PLACEMENT_SELECT } from '../../src/content/hosted-maintenance-manifest.ts';
 import appendRelease from '../../src/content/hosted-append-release-selected.sql';
 import readChain from '../../src/content/read-chain.sql';
 import { routeOf } from '../../src/route/route.ts';

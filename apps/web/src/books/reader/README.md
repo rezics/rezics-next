@@ -23,6 +23,38 @@ Existing [reader stories](../../stories/hosted-book-reader.stories.tsx) cover `M
 composition changes. The production route and subscription retirement witnesses remain in
 [hosted-book-reader.test.tsx](../../../tests/hosted-book-reader.test.tsx).
 
+## Chapter body languages
+
+The reader offers actual published chapter title/body languages and Automatic under Content's
+[language-selection contract](../../../../../services/kernel/src/content/hosted-chapters.md#chapter-body-languages).
+This control chooses authored chapter content independently of interface locale. It consumes native, currently
+readable alternatives; it does not infer translations from labels or text, manufacture bodies, or inspect private
+drafts. Direction and language annotations describe the selected body rather than authorizing another selection.
+
+Keep the language preference separate from the exact `BookSelection.body`. When creating a new chapter destination,
+use the explicit language, ordered preferred-language keys and declared default through Content's native selection.
+Render its actual language and selected title. Outline, previous/next and browser navigation preserve that preference
+while admitting the chosen exact address. Changing the control explicitly selects a new body address; refresh,
+preference changes and later publication/draft edits never silently replace a pinned body. A revoked or concealed
+pinned alternative is unavailable, and its private language metadata is absent from choices. Missing preferences may
+fall back only while creating a new selection, with the actual served language reported.
+
+The chooser uses the existing bounded native page/continuation and current-viewer lifetime. Retire its options and
+pending responses when viewer, catalogue, frozen publication or occurrence changes; no per-language body prefetch or
+whole-book scan. Saved reading checkpoints retain their exact body identity. Do not carry a block offset into a
+different language body. Extend the existing native author-to-reader journey and mounted reader tests to prove
+published alternatives, fallback, exact-link preservation and access revocation; source presence alone is not parity.
+
+The optional language port makes one replacing page request of at most 20 native alternatives after explicit opening,
+with sparse More, exact failed-page Retry and First page. Selection performs one body-free native metadata choice,
+then opens the resulting exact address through the ordinary reader. Prepared viewer and current-publication fences
+apply to both operations. Display controls add no body read or language inference. Caller preferences use the shared
+`@rezics/definitions/language` grammar and bounded exact-key order. URL `bodyLanguage`, `bodyPost`, `bodyRevision`
+and `bodySha256` retain immutable body coordinates separately from `language`/`preferred` for future destinations.
+Omission of the language key pins the semantic canonical default, not a guessed tag. Contents, ancestors and
+previous/next propagate preference while preserving the current body's exact selector. A different preference
+retires revealed outline pages so their labels and targets cannot leak into the replacement choice.
+
 ## Production admission and links
 
 `routes/books.$id.read.tsx` follows the existing file-route generator and locale rewrite. It has no public cache,
@@ -222,6 +254,34 @@ Library progress and membership remain unchanged.
 
 The independent `renderProgress(page, isCurrent)` extension remains available for an admitted Commerce region;
 rendering failure cannot remove the chapter. It does not supply or replace the Library checkpoint.
+
+## Reading display and parity
+
+Decision: Book-owned appearance controls change only scoped CSS, retaining the shared renderer and exact admitted
+Document object. Text size includes 12–32 px, with the incumbent 17 px default; line width, serif/sans, paragraph
+indent, CJK spacing and line breaking are explicit local choices. A versioned, bounded, validated browser value
+contains display fields only. Storage denial keeps the visit usable and reports that choices cannot persist.
+SSR starts with defaults; the client restores once. No account preference, body, position, identity, native request
+or theme store is added. Theme remains the shared Shell Appearance control.
+
+Source comparison uses the read-only `../rezics` commit `95167ceab7173dc1c5fb0ee70568c5c95f1dba8d`:
+`apps/web/features/units/reader.tsx` supplies nested current-chapter navigation, previous/next, progress, persisted
+12–32 px text sizes and a chapter-language choice; `components/book-content-structure-editor.tsx` supplies nested
+parts/chapters and moves. The separate `legacy-final` reference at `1ac6ed6e0668` adds size/measure/typeface/indent/
+CJK controls in `apps/web/features/work-page/reader.tsx` and `reader-settings.ts`, plus author creation, movement,
+private save and explicit saved-text publication in `features/studio/{chapter-list,chapter-editor,publish-dialog}`.
+This is a source comparison, not observed legacy runtime or completed mounted parity. The current native frozen
+publication supplies body language/direction. The language chooser now selects native published title/body alternatives
+through exact addresses; interface locale is independent. Native/mounted execution remains required for parity.
+
+The current implementation improves the older per-chapter publication flow with one selected frozen TOC and exact
+body revisions, stable occurrence links after moves, and body-free private checkpoint metadata. Its native/browser
+journey source pins private later drafts, exact bytes, moved links and independent checkpoint readback; only actual
+execution establishes those outcomes. External comparators inform navigation: [Pressbooks](https://guide.pressbooks.com/chapter/organize/)
+keeps parts, chapters and visibility explicit, [GitBook](https://gitbook.com/docs/publish/site-redirects) retains page
+references through moves, and [Thorium](https://thorium.edrlab.org/en/docs/400_ressources/402_keyboard-shortcuts/)
+distinguishes TOC/current location and reader focus. Those comparisons do not establish frozen historical bodies
+or REZICS progress privacy.
 
 ## Bounds and evidence
 

@@ -1,4 +1,5 @@
 import type { QueryResultRow } from 'pg';
+import { publishHostedLanguageNamespace } from './hosted-chapter-language-namespace.ts';
 import type { Actor, AccessClient } from '../request/access.ts';
 import {
   authoritativeTimeValue,
@@ -110,6 +111,7 @@ type CandidateRow = QueryResultRow & {
   stage_status: string;
   stage_expires_at: string;
   stage_expired: boolean;
+  language_occurrence_count: string;
 };
 
 type PreparedActivationObservation = Readonly<{
@@ -325,7 +327,7 @@ async function readCandidate(
          candidate.placement_count::text,candidate.chapter_count::text,candidate.source_revision_id,
          candidate.expected_head_revision_id,candidate.expected_publication_id,
          candidate.initiator_account_id,candidate.owner_epoch::text,candidate.status,
-         stage.status AS stage_status,
+         stage.status AS stage_status,stage.language_occurrence_count::text,
          to_char(stage.expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS stage_expires_at,
          (stage.expires_at<=$4::timestamptz) AS stage_expired
        FROM content.hosted_version_release_candidate candidate
@@ -649,7 +651,12 @@ async function readActivationPageForPreparation(
          WHERE c.route=$1 AND c.catalogue_id=$2 AND c.stage_id=$3 AND c.kind='chapter'
            AND c.thread_id=t.thread_id AND c.post_id=t.post_id
            AND c.target_revision_id=t.target_revision_id AND c.body_sha256=t.body_sha256
-         ORDER BY c.occurrence_id
+         UNION ALL
+         SELECT language.occurrence_id FROM content.hosted_publication_language_target language
+         WHERE language.route=$1 AND language.catalogue_id=$2 AND language.stage_id=$3
+           AND language.thread_id=t.thread_id AND language.post_id=t.post_id
+           AND language.target_revision_id=t.target_revision_id AND language.body_sha256=t.body_sha256
+         ORDER BY occurrence_id
          LIMIT 1
        ) candidate ON true
        ORDER BY t.thread_id,t.post_id,t.target_revision_id,t.body_sha256
@@ -1138,6 +1145,8 @@ export function activateHostedPublicationCandidate(
         expectedDraftRevisionId: row.expected_head_revision_id,
         expectedPublicationId: row.expected_publication_id,
       });
+      if (BigInt(candidate.language_occurrence_count) > 0n)
+        await publishHostedLanguageNamespace(tx as AccessClient, catalogueId, stageId, row.activation_revision_id);
       await tx.query(
         `UPDATE content.hosted_publication_activation
        SET state='activated',publication_id=$4,completed_at=transaction_timestamp(),

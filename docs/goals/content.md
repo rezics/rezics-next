@@ -20,7 +20,9 @@ boards, threads, posts, media, Spaces and Realms.
   with its exact Post revisions; later draft edits leave that selection unchanged. Ordinary author and reader
   authorization still applies, and unselected drafts stay private. [Native API acceptance](#acceptance) and
   [Web's mounted author and reader acceptance](web.md#acceptance) are separate launch gates for complete books and
-  hosted novels. Record a legacy parity comparison against the read-only `../rezics` behavior baseline at `95167ceab`,
+  hosted novels. Chapter body-language choice uses explicit draft associations and immutable publication selections
+  of actual authored title/body alternatives under the [native contract](../../services/kernel/src/content/hosted-chapters.md#chapter-body-languages);
+  language preference never rewrites an exact selected body. Record a legacy parity comparison against the read-only `../rezics` behavior baseline at `95167ceab`,
   meeting or exceeding it and demonstrating at least one improvement, such as stable exact chapter links across
   moves plus atomic published-revision selection. A flat native first slice alone does not satisfy the launch gate.
 - Reports retain exact anchors. Takedown targets the resource partition and security revision. Erased revision bodies

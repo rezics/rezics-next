@@ -189,6 +189,13 @@ function TocEntry({
       },
     })),
   ];
+  if (target.kind === 'chapter' && controller.canBindChapterLanguage())
+    actions.push({
+      type: 'item',
+      label: m.studio_book_language_heading({}, { locale }),
+      disabled: !editable,
+      onSelect: () => onOrganize({ kind: 'language', occurrenceId: placement.occurrenceId }),
+    });
   if (pin)
     actions.push({
       type: 'item',

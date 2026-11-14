@@ -62,6 +62,7 @@ function asPlacement(
       title: value.title,
       kind: 'chapter',
       target: value.target,
+      ...(value.bodyLanguages === undefined ? {} : { bodyLanguages: value.bodyLanguages }),
     };
   }
   return { occurrenceId, parentId, position, ordinal, title: value.title, kind: 'part' };

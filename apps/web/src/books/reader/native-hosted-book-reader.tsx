@@ -8,6 +8,9 @@ export type NativeHostedBookReaderProps = Omit<HostedBookReaderProps, 'source' |
 
 /** The host supplies real publication/target admission and prepared-viewer observations for this mount. */
 export function NativeHostedBookReader({ admission, ...props }: NativeHostedBookReaderProps) {
-  const source = useMemo(() => createNativeHostedBookSource(admission), [admission]);
+  const source = useMemo(
+    () => createNativeHostedBookSource(admission, props.locale),
+    [admission, props.locale],
+  );
   return <HostedBookReader {...props} source={source} readingIdentity={admission} />;
 }

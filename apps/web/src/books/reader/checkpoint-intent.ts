@@ -67,6 +67,8 @@ export function checkpointConfirmsIntent(intent: CheckpointIntent, value: Checkp
     value.address.catalogueId === command.address.catalogueId &&
     value.address.publicationRevisionId === command.address.publicationRevisionId &&
     value.address.occurrenceId === command.address.occurrenceId &&
+    value.address.bodyLanguage === command.address.bodyLanguage &&
+    value.address.targetPostId === command.address.targetPostId &&
     value.address.targetRevisionId === command.address.targetRevisionId &&
     value.address.targetSha256 === command.address.targetSha256 &&
     sameCheckpointPosition(value.address.documentPosition, command.address.documentPosition)

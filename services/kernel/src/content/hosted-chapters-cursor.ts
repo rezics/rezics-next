@@ -49,6 +49,8 @@ export function hostedCursorBinding(
       catalogueId,
       revisionId: selection.revisionId ?? null,
       kind: selection.kind ?? null,
+      language: selection.language ?? null,
+      preferredLanguages: selection.preferredLanguages ?? null,
       viewer,
       ...query,
     },

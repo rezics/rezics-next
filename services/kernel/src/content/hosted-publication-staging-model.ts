@@ -1,4 +1,4 @@
-import type { HostedChapterTarget } from './hosted-chapters-model.ts';
+import type { HostedChapterTarget, HostedChapterLanguages } from './hosted-chapters-model.ts';
 
 export const HOSTED_PUBLICATION_STAGING_STEP_LIMIT = 20;
 export const HOSTED_PUBLICATION_STAGING_BATCH_LIMIT = 1024;
@@ -81,6 +81,7 @@ export type HostedPublicationStagedCandidate = Readonly<{
   kind: 'part' | 'chapter';
   title: string | null;
   target: HostedChapterTarget | null;
+  bodyLanguages?: HostedChapterLanguages;
 }>;
 export type HostedPublicationTargetObservation = Readonly<{
   target: HostedChapterTarget;
