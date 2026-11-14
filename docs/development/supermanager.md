@@ -31,6 +31,23 @@ After every full clock hour below the 20,000-line product target, the supermanag
 It analyses the causes from the task store and run logs, acts on the largest within the same hour, and reports the
 cause and action in the project's Telegram group, without waiting to be asked.
 
+## Implementation sprint width
+
+For the current 6–8 hour implementation window, the supermanager intervenes whenever fewer than 25 workers
+are actively implementing source. Use the existing ten-minute checkpoint. Count current owned worker processes
+with source work; separate startup reservations, ready tasks, parked checks and landing from coding. Compare
+worktree changes and commits with landings; a process or task label alone is not evidence of code output.
+
+First ask each responsible manager which release outcomes can start now and whether its workers have proposed
+their next independent tasks. Have managers dispatch or recover those starts, confirm the evidence, and give idle
+slots another coherent outcome while a shared fault is repaired. Check concrete allowance and host admission after
+checking supply, ownership and start failures. Keep this intervention active until width recovers or the window
+ends; do not create filler or interrupt live writers.
+
+Consolidate resident managers whose work duplicates another owner's or whose role produces no independent decision
+or actionable work. Transfer their Goals and outstanding task ownership through Goal before stopping the redundant
+session. The supermanager owns the evidence and cross-Goal trade-offs; product managers still own worker starts.
+
 ## Questions for the maintainer
 
 Never ask a blocking question: no dialog, prompt or tool call that waits for an answer while the Goal runs. The work
