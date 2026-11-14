@@ -22,6 +22,12 @@
 
 Client emit stays before the workspace compiler so tests see source-checked declarations. Client emit, `tsc` and construct share the same migrated database; they do not start a second compiler database. `--emit-client` still runs a declaration compiler and then `tsc --noEmit`; that is the accepted client-publication order, not duplicate preparation.
 
+For artifact generation independently of full project typing, add `--generate-only --emit-client` to the same command.
+This mode compiles the production API declaration roots, constructs the production contract, and emits the requested
+OpenAPI and schema outputs from the same migrated database. It omits only the full `src`/`test`/`scripts` typecheck;
+run the default `typecheck` separately for that evidence. Generation is labeled `kernel generation` and is not a full
+project typing pass. `--generate-only` requires client emission so production API compiler failures still stop output.
+
 Declaration entry points name recursive query results through their owning compiler's return type, so publication
 does not expand an inferred cyclic structure. Publisher failure leaves dependent workspace typing pending; missing
 generated declarations are repaired through this publisher rather than handwritten consumer contracts.
