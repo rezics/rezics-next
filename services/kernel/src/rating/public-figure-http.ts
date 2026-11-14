@@ -1,13 +1,13 @@
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { Static } from 'typebox';
-import { deadlineClient } from './dependencies.ts';
+import { remaining } from '../access/deadline.ts';
 import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { publicFigureState, type Queryable } from './public-figure.ts';
 import readViews from './public-figure-views.sql';
 import questionRead from './question-read.sql';
+import { withSourceRatingReadConnection } from './source-rating-read-connection.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -80,21 +80,14 @@ export async function readPublicFigureViews(
 /** Only published Global data and its pending mark enter the consumer snapshot. */
 export async function readSubjectPublicFigure(pool: Pool, subjectId: string, deadline: number) {
   if (routeOf(subjectId) === null) throw new TypeError('Invalid subject figure address');
-  return withConnection(pool, async (client) => {
-    const bounded = deadlineClient(client, deadline);
-    await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const views = await readPublicFigureViews(bounded, [subjectId]);
-      const result = views?.get(subjectId) ?? null;
-      await bounded.query('COMMIT');
-      return result;
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)));
-      }
-      throw error;
-    }
-  });
+  remaining(deadline);
+  return withSourceRatingReadConnection(
+    pool,
+    deadline,
+    async (client) => {
+      const views = await readPublicFigureViews(client as Queryable, [subjectId]);
+      return views?.get(subjectId) ?? null;
+    },
+    { repeatableRead: true },
+  );
 }
