@@ -819,7 +819,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.prompt.conditionBytes`                        | `1500`                                                                     | Combined condition-template measurement budget in one prompt (UTF-8 bytes); overruns do not block launch.                                                                                   |
 | `policy.prompt.workerTotalBytes`                      | `20000`                                                                    | Worker prompt total measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                         |
 | `policy.prompt.managerRoleBytes`                      | `5000`                                                                     | Manager role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                       |
-| `policy.prompt.managerOpeningBytes`                   | `30000`                                                                    | Manager opening measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                             |
+| `policy.prompt.managerOpeningBytes`                   | `30000`                                                                    | Manager opening budget (UTF-8 bytes) for complete owner-summary paragraphs; required role, brief, continuations and owner links remain intact.                                              |
 | `policy.prompt.researchRoleBytes`                     | `9000`                                                                     | Research role and generated architecture map measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                |
 | `policy.brief.bytes`                                  | `12288`                                                                    | Brief lint threshold (UTF-8 bytes); over-budget briefs dispatch with a warning.                                                                                                             |
 | `policy.brief.pathCharacters`                         | `65536`                                                                    | Maximum declared path pattern characters.                                                                                                                                                   |
@@ -1363,6 +1363,8 @@ as a child and continues serving commands while it runs. Without a configured no
 as a local command and the host sends nothing. Add `--send` to deliver a report manually; the default command only
 prints it.
 
+Decision: a plain preview formats current evidence without freezing a row; only a send may capture, sends reject buckets that have not ended, and frozen report bytes and attribution remain stable.
+
 The manager host evaluates absolute flow targets each hour and sends one `environment` event to the configured
 supermanager for each breached threshold: efficiency below 40%, any queue older than 60 minutes, landing p90 above
 30 minutes, or more than 1.5 attempts per integrated task. `flow` in local settings can override `efficiencyBelow`,
@@ -1712,15 +1714,25 @@ using `worker-result.schema.json`, including any concrete blocker and the approa
 
 Workers, managers and researchers receive prompts rendered from `tools/goal/prompts/`: `worker.md`, `manager.md`,
 `research.md`, and `conditions/<id>.md`. The renderer reads those files from disk at each launch, cached by
-modification time and size. Budgets are `policy.prompt` (worker role 3,500 bytes, conditions 1,500, worker total
-20,000, manager role 5,000, manager opening 30,000, research role 2,500) and `policy.brief.bytes` 12,288. Worker
-and manager renders always launch when a size exceeds its budget. Their manifests retain per-layer sizes, budgets and
-over-budget layer names; hourly flow reports count over-budget launches by layer. The brief lints for byte size,
+modification time and size. Budgets are `policy.prompt` (worker role 10,000 bytes, conditions 1,500, worker total
+20,000, manager role 5,000, manager opening 30,000, research role 9,000) and `policy.brief.bytes` 12,288. Worker
+and manager renders always launch when a size exceeds its budget. Manager openings replace full owner Goal documents
+with their first complete Outcome and Scope paragraphs, plus links to the full Goal file and its scope, ownership,
+Done when and acceptance sections. The opening follows the configured brief and includes each current continuation
+once. If the manager opening budget is tight, the renderer omits whole Scope paragraphs, then Outcome paragraphs,
+in Goal order; it never cuts a requirement mid-text. Managers read linked owner detail on demand. Required role,
+brief, continuation and owner links remain intact, so those inputs can still exceed the budget by themselves.
+Manifests retain per-layer sizes, budgets and over-budget layer names; hourly flow reports count over-budget launches
+by layer. The brief lints for byte size,
 `.temp/goal/`, main-checkout paths and superseded check instructions are stored on the task and included in backlog
 dispatch results. Committed-template golden renders still assert role and condition budgets so template growth is
 caught during development. Each worker attempt records the git blob SHAs of `AGENTS.md`, the role template, each
 condition and the brief, plus the policy hash and layer measurements; manager sessions retain their opening
 measurements. `attempts --json` exports worker manifests.
+Decision: concise shared worker guidance keeps the largest current architecture map under the unchanged 10,000-byte role budget with at least 200 bytes of headroom; preserve all selected dependency rows and required workflow guidance.
+Decision: renewed manager openings keep the configured brief and each current continuation once, replace full Goal
+documents with complete Scope then Outcome paragraphs plus owner-detail links, and omit whole summary paragraphs when
+the existing opening budget is tight; managers read omitted detail on demand.
 Decision: task-specific worker guidance renders after the contract to keep the reusable role within its byte budget while retaining the frozen repair line in the role template.
 Decision: Worker prompts render architecture-map rows for the modules that own the brief's paths and those modules' allowed dependencies, with a one-line pointer to `docs/architecture/modules.json`; a Kernel-only brief carries no web rows. The map is computed from `scripts/architecture-map.ts` without loading oxc-parser.
 Decision: Refresh only the `interface-stories.txt` prompt golden when its generated `wapp` row omits the current `w/knowledge/route.tsx` entry; prompt behavior, budgets and other goldens stay unchanged.
