@@ -41,6 +41,29 @@ their complete payload and fallback when their implementation is unavailable. Un
 without publishing a flattened or partially stripped snapshot. A stored document is never round-tripped through
 HTML, Markdown or plain text merely to display a control.
 
+The controls cover all admitted heading levels, authored paragraph/heading alignment, text color/background,
+text-emphasis attributes and programming-language metadata on code blocks. These change the existing document
+attributes; personal typography remains a separate preference. Reader and editor render the same authored values,
+including table-header alignment. Style serialization and rich paste admit only safe property values and cannot
+turn an authored value into additional CSS declarations or an unsolicited resource request.
+
+Images show an admitted preview in the working editor where the host has presentation facts; an alt-only
+placeholder is not the completed image experience. Image controls edit occurrence alt/title, dimensions and
+concealment through the same guarded history. A shared per-occurrence rendering port carries these attributes
+and node identity to the host's existing authorized media presentation. It never derives a URL from an opaque ID
+or grants access. Newly uploaded local preview state remains visit-owned and outside stored document bytes.
+Every existing authoring host supplies the port where its current media contract supports it.
+
+Media and opaque components always expose truthful caption/fallback or unavailable state; they are never invisible
+empty leaf elements. Host media insertion/rendering and known component capabilities may be injected without a new
+service or wire node. Unknown implementations remain opaque and preserve their original data. Media ingestion,
+cropping services and executable user plugins do not become prerequisites for this repair.
+
+Rich clipboard exchange preserves supported node/mark attributes and opaque version/payload/fallback. Structured
+content that cannot be represented is rejected visibly before mutation, or converted only through an explicitly
+chosen plain-text paste mode. Sanitization is property-aware and does not silently erase supported formatting.
+Editor-owned metadata forms contain submit/Enter so they cannot invoke a host Save or Publish action.
+
 Lists use maintained ProseMirror split/lift/sink/join semantics for Enter, Tab, Shift+Tab and Backspace, including
 empty-item exit and nested lists. Task controls change checked state through an ordinary undoable transaction.
 Table controls create a chosen size, insert/delete rows and columns, toggle headers, select cells/rows/columns,
