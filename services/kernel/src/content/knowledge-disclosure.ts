@@ -17,6 +17,7 @@ async function referenceVisible(
   deps: KnowledgeDependencies,
   target: KnowledgeReferenceTarget | null,
   context: ReadContext,
+  expectedPublicationId?: string,
 ): Promise<boolean> {
   if (target === null) return false;
   if (target.kind === 'subject') {
@@ -32,6 +33,7 @@ async function referenceVisible(
   const publication = selected.value;
   if (
     !publication ||
+    (expectedPublicationId !== undefined && publication.publication_id !== expectedPublicationId) ||
     (target.kind === 'revision' &&
       (publication.revision_id !== target.revisionId ||
         publication.publication_sha256.toString('hex') !== target.sha256 ||
@@ -99,13 +101,30 @@ export async function projectKnowledgePublicProvenance(
 ): Promise<KnowledgeProvenance | null> {
   if (provenance?.representation !== 'public') return null;
   const context = { actor: { kind: 'anonymous' as const }, deadline };
-  if (!(await referenceVisible(deps, { kind: 'document', documentId: provenance.documentId }, context))) return null;
-  const route = routeOf(provenance.documentId)!;
+  const route = routeOf(provenance.documentId);
+  if (route === null) return null;
   const selected = await snapshot(deps, provenance.documentId, context, (tx) =>
     knowledgePublicSelection(tx, route, provenance.documentId, provenance.revisionId),
   );
-  return selected.value?.revision_id === provenance.revisionId &&
-    selected.value.publication_id === provenance.publicationId
+  if (
+    selected.value?.revision_id !== provenance.revisionId ||
+    selected.value.publication_id !== provenance.publicationId
+  )
+    return null;
+  // The exported representation digest may differ from the immutable source digest.
+  // Currentness and Subject eligibility belong to this exact selected revision,
+  // never the source's newer live revision.
+  return (await referenceVisible(
+    deps,
+    {
+      kind: 'revision',
+      documentId: provenance.documentId,
+      revisionId: provenance.revisionId,
+      sha256: selected.value.publication_sha256.toString('hex'),
+    },
+    context,
+    provenance.publicationId,
+  ))
     ? provenance
     : null;
 }
