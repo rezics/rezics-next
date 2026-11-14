@@ -1206,11 +1206,9 @@ async function publishShowcasePhases(
     if (state === 'current') currentTagBindings.add(key);
   }
   for (const association of manifest.tagAssociations ?? []) {
-    const state =
-      association.releaseDigest === bundledDigest ? currentBindingMatches(association) : 'retired';
+    const state = association.releaseDigest === bundledDigest ? currentBindingMatches(association) : 'retired';
     currentMembershipBindingStates.set(tagAssociationKey(association), state);
-    if (state === 'current')
-      currentMembershipBindings.add(tagAssociationKey(association));
+    if (state === 'current') currentMembershipBindings.add(tagAssociationKey(association));
   }
   for (const record of manifest.records) {
     if (!record.subjectId || recordHasSourceIdentity(record)) continue;
@@ -1307,11 +1305,7 @@ async function publishShowcasePhases(
       const content = assertion.statement.value.type === 'value' ? assertion.statement.value.content : null;
       const bindingKey = tagId && typeof content === 'string' ? `${record.sourceKey}\0${tagId}\0${content}` : '';
       const bindingState = currentTagBindingStates.get(bindingKey);
-      if (
-        !tagId ||
-        typeof content !== 'string' ||
-        !currentTagBindings.has(bindingKey)
-      ) {
+      if (!tagId || typeof content !== 'string' || !currentTagBindings.has(bindingKey)) {
         omissions.push({
           provider: record.provider,
           sourceKey: record.sourceKey,
@@ -2052,7 +2046,8 @@ async function publishShowcasePhases(
       const state = input.review.fence
         ? await showcaseTagParentSourceFence(input.review.fence, edge.binding)
         : 'unavailable';
-      const statementState = state === 'open' ? await parentStatementCurrent(edge.binding, edge.assertion) : 'unavailable';
+      const statementState =
+        state === 'open' ? await parentStatementCurrent(edge.binding, edge.assertion) : 'unavailable';
       if (state === 'open' && statementState === 'current')
         setParentOutcome(edge.binding, 'public', edge.assertion.candidateId);
       else {
@@ -2284,7 +2279,7 @@ async function publishShowcasePhases(
         if (state === 'retired') return 'retired' as const;
         if (state === 'unavailable') unavailable = true;
       }
-      return unavailable ? 'unavailable' as const : 'current' as const;
+      return unavailable ? ('unavailable' as const) : ('current' as const);
     };
     for (const entry of groupAssertions) {
       const state = await dependencyStateForAssertion(entry);
@@ -2315,7 +2310,7 @@ async function publishShowcasePhases(
         const value = selectedCandidate.statement.value;
         const bindingState =
           tagId && value.type === 'value' && typeof value.content === 'string'
-            ? currentTagBindingStates.get(`${group.record.sourceKey}\0${tagId}\0${value.content}`) ?? 'retired'
+            ? (currentTagBindingStates.get(`${group.record.sourceKey}\0${tagId}\0${value.content}`) ?? 'retired')
             : 'retired';
         if (bindingState === 'unavailable') {
           selections.set(item.candidate, item.rank);
@@ -2335,7 +2330,8 @@ async function publishShowcasePhases(
             (withdrawal) => withdrawal.sourceKey === identity.sourceKey && withdrawal.tagId === identity.tagId,
           );
         const parentWithheld = !!identity && withheldParentTags.has(identity.tagId);
-        const association = identity &&
+        const association =
+          identity &&
           manifest.tagAssociations.find(
             (item) =>
               item.workId === group.record.sourceKey &&
@@ -2343,7 +2339,7 @@ async function publishShowcasePhases(
               item.tagId === identity.tagId,
           );
         const bindingState = association
-          ? currentMembershipBindingStates.get(tagAssociationKey(association)) ?? 'unavailable'
+          ? (currentMembershipBindingStates.get(tagAssociationKey(association)) ?? 'unavailable')
           : 'retired';
         if (!explicitlyWithdrawn && !parentWithheld && bindingState === 'unavailable') {
           selections.set(item.candidate, item.rank);

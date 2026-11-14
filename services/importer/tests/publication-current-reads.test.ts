@@ -28,9 +28,7 @@ test('current provider and citation evidence ignores deprecated or non-value his
     rank,
     property: { id: property },
     value: { type, content },
-    references: [
-      { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: uri } }] },
-    ],
+    references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: uri } }] }],
   });
   const record = { provider: 'bangumi', sourceKey: '101', subjectId: original, nativeType: 'schema:Work' } as const;
   const read = (rows: unknown[], citations = rows) =>
@@ -66,13 +64,16 @@ test('current provider and citation evidence ignores deprecated or non-value his
   expect(publicHasCitation(read([], [valueStatement('schema:name', 'Name', 'normal')]), uri)).toBe(true);
   expect(
     publicHasCitation(
-      read([], [
-        {
-          property: { id: 'schema:name' },
-          value: { type: 'value', content: 'Name' },
-          references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: uri } }] }],
-        },
-      ]),
+      read(
+        [],
+        [
+          {
+            property: { id: 'schema:name' },
+            value: { type: 'value', content: 'Name' },
+            references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: uri } }] }],
+          },
+        ],
+      ),
       uri,
     ),
   ).toBe(false);

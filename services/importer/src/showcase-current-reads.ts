@@ -439,7 +439,9 @@ function isCurrentPublicValueStatement(value: unknown, property: string): boolea
     property?: { id?: unknown };
     value?: { type?: unknown; content?: unknown };
   };
-  return (row.rank === 'normal' || row.rank === 'preferred') && row.property?.id === property && row.value?.type === 'value';
+  return (
+    (row.rank === 'normal' || row.rank === 'preferred') && row.property?.id === property && row.value?.type === 'value'
+  );
 }
 
 export function publicValueStatementCurrent(value: unknown, property: string): boolean {
@@ -477,8 +479,8 @@ function statementCites(value: unknown, uri: string): boolean {
 /** A citation is current only when it belongs to a current native value statement. */
 export function publicHasCitation(read: ReviewedSubjectRead, uri: string): boolean {
   const subject = read.subject as { statements?: Record<string, unknown[]> } | undefined;
-  return Object.entries(subject?.statements ?? {}).some(([property, rows]) =>
-    Array.isArray(rows) && rows.some((row) => publicValueStatementCites(row, property, uri)),
+  return Object.entries(subject?.statements ?? {}).some(
+    ([property, rows]) => Array.isArray(rows) && rows.some((row) => publicValueStatementCites(row, property, uri)),
   );
 }
 
