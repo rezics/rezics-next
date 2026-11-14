@@ -617,6 +617,8 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
     expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(1);
     third.child.kill('SIGTERM');
     await third.exited;
+    expect(third.child.exitCode).toBe(0);
+    expect(third.child.signalCode).toBeNull();
     if (sameProcess(recovered.identity)) throw new Error(hostShutdownEvidence(f.path, third, recovered.identity));
     expect(sameProcess(recovered.identity)).toBe(false);
   } finally {

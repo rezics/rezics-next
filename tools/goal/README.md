@@ -3242,6 +3242,8 @@ Decision: on a new provider start, its identity-only registry record remains pro
 WebSocket connection and JSON-RPC initialization succeed; the host then publishes the complete pool attachment before
 returning the client to manager thread recovery. Lifecycle checks count only recovery RPCs written after each host
 boundary and read that host's complete attachment after its fresh resume event.
+Decision: manager-host SIGTERM and SIGINT handlers remain attached through graceful shutdown and are removed in its
+final cleanup, so the socket drains before owned app-server process groups are stopped.
 Decision: ManagerSessions is the durable Goal coordinator; `manager-session-transport.ts` owns the provider connection
 cache, concrete Codex/Claude session requests, viewer argv and window prompt/respawn. Prompt rendering, launch-manifest
 accounting, inbox delivery, renewal and budget stay with ManagerSessions. Extraction tests pin saved-thread ordering,
