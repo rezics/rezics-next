@@ -5,6 +5,7 @@ import { m } from '../../paraglide/messages.js';
 import type { BookReader } from './reader-state';
 import type { BookDestination } from './hosted-book-reader';
 import { sameSelection, type BookContentsAddress, type BookPage, type BookSelection } from './source';
+import { useShellContextNavigationSelection } from '../../shell/contextual-navigation';
 
 const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 type OutlineProps = {
@@ -19,6 +20,25 @@ type BranchAction = (parent: string | null, action: () => void, keyboard: boolea
 
 /** This content is placed in the existing main navigation by ShellContextNavigation. */
 export function BookOutlineView({ reader, locale, page, selection, destination, registerRow }: OutlineProps) {
+  const selectNavigation = useShellContextNavigationSelection(reader);
+  const pageSnapshot = reader.getSnapshot();
+  const admittedSelection = useRef(false);
+  // This wrapper covers only deliberate destinations, including standalone button renderers.
+  const documentDestination: BookDestination = (address, title, extra) => (
+    <div
+      data-menu-navigation-selection
+      onClickCapture={() => {
+        admittedSelection.current =
+          reader.current() && reader.getSnapshot() === pageSnapshot && pageSnapshot.state !== 'loading';
+      }}
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+        selectNavigation(admittedSelection.current && (!reader.current() || reader.getSnapshot() !== pageSnapshot));
+      }}
+    >
+      {destination(address, title, extra)}
+    </div>
+  );
   const outline = reader.outline;
   const snapshot = useSyncExternalStore(outline.subscribe, outline.getSnapshot, outline.getSnapshot);
   const options = { locale: locale as never };
@@ -87,7 +107,8 @@ export function BookOutlineView({ reader, locale, page, selection, destination, 
       {snapshot.opened ? (
         <nav aria-label={m.book_reader_contents({}, options)}>
           <OutlineBranch
-            {...{ reader, locale, selection, destination, registerRow, request }}
+            {...{ reader, locale, selection, registerRow, request }}
+            destination={documentDestination}
             parent={snapshot.root}
             registerRegion={(parent, element) => {
               if (element) regions.current.set(parent, element);
@@ -99,7 +120,7 @@ export function BookOutlineView({ reader, locale, page, selection, destination, 
         <nav aria-label={m.book_reader_contents({}, options)} className="grid gap-1">
           {page.ancestors.map((ancestor) => (
             <div key={ancestor.occurrenceId}>
-              {destination(ancestor.contents, <bdi>{ancestor.title}</bdi>, { appearance: 'breadcrumb' })}
+              {documentDestination(ancestor.contents, <bdi>{ancestor.title}</bdi>, { appearance: 'breadcrumb' })}
             </div>
           ))}
           <Button

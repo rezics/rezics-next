@@ -37,7 +37,7 @@ import type { HostedDraftPicker } from './hosted-draft-picker';
 import { HostedReleaseReaderLink } from './hosted-release-reader-link-action';
 import type { HostedReleaseReaderBinding } from './hosted-release-reader-link';
 import { WorkbenchRegion, useAuthoringSelection } from './workbench-region';
-import { ShellContextNavigation } from '../shell/contextual-navigation';
+import { ShellContextNavigation, useShellContextNavigationSelection } from '../shell/contextual-navigation';
 import { workbenchCopy } from './workbench-copy';
 import './studio.css';
 
@@ -124,6 +124,7 @@ export function StudioWorkbench({
   const [nativeDraftRisk, setNativeDraftRisk] = useState(false);
   const [nativeCreationPending, setNativeCreationPending] = useState(false);
   const editorHeading = useRef<HTMLHeadingElement>(null);
+  const selectNavigation = useShellContextNavigationSelection(controller);
   const previousPost = useRef<string | null>(
     state.historical ? (state.selected?.source.revision.exact.postId ?? null) : null,
   );
@@ -277,18 +278,26 @@ export function StudioWorkbench({
   }
   function open(post: string) {
     if (blocked) return;
+    const before = controller.snapshot();
     if (post === postId) {
       returnToDocument();
+      selectNavigation(!blocked && port.isCurrent());
       return;
     }
     if (selected?.dirty || selected?.snapshotPending || selected?.uploading) {
       setPendingOpen({ kind: 'document', post });
+      selectNavigation(!blocked && port.isCurrent(), () =>
+        editorHeading.current
+          ?.closest('section.studio-workspace')
+          ?.querySelector<HTMLButtonElement>('.studio-navigation-confirm button:not(:disabled)'),
+      );
       return;
     }
     returnToDocument();
     setView('write');
     setHistoryOpen(false);
     void controller.open(post);
+    selectNavigation(!blocked && !before.operation && controller.snapshot().operation === 'open');
   }
   async function continueToDraft(save: boolean) {
     const target = pendingOpen;
@@ -397,6 +406,7 @@ export function StudioWorkbench({
                 setPendingOpen(null);
                 pendingDestination.current = null;
                 setFocusCanvas(true);
+                selectNavigation(true);
               }}
             >
               {m.studio_workspace_keep_editing({}, options)}

@@ -5,11 +5,13 @@ import {
   useId,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useMatch, useRouterState } from '@tanstack/react-router';
+import { dismissMenuForNavigation } from '@rezics/ui/menu';
 
 type Owner = {
   identity: object;
@@ -54,10 +56,30 @@ export function ShellContextNavigationProvider({ children }: { children: ReactNo
   return <ContextNavigation value={value}>{children}</ContextNavigation>;
 }
 
+/** Menu focus work follows route/reader identities even after its physical panel closes. */
+export function useShellContextNavigationMenuScope() {
+  const context = useContext(ContextNavigation);
+  return useMemo(() => ({}), [context?.scope, context?.active]);
+}
+
 /** Only the expanded desktop rail or the mounted phone Menu supplies this host. */
 export function ShellContextNavigationOutlet() {
   const context = useContext(ContextNavigation);
-  return <div ref={context?.attach} data-shell-context-navigation-host className="min-w-0 empty:hidden" />;
+  const host = useRef<HTMLDivElement | null>(null);
+  const previousOwner = useRef(context?.active);
+  const attach = context?.attach;
+  const ref = useCallback(
+    (node: HTMLDivElement | null) => {
+      host.current = node;
+      return attach?.(node);
+    },
+    [attach],
+  );
+  useLayoutEffect(() => {
+    if (previousOwner.current && previousOwner.current !== context?.active) dismissMenuForNavigation(host.current);
+    previousOwner.current = context?.active;
+  }, [context?.active]);
+  return <div ref={ref} data-shell-context-navigation-host className="min-w-0 empty:hidden" />;
 }
 
 export type ShellContextNavigationProps = {
@@ -65,25 +87,73 @@ export type ShellContextNavigationProps = {
   children: ReactNode;
 };
 
+/** Call only after the consumer admits a document choice or its existing switch review. */
+export function useShellContextNavigationSelection(lifetime?: object) {
+  const context = useContext(ContextNavigation);
+  const [selection, setSelection] = useState<{
+    scope: object | undefined;
+    owner: object | null | undefined;
+    lifetime: object | undefined;
+    focus: () => HTMLElement | null | undefined;
+  } | null>(null);
+  useLayoutEffect(() => {
+    if (!selection) return;
+    setSelection(null);
+    if (selection.scope === context?.scope && selection.owner === context?.active && selection.lifetime === lifetime)
+      selection.focus()?.focus({ preventScroll: true });
+  }, [selection, context?.scope, context?.active, lifetime]);
+  return (accepted: boolean, focus?: () => HTMLElement | null | undefined) => {
+    if (!accepted) return;
+    dismissMenuForNavigation(context?.target ?? null);
+    if (focus) setSelection({ scope: context?.scope, owner: context?.active, lifetime, focus });
+  };
+}
+
 /**
  * Declare navigation next to the reading/editing canvas, inside its existing reader and data providers.
  * The portal retains that React ancestry and disappears with the consumer's admission or lifetime.
  */
 export function ShellContextNavigation({ label, children }: ShellContextNavigationProps) {
   const context = useContext(ContextNavigation);
+  if (!context)
+    return (
+      <ContextNavigationRegion label={label} standalone>
+        {children}
+      </ContextNavigationRegion>
+    );
+  return (
+    <HostedContextNavigation context={context} label={label}>
+      {children}
+    </HostedContextNavigation>
+  );
+}
+
+function HostedContextNavigation({
+  context,
+  label,
+  children,
+}: ShellContextNavigationProps & { context: ContextNavigation }) {
   const routeId = useMatch({ strict: false, select: (match) => match.routeId });
   const depth = useRouterState({ select: (state) => state.matches.findIndex((match) => match.routeId === routeId) });
   const [identity] = useState(() => ({}));
-  const headingId = useId();
-  const register = context?.register;
-  const scope = context?.scope;
+  const { register, scope } = context;
   useLayoutEffect(() => {
-    if (register && scope) return register({ identity, scope, depth });
+    return register({ identity, scope, depth });
   }, [register, identity, scope, depth]);
 
-  if (!context?.target || context.active !== identity) return null;
-  return createPortal(
-    <section
+  if (!context.target || context.active !== identity) return null;
+  return createPortal(<ContextNavigationRegion label={label}>{children}</ContextNavigationRegion>, context.target);
+}
+
+function ContextNavigationRegion({
+  label,
+  children,
+  standalone = false,
+}: ShellContextNavigationProps & { standalone?: boolean }) {
+  const headingId = useId();
+  const Region = standalone ? 'nav' : 'section';
+  return (
+    <Region
       aria-labelledby={headingId}
       data-shell-context-navigation
       className="mt-3 min-w-0 border-t border-sidebar-border pt-3"
@@ -92,7 +162,6 @@ export function ShellContextNavigation({ label, children }: ShellContextNavigati
         {label}
       </h2>
       <div className="min-w-0 [&_a]:min-h-11 [&_button]:min-h-11">{children}</div>
-    </section>,
-    context.target,
+    </Region>
   );
 }
