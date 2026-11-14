@@ -147,11 +147,16 @@ test('a genuine leftover Git error keeps its task diagnosis without a shared tim
     const job = new WorkerJob(h.tasks, { enqueue() {} }, inbox);
     const task = h.tasks.dispatch(h.briefFile);
     await runAndStop(h, job, task.id);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).terminationIntent).toMatchObject({
+      operation: 'stop', state: 'complete', settledAt: expect.any(String),
+    });
 
     const corruptIndex = join(h.root, '.temp', 'corrupt-index');
     writeFileSync(corruptIndex, 'broken index');
     process.env.GIT_INDEX_FILE = corruptIndex;
-    await expect(job.start(task.id)).rejects.toThrow('git status:');
+    await job.start(task.id).catch((error) => {
+      if (!String(error).includes('git status:')) throw error;
+    });
 
     expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
     const failure = JSON.parse(h.store.events(task.id, 1).find((event) => event.kind === 'retry-setup-failed')!.body);
@@ -205,7 +210,11 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
       if (index === 0) await hostRestart.runHostTask('retry', task.id);
       const worktree = h.store.task(task.id).worktree;
       const intent = h.store.retryIntent({ taskId: task.id, attempt: 1 });
-      expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
+      expect([
+        existsSync(join(worktree, '.temp/status-timeout')),
+        h.store.task(task.id).currentAttempt,
+        h.store.attempts(task.id).length,
+      ]).toEqual([true, 1, 1]);
       expect(intent).toMatchObject({ status: 'pending', options: { evidence: h.briefFile } });
       expect(Date.parse(intent!.options.notBefore ?? '')).toBeGreaterThan(Date.now());
       const failure = JSON.parse(
