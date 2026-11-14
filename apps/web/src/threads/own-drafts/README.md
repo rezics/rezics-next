@@ -70,8 +70,7 @@ retirement of its state when the supplied document or reading visit changes. Its
   [reading output](../../../../../packages/ui/tests/document-body.test.ts) and
   [disclosure lifetime](../../../../../packages/ui/tests/document-disclosure-lifetime.test.tsx).
 
-Decision: Consume footnotes unchanged through the existing private `PostReadingBody` caller after Document adopts
-and delivers its snapshot format and public reading disclosure port. Bind the consumer dependency to the implementation
+Decision: Bind the consumer dependency to the delivered snapshot format and public reading disclosure port implementation
 change in `packages/document` and `packages/ui`, confirmed through their public entries and a linked integration brief
 at the actual implementation revision. Prerequisite-only or unrelated integrated changes do not establish producer
 delivery. The integration brief must identify the public snapshot representation, runtime profiles and schema artifacts,
@@ -79,8 +78,12 @@ editor and Markdown preservation, shared accessible disclosure controls and requ
 retirement including equal bytes, and named story states before consumer fixtures and stories are written.
 The [producer integration contract](../../../../../packages/document/FOOTNOTES.md) identifies the delivered Document
 and UI implementation revisions, the public controls and messages, and the existing story states to extend.
-Decision: retain those delivered producer APIs and dispatch the independent consumer integration against that contract;
-the base already includes the implementation, and the linked brief completes its integration contract.
+
+Decision: Own drafts retains those delivered producer APIs and sends each supplied snapshot unchanged through its
+existing private `PostReadingBody`; the Web wrapper localizes footnote controls, source-plus-visit keys retire
+disclosure state, and explicit server or browser choices preserve the selected footnotes through editing and submission
+while later current reads keep their own returned snapshot.
+
 Own drafts does not invent footnote payloads or controls. Consumer changes cover the page/body preview, existing resume,
 command and native suites, shared Web messages/wrapper, and producer-named stories together.
 

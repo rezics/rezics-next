@@ -2,7 +2,7 @@ import { mock } from 'bun:test';
 import type { OwnDraftEntry, OwnDraftIdentity } from '../src/threads/own-drafts/model';
 import { act, createElement, type ReactNode } from 'react';
 import { dirname } from 'node:path';
-import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { fromMarkdown, fromPlainText, type DocumentSnapshot } from '@rezics/document';
 
 export const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 export const threadId = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
@@ -52,6 +52,10 @@ export function selected(entry: OwnDraftEntry = row(), text = 'Selected server b
       mediaIds: entry.mediaIds,
     },
   };
+}
+
+export function footnoteDocument(label: string, definition: string): DocumentSnapshot {
+  return fromMarkdown(`A supplied reference.[^${label}]\n\n[^${label}]: ${definition}`, 'blocks');
 }
 
 // The mounted browser shell supplies commands; no Cloudflare runtime is involved.

@@ -17,6 +17,9 @@ export function DocumentBody({ locale = getLocale(), labels, ...props }: Compone
         taskStatus: m.document_task_status({}, options),
         embeddedComponent: m.document_embedded_component({}, options),
         imageUnavailable: m.content_edition_image_unavailable({}, options),
+        goToFootnote: m.document_go_to_footnote({}, options),
+        footnote: m.document_footnote({}, options),
+        footnotes: m.document_footnotes({}, options),
         ...labels,
       }}
     />
