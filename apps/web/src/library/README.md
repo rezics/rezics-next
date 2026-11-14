@@ -87,8 +87,9 @@ Decision: the private Library uses one header/action area, a horizontally scroll
 filters with the selected type or independent label visible. View details and saved-default guidance are optional;
 Continue follows the shelf. Layout and column changes retain the installed page, cursor and selection. Shared
 shelf primitives keep their existing interfaces. Missing progress meaning and finish history use explicit text,
-never a synthetic percentage, score or date. Main review stories mount the actual `/library` route with a coherent
-member population, first use and source-local recovery. Focused acceptance is authored for the deferred verifier;
+never a synthetic percentage, score or date. A supplied progress session without a unit label keeps its exact
+amount text, identifies unavailable unit meaning and omits the visual share. Main review stories mount the actual
+`/library` route with a coherent member population, first use and source-local recovery. Focused acceptance is authored for the deferred verifier;
 the source attempt runs only the final workspace typecheck under the closing verification instruction.
 
 Library presentation resolves explicit valid URL choices first, then the current account's native shelf defaults, then
@@ -297,11 +298,9 @@ One existing FULL page supplies context: 20 personal rows by default, at most 10
 properties and three values each per row, with at most four displayed values. Continuations repeat that bounded
 page read. This adds no Subject requests, pagination, sorting, commands or private-context cache.
 
-The named unavailable seam is `suppliedShelfFacts`. Kernel's personal FULL list already attaches bounded list facts
-through `attachCollectionListFacts`, but the installed generated personal client has no facts field. The local
-optional adapter consumes that existing producer payload using the generated Collection fact union. Commerce must
-publish its existing personal facts schema in the generated client. FULL label assignments currently supply neither
-facts nor an identifying-context schema: Commerce must add the same optional four-property/three-value facts field
+The named unavailable seam is `suppliedShelfFacts`. The installed personal FULL client publishes optional bounded
+list facts, consumed by the local adapter using the shared generated fact union. FULL label assignments currently
+supply neither facts nor an identifying-context schema: Commerce must add the same optional four-property/three-value facts field
 to `/v1/libraryLabelAssignments?labelId=…&view=FULL`, using the existing bounded attachment with final assignment,
 Entry and reader revalidation. Semantic retains role meaning, accepted source qualification and item disclosure.
 Until those native fields arrive, no alternate endpoint fills the label shelf gap.

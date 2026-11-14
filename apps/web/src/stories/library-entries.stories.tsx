@@ -6,7 +6,11 @@ import { getLocale } from '../paraglide/runtime.js';
 import { displayLibraryTitle } from '../library/title';
 import { PageStory, exposureStory, libraryEntriesReady, libraryHeadingReady, pageReady, pagePaths } from './page';
 import entries from '../kernel/recorded/library-entries.json';
-import { setLibraryEntriesStoryMode, setLibraryTypesStoryState } from '../kernel/fake/library-entries-story';
+import {
+  setLibraryEntriesStoryMode,
+  setLibraryTypesStoryState,
+  setLibraryMemberStoryState,
+} from '../kernel/fake/library-entries-story';
 import { pickText } from '@rezics/composition';
 import { displayTypeLabel, type Release } from '../subject/definitions';
 import definitions from '../kernel/recorded/definitions-release.json';
@@ -18,7 +22,11 @@ const meta = {
   title: 'Library/Entries',
   id: 'pages-library-entries',
   parameters: { layout: 'fullscreen' },
-  beforeEach: () => setLibraryEntriesStoryMode('recorded'),
+  beforeEach: () => {
+    setLibraryEntriesStoryMode('recorded');
+    setContinueStorySize(6);
+    setLibraryNavigationStoryState({ pinCount: 0, builtins: 'none' });
+  },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -33,6 +41,7 @@ function filteredEntriesPath(title: string): string {
 }
 export const SignedIn: Story = {
   name: 'Owner',
+  beforeEach: () => memberShelf('populated'),
   play: libraryEntriesReady,
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
 };
@@ -280,4 +289,71 @@ export const TypePickerUnavailable: Story = {
     await expect(dialog.getByRole('button', { name: m.library_types_retry() })).toBeEnabled();
     expect(canvas.queryAllByRole('listitem').length).toBeGreaterThan(0);
   },
+};
+
+/** Main review states use the actual route and remain available for ordinary manual navigation. */
+function memberShelf(state: Parameters<typeof setLibraryMemberStoryState>[0]) {
+  setLibraryMemberStoryState(state);
+  setContinueStorySize(0);
+  setLibraryNavigationStoryState({ pinCount: 0, builtins: 'none', collectionCount: 0 });
+}
+
+export const MemberFiltered: Story = {
+  name: 'Owner, status and type selected',
+  beforeEach: () => memberShelf('populated'),
+  render: () => <PageStory visitor="Signed In" path="/library?state=planned&type=schema%3ABook&layout=list&size=l" />,
+};
+
+export const MemberSelected: Story = {
+  name: 'Owner, selected page across layouts',
+  beforeEach: () => memberShelf('populated'),
+  render: () => <PageStory visitor="Signed In" path="/library?layout=list" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const launcher = await canvas.findByRole('button', { name: m.library_selection_page() });
+    await waitFor(() => expect(launcher).toBeEnabled());
+    launcher.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(launcher).toHaveFocus();
+    const selection = () => canvas.getByRole('region', { name: m.library_selection_heading() });
+    await expect(
+      within(await canvas.findByRole('region', { name: m.library_selection_heading() })).getByText(
+        m.library_selection_count({ count: 8 }),
+      ),
+    ).toBeVisible();
+    const layouts = within(canvas.getByRole('group', { name: m.library_layout() }));
+    await userEvent.click(layouts.getByRole('button', { name: m.library_layout_grid() }));
+    await expect(within(selection()).getByText(m.library_selection_count({ count: 8 }))).toBeVisible();
+    await userEvent.click(within(selection()).getByRole('button', { name: m.library_selection_review() }));
+    await expect(
+      await within(document.body).findByRole('dialog', { name: m.library_selection_review_title() }),
+    ).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+  },
+};
+
+export const FirstUse: Story = {
+  name: 'Owner, empty first use',
+  beforeEach: () => memberShelf('first-use'),
+  render: () => <PageStory visitor="Signed In" path="/library" />,
+};
+
+export const MemberLabel: Story = {
+  name: 'Owner, independent label selected',
+  beforeEach: () => memberShelf('populated'),
+  render: () => (
+    <PageStory visitor="Signed In" path="/library?label=0192f3a0-6c1e-7b2a-9d4e-000000000801&layout=list" />
+  ),
+};
+
+export const MemberPreparing: Story = {
+  name: 'Owner, source-local title preparation',
+  beforeEach: () => memberShelf('preparing'),
+  render: () => <PageStory visitor="Signed In" path="/library?orderBy=title&direction=asc&layout=list" />,
+};
+
+export const MemberUnavailable: Story = {
+  name: 'Owner, source-local retry',
+  beforeEach: () => memberShelf('unavailable'),
+  render: () => <PageStory visitor="Signed In" path="/library?state=in_progress&layout=list" />,
 };
