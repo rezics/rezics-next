@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction, withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from './access-port.ts';
 import type { Effect } from '../events/effects.ts';
 import { routeOf } from '../route/route.ts';
@@ -112,44 +112,32 @@ export async function readModerationDirectoryReferences(
 > {
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > MODERATION_DIRECTORY_RAW_PAGE)
     throw new RangeError('Invalid moderation candidate budget');
-  return within(input.deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, input.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const coverage = await readModerationDirectoryCoverage(client);
-        const references = !coverage?.complete
-          ? []
-          : (
-              await client.query<ModerationDirectoryReference>(
-                `SELECT route,board_id AS "boardId",realm_id AS "realmId"
-                 FROM content.moderation_directory_reference
-                 WHERE ${input.realmId === undefined ? '' : 'realm_id=$4::uuid AND '}
-                   ROW(route,board_id)>ROW($1::integer,$2::uuid)
-                 ORDER BY route,board_id LIMIT $3`,
-                [
-                  input.after?.[0] ?? -1,
-                  input.after?.[1] ?? zero,
-                  input.limit,
-                  ...(input.realmId === undefined ? [] : [input.realmId]),
-                ],
-              )
-            ).rows;
-        await client.query('COMMIT');
-        return { coverage, references };
-      } catch (error) {
-        await connection.query('ROLLBACK');
-        throw error;
-      }
-    }),
-  );
+  return withBoundedReadOnlyTransaction(pool, input.deadline, async (client) => {
+    const coverage = await readModerationDirectoryCoverage(client);
+    const references = !coverage?.complete
+      ? []
+      : (
+          await client.query<ModerationDirectoryReference>(
+            `SELECT route,board_id AS "boardId",realm_id AS "realmId"
+             FROM content.moderation_directory_reference
+             WHERE ${input.realmId === undefined ? '' : 'realm_id=$4::uuid AND '}
+               ROW(route,board_id)>ROW($1::integer,$2::uuid)
+             ORDER BY route,board_id LIMIT $3`,
+            [
+              input.after?.[0] ?? -1,
+              input.after?.[1] ?? zero,
+              input.limit,
+              ...(input.realmId === undefined ? [] : [input.realmId]),
+            ],
+          )
+        ).rows;
+    return { coverage, references };
+  });
 }
 
 /** Request-local coverage observation uses the same bounded checkout as the raw page. */
 export async function observeModerationDirectoryCoverage(pool: Pool, deadline: number) {
-  return within(deadline, () =>
-    withConnection(pool, (connection) => readModerationDirectoryCoverage(deadlineClient(connection, deadline))),
-  );
+  return withBoundedReadConnection(pool, deadline, (client) => readModerationDirectoryCoverage(client));
 }
 
 export async function readModerationDirectoryCoverage(
