@@ -17,6 +17,7 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
   writeSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -48,7 +49,11 @@ import {
   artifactRelativePath,
   CHECK_ARTIFACTS_MAX_BYTES,
   CHECK_ARTIFACTS_MAX_FILES,
+  captureArtifactPublicationState,
+  assertArtifactPublicationState,
+  publishArtifactReturns,
   clearDeclaredArtifacts,
+  type ArtifactPublicationState,
   validateArtifactDeclarations,
 } from './check-artifacts.ts';
 import {
@@ -58,6 +63,7 @@ import {
   outputTreeProfile,
   outputTreeTransportCandidates,
   receiveOutputTrees,
+  readOutputTreeFile,
   safeOutputTreePath,
   type OutputTreeBinding,
 } from './check-output-tree.ts';
@@ -456,23 +462,6 @@ function ensureSafeParent(root: string, relativePath: string): string {
   return join(root, ...parts);
 }
 
-function ensureSafeDestinationParent(root: string, relativePath: string): string {
-  const parts = relativePath.split('/');
-  let current = root;
-  for (const part of parts.slice(0, -1)) {
-    current = join(current, part);
-    try {
-      const stat = lstatSync(current);
-      if (stat.isSymbolicLink() || !stat.isDirectory())
-        throw new CheckRunUnavailable(`check-run: declared output parent is unsafe: ${relativePath}`);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      mkdirSync(current, { mode: 0o700 });
-    }
-  }
-  return join(root, ...parts);
-}
-
 function removeCandidateFile(root: string, path: string): void {
   const target = ensureSafeParent(root, path);
   rmSync(target, { recursive: true, force: true });
@@ -534,6 +523,7 @@ export async function prepareCandidateSnapshot(
   excludedInputs: readonly string[] = [],
   allocation?: { workspace: string; scratch: string },
 ): Promise<CandidateSnapshot> {
+  const declarations = [...excludedInputs];
   excludedInputs = outputTreeInputExclusions(excludedInputs);
   const root = resolve(workspace);
   const repositoryRoot = resolve(git(root, ['rev-parse', '--show-toplevel']));
@@ -546,6 +536,21 @@ export async function prepareCandidateSnapshot(
     );
   assertCandidateInputs(root, excludedInputs);
   const files = workspaceFiles(root);
+  const preservesSource = (path: string) =>
+    !path.startsWith('.temp/') &&
+    path !== '.temp' &&
+    (path === KERNEL_CLIENT_OUTPUT.root || files.some((file) => file === path || file.startsWith(`${path}/`)));
+  const priorOutputs = captureArtifactPublicationState(root, declarations);
+  assertArtifactPublicationState(root, priorOutputs);
+  // Transient proof must disappear before an accepted attempt can fail setup or transport.
+  clearDeclaredArtifacts(
+    root,
+    declarations.filter((path) => !preservesSource(path)),
+  );
+  const callerOutputs = captureArtifactPublicationState(root, declarations).map((entry) => ({
+    ...entry,
+    source: preservesSource(entry.path),
+  }));
   const beforeFingerprint = await inputFingerprint(root, files, excludedInputs);
   const indexTree = candidateIndexTree(root, head);
   const baseFiles = gitList(root, ['ls-tree', '-rz', '--name-only', head]);
@@ -600,6 +605,18 @@ export async function prepareCandidateSnapshot(
     const frozenFingerprint = await inputFingerprint(frozen, workspaceFiles(frozen), excludedInputs);
     if (beforeFingerprint !== afterFingerprint || beforeFingerprint !== frozenFingerprint)
       throw new CheckRunUnavailable('check-run: candidate source changed while preparing its frozen snapshot');
+    assertArtifactPublicationState(root, callerOutputs);
+    writeFileSync(
+      join(scratch, 'caller-return-state.json'),
+      JSON.stringify({
+        version: 1,
+        root,
+        sourceHash: frozenFingerprint,
+        declarations,
+        outputs: callerOutputs,
+      }),
+      { mode: 0o600, flag: 'wx' },
+    );
     return { workspace: frozen, sourceHash: frozenFingerprint, inputFiles: files, indexTree, scratch };
   } catch (error) {
     if (worktreeRegistered) {
@@ -1146,14 +1163,63 @@ type ReturnedOutputResult = {
   entries: Array<{ path: string; size: number; sha256: string; kind: 'file' | 'directory' }>;
 };
 
-async function hashTree(path: string): Promise<string> {
-  const stats = lstatSync(path);
-  if (stats.isSymbolicLink()) throw new Error(`symlink returned for ${path}`);
-  if (stats.isFile()) return hashFile(path);
-  if (!stats.isDirectory()) throw new Error(`special file returned for ${path}`);
-  const hash = createHash('sha256');
-  for (const child of readdirSync(path).sort()) hash.update(`${child}\0${await hashTree(join(path, child))}\0`);
-  return hash.digest('hex');
+function callerReturnState(
+  snapshot: Pick<CandidateSnapshot, 'scratch' | 'sourceHash'>,
+  root: string,
+  declarations: readonly string[],
+  physicalRunId: string,
+): ArtifactPublicationState[] {
+  if (!declarations.length) return [];
+  const value = JSON.parse(
+    readOutputTreeFile(snapshot.scratch, 'caller-return-state.json', 64 * 1024).toString('utf8'),
+  );
+  const paths = hasOutputTreeReturn(declarations)
+    ? [...new Set([...declarations, KERNEL_CLIENT_OUTPUT.root])]
+    : [...declarations];
+  const outputs = value.published?.physicalRunId === physicalRunId ? value.published.outputs : value.outputs;
+  if (
+    value.version !== 1 ||
+    value.root !== root ||
+    value.sourceHash !== snapshot.sourceHash ||
+    JSON.stringify(value.declarations) !== JSON.stringify(declarations) ||
+    !Array.isArray(value.outputs) ||
+    !Array.isArray(outputs) ||
+    JSON.stringify(outputs.map((entry: ArtifactPublicationState) => entry.path)) !== JSON.stringify(paths) ||
+    outputs.some(
+      (entry: ArtifactPublicationState) =>
+        typeof entry.source !== 'boolean' ||
+        ![entry.fingerprint, entry.content].every(
+          (digest) => digest === null || (typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest)),
+        ),
+    )
+  )
+    throw new CheckRunUnavailable('check-run: caller return custody is missing or mismatched');
+  return outputs;
+}
+
+function checkpointCallerReturns(
+  snapshot: Pick<CandidateSnapshot, 'scratch' | 'sourceHash'>,
+  root: string,
+  declarations: readonly string[],
+  physicalRunId: string,
+  outputs: readonly ArtifactPublicationState[],
+): void {
+  if (!declarations.length) return;
+  callerReturnState(snapshot, root, declarations, physicalRunId);
+  const file = join(snapshot.scratch, 'caller-return-state.json');
+  const value = JSON.parse(
+    readOutputTreeFile(snapshot.scratch, 'caller-return-state.json', 64 * 1024).toString('utf8'),
+  );
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify({ ...value, published: { physicalRunId, outputs } }), {
+      mode: 0o600,
+      flag: 'wx',
+    });
+    renameSync(temporary, file);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 }
 
 async function copyReturnedOutputs(
@@ -1162,10 +1228,14 @@ async function copyReturnedOutputs(
   stageRoot: string,
   physicalRunId: string,
   returns: readonly string[],
+  publication: {
+    expected: readonly ArtifactPublicationState[];
+    validateSource: () => Promise<void>;
+    checkpoint: (outputs: readonly ArtifactPublicationState[]) => void;
+  },
   authenticated?: {
     manifest: RemoteReturnManifest;
     terminal: OutputTreeBinding & { exitCode: number };
-    validateSource?: () => Promise<void>;
   },
 ): Promise<ReturnedOutputResult> {
   const result: ReturnedOutputResult = { missing: [], rejected: [], entries: [] };
@@ -1175,6 +1245,7 @@ async function copyReturnedOutputs(
   let totalBytes = 0;
   let examinedEntries = 0;
   const staged: string[] = [];
+  const stagedEntries: ReturnedOutputResult['entries'] = [];
 
   const copyTree = async (source: string, stagePath: string): Promise<void> => {
     artifactRelativePath(stagePath);
@@ -1190,7 +1261,7 @@ async function copyReturnedOutputs(
       mkdirSync(destination, { recursive: true, mode: stats.mode & 0o777 });
       const children = readdirSync(source).sort();
       if (children.length === 0) {
-        result.entries.push({
+        stagedEntries.push({
           path: stagePath,
           size: 0,
           sha256: EMPTY_DIRECTORY_DIGEST,
@@ -1211,7 +1282,7 @@ async function copyReturnedOutputs(
     chmodSync(destination, stats.mode & 0o777);
     if (before !== (await hashFile(source)) || before !== (await hashFile(destination)))
       throw new Error(`returned output changed while copying: ${stagePath}`);
-    result.entries.push({ path: stagePath, size: stats.size, sha256: before, kind: 'file' });
+    stagedEntries.push({ path: stagePath, size: stats.size, sha256: before, kind: 'file' });
   };
 
   for (const path of returns) {
@@ -1226,59 +1297,52 @@ async function copyReturnedOutputs(
     }
   }
 
-  if (
+  if (result.missing.length || result.rejected.length) {
+    for (const path of result.missing) process.stderr.write(`check-run: declared output missing: ${path}\n`);
+    for (const path of result.rejected) process.stderr.write(`check-run: declared output rejected: ${path}\n`);
+    return result;
+  }
+  const hasTree =
     returns.includes(KERNEL_CLIENT_OUTPUT.transport) ||
-    outputTreeTransportCandidates(sourceRoot, { status: 'complete', entries: result.entries }, returns).length
-  ) {
-    if (!authenticated)
-      throw new CheckRunUnavailable('check-run: tree receiving requires authenticated terminal custody');
-    await authenticated.validateSource?.();
+    outputTreeTransportCandidates(stageRoot, { status: 'complete', entries: stagedEntries }, returns).length > 0;
+  if (hasTree && !authenticated)
+    throw new CheckRunUnavailable('check-run: tree receiving requires authenticated terminal custody');
+  await publication.validateSource();
+  if (authenticated) {
     const order = (items: RemoteReturnManifest['entries']) =>
       items
         .map(({ path, size, sha256, kind }) => ({ path, size, sha256, kind }))
         .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
     if (
       authenticated.manifest.status !== 'complete' ||
-      JSON.stringify(order(authenticated.manifest.entries)) !== JSON.stringify(order(result.entries))
+      JSON.stringify(order(authenticated.manifest.entries)) !== JSON.stringify(order(stagedEntries))
     )
       throw new CheckRunUnavailable('check-run: entire returned catalogue differs from physical custody');
-    if (!result.missing.length && !result.rejected.length)
-      receiveOutputTrees(sourceRoot, destinationRoot, authenticated.manifest, authenticated.terminal, returns);
   }
-
+  publishArtifactReturns(
+    destinationRoot,
+    stageRoot,
+    staged,
+    publication.expected,
+    () => {
+      if (hasTree && authenticated) {
+        assertArtifactPublicationState(
+          destinationRoot,
+          publication.expected.filter(({ path }) => !returns.includes(path)),
+        );
+        receiveOutputTrees(stageRoot, destinationRoot, authenticated.manifest, authenticated.terminal, returns);
+        return captureArtifactPublicationState(destinationRoot, returns).filter(({ path }) => !returns.includes(path));
+      }
+    },
+    publication.checkpoint,
+  );
+  result.entries = stagedEntries;
   for (const path of staged) {
-    const source = resolve(stageRoot, path);
-    const destination = ensureSafeDestinationParent(destinationRoot, path);
-    rmSync(destination, { recursive: true, force: true });
-    const temporary = `${destination}.${randomUUID()}.return`;
-    try {
-      const before = await hashTree(source);
-      copyFileOrTree(source, temporary);
-      if (before !== (await hashTree(source)) || before !== (await hashTree(temporary)))
-        throw new Error(`returned output changed while restoring: ${path}`);
-      renameSync(temporary, destination);
-      process.stderr.write(`check-run: returned physical=${physicalRunId} path=${JSON.stringify(path)}\n`);
-    } catch (error) {
-      rmSync(temporary, { recursive: true, force: true });
-      result.rejected.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    process.stderr.write(`check-run: returned physical=${physicalRunId} path=${JSON.stringify(path)}\n`);
   }
   for (const path of result.missing) process.stderr.write(`check-run: declared output missing: ${path}\n`);
   for (const path of result.rejected) process.stderr.write(`check-run: declared output rejected: ${path}\n`);
   return result;
-}
-
-function copyFileOrTree(source: string, destination: string): void {
-  const stats = lstatSync(source);
-  if (stats.isSymbolicLink()) throw new Error(`symlink returned for ${source}`);
-  if (stats.isDirectory()) {
-    mkdirSync(destination, { recursive: true, mode: stats.mode & 0o777 });
-    for (const child of readdirSync(source).sort()) copyFileOrTree(join(source, child), join(destination, child));
-    return;
-  }
-  if (!stats.isFile()) throw new Error(`special file returned for ${source}`);
-  copyFileSync(source, destination);
-  chmodSync(destination, stats.mode & 0o777);
 }
 
 function resolveEnvironmentFileSettings(
@@ -1875,13 +1939,25 @@ async function runCheckLegacy(
         throw new CheckRunUnavailable('check-run: remote terminal receipt does not match the native command status');
       terminalConfirmed = true;
       try {
-        clearDeclaredArtifacts(candidateRoot, returns);
         const returned = await copyReturnedOutputs(
           snapshot.workspace,
           candidateRoot,
           join(snapshot.scratch, 'returns'),
           receivedReceipt.run,
           returns,
+          {
+            expected: callerReturnState(snapshot, candidateRoot, returns, receivedReceipt.run),
+            checkpoint: (outputs) =>
+              checkpointCallerReturns(snapshot, candidateRoot, returns, receivedReceipt!.run, outputs),
+            validateSource: async () => {
+              const ignore = postRestoreSourceExclusions(returns);
+              if (
+                (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore)) !==
+                (await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore))
+              )
+                throw new CheckRunUnavailable('check-run: source changed before return publication');
+            },
+          },
           legacySettlement?.native?.run === receivedReceipt.run &&
             legacySettlement.native.host === receivedReceipt.host &&
             legacySettlement.native.exitCode === receivedReceipt.exitCode &&
@@ -1893,14 +1969,6 @@ async function runCheckLegacy(
                   run: receivedReceipt.run,
                   sourceSha256: snapshot.sourceHash,
                   exitCode: receivedReceipt.exitCode,
-                },
-                validateSource: async () => {
-                  const ignore = postRestoreSourceExclusions(returns);
-                  if (
-                    (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore)) !==
-                    (await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore))
-                  )
-                    throw new CheckRunUnavailable('check-run: source changed before tree receiving');
                 },
               }
             : undefined,
@@ -2443,7 +2511,6 @@ async function runCheckWithFinalSettlement(
     );
   }
   try {
-    clearDeclaredArtifacts(candidateRoot, returns);
     localReturns = await copyReturnedOutputs(
       snapshot.workspace,
       candidateRoot,
@@ -2451,13 +2518,9 @@ async function runCheckWithFinalSettlement(
       receivedReceipt.run,
       returns,
       {
-        manifest: remoteSettlement.returns,
-        terminal: {
-          host: receivedReceipt.host,
-          run: receivedReceipt.run,
-          sourceSha256: snapshot.sourceHash,
-          exitCode: receivedReceipt.exitCode,
-        },
+        expected: callerReturnState(snapshot, candidateRoot, returns, receivedReceipt.run),
+        checkpoint: (outputs) =>
+          checkpointCallerReturns(snapshot, candidateRoot, returns, receivedReceipt!.run, outputs),
         validateSource: async () => {
           const ignore = postRestoreSourceExclusions(returns);
           if (
@@ -2468,6 +2531,15 @@ async function runCheckWithFinalSettlement(
               (await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore))
           )
             throw new CheckRunUnavailable('check-run: source or physical custody changed before publication');
+        },
+      },
+      {
+        manifest: remoteSettlement.returns,
+        terminal: {
+          host: receivedReceipt.host,
+          run: receivedReceipt.run,
+          sourceSha256: snapshot.sourceHash,
+          exitCode: receivedReceipt.exitCode,
         },
       },
     );
@@ -3159,7 +3231,6 @@ export async function reconcileRegisteredCheckRun(
       let returnFailure: unknown;
       if (candidateSourceBefore && frozenSourceBefore) {
         try {
-          clearDeclaredArtifacts(candidateRoot, record.returns);
           const stage = join(record.snapshot.scratch, 'reconciled-returns');
           rmSync(stage, { recursive: true, force: true });
           local = await copyReturnedOutputs(
@@ -3169,16 +3240,43 @@ export async function reconcileRegisteredCheckRun(
             physical.run,
             record.returns,
             {
+              expected: callerReturnState(
+                {
+                  ...record.snapshot,
+                  sourceHash: record.snapshot.sourceSha256,
+                },
+                candidateRoot,
+                record.returns,
+                physical.run,
+              ),
+              checkpoint: (outputs) =>
+                checkpointCallerReturns(
+                  {
+                    scratch: record.snapshot!.scratch,
+                    sourceHash: record.snapshot!.sourceSha256,
+                  },
+                  candidateRoot,
+                  record.returns,
+                  physical.run,
+                  outputs,
+                ),
+              validateSource: async () => {
+                const ignore = postRestoreSourceExclusions(record.returns);
+                if (
+                  remote.preparedInputs?.sourceSha256 !== record.binding.sourceSha256 ||
+                  (await inputFingerprint(record.snapshot!.workspace, record.snapshot!.inputFiles, ignore)) !==
+                    (await inputFingerprint(candidateRoot, record.snapshot!.inputFiles, ignore))
+                )
+                  throw new CheckRunUnavailable('check-run: reconciled tree lacks matching physical prepared custody');
+              },
+            },
+            {
               manifest: remote.returns,
               terminal: {
                 host: physical.host,
                 run: physical.run,
                 sourceSha256: record.binding.sourceSha256,
                 exitCode: remote.native.exitCode,
-              },
-              validateSource: async () => {
-                if (remote.preparedInputs?.sourceSha256 !== record.binding.sourceSha256)
-                  throw new CheckRunUnavailable('check-run: reconciled tree lacks matching physical prepared custody');
               },
             },
           );
