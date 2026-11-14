@@ -3,14 +3,12 @@ import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { AccessUnavailableError } from '../access/contract/errors.ts';
-import { deadlineClient } from './access-port.ts';
-import { commandTime, mintReadTime } from '../command/command.ts';
+import { commandTime, mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import {
   currentOperationalResources,
   hasLiveOperationalTransaction,
   runOperationalTransaction,
 } from '../command/operational.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -22,6 +20,7 @@ import {
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
 import { CollectionSourceLedger, NativeCollectionWork } from './collection-native-work.ts';
+import { withCollectionReadConnection } from './collection-read-connection.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import {
   COLLECTION_KIND_PREPARATION_OBSERVATION,
@@ -174,20 +173,39 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
     );
     const metadata = read.metadata;
     if (!metadata || metadata.state !== 'active') return null;
-    const at = await work.bounded(clockBound(), () =>
-      withConnection(deps.pool, (client) => mintReadTime(deadlineClient(client, deadline), deps.clock)),
-    );
-    const authorized = await work.run((allowance) =>
-      authorizeNativeCollectionMetadata(deps.pool, metadata, { access: deps.access!, actor, at, allowance, deadline }),
-    );
-    return authorized.authorized ? { metadata, at, work } : null;
+    let at: AuthoritativeTime | undefined;
+    let transferred = false;
+    try {
+      const time = await work.bounded(clockBound(), () =>
+        withCollectionReadConnection(deps.pool, deadline, async (client) => {
+          // Own the time before checkout completion can fail or expire.
+          at = await mintReadTime(client, deps.clock);
+          return at;
+        }),
+      );
+      const authorized = await work.run((allowance) =>
+        authorizeNativeCollectionMetadata(deps.pool, metadata, {
+          access: deps.access!,
+          actor,
+          at: time,
+          allowance,
+          deadline,
+        }),
+      );
+      if (!authorized.authorized) return null;
+      const result = { metadata, at: time, work };
+      transferred = true;
+      return result;
+    } finally {
+      if (at && !transferred) releaseOperationalTime(at);
+    }
   }
 
   /** Exact current native Source, including population/excluded/order dependencies; no capture is minted here. */
   async function retained(metadata: NativeCollectionMetadata, work: CollectionSourceLedger, deadline: number) {
     const rows = await work.bounded(scopeBound(), () =>
-      withConnection(deps.pool, (client) =>
-        scopeQuery.run(deadlineClient(client, deadline), {
+      withCollectionReadConnection(deps.pool, deadline, (client) =>
+        scopeQuery.run(client, {
           route: metadata.route,
           collection_id: metadata.collectionId,
           source_fence: nativeSourceFence(metadata),
@@ -239,8 +257,9 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
     const key = locator(capture);
     if (!key || capture.audience !== audience(actor)) return null;
     const read = await current(capture.collectionId, actor, deadline);
+    if (!read) return null;
+    releaseOperationalTime(read.at);
     if (
-      !read ||
       read.metadata.curatorAccountId !== capture.accountId ||
       read.metadata.sourceGeneration !== capture.sourceGeneration ||
       nativeSourceFence(read.metadata) !== key.fence
@@ -260,8 +279,16 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
     if (native.scanned !== '0') return null;
     // Recheck current viewer/source authority after the Semantic wait; never retain its allow verdict.
     const final = await current(capture.collectionId, actor, deadline);
-    if (!final || nativeSourceFence(final.metadata) !== key.fence) return null;
-    return { ...read, ...native, key, at: final.at };
+    if (!final) return null;
+    let transferred = false;
+    try {
+      if (nativeSourceFence(final.metadata) !== key.fence) return null;
+      const result = { ...read, ...native, key, at: final.at };
+      transferred = true;
+      return result;
+    } finally {
+      if (!transferred) releaseOperationalTime(final.at);
+    }
   }
 
   return {
@@ -272,7 +299,9 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
         // MembersPreparation does not currently provide. Never turn accountId or audience into an Actor.
         if (input.audience !== null && input.audience !== publicAudience) return unavailable();
         const read = await current(input.collectionId, anonymous, input.deadline);
-        if (!read || read.metadata.curatorAccountId !== input.accountId || read.metadata.authority !== 'curated')
+        if (!read) return unavailable();
+        releaseOperationalTime(read.at);
+        if (read.metadata.curatorAccountId !== input.accountId || read.metadata.authority !== 'curated')
           return unavailable();
         const native = await retained(read.metadata, read.work, input.deadline);
         if (!native || native.scanned !== '0') return unavailable();
@@ -287,8 +316,8 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
         );
         if (completed.status !== 'complete') return unavailable();
         const previous = await read.work.bounded(observationBound(), () =>
-          withConnection(deps.pool, (client) =>
-            readObservation.run(deadlineClient(client, input.deadline), {
+          withCollectionReadConnection(deps.pool, input.deadline, (client) =>
+            readObservation.run(client, {
               route: read.metadata.route,
               collection_id: input.collectionId,
               audience: publicAudience,
@@ -322,14 +351,18 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
             native.observation.committedRevision.toString(),
           ]),
         };
-        if (!(await resolve(capture, anonymous, input.deadline))) return unavailable();
+        const resolved = await resolve(capture, anonymous, input.deadline);
+        if (!resolved) return unavailable();
+        releaseOperationalTime(resolved.at);
         return { status: 'prepared' as const, capture };
       });
     },
     select(input) {
       return guarded(async () => {
         const read = await current(input.collectionId, input.actor, input.deadline);
-        return read ? { status: 'selected' as const, audience: audience(input.actor) } : unavailable();
+        if (!read) return unavailable();
+        releaseOperationalTime(read.at);
+        return { status: 'selected' as const, audience: audience(input.actor) };
       });
     },
     resume(input) {
@@ -337,40 +370,49 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
         if (input.capture.audience !== publicAudience || !deps.access || !deps.routeKey) return unavailable();
         const read = await resolve(input.capture, anonymous, input.deadline);
         if (!read) return unavailable();
-        const prepared = await read.work.run((allowance) =>
-          sources.source(deps.access!).prepare({
-            collectionId: input.capture.collectionId,
-            actor: anonymous,
-            at: read.at,
-            deadline: input.deadline,
-            allowance,
-          }),
-        );
-        // Handles belong to the Source instance which created them. Retain that same native reader for page.
-        // source() is composed once per resume by the binding below, never recovered from serialized data.
-        const access = deps.access;
-        return {
-          status: 'prepared' as const,
-          access,
-          identity: read.observation,
-          step: {
-            actor: anonymous,
-            at: read.at,
-            deadline: input.deadline,
-            source: prepared.source,
-            allowance: read.work.allowance(),
-            readType: async (request) => readCollectionKindPreparationType(request),
-          },
-        };
+        let transferred = false;
+        try {
+          const prepared = await read.work.run((allowance) =>
+            sources.source(deps.access!).prepare({
+              collectionId: input.capture.collectionId,
+              actor: anonymous,
+              at: read.at,
+              deadline: input.deadline,
+              allowance,
+            }),
+          );
+          // Handles belong to the Source instance which created them. Retain that same native reader for page.
+          // source() is composed once per resume by the binding below, never recovered from serialized data.
+          const access = deps.access;
+          const result: Extract<Awaited<ReturnType<CollectionKindPreparation['resume']>>, { status: 'prepared' }> = {
+            status: 'prepared',
+            access,
+            identity: read.observation,
+            step: {
+              actor: anonymous,
+              at: read.at,
+              deadline: input.deadline,
+              source: prepared.source,
+              allowance: read.work.allowance(),
+              readType: async (request) => readCollectionKindPreparationType(request),
+            },
+          };
+          // The page caller owns this live time through Source traversal.
+          transferred = true;
+          return result;
+        } finally {
+          if (!transferred) releaseOperationalTime(read.at);
+        }
       });
     },
     revalidate(input) {
       return guarded(async () => {
         const actor = input.actor ?? (input.capture.audience === publicAudience ? anonymous : null);
         if (!actor) return unavailable();
-        return (await resolve(input.capture, actor, input.deadline))
-          ? { status: 'current' as const }
-          : { status: 'stale' as const };
+        const read = await resolve(input.capture, actor, input.deadline);
+        if (!read) return { status: 'stale' as const };
+        releaseOperationalTime(read.at);
+        return { status: 'current' as const };
       });
     },
     adopt(input) {
