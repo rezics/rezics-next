@@ -13,6 +13,8 @@ const searchSchema = v.object({
   cursor: v.optional(cursor),
   returnParent: v.optional(hostedId),
   returnCursor: v.optional(cursor),
+  catalogueReturn: v.optional(v.literal('1')),
+  catalogueCursor: v.optional(cursor),
 });
 export type HostedBookSearch = v.InferOutput<typeof searchSchema>;
 export const hostedBookVisitSchema = v.strictObject({

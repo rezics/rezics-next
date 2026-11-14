@@ -79,6 +79,7 @@ Canonical links use `/{locale}/books/{catalogueId}/read`. Their bounded search c
 | `subject`                      | Subject associated with the discovery link; native Library validates every save    |
 | `parent`, `cursor`             | One bounded contents level and its opaque continuation                             |
 | `returnParent`, `returnCursor` | Originating bounded contents position retained by a chapter link                   |
+| `catalogueReturn`, `catalogueCursor` | Explicit Subject chooser return marker (`1`) and its exact optional cursor |
 
 No ordinal, current Post head, semantic relationship or scalar progress creates an occurrence selection. Reused
 bodies have different occurrence links even when their exact Post/revision/digest is identical. A move changes
@@ -217,6 +218,20 @@ The independent `renderProgress(page, isCurrent)` extension remains available fo
 rendering failure cannot remove the chapter. It does not supply or replace the Library checkpoint.
 
 ## Bounds and evidence
+
+Decision: the Subject catalogue chooser retains eight observed predecessor coordinates plus current/staged
+coordinates in the existing route owner, scoped to Subject, locale and viewer/session. Each cursor is at most
+4,096 characters. Only successful explicit More traversal creates a predecessor; sparse pages count as pages.
+Back/Forward can revisit retained coordinates; direct/evicted positions never invent Previous. First page clears
+the frontier after fresh admission. Failed reads retain their exact URL for Retry; restart omits only the chooser
+cursor. Selected publications carry an explicit `catalogueReturn=1` and optional `catalogueCursor`, independently
+of chapter/contents return operands, so ordinary and modified links can return to that same position through one
+fresh native discovery read. The marker also distinguishes an admitted first-page origin from a direct Book link.
+Chooser memory survives selecting a publication and returning within the Book route, but session/viewer, locale,
+Subject replacement, pagehide or leaving that route retires it and pending focus. No catalogue rows, bodies or
+private reading positions enter the descriptor or history. One discovery request per explicit page, Retry or return;
+no prefetch, refill, point reads or catalogue scan. Keyboard traversal focuses the admitted chooser heading; return
+focuses the selected publication when present, otherwise the heading. Pointer traversal does not move focus.
 
 Decision: retain at most eight observed predecessor contents coordinates plus current/staged coordinates in
 route-owned memory for one mounted publication/viewer/credential/locale visit. Coordinates contain only exact
