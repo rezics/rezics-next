@@ -10,10 +10,7 @@ import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type AccountActor, type Actor } from './check.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readAccount, type Account } from './account-data.ts';
-import {
-  withManagedAdviceReadConnection,
-  withManagedAdviceReadSnapshot,
-} from './managed-advice-read-connection.ts';
+import { withManagedAdviceReadConnection, withManagedAdviceReadSnapshot } from './managed-advice-read-connection.ts';
 import assignmentRead from './delegation-read.sql';
 import { deriveAccess } from './derived-access.ts';
 import { accessClock } from './access-clock.ts';

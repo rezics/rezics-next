@@ -4,11 +4,7 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineClient, remaining, within } from './deadline.ts';
 import { classifyUnavailability, requireAccessDeadline } from './unavailable.ts';
 
-type ManagedRead<T> = (
-  connection: PoolClient,
-  client: AccessClient,
-  discard: (error: unknown) => void,
-) => Promise<T>;
+type ManagedRead<T> = (connection: PoolClient, client: AccessClient, discard: (error: unknown) => void) => Promise<T>;
 
 function errorValue(error: unknown): Error {
   return error instanceof Error ? error : new Error('Managed advice read failed');

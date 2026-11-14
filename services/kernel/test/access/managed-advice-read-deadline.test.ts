@@ -75,10 +75,8 @@ test('expired BEGIN, source observation, and COMMIT discard uncertain clients', 
     const next = fakeClient();
     let acquisitions = 0;
     const pool = fakePool(async () => (acquisitions++ === 0 ? source.client : next.client));
-    const visit = withManagedAdviceReadSnapshot(
-      pool,
-      Date.now() + 30,
-      async (client) => (phase === 'read' ? client.query(blockedSql) : 'current'),
+    const visit = withManagedAdviceReadSnapshot(pool, Date.now() + 30, async (client) =>
+      phase === 'read' ? client.query(blockedSql) : 'current',
     );
 
     await reached.promise;
