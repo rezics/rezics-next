@@ -2355,6 +2355,8 @@ async function publishShowcasePhases(
       selections.set(item.candidate, item.rank);
     }
     for (const candidateId of group.ids) {
+      const candidate = page.candidates.find((item) => item.id === candidateId);
+      if (candidate?.decision === 'rejected' || candidate?.rank === 'deprecated') continue;
       const dependencyState = dependencyEvidenceByCandidate.get(candidateId);
       if (dependencyState === undefined || dependencyState === 'current')
         selections.set(candidateId, selections.get(candidateId) ?? 'normal');
