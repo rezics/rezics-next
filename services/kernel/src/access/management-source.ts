@@ -7,14 +7,13 @@ import {
   releaseOperationalTime,
   type AuthoritativeTime,
 } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type Actor } from './check.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accessClock } from './access-clock.ts';
 import { readAccount } from './account-data.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { withManagementReadConnection, withManagementReadSnapshot } from './management-read-connection.ts';
 import assignmentRead from './delegation-read.sql';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import operatorRead from './management-source-operator.sql';
@@ -91,25 +90,7 @@ export async function readOperatorTransferState(
   if (actor.kind !== 'account' || !deps.access.prepare) throw new ManagementSourceRefusedError('denied');
   let time: AuthoritativeTime | undefined;
   const snapshot = <T>(read: (client: AccessClient) => Promise<T>) =>
-    within(deadline, () =>
-      withConnection(deps.pool, async (client) => {
-        const bounded = deadlineClient(client, deadline);
-        await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const result = await read(bounded);
-          requireAccessDeadline(deadline);
-          await bounded.query('COMMIT');
-          return result;
-        } catch (error) {
-          try {
-            await client.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(client, rollbackError as Error);
-          }
-          throw error;
-        }
-      }),
-    );
+    withManagementReadSnapshot(deps.pool, deadline, read);
   try {
     const source = await snapshot(async (client) => {
       const epoch = await home(client, route);
@@ -214,15 +195,16 @@ export function createAuthDeletionHandleRead(deps: Dependencies): AuthDeletionHa
       const route = routeOf(accountId);
       if (route === null) throw new ManagementSourceRefusedError('invalid');
       await deps.access.authenticate(token, { pool: deps.pool, deadline });
-      return within(deadline, () =>
-        withConnection(deps.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
+      try {
+        return await withManagementReadConnection(deps.pool, deadline, async (client) => {
           await home(client, route);
           const target = await readAccount(client, route, accountId);
-          requireAccessDeadline(deadline);
           return target?.state === 'deleted' ? null : (target?.handle ?? null);
-        }),
-      );
+        });
+      } catch (error) {
+        throwAccessUnavailable(error, deadline);
+        throw error;
+      }
     },
   };
 }

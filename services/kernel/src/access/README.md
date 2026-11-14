@@ -3180,6 +3180,11 @@ unavailable. The command still performs fresh native approval and execution chec
 Decision: Editable profile, rename entry and managed action observations use the original request deadline for each
 connection; late checkouts run no SQL and unresolved transaction I/O is discarded.
 
+Decision: Managed operator-transfer and deletion-handle reads carry the original request deadline through pool
+checkout and native queries. Transfer keeps its two read-only repeatable-read snapshots around released authority
+preparation. Late checkouts issue no SQL; uncertain `BEGIN`, query or `COMMIT` I/O discards its client, and cleanup
+never queues rollback behind expired I/O.
+
 The complete page read has a documented finite sum: one existing bounded profile read, one full-key actor seek, and
 one existing bounded action observation. For this self-only selection the before and final snapshots each use one
 deduplicated partition seek and two full-key actor seeks; they admit at most one rename candidate and one installed
