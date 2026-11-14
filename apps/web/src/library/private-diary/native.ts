@@ -25,7 +25,9 @@ export async function readDiaryPage(
   authorization: string,
   cursor?: string,
   filter: Pick<DiaryAddress, 'year' | 'month'> = {},
+  signal?: AbortSignal,
 ): Promise<DiaryRead> {
+  signal?.throwIfAborted();
   const result = await client.libraryDiary.get({
     query: {
       limit: PRIVATE_DIARY_PAGE_LIMIT,
@@ -34,15 +36,26 @@ export async function readDiaryPage(
       ...(cursor ? { cursor } : {}),
     },
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual', signal },
   });
+  signal?.throwIfAborted();
   if (!result.error && result.data) return { kind: 'ready', page: result.data };
   return result.status === 409 ? { kind: 'stale' } : readFailure(result.status, result.error?.value);
 }
 
 export type SummaryRead = { kind: 'ready'; summary: ConsumptionSummary } | DiaryReadFailure;
 
-export async function readConsumptionSummary(client: KernelClient, authorization: string): Promise<SummaryRead> {
-  const result = await client.libraryConsumptionSummary.get({ headers: { authorization } });
+export async function readConsumptionSummary(
+  client: KernelClient,
+  authorization: string,
+  signal?: AbortSignal,
+): Promise<SummaryRead> {
+  signal?.throwIfAborted();
+  const result = await client.libraryConsumptionSummary.get({
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual', signal },
+  });
+  signal?.throwIfAborted();
   if (!result.error && result.data) return { kind: 'ready', summary: result.data };
   return readFailure(result.status, result.error?.value);
 }
@@ -67,8 +80,15 @@ export async function readReportedYearSummary(
   client: KernelClient,
   authorization: string,
   year: number,
+  signal?: AbortSignal,
 ): Promise<ReportedYearRead> {
-  const result = await client.libraryReportedYearSummary.get({ query: { year }, headers: { authorization } });
+  signal?.throwIfAborted();
+  const result = await client.libraryReportedYearSummary.get({
+    query: { year },
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual', signal },
+  });
+  signal?.throwIfAborted();
   if (!result.error && result.data?.year === year) return { kind: 'ready', value: result.data };
   return readFailure(result.status, result.error?.value);
 }

@@ -3,6 +3,38 @@
 The [Library private diary contract](../README.md#journal-and-history-reading) owns reads, explicit journal correction
 and occurrence lifecycle commands. This directory owns the occurrence caller's local departure integration.
 
+## Consumption history transport
+
+Decision: bind the incoming request signal to the diary page and its selected summary, with private no-store and
+manual redirects on every generated native GET. Keep cancellation commands independent of the abandoned read.
+
+One visit requests exactly one page of 25 at its supplied year, month and opaque cursor, plus either the all-time
+summary or the selected year's summary. The siblings run independently: one native refusal or transport failure
+does not discard the other's useful result. A redirect remains an unavailable read and is never followed with the
+reader's authorization. The BFF response remains private/no-store; existing page and summary admission budgets stay
+with their reading owners.
+
+Session preparation receives the same incoming Request. Its current session RPC has no abort parameter, so abort
+checks bracket preparation and prevent native reads from starting after departure. Each native GET receives that
+request's signal and checks it before dispatch and after completion, including a client-normalized transport abort
+or a late response. An abandoned or replaced request rejects instead of returning an empty page, a signed-out
+reading or a recoverable sibling failure. A replacement has its own signal and exact address. No retry, refill,
+polling, abort listener or private persistence is added; cancellation costs only the original two reads.
+
+Continuation cancellation retains its original viewer/CSRF admission, continuation body and receipt meaning. It is
+not bound to the departing read's signal. A read abort cannot prove that a dispatched mutation was unapplied or
+replace its original receipt.
+
+Design sources: this owner, `native.ts`, `server.ts`, the linked Library journal/history owner, the existing
+`yearly-goal-native.ts` private fetch policy, `subject-slot.ts` session signature, installed client declarations and
+the read-only main checkout `.reference/INDEX.md`.
+
+Acceptance source: `private-diary-transport.test.ts` exercises the real generated HTTP seam for exact operands,
+private fetch policy, request signal propagation, independent sibling failures and replacement/abort. Execution is
+deferred to integration verification, followed by the existing mounted history/journal and native acceptance.
+
+## Journal departure
+
 Decision: register the journal in the existing Progress departure decision; a pending save offers Stay, while an
 unresolved or acknowledged save permits deliberate Leave without altering the sealed request. Keep useful editing
 independent of that request. An isolated occurrence caller installs the same boundary.

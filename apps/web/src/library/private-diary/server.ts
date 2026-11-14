@@ -20,8 +20,8 @@ import { diarySearch, type DiaryAddress } from './address';
 
 type PrivateIdentity = { viewer: string; csrfToken: string; authorization: string };
 
-async function currentIdentity(): Promise<PrivateIdentity | null> {
-  const identity = await readSubjectSlotSession(getRequest(), env as Partial<SessionEnv>);
+async function currentIdentity(request = getRequest()): Promise<PrivateIdentity | null> {
+  const identity = await readSubjectSlotSession(request, env as Partial<SessionEnv>);
   return identity.state === 'signed-in' && identity.csrfToken
     ? { viewer: identity.subject, csrfToken: identity.csrfToken, authorization: identity.authorization }
     : null;
@@ -39,7 +39,9 @@ export type PrivateDiaryLoad = {
 
 export type PrivateDiaryLoadResult = PrivateDiaryLoad | { kind: 'signed-out' | 'unavailable' };
 
-function thrownReadFailure(error: unknown): DiaryReadFailure {
+function thrownReadFailure(error: unknown, signal: AbortSignal): DiaryReadFailure {
+  signal.throwIfAborted();
+  if (error instanceof Error && error.name === 'AbortError') throw error;
   return { kind: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
 }
 
@@ -49,20 +51,30 @@ export const readPrivateDiary = createServerFn({ method: 'GET' })
   )
   .handler(async ({ data }): Promise<PrivateDiaryLoadResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const identity = await currentIdentity();
+    const request = getRequest();
+    const { signal } = request;
+    signal.throwIfAborted();
+    const identity = await currentIdentity(request);
+    signal.throwIfAborted();
     if (!identity) return { kind: 'signed-out' };
     const client = kernelClient();
+    const failure = (error: unknown) => thrownReadFailure(error, signal);
     const [diary, summary, reportedYear] = await Promise.all([
-      readDiaryPage(client, identity.authorization, data.cursor, { year: data.year, month: data.month }).catch(
-        thrownReadFailure,
-      ),
+      readDiaryPage(
+        client,
+        identity.authorization,
+        data.cursor,
+        { year: data.year, month: data.month },
+        signal,
+      ).catch(failure),
       data.year === undefined
-        ? readConsumptionSummary(client, identity.authorization).catch(thrownReadFailure)
+        ? readConsumptionSummary(client, identity.authorization, signal).catch(failure)
         : Promise.resolve({ kind: 'not-selected' as const }),
       data.year === undefined
         ? null
-        : readReportedYearSummary(client, identity.authorization, data.year).catch(thrownReadFailure),
+        : readReportedYearSummary(client, identity.authorization, data.year, signal).catch(failure),
     ]);
+    signal.throwIfAborted();
     return {
       kind: 'ready',
       address: data,
