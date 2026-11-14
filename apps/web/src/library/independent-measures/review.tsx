@@ -48,12 +48,23 @@ export function IndependentMeasuresReview({
       </dl>
       <div className="flex flex-wrap gap-2 border-t border-border pt-4">
         {onConfirm ? (
-          <Button type="button" className="min-h-11" disabled={busy} onClick={onConfirm}>
+          <Button
+            type="button"
+            className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+            disabled={busy}
+            onClick={onConfirm}
+          >
             {m.library_progress_confirm_correction()}
           </Button>
         ) : null}
         {onCancel ? (
-          <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={onCancel}>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+            disabled={busy}
+            onClick={onCancel}
+          >
             {m.library_progress_cancel()}
           </Button>
         ) : null}

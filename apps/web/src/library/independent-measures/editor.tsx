@@ -179,7 +179,7 @@ export function IndependentMeasuresEditor({
             <fieldset key={measure.unit} className="min-w-0 space-y-3 rounded-xl border border-border p-4">
               <legend className="max-w-full px-1 text-sm font-medium [overflow-wrap:anywhere]">
                 {measure.primary ? m.library_progress_measure_primary() : m.library_progress_measure_additional()}:{' '}
-                {measure.label}
+                <span>{measure.label}</span>
               </legend>
               <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <div className="min-w-0 space-y-2">
@@ -216,7 +216,7 @@ export function IndependentMeasuresEditor({
                       <Button
                         type="button"
                         variant="outline"
-                        className="min-h-11 min-w-11"
+                        className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
                         disabled={busy}
                         onClick={() => onDraft(measure.unit, measure.amount ?? '')}
                       >
@@ -226,7 +226,7 @@ export function IndependentMeasuresEditor({
                       <Button
                         type="button"
                         variant="outline"
-                        className="min-h-11 min-w-11"
+                        className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
                         disabled={busy || measure.amount === null}
                         onClick={() => onClear(measure.unit)}
                       >
@@ -256,14 +256,19 @@ export function IndependentMeasuresEditor({
         <p className="text-sm text-muted-foreground">{m.library_progress_scalar_meaning()}</p>
         <div className="flex flex-wrap gap-2">
           <Exposure operation="progress_session.record">
-            <Button type="button" className="min-h-11 min-w-11" disabled={busy || !edits.length} onClick={onReview}>
+            <Button
+              type="button"
+              className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
+              disabled={busy || !edits.length}
+              onClick={onReview}
+            >
               {m.library_progress_measure_save()}
             </Button>
           </Exposure>
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-11"
+            className="min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]"
             disabled={busy || refreshing}
             onClick={onRefresh}
           >

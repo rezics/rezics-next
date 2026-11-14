@@ -1131,7 +1131,7 @@ function ProgressIndexPageContent({
       </article>
     );
   const viewerState = page.viewerState ?? (page.signedIn ? 'signed_in' : 'signed_out');
-  if (viewerState !== 'signed_in')
+  if (viewerState !== 'signed_in' && !(viewerState === 'unavailable' && page.signedIn))
     return (
       <article className="max-w-4xl space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
@@ -1217,7 +1217,7 @@ function ProgressIndexPageContent({
             <ProgressPicker
               value={filterSubject}
               label={m.library_progress_discovery_exact_subject()}
-              isCurrent={current}
+              isCurrent={authority?.isCurrent}
               onValueChange={setFilterSubject}
             />
             <div className="flex flex-wrap gap-2">
@@ -1293,7 +1293,16 @@ function ProgressIndexPageContent({
         >
           {m.library_progress_index_list_heading()}
         </h2>
-        {sessions.length ? (
+        {viewerState === 'unavailable' ? (
+          <div className="space-y-3 rounded-xl border border-border p-4">
+            <p role="status">{m.library_progress_unavailable()}</p>
+            {retry ? (
+              <Button variant="outline" className="min-h-11" disabled={loading} onClick={retry}>
+                {m.library_progress_retry()}
+              </Button>
+            ) : null}
+          </div>
+        ) : sessions.length ? (
           <ol className="divide-y divide-border">
             {sessions.map((session) => (
               <SessionRow
@@ -1466,6 +1475,9 @@ function ProgressIndexPageContent({
                       }}
                     />
                     <p className="text-sm text-muted-foreground">{m.library_progress_version_scope()}</p>
+                    {!version[0] ? (
+                      <p className="text-sm text-muted-foreground">{m.library_progress_no_version()}</p>
+                    ) : null}
                   </Field>
                   <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>
                   <fieldset className="space-y-3">
@@ -1491,6 +1503,8 @@ function ProgressIndexPageContent({
                   </fieldset>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <ProgressChoice
+                      id="progress-unit"
+                      name="unit"
                       label={m.library_progress_unit()}
                       value={unit}
                       options={progressUnitOptions}
@@ -1498,7 +1512,7 @@ function ProgressIndexPageContent({
                       onValueChange={(value) => changeDraft(() => setUnit(value))}
                     />
                     {acceptsTotal ? (
-                      <Field>
+                      <Field className="gap-2">
                         <FieldLabel htmlFor="progress-total">{m.library_progress_total()}</FieldLabel>
                         <ProgressDecimalInput
                           id="progress-total"

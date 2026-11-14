@@ -901,12 +901,13 @@ test('Unit and Total share the same field geometry at phone and desktop widths',
   }
   const { page } = await open(`/en/library/progress?subjectId=${subjectId}`, true, 'domcontentloaded');
   try {
+    await main(page).locator('[data-progress-start] > summary').click();
     const unit = main(page).getByRole('combobox', { name: 'Unit', exact: true });
     expect(await main(page).locator('select[name="unit"]').count()).toBe(1);
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 860 });
       const geometry = await page.evaluate(() => {
-        const unit = document.querySelector('select[name="unit"]')!;
+        const unit = document.querySelector('#progress-unit')!;
         const total = document.querySelector('#progress-total')!;
         const unitLabel = document.querySelector('label[for="progress-unit"]')!;
         const totalLabel = document.querySelector('label[for="progress-total"]')!;

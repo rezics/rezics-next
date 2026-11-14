@@ -1,3 +1,8 @@
+import {
+  progressInterfaceSubjectId,
+  progressInterfaceCursor,
+  setProgressInterfaceScenario,
+} from '../kernel/fake/library-progress-interface';
 import { expect, userEvent, within } from 'storybook/test';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense } from 'react';
@@ -41,6 +46,7 @@ export const SelectorSheetOpen: Story = {
   name: 'Profile unit selector focused',
   play: async (context) => {
     await libraryProgressReady(context);
+    await userEvent.click(context.canvasElement.querySelector('[data-progress-start] > summary')!);
     const selector = await within(context.canvasElement).findByRole('combobox', { name: m.library_progress_unit() });
     selector.focus();
     await expect(selector).toHaveFocus();
@@ -142,7 +148,7 @@ export const UnknownUnitLongTitles: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findAllByText(m.library_progress_unit_unspecified());
-    const details = canvasElement.querySelector('details')!;
+    const details = canvasElement.querySelector('ol > li details')!;
     expect(details).not.toHaveAttribute('open');
     expect(within(details).getByText(m.library_history_unavailable())).not.toBeVisible();
     expect(details.querySelector('code')).not.toBeVisible();
@@ -157,7 +163,7 @@ export const UnknownUnitDetailsOpen: Story = {
   name: 'Optional native progress details opened by keyboard',
   play: async (context) => {
     await UnknownUnitLongTitles.play?.(context);
-    const details = context.canvasElement.querySelector('details')!;
+    const details = context.canvasElement.querySelector('ol > li details')!;
     details.querySelector('summary')!.focus();
     await userEvent.keyboard('{Enter}');
     expect(details).toHaveAttribute('open');
@@ -254,10 +260,68 @@ export const ExplicitVersionChoice: Story = {
   play: async (context) => {
     await libraryProgressReady(context);
     const canvas = within(context.canvasElement);
+    await userEvent.click(context.canvasElement.querySelector('[data-progress-start] > summary')!);
     await canvas.findByRole('combobox', { name: m.library_progress_version() });
     await canvas.findByText(m.library_progress_version_scope());
     await canvas.findByText(m.library_progress_new_session_scope());
     await canvas.findByText(m.library_progress_no_version());
   },
   render: () => ProgressStory('recorded'),
+};
+
+/** Manual review uses the installed route, loader, owner index and exact return context. */
+export const NativeSessionList: Story = {
+  name: 'Review · work, version and separate reading sessions',
+  beforeEach() {
+    setProgressInterfaceScenario('units');
+    return () => setProgressInterfaceScenario();
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Constructed native responses on the actual Progress route. Open the session to inspect chapters and volumes, then return to the same visit. More shows an earlier completed session of the same work with its own start time. Additional filters retain the installed subject-only reader limitations. This entry has no play function; runtime and native acceptance are deferred.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={`/library/progress?subjectId=${progressInterfaceSubjectId}`} />,
+};
+
+export const NativeContinuedVisit: Story = {
+  name: 'Review · exact return to an earlier progress window',
+  beforeEach() {
+    setProgressInterfaceScenario('units');
+    return () => setProgressInterfaceScenario();
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Direct entry to the native opaque later window. Open the completed reading session and use Return to progress. The same subject and cursor are retained; no predecessor is invented and no session page is scanned. Manual review; no autoplay.',
+      },
+    },
+  },
+  render: () => (
+    <PageStory
+      visitor="Signed In"
+      path={`/library/progress?subjectId=${progressInterfaceSubjectId}&cursor=${encodeURIComponent(progressInterfaceCursor)}`}
+    />
+  ),
+};
+
+export const WorkDiscoveryRecovery: Story = {
+  name: 'Review · find a work while the list is unavailable',
+  beforeEach() {
+    setProgressInterfaceScenario('units');
+    return () => setProgressInterfaceScenario();
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The installed native list cannot execute owner-wide or typed-filter addresses. This actual route retains the active filter and unavailable state while keeping the work picker, filter controls and Show all progress available. Choose a readable work and remove the additional filter to use the existing subject-only reader. No rows, empty result or owner-wide API support are invented. Manual entry with no play function.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path="/library/progress?state=active" />,
 };

@@ -54,14 +54,17 @@ test('session changes list each changed field once and use a real progress icon'
 });
 
 test('progress unit choices use a labelled Select form field while row actions use menus', async () => {
-  const [page, picker, session] = await Promise.all([
+  const [page, picker, session, actions] = await Promise.all([
     read('../src/library/progress-page.tsx'),
     read('../src/library/progress-picker.tsx'),
     read('../src/library/progress-session.tsx'),
+    read('../src/library/progress-actions.tsx'),
   ]);
-  expect(page).toContain('@rezics/ui/shadcn/select');
-  expect(page).toContain('<Select');
-  expect(page).toContain('<FieldLabel htmlFor="progress-unit">');
+  expect(actions).toContain('@rezics/ui/shadcn/select');
+  expect(actions).toContain('<FieldLabel');
+  expect(actions).toContain('htmlFor={id}');
+  expect(page).toContain('<ProgressChoice');
+  expect(page).toContain('id="progress-unit"');
   expect(page).toContain('name="unit"');
   expect(page).toContain('changeDraft(() => setUnit(value))');
   expect(page).not.toContain('title={m.library_progress_unit()}');

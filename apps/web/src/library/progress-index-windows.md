@@ -17,7 +17,9 @@ Each current window costs one existing prepared native list read capped at 100 r
 
 Decision: supplied work/version identity and start time lead each session. Discovery keeps the work picker and
 Apply action together; additional raw-address filters and starting another session are deliberate disclosures.
-Only the admitted page supplies rows. Recording choices use the shared labelled select, and native details remain
+Signed-in list recovery keeps discovery usable, including retained unsupported filters; an unavailable result never
+becomes an empty list. Discovery follows read authority independently of permission to create a session. Only the
+admitted page supplies rows. Recording choices use the shared labelled select, and native details remain
 inspectable without placing mode IDs or permission diagnostics in the normal reading path.
 
 Selected sessions group the saved value, replacement amount or deliberate clear, review and recovery by native

@@ -7,25 +7,31 @@ import type { ProgressRecordInput } from './progress-reads';
 
 /** The same labelled control is used for discovery and native recording choices. */
 export function ProgressChoice({
+  id: controlId,
+  name,
   label,
   value,
   options,
   onValueChange,
   disabled = false,
 }: {
+  id?: string;
+  name?: string;
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onValueChange: (value: string) => void;
   disabled?: boolean;
 }) {
-  const id = useId();
+  const generatedId = useId();
+  const id = controlId ?? generatedId;
   return (
     <Field className="min-w-0 gap-2">
       <FieldLabel id={`${id}-label`} htmlFor={id} className="text-sm font-medium">
         {label}
       </FieldLabel>
       <Select<string, false>
+        name={name}
         items={options}
         value={value}
         disabled={disabled}

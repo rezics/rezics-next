@@ -218,8 +218,11 @@ async function mount(initial = page()) {
       <RouterContextProvider router={router}>{p && <ProgressIndexPage page={p} {...options} />}</RouterContextProvider>
     </StrictMode>
   );
-  const show = (p: ProgressIndex | null, options: Parameters<typeof tree>[1] = {}) =>
-    settle(() => root.render(tree(p, options)));
+  const show = async (p: ProgressIndex | null, options: Parameters<typeof tree>[1] = {}) => {
+    await settle(() => root.render(tree(p, options)));
+    // These command-lifetime cases deliberately enter the disclosed creation form.
+    await settle(() => host.querySelector('[data-progress-start]')?.setAttribute('open', ''));
+  };
   const body = within(window.document.body as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document as unknown as Document });
   const form = () => host.querySelector('form')!;

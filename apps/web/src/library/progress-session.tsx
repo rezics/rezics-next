@@ -1841,19 +1841,21 @@ function SessionEditor({
               ]}
             />
           ) : null}
-          <Exposure operation="progress_session.record">
-            <Button
-              variant="outline"
-              onClick={() =>
-                stage({
-                  kind: 'record',
-                  data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, clear: true },
-                })
-              }
-            >
-              {m.library_progress_clear()}
-            </Button>
-          </Exposure>
+          {!sessionHasIndependentMeasures(session) ? (
+            <Exposure operation="progress_session.record">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  stage({
+                    kind: 'record',
+                    data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, clear: true },
+                  })
+                }
+              >
+                {m.library_progress_clear()}
+              </Button>
+            </Exposure>
+          ) : null}
         </div>
       ) : null}
       {session.state === 'active' && confirming && !editing ? (

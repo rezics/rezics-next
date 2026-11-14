@@ -259,6 +259,8 @@ async function mount(initial = envelope(), token: string | null = null) {
       ),
     );
   await show();
+  // Inspect create authority inside its deliberate disclosure.
+  await tick(() => host.querySelector('[data-progress-start]')?.setAttribute('open', ''));
   const view = within(host);
   const user = userEvent.setup({ document });
   const click = (element: HTMLElement) =>
