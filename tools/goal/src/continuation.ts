@@ -137,13 +137,7 @@ function continuationScopeHeader(body: string): ContinuationScopeHeader | undefi
   const invalidKind =
     briefKind !== undefined &&
     (typeof briefKind !== 'string' || !BRIEF_KINDS.includes(briefKind as Task['brief']['kind']));
-  if (
-    !declaredGoal ||
-    !declaredManager ||
-    invalidKind ||
-    !paths.length
-  )
-    return { kind: 'incomplete' };
+  if (!declaredGoal || !declaredManager || invalidKind || !paths.length) return { kind: 'incomplete' };
   return {
     kind: 'complete',
     goal: declaredGoal,
@@ -963,12 +957,7 @@ export function harvestContinuations(
         markdown = completeContinuation(written, task, ownership, settings.policy?.brief);
         const reason = invalidReason(markdown, task, settings, known);
         if (reason && scopeHeader) {
-          markdown = incompleteScopeProposal(
-            written,
-            task,
-            ownership,
-            settings.policy?.brief ?? defaultPolicy.brief,
-          );
+          markdown = incompleteScopeProposal(written, task, ownership, settings.policy?.brief ?? defaultPolicy.brief);
           forcedProposalReason = `structured scope needs correction: ${reason}`.replace(/\s+/g, ' ').slice(0, 200);
           checkOverlap = false;
         } else if (reason) {

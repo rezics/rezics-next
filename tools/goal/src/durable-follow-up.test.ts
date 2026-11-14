@@ -138,9 +138,9 @@ test("a retried attempt's continuation is dropped once an earlier attempt queued
     const earlier = { taskId: task.id, attempt: attempt.attempt };
     const first = harvestContinuations(h.store, h.settings, task, earlier);
     expect(first.queued).toHaveLength(1);
-    expect(parseBrief(readFileSync(first.queued[0]!, 'utf8'), readRiskOwnership(h.settings.riskAreasFile)).after).toEqual(
-      [],
-    );
+    expect(
+      parseBrief(readFileSync(first.queued[0]!, 'utf8'), readRiskOwnership(h.settings.riskAreasFile)).after,
+    ).toEqual([]);
     writeFileSync(join(source, 'rest of shelf.md'), rest);
     writeFileSync(join(source, 'renamed rest.md'), rest);
     const later = beginAttempt(h, h.store.task(task.id));
@@ -299,7 +299,9 @@ test('an explicit no-owned-remainder handoff stays reviewable while same-slice p
     expect(proposal).toContain('paths: []');
     expect(proposal.slice(proposalFrontMatter.length)).toBe(handoff.slice(handoffFrontMatter.length));
     expect(readFileSync(`${result.proposed[0]!.file}.reason`, 'utf8')).toContain('no-owned-remainder handoff');
-    expect(parseBrief(readFileSync(result.queued[0]!, 'utf8'), readRiskOwnership(h.settings.riskAreasFile))).toMatchObject({
+    expect(
+      parseBrief(readFileSync(result.queued[0]!, 'utf8'), readRiskOwnership(h.settings.riskAreasFile)),
+    ).toMatchObject({
       paths: ['result.txt'],
       after: [],
     });
@@ -315,7 +317,10 @@ test('a complete body scope reaches overlap review for its declared paths', () =
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const otherBrief = join(h.settings.stateDirectory, 'other.md');
-    writeFileSync(otherBrief, markdown.replace('Write the requested result and commit it.', 'Existing semantic reference work'));
+    writeFileSync(
+      otherBrief,
+      markdown.replace('Write the requested result and commit it.', 'Existing semantic reference work'),
+    );
     const other = h.tasks.dispatch(otherBrief);
     h.store.updateTask({ taskId: other.id, attempt: h.store.task(other.id).currentAttempt }, (current) => {
       current.state = 'running';
@@ -631,7 +636,10 @@ test('a growing continuation batch reuses one inventory and incorporates publica
     // Existing dispatches from this source attempt are siblings, even when their scopes match the first remainder.
     for (let index = 0; index < 5; index++) {
       const siblingBrief = join(h.settings.stateDirectory, `sibling-${index}.md`);
-      writeFileSync(siblingBrief, markdown.replace('Write the requested result and commit it.', `# Existing owner ${index}`));
+      writeFileSync(
+        siblingBrief,
+        markdown.replace('Write the requested result and commit it.', `# Existing owner ${index}`),
+      );
       const sibling = h.tasks.dispatch(siblingBrief);
       h.store.updateTask({ taskId: sibling.id, attempt: h.store.task(sibling.id).currentAttempt }, (current) => {
         current.state = 'running';
