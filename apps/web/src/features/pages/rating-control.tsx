@@ -13,7 +13,7 @@ import {
   type PersonalScoreWriteResult,
 } from '../../library/score-write';
 import { subjectOwnRatingQuery, subjectRatingQuery } from './subject-queries';
-import { displayRating, type RatingQuestion, type SubjectOwnRating } from './subject-ratings';
+import { type RatingQuestion, type SubjectOwnRating } from './subject-ratings';
 import type { SubjectPersonalLease } from './subject-personal-reader';
 
 export type RatingControlState =
@@ -135,6 +135,7 @@ export function RatingControlView({
   const options = { locale: locale as never };
   const formId = useId();
   const labelId = `${formId}-label`;
+  const scaleId = `${formId}-scale`;
   const [draft, setDraft] = useState<number | null>(state.kind === 'ready' ? state.units : null);
   const editing = useRef(false);
   const fallback = nativeFallback ? (
@@ -183,13 +184,9 @@ export function RatingControlView({
   const scale = question.scale;
   const sliderValue =
     value ?? scale.min + Math.floor((scale.max - scale.min) / scale.displayStep / 2) * scale.displayStep;
+  const number = (units: number) => new Intl.NumberFormat(locale).format(units);
   const display = (units: number | null) =>
-    units === null
-      ? m.subject_rating_control_unrated({}, options)
-      : m.subject_rating_control_value(
-          { score: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(displayRating(units, scale)) },
-          options,
-        );
+    units === null ? m.subject_rating_control_unrated({}, options) : `${number(units)} / ${number(scale.max)}`;
   const valueText = display(value);
   const clearOnKey = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Home' && !pending && event.target instanceof HTMLInputElement && event.target.type === 'range') {
@@ -275,15 +272,18 @@ export function RatingControlView({
             <Slider.Thumb
               aria-label={question.label}
               aria-valuetext={valueText}
+              aria-describedby={scaleId}
               data-slot="slider-thumb"
               className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary not-dark:bg-clip-padding transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
             />
           </Slider.Control>
         </Slider.Root>
-        <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">
-          <span>{displayRating(scale.min, scale)}</span>
-          <span>{displayRating(scale.max, scale)}</span>
-        </div>
+        <p id={scaleId} className="text-xs text-muted-foreground tabular-nums">
+          {m.rating_native_scale(
+            { min: number(scale.min), max: number(scale.max), step: number(scale.displayStep) },
+            options,
+          )}
+        </p>
         <div className="flex flex-wrap gap-2">
           <Button
             className={actionClassName}

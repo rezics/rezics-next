@@ -41,6 +41,15 @@ Decision: after return, retain only the exact original pair as a short-lived in-
 
 Decision: during an eligible My ratings visit, retain up to eight admitted predecessor cursors plus the current cursor in the existing return provider; stage each move and commit it only after the target response is admitted.
 
+## Answer presentation
+
+Decision: lead each row with its supplied Subject identity and exact original question, show native units including
+zero, and mount editing, clear confirmation and exact readback inside that selected row. Show the scale once and
+keep original identifiers in answer details. Selection mounts a fresh editor, so confirmation never moves to another
+pair. Order guidance follows the inventory; no page count becomes an inventory total. Ordinary review entries
+remain manually editable. The [Subject rating presentation](../../features/pages/README.md#rating-presentation)
+keeps public measurements and imported evidence separate from these private answers.
+
 ## Cost
 
 - **Touches**

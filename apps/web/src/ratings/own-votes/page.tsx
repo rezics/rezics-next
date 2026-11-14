@@ -500,7 +500,7 @@ export function OwnVotesWorkspace({
   };
 
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-10">
       <PageHeading ref={headingRef} tabIndex={-1}>
         {m.library_my_ratings_heading()}
       </PageHeading>
@@ -539,7 +539,6 @@ export function OwnVotesWorkspace({
                   : m.library_my_ratings_return_refreshed()}
             </p>
           ) : null}
-          <p className="text-sm text-muted-foreground">{m.library_my_ratings_page_order()}</p>
           {visiblePage.votes.length === 0 ? (
             feedback?.kind === 'cleared' || feedback?.kind === 'review-cleared' ? null : (
               <p role="status">{visiblePage.next ? m.library_my_ratings_sparse() : m.library_my_ratings_empty()}</p>
@@ -552,40 +551,45 @@ export function OwnVotesWorkspace({
               disabled={locked}
               onSelect={select}
               onVisit={(entry) => onDeparturePair?.(entry)}
+              selectedEditor={
+                activeEntry && selectedCurrent() ? (
+                  <OwnVoteEditor
+                    key={votePairKey(activeEntry)}
+                    entry={activeEntry}
+                    locale={locale}
+                    editing={editing}
+                    draft={draft}
+                    locked={locked}
+                    busy={busy}
+                    feedback={feedback}
+                    canRetry={
+                      awaitingCommand &&
+                      !!intent &&
+                      isAdmittedVoteAction(activeEntry, activeEntry.actions, intent.method)
+                    }
+                    onEdit={() => {
+                      setDraft(String(activeEntry.own.units));
+                      setEditing(true);
+                      setFeedback(null);
+                    }}
+                    onDraft={setDraft}
+                    onSave={() => startIntent('PUT', Number(draft))}
+                    onCancel={() => {
+                      setEditing(false);
+                      setDraft('');
+                      setFeedback(null);
+                    }}
+                    onClear={() => startIntent('DELETE')}
+                    onRetry={() => {
+                      const active = intentRef.current;
+                      if (active && awaitingCommand) void send(active);
+                    }}
+                    onReview={() => void reviewOriginal()}
+                  />
+                ) : null
+              }
             />
           )}
-          {activeEntry && selectedCurrent() ? (
-            <OwnVoteEditor
-              entry={activeEntry}
-              locale={locale}
-              editing={editing}
-              draft={draft}
-              locked={locked}
-              busy={busy}
-              feedback={feedback}
-              canRetry={
-                awaitingCommand && !!intent && isAdmittedVoteAction(activeEntry, activeEntry.actions, intent.method)
-              }
-              onEdit={() => {
-                setDraft(String(activeEntry.own.units));
-                setEditing(true);
-                setFeedback(null);
-              }}
-              onDraft={setDraft}
-              onSave={() => startIntent('PUT', Number(draft))}
-              onCancel={() => {
-                setEditing(false);
-                setDraft('');
-                setFeedback(null);
-              }}
-              onClear={() => startIntent('DELETE')}
-              onRetry={() => {
-                const active = intentRef.current;
-                if (active && awaitingCommand) void send(active);
-              }}
-              onReview={() => void reviewOriginal()}
-            />
-          ) : null}
           {feedback?.kind === 'cleared' || feedback?.kind === 'review-cleared' ? (
             <p role="status">{m.library_my_ratings_cleared()}</p>
           ) : null}
@@ -594,7 +598,7 @@ export function OwnVotesWorkspace({
               {m.library_my_ratings_retry_page()}
             </Button>
           ) : null}
-          <nav className="flex flex-wrap gap-3" aria-label={m.library_my_ratings_heading()}>
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2" aria-label={m.library_my_ratings_heading()}>
             {cursor !== null ? (
               <Link
                 className="inline-flex min-h-11 items-center underline"
@@ -629,6 +633,7 @@ export function OwnVotesWorkspace({
               </Link>
             ) : null}
           </nav>
+          <p className="text-xs text-muted-foreground">{m.library_my_ratings_page_order()}</p>
         </>
       ) : null}
       <OwnVotesDeparture

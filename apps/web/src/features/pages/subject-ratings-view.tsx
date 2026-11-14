@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, type ContextType, type ReactNode } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { MetaLine } from '@rezics/ui/meta-line';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
@@ -15,6 +14,7 @@ import {
   providerStatisticLabel,
   suppliedRatingSources,
   type Figure,
+  type Statistic,
   type Ratings,
   type RatingSources,
   type RatingSource,
@@ -227,11 +227,11 @@ export function RatingsView({
   const sources = 'figures' in data ? suppliedRatingSources(data) : data;
   const question = sources.question.kind === 'ready' ? sources.question.value : undefined;
   const headline = sources.figure.kind === 'ready' ? sources.figure.value : undefined;
+  const globalFigure = sources.global.kind === 'ready' ? sources.global.value : undefined;
   const statistics = sources.statistics.kind === 'ready' ? sources.statistics.value : [];
   const sourcesHref =
     (page ? viewHref(page, 'sources') : undefined) ??
     `${subjectHref({ id: subject, label: assessmentChrome?.title || page?.subjectLabel || title }, locale).href}/sources`;
-  const owner = { subject };
   const status = (source: RatingSource, result?: ReactNode) => (
     <RatingSourceStatus
       outcome={sources[source]}
@@ -246,26 +246,15 @@ export function RatingsView({
             }
           : undefined
       }
-      owner={owner}
+      owner={{ subject }}
     >
       {result}
     </RatingSourceStatus>
   );
-
   const number = (value: number, digits = 0) =>
     new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
-  const date = (value: string) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-    const parsed = new Date(`${value}T00:00:00.000Z`);
-    return Number.isFinite(parsed.getTime())
-      ? new Intl.DateTimeFormat(locale, { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric' }).format(
-          parsed,
-        )
-      : value;
-  };
-
-  const globalFigure = sources.global.kind === 'ready' ? sources.global.value : undefined;
   const threshold = question && ['episode', 'character'].includes(question.grain) ? 10 : 5;
+  const hasPersonalAnswer = !control && supplied && supplied.own !== null && question;
 
   return (
     <section data-slot="rating-summary" aria-labelledby={`${id}-title`} className={sectionClass}>
@@ -276,7 +265,7 @@ export function RatingsView({
         'question',
         question ? (
           <p
-            className="text-sm font-medium wrap-anywhere"
+            className="text-lg leading-snug font-medium wrap-anywhere sm:text-xl"
             data-slot="rating-question"
             data-revision={question.revision}
           >
@@ -284,91 +273,94 @@ export function RatingsView({
           </p>
         ) : undefined,
       )}
-      <div data-slot="rating-figures" className="space-y-4">
-        <div className="space-y-2 [&_strong]:text-3xl [&_strong]:font-semibold">
+      <div className={`grid min-w-0 gap-5 ${question && (control || hasPersonalAnswer) ? 'lg:grid-cols-2' : ''}`}>
+        <section aria-labelledby={`${id}-public`} data-slot="rating-public" className="min-w-0 space-y-4 border-y py-5">
+          <h3 id={`${id}-public`} data-slot="rating-global" className="text-sm font-medium text-muted-foreground">
+            {m.rating_population_source_global({}, options)}
+          </h3>
+          <div
+            data-slot="rating-figures"
+            className="[&_strong]:text-4xl [&_strong]:leading-tight [&_strong]:font-semibold [&_strong]:tracking-tight"
+          >
+            {status(
+              'figure',
+              headline ? (
+                <>
+                  <PublicRatingFigure
+                    figure={headline}
+                    locale={locale}
+                    {...(question ? { remaining: threshold - headline.count } : {})}
+                  />
+                  {headline.count === 0 && headline.state !== 'updating' && (
+                    <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
+                  )}
+                </>
+              ) : undefined,
+            )}
+          </div>
           {status(
-            'figure',
-            headline ? (
-              <>
-                <PublicRatingFigure
-                  figure={headline}
-                  locale={locale}
-                  {...(question ? { remaining: threshold - headline.count } : {})}
-                />
-                {headline.count === 0 && headline.state !== 'updating' && (
-                  <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
-                )}
-              </>
+            'global',
+            !headline && globalFigure && question ? (
+              <GlobalRatingAggregate figure={globalFigure} question={question} locale={locale} />
             ) : undefined,
           )}
-        </div>
-        {!control && supplied && supplied.own !== null && question && (
-          <p data-slot="own-rating" className="text-sm text-muted-foreground">
-            {m.subject_ratings_yours({ score: number(displayRating(supplied.own!, question.scale), 2) }, options)}
-          </p>
-        )}
-        {control && question && (
-          <SubjectRatingControl
-            {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
-            question={question}
-            locale={control.locale}
-            own={control.own}
-            {...(control.binding ? { binding: control.binding } : {})}
-            returnTo={control.returnTo}
-            session={control.session}
-            subjectId={control.subjectId}
-          />
-        )}
-      </div>
-      <p data-slot="rating-global" className="text-sm font-medium">
-        {m.rating_population_source_global({}, options)}
-      </p>
-      {status(
-        'global',
-        !headline && globalFigure && question ? (
-          <div data-slot="rating-global-aggregate" className="space-y-1 text-sm">
-            {globalFigure.freshness?.updating ? (
-              <p role="status">{m.rating_public_updating({}, options)}</p>
-            ) : globalFigure.count === 0 ? (
-              <p>{m.subject_ratings_empty({}, options)}</p>
-            ) : (
-              <>
-                <p>
-                  {m.subject_ratings_realm_count(
-                    { count: number(globalFigure.count), population: m.rating_population_source_global({}, options) },
+          {question && (
+            <RatingDistribution figure={globalFigure} headline={headline} question={question} locale={locale} />
+          )}
+        </section>
+        {question && (control || hasPersonalAnswer) ? (
+          <section
+            aria-labelledby={`${id}-personal`}
+            data-slot="rating-personal"
+            className="min-w-0 space-y-4 border-s-2 border-primary/40 bg-muted/30 p-4 sm:p-5"
+          >
+            <h3 id={`${id}-personal`} className="text-sm font-semibold">
+              {m.rating_personal_heading({}, options)}
+            </h3>
+            {control ? (
+              <SubjectRatingControl
+                {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
+                question={question}
+                locale={control.locale}
+                own={control.own}
+                {...(control.binding ? { binding: control.binding } : {})}
+                returnTo={control.returnTo}
+                session={control.session}
+                subjectId={control.subjectId}
+              />
+            ) : supplied ? (
+              <div className="space-y-2">
+                <p data-slot="own-rating" className="text-2xl font-semibold tabular-nums">
+                  {number(supplied.own!)} / {number(question.scale.max)}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {m.rating_native_scale(
+                    {
+                      min: number(question.scale.min),
+                      max: number(question.scale.max),
+                      step: number(question.scale.displayStep),
+                    },
                     options,
                   )}
                 </p>
-                {globalFigure.remaining !== undefined || globalFigure.count < threshold ? (
-                  <p>
-                    {m.subject_ratings_remaining(
-                      { count: number(globalFigure.remaining ?? threshold - globalFigure.count) },
-                      options,
-                    )}
-                  </p>
-                ) : globalFigure.mean !== undefined &&
-                  Number.isFinite(globalFigure.mean) &&
-                  globalFigure.mean >= question.scale.min &&
-                  globalFigure.mean <= question.scale.max &&
-                  question.scale.max > question.scale.min ? (
-                  <p>
-                    {m.rating_public_mean(
-                      {
-                        mean: number(displayRating(globalFigure.mean, question.scale), 2),
-                        maximum: number(PUBLIC_RATING_SCALE.max),
-                      },
-                      options,
-                    )}
-                  </p>
-                ) : (
-                  <p>{m.subject_ratings_figure_unavailable({}, options)}</p>
-                )}
-              </>
-            )}
-          </div>
-        ) : undefined,
-      )}
-      {question && <RatingDistribution figure={globalFigure} headline={headline} question={question} locale={locale} />}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
+      {sources.statistics.kind !== 'ready' || statistics.length > 0 ? (
+        <section aria-labelledby={`${id}-imported`} data-slot="rating-imported" className="min-w-0 space-y-3 pt-2">
+          <h3 id={`${id}-imported`} className="text-base font-semibold">
+            {m.rating_population_source_statistics({}, options)}
+          </h3>
+          {status(
+            'statistics',
+            statistics.length ? (
+              <ImportedRatingSources statistics={statistics} sourcesHref={sourcesHref} locale={locale} />
+            ) : undefined,
+          )}
+        </section>
+      ) : null}
       {populations}
       {supplied && (
         <RatingComparisons
@@ -378,9 +370,9 @@ export function RatingsView({
           locale={locale}
         />
       )}
-      <details data-slot="rating-provenance" className="text-sm">
+      <details data-slot="rating-provenance" className="border-t text-sm">
         <summary className={summaryClass}>{m.subject_ratings_provenance({}, options)}</summary>
-        <div className="mt-3 space-y-3 wrap-anywhere text-muted-foreground">
+        <div className="space-y-3 pb-3 wrap-anywhere text-muted-foreground">
           {question && (
             <p data-slot="rating-question-revision">
               {m.rating_question_revision({ revision: number(question.revision) }, options)}
@@ -388,57 +380,6 @@ export function RatingsView({
           )}
           <p>{m.rating_public_delay({}, options)}</p>
           <p>{m.rating_public_ordering({}, options)}</p>
-          {status(
-            'statistics',
-            statistics.length
-              ? statistics.map((item) => (
-                  <p
-                    key={`${item.source}:${item.sourceRecordId ?? ''}`}
-                    data-slot="imported-score"
-                    data-provider={item.source}
-                    className="min-w-0 break-words"
-                  >
-                    <MetaLine
-                      items={[
-                        <span className="font-medium">{providerStatisticLabel(item.source)}</span>,
-                        <strong className="tabular-nums">
-                          {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
-                        </strong>,
-                        m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
-                        item.sourceRecordId
-                          ? (() => {
-                              const href = sourceObservationHref(sourcesHref, item.source, item.observation?.digest);
-                              return href ? (
-                                <a
-                                  className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                  href={href}
-                                >
-                                  {m.subject_classification_source_record({ record: item.sourceRecordId }, options)}
-                                </a>
-                              ) : (
-                                m.subject_classification_source_record({ record: item.sourceRecordId }, options)
-                              );
-                            })()
-                          : null,
-                        item.sourceAlias && item.sourceAlias !== item.source
-                          ? m.subject_classification_source_alias({ alias: item.sourceAlias }, options)
-                          : null,
-                        item.observation
-                          ? m.subject_classification_source_unversioned(
-                              { digest: item.observation.digest.slice(0, 12) },
-                              options,
-                            )
-                          : null,
-                        item.licence ? m.rating_import_licence({ licence: item.licence }, options) : null,
-                        item.attribution
-                          ? m.rating_import_attribution({ attribution: item.attribution }, options)
-                          : null,
-                      ]}
-                    />
-                  </p>
-                ))
-              : undefined,
-          )}
         </div>
       </details>
       {assessmentHandlers && assessmentChrome && control && (
@@ -457,6 +398,135 @@ export function RatingsView({
         {m.subject_ratings_reviews({}, options)}
       </a>
     </section>
+  );
+}
+
+/** The aggregate remains independently readable when the published figure is unavailable. */
+function GlobalRatingAggregate({
+  figure,
+  question,
+  locale,
+}: {
+  figure: Figure;
+  question: Ratings['question'];
+  locale: string;
+}) {
+  const options = { locale: locale as never };
+  const number = (value: number, digits = 0) =>
+    new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
+  const threshold = ['episode', 'character'].includes(question.grain) ? 10 : 5;
+  return (
+    <div data-slot="rating-global-aggregate" className="space-y-2 text-sm">
+      {figure.freshness?.updating ? (
+        <p role="status">{m.rating_public_updating({}, options)}</p>
+      ) : figure.count === 0 ? (
+        <p>{m.subject_ratings_empty({}, options)}</p>
+      ) : (
+        <>
+          <p>
+            {m.subject_ratings_realm_count(
+              { count: number(figure.count), population: m.rating_population_source_global({}, options) },
+              options,
+            )}
+          </p>
+          {figure.remaining !== undefined || figure.count < threshold ? (
+            <p>
+              {m.subject_ratings_remaining({ count: number(figure.remaining ?? threshold - figure.count) }, options)}
+            </p>
+          ) : figure.mean !== undefined &&
+            Number.isFinite(figure.mean) &&
+            figure.mean >= question.scale.min &&
+            figure.mean <= question.scale.max &&
+            question.scale.max > question.scale.min ? (
+            <p className="text-2xl font-semibold tabular-nums">
+              {m.rating_public_mean(
+                {
+                  mean: number(displayRating(figure.mean, question.scale), 2),
+                  maximum: number(PUBLIC_RATING_SCALE.max),
+                },
+                options,
+              )}
+            </p>
+          ) : (
+            <p>{m.subject_ratings_figure_unavailable({}, options)}</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Source scores retain their own units and evidence, never the native question's scale. */
+function ImportedRatingSources({
+  statistics,
+  sourcesHref,
+  locale,
+}: {
+  statistics: Statistic[];
+  sourcesHref: string;
+  locale: string;
+}) {
+  const options = { locale: locale as never };
+  const number = (value: number, digits = 0) =>
+    new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
+  const date = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(parsed.getTime())
+      ? new Intl.DateTimeFormat(locale, { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric' }).format(
+          parsed,
+        )
+      : value;
+  };
+  return (
+    <ul className="grid min-w-0 gap-3 sm:grid-cols-2">
+      {statistics.map((item) => {
+        const href = sourceObservationHref(sourcesHref, item.source, item.observation?.digest);
+        return (
+          <li
+            key={`${item.source}:${item.sourceRecordId ?? ''}`}
+            data-slot="imported-score"
+            data-provider={item.source}
+            className="min-w-0 space-y-2 rounded-lg border p-4 wrap-anywhere"
+          >
+            <h4 className="font-semibold">{providerStatisticLabel(item.source)}</h4>
+            <p className="text-muted-foreground">
+              <strong className="text-2xl font-semibold text-foreground tabular-nums">{number(item.mean, 2)}</strong> (
+              {number(item.scale.min)}–{number(item.scale.max)})
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options)}
+            </p>
+            <details className="text-xs text-muted-foreground">
+              <summary className={summaryClass}>{m.rating_source_details({}, options)}</summary>
+              <div className="space-y-2 pb-2">
+                {item.sourceRecordId &&
+                  (href ? (
+                    <a className={linkClass} href={href}>
+                      {m.subject_classification_source_record({ record: item.sourceRecordId }, options)}
+                    </a>
+                  ) : (
+                    <p>{m.subject_classification_source_record({ record: item.sourceRecordId }, options)}</p>
+                  ))}
+                {item.sourceAlias && item.sourceAlias !== item.source && (
+                  <p>{m.subject_classification_source_alias({ alias: item.sourceAlias }, options)}</p>
+                )}
+                {item.observation && (
+                  <p>
+                    {m.subject_classification_source_unversioned(
+                      { digest: item.observation.digest.slice(0, 12) },
+                      options,
+                    )}
+                  </p>
+                )}
+                {item.licence && <p>{m.rating_import_licence({ licence: item.licence }, options)}</p>}
+                {item.attribution && <p>{m.rating_import_attribution({ attribution: item.attribution }, options)}</p>}
+              </div>
+            </details>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -528,7 +598,7 @@ function RatingComparisons({ data, id, locale }: { data: Ratings; id: string; lo
         <ContentItemFrame
           as="div"
           data-slot="content-item-frame"
-          className="min-w-0 space-y-2 wrap-anywhere py-3 sm:py-4"
+          className="min-w-0 space-y-2 rounded-lg border p-4 wrap-anywhere"
         >
           <ContentItemHeading level={3} className="text-[17px] leading-snug font-semibold sm:text-lg md:text-xl">
             {realm.name}
@@ -592,43 +662,49 @@ export function BookOverviewRating({ subject, locale }: { subject: string; local
       <h2 id="book-identity-ratings-title" className="sr-only">
         {m.subject_ratings({}, options)}
       </h2>
-      <RatingSourceStatus
-        outcome={sources.figure}
-        source="figure"
-        locale={locale}
-        retry={retry('figure')}
-        owner={{ subject }}
-      >
-        {figure && (
-          <div className="[&_strong]:text-2xl [&_strong]:font-semibold sm:[&_strong]:text-3xl">
-            <PublicRatingFigure figure={figure} locale={locale} />
-            {figure.count === 0 && figure.state !== 'updating' && (
-              <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
-            )}
-          </div>
-        )}
-      </RatingSourceStatus>
-      {control && (
+      <div className="space-y-2" data-slot="book-rating-public">
+        <p className="text-xs font-medium text-muted-foreground">{m.rating_population_source_global({}, options)}</p>
         <RatingSourceStatus
-          outcome={sources.question}
-          source="question"
+          outcome={sources.figure}
+          source="figure"
           locale={locale}
-          retry={retry('question')}
+          retry={retry('figure')}
           owner={{ subject }}
         >
-          {question && (
-            <SubjectRatingControl
-              {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
-              question={question}
-              locale={control.locale}
-              own={control.own}
-              {...(control.binding ? { binding: control.binding } : {})}
-              returnTo={control.returnTo}
-              session={control.session}
-              subjectId={control.subjectId}
-            />
+          {figure && (
+            <div className="[&_strong]:text-2xl [&_strong]:font-semibold sm:[&_strong]:text-3xl">
+              <PublicRatingFigure figure={figure} locale={locale} />
+              {figure.count === 0 && figure.state !== 'updating' && (
+                <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
+              )}
+            </div>
           )}
         </RatingSourceStatus>
+      </div>
+      {control && (
+        <div className="space-y-2 border-s-2 border-primary/40 bg-muted/30 p-4" data-slot="book-rating-personal">
+          <p className="text-sm font-semibold">{m.rating_personal_heading({}, options)}</p>
+          <RatingSourceStatus
+            outcome={sources.question}
+            source="question"
+            locale={locale}
+            retry={retry('question')}
+            owner={{ subject }}
+          >
+            {question && (
+              <SubjectRatingControl
+                {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
+                question={question}
+                locale={control.locale}
+                own={control.own}
+                {...(control.binding ? { binding: control.binding } : {})}
+                returnTo={control.returnTo}
+                session={control.session}
+                subjectId={control.subjectId}
+              />
+            )}
+          </RatingSourceStatus>
+        </div>
       )}
     </section>
   );

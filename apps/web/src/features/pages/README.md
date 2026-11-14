@@ -30,6 +30,17 @@ actual source replacement retires it. Public DTOs may describe visible controls,
 observation and native admission can make a private action current. Public Person credit inspect reads that prepared
 session cache and does not start another session fetch.
 
+## Rating presentation
+
+Decision: the human question leads distinct public, imported-source, population and own-answer regions. Public
+figures retain their published scale and suppression; each imported score keeps its source scale, count, date and
+expandable evidence. Imported failures and retries remain visible independently of publication explanations.
+Personal controls show exact native question units and minimum/maximum/step, including zero, while their existing
+command and retirement engines retain authority. Readback after an uncertain command reports current state without
+confirming that intent; exact replay remains deliberate. Population disclosure stays client-only under the current
+reader lease, with no private payload added to SSR. Library facts supply no public count or authority. Review
+entries stay manually editable. The [private inventory](../../ratings/own-votes/README.md) owns original-pair edits.
+
 ## Composition render identity
 
 Decision: `CompositionRender` keeps its Puck render config while its registry has equal entries and its definitions, root and document root are unchanged, and each slot callback is invoked for its content, so composed controls stay mounted through sibling and route re-renders while a new document or registry entry still remounts them.
