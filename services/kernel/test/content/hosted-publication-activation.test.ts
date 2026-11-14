@@ -7,15 +7,34 @@ import {
   startHostedPublicationActivation as start,
   type HostedPublicationActivationDependencies,
 } from '../../src/content/hosted-publication-activation.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 
 setDefaultTimeout(360_000);
+const activationProgressEvent = 'com.rezics.content.hosted-catalogue.activation.changed.v1';
+const activationEvent = 'com.rezics.content.hosted-catalogue.publication.activated.v1';
+const activationEventTypes = [activationProgressEvent, activationEvent];
 const context = () => ({
   idempotencyKey: crypto.randomUUID(),
   deadline: Date.now() + 120_000,
   requestId: crypto.randomUUID(),
 });
+
+async function activationEventCounts(
+  f: Awaited<ReturnType<typeof hostedChaptersFixture>>,
+  catalogueId: string,
+) {
+  const result = await f.native.pool.query<{ type: string; count: number }>(
+    `SELECT type,count(*)::integer AS count FROM core.outbox
+     WHERE partition_no=$1 AND subject=$2 AND type=ANY($3::text[]) GROUP BY type`,
+    [partitionOf(routeOf(catalogueId)!), catalogueId, activationEventTypes],
+  );
+  const counts = new Map(result.rows.map((row) => [row.type, row.count]));
+  return {
+    progress: counts.get(activationProgressEvent) ?? 0,
+    activated: counts.get(activationEvent) ?? 0,
+  };
+}
 
 test('expired sealed Books refuse fresh activation work, retain the old edition and replay committed receipts', async () => {
   const f = await hostedChaptersFixture();
@@ -24,6 +43,13 @@ test('expired sealed Books refuse fresh activation work, retain the old edition 
     const route = routeOf(catalogueId)!;
     const path = `/v1/hostedCatalogues/${catalogueId}`;
     const actor = f.native.author.actor;
+    const currentPublicationId = async () => {
+      const result = await f.native.pool.query<{ publication_id: string | null }>(
+        `SELECT publication_id FROM content.hosted_catalogue WHERE route=$1 AND catalogue_id=$2`,
+        [route, catalogueId],
+      );
+      return result.rows[0]?.publication_id ?? null;
+    };
     const target = f.target(await f.native.thread('published'));
     const oldId = f.newOccurrenceId();
     const nextId = f.newOccurrenceId();
@@ -96,9 +122,31 @@ test('expired sealed Books refuse fresh activation work, retain the old edition 
     const precise = await prepare(`${expiry.toISOString().slice(0, -1)}001Z`);
     const committedExpiry = new Date(expiry.getTime() + 60_000);
     const committed = await prepare(committedExpiry.toISOString());
-    expect((await start(deps, actor, catalogueId, checking, context())).value.state).toBe('checking');
-    await start(deps, actor, catalogueId, ready, context());
-    expect((await advance(deps, actor, catalogueId, ready, context())).value.state).toBe('ready');
+    const initialEvents = await activationEventCounts(f, catalogueId);
+    const checkingContext = context();
+    const checkingStarted = await start(deps, actor, catalogueId, checking, checkingContext);
+    expect(checkingStarted.value.state).toBe('checking');
+    const afterStartEvents = { ...initialEvents, progress: initialEvents.progress + 1 };
+    expect(await activationEventCounts(f, catalogueId)).toEqual(afterStartEvents);
+    expect(await start(deps, actor, catalogueId, checking, checkingContext)).toEqual({
+      ...checkingStarted,
+      replayed: true,
+    });
+    expect(await start(deps, actor, catalogueId, checking, context())).toMatchObject({ value: checkingStarted.value });
+    expect(await activationEventCounts(f, catalogueId)).toEqual(afterStartEvents);
+
+    const readyStarted = await start(deps, actor, catalogueId, ready, context());
+    expect(readyStarted.value.state).toBe('checking');
+    const afterReadyStartEvents = { ...afterStartEvents, progress: afterStartEvents.progress + 1 };
+    expect(await activationEventCounts(f, catalogueId)).toEqual(afterReadyStartEvents);
+    const readyContext = context();
+    const readyProgress = await advance(deps, actor, catalogueId, ready, readyContext);
+    expect(readyProgress.value.state).toBe('ready');
+    const afterReadyEvents = { ...afterReadyStartEvents, progress: afterReadyStartEvents.progress + 1 };
+    expect(await activationEventCounts(f, catalogueId)).toEqual(afterReadyEvents);
+    expect(await advance(deps, actor, catalogueId, ready, readyContext)).toEqual({ ...readyProgress, replayed: true });
+    expect(await advance(deps, actor, catalogueId, ready, context())).toMatchObject({ value: readyProgress.value });
+    expect(await activationEventCounts(f, catalogueId)).toEqual(afterReadyEvents);
 
     at = expiry;
     // One microsecond remains live; JavaScript Date truncation would incorrectly refuse it.
@@ -151,11 +199,40 @@ test('expired sealed Books refuse fresh activation work, retain the old edition 
     );
     expect(unpublished.status).toBe(404);
 
-    await start(deps, actor, catalogueId, committed, context());
-    expect((await advance(deps, actor, catalogueId, committed, context())).value.state).toBe('ready');
+    const committedStarted = await start(deps, actor, catalogueId, committed, context());
+    expect(committedStarted.value.state).toBe('checking');
+    const beforeCommittedAdvance = await activationEventCounts(f, catalogueId);
+    const committedProgress = await advance(deps, actor, catalogueId, committed, context());
+    expect(committedProgress.value.state).toBe('ready');
+    expect((await activationEventCounts(f, catalogueId)).progress).toBe(beforeCommittedAdvance.progress + 1);
+    const beforeActivationEvents = await activationEventCounts(f, catalogueId);
+    expect(await currentPublicationId()).toBe(editionA.revisionId);
     const activationContext = context();
     const activated = await activate(deps, actor, catalogueId, committed, activationContext);
     expect(activated.value.state).toBe('activated');
+    const afterActivationEvents = { ...beforeActivationEvents, activated: beforeActivationEvents.activated + 1 };
+    expect(await activationEventCounts(f, catalogueId)).toEqual(afterActivationEvents);
+    const activatedPointer = activated.value.publicationId;
+    expect(await currentPublicationId()).toBe(activatedPointer);
+    expect(await activate(deps, actor, catalogueId, committed, activationContext)).toEqual({
+      ...activated,
+      replayed: true,
+    });
+    expect(await activate(deps, actor, catalogueId, committed, context())).toMatchObject({ value: activated.value });
+    expect(await activationEventCounts(f, catalogueId)).toEqual(afterActivationEvents);
+    expect(await currentPublicationId()).toBe(activatedPointer);
+    const activatedAdvanceContext = context();
+    const activatedAdvance = await advance(deps, actor, catalogueId, committed, activatedAdvanceContext);
+    expect(activatedAdvance.value).toEqual(activated.value);
+    expect(await advance(deps, actor, catalogueId, committed, activatedAdvanceContext)).toEqual({
+      ...activatedAdvance,
+      replayed: true,
+    });
+    expect(await advance(deps, actor, catalogueId, committed, context())).toMatchObject({
+      value: activatedAdvance.value,
+    });
+    expect(await activationEventCounts(f, catalogueId)).toEqual(afterActivationEvents);
+    expect(await currentPublicationId()).toBe(activatedPointer);
     const laterDraft = await f.native.command(
       `${path}:revise`,
       {

@@ -53,6 +53,22 @@ const commandContext = (idempotencyKey = crypto.randomUUID()) => ({
   requestId: crypto.randomUUID(),
 });
 
+const activationProgressEvent = 'com.rezics.content.hosted-catalogue.activation.changed.v1';
+const activationEvent = 'com.rezics.content.hosted-catalogue.publication.activated.v1';
+
+async function activationEventCounts(catalogueId: string) {
+  const result = await f.native.pool.query<{ type: string; count: number }>(
+    `SELECT type,count(*)::integer AS count FROM core.outbox
+     WHERE partition_no=$1 AND subject=$2 AND type=ANY($3::text[]) GROUP BY type`,
+    [partitionOf(routeOf(catalogueId)!), catalogueId, [activationProgressEvent, activationEvent]],
+  );
+  const counts = new Map(result.rows.map((row) => [row.type, row.count]));
+  return {
+    progress: counts.get(activationProgressEvent) ?? 0,
+    activated: counts.get(activationEvent) ?? 0,
+  };
+}
+
 function dependencies(pool: Pool, disclosureBarrier?: HostedPublicationActivationDependencies['disclosureBarrier']) {
   return {
     pool,
@@ -316,6 +332,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
   }
   expect(invalidated).toBe(true);
 
+  const beforeStaleRestartEvents = await activationEventCounts(catalogueId);
   const staleFinal = await activateHostedPublicationCandidate(
     activationDeps,
     f.native.author.actor,
@@ -325,6 +342,10 @@ test('21-target authority restarts after cross-home consent revoke and activates
   );
   expect(staleFinal.value).toMatchObject({ state: 'restart', restartRequired: true });
   expect(staleFinal.value.candidateGenerationId).toBe(originalGenerationId);
+  expect(await activationEventCounts(catalogueId)).toEqual({
+    ...beforeStaleRestartEvents,
+    progress: beforeStaleRestartEvents.progress + 1,
+  });
   expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
 
   const renewedConsent = await issueRevisionDisclosure(
@@ -363,6 +384,7 @@ test('21-target authority restarts after cross-home consent revoke and activates
   expect(current.value.checkedTargetCount).toBe('22');
 
   await changeBoardVisibility(f.native.board.id, 'protected');
+  const beforeContainerRestartEvents = await activationEventCounts(catalogueId);
   const staleContainer = await activateHostedPublicationCandidate(
     activationDeps,
     f.native.author.actor,
@@ -372,6 +394,10 @@ test('21-target authority restarts after cross-home consent revoke and activates
   );
   expect(staleContainer.value).toMatchObject({ state: 'restart', restartRequired: true });
   expect(staleContainer.value.candidateGenerationId).toBe(originalGenerationId);
+  expect(await activationEventCounts(catalogueId)).toEqual({
+    ...beforeContainerRestartEvents,
+    progress: beforeContainerRestartEvents.progress + 1,
+  });
   expect(await publicationId(catalogueId)).toBe(releaseA.revisionId);
   await changeBoardVisibility(f.native.board.id, 'published');
   current = await advanceHostedPublicationActivationAuthority(

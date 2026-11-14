@@ -417,6 +417,10 @@ current author admission still precedes exact committed receipt replay, which re
 and never moves the publication pointer again. The current public edition remains selected and readable under its
 ordinary disclosure rules; expired unpublished candidates remain private.
 
+Decision: native activation commands return explicit command effects. A new pass, authority-page advance or stale
+authority restart emits the existing activation-changed event; the first pointer commit emits publication-activated;
+retained start, ready/activated advance and activated retries use `noEffect` and emit no event.
+
 Decision: fresh whole-source building and selection building/closing advances replay their exact native step receipt
 before checking expiry, then lock the exact catalogue row after the stage row and compare both pinned draft and
 publication IDs before source traversal, candidate settlement or closure-frontier writes. A stale pointer returns the
