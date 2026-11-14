@@ -1460,7 +1460,7 @@ export function SubjectPage({
                       locale={locale}
                       link={ContextLink}
                       returning={returnSource === read.subject.id}
-                      readerSpoiler={reader?.spoilerLevel ?? 0}
+                      readerSpoiler={reader && reader !== defaultReader ? reader.spoilerLevel : undefined}
                       {...(currentHref !== undefined ? { currentHref } : {})}
                       recoverCurrentPage={recoverCatalogueFileReader}
                     />
