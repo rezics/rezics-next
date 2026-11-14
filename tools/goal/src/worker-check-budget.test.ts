@@ -674,6 +674,103 @@ async function settleSuccessWithHostCheck(
   return { task, ref: { taskId: task.id, attempt: attempt.attempt }, landings };
 }
 
+function writeTypingInputDrift(budget: string, worktree: string, command: string[]): string {
+  const physicalRunId = randomUUID();
+  const path = join(budget, '1');
+  const stamp = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+  writeFileSync(path, JSON.stringify({ ...stamp, typingRequest: { physicalRunId, command, capture: 'physical-command', localPrepared: [] } }));
+  mkdirSync(join(worktree, 'scripts'), { recursive: true });
+  writeFileSync(join(worktree, 'scripts/typecheck.ts'), 'export {};\n');
+  writeFileSync(join(worktree, 'deferred-source.ts'), 'export const current = true;\n');
+  return physicalRunId;
+}
+
+function writeOwnedCheckResult(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkId: string,
+  physicalRunId: string,
+  status: 'running' | 'finished',
+): void {
+  const root = join(worktree, '.temp/goal/checks');
+  const finished = status === 'finished';
+  const argv = ['bun', 'test', 'custody.test.ts'];
+  mkdirSync(join(root, 'results'), { recursive: true });
+  mkdirSync(join(root, 'custody/history'), { recursive: true });
+  writeFileSync(join(root, 'results', `${checkId}.json`), JSON.stringify({
+    id: checkId, cwd: worktree, argv, ownership: { taskId, attempt }, status, physicalRunId,
+    ...(finished ? { exitCode: 0 } : {}),
+  }));
+  if (finished) writeFileSync(join(root, 'custody/history', `${checkId}.${physicalRunId}.json`), JSON.stringify({
+    version: 1, id: checkId, cwd: worktree, argv, ownership: { taskId, attempt }, physicalRunId,
+    status, exitCode: 0, remoteExpected: false,
+    terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+  }));
+}
+
+test('source-only recovery waits for check custody and preserves the unused grant through mode removal', async () => {
+  const h = harness();
+  const command = ['bun', 'scripts/typecheck.ts'];
+  const landing: unknown[] = [];
+  try {
+    let physicalRunId = '';
+    const retained = await settleSuccessWithHostCheck(h, typecheckLog, (budget, worktree) => {
+      physicalRunId = writeTypingInputDrift(budget, worktree, command);
+    });
+    h.settings.integration.operationsManager = 'operations';
+    h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY,state TEXT NOT NULL)');
+    h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(
+      'operations',
+      JSON.stringify({
+        id: 'operations',
+        kind: 'resident-supermanager',
+        provider: 'claude',
+        status: 'running',
+        threadId: 'operations-session',
+      }),
+    );
+    const actor = { id: 'operations', sessionId: 'operations-session' };
+    const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, retained.task.id, 1);
+    const receive = () => recoverWorkerTyping(h.tasks, { enqueue: (value) => landing.push(value) }, retained.ref, actor);
+    const grant = recoveryProof(await receive());
+    const grantPath = join(budget, 'typing-recovery', `${grant.env[TYPING_RECOVERY_ENV]}.json`);
+    const grantBytes = readFileSync(grantPath, 'utf8');
+    expect(JSON.parse(grantBytes)).toMatchObject({ command });
+    const checkId = randomUUID();
+    const checkRun = randomUUID();
+    writeOwnedCheckResult(retained.task.worktree, retained.task.id, 1, checkId, checkRun, 'running');
+    h.store.updateAttempt(retained.ref, (attempt) => {
+      attempt.checks = [checkId];
+    });
+    writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'source-only\n');
+    expect(await receive()).toMatchObject({ status: 'pending' });
+    expect(h.store.attempt(retained.ref)).toMatchObject({ checks: [checkId], typingEvidencePending: { command } });
+    expect(readFileSync(grantPath, 'utf8')).toBe(grantBytes);
+    writeOwnedCheckResult(retained.task.worktree, retained.task.id, 1, checkId, checkRun, 'finished');
+    expect(await receive()).toMatchObject({ status: 'landing' });
+    expect(landing).toHaveLength(1);
+    expect(h.store.attempt(retained.ref)).toMatchObject({ checks: [checkId], typingEvidenceDeferred: { command } });
+    expect(h.store.events(retained.task.id, 1).some((event) => event.kind === 'typing-evidence-deferred')).toBe(true);
+    expect(h.store.attempt(retained.ref).typingEvidencePending).toBeUndefined();
+    expect(readFileSync(grantPath, 'utf8')).toBe(grantBytes);
+    expect(workerCheckHostRunsUsed(budget)).toBe(1);
+    const retainedFailure = readWorkerCheckHostStamp(budget, '1');
+    expect(retainedFailure).toMatchObject({
+      exitCode: 1,
+      typecheckFailed: true,
+      typingRequest: { physicalRunId, command },
+    });
+    expect(readFileSync(retainedFailure.log!, 'utf8')).toBe(typecheckLog);
+    expect((await receive()).status).toBe('landing');
+    unlinkSync(join(h.settings.stateDirectory, 'verification-mode'));
+    expect((await receive()).status).toBe('landing');
+    expect(h.store.attempt(retained.ref).typingEvidenceDeferred).toMatchObject({ command });
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
 const directKernelCompiler = ['bun', 'services/kernel/scripts/typecheck.ts'];
 
 function prepareDirectKernelCompiler(worktree: string): void {

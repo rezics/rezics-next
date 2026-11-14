@@ -3011,8 +3011,17 @@ Unchanged legacy stamps remain valid under their original full-tree comparison. 
 requested an artifact their compiler could not produce can reuse their successful original full-tree stamp only while
 the tree and retained prepared dependency inputs still match. Modern physical capture requires its matching artifact;
 a rejected artifact, changed legacy input or missing modern receipt never becomes a pass. True compiler failures retain
-their verdict and log. Unavailable evidence parks completed source with `typingEvidencePending`, preserving the attempt,
-commits and check IDs instead of creating a source-writing retry.
+their verdict and log. Outside an eligible source-only window, unavailable evidence parks completed source with
+`typingEvidencePending`, preserving the attempt, commits and check IDs instead of creating a source-writing retry.
+During an eligible source-only window, settlement records unavailable compiler evidence as `typingEvidenceDeferred` and
+lets ordinary source land for verifier acceptance after same-attempt physical custody is terminal. The original worker
+result, failed check records, compiler identities and unexecuted grants remain unchanged; repeated recovery does not
+launch a compiler or clear the obligation, including after source-only mode is removed.
+
+Decision: settlement and typing recovery use the launch prompt's live source-only eligibility rules, including changed
+paths. They defer only unavailable compiler evidence for ordinary dev source, require terminal custody, preserve exact
+failures and grants, and leave typing failures, money paths, explicit requirements, proof and control-plane acceptance
+on their existing paths. The dev verifier owns the deferred compiler acceptance.
 
 For the installed Kernel client-output pipeline, the receipt retains its remote host/run binding with the local physical
 check identity. Failure classification may accept replaced generated declarations only when the published output tree

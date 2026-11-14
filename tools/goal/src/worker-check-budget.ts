@@ -2514,10 +2514,16 @@ export function workerCheckHostTypingSettlement(input: {
   directory?: string | undefined;
   worktree: string;
   limit?: string | number | null | undefined;
+  /** Source-only may defer optional compiler evidence even when the attempt has no ordinary check budget. */
+  inspectUnbudgeted?: boolean | undefined;
 }): WorkerCheckHostTypingSettlement {
   try {
     const directory = input.directory?.trim();
-    if (!directory || input.limit === 'off' || input.limit === null) return { ok: true };
+    if (
+      !directory ||
+      ((input.limit === 'off' || input.limit === null) && !input.inspectUnbudgeted)
+    )
+      return { ok: true };
     let names: string[];
     try {
       names = stampNames(directory);

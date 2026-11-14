@@ -14,6 +14,7 @@ import { acquireDirectoryLease } from './lease.ts';
 import { sameProcess } from './process.ts';
 import { backlogManagerActor, type AuthenticatedManager } from './priority-authority.ts';
 import { readMeasurement } from './records.ts';
+import { sourceOnlyCompletionEligible } from './prompts.ts';
 import { settle } from './settle.ts';
 import type { WithdrawnTypingRecoveryOrigin } from './store.ts';
 import type { WorkerTasks } from './tasks.ts';
@@ -470,12 +471,44 @@ export async function recoverWorkerTyping(
     }
     if (withdrawnRetry && !authority)
       throw new Error('withdrawn retry compiler recovery requires authenticated owner or operations authority');
+    const sourceOnly =
+      !withdrawnRetry &&
+      sourceOnlyCompletionEligible({ task, stateDirectory: settings.stateDirectory, policy: settings.policy });
     const typing = workerCheckHostTypingSettlement({
       directory,
       worktree: task.worktree,
       limit: workerCheckHostBudgetLimit(task, ref.attempt),
+      inspectUnbudgeted: sourceOnly,
     });
     const checkIds = workerCheckHostTypingCheckIds(directory, attempt.checks ?? []);
+    if (
+      !typing.ok &&
+      typing.kind === 'evidence-unavailable' &&
+      sourceOnly
+    ) {
+      if (workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, checkIds) !== 'terminal')
+        return {
+          ...ref,
+          status: 'pending' as const,
+          result: `${typing.result}\n` +
+            'Compiler evidence can be deferred under source-only policy, but same-attempt check custody is not terminal. ' +
+            `Keep check ids ${checkIds.join(', ') || '(none)'}, original owners and grants unchanged; no compiler command was issued.`,
+        };
+      if (retry?.status === 'pending')
+        store.updateRetryIntent(ref, (intent) => {
+          intent.status = 'abandoned';
+        });
+      await settle(
+        tasks,
+        { attempt, exited: Promise.resolve({ code: attempt.exitCode ?? 0, signal: null }) },
+        landing,
+        afterSettle,
+      );
+      return {
+        ...ref,
+        status: store.task(task.id).state === 'landing' ? ('landing' as const) : ('pending' as const),
+      };
+    }
     const pendingCommand = !typing.ok ? (typing.command ?? attempt.typingEvidencePending?.command) : undefined;
     const resolvedPendingCommand = pendingCommand
       ? resolveTypingCompilerCommand(task.worktree, pendingCommand)
