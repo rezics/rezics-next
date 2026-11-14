@@ -89,7 +89,7 @@ export const PrivateWriting: Story = {
   ...diaryRoute(
     'reading',
     occurrencePath,
-    'Read the private reflection, choose Write or revise your journal, edit it, Review, then Save. The original and proposed values are compared at the captured journal revision. Cancel before dispatch discards only this draft. Progress revision and public publication remain independent.',
+    'Read the private reflection, choose Write or revise your journal, edit it, Review, then Save. The original and proposed values are compared at the captured journal revision. Cancel before dispatch discards only this draft. Change any field or choose Clear, then follow Library or use Back to open the shared Stay/Leave dialog. Stay keeps exact selections and focus; Leave discards only local drafts. An untouched editor and a settled save without later edits do not prompt. Progress revision and public publication remain independent.',
   ),
   name: 'Journal · read, edit, review and cancel',
 };
@@ -137,7 +137,7 @@ export const ExactFailedSaveRecovery: Story = {
   ...diaryRoute(
     'failed-save',
     occurrencePath,
-    'Edit the reflection, Review and Save. The constructed producer saves once and loses the response. Read current values to see revision 4 separately; the retained original comparison still shows revision 3. Retry sends exactly the original body, key and revision, returning its recorded outcome without applying the edit twice.',
+    'Edit the reflection, Review and Save. The constructed producer saves once and loses the response. Read current values to see revision 4 separately; the retained original comparison still shows revision 3. Continue editing the fields without changing that sealed request. Try leaving: the dialog distinguishes the uncertain save from your unsent edits. Stay retains both; deliberate Leave discards only local edits and cannot undo the dispatched save. Retry sends exactly the original body, credential, key and revision, returning its recorded outcome without applying the edit twice. Any edits made after dispatch remain a draft after Retry succeeds.',
   ),
   name: 'Journal · lost response and exact original retry',
 };

@@ -18,7 +18,10 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState, useId, type FormEvent, type ReactNode } from 'react';
+import {
+  useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useId,
+  type FormEvent, type ReactNode,
+} from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../application';
 import { useSession } from '../application';
@@ -32,6 +35,7 @@ import {
 } from './occurrence-server';
 
 import { historyReturn } from './address';
+import { PrivateJournalDraftNavigation, usePrivateJournalDraftNavigation } from './draft-navigation';
 
 type JournalBody = JournalPatch;
 type JournalCommand = {
@@ -51,7 +55,12 @@ type LifecycleCommand = {
 };
 
 type PrivateJournal = Extract<JournalReadResult, { kind: 'ready' }>['journal'];
-type JournalCustody = { command?: JournalCommand; basis?: PrivateJournal; flight?: object };
+type JournalCustody = {
+  command?: JournalCommand;
+  basis?: PrivateJournal;
+  flight?: object;
+  listeners?: Set<() => void>;
+};
 // Only the existing progress-reader lifetime can retain a dispatched command through a read replacement.
 // Only a dispatched command and its original comparison survive here. Neither authorizes a current read.
 const journalCommands = new WeakMap<object, JournalCustody>();
@@ -116,10 +125,13 @@ export function PrivateOccurrenceControls(props: {
   const location = useLocation();
   const read = useOperation('progress_session.read');
   const journalRead = useOperation('progress_session_journal.read');
+  const source = useRef({ lifetime: props.lifetime, generation: 0 });
+  if (source.current.lifetime !== props.lifetime)
+    source.current = { lifetime: props.lifetime, generation: source.current.generation + 1 };
   if (owner.state !== 'signed-in' || !owner.csrfToken || !read || !journalRead || !props.isCurrent())
     return <p role="status">{m.library_occurrence_unavailable()}</p>;
   return (
-    <OccurrenceControls
+    <PrivateJournalDraftNavigation
       key={JSON.stringify([
         owner.subject,
         owner.csrfToken,
@@ -127,9 +139,11 @@ export function PrivateOccurrenceControls(props: {
         props.session.subjectId,
         props.session.versionSubjectId,
         location.search.history,
+        source.current.generation,
       ])}
-      {...props}
-    />
+    >
+      <OccurrenceControls {...props} />
+    </PrivateJournalDraftNavigation>
   );
 }
 
@@ -154,6 +168,17 @@ function OccurrenceControls({
   }, []);
   const flight = useRef(false);
   const [custody] = useState(() => journalCustody(lifetime));
+  useSyncExternalStore(
+    useCallback(
+      (listener: () => void) => {
+        (custody.listeners ??= new Set()).add(listener);
+        return () => { custody.listeners!.delete(listener); };
+      },
+      [custody],
+    ),
+    () => custody.flight,
+    () => undefined,
+  );
   const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
   const readAllowed = useOperation('progress_session.read');
@@ -205,6 +230,8 @@ function OccurrenceControls({
   const [draft, setDraft] = useState<JournalDraft>(() =>
     retained ? draftFromPatch(retained.body) : emptyJournalDraft(),
   );
+  // Reference equality identifies only the selections actually sent. Later edits get new selections.
+  const submittedDraft = useRef<JournalDraft | null>(retained ? draft : null);
   const [review, setReview] = useState<JournalCommand | null>(retained);
   const [reviewBasis, setReviewBasis] = useState<PrivateJournal | null>(retained ? (custody.basis ?? null) : null);
   const [editing, setEditing] = useState(Boolean(retained));
@@ -269,6 +296,8 @@ function OccurrenceControls({
   }, [journalUpdateAllowed, reopenAllowed, retireAllowed]);
 
   const leaving = useRef(false);
+  const departed = useRef(false);
+  const [departureIdentity] = useState(() => ({}));
   const currentRef = useRef({
     sessionId: session.id,
     viewer: currentViewer,
@@ -292,11 +321,34 @@ function OccurrenceControls({
 
   const stillCurrent = (command: { sessionId: string; viewer: string; csrfToken: string }) =>
     live.current &&
+    !departed.current &&
+    !leaving.current &&
     currentRef.current.enabled &&
     currentRef.current.sessionId === command.sessionId &&
     currentRef.current.viewer === command.viewer &&
     currentRef.current.csrfToken === command.csrfToken &&
     currentRef.current.isCurrent();
+
+  usePrivateJournalDraftNavigation({
+    identity: departureIdentity,
+    isCurrent: () => live.current && !departed.current && !leaving.current && !terminal && enabled && isCurrent(),
+    draft,
+    command: journalCommand
+      ? busy || custody.flight
+        ? 'pending'
+        : journalNotice === 'acknowledged'
+          ? 'acknowledged'
+          : 'uncertain'
+      : null,
+    discard: () => {
+      departed.current = true;
+      setDraft(emptyJournalDraft());
+      setReview(null);
+      setReviewBasis(null);
+      setRefusedField(null);
+      setEditing(false);
+    },
+  });
 
   const leaveRetiredDetail = useCallback(() => {
     if (leaving.current) return;
@@ -313,10 +365,12 @@ function OccurrenceControls({
   async function sendJournal(command: JournalCommand) {
     if (!currentRef.current.journalUpdateAllowed || !stillCurrent(command) || flight.current || custody.flight) return;
     if (custody.command && custody.command !== command) return;
+    if (!custody.command) submittedDraft.current = draft;
     custody.command ??= command;
     if (reviewBasis !== null) custody.basis ??= reviewBasis;
     const attempt = {};
     custody.flight = attempt;
+    custody.listeners?.forEach((listener) => listener());
     flight.current = true;
     const generation = authority.current.generation;
     setBusy(true);
@@ -324,6 +378,7 @@ function OccurrenceControls({
     setJournalNotice(null);
     const result = await correctOccurrenceJournal({ data: command }).catch(() => ({ kind: 'uncertain' as const }));
     if (custody.flight === attempt) delete custody.flight;
+    custody.listeners?.forEach((listener) => listener());
     flight.current = false;
     if (!stillCurrent(command)) return;
     setBusy(false);
@@ -342,7 +397,14 @@ function OccurrenceControls({
       });
       delete custody.command;
       delete custody.basis;
-      setDraft(emptyJournalDraft());
+      const submitted = submittedDraft.current!;
+      setDraft((current) => ({
+        startDate: current.startDate === submitted.startDate ? { kind: 'untouched' } : current.startDate,
+        finishDate: current.finishDate === submitted.finishDate ? { kind: 'untouched' } : current.finishDate,
+        reflection: current.reflection === submitted.reflection ? { kind: 'untouched' } : current.reflection,
+        assessment: current.assessment === submitted.assessment ? { kind: 'untouched' } : current.assessment,
+      }));
+      submittedDraft.current = null;
       setReview(null);
       setJournalNotice('saved');
       setJournalCommand(null);
@@ -561,24 +623,25 @@ function OccurrenceControls({
                   field={field}
                   selection={draft[field]}
                   value={working[field]}
-                  disabled={!journalUpdateAllowed || journalCommand !== null || busy || review !== null}
+                  disabled={!journalUpdateAllowed || (!journalCommand && (busy || review !== null))}
                   invalid={!parsedDraft.ok && parsedDraft.field === field}
                   refused={refusedField === field}
                   onChange={(selection) => {
                     if (
                       !enabled ||
                       !isCurrent() ||
+                      departed.current ||
+                      leaving.current ||
                       !journalUpdateAllowed ||
-                      custody.command ||
-                      custody.flight ||
-                      review
+                      (review && !custody.command)
                     )
                       return;
                     setDraft((current) => ({ ...current, [field]: selection }));
                     // Editing a retained field cannot remove the only current-read/re-review recovery.
-                    setJournalNotice(
-                      conflictRevision !== null && reviewedRevision !== journal.revision ? 'conflict' : null,
-                    );
+                    if (!custody.command)
+                      setJournalNotice(
+                        conflictRevision !== null && reviewedRevision !== journal.revision ? 'conflict' : null,
+                      );
                     setRefusedField(null);
                   }}
                 />
@@ -660,6 +723,7 @@ function OccurrenceControls({
                   : m.library_occurrence_uncertain()}
               </p>
               <p className="text-sm text-muted-foreground">{m.library_journal_retry_identity()}</p>
+              <p className="text-sm text-muted-foreground">{m.library_journal_separate_draft()}</p>
               <Button
                 type="button"
                 variant="outline"
