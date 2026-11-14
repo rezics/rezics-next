@@ -2394,12 +2394,9 @@ The supermanager sets direction and the managers own the work. This applies to e
   It may change any file its outcome needs outside risk areas, merges or cherry-picks only branches its brief names,
   lands committed, type-checking increments, and writes the rest of a larger outcome as a continuation brief. Workers
   build on their brief and the owner READMEs and do not read other workers' tasks.
-- **Managers keep the outcomes and drop the ceremony.** A manager keeps the ordered list of outcomes for its Goal and
-  short outcome briefs in its backlog, cross-Goal contracts and their frozen acceptance, answers to escalations, and a
-  review of a sample of about two landings an hour whose defects become briefs. It synthesizes what its workers report,
-  including conflicts and duplicated or missing work across tasks, into decisions and the next briefs. It does not
-  dispatch, approve retries, preflight briefs, write per-task acceptance, receive results, track custody, review
-  evidence per task or send status messages and receipts.
+- **Managers own delivery.** Follow the [manager role](prompts/manager.md) and
+  [delivery ownership](../../docs/development/delivery.md#delivery-ownership). A manager is responsible for real worker
+  starts and follow-through; the controller executes admission, retries and landings.
 - **Managers talk to each other first.** Any manager may message any other with
   `bun tools/goal/src/cli.ts inbox send <manager> instruction "<message>"`. A question about another Goal's contract goes
   to that Goal's manager. The producer decides its interface and the consumer adapts; the two settle it within one
@@ -2484,6 +2481,11 @@ the stored summary without inferring links. `--json` prints the complete page ob
 the page limit, continuation cursor and `hasMore`. The exported `SharedInboxQueries` API provides the same `log`,
 `thread` and `digest` reads to operations reports after they have actually been delivered; it does not schedule or send
 an hourly report.
+
+Worktree dependency setup failures store full diagnostics on the attempt's `launch-failed` event. The task owner's
+inbox history retains a short task reference. Only the operations owner receives a waking notice; repeats are
+folded by shared cause without path or task ID in the wake. Offloaded starts do not emit a second background error
+for an attempt already settled and reported by the child.
 
 A delivery identical to one made to the same recipient within the last hour is not stored again: the earlier row's
 `delivery_count` and `last_delivered_at` change, nobody is woken, and `inbox read` shows the count as `deliveries`.
@@ -2808,7 +2810,7 @@ Decision: width and expiry share this classifier; accepted successors require an
 
 #### Goal backlogs
 
-A manager's output is ready briefs; the controller dispatches them. Each Goal has a backlog directory,
+Managers keep work ready and own getting it started. The controller dispatches the next eligible briefs. Each Goal has a backlog directory,
 `<state>/backlog/<goal>/`. Every minute the manager host starts one backlog run, `goal backlog dispatch`, as a child
 process, like promotion: dispatch runs Git and dependency installation synchronously, which must never block the
 host's socket. The host skips the minute while the previous child is still running, and the run holds the
