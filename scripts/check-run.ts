@@ -3028,7 +3028,8 @@ async function reconcileRegisteredPhysicalCleanup(
     workspace: checkRunSettlementStateDirectory(stateOptions),
     returns: [], // The existing transport returns immediately without any artifact probe or restoration.
     expectedSourceSha256: initial.binding.sourceSha256,
-    allowedHosts: hosts.map(({ name }) => name),
+    allowedHosts: [initial.physical.host],
+    cleanupOnly: true,
   });
   const identity = initial.transportChild
     ? await (dependencies.reapTransport ?? reapRetainedTransportChild)(initial.transportChild)
