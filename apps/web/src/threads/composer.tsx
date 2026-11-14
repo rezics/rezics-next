@@ -7,7 +7,7 @@ import {
   type DocumentNode,
   type DocumentSnapshot,
 } from '@rezics/document';
-import { DocumentBody } from '../document-body';
+import { DocumentBody } from '@rezics/ui/document-body';
 import { RichTextEditor, type RichTextEditorLabels, type UploadState, type UploadAttachment } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -150,8 +150,17 @@ function WritingRequestRecovery({
           <div className="max-h-[60dvh] min-w-0 overflow-auto rounded-lg border border-border p-3">
             <DocumentBody
               document={command.body}
+              locale={getLocale()}
               className="mx-0! w-full [overflow-wrap:anywhere]"
-              labels={{ imageUnavailable: m.thread_inspection_image_unavailable() }}
+              labels={{
+                revealSpoiler: m.thread_reveal_spoiler(),
+                taskStatus: m.document_task_status(),
+                embeddedComponent: m.document_embedded_component(),
+                imageUnavailable: m.thread_inspection_image_unavailable(),
+                goToFootnote: m.document_go_to_footnote(),
+                footnote: m.document_footnote(),
+                footnotes: m.document_footnotes(),
+              }}
             />
           </div>
           <p className="text-sm text-muted-foreground">{m.thread_recovery_document_notice()}</p>
@@ -747,6 +756,7 @@ function PostComposerContent<T, Context = undefined>({
   const writingRevision = useRef(0);
   const [bodyCanSend, setBodyCanSend] = useState(() => hasDocumentContent(body));
   const editorHost = useRef<HTMLDivElement>(null);
+  const [editorGeneration, setEditorGeneration] = useState(0);
   const titleHost = useRef<HTMLInputElement>(null);
   const [editorReady, setEditorReady] = useState(false);
   const focusCaller = JSON.stringify([initialKey, containerId ?? null, boardId ?? null, submissionContext]);
@@ -1296,6 +1306,7 @@ function PostComposerContent<T, Context = undefined>({
         const empty = fromPlainText('', 'blocks');
         pruneCopiedImages(empty);
         mediaUpload.retire();
+        setEditorGeneration((generation) => generation + 1);
         ownedMediaIds.current.clear();
         editorPendingRef.current = 0;
         updatePending();
@@ -1414,6 +1425,7 @@ function PostComposerContent<T, Context = undefined>({
             </div>
           ) : null}
           <RichTextEditor
+            key={editorGeneration}
             value={body}
             onChange={updateBody}
             onSnapshotPending={snapshotPending}
@@ -1619,6 +1631,7 @@ function InlinePostEditorContent({
 }: InlinePostEditorProps) {
   const lifetime = useComposerLifetime();
   const editorRoot = useRef<HTMLDivElement>(null);
+  const [editorGeneration, setEditorGeneration] = useState(0);
   const discardAction = useRef(onCancel);
   const locale = getLocale();
   const labels = useMemo(() => editorLabels(), [locale]);
@@ -1988,6 +2001,7 @@ function InlinePostEditorContent({
         setAcknowledged(null);
         pruneCopiedImages(submittedBody);
         mediaUpload.retire();
+        setEditorGeneration((generation) => generation + 1);
         editorPendingRef.current = 0;
         updatePending();
         initialBodyRef.current = submittedBody;
@@ -2130,7 +2144,7 @@ function InlinePostEditorContent({
       <form className="min-w-0 space-y-4 [overflow-wrap:anywhere]" onSubmit={submit}>
         <p className="text-sm font-medium">{m.thread_reply_body_label()}</p>
         <RichTextEditor
-          key={revisionId}
+          key={JSON.stringify([revisionId, editorGeneration])}
           value={body}
           onChange={updateBody}
           onSnapshotPending={snapshotPending}
