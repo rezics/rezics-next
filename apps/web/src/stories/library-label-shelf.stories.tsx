@@ -151,7 +151,7 @@ export const SparseContinued: Story = {
     const view = within(context.canvasElement);
     await expect(view.getByText(m.library_labels_member_page_count({ count: 1 }))).toBeVisible();
     await expect(view.getByText('The Left Hand of Darkness')).toBeVisible();
-    await userEvent.click(view.getByRole('link', { name: m.library_more(), exact: true }));
+    await userEvent.click(view.getByRole('link', { name: m.library_more() }));
     await waitFor(() =>
       expect(context.canvasElement.querySelectorAll('[data-slot="cover-card"], [data-slot="tombstone"]')).toHaveLength(
         2,
@@ -159,7 +159,7 @@ export const SparseContinued: Story = {
     );
     await expect(view.getByText(m.library_labels_member_page_count({ count: 2 }))).toBeVisible();
     await expect(view.getByRole('link', { name: m.library_label_previous_page() })).toBeVisible();
-    await expect(view.queryByRole('link', { name: m.library_more(), exact: true })).toBeNull();
+    await expect(view.queryByRole('link', { name: m.library_more() })).toBeNull();
   },
 };
 
