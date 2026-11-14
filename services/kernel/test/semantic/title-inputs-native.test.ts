@@ -70,13 +70,10 @@ test('an unrequested Semantic visibility write retires the basis while real empt
       [shelfHome],
     )
   ).rows[0]!.position;
-  const prepared = await driver.fixtures.send(
-    shelfOwner,
-    'POST',
-    '/v1/libraryShelfTitlePreparation',
-    undefined,
-    { 'Accept-Language': 'en', 'Idempotency-Key': `"${randomUUID()}"` },
-  );
+  const prepared = await driver.fixtures.send(shelfOwner, 'POST', '/v1/libraryShelfTitlePreparation', undefined, {
+    'Accept-Language': 'en',
+    'Idempotency-Key': `"${randomUUID()}"`,
+  });
   expect(prepared.status).toBe(200);
   expect(prepared.body).toMatchObject({ installation: 'pending', prepared: 0 });
   expect(

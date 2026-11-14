@@ -43,9 +43,7 @@ test('an unrequested Semantic title revision retires the basis while a Library-o
   const release = { digest: `sha256:${'a'.repeat(64)}`, head: 4 };
   const before = semanticTitleBasisVersion(homes, release);
   const libraryPreparation = homes.map((home) => ({ ...home, position: home.position + 1n }));
-  const changedElsewhere = homes.map((home) =>
-    home.partitionNo === 3711 ? { ...home, titleRevision: '1' } : home,
-  );
+  const changedElsewhere = homes.map((home) => (home.partitionNo === 3711 ? { ...home, titleRevision: '1' } : home));
   expect(before).toMatch(/^[0-9a-f]{64}$/);
   expect(semanticTitleBasisVersion(libraryPreparation, release)).toBe(before);
   expect(semanticTitleBasisVersion(changedElsewhere, release)).not.toBe(before);
