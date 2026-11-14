@@ -49,7 +49,14 @@ import {
   showcaseAdoptInvocationBound,
   showcaseReviewActionKey,
 } from './showcase-adoption.ts';
-import { currentCandidateSelection, safeCandidatePage, sameAdoptionSelection } from './showcase-current-reads.ts';
+import {
+  currentCandidateSelection,
+  publicStatements,
+  publicValueStatementCurrent,
+  safeCandidatePage,
+  sameAdoptionSelection,
+  type AdoptionMode,
+} from './showcase-current-reads.ts';
 import type { ShowcaseJournal } from './showcase-journal.ts';
 import {
   acquireShowcaseVndbTagRatings,
@@ -1862,8 +1869,9 @@ export async function resolveCurrentReviewedTagSubjects(
 }
 
 function statementValues(read: ReviewedSubjectRead, property: string): string[] {
-  const statements = (read.subject as { statements?: Record<string, unknown[]> }).statements?.[property] ?? [];
+  const statements = publicStatements(read, property);
   return statements.flatMap((row) => {
+    if (!publicValueStatementCurrent(row, property)) return [];
     if (!isRecord(row) || !isRecord(row.value) || row.value.type !== 'value' || typeof row.value.content !== 'string')
       return [];
     return [row.value.content];
@@ -1874,8 +1882,9 @@ function statementWeights(
   read: ReviewedSubjectRead,
   property: string,
 ): { target: string; amount: string; metric: string }[] {
-  const statements = (read.subject as { statements?: Record<string, unknown[]> }).statements?.[property] ?? [];
+  const statements = publicStatements(read, property);
   return statements.flatMap((row) => {
+    if (!publicValueStatementCurrent(row, property)) return [];
     if (!isRecord(row) || !isRecord(row.value) || row.value.type !== 'value' || typeof row.value.content !== 'string')
       return [];
     const target = row.value.content;
