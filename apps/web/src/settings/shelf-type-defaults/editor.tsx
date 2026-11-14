@@ -252,7 +252,7 @@ function OwnerShelfTypeDefaults({
               <Select<string, false>
                 items={typeLayoutOptions}
                 disabled={disabled || !currentChoice()}
-                value={override}
+                value={override ?? null}
                 onValueChange={(next) => {
                   const value = next ?? '';
                   if (!currentChoice() || (atLimit && value)) return;
