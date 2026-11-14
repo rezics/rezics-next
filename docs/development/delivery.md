@@ -156,18 +156,24 @@ state, owner links, blockers and next actions. Resume only when authorized.
 # Delivery ownership
 
 Each manager independently finds runnable release work from actual source gaps, owner contracts and worker proposals.
-Size complete writable outcomes and refill eligible capacity before workers exit or park. Keep a ready queue, verify
-actual process starts and first-source checkpoints, and continue dispatch without waiting for a fixed batch or a list
-from the supermanager. Follow [Brief preflight](#brief-preflight) for verification dependencies.
+Size complete writable outcomes. Managers keep reviewed, independent, ready source outcomes ahead of eligible
+concurrent coding capacity and refill before an opening. Treat the number of ready outcomes as a supply target, not a
+quota, permission to increase capacity, or a gate on starting work. Ready excludes work that is running,
+dependency-held, duplicate or verification-only. Verify actual process starts and first-source checkpoints, and
+continue dispatch without waiting for a fixed batch or a list from the supermanager. Existing controller alarms
+govern notification; managers own the response. Follow [Brief preflight](#brief-preflight) for verification
+dependencies.
 
 Workers repair within scope and continuously surface evidenced, valuable independent outcomes while working, without
 waiting to finish. Each proposal gives the user-visible outcome, source witness, first editable files and exact
-dependency, if any. Managers merge related proposals, avoid duplicate ownership, coordinate write boundaries, start
-eligible work and park only genuine dependencies; they own priority, assignment, start recovery and integration
-follow-through. Proposal production is a duty, not an artificial quota, second audit or substitute for coding. When
-first source stalls, inspect the rendered prompt and identify the first writable file or function, observed behavior,
-owner boundaries and next independent step. Remove unnecessary context, conflicting instructions and stale check
-demands; preserve useful active work and avoid repeating the prompt.
+dependency, if any. During planning, managers review proposals, combine same-outcome work when that reduces duplicated
+startup or integration, dispatch independent slices, use Brief preflight to bypass only artificial waits, and name
+indispensable source or authority. They avoid duplicate ownership, coordinate write boundaries, start eligible work
+and park only genuine dependencies; they own priority, assignment, start recovery and integration follow-through.
+Proposal production is a duty, not an artificial quota, second audit or substitute for coding. When first source
+stalls, inspect the rendered prompt and identify the first writable file or function, observed behavior, owner
+boundaries and next independent step. Remove unnecessary context, conflicting instructions and stale check demands;
+preserve useful active work and avoid repeating the prompt.
 The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns implementation to workers; the
 controller executes admission, retries and landings.
 
