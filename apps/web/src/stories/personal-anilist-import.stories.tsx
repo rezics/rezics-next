@@ -106,7 +106,7 @@ function makeJourneyPort() {
       const ordinal = command.body.ordinal;
       const review: AniListLabelReview = {
         id: reviewIds[ordinal]!,
-        subjectId: command.body.subjectId,
+        subjectId: command.body.subjectId!,
         identityEpoch: '1',
         sourceDigest: 'illustrative-digest',
         matchFingerprint: `match-${ordinal}`,

@@ -105,6 +105,7 @@ function threads(kind: 'review' | 'discussion', id: string, member: boolean) {
   return (kind === 'review' ? animeReviewTitles : discussionTitles).map(
     (title, index): ReturnType<typeof communityThread> => {
       const base = communityThread(kind, false, subject);
+      const firstPost = base.firstPost as Extract<typeof base.firstPost, { availability: 'available' }>;
       const boardId = animeId(kind === 'review' ? 80 : 81);
       // Subject-local identity prevents a Season review opening the Series' thread.
       const subjectIndex = animeSubjects.findIndex((row) => row.id === id);
@@ -116,7 +117,7 @@ function threads(kind: 'review' | 'discussion', id: string, member: boolean) {
         title,
         licence: 'CC0-1.0',
         firstPost: {
-          ...base.firstPost,
+          ...firstPost,
           id: animeId(30000 + subjectIndex * 100 + (kind === 'review' ? 0 : 50) + index),
           threadId,
           boardId,
@@ -245,7 +246,7 @@ export function animeShowcasePage(
         body: communityThreadPage(read.threadKind, { id, label: item.labels.en! }, page.items, page.next, read.place),
       };
     } else if (read.kind === 'collections') {
-      const page = windowOf(collections(id), read.limit, node, read.cursor);
+      const page = windowOf(collections(id), read.limit, node);
       reads[key] = { status: 200, body: { collections: page.items, count: page.count, next: page.next } };
     }
   }

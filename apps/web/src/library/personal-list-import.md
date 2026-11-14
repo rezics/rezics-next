@@ -165,3 +165,8 @@ replacement, uncertain retry, partial results and Library return are reached thr
 Focused acceptance adds AniList mounted label-search retention, MAL explicit assignment readback and Bangumi retained
 cancelled inspection; existing target retirement, zero/clear and exact-retry assertions remain unchanged. The necessary
 additional source path is `personal-bangumi-import/controller.ts`; acceptance files are the existing provider tests.
+
+The required Web typecheck also exposed existing fixture drift in `kernel/fake/a-collection-review.ts`,
+`kernel/fake/anime-showcase.ts` and `kernel/fixtures/collection-showcase.ts`. The coordinated repair narrows known
+fixture values to their current public types and removes a collection cursor access absent from the read contract;
+provider behavior and native consent protocols are unchanged.

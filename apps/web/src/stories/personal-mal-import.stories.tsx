@@ -18,7 +18,7 @@ const id = '0192f3a0-6c1e-7b2a-9d4e-00000000cccc';
 const target = '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb';
 const question: MalQuestion = {
   id: MAL_STANDARD_QUESTION_ID,
-  realmId: null,
+  realmId: target,
   revision: 1,
   meaning: 'Personal enjoyment of this work.',
   lifecycle: { state: 'active', revision: 1 },
@@ -42,7 +42,7 @@ function makePort(): MalImportPort {
       score: { kind: 'value', raw: '8', value: 8, scale: { min: 1, max: 10, step: 1 } },
       role: 'active',
       state: 'active',
-      current: { state: 'planned', revision: 3 },
+      current: { state: 'planned', revision: 3, incarnationId: null },
       review: null,
     },
     {
@@ -71,7 +71,23 @@ function makePort(): MalImportPort {
           rows: structuredClone(rows),
           next: null,
           sourcePath: `/v1/libraryImports/mal/${id}/source`,
-          limits: { bytes: 2097152, rows: 500, page: 20 },
+          limits: {
+            bytes: 2097152,
+            wireBytes: 4194304,
+            evidenceBytes: 50331648,
+            rows: 500,
+            page: 20,
+            depth: 16,
+            uploads: 3,
+          },
+          labelLimits: {
+            rows: 20,
+            values: 32,
+            newLabels: 32,
+            sourceBytes: 8192,
+            selectionBytes: 16384,
+            outputBytes: 524288,
+          },
         },
       };
     },
@@ -86,6 +102,7 @@ function makePort(): MalImportPort {
       const row = rows[input.row]!;
       row.review = {
         version: command.key,
+        fingerprint: `illustrative-review-${input.row}`,
         target: input.target,
         skip: input.skip,
         replace: input.replace,
@@ -162,6 +179,7 @@ function makePort(): MalImportPort {
                 action: rows[choice.row]!.review!.score!.action,
                 status: 'unavailable' as const,
                 reason: 'illustrative-conditional-admission',
+                vote: null,
               },
             }
           : {}),
