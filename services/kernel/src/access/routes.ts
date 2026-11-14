@@ -9,7 +9,7 @@ import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import {
   createPreferenceCommands,
@@ -26,7 +26,7 @@ import {
   SHELF_TABLE_COLUMNS,
   SHELF_TABS,
 } from './preferences.ts';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import { NOTIFICATION_KINDS, type Notifications, type NotificationsPatch } from './notification-kinds.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -1183,22 +1183,27 @@ export function accessRoutes(
             deadline: job.deadline,
           });
         } catch (error) {
-          throwAccessUnavailable(error, job.deadline);
+          throwAccessUnavailable(error);
           throw error;
         }
         const value = await admission.run('normal', job, () =>
-          withConnection(dependencies.pool, async (client) => {
-            if (!(await check(client))) throw new ProblemError('forbidden');
-            const preferences = await readAccountPreferences(client, params.accountId);
-            let writable: boolean;
-            try {
-              writable = await checkUpdate(client);
-            } catch (error) {
-              throwAccessUnavailable(error, job.deadline);
-              throw error;
-            }
-            return withReadingPreferencePage(preferences, { writable });
-          }),
+          withBoundedReadConnection(
+            dependencies.pool,
+            job.deadline,
+            async (client) => {
+              if (!(await check(client))) throw new ProblemError('forbidden');
+              const preferences = await readAccountPreferences(client, params.accountId);
+              let writable: boolean;
+              try {
+                writable = await checkUpdate(client);
+              } catch (error) {
+                throwAccessUnavailable(error);
+                throw error;
+              }
+              return withReadingPreferencePage(preferences, { writable });
+            },
+            { deadlineError: () => new AccessUnavailableError('deadline') },
+          ),
         );
         set.headers['cache-control'] = 'private, no-store';
         return value;
@@ -1246,8 +1251,11 @@ export function accessRoutes(
               );
             } catch (error) {
               if (!(error instanceof ProblemError) || error.code !== 'conflict') throw error;
-              const current = await withConnection(dependencies.pool, (client) =>
-                readAccountPreferences(client, params.accountId),
+              const current = await withBoundedReadConnection(
+                dependencies.pool,
+                job.deadline,
+                (client) => readAccountPreferences(client, params.accountId),
+                { deadlineError: () => new AccessUnavailableError('deadline') },
               );
               // runCommand reached a conflict only after its current account:update check admitted this attempt.
               throw new ProblemError('conflict', {
