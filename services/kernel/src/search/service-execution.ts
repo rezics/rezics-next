@@ -66,6 +66,7 @@ import {
   readReleaseSearchGroups,
   type ReleaseSearchGroupsResult,
 } from './release-search-source.ts';
+import { bindReleaseSearchText } from './release-search-text.ts';
 import { ReleaseSearchCursorInvalid } from './release-search-cursor.ts';
 import { OpenSearchError, SearchUnavailableError } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
@@ -534,6 +535,10 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     const index = subjectIndexName(prefix, generation);
     const indexUuid = await indexRequest(() => discoveryIndexUuid(client, index));
     const physical: CalendarPhysicalIdentity = { generation, indexUuid, incarnation: indexUuid };
+    const currentTextDisclosure = text ? disclosure.currentText(index) : undefined;
+    const currentText = bindReleaseSearchText(currentTextDisclosure, text, () => {
+      throw indexNotReady();
+    });
 
     const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
     const compiledFilter = compileFilter(admitted as FilterDocument, {
@@ -682,6 +687,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           relationProperties,
           spoilerThreshold: spoilerThreshold ?? 0,
           observeRelationRelease: relationRelease,
+          ...(currentText ? { currentText } : {}),
         }),
       );
       if (checked.relationRejected) throw new ReleaseGroupingRestartRequired();
@@ -701,6 +707,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             prefix,
             client,
             relationProperties,
+            ...(currentText ? { currentText } : {}),
             observeBasis,
             deadline,
             observeRelationRelease: relationRelease,
@@ -724,6 +731,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             prefix,
             client,
             relationProperties,
+            ...(currentText ? { currentText } : {}),
             observeBasis,
             deadline,
             observeRelationRelease: relationRelease,

@@ -145,6 +145,8 @@ carry the work ID and their own cursor while group requests retain the group cur
 Decision: relevance ranks each work by its first current matching release in native relevance order; ungroupable releases keep their own native relevance position.
 Decision: relevance cursors retain an opaque PostgreSQL lineage node, while emitted work IDs stay in private page rows bound to the viewer, request, generation and source cut. Each node has one replay-idempotent successor per native position, so replaying an older cursor cannot see work IDs from a later branch.
 
+Decision: grouped candidate ownership and final release hydration re-evaluate submitted text against current Subjects with the analyzer bound to the active physical generation; name-order work candidates, previews and child resumes use that same predicate, and undecidable text retains Search's `index_not_ready` outcome.
+
 Decision: native name traversal uses one shared canonical-name frontier across occupied homes in all pools;
 every pool's retained cut, including an empty pool, participates in invalidation.
 
