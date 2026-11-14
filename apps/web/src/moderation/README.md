@@ -40,6 +40,15 @@ independent. Original intent, drafts and late callbacks retire with the visit.
   response. This does not bound Content's nested native reads or serialized bytes; Content/controller owns that
   physical cost evidence.
 
+## Interface hierarchy
+
+Decision: use a scope and current queue-admission header, evidence-led case rows, distinct reported/current evidence,
+and one deliberate action region. Queue admission describes the current read only; it never implies command or Global
+authority. Human supplied reasons, names and context lead; exact report, appeal, decision and target references stay
+selectable in disclosure controls. Dangerous action operands remain visible beside the editable reason before sending.
+Unavailable target context does not conceal the retained receipt or its independent appeal status. Queue and History
+return frontiers, focus recovery, original uncertain retries and feature gates keep their existing owners.
+
 ## Workbench queue and scope
 
 An authorized signed-in moderator enters `/moderation/workbench`. The workbench reads one selected board or catalogue

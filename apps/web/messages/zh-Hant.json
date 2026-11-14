@@ -12506,5 +12506,12 @@
   "library_journal_reflection_placeholder": "有什麼讓你難忘？寫下私人感想吧…",
   "rating_native_scale": "{min}–{max} · 每格 {step}",
   "rating_personal_heading": "你的回答",
-  "rating_source_details": "來源詳情"
+  "rating_source_details": "來源詳情",
+  "moderation_scope_label": "管理範圍",
+  "moderation_admission_current": "已確認佇列存取權限",
+  "moderation_scope_catalogue": "目錄",
+  "moderation_case_open": "開啟案件",
+  "moderation_action_target": "操作對象",
+  "moderation_action_review_hint": "送出前請核對確切對象和理由。",
+  "moderation_case_references": "案件參照資訊"
 }

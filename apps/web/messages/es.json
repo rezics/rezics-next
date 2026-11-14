@@ -12506,5 +12506,12 @@
   "library_journal_reflection_placeholder": "¿Qué te ha dejado? Escribe una reflexión privada…",
   "rating_native_scale": "{min}–{max} · incrementos de {step}",
   "rating_personal_heading": "Tu respuesta",
-  "rating_source_details": "Detalles de la fuente"
+  "rating_source_details": "Detalles de la fuente",
+  "moderation_scope_label": "Ámbito de moderación",
+  "moderation_admission_current": "Acceso a la cola comprobado",
+  "moderation_scope_catalogue": "Catálogo",
+  "moderation_case_open": "Abrir caso",
+  "moderation_action_target": "La acción se aplica a",
+  "moderation_action_review_hint": "Revisa el destino exacto y el motivo antes de enviar.",
+  "moderation_case_references": "Referencias del caso"
 }

@@ -10,7 +10,8 @@ import type { ReportQueueAction } from '../reports-view-action';
 import { WorkbenchAppeal } from '../workbench-appeal';
 import { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistory } from '../workbench-history';
 import { WorkbenchReportSelect, WorkbenchSelection } from '../workbench-selection';
-import { WorkbenchTriageCase, workbenchTriageIdentity } from '../workbench-triage';
+import { WorkbenchTriageSummary, WorkbenchTriageDetails, workbenchTriageIdentity } from '../workbench-triage';
+import { ModerationScope, moderationControl } from '../presentation';
 import {
   workbenchDirectorySearch,
   workbenchCaseHref,
@@ -27,8 +28,7 @@ import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import { reportReviewDepartureMessages, reportReviewNavigationContext } from '../reports-bulk-controls';
 import type { WorkbenchWindowMove, WorkbenchWindowRetry, WorkbenchWindowView } from './window-history';
 
-const control =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words px-3 py-2 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const control = moderationControl;
 
 export type WorkbenchViewProps = {
   page: Pick<WorkbenchRead, 'state' | 'realms' | 'realmsNext' | 'boards' | 'boardsNext' | 'cases' | 'next' | 'search'> &
@@ -91,13 +91,16 @@ function CaseRow({
   return (
     <li
       id={item.kind === 'report' ? `workbench-case-${encodeURIComponent(item.id)}` : undefined}
-      className="min-w-0 border-b py-3"
+      className="min-w-0 space-y-3 border-b py-5 sm:py-6"
     >
       {selection && item.kind === 'report' ? (
         <WorkbenchReportSelect controller={selection} reportId={item.id} number={number} />
       ) : null}
+      <WorkbenchTriageSummary item={item} />
+      <div className="flex min-w-0 flex-wrap items-start gap-x-3 gap-y-1">
       <a
-        className={`${control} justify-start text-left font-medium underline-offset-4 hover:underline`}
+        aria-label={m.moderation_workbench_open_case({ id: item.id })}
+        className={`${control} justify-start px-0 text-left font-medium underline underline-offset-4`}
         href={href}
         onClick={(event) => {
           if (isCurrent && !isCurrent()) event.preventDefault();
@@ -118,9 +121,10 @@ function CaseRow({
         }}
         {...(item.kind === 'appeal' ? { 'data-workbench-appeal-activator': encodeURIComponent(item.id) } : {})}
       >
-        {m.moderation_workbench_open_case({ id: item.id })}
+        {m.moderation_case_open()}
       </a>
-      <WorkbenchTriageCase item={item} identity={identity} />
+      <WorkbenchTriageDetails item={item} identity={identity} />
+      </div>
     </li>
   );
 }
@@ -205,14 +209,17 @@ export function WorkbenchView({
   return (
     <article
       tabIndex={-1}
-      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]"
+      className="mx-auto w-full min-w-0 max-w-5xl space-y-6 text-foreground [overflow-wrap:anywhere]"
     >
       <header className="space-y-3">
         <PageHeading>{m.moderation_workbench_heading()}</PageHeading>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
-          {m.moderation_workbench_membership_hint()}
-        </p>
+        {queueScope ? (
+          <ModerationScope
+            kind={queueScope.kind}
+            {...(boardId ? { id: boardId, label: page.boards.find((board) => board.id === boardId)?.title } : {})}
+            admitted={page.state === 'ready'}
+          />
+        ) : <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>}
       </header>
       {status && !search.history ? (
         <p
@@ -263,9 +270,6 @@ export function WorkbenchView({
         >
           {m.moderation_directory_return()}
         </Button>
-      ) : null}
-      {queueScope && search.directory ? (
-        <p className="text-sm text-muted-foreground">{m.moderation_directory_return_hint()}</p>
       ) : null}
       {page.state === 'ready' && (scope.kind === 'none' || scope.kind === 'realm') ? (
         <>
@@ -367,7 +371,7 @@ export function WorkbenchView({
               </Button>
             ) : null}
           </nav>
-          {!search.history && queueScope.kind === 'board' && search.queue !== 'appeals' ? (
+          {!search.history && !search.case && queueScope.kind === 'board' && search.queue !== 'appeals' ? (
             <fieldset className="flex min-w-0 flex-wrap items-end gap-3">
               <legend className="sr-only">{m.moderation_filter_kind()}</legend>
               <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">

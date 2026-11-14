@@ -12513,5 +12513,12 @@
   "library_journal_reflection_placeholder": "What stayed with you? Write a private reflection…",
   "rating_native_scale": "{min}–{max} · step {step}",
   "rating_personal_heading": "Your answer",
-  "rating_source_details": "Source details"
+  "rating_source_details": "Source details",
+  "moderation_scope_label": "Moderation scope",
+  "moderation_admission_current": "Queue access checked",
+  "moderation_scope_catalogue": "Catalogue",
+  "moderation_case_open": "Open case",
+  "moderation_action_target": "Action applies to",
+  "moderation_action_review_hint": "Review the exact target and reason before sending.",
+  "moderation_case_references": "Case references"
 }

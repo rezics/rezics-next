@@ -12506,5 +12506,12 @@
   "library_journal_reflection_placeholder": "Que retiens-tu de cette expérience ? Écris une réflexion privée…",
   "rating_native_scale": "{min}–{max} · pas de {step}",
   "rating_personal_heading": "Votre réponse",
-  "rating_source_details": "Détails de la source"
+  "rating_source_details": "Détails de la source",
+  "moderation_scope_label": "Périmètre de modération",
+  "moderation_admission_current": "Accès à la file vérifié",
+  "moderation_scope_catalogue": "Catalogue",
+  "moderation_case_open": "Ouvrir le dossier",
+  "moderation_action_target": "Cible de l’action",
+  "moderation_action_review_hint": "Vérifiez la cible exacte et le motif avant l’envoi.",
+  "moderation_case_references": "Références du dossier"
 }

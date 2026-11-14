@@ -12506,5 +12506,12 @@
   "library_journal_reflection_placeholder": "무엇이 마음에 남았나요? 비공개 감상을 적어 보세요…",
   "rating_native_scale": "{min}–{max} · {step} 단위",
   "rating_personal_heading": "내 답변",
-  "rating_source_details": "출처 세부 정보"
+  "rating_source_details": "출처 세부 정보",
+  "moderation_scope_label": "관리 범위",
+  "moderation_admission_current": "대기열 접근 확인됨",
+  "moderation_scope_catalogue": "카탈로그",
+  "moderation_case_open": "사례 열기",
+  "moderation_action_target": "작업 대상",
+  "moderation_action_review_hint": "보내기 전에 정확한 대상과 사유를 확인하세요.",
+  "moderation_case_references": "사례 참조 정보"
 }

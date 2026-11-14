@@ -12506,5 +12506,12 @@
   "library_journal_reflection_placeholder": "心に残ったことを、非公開の感想として書いてみましょう…",
   "rating_native_scale": "{min}～{max} · {step}刻み",
   "rating_personal_heading": "あなたの回答",
-  "rating_source_details": "出典の詳細"
+  "rating_source_details": "出典の詳細",
+  "moderation_scope_label": "モデレーション範囲",
+  "moderation_admission_current": "キューへのアクセス確認済み",
+  "moderation_scope_catalogue": "カタログ",
+  "moderation_case_open": "案件を開く",
+  "moderation_action_target": "操作の対象",
+  "moderation_action_review_hint": "送信前に対象と理由を確認してください。",
+  "moderation_case_references": "案件の参照情報"
 }

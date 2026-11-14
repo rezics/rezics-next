@@ -12506,5 +12506,12 @@
   "library_journal_reflection_placeholder": "Was ist dir geblieben? Halte deine Gedanken privat fest…",
   "rating_native_scale": "{min}–{max} · Schrittweite {step}",
   "rating_personal_heading": "Deine Antwort",
-  "rating_source_details": "Details zur Quelle"
+  "rating_source_details": "Details zur Quelle",
+  "moderation_scope_label": "Moderationsbereich",
+  "moderation_admission_current": "Zugriff auf Warteschlange geprüft",
+  "moderation_scope_catalogue": "Katalog",
+  "moderation_case_open": "Fall öffnen",
+  "moderation_action_target": "Aktion betrifft",
+  "moderation_action_review_hint": "Prüfe das genaue Ziel und die Begründung vor dem Senden.",
+  "moderation_case_references": "Fallreferenzen"
 }
