@@ -336,9 +336,7 @@ export const NestedContentsReturnInteraction: Story = {
     await atView(context, 'contents');
     const canvas = within(context.canvasElement);
     await userEvent.click(await canvas.findByRole('link', { name: bookParts[0]!.labels.en! }));
-    await expect(
-      await canvas.findByRole('heading', { level: 1, name: bookParts[0]!.labels.en! }),
-    ).toBeVisible();
+    await expect(await canvas.findByRole('heading', { level: 1, name: bookParts[0]!.labels.en! })).toBeVisible();
     await visit(context, 'contents');
     const partContents = window.location.href;
     const item = await canvas.findByRole('link', { name: bookContents[0]!.labels.en! });
@@ -352,9 +350,7 @@ export const NestedContentsReturnInteraction: Story = {
     await expect(itemReturn.searchParams.get('streamDirection')).toBe('inverse');
     await expect(itemReturn.hash).toBe('#literary-reader');
     await userEvent.click(item);
-    await expect(
-      await canvas.findByRole('heading', { level: 1, name: bookContents[0]!.labels.en! }),
-    ).toBeVisible();
+    await expect(await canvas.findByRole('heading', { level: 1, name: bookContents[0]!.labels.en! })).toBeVisible();
     await historyTo(context, 'back', 'contents');
     await expect(window.location.href).toBe(partContents);
     await historyTo(context, 'back', 'overview');
