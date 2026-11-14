@@ -1520,10 +1520,13 @@ async function publishShowcasePhases(
       omissions.push({ provider: 'vndb', sourceKey: workId, code });
     }
   }
-  // A subject stops only for its own identity. A refused or failed fact stops just its own property group,
-  // so a malformed neighbour never suppresses a valid fact.
-  const stoppedSubjects = new Set<string>();
-  const stoppedGroups = new Set<string>();
+  // Acceptance is per candidate. Retain unresolved intent for replay while allowing accepted siblings
+  // to form a complete selection under the current adoption head.
+  const withheldAcceptanceCandidates = new Set<string>();
+  const withholdAcceptance = (record: ShowcaseRecord, candidateId: string, code: string) => {
+    withheldAcceptanceCandidates.add(candidateId);
+    omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code });
+  };
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
     if (
@@ -1532,8 +1535,7 @@ async function publishShowcasePhases(
       assertion.tagParentPath !== undefined ||
       vndbTagMembership(record, assertion) ||
       (assertion.property === 'schema:genre' && blockedTagSubjects.has(id)) ||
-      stoppedSubjects.has(id) ||
-      stoppedGroups.has(groupKey(id, assertion.property)) ||
+      withheldAcceptanceCandidates.has(assertion.candidateId) ||
       blockedCoverCandidates.has(assertion.candidateId)
     )
       continue;
@@ -1569,8 +1571,7 @@ async function publishShowcasePhases(
     const candidate = validated.get(assertion.candidateId)!;
     if (candidate.decision === 'accepted') continue;
     if (candidate.decision === 'rejected') {
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-currently-rejected' });
-      stoppedGroups.add(groupKey(id, assertion.property));
+      withholdAcceptance(record, assertion.candidateId, 'candidate-currently-rejected');
       continue;
     }
     const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
@@ -1579,8 +1580,7 @@ async function publishShowcasePhases(
     const prior = input.journal.action(key);
     if (prior?.state === 'acknowledged') continue;
     if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: prior.error_code! });
-      if (assertion.property !== 'schema:image') stoppedGroups.add(groupKey(id, assertion.property));
+      withholdAcceptance(record, assertion.candidateId, prior.error_code!);
       continue;
     }
     const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
@@ -1591,8 +1591,7 @@ async function publishShowcasePhases(
       pageCache.delete(groupKey(id, assertion.property));
     } catch (error) {
       input.journal.refuseAction(key, errorCode(error));
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: errorCode(error) });
-      if (assertion.property !== 'schema:image') stoppedGroups.add(groupKey(id, assertion.property));
+      withholdAcceptance(record, assertion.candidateId, errorCode(error));
     }
   }
 
@@ -1604,8 +1603,7 @@ async function publishShowcasePhases(
       !id ||
       !validated.has(assertion.candidateId) ||
       (assertion.property === 'schema:genre' && blockedTagSubjects.has(id)) ||
-      stoppedSubjects.has(id) ||
-      stoppedGroups.has(groupKey(id, assertion.property)) ||
+      withheldAcceptanceCandidates.has(assertion.candidateId) ||
       blockedCoverCandidates.has(assertion.candidateId)
     )
       continue;
@@ -2139,7 +2137,7 @@ async function publishShowcasePhases(
     const candidate = validated.get(assertion.candidateId)!;
     if (candidate.decision === 'accepted') continue;
     if (candidate.decision === 'rejected') {
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-currently-rejected' });
+      withholdAcceptance(record, assertion.candidateId, 'candidate-currently-rejected');
       continue;
     }
     const state = await currentFactsFence(input.review, input.aliases.vndb, record.sourceKey);
@@ -2154,8 +2152,7 @@ async function publishShowcasePhases(
     const prior = input.journal.action(key);
     if (prior?.state === 'acknowledged') continue;
     if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
-      blockedTagSubjects.add(id);
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: prior.error_code! });
+      withholdAcceptance(record, assertion.candidateId, prior.error_code!);
       continue;
     }
     const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
@@ -2166,16 +2163,22 @@ async function publishShowcasePhases(
       pageCache.delete(groupKey(id, assertion.property));
     } catch (error) {
       input.journal.refuseAction(key, errorCode(error));
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: errorCode(error) });
+      withholdAcceptance(record, assertion.candidateId, errorCode(error));
     }
   }
   for (const [key, group] of grouped) {
     for (const candidateId of group.ids)
-      if (parentCandidateIds.has(candidateId) || blockedMembershipCandidateIds.has(candidateId))
+      if (
+        parentCandidateIds.has(candidateId) ||
+        blockedMembershipCandidateIds.has(candidateId) ||
+        withheldAcceptanceCandidates.has(candidateId)
+      )
         group.ids.delete(candidateId);
     if (group.property === 'skos:broader' && group.ids.size === 0) grouped.delete(key);
   }
   progress.enter('adoption');
+  const stoppedSubjects = new Set<string>();
+  const stoppedGroups = new Set<string>();
   for (const [key, group] of grouped) {
     const [id] = key.split('\0');
     const refreshWeights =
@@ -2356,7 +2359,18 @@ async function publishShowcasePhases(
     }
     for (const candidateId of group.ids) {
       const candidate = page.candidates.find((item) => item.id === candidateId);
-      if (candidate?.decision === 'rejected' || candidate?.rank === 'deprecated') continue;
+      if (candidate?.decision !== 'accepted' || candidate.rank === 'deprecated') {
+        withholdAcceptance(
+          group.record,
+          candidateId,
+          candidate?.decision === 'rejected'
+            ? 'candidate-currently-rejected'
+            : candidate?.rank === 'deprecated'
+              ? 'candidate-not-currently-adopted'
+              : 'candidate-acceptance-not-current',
+        );
+        continue;
+      }
       const dependencyState = dependencyEvidenceByCandidate.get(candidateId);
       if (dependencyState === undefined || dependencyState === 'current')
         selections.set(candidateId, selections.get(candidateId) ?? 'normal');
@@ -2565,6 +2579,7 @@ async function publishShowcasePhases(
     const visible = record.assertions.filter((assertion) => {
       if (
         !validated.has(assertion.candidateId) ||
+        withheldAcceptanceCandidates.has(assertion.candidateId) ||
         (dependencyEvidenceByCandidate.has(assertion.candidateId) &&
           dependencyEvidenceByCandidate.get(assertion.candidateId) !== 'current') ||
         withheldGraphCandidates.has(assertion.candidateId) ||
@@ -2637,8 +2652,13 @@ async function publishShowcasePhases(
       });
       continue;
     }
+    // Identity and vocabulary failures retain their dependent scope. Independent unresolved facts
+    // remain in the manifest and omissions, without hiding the record's public accepted assertions.
     const required = record.assertions.filter(
       (assertion) =>
+        (!withheldAcceptanceCandidates.has(assertion.candidateId) ||
+          record.kind === 'source-vocabulary' ||
+          assertion.property === sourceIdentityProperty(record)) &&
         (!dependencyEvidenceByCandidate.has(assertion.candidateId) ||
           dependencyEvidenceByCandidate.get(assertion.candidateId) === 'current') &&
         !withheldGraphCandidates.has(assertion.candidateId) &&
