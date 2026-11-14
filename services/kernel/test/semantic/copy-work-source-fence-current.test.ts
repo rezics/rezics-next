@@ -6,8 +6,8 @@ import { sourceTuple } from '../../src/semantic/fences.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { citedValue, createListPresentationFixture, listRouteKey } from './support/list-presentation-fixture.ts';
 
-function sourceOnOtherHome(subject: string): Source {
-  const subjectHome = partitionOf(routeOf(subject)!);
+function sourceOnOtherHomes(edition: string, work: string): Source {
+  const excludedHomes = new Set([partitionOf(routeOf(edition)!), partitionOf(routeOf(work)!)]);
   for (let attempt = 0; attempt < 128; attempt++) {
     const source: Source = {
       source: 'native_list_fixture',
@@ -17,9 +17,9 @@ function sourceOnOtherHome(subject: string): Source {
       converter_revision: '1',
       field_group: 'facts',
     };
-    if (partitionOf(sourceTuple(listRouteKey, source).route) !== subjectHome) return source;
+    if (!excludedHomes.has(partitionOf(sourceTuple(listRouteKey, source).route))) return source;
   }
-  throw new Error('Could not select a Source-fence home outside the edition home');
+  throw new Error('Could not select a Source-fence home outside the edition and work homes');
 }
 
 test('native cross-home copy-work witness expires on takedown and replacement membership reads current', async () => {
@@ -27,8 +27,10 @@ test('native cross-home copy-work witness expires on takedown and replacement me
   try {
     const work = await f.create('schema:Book', {}, { en: 'Harbour' });
     const edition = await f.create('bf:Instance', {}, { en: 'Harbour paperback' });
-    const source = sourceOnOtherHome(edition);
-    expect(partitionOf(sourceTuple(listRouteKey, source).route)).not.toBe(partitionOf(routeOf(edition)!));
+    const source = sourceOnOtherHomes(edition, work);
+    const fenceHome = partitionOf(sourceTuple(listRouteKey, source).route);
+    expect(fenceHome).not.toBe(partitionOf(routeOf(edition)!));
+    expect(fenceHome).not.toBe(partitionOf(routeOf(work)!));
     const proposal = await f.batch({
       op: 'propose',
       key: randomUUID(),
@@ -73,11 +75,12 @@ test('native cross-home copy-work witness expires on takedown and replacement me
       )
     ).rows[0]!.revision;
     await f.adopt(edition, COPY_WORK_PROPERTY, [replacementProposal.candidate as string], expectedHead);
-    const restored = await readCopyWorkDisclosure(deps, { identities: [edition], languages: ['en'] });
-    expect(restored.results.get(edition)).toEqual({
+    const replacementRead = await readCopyWorkDisclosure(deps, { identities: [edition], languages: ['en'] });
+    expect(replacementRead.results.get(edition)).toEqual({
       state: 'available',
       works: [{ id: work, labels: { en: 'Harbour' } }],
     });
+    expect(await replacementRead.current()).toBe(true);
   } finally {
     await f.close();
   }

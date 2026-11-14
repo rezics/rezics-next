@@ -1311,8 +1311,10 @@ safe.
 
 Decision: retain each exact imported Source-fence read cut with its taken-key
 result and include every fence home in copy-work cut reconciliation and
-`current()`. Conflicting observations of one home make the batch unavailable;
-any later provider-field state change makes the old witness stale.
+`current()`. Source-fence takedown is permanent; a separately permitted new
+tuple may supply a replacement relation without clearing the original fence.
+Conflicting observations of one home make the batch unavailable, and any later
+provider-field state change makes the old witness stale.
 
 Decision: the bundled `schema:exampleOfWork` slot is single-valued, so native
 writes admit one work per edition. The producer still proves a three-plus-
