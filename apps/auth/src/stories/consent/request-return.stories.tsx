@@ -27,7 +27,9 @@ type Mode =
   | 'acknowledged'
   | 'approved'
   | 'declined'
-  | 'pending';
+  | 'pending'
+  | 'long-copy'
+  | 'recovered';
 // Presentation responses only; the stories make no native execution claim.
 function Visit({ mode }: { mode: Mode }) {
   const [ready, setReady] = useState(false);
@@ -53,7 +55,10 @@ function Visit({ mode }: { mode: Mode }) {
     let release: ((response: Response) => void) | undefined;
     const review = {
       client_id: 'story-consent',
-      display_name: 'Reading companion',
+      display_name:
+        mode === 'long-copy'
+          ? 'Internationale Lesegemeinschaft für gemeinsame Sammlungen, persönliche Leselisten und unabhängige Veröffentlichungen'
+          : 'Reading companion',
       scopes: ['openid'],
       requested: ['openid'],
       granted: [],
@@ -77,7 +82,7 @@ function Visit({ mode }: { mode: Mode }) {
             })
           : Response.json({ code: 'unavailable' }, { status: 503 });
       }
-      if (++reads === 1) return Response.json(review);
+      if (++reads === 1 || (mode === 'recovered' && reads > 2)) return Response.json(review);
       if (mode === 'loading')
         return new Promise<Response>((resolve) => {
           release = resolve;
@@ -169,4 +174,19 @@ export const UnknownThenApproved = {
 export const UnknownThenDeclined = {
   render: () => <Visit mode="declined" />,
   play: ({ canvasElement }: { canvasElement: HTMLElement }) => latest(canvasElement, 'decline'),
+};
+
+export const LongLocaleConsentReview = {
+  globals: { locale: 'de' },
+  render: () => <Visit mode="long-copy" />,
+};
+export const IndependentReadRecovery = {
+  render: () => <Visit mode="recovered" />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await reachHistory(canvasElement);
+    (await waitFor(() => button(canvasElement, m.auth_consent_review_current()))).click();
+    await waitFor(() => button(canvasElement, m.auth_consent_approve()));
+    if (!canvasElement.textContent?.includes(m.auth_consent_history_unknown()))
+      throw new Error('A recovered current review must retain earlier uncertainty');
+  },
 };

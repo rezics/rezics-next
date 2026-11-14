@@ -4,6 +4,7 @@ type TurnstileRenderOptions = {
   sitekey: string;
   action: 'signup';
   language: string;
+  size: 'compact';
   retry: 'never';
   callback: (token: string) => void;
   'expired-callback': () => void;
@@ -202,6 +203,7 @@ export const TurnstileWidget = forwardRef<
               sitekey: siteKey,
               action: 'signup',
               language,
+              size: 'compact',
               retry: 'never',
               callback: (token) => publish(token || null),
               'expired-callback': () => publish(null),

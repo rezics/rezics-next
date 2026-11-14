@@ -40,7 +40,7 @@ export function AuthNotice({ children, className, ...props }: ComponentPropsWith
 
 export function AuthActions({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-center [&>button]:w-full sm:[&>button]:w-auto sm:[&>button]:flex-1">
+    <div className="grid min-w-0 gap-3 empty:hidden sm:flex sm:empty:hidden sm:flex-wrap sm:items-center [&>button]:w-full sm:[&>button]:w-auto sm:[&>button]:flex-1">
       {children}
     </div>
   );

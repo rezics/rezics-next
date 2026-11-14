@@ -9,6 +9,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AuthPage, AuthShell } from './frame';
 import { RouteFailureError, RouteMissing, RouteRecoveryProvider } from './route-failure-view';
+import { authLocale } from './stories/accounts-operations/story';
 
 export default {
   title: 'Pages/Auth/Route recovery',
@@ -139,3 +140,10 @@ export const RecoveredPhone = story('recovered', 'phone390');
 export const RecoveredPhoneDark = story('recovered', 'phone390', true);
 export const RecoveredDesktop = story('recovered', 'desktop1280');
 export const RecoveredDesktopDark = story('recovered', 'desktop1280', true);
+
+export const LongLocaleUnavailable = {
+  globals: { locale: 'de' },
+  decorators: [authLocale],
+  parameters: { layout: 'fullscreen' },
+  render: () => <JourneyPage journey="ready" dark={false} />,
+};

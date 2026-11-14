@@ -315,6 +315,8 @@ acceptance test compares the browser pattern's source with the kernel's claim pa
 dependency on kernel or Auth modules. Reserved handles are checked by the server and get the same taken-or-reserved
 field message as taken handles.
 
+The widget uses the [documented compact size](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/widget-configurations/#widget-sizes)
+(150 × 140 pixels) so its fixed iframe fits the phone form column; size changes no verification operands or lifecycle.
 The page loads the Turnstile script once and renders the widget explicitly with the public `TURNSTILE_SITE_KEY`,
 `action: "signup"` and the page locale. In development, `TURNSTILE_SCRIPT_URL` replaces the script address. The
 submit button is enabled before a token arrives; submitting without one shows a localized message beside the widget

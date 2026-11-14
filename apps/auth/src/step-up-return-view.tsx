@@ -46,7 +46,7 @@ export function StepUpReturnView({
       >
         <h2>{m.auth_step_up_return_heading()}</h2>
         <StepUpHistoryNotice history={history} />
-        <p ref={statusRef} role="status" tabIndex={-1} aria-live="polite" className="empty:hidden">
+        <p ref={statusRef} role="status" tabIndex={-1} aria-live="polite">
           {review.kind === 'checking'
             ? m.auth_step_up_return_pending()
             : review.kind === 'continue'

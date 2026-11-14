@@ -109,7 +109,7 @@ test('empty and whitespace-only details do not warn; Stay preserves invalid inpu
   await p.edit('password', ' ');
   await p.submit();
   const error = p.input('handle').getAttribute('aria-describedby');
-  expect(error).toBe('signup-handle-error');
+  expect(error).toBe('signup-handle-hint signup-handle-error');
   expect(p.unload()).toBe(true);
   await flush(() => p.host.querySelector<HTMLAnchorElement>('a[href^="/login"]')!.click());
   const dialog = document.querySelector('[role="alertdialog"]')!;
