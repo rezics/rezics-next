@@ -1,3 +1,4 @@
+-- migrate:up
 -- A Post-wide promise is a separate immutable capture. Existing editions and
 -- historical subject-only rows remain untouched and unknown.
 CREATE FUNCTION commerce.valid_content_post(value jsonb) RETURNS boolean
