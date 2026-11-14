@@ -57,8 +57,16 @@ test('PostgreSQL relevance lineage binds authority, keeps replay idempotent and 
         return { rows: [{ execution_id: execution, position_id: node }] };
       }
       if (sql.includes('WITH RECURSIVE retained AS')) {
-        const [execution, node, principal, requestHash, generation, cutHash, now, candidates] =
-          values as unknown as [string, string, string, string, number, string, Date, string[]];
+        const [execution, node, principal, requestHash, generation, cutHash, now, candidates] = values as unknown as [
+          string,
+          string,
+          string,
+          string,
+          number,
+          string,
+          Date,
+          string[],
+        ];
         const session = executions.get(execution);
         if (
           !session ||
@@ -84,8 +92,16 @@ test('PostgreSQL relevance lineage binds authority, keeps replay idempotent and 
         };
       }
       if (sql.startsWith('UPDATE search.release_relevance_execution')) {
-        const [execution, node, principal, requestHash, generation, cutHash, expires, now] =
-          values as unknown as [string, string, string, string, number, string, Date, Date];
+        const [execution, node, principal, requestHash, generation, cutHash, expires, now] = values as unknown as [
+          string,
+          string,
+          string,
+          string,
+          number,
+          string,
+          Date,
+          Date,
+        ];
         const session = executions.get(execution);
         if (
           !session ||
@@ -101,8 +117,33 @@ test('PostgreSQL relevance lineage binds authority, keeps replay idempotent and 
         return { rows: [{ id: execution }] };
       }
       if (sql.includes('INSERT INTO search.release_relevance_position')) {
-        const [execution, parent, proposed, branch, digest, principal, requestHash, generation, cutHash, expires, now, emitted] =
-          values as unknown as [string, string, string, string, string, string, string, number, string, Date, Date, string[]];
+        const [
+          execution,
+          parent,
+          proposed,
+          branch,
+          digest,
+          principal,
+          requestHash,
+          generation,
+          cutHash,
+          expires,
+          now,
+          emitted,
+        ] = values as unknown as [
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          number,
+          string,
+          Date,
+          Date,
+          string[],
+        ];
         const session = executions.get(execution);
         if (
           !session ||

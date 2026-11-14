@@ -28,11 +28,7 @@ export interface ReleaseSearchRelevanceState {
     initialWorks?: readonly string[],
   ): Promise<ReleaseSearchRelevanceLocation>;
   /** Renews a valid cursor's private state before reading it. */
-  resume(
-    binding: ReleaseSearchRelevanceBinding,
-    location: ReleaseSearchRelevanceLocation,
-    now: number,
-  ): Promise<void>;
+  resume(binding: ReleaseSearchRelevanceBinding, location: ReleaseSearchRelevanceLocation, now: number): Promise<void>;
   /** Checks only this native page's candidate works against the cursor's own ancestry. */
   seen(
     binding: ReleaseSearchRelevanceBinding,
@@ -126,10 +122,7 @@ export function createReleaseSearchRelevanceState(input: {
   reserve: Reserve;
   poolId: string;
 }): ReleaseSearchRelevanceState {
-  async function query<Row extends Record<string, unknown>>(
-    sql: string,
-    values: unknown[],
-  ): Promise<readonly Row[]> {
+  async function query<Row extends Record<string, unknown>>(sql: string, values: unknown[]): Promise<readonly Row[]> {
     input.reserve(input.poolId);
     const result = await input.run(() => input.pool.query<Row>(sql, values));
     return result.rows;
@@ -343,8 +336,7 @@ export function createReleaseSearchRelevanceState(input: {
   ): Promise<ReleaseSearchRelevanceLocation> {
     const emitted = workIds(values);
     if (!emitted.length) return location;
-    if (!validLocation(location) || !/^[0-9a-f]{64}$/.test(branch))
-      throw new ReleaseSearchRelevanceStateExpired();
+    if (!validLocation(location) || !/^[0-9a-f]{64}$/.test(branch)) throw new ReleaseSearchRelevanceStateExpired();
     const identity = bound(requestBinding);
     const time = timestamp(currentTime);
     const next = randomUUID();

@@ -221,9 +221,13 @@ function position(after: string | null, expected: string, children: boolean): Po
             Object.keys(value.relevance).some((key) => key !== 'execution' && key !== 'node'))))) ||
     Object.keys(value).some(
       (key) =>
-        !['version', 'binding', 'namesAfter', 'skipWorkFor', ...(value.version === 1 ? ['seenWorks'] : ['relevance'])].includes(
-          key,
-        ),
+        ![
+          'version',
+          'binding',
+          'namesAfter',
+          'skipWorkFor',
+          ...(value.version === 1 ? ['seenWorks'] : ['relevance']),
+        ].includes(key),
     )
   )
     return unavailable();
@@ -384,12 +388,14 @@ export function createReleaseSearchCandidateStreams(input: {
       return unavailable();
     await assertCurrent();
     let relevanceLocation: ReleaseSearchRelevanceLocation | undefined;
-    let relevanceBinding: {
-      principal: string;
-      request: ReleaseGroupingRequest;
-      generation: number;
-      cut: ReleaseSearchCandidateCut;
-    } | undefined;
+    let relevanceBinding:
+      | {
+          principal: string;
+          request: ReleaseGroupingRequest;
+          generation: number;
+          cut: ReleaseSearchCandidateCut;
+        }
+      | undefined;
     if (request.sort === 'relevance' && work === undefined) {
       const progress = input.relevanceProgress;
       if (!progress) return unavailable();
@@ -545,10 +551,7 @@ export function createReleaseSearchCandidateStreams(input: {
           input.relevanceProgress!.now,
         );
       } catch (error) {
-        if (
-          error instanceof ReleaseSearchRelevanceStateExpired ||
-          error instanceof ReleaseSearchRelevanceStateConflict
-        )
+        if (error instanceof ReleaseSearchRelevanceStateExpired || error instanceof ReleaseSearchRelevanceStateConflict)
           throw new ReleaseGroupingRestartRequired();
         throw error;
       }
