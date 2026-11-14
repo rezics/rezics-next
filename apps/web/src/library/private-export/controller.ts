@@ -148,8 +148,7 @@ export function createExportJourney(input: {
   function rememberCoverage(value: ExportStatus | ExportManifest): boolean {
     const candidate = exportCoverage(value);
     if (binding && !sameExportCoverage(binding, candidate)) return false;
-    const issue = assembly.bind(candidate.version);
-    if (issue) return false;
+    assembly.bind();
     binding ??= candidate;
     exportId = candidate.exportId;
     capturedAt = candidate.capturedAt;
@@ -241,7 +240,7 @@ export function createExportJourney(input: {
     if (isTerminalState(page.state)) return enterTerminal(page.state);
     if (expireIfNeeded()) return snapshot();
 
-    const issue = assembly.addPage(page.records, binding.version);
+    const issue = assembly.addPage(page.records);
     cost.recordPage(page);
     if (issue?.kind === 'limit') return enterTerminal('limit');
     if (issue) return enterTerminal('unavailable');

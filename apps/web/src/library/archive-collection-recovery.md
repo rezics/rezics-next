@@ -9,8 +9,8 @@ merge or reuse command.
 
 ## What the visit supports
 
-The visit sends original export versions 1 through 4 to native validation. Each complete manifest and all unsupported
-rows retain their original version and accounting. It shows native coverage and omissions, and selects one eligible curated Collection.
+The visit sends the original completed canonical v1 export to native validation. Its complete manifest and all unsupported
+rows retain their original accounting. It shows native coverage and omissions, and selects one eligible curated Collection.
 It reads one native page at a time and shows each occurrence as its own item, including repeated Subjects, its actual
 note state and native order support. A selected occurrence is preserved with its stored note and validated native
 order; omitting the occurrence omits its note as well. The native review owns order movement and the final order

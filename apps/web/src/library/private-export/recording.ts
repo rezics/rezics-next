@@ -1,4 +1,4 @@
-import captures from './recorded.json';
+import capture from './recorded.json';
 import {
   isExportPage,
   isExportStatus,
@@ -11,10 +11,9 @@ import {
 export type ExportRecording = { status: ExportStatus; pages: ExportPage[]; artifact: string };
 
 /** Shared story/test transport for the unmodified HTTP producer recordings. Never used by the live visit. */
-export function exportRecording(version: 1 | 4): ExportRecording {
-  const capture = captures.find((capture) => capture.status.version === version);
+export function exportRecording(): ExportRecording {
   if (!capture || !isExportStatus(capture.status) || !capture.pages.every(isExportPage))
-    throw new Error(`Invalid recorded Library export V${version}`);
+    throw new Error('Invalid recorded Library export');
   return { status: capture.status, pages: capture.pages as ExportPage[], artifact: capture.artifact };
 }
 

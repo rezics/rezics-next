@@ -1,6 +1,6 @@
 import type { MouseEventHandler } from 'react';
 import { m } from '../../paraglide/messages.js';
-import { EXPORT_SECTIONS_V4, EXPORT_TTL_MINUTES, EXPORT_VERSION } from './contract';
+import { EXPORT_SECTIONS, EXPORT_TTL_MINUTES, EXPORT_VERSION } from './contract';
 import { ExportAction, actionClass } from './controls';
 import { exportSectionLabel } from './meaning';
 
@@ -43,7 +43,7 @@ export function ExportCoverage({
         <summary className={`${actionClass} cursor-pointer font-medium`}>{m.library_export_sections_heading()}</summary>
         <div className="space-y-4 px-4 pb-4">
           <ul className="list-disc space-y-2 pl-5 text-sm">
-            {EXPORT_SECTIONS_V4.map((section) => (
+            {EXPORT_SECTIONS.map((section) => (
               <li key={section}>{exportSectionLabel(section)}</li>
             ))}
           </ul>
