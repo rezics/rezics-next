@@ -74,7 +74,8 @@ function retainedMigrationWithoutUpMarker(
   const normalizedRoot = resolve(root);
   const normalizedSource = resolve(sourcePath);
   const withinKernel = relative(join(normalizedRoot, 'services/kernel'), normalizedSource).replaceAll('\\', '/');
-  if (!withinKernel || withinKernel === '..' || withinKernel.startsWith('../') || isAbsolute(withinKernel)) return false;
+  if (!withinKernel || withinKernel === '..' || withinKernel.startsWith('../') || isAbsolute(withinKernel))
+    return false;
   let info: ReturnType<typeof lstatSync>;
   try {
     info = lstatSync(normalizedSource);

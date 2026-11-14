@@ -249,14 +249,14 @@ async function typingRetryFixture(
   writeFileSync(
     log,
     options.legacySourceRepair
-      ? "kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'\nerror: script \"typecheck\" exited with code 75\n"
+      ? 'kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with \'-- migrate:up\'\nerror: script "typecheck" exited with code 75\n'
       : options.setupFailure === 'generic'
-      ? 'remote-check: connection failed before a result\n'
-      : options.setupFailure
-        ? 'Migration version check failed:\n- db/commerce/migrations/20261113195649_post_benefit.sql: missing dbmate up marker; add `-- migrate:up` before the up SQL\nName migrations with `date -u +%Y%m%d%H%M%S`.\n'
-        : kernelOutput
-          ? 'packages/client/src/index.ts(1,1): error TS2322: route diagnostic\n'
-          : 'apps/web/src/reader.ts(1,1): error TS2322: required optional prop is missing\n',
+        ? 'remote-check: connection failed before a result\n'
+        : options.setupFailure
+          ? 'Migration version check failed:\n- db/commerce/migrations/20261113195649_post_benefit.sql: missing dbmate up marker; add `-- migrate:up` before the up SQL\nName migrations with `date -u +%Y%m%d%H%M%S`.\n'
+          : kernelOutput
+            ? 'packages/client/src/index.ts(1,1): error TS2322: route diagnostic\n'
+            : 'apps/web/src/reader.ts(1,1): error TS2322: required optional prop is missing\n',
   );
   const checkExitCode = options.setupFailure ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1;
   settleWorkerCheckHostBudget(env, checkExitCode, !options.setupFailure, {
@@ -498,10 +498,7 @@ test('an accepted source amendment retries only for a retained terminal missing-
     expect(h.store.attempt(proven.ref).checks).toEqual([proven.listedCheckId]);
     expect(h.store.attempt(proven.ref).typingEvidencePending?.command).toEqual(proven.pendingCommand);
     const setupResult = JSON.parse(
-      readFileSync(
-        join(proven.task.worktree, '.temp/goal/checks/results', `${proven.checkId}.json`),
-        'utf8',
-      ),
+      readFileSync(join(proven.task.worktree, '.temp/goal/checks/results', `${proven.checkId}.json`), 'utf8'),
     );
     expect(setupResult).toMatchObject({
       id: proven.checkId,
@@ -510,9 +507,9 @@ test('an accepted source amendment retries only for a retained terminal missing-
       exitCode: WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
       physicalRunId: proven.physicalRunId,
     });
-    expect(
-      readFileSync(join(proven.task.worktree, setupResult.log), 'utf8'),
-    ).toContain("phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'");
+    expect(readFileSync(join(proven.task.worktree, setupResult.log), 'utf8')).toContain(
+      "phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'",
+    );
     const setupStamp = readWorkerCheckHostStamp(
       workerCheckBudgetDirectory(h.settings.stateDirectory, proven.task.id, proven.ref.attempt),
       '1',
@@ -531,10 +528,7 @@ test('an accepted source amendment retries only for a retained terminal missing-
     expect(setupStamp.setupFailure).toBeUndefined();
     expect(
       JSON.parse(
-        readFileSync(
-          join(proven.task.worktree, '.temp/goal/checks/results', `${proven.listedCheckId}.json`),
-          'utf8',
-        ),
+        readFileSync(join(proven.task.worktree, '.temp/goal/checks/results', `${proven.listedCheckId}.json`), 'utf8'),
       ),
     ).toMatchObject({ status: 'finished', exitCode: 1 });
     expect(h.store.attempt({ taskId: proven.task.id, attempt: 2 }).checks ?? []).toEqual([]);

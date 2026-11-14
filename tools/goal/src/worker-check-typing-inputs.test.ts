@@ -679,7 +679,9 @@ test('the retained legacy dbmate setup diagnostic identifies only one missing Ke
   write(root, migration, '-- migrate:down\nselect 1;\n');
 
   expect(retainedKernelMigrationHeaderDefect(root, log)).toEqual({ path: migration, line });
-  expect(retainedKernelMigrationHeaderDefect(root, log.replace('phase=database-setup', 'phase=compiler'))).toBeUndefined();
+  expect(
+    retainedKernelMigrationHeaderDefect(root, log.replace('phase=database-setup', 'phase=compiler')),
+  ).toBeUndefined();
 
   write(root, 'services/kernel/db/community/migrations/20261113195650_second.sql', '-- migrate:down\nselect 2;\n');
   expect(retainedKernelMigrationHeaderDefect(root, log)).toBeUndefined();

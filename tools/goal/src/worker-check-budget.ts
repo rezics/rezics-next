@@ -2305,8 +2305,7 @@ function ownedAttemptCheckIds(input: {
   try {
     files = readdirSync(directory).filter((file) => file.endsWith('.json'));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-      return input.checkIds.length === 0 ? [] : undefined;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return input.checkIds.length === 0 ? [] : undefined;
     throw error;
   }
   const ids = new Set(input.checkIds);
@@ -2439,7 +2438,7 @@ function terminalMigrationSetupDefect(
             record.setupFailure.kind === 'missing-kernel-migration-up-marker' &&
             record.setupFailure.commandReached === false &&
             record.setupFailure.physicalRunId === result.physicalRunId &&
-            JSON.stringify(record.setupFailure.command) === JSON.stringify(request.command)))
+            JSON.stringify(record.setupFailure.command) === JSON.stringify(request.command))),
       );
     });
     if (candidates.length !== 1) continue;

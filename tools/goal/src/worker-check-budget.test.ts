@@ -344,13 +344,7 @@ test('a retained setup receipt admits source repair through the original owned c
       '-c',
       'bun run --cwd services/kernel typecheck && bun test services/kernel/test/commerce/post-benefit.test.ts',
     ];
-    const writeTerminalResult = (
-      id: string,
-      physical: string,
-      argv: string[],
-      logPath: string,
-      exitCode: number,
-    ) => {
+    const writeTerminalResult = (id: string, physical: string, argv: string[], logPath: string, exitCode: number) => {
       const result = {
         id,
         cwd: worktree.path,
