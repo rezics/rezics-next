@@ -36,6 +36,9 @@ Preparation start returns 202 and the remaining preparation commands return 200.
 limited to 1,024 IDs with no aggregate cap. Preparation responses are private and no-store, expose only retained
 progress and candidate counts, and never select the publication pointer.
 
+Decision: preparation route registration returns its chained Elysia type through chapter composition, so the
+generated Kernel client exposes all seven mounted commands and Studio calls them directly with inferred operands.
+
 Each placement supplies `occurrenceId`, nullable `parentId`, zero-based sibling `position`, `title` and `kind`.
 Parts have no target. Chapters supply a target containing `threadId`, `postId`, `revisionId` and lowercase SHA-256
 hex. The occurrence and parent IDs carry the catalogue's route; target identities carry the target Post's route.
