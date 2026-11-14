@@ -1,5 +1,5 @@
 import { accessNativeWork, accessCheckout, accessTransaction, type AccessWorkAccounting } from '../work.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError, throwAccessUnavailable } from '../unavailable.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -11,8 +11,8 @@ import {
   type CommandOutcome,
 } from '../../command/command.ts';
 import { readPartition } from '../../partition/partition.ts';
-import { withConnection, discardConnection } from '../../database/pool.ts';
-import { deadlineClient, within } from '../deadline.ts';
+import { withBoundedReadConnection } from '../../database/pool.ts';
+import { remaining } from '../deadline.ts';
 import type { AccountActor, AccessContext, Resource } from '../../request/access.ts';
 import { partitionOf } from '../../route/route.ts';
 import { isExposureGroup } from '@rezics/access';
@@ -44,17 +44,23 @@ export async function readExposure(
     throw new TypeError('Invalid exposure lookup');
   const nativeTime = time ?? (at instanceof Date ? undefined : at);
   const instant = nativeTime ? authoritativeTimeValue(nativeTime) : (at as Date).toISOString();
-  requireAccessDeadline(deadline);
-  return within(deadline, () =>
-    accessCheckout(work, () =>
-      withConnection(pool, async (client) => {
-        const bounded = deadlineClient(client, deadline);
+  remaining(deadline);
+  let phase: 'none' | 'beginning' | 'open' | 'committing' | 'committed' | 'rolling-back' | 'rolled-back' = 'none';
+  let failure: { error: unknown } | undefined;
+  return accessCheckout(work, () =>
+    withBoundedReadConnection(
+      pool,
+      deadline,
+      async (bounded) => {
         try {
+          // Keep explicit transaction accounting and post-COMMIT time validation.
+          phase = 'beginning';
           await accessTransaction(
             work,
             bounded,
             nativeTime || work ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN READ ONLY',
           );
+          phase = 'open';
           if (nativeTime || work) {
             const input = { partition_no: partitionOf(GLOBAL_CONTEXT.route) };
             if (work) {
@@ -88,26 +94,45 @@ export async function readExposure(
           const row = await accessNativeWork(work, 'opening', input, {}, () => openingRead.run(bounded, input));
           if (!row || typeof row.open !== 'boolean' || typeof row.at !== 'string')
             throw new Error('Exposure catalogue read failed');
+          phase = 'committing';
           await accessTransaction(work, bounded, 'COMMIT');
+          phase = 'committed';
           const readAt = new Date(row.at);
           if (!Number.isFinite(readAt.getTime()) || (nativeTime && row.at !== instant))
             throw new Error('Exposure catalogue time was invalid');
           if (nativeTime) authoritativeTimeValue(nativeTime);
           return { open: row.open, at: nativeTime || work ? row.at : readAt.toISOString() };
         } catch (error) {
+          // A cleanup deadline must not replace the causal read failure.
+          failure = { error };
           if (work) {
             work.fail(error);
-            discardConnection(client, error instanceof Error ? error : new Error('Exposure read failed'));
             throw error;
           }
-          try {
-            await client.query('ROLLBACK');
-          } catch {
-            // Preserve the original read failure.
+          if (phase === 'open' && Date.now() < deadline) {
+            phase = 'rolling-back';
+            try {
+              await accessTransaction(work, bounded, 'ROLLBACK');
+              phase = 'rolled-back';
+            } catch {
+              // The lifetime retires failed cleanup; preserve the read failure.
+            }
           }
           throw error;
         }
-      }),
+      },
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError(error) {
+          if (failure) error = failure.error;
+          throwAccessUnavailable(error);
+          return error;
+        },
+        // The lifetime recognizes settled server errors; other query failures may leave IO active.
+        isUncertainSettledQueryError: () => true,
+        isUncertainWorkError: () =>
+          work !== undefined || (phase !== 'none' && phase !== 'committed' && phase !== 'rolled-back'),
+      },
     ),
   ).catch((error: unknown) => {
     work?.fail(error);

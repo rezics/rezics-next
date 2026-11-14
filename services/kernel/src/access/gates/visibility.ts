@@ -1,6 +1,6 @@
-import { requireAccessDeadline } from '../unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../unavailable.ts';
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../deadline.ts';
+import { remaining } from '../deadline.ts';
 import {
   compileExposureCatalogue,
   decideExposure,
@@ -9,7 +9,7 @@ import {
   type ExposureOperation,
 } from '@rezics/access';
 import { authorizePlatformGate } from '../read-bindings.ts';
-import { withConnection } from '../../database/pool.ts';
+import { withBoundedReadConnection } from '../../database/pool.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
 import type { Access, Actor } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from './catalogue.ts';
@@ -90,14 +90,25 @@ async function discover(input: DiscoveryInput): Promise<readonly ExposureOperati
   const held = new Set<string>();
   requireAccessDeadline(input.deadline);
   if (catalogue.groups.length > 0) {
-    await within(input.deadline, () =>
-      withConnection(input.pool, async (client) => {
-        const bounded = deadlineClient(client, input.deadline);
+    remaining(input.deadline);
+    await withBoundedReadConnection(
+      input.pool,
+      input.deadline,
+      async (bounded) => {
         for (const row of await openGroups.run(bounded, { groups: [...catalogue.groups], at: instant })) {
           if (typeof row.group !== 'string') throw new Error('Open group read failed');
           open.add(row.group);
         }
-      }),
+      },
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError(error) {
+          throwAccessUnavailable(error);
+          return error;
+        },
+        // The lifetime recognizes settled server errors; other query failures may leave IO active.
+        isUncertainSettledQueryError: () => true,
+      },
     );
     for (const [group, action] of scopedActions) {
       if (open.has(group)) continue;
