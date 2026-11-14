@@ -11,6 +11,7 @@ import {
   characterId,
 } from '../src/features/catalogue/story-arc-reader/examples';
 import type { ArcAddress, ArcRead, ArcTransport } from '../src/features/catalogue/story-arc-reader/model';
+import type { Reader } from '../src/subject/reader';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -70,6 +71,66 @@ export async function ui() {
   };
   return { host, client, render, click, close };
 }
+
+test.each([0, 1, 2] as const)(
+  'first level %i preparation reprojects disclosure without replacing the native visit',
+  async (level) => {
+    const mounted = await ui();
+    try {
+      const fixture = arcExample();
+      const initial = await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' });
+      const props = { ...arcAddress, locale: 'en', source: {}, reader: null, transport: fixture.read, initial };
+      await mounted.render(props);
+      await mounted.click(m.subject_spoiler_show());
+      const row = mounted.host.querySelectorAll('[data-slot=story-arc-row]')[1]!;
+      await mounted.click(m.arc_reader_characters(), row);
+      const child = row.querySelector('[data-slot=arc-appearance-window]')!;
+      await mounted.click(m.subject_spoiler_show(), child);
+      await mounted.click(m.arc_reader_inspect(), child);
+      const inspection = child.querySelector('section[aria-label="' + m.arc_reader_inspect() + '"]');
+      const target = child.querySelector<HTMLAnchorElement>(`a[href*="${characterId}"]`)!;
+      target.focus();
+      await act(async () => target.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
+      const reads = fixture.calls.length;
+      const settings: Reader = { spoilerLevel: level, suitability: level === 0 ? 'blur' : 'show' };
+      await mounted.render({ ...props, settings });
+      expect(fixture.calls).toHaveLength(reads);
+      expect(mounted.host.textContent).toContain('Later title');
+      if (level === 1) {
+        expect(child.isConnected).toBe(false);
+        expect(mounted.host.querySelector(`a[href*="${characterId}"]`)).toBeNull();
+        expect(document.activeElement?.tagName).toBe('H2');
+        await mounted.click(m.subject_spoiler_show());
+        expect(row.querySelector('[data-slot=arc-appearance-window]')).toBeNull();
+        expect(row.querySelector('section[aria-label="' + m.arc_reader_inspect() + '"]')).toBeNull();
+      } else {
+        expect(row.querySelector('[data-slot=arc-appearance-window]')).toBe(child);
+        expect(child.querySelector('section[aria-label="' + m.arc_reader_inspect() + '"]')).toBe(inspection);
+        expect(child.querySelector(`a[href*="${characterId}"]`)).toBe(target);
+        await act(async () => window.dispatchEvent(new Event('focus')));
+        expect(document.activeElement).toBe(target);
+      }
+      await mounted.render({ ...props, settings: { ...settings } });
+      expect(fixture.calls).toHaveLength(reads);
+      if (target.isConnected)
+        await act(async () => target.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
+      const intervening = await mounted.click(
+        m.arc_reader_inspect(),
+        mounted.host.querySelector('[data-slot=story-arc-row]')!,
+      );
+      await act(async () => window.dispatchEvent(new Event('focus')));
+      expect(document.activeElement).toBe(intervening);
+      const replacement: Reader = level === 0 ? { ...settings, spoilerLevel: 2 } : { ...settings, suitability: 'blur' };
+      await mounted.render({ ...props, settings: replacement });
+      await mounted.render({ ...props, settings });
+      expect(mounted.host.querySelectorAll('button')).toHaveLength(0);
+      expect(mounted.host.textContent).toContain(m.arc_reader_fresh_subject());
+      expect(fixture.calls).toHaveLength(reads);
+    } finally {
+      await mounted.close();
+    }
+  },
+);
 
 test('arc journey gates whole narrative/appearance rows, opens current targets, retains exact retry and keyboard return', async () => {
   const mounted = await ui();
@@ -134,19 +195,31 @@ test('replacement exposure retires accepted controls and an in-flight continuati
     const fixture = arcExample();
     const initial = await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' });
     let resolve!: (read: ArcRead) => void;
+    let reads = 0;
     const props = {
       ...arcAddress,
       locale: 'en',
       source: {},
       reader: null,
       initial,
-      transport: () =>
-        new Promise<ArcRead>((done) => {
+      transport: () => {
+        reads++;
+        return new Promise<ArcRead>((done) => {
           resolve = done;
-        }),
+        });
+      },
     };
     await mounted.render(props);
     await mounted.click(m.work_parts_more());
+    const prepared = { ...props, settings: { spoilerLevel: 2, suitability: 'show' } as const };
+    await mounted.render(prepared);
+    expect(reads).toBe(1);
+    expect(mounted.host.textContent).toContain('Earlier title');
+    await act(async () => resolve(initial));
+    expect(mounted.host.textContent).toContain('Later title');
+    expect(mounted.host.textContent).not.toContain(m.arc_reader_fresh_subject());
+    await mounted.click(m.work_parts_more());
+    expect(reads).toBe(2);
     await act(async () => {
       mounted.client.setQueryData(['exposure', 'viewer'], { replacement: true });
     });

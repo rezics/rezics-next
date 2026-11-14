@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { defaultReader, type Reader } from '../../../subject/reader';
@@ -9,7 +10,6 @@ import { addressLease, type AddressLease } from '../../../session';
 import { useArcLifetime } from './reading/use-lifetime';
 import { useArcWindow } from './reading/use-window';
 import { linkClass, linkColor, spoilerLevel, type PageLink } from '../../pages/shared';
-import { SpoilerGate } from '../../pages/values';
 import type { PartRow } from '../work-parts';
 import { storyArcType } from '../story-arc-profile';
 import type { ArcAddress, ArcRead, ArcTransport } from './model';
@@ -52,14 +52,8 @@ export function StoryArcReader(props: Props) {
   const reading = useArcLifetime({
     source: props.source,
     reader: props.reader,
-    descriptor: JSON.stringify([
-      props.id,
-      props.context,
-      props.locale,
-      props.realm,
-      settings.spoilerLevel,
-      settings.suitability,
-    ]),
+    descriptor: JSON.stringify([props.id, props.context, props.locale, props.realm]),
+    settings: props.settings ? JSON.stringify([settings.spoilerLevel, settings.suitability]) : null,
   });
   useLayoutEffect(() => {
     if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
@@ -141,7 +135,7 @@ function ArcWindow({
   const [selected, setSelected] = useState<string | null>(null);
   const [member, setMember] = useState<Member | null>(null);
   const memberRef = useRef<Member | null>(null);
-  const origin = useRef<{ target: HTMLAnchorElement; lease: AddressLease } | null>(null);
+  const origin = useRef<{ target: HTMLAnchorElement | null; lease: AddressLease } | null>(null);
   const focusAfter = useRef<Element | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const beforeReplace = () => {
@@ -158,25 +152,36 @@ function ArcWindow({
   const windowRead = useArcWindow({ base, initial, transport, current, beforeReplace });
   const { page, failure, busy, version, episode } = windowRead;
   const isCurrent = () => current() && episode.current();
+  const callbacks = useRef({ current: isCurrent, focusHeading });
+  callbacks.current = { current: isCurrent, focusHeading };
   useLayoutEffect(() => {
+    if (origin.current && !origin.current.target?.isConnected) origin.current.target = null;
     const removed = focusAfter.current;
-    focusAfter.current = null;
-    if (removed && !removed.isConnected && document.activeElement === document.body && isCurrent()) focusHeading();
-  }, [version, page, member]);
+    if (removed && !removed.isConnected) {
+      focusAfter.current = null;
+      if (document.activeElement === document.body && isCurrent()) focusHeading();
+    }
+  });
   useEffect(() => {
     const restore = () => {
       const intent = origin.current;
       origin.current = null;
-      if (!intent || !current() || !intent.lease.current()) return;
+      if (!intent || !callbacks.current.current() || !intent.lease.current()) return;
       if (
-        intent.target.isConnected &&
+        intent.target?.isConnected &&
         (document.activeElement === intent.target || document.activeElement === document.body)
       )
         intent.target.focus();
-      else if (!intent.target.isConnected && document.activeElement === document.body) focusHeading();
+      else if (!intent.target?.isConnected && document.activeElement === document.body)
+        callbacks.current.focusHeading();
     };
     const cancel = (event: Event) => {
-      if (origin.current && event.target !== origin.current.target && event.target !== document.body)
+      if (event.type === 'pointerdown' || (event.target instanceof Node && !container.current?.contains(event.target)))
+        focusAfter.current = null;
+      if (
+        origin.current &&
+        (event.type === 'pointerdown' || (event.target !== origin.current.target && event.target !== document.body))
+      )
         origin.current = null;
     };
     window.addEventListener('focus', restore);
@@ -188,7 +193,7 @@ function ArcWindow({
       document.removeEventListener('pointerdown', cancel);
       origin.current = null;
     };
-  }, [current, focusHeading]);
+  }, []);
   const returnFocus = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!isCurrent()) {
       event.preventDefault();
@@ -219,6 +224,13 @@ function ArcWindow({
     setMember(null);
     setSelected((value) => (value === key ? null : key));
   };
+  const conceal = (key: string) => {
+    if (selected === key) setSelected(null);
+    if (memberRef.current?.key !== key) return;
+    memberRef.current.lease.retire();
+    memberRef.current = null;
+    setMember(null);
+  };
   const openMember = (key: string, row: PartRow, event: MouseEvent<HTMLButtonElement>) => {
     if (!isCurrent() || busy || !row.summary) return;
     if (memberRef.current?.key === key) {
@@ -241,6 +253,9 @@ function ArcWindow({
   return (
     <div
       ref={container}
+      onFocusCapture={(event) => {
+        focusAfter.current = event.target;
+      }}
       className="min-w-0 space-y-4"
       aria-busy={busy}
       data-slot={arc ? 'arc-appearance-window' : 'arc-outer-window'}
@@ -430,13 +445,14 @@ function ArcWindow({
               );
               return (
                 <li key={key} data-slot="story-arc-row" className="min-w-0 py-4">
-                  {spoilerLevel(row.statement) > settings.spoilerLevel ? (
-                    <SpoilerGate label={m.subject_spoiler_show({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
-                      {content}
-                    </SpoilerGate>
-                  ) : (
-                    content
-                  )}
+                  <ArcDisclosure
+                    level={settings.spoilerLevel}
+                    required={spoilerLevel(row.statement)}
+                    locale={locale}
+                    onConceal={() => conceal(key)}
+                  >
+                    {content}
+                  </ArcDisclosure>
                 </li>
               );
             })}
@@ -470,6 +486,39 @@ function ArcWindow({
         </button>
       )}
     </div>
+  );
+}
+
+/** Keep visible content at the same position when prepared preferences replace a temporary reveal. */
+function ArcDisclosure({
+  level,
+  required,
+  locale,
+  onConceal,
+  children,
+}: {
+  level: Reader['spoilerLevel'];
+  required: number;
+  locale: string;
+  onConceal: () => void;
+  children: ReactNode;
+}) {
+  const [reveal, setReveal] = useState({ level, open: false });
+  const concealed = required > level;
+  const visible = !concealed || (reveal.level === level && reveal.open);
+  useLayoutEffect(() => {
+    if (!visible) onConceal();
+  }, [visible]);
+  const o = { locale: locale as never };
+  return (
+    <Collapsible open={visible} onOpenChange={(open) => setReveal({ level, open })} className="space-y-2">
+      {concealed && (
+        <CollapsibleTrigger render={<button type="button" className={button} />}>
+          {visible ? m.subject_spoiler_hide({}, o) : m.subject_spoiler_show({}, o)}
+        </CollapsibleTrigger>
+      )}
+      <CollapsibleContent className="space-y-2">{visible ? children : null}</CollapsibleContent>
+    </Collapsible>
   );
 }
 

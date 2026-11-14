@@ -25,11 +25,14 @@ test('Previous keeps eight accepted addresses, rereads them, evicts oldest, and 
       const number = address.cursor?.startsWith('page:') ? Number(address.cursor.slice(5)) : 1;
       return { ...initial, next: `page:${number + 1}` };
     };
-    await mounted.render({ ...arcAddress, locale: 'en', source: {}, reader: null, initial, transport });
+    const props = { ...arcAddress, locale: 'en', source: {}, reader: null, initial, transport };
+    await mounted.render(props);
     // The first native frontier remains exact; following pages use authored opaque tokens.
     await mounted.click(m.work_parts_more());
     for (let i = 0; i < 9; i++) await mounted.click(m.work_parts_more());
     expect(mounted.host.textContent).toContain(m.arc_reader_history_limit());
+    await mounted.render({ ...props, settings: { spoilerLevel: 0, suitability: 'blur' } });
+    expect(addresses).toHaveLength(10);
     for (let i = 0; i < 8; i++) await mounted.click(m.arc_reader_previous());
     expect(button(mounted.host, m.arc_reader_previous()).disabled).toBe(true);
     expect(addresses.at(-1)?.cursor).toBe('page:2');
@@ -55,7 +58,8 @@ test('failed frontier is distinct from prior page; exact Retry, Previous, Start 
         ? { ok: false, reason: failure }
         : { ...initial, next: address.cursor ? 'frontier-2' : initial.next };
     };
-    await mounted.render({ ...arcAddress, locale: 'en', source: {}, reader: null, initial, transport });
+    const props = { ...arcAddress, locale: 'en', source: {}, reader: null, initial, transport };
+    await mounted.render(props);
     await mounted.click(m.work_parts_more());
     failure = 'unavailable';
     await mounted.click(m.work_parts_more());
@@ -65,6 +69,12 @@ test('failed frontier is distinct from prior page; exact Retry, Previous, Start 
     expect(mounted.host.textContent).toContain('Later title');
     expect(button(mounted.host, m.arc_reader_previous()).disabled).toBe(false);
     expect(button(mounted.host, m.work_parts_restart()).disabled).toBe(false);
+    await mounted.click(m.arc_reader_inspect());
+    const inspection = mounted.host.querySelector('section[aria-label="' + m.arc_reader_inspect() + '"]');
+    await mounted.render({ ...props, settings: { spoilerLevel: 2, suitability: 'show' } });
+    expect(addresses).toHaveLength(2);
+    expect(mounted.host.querySelector('section[aria-label="' + m.arc_reader_inspect() + '"]')).toBe(inspection);
+    expect(button(mounted.host, m.arc_reader_previous()).disabled).toBe(false);
     await mounted.click(m.subject_section_retry());
     expect(addresses.at(-1)).toEqual(failed);
     failure = undefined;
@@ -158,6 +168,10 @@ test('pointer opening and late child reads never steal focus or replace a new ch
     await mounted.render(props);
     const opener = await mounted.click(m.arc_reader_characters(), mounted.host, 1);
     expect(document.activeElement).toBe(opener);
+    const pendingChild = child(mounted.host);
+    await mounted.render({ ...props, settings: { spoilerLevel: 0, suitability: 'blur' } });
+    expect(child(mounted.host)).toBe(pendingChild);
+    expect(opener.getAttribute('aria-expanded')).toBe('true');
     const priorClose = button(mounted.host, m.arc_reader_back());
     await mounted.click(m.arc_reader_back());
     defer = false;

@@ -22,8 +22,23 @@ Rows without native assertions disclose no context because their spoiler qualifi
 
 The entire assertion, title, navigation, qualifiers and sources stay behind its spoiler gate. Every successful
 window replacement resets reveal consent. The narrative Summary remains the existing composition component.
-All windows and controls retire on viewer/session/exposure, subject, Context, Realm, locale, settings, source
+All windows and controls retire on viewer/session/exposure, subject, Context, Realm, locale, settings replacement, source
 observation, Query provider or lifetime replacement; late responses cannot restore them.
+
+Decision: unresolved display preferences project the safe defaults without adopting them as prepared settings.
+The first defined settings, including default-valued settings, are preparation of this same native reading.
+Adopt them without replacing its lease, page, stream, cursor, eight-address Previous trail, failed exact-address
+retry or pending request. Equal setting values remain the same observation. Once prepared, any different settings
+(or a return to unresolved settings) retire the whole reading permanently, including A/B/A changes; only a fresh
+source starts a new reading. Preparation never overrides another retirement reason.
+
+Preparation immediately reprojects every retained row. Local reveal consent belongs to its spoiler level;
+changing that level drops consent for assertions still above it. A newly concealed assertion loses its selection,
+member window and link destination. Equal levels retain explicit reveal consent. Content which remains visible,
+including a revealed member now admitted by preferences, keeps the same mounted child and native read.
+Keyboard return uses the surviving visible link or current heading, and intervening focus/pointer activity
+cancels that intent. This stable local disclosure boundary uses the existing UI primitives; shared SpoilerGate,
+Subject preparation, session observation and native admission keep their owners.
 
 Decision: public destinations open in a new tab, retaining the originating work or arc's exact mounted window;
 keyboard return restores its still-meaningful link or the reader heading. Only one member appearance window is
@@ -46,7 +61,7 @@ settlement do not move focus. Close checks the original child lease before chang
 current opener. Hiding its spoiler gate retires that child. Removed current content can fall back to the current
 heading only while focus remains unclaimed. Tab-return intent is cancelled by intervening focus/pointer activity.
 The installed browser observation/cache subscription and retiring address lease fence equal-success session,
-exposure, source, settings, Context, Realm, locale and page-departure replacements. Retired readings offer a fresh
+exposure, source, prepared-settings, Context, Realm, locale and page-departure replacements. Retired readings offer a fresh
 Subject load; they cannot be revived by Retry or a matching payload.
 
 ## Cost
@@ -54,7 +69,8 @@ Subject load; they cannot be revived by Retry or a matching payload.
 Each deliberate first/next/previous/retry/restart/stream read costs one exact Subject read, the existing active-definition
 and immutable Release pair, and at most one relations/links page. Opening a member's appearances repeats this plan
 for that exact work and arc filter. There are no per-row reads, target hydration, polling, prefetch, writes or
-session/exposure reads. At most one request per window is pending. One outer and one optional member window are
+session/exposure reads. Display preparation adds no native or preference requests, hydration or retained history/payload.
+At most one request per window is pending. One outer and one optional member window are
 retained, each with at most 20 rows, 128 KiB per native row and a 2,686,976-byte page cap; Subject input is capped
 at 4 MiB. Definitions retain the existing 4 MiB/1,024-Type/4,096-property limits and at most 64 streams. Cursors
 retain at most 4,096 UTF-16 units. Old windows replace rather than accumulate. Each window also retains at most eight prior bounded addresses,
@@ -69,3 +85,8 @@ Authored stories exercise the disclosed journey, unsupported definitions and una
 source examples, not native publication or rendered passes. Focused tests use generated native client seams and
 mounted keyboard/spoiler/retirement journeys. Wrapping shell components, theme tokens, 44px controls and all eight
 existing locales support phone390/desktop1280. Native/browser acceptance remains deferred to integration.
+
+Preparation regressions extend `story-arc-reader-view.test.tsx` (first default/non-default settings, equal observations,
+visible child identity, concealment, keyboard return, pending continuation and later A/B/A retirement) and
+`story-arc-reader-recovery.test.tsx` (eight-address Previous, exact failed Retry, retained selection and pending child).
+Existing replacement, withheld/invalid, stream and departure assertions remain in place.

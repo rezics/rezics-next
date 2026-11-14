@@ -4,7 +4,12 @@ import { browserObservation } from '../../../../session';
 import { addressLease } from '../../../../session';
 
 /** Domain identity stays in this mount; the installed browser store owns cache observation. */
-export function useArcLifetime(input: { source: object | string; descriptor: string; reader: string | null }) {
+export function useArcLifetime(input: {
+  source: object | string;
+  descriptor: string;
+  reader: string | null;
+  settings: string | null;
+}) {
   const client = useContext(QueryClientContext);
   const observation = useMemo(() => {
     const store = client ? browserObservation(client) : undefined;
@@ -62,11 +67,15 @@ export function useArcLifetime(input: { source: object | string; descriptor: str
     !binding.retired &&
     (binding.descriptor !== input.descriptor ||
       binding.reader !== input.reader ||
+      (binding.settings !== null && binding.settings !== input.settings) ||
       binding.observation !== observation ||
       binding.revision !== revision)
   ) {
     binding.lease.retire();
     setBinding({ ...binding, retired: true, generation: binding.generation + 1 });
+  } else if (!binding.retired && binding.settings === null && input.settings !== null) {
+    // Display preparation has no native operand: retain the lease, pending reads and mounted windows.
+    setBinding({ ...binding, settings: input.settings });
   }
   useLayoutEffect(() => {
     mounted.current = true;
