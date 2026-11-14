@@ -118,6 +118,12 @@ Decision: a cross-parent move cuts the stable occurrence subtree's contiguous pr
 splices them at the destination's aggregate rank; it updates sibling roots, moved-root containment and only changed
 ancestor summaries, without visiting descendants.
 
+Decision: ordinary and chapter-weighted boundary selections batch independent immutable child roots in one
+snapshot-pinned frontier per AVL level. Move placement checks and first/last chapter-projection checks coalesce
+their known selections on each index. Single selections use the same path. Physical batches contain at most 512
+distinct node IDs, including prefetched siblings; dependent rounds follow tree height, and work grows with the
+selected paths rather than the Book's total size. Every loaded child retains its inverse-parent and cycle checks.
+
 Decision: mount the stable-anchor move as `moveDraftPoint`; `parentId: null` selects the root sibling list, and a
 null `beforeOccurrenceId` appends to the selected sibling list. A non-null anchor must be a current sibling of the
 selected root or Part. Root moves create no synthetic occurrence or chapter destination. The existing move command

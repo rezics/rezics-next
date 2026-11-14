@@ -61,11 +61,22 @@ function buildSequence(values: readonly string[], weighted: ReadonlySet<string> 
   return { nodes, rootId: build(0, values.length, null) };
 }
 
-function makeIndexes(snapshots: Readonly<{ siblings: Snapshot; preorder: Snapshot; chapters: Snapshot }>) {
+function makeIndexes(
+  snapshots: Readonly<{ siblings: Snapshot; preorder: Snapshot; chapters: Snapshot }>,
+  batches?: { index: 'siblings' | 'preorder' | 'chapters'; ids: readonly string[] }[],
+) {
+  const access = (index: 'siblings' | 'preorder' | 'chapters') =>
+    createVersionedOutlineSequenceReadWriteSet<string>(
+      async (id) => snapshots[index].get(id) ?? null,
+      async (ids) => {
+        batches?.push({ index, ids: [...ids] });
+        return new Map(ids.map((id) => [id, snapshots[index].get(id) ?? null]));
+      },
+    );
   const accesses = {
-    siblings: createVersionedOutlineSequenceReadWriteSet<string>(async (id) => snapshots.siblings.get(id) ?? null),
-    preorder: createVersionedOutlineSequenceReadWriteSet<string>(async (id) => snapshots.preorder.get(id) ?? null),
-    chapters: createVersionedOutlineSequenceReadWriteSet<string>(async (id) => snapshots.chapters.get(id) ?? null),
+    siblings: access('siblings'),
+    preorder: access('preorder'),
+    chapters: access('chapters'),
     readLegacyMaximum: async () => null,
   } satisfies HostedVersionDraftMoveIndexes;
   return accesses;
@@ -190,7 +201,8 @@ test('moves a large unchanged subtree by ranks, preserves the old draft, and rej
     parentId: 'parent-b',
     beforeOccurrenceId: 'b-before',
   };
-  const indexes = makeIndexes(original);
+  const batches: { index: 'siblings' | 'preorder' | 'chapters'; ids: readonly string[] }[] = [];
+  const indexes = makeIndexes(original, batches);
   const plan = await prepareHostedVersionDraftMovePlan(input, selection, indexes);
   const nextSiblings = commit(siblingSnapshot, indexes.siblings);
   const nextPreorder = commit(preorder.nodes, indexes.preorder);
@@ -246,6 +258,13 @@ test('moves a large unchanged subtree by ranks, preserves the old draft, and rej
   expect(totalProbes + chapterProbes).toBeLessThan(logarithmicBound);
   expect(totalWrites + chapterWrites).toBeLessThan(logarithmicBound);
   expect(totalProbes + chapterProbes).toBeLessThan(Number(selection.source.subtreeSize));
+  expect(batches.some((batch) => batch.index === 'preorder' && batch.ids.length > 2)).toBe(true);
+  expect(batches.every((batch) => batch.ids.length <= 512)).toBe(true);
+  for (const index of ['siblings', 'preorder', 'chapters'] as const) {
+    const ids = batches.filter((batch) => batch.index === index).flatMap((batch) => batch.ids);
+    expect(ids).toHaveLength(new Set(ids).size);
+    expect(indexes[index].work().snapshotProbeCount).toBe(ids.length);
+  }
 
   const staleIndexes = makeIndexes(original);
   await expect(
@@ -259,6 +278,12 @@ test('moves a large unchanged subtree by ranks, preserves the old draft, and rej
   const invalidIndexes = makeIndexes(original);
   await expect(
     prepareHostedVersionDraftMovePlan({ ...input, beforeOccurrenceId: 'a-after' }, wrongParentAnchor, invalidIndexes),
+  ).rejects.toMatchObject({ code: 'invalid-anchor' });
+
+  const wrongPlacement = new Map(original.preorder);
+  wrongPlacement.set('source-part', { ...wrongPlacement.get('source-part')!, value: 'another-occurrence' });
+  await expect(
+    prepareHostedVersionDraftMovePlan(input, selection, makeIndexes({ ...original, preorder: wrongPlacement })),
   ).rejects.toMatchObject({ code: 'invalid-anchor' });
 
   const noopIndexes = makeIndexes(original);

@@ -10,7 +10,9 @@ import {
   rankVersionedOutlineSequenceNode,
   rankVersionedOutlineSequenceNodes,
   selectVersionedOutlineSequenceChapter,
+  selectVersionedOutlineSequenceChapters,
   selectVersionedOutlineSequenceNode,
+  selectVersionedOutlineSequenceNodes,
   splitVersionedOutlineSequence,
   spliceVersionedOutlineSequence,
   setVersionedOutlineSequenceSubtreeHeight,
@@ -212,6 +214,84 @@ test('multi-rank frontiers deduplicate shared paths across roots and stay pinned
       { rootId: moved.rootId, nodeId: first.ids[11]! },
     ]),
   ).toEqual([41n]);
+});
+
+test('ordinary and weighted selections share child frontiers without scanning large Books or empty parts', async () => {
+  const seeded = seedBalanced(4095, 'select-', 17);
+  const emptyParts = seedBalanced(15, 'empty-parts-');
+  const snapshot = new Map([...seeded.nodes, ...emptyParts.nodes]);
+  for (const chapterOnly of [false, true]) {
+    const values = chapterOnly ? seeded.ids.filter((_, index) => index % 17 === 0) : seeded.ids;
+    const ranks = [0n, 1n, BigInt(values.length - 1), 1n, BigInt(values.length), 1n << 60n];
+    const requests = [
+      ...ranks.map((rank) => ({ rootId: seeded.rootId, rank })),
+      { rootId: emptyParts.rootId, rank: 0n },
+      { rootId: null, rank: 0n },
+    ];
+    const batches: string[][] = [];
+    const access = batchWorkspace(snapshot, batches);
+    const select = chapterOnly ? selectVersionedOutlineSequenceChapters : selectVersionedOutlineSequenceNodes;
+    expect((await select(access, requests)).map((node) => node?.id ?? null)).toEqual([
+      values[0], values[1], values.at(-1), values[1], null, null,
+      chapterOnly ? null : emptyParts.ids[0], null,
+    ]);
+    expect(batches[0]).toEqual([seeded.rootId!, emptyParts.rootId!]);
+    expect(batches.length).toBeLessThanOrEqual(seeded.nodes.get(seeded.rootId!)!.height + 1);
+    expect(batches.every((batch) => batch.length <= requests.length * 2)).toBe(true);
+    const probes = batches.flat();
+    expect(probes).toHaveLength(new Set(probes).size);
+    expect(access.work().snapshotProbeCount).toBe(probes.length);
+    expect(probes.length).toBeLessThan(160);
+    expect(access.work().writtenNodeCount).toBe(0);
+  }
+});
+
+test('boundary selections retain exact historical roots and split physical frontiers beyond 512 IDs', async () => {
+  const seeded = seedBalanced(2047, 'select-history-', 3);
+  const requests = seeded.ids.map((_, index) => ({ rootId: seeded.rootId, rank: BigInt(index) }));
+  const batches: string[][] = [];
+  expect((await selectVersionedOutlineSequenceNodes(batchWorkspace(seeded.nodes, batches), requests)).map((node) => node!.id))
+    .toEqual(seeded.ids);
+  expect(batches.some((batch) => batch.length === 512)).toBe(true);
+  expect(batches.every((batch) => batch.length <= 512)).toBe(true);
+  expect(batches.flat()).toHaveLength(seeded.nodes.size);
+
+  const edit = workspace(seeded.nodes);
+  const moved = await moveVersionedOutlineSequenceRange(edit, seeded.rootId, 0n, 3n, 2047n);
+  const next = commit(seeded.nodes, edit);
+  const boundaries = [0n, 2046n].map((rank) => ({ rootId: moved.rootId, rank }));
+  expect((await selectVersionedOutlineSequenceNodes(batchWorkspace(next), boundaries)).map((node) => node!.id))
+    .toEqual([seeded.ids[3], seeded.ids[2]]);
+  expect((await selectVersionedOutlineSequenceNodes(batchWorkspace(seeded.nodes), boundaries.map(({ rank }) => ({ rootId: seeded.rootId, rank })))).map((node) => node!.id))
+    .toEqual([seeded.ids[0], seeded.ids[2046]]);
+  expect((await selectVersionedOutlineSequenceChapters(batchWorkspace(next), [{ rootId: moved.rootId, rank: 0n }]))[0]?.id)
+    .toBe(seeded.ids[3]);
+  expect((await selectVersionedOutlineSequenceChapters(batchWorkspace(seeded.nodes), [{ rootId: seeded.rootId, rank: 0n }]))[0]?.id)
+    .toBe(seeded.ids[0]);
+});
+
+test('selectors reject missing roots, missing children, inverse-parent corruption and child cycles', async () => {
+  const seeded = seedBalanced(7, 'select-corrupt-', 2);
+  const root = seeded.nodes.get(seeded.rootId!)!;
+  for (const select of [selectVersionedOutlineSequenceNodes, selectVersionedOutlineSequenceChapters]) {
+    const requests = [{ rootId: seeded.rootId, rank: 0n }];
+    expect(await select(batchWorkspace(seeded.nodes), [])).toEqual([]);
+    await expect(select(batchWorkspace(seeded.nodes), [{ rootId: null, rank: -1n }])).rejects.toThrow(RangeError);
+    await expect(select(batchWorkspace(seeded.nodes), [{ rootId: 'missing', rank: 0n }])).rejects.toThrow('missing node');
+    await expect(select(batchWorkspace(seeded.nodes), [{ rootId: root.leftId, rank: 0n }])).rejects.toThrow('selected root');
+    const missing = new Map(seeded.nodes);
+    missing.delete(root.leftId!);
+    await expect(select(batchWorkspace(missing), requests)).rejects.toThrow('missing node');
+    const inverse = new Map(seeded.nodes);
+    inverse.set(root.leftId!, { ...inverse.get(root.leftId!)!, treeParentId: root.rightId });
+    await expect(select(batchWorkspace(inverse), requests)).rejects.toThrow('tree-parent link is inconsistent');
+    const cycle = new Map(seeded.nodes);
+    cycle.set(root.id, { ...root, leftId: root.id });
+    await expect(select(batchWorkspace(cycle), requests)).rejects.toThrow('child links contain a cycle');
+    const repeated = new Map(seeded.nodes);
+    repeated.set(root.id, { ...root, rightId: root.leftId });
+    await expect(select(batchWorkspace(repeated), requests)).rejects.toThrow('both children');
+  }
 });
 
 test('snapshot batches share pending probes, cache absence and split at 512 without parallel dispatch', async () => {

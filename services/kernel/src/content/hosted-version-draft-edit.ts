@@ -10,8 +10,8 @@ import {
 import {
   chapterRankVersionedOutlineSequenceNode,
   moveVersionedOutlineSequenceRange,
-  rankVersionedOutlineSequenceNode,
-  selectVersionedOutlineSequenceNode,
+  rankVersionedOutlineSequenceNodes,
+  selectVersionedOutlineSequenceNodes,
   spliceVersionedOutlineSequence,
 } from './versioned-outline-sequence.ts';
 import { HOSTED_DEPTH_LIMIT } from './hosted-chapters-model.ts';
@@ -62,24 +62,21 @@ async function sequenceLength(
   return root.count;
 }
 
-async function selectedRank(
+async function selectedRanks(
   access: HostedVersionDraftMoveIndexes['siblings'],
-  rootId: string | null,
-  occurrenceId: string,
-): Promise<bigint> {
-  const rank = await rankVersionedOutlineSequenceNode(access, rootId, occurrenceId);
-  if (rank === null) invalidAnchor();
-  const selected = await selectVersionedOutlineSequenceNode(access, rootId, rank);
-  if (selected?.value !== occurrenceId) invalidAnchor();
-  return rank;
-}
-
-async function selectedPreorderRank(
-  indexes: HostedVersionDraftMoveIndexes,
-  rootId: string | null,
-  occurrenceId: string,
-): Promise<bigint> {
-  return selectedRank(indexes.preorder, rootId, occurrenceId);
+  requests: readonly Readonly<{ rootId: string | null; nodeId: string }>[],
+): Promise<readonly bigint[]> {
+  const ranks = await rankVersionedOutlineSequenceNodes(access, requests);
+  const selections = requests.map(({ rootId }, index) => {
+    const rank = ranks[index]!;
+    if (rank === null) invalidAnchor();
+    return { rootId, rank };
+  });
+  const selected = await selectVersionedOutlineSequenceNodes(access, selections);
+  for (let index = 0; index < requests.length; index += 1) {
+    if (selected[index]?.value !== requests[index]!.nodeId) invalidAnchor();
+  }
+  return selections.map(({ rank }) => rank);
 }
 
 function ancestorDeltas(
@@ -168,12 +165,22 @@ export async function prepareHostedVersionDraftMovePlan(
     throw new Error('Hosted version draft selection returned different sibling roots for one parent');
   }
 
-  const sourceSiblingRank = await selectedRank(indexes.siblings, selection.sourceSiblingRootId, source.occurrenceId);
-  const sourcePreorderRank = await selectedPreorderRank(indexes, selection.preorderRootId, source.occurrenceId);
+  const [siblingRanks, preorderRanks] = await Promise.all([
+    selectedRanks(indexes.siblings, [
+      { rootId: selection.sourceSiblingRootId, nodeId: source.occurrenceId },
+      ...(before === null ? [] : [{ rootId: selection.destinationSiblingRootId, nodeId: before.occurrenceId }]),
+    ]),
+    selectedRanks(
+      indexes.preorder,
+      [source, ...(destinationParent === null ? [] : [destinationParent]), ...(before === null ? [] : [before])].map(
+        ({ occurrenceId }) => ({ rootId: selection.preorderRootId, nodeId: occurrenceId }),
+      ),
+    ),
+  ]);
+  const sourceSiblingRank = siblingRanks[0]!;
+  const sourcePreorderRank = preorderRanks[0]!;
   const destinationPreorderRank =
-    destinationParent === null
-      ? null
-      : await selectedPreorderRank(indexes, selection.preorderRootId, destinationParent.occurrenceId);
+    destinationParent === null ? null : preorderRanks[1]!;
   const preorderLength = await sequenceLength(indexes.preorder, selection.preorderRootId);
   if (sourcePreorderRank + source.subtreeSize > preorderLength) {
     throw new Error('Hosted version draft subtree exceeds the selected preorder');
@@ -187,12 +194,9 @@ export async function prepareHostedVersionDraftMovePlan(
   }
 
   const destinationSiblingLength = await sequenceLength(indexes.siblings, selection.destinationSiblingRootId);
-  const destinationSiblingRank =
-    before === null
-      ? destinationSiblingLength
-      : await selectedRank(indexes.siblings, selection.destinationSiblingRootId, before.occurrenceId);
+  const destinationSiblingRank = before === null ? destinationSiblingLength : siblingRanks[1]!;
   const beforePreorderRank =
-    before === null ? null : await selectedPreorderRank(indexes, selection.preorderRootId, before.occurrenceId);
+    before === null ? null : preorderRanks[destinationParent === null ? 1 : 2]!;
   if (
     beforePreorderRank !== null &&
     beforePreorderRank >= sourcePreorderRank &&

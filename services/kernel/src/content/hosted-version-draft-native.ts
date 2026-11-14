@@ -3,8 +3,9 @@ import { routeOf } from '../route/route.ts';
 import {
   chapterRankVersionedOutlineSequenceNode,
   rankVersionedOutlineSequenceNode,
-  selectVersionedOutlineSequenceChapter,
+  selectVersionedOutlineSequenceChapters,
   selectVersionedOutlineSequenceNode,
+  selectVersionedOutlineSequenceNodes,
 } from './versioned-outline-sequence.ts';
 import { HOSTED_DEPTH_LIMIT } from './hosted-chapters-model.ts';
 import {
@@ -318,12 +319,20 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
         );
         if (start === null) invalidAnchor();
         const lastRank = start + occurrence.value.chapterCount - 1n;
-        const [firstInPreorder, lastInPreorder, firstInChapters, lastInChapters] = await Promise.all([
-          selectVersionedOutlineSequenceChapter(indexes.preorder, snapshot.preorderRootId, start),
-          selectVersionedOutlineSequenceChapter(indexes.preorder, snapshot.preorderRootId, lastRank),
-          selectVersionedOutlineSequenceNode(indexes.chapters, snapshot.chapterRootId, start),
-          selectVersionedOutlineSequenceNode(indexes.chapters, snapshot.chapterRootId, lastRank),
+        const [preorderBoundaries, chapterBoundaries] = await Promise.all([
+          selectVersionedOutlineSequenceChapters(
+            indexes.preorder,
+            [start, lastRank].map((rank) => ({ rootId: snapshot.preorderRootId, rank })),
+          ),
+          selectVersionedOutlineSequenceNodes(
+            indexes.chapters,
+            [start, lastRank].map((rank) => ({ rootId: snapshot.chapterRootId, rank })),
+          ),
         ]);
+        const firstInPreorder = preorderBoundaries[0]!;
+        const lastInPreorder = preorderBoundaries[1]!;
+        const firstInChapters = chapterBoundaries[0]!;
+        const lastInChapters = chapterBoundaries[1]!;
         if (
           firstInPreorder === null ||
           lastInPreorder === null ||

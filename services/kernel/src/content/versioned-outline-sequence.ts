@@ -745,29 +745,123 @@ export async function rankVersionedOutlineSequenceNodes<Value>(
   return ranks;
 }
 
+export type VersionedOutlineSequenceSelectionRequest = Readonly<{
+  rootId: string | null;
+  rank: bigint;
+}>;
+
+/**
+ * Select independent boundaries together. Each round loads only the current nodes' child roots:
+ * the left summary and either possible next node are then available without serial sibling probes.
+ * The snapshot cache shares paths and caps physical batches; dependent rounds still follow AVL height.
+ */
+async function selectInRoots<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
+  requests: readonly VersionedOutlineSequenceSelectionRequest[],
+  chapterOnly: boolean,
+): Promise<readonly (VersionedOutlineSequenceNode<Value> | null)[]> {
+  for (const { rank } of requests) {
+    if (rank < 0n) {
+      throw new RangeError(
+        chapterOnly
+          ? 'Versioned outline sequence chapter rank cannot be negative'
+          : 'Versioned outline sequence selection rank cannot be negative',
+      );
+    }
+  }
+
+  const loaded = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
+  async function loadFrontier(ids: readonly (string | null)[]): Promise<void> {
+    const missingIds = [...new Set(ids.filter((id): id is string => id !== null))].filter((id) => !loaded.has(id));
+    if (missingIds.length === 0) return;
+    const nodes = await access.readNodes(missingIds);
+    for (const id of missingIds) loaded.set(id, nodes.get(id) ?? null);
+  }
+  function requireLoaded(id: string): VersionedOutlineSequenceNode<Value> {
+    const node = loaded.get(id) ?? null;
+    if (node === null) throw new Error('Versioned outline sequence references a missing node');
+    return node;
+  }
+
+  type Candidate = {
+    requestIndex: number;
+    current: VersionedOutlineSequenceNode<Value>;
+    remaining: bigint;
+    visited: Set<string>;
+  };
+  const selected: (VersionedOutlineSequenceNode<Value> | null)[] = requests.map(() => null);
+  let candidates: Candidate[] = [];
+  await loadFrontier(requests.map(({ rootId }) => rootId));
+  for (let requestIndex = 0; requestIndex < requests.length; requestIndex += 1) {
+    const { rootId, rank } = requests[requestIndex]!;
+    if (rootId === null) continue;
+    const root = requireLoaded(rootId);
+    if (root.treeParentId !== null) throw new Error('Versioned outline sequence operation requires a selected root');
+    candidates.push({ requestIndex, current: root, remaining: rank, visited: new Set([rootId]) });
+  }
+
+  while (candidates.length > 0) {
+    await loadFrontier(candidates.flatMap(({ current }) => [current.leftId, current.rightId]));
+    const next: Candidate[] = [];
+    for (const candidate of candidates) {
+      const node = candidate.current;
+      if (node.leftId !== null && node.leftId === node.rightId) {
+        throw new Error('Versioned outline sequence cannot use one node as both children');
+      }
+      const left = node.leftId === null ? null : requireLoaded(node.leftId);
+      const right = node.rightId === null ? null : requireLoaded(node.rightId);
+      for (const child of [left, right]) {
+        if (child === null) continue;
+        if (candidate.visited.has(child.id)) throw new Error('Versioned outline sequence child links contain a cycle');
+        if (child.treeParentId !== node.id) throw new Error('Versioned outline sequence tree-parent link is inconsistent');
+      }
+
+      const leftCount = chapterOnly ? (left?.chapterCount ?? 0n) : (left?.count ?? 0n);
+      const weight = chapterOnly ? chapterWeightOf(node) : 1n;
+      let child: VersionedOutlineSequenceNode<Value> | null;
+      if (candidate.remaining < leftCount) {
+        child = left;
+      } else if (candidate.remaining === leftCount && weight === 1n) {
+        selected[candidate.requestIndex] = node;
+        continue;
+      } else {
+        candidate.remaining -= leftCount + weight;
+        child = right;
+      }
+      if (child !== null) {
+        candidate.visited.add(child.id);
+        candidate.current = child;
+        next.push(candidate);
+      }
+    }
+    candidates = next;
+  }
+  return selected;
+}
+
+/** Select exact zero-based ranks across selected roots, preserving request order and duplicates. */
+export function selectVersionedOutlineSequenceNodes<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
+  requests: readonly VersionedOutlineSequenceSelectionRequest[],
+): Promise<readonly (VersionedOutlineSequenceNode<Value> | null)[]> {
+  return selectInRoots(access, requests, false);
+}
+
+/** Select chapter-weighted ranks; unweighted nodes and empty parts consume no rank. */
+export function selectVersionedOutlineSequenceChapters<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
+  requests: readonly VersionedOutlineSequenceSelectionRequest[],
+): Promise<readonly (VersionedOutlineSequenceNode<Value> | null)[]> {
+  return selectInRoots(access, requests, true);
+}
+
 /** Select a node by exact zero-based rank; out-of-range ranks return null. */
 export async function selectVersionedOutlineSequenceNode<Value>(
   access: VersionedOutlineSequenceReadAccess<Value>,
   rootId: string | null,
   rank: bigint,
 ): Promise<VersionedOutlineSequenceNode<Value> | null> {
-  if (rank < 0n) throw new RangeError('Versioned outline sequence selection rank cannot be negative');
-  await sequenceCount(access, rootId);
-  let nodeId = rootId;
-  let remaining = rank;
-  while (nodeId !== null) {
-    const node = await requireNode(access, nodeId);
-    const leftCount = await countOf(access, node.leftId);
-    if (remaining < leftCount) {
-      nodeId = node.leftId;
-    } else if (remaining === leftCount) {
-      return node;
-    } else {
-      remaining -= leftCount + 1n;
-      nodeId = node.rightId;
-    }
-  }
-  return null;
+  return (await selectVersionedOutlineSequenceNodes(access, [{ rootId, rank }]))[0]!;
 }
 
 /** Select a chapter by zero-based weighted rank; unweighted nodes and empty parts consume no rank. */
@@ -776,23 +870,7 @@ export async function selectVersionedOutlineSequenceChapter<Value>(
   rootId: string | null,
   chapterRank: bigint,
 ): Promise<VersionedOutlineSequenceNode<Value> | null> {
-  if (chapterRank < 0n) throw new RangeError('Versioned outline sequence chapter rank cannot be negative');
-  await sequenceCount(access, rootId);
-  let nodeId = rootId;
-  let remaining = chapterRank;
-  while (nodeId !== null) {
-    const node = await requireNode(access, nodeId);
-    const leftChapters = await chapterCountOf(access, node.leftId);
-    if (remaining < leftChapters) {
-      nodeId = node.leftId;
-    } else if (remaining === leftChapters && chapterWeightOf(node) === 1n) {
-      return node;
-    } else {
-      remaining -= leftChapters + chapterWeightOf(node);
-      nodeId = node.rightId;
-    }
-  }
-  return null;
+  return (await selectVersionedOutlineSequenceChapters(access, [{ rootId, rank: chapterRank }]))[0]!;
 }
 
 /** Split before index. Both returned roots are detached and retain their original logical node IDs. */
