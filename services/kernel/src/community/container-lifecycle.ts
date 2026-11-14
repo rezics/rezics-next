@@ -12,6 +12,7 @@ import {
 import { accessRoot, deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { resourceRoleHeld } from '../access/resource-role-held.ts';
+import { classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -19,7 +20,7 @@ import {
   mintReadTime,
   type AuthoritativeTime,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccessClient, AccessContext, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -147,12 +148,20 @@ export async function readContainerLifecycle(
   const accessContext = { pool: deps.pool, ...context };
   const remove = await accessCheck(deps.access, actor, removalAction(kind), resource, accessContext);
   const restore = await accessCheck(deps.access, actor, restorationAction(kind), resource, accessContext);
-  const initial = await withConnection(deps.pool, async (client) => {
+  const initial = await withBoundedReadConnection(deps.pool, context.deadline, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     const time = await mintReadTime(bounded, deps.clock);
     const row = await read(bounded, kind, id, time);
     if (!row) return null;
     return { row, time };
+  }, {
+    mapError(error) {
+      throwAccessUnavailable(error, context.deadline);
+      return error;
+    },
+    isUncertainSettledQueryError(error) {
+      return classifyUnavailability(error) !== undefined;
+    },
   });
   if (!initial) return null;
   // Platform reach is an exact installed action at a separate Global anchor.
@@ -163,7 +172,7 @@ export async function readContainerLifecycle(
       ? await readableContext(deps, actor, initial.row.context_id, initial.time, accessContext)
       : { allowed: true, deadline: context.deadline };
   // Release both independent anchors before final native role/version validation.
-  return withConnection(deps.pool, async (client) => {
+  return withBoundedReadConnection(deps.pool, context.deadline, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     const time = initial.time;
     const row = await read(bounded, kind, id, time);
@@ -186,6 +195,14 @@ export async function readContainerLifecycle(
       ...value,
       mayRestore: value.mayRestore && contextRead.allowed && deps.deadlineNow() < contextRead.deadline,
     };
+  }, {
+    mapError(error) {
+      throwAccessUnavailable(error, context.deadline);
+      return error;
+    },
+    isUncertainSettledQueryError(error) {
+      return classifyUnavailability(error) !== undefined;
+    },
   });
 }
 
@@ -201,13 +218,21 @@ async function platformRestoration(
   const action = restorationAction(kind);
   const evidence = await installed.prepare?.(actor, action, globalContextAnchor.resource, context);
   const deadline = Math.min(context.deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
-  return withConnection(deps.pool, async (client) => {
+  return withBoundedReadConnection(deps.pool, context.deadline, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     const allowed =
       deps.deadlineNow() < deadline &&
       (await globalContextAnchor.validate(bounded, time)) &&
       (await installed.authorize(bounded, actor, action, globalContextAnchor.resource, evidence, time));
     return { allowed, deadline };
+  }, {
+    mapError(error) {
+      throwAccessUnavailable(error, context.deadline);
+      return error;
+    },
+    isUncertainSettledQueryError(error) {
+      return classifyUnavailability(error) !== undefined;
+    },
   });
 }
 
@@ -222,7 +247,7 @@ async function readableContext(
   const resource = { ...anchor.resource, eligibility: publicContextEligibility(anchor.resource) };
   const evidence = await deps.access.prepare?.(actor, 'context:read', resource, context);
   const deadline = Math.min(context.deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
-  return withConnection(deps.pool, async (client) => {
+  return withBoundedReadConnection(deps.pool, context.deadline, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     try {
       const allowed =
@@ -234,6 +259,14 @@ async function readableContext(
       if (error instanceof ContextNotFoundError) return { allowed: false, deadline };
       throw error;
     }
+  }, {
+    mapError(error) {
+      throwAccessUnavailable(error, context.deadline);
+      return error;
+    },
+    isUncertainSettledQueryError(error) {
+      return classifyUnavailability(error) !== undefined;
+    },
   });
 }
 
