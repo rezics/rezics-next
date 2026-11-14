@@ -1,6 +1,7 @@
 import { Extension, type Editor } from '@tiptap/core';
-import type { Node } from '@tiptap/pm/model';
-import type { Command } from '@tiptap/pm/state';
+import { Fragment, type Node } from '@tiptap/pm/model';
+import { closeHistory } from '@tiptap/pm/history';
+import { TextSelection, type Command, type Selection, type Transaction } from '@tiptap/pm/state';
 import {
   TableView,
   addColumnBefore,
@@ -45,6 +46,80 @@ export const tableCommands = {
 } satisfies Record<string, Command>;
 
 export type TableCommandName = keyof typeof tableCommands;
+
+export interface TableSizeOptions {
+  rows: number;
+  cols: number;
+  withHeaderRow: boolean;
+}
+
+export interface TableInsertTarget {
+  doc: Node;
+  selection: Selection;
+  slash?: { from: number; to: number; query: string };
+}
+
+export function canInsertSizedTable(editor: Editor): boolean {
+  return !editor.isDestroyed && editor.isEditable && !editor.view.composing &&
+    ['table', 'tableRow', 'tableCell', 'tableHeader', 'paragraph'].every((name) => editor.schema.nodes[name]) &&
+    editor.state.selection.$from.parent.isTextblock && !isInTable(editor.state);
+}
+
+/** Map an open size chooser only while it still owns the same untouched selection and optional slash. */
+export function mapTableInsertTarget(target: TableInsertTarget, transaction: Transaction, editor: Editor): TableInsertTarget | null {
+  if (transaction.before !== target.doc) return null;
+  const from = transaction.mapping.map(target.selection.from, 1);
+  const to = transaction.mapping.map(target.selection.to, target.selection.empty ? 1 : -1);
+  if (target.selection.empty && transaction.mapping.map(target.selection.from, -1) !== from) return null;
+  if (from > to || !target.doc.slice(target.selection.from, target.selection.to).eq(editor.state.doc.slice(from, to))) return null;
+  const selection = target.selection.getBookmark().map(transaction.mapping).resolve(editor.state.doc);
+  if (!selection.eq(editor.state.selection)) return null;
+  let slash = target.slash;
+  if (slash) {
+    const start = transaction.mapping.map(slash.from, 1);
+    const end = transaction.mapping.map(slash.to, -1);
+    if (start >= end || editor.state.doc.textBetween(start, end) !== `/${slash.query}`) return null;
+    slash = { ...slash, from: start, to: end };
+  }
+  return { doc: editor.state.doc, selection, ...(slash ? { slash } : {}) };
+}
+
+/** A single schema transaction deletes an admitted slash and inserts the deliberately sized table. */
+export function insertSizedTable(editor: Editor, target: TableInsertTarget, options: TableSizeOptions, isCurrent: () => boolean): boolean {
+  if (!isCurrent() || !canInsertSizedTable(editor) || editor.state.doc !== target.doc || !editor.state.selection.eq(target.selection)) return false;
+  if (![options.rows, options.cols].every((value) => Number.isInteger(value) && value >= 1 && value <= 10)) return false;
+  const { schema } = editor.state;
+  const transaction = closeHistory(editor.state.tr);
+  if (target.slash) {
+    const { from, to, query } = target.slash;
+    if (transaction.doc.textBetween(from, to) !== `/${query}`) return false;
+    transaction.delete(from, to);
+  }
+  const { $from } = transaction.selection;
+  if (!$from.parent.isTextblock) return false;
+  const attrs = Object.fromEntries(['lang', 'dir'].flatMap((key) =>
+    $from.parent.attrs[key] == null ? [] : [[key, $from.parent.attrs[key]]],
+  ));
+  const rows = Array.from({ length: options.rows }, (_, row) => schema.nodes.tableRow!.create(null,
+    Array.from({ length: options.cols }, () => {
+      const type = row === 0 && options.withHeaderRow ? schema.nodes.tableHeader! : schema.nodes.tableCell!;
+      return type.create(null, schema.nodes.paragraph!.create(attrs));
+    }),
+  ));
+  const table = schema.nodes.table!.create(attrs, rows);
+  const emptyParagraph = $from.parent.type === schema.nodes.paragraph && $from.parent.content.size === 0;
+  const at = emptyParagraph ? $from.before() : $from.after();
+  const tail = emptyParagraph ? $from.parent : schema.nodes.paragraph!.create(attrs);
+  const parent = $from.node($from.depth - 1);
+  const index = $from.index($from.depth - 1) + (emptyParagraph ? 0 : 1);
+  const content = Fragment.from([table, tail]);
+  if (!parent.canReplace(index, index + (emptyParagraph ? 1 : 0), content)) return false;
+  transaction.replaceWith(at, emptyParagraph ? $from.after() : at, content);
+  transaction.setSelection(TextSelection.near(transaction.doc.resolve(at + 3))).scrollIntoView();
+  const before = editor.state;
+  editor.view.dispatch(transaction);
+  return editor.state !== before;
+}
 
 export function runTableCommand(editor: Editor, name: TableCommandName, isCurrent: () => boolean): boolean {
   if (!isCurrent() || editor.isDestroyed || !editor.isEditable) return false;

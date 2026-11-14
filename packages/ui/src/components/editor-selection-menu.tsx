@@ -1,13 +1,6 @@
 'use client';
 
 import { Button } from '@rezics/ui/shadcn/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@rezics/ui/shadcn/dropdown-menu';
 import { TooltipProvider } from '@rezics/ui/shadcn/tooltip';
 import type { Editor } from '@tiptap/core';
 import { BubbleMenu } from '@tiptap/react/menus';
@@ -16,6 +9,7 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject }
 import { useCommandState } from './editor-commands.ts';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { LinkField, type LinkVisitRange } from './editor-link.tsx';
+import { BlockMenu } from './editor-upstream/reactjs-tiptap-editor/block-menu.tsx';
 import { ActionButton } from './editor-upstream/reactjs-tiptap-editor/action-button.tsx';
 
 /** Placement belongs to the selection controls, outside the document surface. */
@@ -65,7 +59,6 @@ export function SelectionMenu({
   focusEditor: () => void;
 }) {
   const state = useCommandState(editor);
-  const [blocksOpen, setBlocksOpen] = useState(false);
   const [tabStop, setTabStop] = useState('bold');
   // The block menu lives in a portal, outside the bubble, so the bubble must not hide while it holds focus.
   const holdsFocus = useRef(false);
@@ -82,7 +75,6 @@ export function SelectionMenu({
       if (!isCurrent()) return;
       selectionRevision.current += 1;
       setRenderedSelectionRevision(selectionRevision.current);
-      setBlocksOpen(false);
       holdsFocus.current = false;
     };
     editor.on('selectionUpdate', close);
@@ -92,24 +84,21 @@ export function SelectionMenu({
   }, [editor, isCurrent]);
 
   function moveFocus(event: KeyboardEvent<HTMLDivElement>) {
-    if (!menuIsCurrent()) return;
+    if (!menuIsCurrent() || event.nativeEvent.isComposing || event.keyCode === 229 || editor.view.composing) return;
     const target = event.target as HTMLElement;
     // Menu items render in a portal, but their events still bubble through this tree.
     if (!event.currentTarget.contains(target) || target.closest('input')) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      if (blocksOpen) {
-        holdsFocus.current = false;
-        setBlocksOpen(false);
-      } else focusEditor();
+      focusEditor();
       return;
     }
     const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
     const step = { ArrowRight: rtl ? -1 : 1, ArrowDown: 1, ArrowLeft: rtl ? 1 : -1, ArrowUp: -1 }[event.key];
     if (!step && event.key !== 'Home' && event.key !== 'End') return;
     // Up and down open the menu on its own button.
-    if (target.closest('[data-slot="dropdown-menu-trigger"]') && (event.key === 'ArrowDown' || event.key === 'ArrowUp'))
+    if (target.closest('[data-editor-block-trigger]') && (event.key === 'ArrowDown' || event.key === 'ArrowUp'))
       return;
     const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')];
     const index = buttons.indexOf(target as HTMLButtonElement);
@@ -124,7 +113,7 @@ export function SelectionMenu({
     buttons[next]?.focus();
   }
   function runCommand(command: (typeof state.marks)[number]['command'] | (typeof state.blocks)[number]['command']) {
-    if (!menuIsCurrent() || editor.isDestroyed || !editor.isEditable) return;
+    if (!menuIsCurrent() || editor.isDestroyed || !editor.isEditable || editor.view.composing) return;
     command.run(editor, onLink, () => undefined);
     if (isCurrent() && !editor.isDestroyed && editor.isEditable) editor.view.focus();
   }
@@ -179,51 +168,29 @@ export function SelectionMenu({
               </ActionButton>
             ))}
             {state.blocks.length ? (
-              <DropdownMenu
-                modal={false}
-                open={blocksOpen}
-                onOpenChange={(open) => {
-                  if (!menuIsCurrent()) return;
-                  holdsFocus.current = open || holdsFocus.current;
-                  setBlocksOpen(open);
-                }}
-                onOpenChangeComplete={(open) => {
-                  if (menuIsCurrent() && !open) holdsFocus.current = false;
-                }}
-              >
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      tabIndex={activeTabStop === 'turnInto' ? 0 : -1}
-                      onFocus={() => {
-                        if (menuIsCurrent()) setTabStop('turnInto');
-                      }}
-                    />
-                  }
-                >
-                  {labels.turnInto}
-                  <ChevronDown aria-hidden="true" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  aria-label={labels.turnInto}
-                  className="w-auto min-w-44"
-                  finalFocus={returnFocus(editor, isCurrent)}
-                >
-                  <DropdownMenuRadioGroup value={state.blocks.find((block) => block.active)?.command.id}>
-                    {state.blocks.map(({ command }) => (
-                      <DropdownMenuRadioItem
-                        key={command.id}
-                        value={command.id}
-                        closeOnClick
-                        onClick={() => runCommand(command)}
-                      >
-                        {labels[command.label]}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <BlockMenu
+                editor={editor}
+                labels={labels}
+                title={labels.turnInto}
+                commands={state.blocks.map(({ command }) => command)}
+                selectedBlock={state.blocks.find((block) => block.active)?.command.id}
+                isCurrent={menuIsCurrent}
+                onSelect={runCommand}
+                onOpenChange={(open) => { holdsFocus.current = open; }}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    data-editor-block-trigger
+                    tabIndex={activeTabStop === 'turnInto' ? 0 : -1}
+                    onFocus={() => { if (menuIsCurrent()) setTabStop('turnInto'); }}
+                    onPointerDown={(event) => event.preventDefault()}
+                  >
+                    {labels.turnInto}
+                    <ChevronDown aria-hidden="true" />
+                  </Button>
+                }
+              />
             ) : null}
           </>
         )}

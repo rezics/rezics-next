@@ -1,11 +1,13 @@
 'use client';
 
-import { Command, CommandItem, CommandList } from '@rezics/ui/shadcn/command';
+import { Command, CommandList } from '@rezics/ui/shadcn/command';
 import { Extension, type Editor as TiptapEditor } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { memo, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { availableCommands, runEditorCommand, slashCommands, type EditorCommand } from './editor-commands.ts';
+import { availableCommands, blockCommands, runEditorCommand, slashCommands, type EditorCommand } from './editor-commands.ts';
 import type { RichTextEditorLabels } from './editor-labels.ts';
+import { CommandListItems, filterCommandGroups } from './editor-upstream/reactjs-tiptap-editor/command-list.tsx';
+import { canInsertSizedTable } from './editor-table-commands.ts';
 
 export interface SlashRange {
   from: number;
@@ -98,7 +100,7 @@ export function slashExtension(handlers: RefObject<SlashHandlers>) {
           props: {
             handleKeyDown(view, event) {
               const current = slashPluginKey.getState(view.state);
-              if (!current?.active || event.isComposing) return false;
+              if (!current?.active || event.isComposing || view.composing || event.keyCode === 229) return false;
               if (event.key === 'Escape') {
                 view.dispatch(view.state.tr.setMeta(slashPluginKey, { exit: true }).setMeta('addToHistory', false));
                 return true;
@@ -138,19 +140,7 @@ export function matchCommands(
   labels: RichTextEditorLabels,
   query: string,
 ): EditorCommand[] {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return [...commands];
-  const rank = (command: EditorCommand) => {
-    const words = [labels[command.label], ...(command.keywords ?? [])].map((word) => word.toLowerCase());
-    if (words.some((word) => word.startsWith(needle))) return 0;
-    if (words.some((word) => word.includes(needle))) return 1;
-    return 2;
-  };
-  return commands
-    .map((command) => ({ command, rank: rank(command) }))
-    .filter((entry) => entry.rank < 2)
-    .sort((left, right) => left.rank - right.rank)
-    .map((entry) => entry.command);
+  return filterCommandGroups(commands, labels, query).flatMap((group) => group.commands);
 }
 
 interface OpenMenu {
@@ -209,6 +199,7 @@ export const SlashMenu = memo(function SlashMenu({
   handlers,
   onLink,
   onImage,
+  onTable,
   visit,
   isCurrent,
 }: {
@@ -218,6 +209,7 @@ export const SlashMenu = memo(function SlashMenu({
   handlers: RefObject<SlashHandlers>;
   onLink: () => void;
   onImage: () => void;
+  onTable?: (range: SlashRange) => void;
   visit: number;
   isCurrent: () => boolean;
 }) {
@@ -226,15 +218,16 @@ export const SlashMenu = memo(function SlashMenu({
   const [place, setPlace] = useState<MenuPlacement | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const nextOpenId = useRef(0);
-  const commands = availableCommands(slashCommands, editor).filter((command) => command.id !== 'image' || upload);
+  const commands = availableCommands([...blockCommands.filter((command) => command.id === 'paragraph'), ...slashCommands], editor)
+    .filter((command) => (command.id !== 'image' || upload) && (command.id !== 'table' || canInsertSizedTable(editor)));
   const items = open ? matchCommands(commands, labels, open.query) : [];
   const activeIndex = items.length ? index % items.length : 0;
   const active = items[activeIndex];
-  const latest = useRef({ open, index, commands, labels, onLink, onImage });
-  latest.current = { open, index, commands, labels, onLink, onImage };
+  const latest = useRef({ open, index, commands, labels, onLink, onImage, onTable });
+  latest.current = { open, index, commands, labels, onLink, onImage, onTable };
 
   function choose(command: EditorCommand, admitted: OpenMenu | null) {
-    if (!isCurrent() || editor.isDestroyed || !editor.isEditable || !admitted || admitted.visit !== visit) return;
+    if (!isCurrent() || editor.isDestroyed || !editor.isEditable || editor.view.composing || !admitted || admitted.visit !== visit) return;
     if (latest.current.open?.id !== admitted.id) return;
     const plugin = slashPluginKey.getState(editor.state);
     if (
@@ -245,6 +238,11 @@ export const SlashMenu = memo(function SlashMenu({
       !latest.current.commands.some((current) => current === command)
     )
       return;
+    if (command.id === 'table' && latest.current.onTable) {
+      latest.current.onTable(admitted.range);
+      editor.view.dispatch(editor.state.tr.setMeta(slashPluginKey, { exit: true }).setMeta('addToHistory', false));
+      return;
+    }
     editor.chain().deleteRange({ from: plugin.from, to: plugin.to }).run();
     if (!isCurrent() || editor.isDestroyed || !editor.isEditable) return;
     runEditorCommand(command, editor, latest.current.onLink, latest.current.onImage, isCurrent);
@@ -289,7 +287,7 @@ export const SlashMenu = memo(function SlashMenu({
       setOpen(null);
     },
     key: (event) => {
-      if (!isCurrent()) return false;
+      if (!isCurrent() || event.isComposing || event.keyCode === 229 || editor.view.composing) return false;
       const current = latest.current;
       if (!current.open) return false;
       const choices = matchCommands(current.commands, current.labels, current.open.query);
@@ -421,6 +419,7 @@ export const SlashMenu = memo(function SlashMenu({
     dom.setAttribute('aria-expanded', 'true');
     if (option?.id) dom.setAttribute('aria-activedescendant', option.id);
     else dom.removeAttribute('aria-activedescendant');
+    option?.scrollIntoView({ block: 'nearest' });
     return () => {
       if (dom.getAttribute('data-slash-aria-owner') !== owner) return;
       dom.removeAttribute('data-slash-aria-owner');
@@ -462,11 +461,7 @@ export const SlashMenu = memo(function SlashMenu({
       >
         <CommandList label={labels.insertBlock} style={{ maxHeight: place?.maxHeight }}>
           {items.length ? (
-            items.map((command) => (
-              <CommandItem key={command.id} value={command.id} onSelect={() => choose(command, open)}>
-                {labels[command.label]}
-              </CommandItem>
-            ))
+            <CommandListItems commands={items} labels={labels} onSelect={(command) => choose(command, open)} />
           ) : (
             <p className="px-2 py-1.5 text-sm text-muted-foreground">{labels.slashEmpty}</p>
           )}

@@ -166,7 +166,13 @@ headers, resizing and cell navigation share the existing editor/history instance
 groups use an in-flow toolbar and the public responsive `Menu`; interface labels remain separate from document
 language. The adjacent provenance identifies the copied/adapted source and retained MIT notice.
 
-Block/slash, table-size picker, link and media composition still need adoption through this owner. Source is not
+The adopted slash groups also supply the searchable block picker in the public responsive Menu, including a
+return to Paragraph. Table insertion from either entry point opens the upstream 10×10 size grid, with keyboard
+travel, explicit row/column inputs and a header-row choice. Its selection belongs to the current editing visit;
+confirmation inserts in one transaction and cancellation keeps any typed slash. The original discoverable,
+labeled formatting toolbar, docked touch controls and wrapping caller save/submit slot remain intact.
+
+Link and media composition still need adoption through this owner. Source is not
 usable-journey acceptance. Web owns subsequent rich-document round trips, table and
 media operations, keyboard/touch/IME/RTL/screen-reader use, native undo, two-editor isolation and caller save/publish
 continuity. Root owns publication and sampled review. Those checks are separately scheduled after the code-only window.

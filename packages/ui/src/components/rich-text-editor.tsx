@@ -32,6 +32,9 @@ import { richTextEditorLabels, type RichTextEditorLabels } from './editor-labels
 import { SelectionMenu } from './editor-selection-menu.tsx';
 import { EditorTouchBar } from './editor-touch-bar.tsx';
 import { TableControls } from './editor-upstream/reactjs-tiptap-editor/table-controls.tsx';
+import { TableInsert } from './editor-upstream/reactjs-tiptap-editor/create-table.tsx';
+import { productLabelsForLanguage } from './editor-upstream/reactjs-tiptap-editor/control-labels.ts';
+import { canInsertSizedTable, type TableInsertTarget } from './editor-table-commands.ts';
 import {
   isLinkRangeValid,
   LinkMenu,
@@ -50,7 +53,7 @@ import {
   type UploadAttachmentActions,
 } from './editor-uploads.ts';
 import { availableCommands, imageCommand, redoCommand, runEditorCommand, undoCommand } from './editor-commands.ts';
-import { idleSlashHandlers, SlashMenu, slashExtension } from './editor-slash-menu.tsx';
+import { idleSlashHandlers, SlashMenu, slashExtension, type SlashRange } from './editor-slash-menu.tsx';
 
 import {
   idleMentionHandlers,
@@ -357,9 +360,17 @@ export function RichTextEditor({
   const [uploadMessage, setUploadMessage] = useState('');
   const [touchSheetOpen, setTouchSheetOpen] = useState(false);
   const [toolbarFocused, setToolbarFocused] = useState(false);
+  const [tableRequest, setTableRequest] = useState<(TableInsertTarget & { id: number }) | null>(null);
+  const nextTableId = useRef(0);
+  const [interfaceLanguage, setInterfaceLanguage] = useState<string>();
   const uploads = useRef<ReturnType<typeof editorUploads> | null>(null);
   const uploadLease = useRef<symbol | null>(null);
-  const resolvedLabels = useMemo(() => ({ ...richTextEditorLabels, ...labels }), [labels]);
+  const resolvedLabels = useMemo(() => ({
+    ...richTextEditorLabels, ...productLabelsForLanguage(interfaceLanguage), ...labels,
+  }), [interfaceLanguage, labels]);
+  useLayoutEffect(() => {
+    setInterfaceLanguage(menuContainer.current?.closest('[lang]')?.getAttribute('lang') ?? undefined);
+  }, [labels]);
 
   const labelsRef = useRef(resolvedLabels);
   labelsRef.current = resolvedLabels;
@@ -666,6 +677,7 @@ export function RichTextEditor({
     setOwnedImagePosition(null);
     setTouchSheetOpen(false);
     setToolbarFocused(false);
+    setTableRequest(null);
     setVisit(visitRef.current);
   }, [setOwnedImagePosition, setOwnedLinkRange]);
 
@@ -967,6 +979,17 @@ export function RichTextEditor({
     if (isCurrent() && editor && !editor.isDestroyed && editor.isEditable)
       setOwnedImagePosition(editor.state.selection.from);
   }, [editor, isCurrent, setOwnedImagePosition]);
+  const openTable = useCallback((slash?: SlashRange) => {
+    if (!isCurrent() || !editor || !canInsertSizedTable(editor)) return;
+    setOwnedLinkRange(null);
+    setOwnedImagePosition(null);
+    setTableRequest({
+      id: ++nextTableId.current,
+      doc: editor.state.doc,
+      selection: editor.state.selection,
+      ...(slash ? { slash } : {}),
+    });
+  }, [editor, isCurrent, setOwnedImagePosition, setOwnedLinkRange]);
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -1054,6 +1077,7 @@ export function RichTextEditor({
           labels={resolvedLabels}
           onLink={openLink}
           onImage={openImage}
+          onTable={openTable}
           upload={hasUpload}
           visible={toolbarVisible}
           docked={touchBarDocked}
@@ -1096,6 +1120,16 @@ export function RichTextEditor({
       ) : null}
       {editor && editable ? (
         <>
+          {isCurrent() && tableRequest ? (
+            <TableInsert
+              key={`table-insert-${visit}-${tableRequest.id}`}
+              editor={editor}
+              labels={resolvedLabels}
+              target={tableRequest}
+              isCurrent={isCurrent}
+              onClose={() => setTableRequest((current) => current?.id === tableRequest.id ? null : current)}
+            />
+          ) : null}
           {isCurrent() && upload && editor.schema.nodes.image && imagePosition !== null ? (
             <ImageInsert
               key={`image-${visit}`}
@@ -1131,6 +1165,7 @@ export function RichTextEditor({
             handlers={slashHandlers}
             onLink={openLink}
             onImage={openImage}
+            onTable={openTable}
             visit={visit}
             isCurrent={isCurrent}
           />

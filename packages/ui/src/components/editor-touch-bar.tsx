@@ -1,21 +1,23 @@
 'use client';
 
 import { Button } from '@rezics/ui/shadcn/button';
-import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '@rezics/ui/shadcn/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@rezics/ui/shadcn/tooltip';
 import type { Editor } from '@tiptap/core';
 import { Blocks, Bold, ChevronDown, Code, Eraser, Italic, Link, Redo2, Strikethrough, Undo2 } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '../utils.ts';
 import {
-  availableInsertCommands,
+  availableCommands,
+  blockCommands as schemaBlockCommands,
+  insertCommands,
   undoCommand,
   redoCommand,
   useCommandState,
   type EditorCommand,
 } from './editor-commands.ts';
 import type { RichTextEditorLabels } from './editor-labels.ts';
-import { returnFocus } from './editor-selection-menu.tsx';
+import { BlockMenu } from './editor-upstream/reactjs-tiptap-editor/block-menu.tsx';
+import { canInsertSizedTable } from './editor-table-commands.ts';
 import { ActionButton } from './editor-upstream/reactjs-tiptap-editor/action-button.tsx';
 
 const icons = {
@@ -95,13 +97,14 @@ const barButton = 'min-h-11 min-w-11 shrink-0 focus-visible:text-primary [&_svg:
 
 /**
  * Formatting at the document entry point, docked above the keyboard on coarse pointers. Pointer controls preserve
- * the editor selection; the block picker is a bottom sheet.
+ * the editor selection; the adopted block groups use the public responsive Menu.
  */
 export function EditorTouchBar({
   editor,
   labels,
   onLink,
   onImage,
+  onTable,
   upload,
   visible,
   docked,
@@ -114,6 +117,7 @@ export function EditorTouchBar({
   labels: RichTextEditorLabels;
   onLink: () => void;
   onImage: () => void;
+  onTable?: () => void;
   upload: boolean;
   visible: boolean;
   docked: boolean;
@@ -128,7 +132,9 @@ export function EditorTouchBar({
   const bar = useRef<HTMLDivElement>(null);
   const showBar = visible && (persistent || docked || state.empty || blocksOpen);
   const inset = useKeyboardInset(showBar && docked);
-  const blockCommands = useMemo(() => availableInsertCommands(editor, upload), [editor, upload]);
+  const blockCommands = availableCommands([
+    ...schemaBlockCommands.filter((command) => command.id === 'paragraph'), ...insertCommands,
+  ], editor).filter((command) => (command.id !== 'image' || upload) && (command.id !== 'table' || canInsertSizedTable(editor)));
   const formatOrder = ['bold', 'italic', 'link', 'strike', 'code', 'clearFormatting'];
   const formatCommands = state.marks
     .map(({ command }) => command)
@@ -180,8 +186,9 @@ export function EditorTouchBar({
   }, [docked, editor, isCurrent, scrollCaret, showBar]);
 
   function moveFocus(event: KeyboardEvent<HTMLDivElement>) {
-    if (!menuIsCurrent()) return;
+    if (!menuIsCurrent() || event.nativeEvent.isComposing || event.keyCode === 229 || editor.view.composing) return;
     if (!event.currentTarget.contains(event.target as Node)) return;
+    if ((event.target as HTMLElement).closest('[data-editor-block-trigger]') && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
@@ -236,20 +243,14 @@ export function EditorTouchBar({
   }
 
   function runCommand(command: EditorCommand) {
-    if (!menuIsCurrent() || editor.isDestroyed || !editor.isEditable) return;
+    if (!menuIsCurrent() || editor.isDestroyed || !editor.isEditable || editor.view.composing) return;
+    if (command.id === 'table' && onTable) {
+      onTable();
+      return;
+    }
     command.run(editor, onLink, onImage);
     if (isCurrent() && !editor.isDestroyed && editor.isEditable) editor.view.focus();
   }
-
-  function chooseBlock(command: EditorCommand) {
-    if (!menuIsCurrent()) return;
-    runCommand(command);
-    if (!isCurrent()) return;
-    setBlocksOpen(false);
-    onSheetOpenChange(false);
-  }
-
-  const sheetFocus = returnFocus(editor, isCurrent);
 
   if (!isCurrent()) return null;
 
@@ -283,33 +284,38 @@ export function EditorTouchBar({
               docked ? 'overflow-x-auto overscroll-x-contain' : 'flex-wrap',
             )}
           >
-            {blockCommands.length
-              ? barControl(
-                  'blocks',
-                  labels.blocks,
+            {blockCommands.length ? (
+              <BlockMenu
+                editor={editor}
+                labels={labels}
+                title={labels.blocks}
+                commands={blockCommands}
+                selectedBlock={state.blocks.find((item) => item.active)?.command.id}
+                isCurrent={menuIsCurrent}
+                onSelect={runCommand}
+                onOpenChange={(open) => {
+                  if (!isCurrent()) return;
+                  setBlocksOpen(open);
+                  onSheetOpenChange(open);
+                }}
+                trigger={
                   <Button
                     type="button"
                     variant="ghost"
                     className={cn(barButton, 'gap-1.5 px-2.5', blocksOpen && 'bg-primary/10 text-primary')}
                     aria-label={labels.blocks}
-                    aria-haspopup="dialog"
-                    aria-expanded={blocksOpen}
+                    data-editor-block-trigger
                     tabIndex={activeTabStop === 'blocks' ? 0 : -1}
-                    onFocus={() => {
-                      if (isCurrent()) setTabStop('blocks');
-                    }}
+                    onFocus={() => { if (isCurrent()) setTabStop('blocks'); }}
                     {...focusPreservingPointer}
-                    onClick={() => {
-                      if (!menuIsCurrent()) return;
-                      setBlocksOpen(true);
-                      onSheetOpenChange(true);
-                    }}
                   >
                     <Blocks aria-hidden="true" />
                     <span className="text-xs sm:text-sm">{labels.blocks}</span>
-                  </Button>,
-                )
-              : null}
+                    <ChevronDown aria-hidden="true" />
+                  </Button>
+                }
+              />
+            ) : null}
             {formatCommands.map((command) => commandButton(command))}
             {commandButton(undoCommand, !state.canUndo)}
             {commandButton(redoCommand, !state.canRedo)}
@@ -338,39 +344,6 @@ export function EditorTouchBar({
             : null}
         </div>
       ) : null}
-      <Sheet
-        open={blocksOpen}
-        onOpenChange={(open) => {
-          if (!isCurrent()) return;
-          setBlocksOpen(open);
-          onSheetOpenChange(open);
-        }}
-      >
-        <SheetContent side="bottom" showCloseButton={false} finalFocus={sheetFocus}>
-          <SheetHeader className="flex-row items-center justify-between gap-2 p-4 pb-2">
-            <SheetTitle>{labels.blocks}</SheetTitle>
-            <SheetClose render={<Button variant="ghost" />}>{labels.cancel}</SheetClose>
-          </SheetHeader>
-          <div className="grid grid-cols-2 gap-2 p-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] sm:grid-cols-3">
-            {blockCommands.map((command) => {
-              const active = command.active?.(editor) ?? false;
-              return (
-                <Button
-                  key={command.id}
-                  type="button"
-                  variant="ghost"
-                  className={cn('min-h-11 justify-start px-3 text-start', active && 'bg-primary/10 text-primary')}
-                  aria-pressed={command.active ? active : undefined}
-                  {...focusPreservingPointer}
-                  onClick={() => chooseBlock(command)}
-                >
-                  {labels[command.label]}
-                </Button>
-              );
-            })}
-          </div>
-        </SheetContent>
-      </Sheet>
     </TooltipProvider>
   );
 }

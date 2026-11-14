@@ -1,4 +1,5 @@
 import { tableControlLabels, type TableControlLabels } from './editor-upstream/reactjs-tiptap-editor/table-labels.ts';
+import { productControlLabels, type ProductControlLabels } from './editor-upstream/reactjs-tiptap-editor/control-labels.ts';
 
 /** English defaults for the editor's controls and upload announcements. */
 const baseEditorLabels = {
@@ -51,7 +52,7 @@ const baseEditorLabels = {
   documentError: 'This document could not be saved.',
 };
 
-export const richTextEditorLabels = { ...baseEditorLabels, ...tableControlLabels };
+export const richTextEditorLabels = { ...baseEditorLabels, ...tableControlLabels, ...productControlLabels };
 export type EditorCommandLabel = keyof typeof baseEditorLabels;
 // New control labels remain optional for existing callers that supply a complete original label map.
-export type RichTextEditorLabels = { readonly [K in EditorCommandLabel]: string } & Partial<TableControlLabels>;
+export type RichTextEditorLabels = { readonly [K in EditorCommandLabel]: string } & Partial<TableControlLabels & ProductControlLabels>;
