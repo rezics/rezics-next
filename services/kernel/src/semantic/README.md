@@ -526,6 +526,9 @@ The HTTP display reader prepares current subject and statement-audience authoriz
 before checking out the display snapshot. Waiting does not consume short-lived permission evidence or extend its TTL;
 authorization still checks the current native snapshot within the original request deadline.
 
+Semantic keeps its logical snapshot registry and child deadline narrowing; the shared Kernel bounded read-only lifetime
+owns physical checkout, guarded SQL, transaction cleanup and uncertain-connection discard.
+
 ## Identity epoch status
 
 The adopted receiving `IdentityEffect` alternative is implemented by the existing Store through
