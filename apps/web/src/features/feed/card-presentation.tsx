@@ -207,7 +207,7 @@ function ReviewedSubjectLink({
   );
 }
 
-/** Review Subjects are secondary destinations; Realm names are unlinked Space carrier context. */
+/** Native review context stays independent of row kind and target disclosure. */
 export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const options = { locale: locale as Locale };
@@ -267,13 +267,6 @@ export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; local
         <ReviewedSubjectLink id={subject.id} title={subject.title} locale={locale} />
       </div>
     ) : null;
-  }
-  if (item.destination.kind === 'space' && 'realm' in summary && summary.realm?.title) {
-    return (
-      <span className="min-w-0 [overflow-wrap:anywhere]" data-feed-card-carrier>
-        {m.home_card_carrier({}, options)} <bdi>{summary.realm.title}</bdi>
-      </span>
-    );
   }
   return null;
 }

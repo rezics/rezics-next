@@ -12,6 +12,7 @@ import {
   FeedCardContext,
   FeedCardParentContext,
   FeedCardPreview,
+  FeedCardSubjectContext,
   FeedCardVisual,
   feedCardKind,
 } from './card-presentation';
@@ -57,6 +58,7 @@ export function homeFeedItemPresentation(
     metadata: (
       <>
         <FeedCardAttribution item={item} kind={kind} locale={locale} />
+        <FeedCardSubjectContext item={item} locale={locale} />
         {activity?.state === 'current' ? (
           <p data-slot="conversation-activity" className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
             <span
