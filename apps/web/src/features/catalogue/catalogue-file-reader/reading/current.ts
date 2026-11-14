@@ -4,7 +4,7 @@ import { addressLease } from '../../../../reader/lease';
 import { browserObservation, type BrowserObservationSnapshot } from '../../../../session/observation';
 
 const noSubscribe = () => () => {};
-const unobserved = () => 'unobserved';
+const unobserved = JSON.stringify(['unobserved', 'unobserved']);
 type InspectionKind = 'assertion' | 'association';
 type Selection = { key: string; group: string; kind: InspectionKind; part?: string | undefined };
 type Receipt = {
@@ -121,6 +121,7 @@ export function useCatalogueFileReading(input: {
 }) {
   const client = useContext(QueryClientContext);
   const observation = client ? browserObservation(client) : undefined;
+  const holder = useRef<CurrentReading | undefined>(undefined);
   const session = useSyncExternalStore(
     observation?.subscribe ?? noSubscribe,
     observation?.getSnapshot ?? (() => undefined),
@@ -128,7 +129,7 @@ export function useCatalogueFileReading(input: {
   );
   const cacheSource = input.cacheSource ?? input.source;
   const cacheSnapshot = useCallback(() => {
-    if (!client) return unobserved();
+    if (!client) return unobserved;
     const stamp = (key: readonly unknown[]) => {
       const state = client.getQueryState(key);
       return [state?.status, state?.fetchStatus, state?.isInvalidated, state?.dataUpdateCount, state?.errorUpdateCount];
@@ -151,12 +152,33 @@ export function useCatalogueFileReading(input: {
       .findAll({ queryKey: ['exposure', 'viewer'] })
       .map((query) => [query.queryHash, stamp(query.queryKey)])
       .sort((left, right) => String(left[0]).localeCompare(String(right[0])));
-    return JSON.stringify([JSON.stringify([subjects, stamp(['exposure', 'viewer']), viewers]), stamp(['session'])]);
+    return JSON.stringify([
+      JSON.stringify([subjects, stamp(['exposure', 'viewer']), viewers]),
+      JSON.stringify(stamp(['session'])),
+    ]);
   }, [client, cacheSource]);
-  const snapshot = useSyncExternalStore(observation?.subscribeCache ?? noSubscribe, cacheSnapshot, cacheSnapshot);
-  const [cache, sessionCache] = client ? (JSON.parse(snapshot) as [string, unknown]) : [snapshot, undefined];
-  const sessionStamp = JSON.stringify(sessionCache) ?? unobserved();
-  const holder = useRef<CurrentReading | undefined>(undefined);
+  const subscribeCache = useCallback(
+    (notify: () => void) =>
+      observation?.subscribeCache(() => {
+        const episode = holder.current;
+        const observed = observation.getSnapshot();
+        const [cache, sessionCache] = JSON.parse(cacheSnapshot()) as [string, string];
+        if (episode && episode.observation === observation && episode.cache === cache) {
+          if (episode.sessionBound) {
+            if (episode.session !== observed || episode.sessionCache !== sessionCache) episode.retire();
+          } else {
+            // Bind in the existing cache subscription, before another authority can replace it.
+            episode.session = observed;
+            episode.sessionCache = sessionCache;
+            episode.sessionBound = observed.state === 'signed-in' || observed.state === 'signed-out';
+          }
+        }
+        notify();
+      }) ?? noSubscribe(),
+    [observation, cacheSnapshot],
+  );
+  const snapshot = useSyncExternalStore(subscribeCache, cacheSnapshot, cacheSnapshot);
+  const [cache, sessionCache] = JSON.parse(snapshot) as [string, string];
   const [, refresh] = useReducer((version: number) => version + 1, 0);
   if (
     !holder.current ||
@@ -166,14 +188,14 @@ export function useCatalogueFileReading(input: {
     holder.current.cache !== cache ||
     (holder.current.spoiler !== undefined && holder.current.spoiler !== input.spoiler) ||
     (holder.current.sessionBound &&
-      (holder.current.session !== session || holder.current.sessionCache !== sessionStamp))
+      (holder.current.session !== session || holder.current.sessionCache !== sessionCache))
   ) {
     holder.current?.retire();
     holder.current = createReading(
       input.source,
       input.descriptor,
       cache,
-      sessionStamp,
+      sessionCache,
       input.spoiler,
       observation,
       session,
@@ -183,14 +205,18 @@ export function useCatalogueFileReading(input: {
   // First preparation binds the admitted source; only subsequent replacements retire it.
   episode.spoiler = input.spoiler;
   episode.session = session;
-  episode.sessionCache = sessionStamp;
+  episode.sessionCache = sessionCache;
   episode.sessionBound ||= session?.state === 'signed-in' || session?.state === 'signed-out';
-  episode.owns = () =>
-    holder.current === episode &&
-    (client ? JSON.parse(cacheSnapshot())[0] === episode.cache : cacheSnapshot() === episode.cache) &&
-    (!episode.sessionBound ||
-      ((!observation || observation.getSnapshot() === episode.session) &&
-        JSON.stringify(JSON.parse(cacheSnapshot())[1]) === episode.sessionCache));
+  episode.owns = () => {
+    const [currentCache, currentSessionCache] = JSON.parse(cacheSnapshot()) as [string, string];
+    return (
+      holder.current === episode &&
+      currentCache === episode.cache &&
+      (!episode.sessionBound ||
+        ((!observation || observation.getSnapshot() === episode.session) &&
+          currentSessionCache === episode.sessionCache))
+    );
+  };
   useLayoutEffect(() => {
     episode.active = true;
     const depart = () => {

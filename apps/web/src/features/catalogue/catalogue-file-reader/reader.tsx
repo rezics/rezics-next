@@ -923,9 +923,16 @@ export function CatalogueFileReader({
       const attempt = attemptedReturn.current;
       if (attempt?.episode === reading.episode && attempt.pending) attempt.focusAllowed = false;
     };
-    window.addEventListener('pointerdown', activity, true);
-    window.addEventListener('keydown', activity, true);
-    window.addEventListener('focusin', activity, true);
+    const stopTracking = () => {
+      window.removeEventListener('pointerdown', activity, true);
+      window.removeEventListener('keydown', activity, true);
+      window.removeEventListener('focusin', activity, true);
+    };
+    if (returnHash) {
+      window.addEventListener('pointerdown', activity, true);
+      window.addEventListener('keydown', activity, true);
+      window.addEventListener('focusin', activity, true);
+    }
     // Let the current session/cache subscription settle before consuming a navigation receipt.
     queueMicrotask(() => {
       if (cancelled) return;
@@ -940,6 +947,7 @@ export function CatalogueFileReader({
           if (!attemptedReturn.current.pending) return;
         } else {
           // Replacing an admitted reading must not replay the URL's old selection (including A/B/A).
+          stopTracking();
           setReturnOutcome('retired');
           reading.focus(
             groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current ?? undefined,
@@ -949,10 +957,12 @@ export function CatalogueFileReader({
         }
       } else {
         attemptedReturn.current = { hash: returnHash, episode: reading.episode, pending: true, focusAllowed: true };
+        reading.episode.returnInterrupted = false;
       }
       if (visit.state === 'loading' || readerSpoiler === undefined) return;
       const attempt = attemptedReturn.current;
       attempt.pending = false;
+      stopTracking();
       if (reading.episode.returnInterrupted) return;
       const resolved = selectedEvidence(visit, returned);
       const contextMatches =
@@ -980,7 +990,8 @@ export function CatalogueFileReader({
         partExists &&
         !historical &&
         available &&
-        opener
+        opener?.isConnected &&
+        !opener.disabled
       ) {
         setReturnOutcome(undefined);
         reading.select(returned, opener, groupHeadings.current.get(returned.group), true, true, attempt.focusAllowed);
@@ -995,9 +1006,7 @@ export function CatalogueFileReader({
     });
     return () => {
       cancelled = true;
-      window.removeEventListener('pointerdown', activity, true);
-      window.removeEventListener('keydown', activity, true);
-      window.removeEventListener('focusin', activity, true);
+      stopTracking();
     };
   }, [reading.episode, returnHash, readerSpoiler, visit.state]);
   useLayoutEffect(() => {
