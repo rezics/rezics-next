@@ -7,7 +7,7 @@ save failures retry the exact completed bytes under the same capture. Installed 
 a supported Bangumi or MAL member, or a VNDB member, that expires after capture makes the original capture stale.
 Decision: a Bangumi upload expiring between its header and evidence sections invalidates the live capture even when the
 source generation is unchanged; the later evidence page is never delivered under that capture.
-The canonical v1 artifact contains all 21 owner-fact sections, including independent annotations, accepted
+The canonical v1 artifact contains all 22 owner-fact sections, including independent annotations, accepted
 source observations, occurrence journals with private assessment, and VNDB/AniList upload evidence. Recovery
 owners explicitly select supported facts; provider evidence stays retained and counted without execution authority.
 
@@ -41,7 +41,7 @@ Download uses those exact collected bytes; a local save failure can retry them. 
 Web owns `/library/export` as the signed-in Library portability visit. Commerce owns capture, paging, cancellation,
 fences, expiry and artifact semantics. The page binds `KernelClient.libraryExports` when post, status GET, pages GET
 and DELETE are present. Decision: export adoption remains unavailable until complete generated declarations and
-installed client typing agree on canonical v1 coverage, all 21 sections and the journal assessment contract. Missing methods
+installed client typing agree on canonical v1 coverage, all 22 sections and the journal assessment contract. Missing methods
 render unavailable rather than a local engine or successful fixture. Decision: use the create response's original
 `first` cursor on the happy path and call status GET only to replay lost bytes or reread a still-valid capture.
 
@@ -62,7 +62,7 @@ The format is `https://rezics.com/formats/library-export`, `version:1`, with cov
 `private-library-owner-facts-v1`. Its fixed section order is `entries`, `labels`, `assignments`, `sessions`,
 `holdings`, `collections`, `collectionPins`, `bangumiUploads`, `bangumiEvidence`, `malImports`, `units`, `history`,
 `occurrences`, `malEvidence`, `annotations`, `provenance`, `journals`, `vndbUploads`, `vndbEvidence`,
-`anilistUploads`, `anilistEvidence`. Final accounting requires `rows`, `recordBytes` and every section's
+`anilistUploads`, `anilistEvidence`, `hostedReading`. Final accounting requires `rows`, `recordBytes` and every section's
 `sectionTotals`, including empty sections. No generation selector, older parser or alternate writer is installed.
 
 | Omission | Meaning |
@@ -93,6 +93,18 @@ partial calendar objects: absent month or day components remain absent, and a cl
 reflections remain distinct from `null`. The progress revision and journal revision are independent. A retired
 occurrence is not exported even while its audit rows remain in erasure custody. Existing MAL evidence remains its
 own section; no importer-to-journal provenance link or new completion is inferred.
+
+## Exact hosted checkpoints
+
+`hostedReading` retains the saved Subject, catalogue/publication/occurrence address, exact target revision and
+SHA-256, document block/offset, checkpoint revision and changed time. Optional nullable `bodyLanguage` accompanies
+that exact address: omission or null selects the semantic default, while a canonical language tag selects its
+separate exact body. Decoding preserves omission, null and tags without changing revision or digest. These private
+records remain unsupported recovery evidence; they grant no Content access and never resolve or install a body.
+
+The existing `readHostedReadingExportPage` owner hook supplies an account/Subject keyset of at most 17 checkpoint
+rows, with fixed UUID/digest/revision fields, bounded language/position fields and no chapter/document bytes.
+Save, update and clear participate in the same account source fence as the rest of the capture.
 
 ## Provider evidence and assessment
 
@@ -157,7 +169,7 @@ bounded by admitted source bytes (VNDB <=16 MiB per addressed parent, AniList <=
 projections); SQL limits each driver row to 64 KiB, at most 17 such rows. Application redaction, reference expansion
 and serialization process at most 16*64 KiB candidate input per page, returning <=120,000 encoded record bytes.
 Native annotation/provenance optional joins remain at most 16 exact Subject keys; counters/cursors now process
-21 fixed pairs. Artifact caps, browser assembly, expiry and one control row per owner are unchanged.
+22 fixed pairs. Artifact caps, browser assembly, expiry and one control row per owner are unchanged.
 
 VNDB deletion/pruning/terminal cleanup adds at most 5,000 indexed child deletes and fence updates per parent to its
 existing source cleanup payer (at most four VNDB parents and 20,000 children in its installed owner erase call); AniList generated projections follow each existing row's cleanup. Source index data

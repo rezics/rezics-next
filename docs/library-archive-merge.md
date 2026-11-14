@@ -4,7 +4,7 @@ Collection archive recovery is owned by [Native Library archive Collection recov
 The installed v1 export and its producer-side guarantees remain owned by [Library export](library-export.md).
 
 The [installed personal export](library-export.md) produces a completed local `{manifest,records}` file.
-Its canonical v1 manifest, fixed 21-section order, section totals and encoded-record limits are shared by the
+Its canonical v1 manifest, fixed 22-section order, section totals and encoded-record limits are shared by the
 producer and archive decoder. Personal-fact recovery is specified in
 [Personal archive annotation, journal and assessment recovery](library-archive-personal-fact-recovery.md).
 

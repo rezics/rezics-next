@@ -1,5 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import type { PoolClient } from 'pg';
+import { readHostedReadingExportPage } from './hosted-reading.ts';
 import { exportSections, LIBRARY_EXPORT_LIMITS, type LibraryExportSection } from './library-export-format.ts';
 export { exportSections } from './library-export-format.ts';
 
@@ -21,7 +22,14 @@ type TimestampFact =
 type ExistingExportRecord = Record<string, unknown> & {
   section: Exclude<
     LibraryExportSection,
-    'annotations' | 'provenance' | 'journals' | 'vndbUploads' | 'vndbEvidence' | 'anilistUploads' | 'anilistEvidence'
+    | 'annotations'
+    | 'provenance'
+    | 'journals'
+    | 'vndbUploads'
+    | 'vndbEvidence'
+    | 'anilistUploads'
+    | 'anilistEvidence'
+    | 'hostedReading'
   >;
 };
 export type AnnotationExportRecord = {
@@ -82,12 +90,19 @@ export type ProviderExportRecord =
       row_count: number | null;
     }
   | { section: 'vndbEvidence' | 'anilistEvidence'; upload_id: string; ordinal: number; evidence: unknown };
+/** The installed owner hook supplies the exact saved checkpoint; no current body is resolved. */
+export type HostedReadingExportRecord = Omit<Awaited<ReturnType<typeof readHostedReadingExportPage>>[number], 'key'> & {
+  section: 'hostedReading';
+  bodyLanguage?: string | null;
+  subject_id_reference: { id: string; href: string };
+};
 export type ExportRecord =
   | ExistingExportRecord
   | AnnotationExportRecord
   | ProvenanceExportRecord
   | JournalExportRecord
-  | ProviderExportRecord;
+  | ProviderExportRecord
+  | HostedReadingExportRecord;
 type SourceRow = Record<string, unknown> & { key: string };
 export type ExportSeek = {
   section: number;
@@ -253,7 +268,11 @@ export async function readExportSourcePage(
   const fetchRows = FETCH_ROWS();
 
   let rows: { value: SourceRow | null }[];
-  if (Object.hasOwn(queries(), section) || section === 'journals') {
+  if (section === 'hostedReading') {
+    rows = (await readHostedReadingExportPage(client, route, accountId, seek.after || ZERO, FETCH_ROWS())).map(
+      (value) => ({ value }),
+    );
+  } else if (Object.hasOwn(queries(), section) || section === 'journals') {
     const sourceSql =
       section === 'journals'
         ? journalQuery()
@@ -416,7 +435,7 @@ export async function readExportSourcePage(
     seek.sectionTotals[seek.section] = [totalRows + 1, totalBytes + bytes];
   }
   if (records.length === rows.length && rows.length < fetchRows) {
-    if (Object.hasOwn(queries(), section) || section === 'journals') {
+    if (Object.hasOwn(queries(), section) || section === 'journals' || section === 'hostedReading') {
       seek.section++;
       seek.after = '';
     } else {

@@ -41,6 +41,7 @@ const exportSection = t.Union([
   t.Literal('vndbEvidence'),
   t.Literal('anilistUploads'),
   t.Literal('anilistEvidence'),
+  t.Literal('hostedReading'),
 ]);
 const manifestV1 = t.Object(
   {

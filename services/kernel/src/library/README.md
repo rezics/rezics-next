@@ -102,8 +102,8 @@ rechecks current catalogue/target Access on get. Get returns the saved address a
 unavailable resume when current authority withholds bytes; it never silently changes the selection.
 TOC withdrawal removes current `for_subject` discovery; historical exact reads remain on Content
 resolve. Ordinary Entry/Progress keep Book page units. Private facts grant no read access and join
-account erasure. The canonical Library export currently omits checkpoints;
-`readHostedReadingExportPage` is the installed hook for later coverage. Fewest tests: current discovery
+account erasure. Canonical Library export includes private checkpoints through
+`readHostedReadingExportPage`; exact address and optional nullable `bodyLanguage` remain retained recovery evidence. Fewest tests: current discovery
 and empty TOC, CAS save/get/clear, withheld resume keeping the address, position bounds.
 
 Acceptance choice: focused source fixtures pin those states; native/browser acceptance stays in the

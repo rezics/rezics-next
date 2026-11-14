@@ -314,20 +314,35 @@ beforeAll(async () => {
   expect(artifact.manifest.recordBytes).toBe(
     records.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row), 'utf8'), 0),
   );
-  expect(Object.keys(artifact.manifest.sectionTotals as Record<string, unknown>)).toHaveLength(21);
+  expect(Object.keys(artifact.manifest.sectionTotals as Record<string, unknown>)).toHaveLength(22);
 }, 120_000);
 
 afterAll(async () => {
   await f?.close();
 });
 
-test('canonical provider evidence is retained privately without becoming a recovery operand', async () => {
+test('canonical provider and checkpoint evidence is retained privately without becoming a recovery operand', async () => {
   const uploadId = randomUUID();
   const rows: RecordRow[] = [
     { section: 'vndbUploads', upload_id: uploadId, state: 'active', expires_at: '2026-01-01T00:00:00Z' },
     { section: 'vndbEvidence', upload_id: uploadId, ordinal: 0, evidence: { score: '0', private: true } },
     { section: 'anilistUploads', upload_id: uploadId, cancelled: false, score_format: 'POINT_10', row_count: 1 },
     { section: 'anilistEvidence', upload_id: uploadId, ordinal: 0, evidence: { score: null } },
+    {
+      section: 'hostedReading',
+      subject_id: uploadId,
+      subject_id_reference: { id: uploadId, href: `https://rezics.com/subjects/${uploadId}` },
+      catalogue_id: uploadId,
+      publication_revision_id: uploadId,
+      occurrence_id: uploadId,
+      target_revision_id: uploadId,
+      target_sha256: 'b'.repeat(64),
+      bodyLanguage: null,
+      document_block_id: null,
+      document_offset: null,
+      revision: '1',
+      changed_at: '2026-01-01T00:00:00Z',
+    },
   ];
   const uploaded = await upload(source, framed(rows));
   const preview = await previewAll(source, uploaded.uploadId);

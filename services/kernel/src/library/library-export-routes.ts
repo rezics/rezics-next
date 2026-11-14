@@ -36,6 +36,7 @@ const sections = t.Tuple([
   t.Literal('vndbEvidence'),
   t.Literal('anilistUploads'),
   t.Literal('anilistEvidence'),
+  t.Literal('hostedReading'),
 ]);
 const manifestFields = {
   format: t.Literal('https://rezics.com/formats/library-export'),
@@ -104,8 +105,12 @@ const timestampFact = t.Union([
     closed,
   ),
 ]);
-const legacyRecord = t.Object(
-  { section: t.Union(exportSections.map((section) => t.Literal(section))) },
+const nativeRecord = t.Object(
+  {
+    section: t.Union(
+      exportSections.filter((section) => section !== 'hostedReading').map((section) => t.Literal(section)),
+    ),
+  },
   { additionalProperties: true },
 );
 const annotationRecord = t.Object(
@@ -204,8 +209,27 @@ const anilistEvidenceRecord = t.Object(
   { section: t.Literal('anilistEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
   closed,
 );
+const hostedReadingRecord = t.Object(
+  {
+    section: t.Literal('hostedReading'),
+    subject_id: text,
+    subject_id_reference: t.Object({ id: text, href: text }, closed),
+    catalogue_id: text,
+    publication_revision_id: text,
+    occurrence_id: text,
+    target_revision_id: text,
+    target_sha256: text,
+    bodyLanguage: t.Optional(nullable),
+    document_block_id: nullable,
+    document_offset: t.Union([t.Integer({ minimum: 0, maximum: 2097152 }), t.Null()]),
+    revision: text,
+    changed_at: text,
+  },
+  closed,
+);
 const exportRecord = t.Union([
-  legacyRecord,
+  nativeRecord,
+  hostedReadingRecord,
   annotationRecord,
   provenanceRecord,
   journalRecord,

@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { canonicalLanguageKey } from '@rezics/definitions/language';
 import {
   exportSections,
   LIBRARY_EXPORT_FORMAT,
@@ -455,6 +456,56 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
     fail('invalid_record');
 }
 
+/** A saved address is private evidence, never current Content admission or a checkpoint command. */
+function hostedReadingRecord(row: ObjectValue) {
+  if (
+    !exactKeys(
+      row,
+      [
+        'section',
+        'subject_id',
+        'subject_id_reference',
+        'catalogue_id',
+        'publication_revision_id',
+        'occurrence_id',
+        'target_revision_id',
+        'target_sha256',
+        'document_block_id',
+        'document_offset',
+        'revision',
+        'changed_at',
+      ],
+      ['bodyLanguage'],
+    ) ||
+    !uuid(row.catalogue_id) ||
+    !uuid(row.publication_revision_id) ||
+    !uuid(row.occurrence_id) ||
+    !uuid(row.target_revision_id) ||
+    typeof row.target_sha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(row.target_sha256) ||
+    typeof row.revision !== 'string' ||
+    !/^[1-9][0-9]{0,18}$/.test(row.revision) ||
+    BigInt(row.revision) > 9223372036854775807n ||
+    !timestamp(row.changed_at)
+  )
+    fail('invalid_record');
+  reference(row, 'subject_id');
+  const block = row.document_block_id,
+    offset = row.document_offset;
+  if (
+    (block === null) !== (offset === null) ||
+    (block !== null && (typeof block !== 'string' || block.length < 1 || block.length > 128)) ||
+    (offset !== null && (!Number.isSafeInteger(offset) || Number(offset) < 0 || Number(offset) > 2097152))
+  )
+    fail('invalid_record');
+  if (
+    Object.hasOwn(row, 'bodyLanguage') &&
+    row.bodyLanguage !== null &&
+    canonicalLanguageKey(row.bodyLanguage) !== row.bodyLanguage
+  )
+    fail('invalid_record');
+}
+
 const identityFields: Record<LibraryExportSection, readonly string[]> = {
   entries: ['subject_id'],
   labels: ['label_id'],
@@ -477,6 +528,7 @@ const identityFields: Record<LibraryExportSection, readonly string[]> = {
   vndbEvidence: ['upload_id', 'ordinal'],
   anilistUploads: ['upload_id'],
   anilistEvidence: ['upload_id', 'ordinal'],
+  hostedReading: ['subject_id'],
 };
 function recordKey(row: ObjectValue, section: LibraryExportSection) {
   const values = identityFields[section].map((key) => {
@@ -527,6 +579,7 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     recordBytes += size;
     if (recordBytes > LIBRARY_ARCHIVE_LIMITS().recordBytes) fail('bounds');
     if ((archiveMergeSections as readonly string[]).includes(section)) supportedRecord(row, section as MergeSection);
+    if (section === 'hostedReading') hostedReadingRecord(row);
     const key = recordKey(row, section);
     if (seen.has(key)) fail('duplicate_record');
     seen.add(key);

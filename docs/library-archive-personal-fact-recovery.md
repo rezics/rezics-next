@@ -15,7 +15,7 @@ with its explicit cleared/unknown/absent meaning. Unsupported rows remain eviden
 
 ## Evidence and supported operations
 
-`decodeLibraryArchive(bytes)` accepts the complete canonical v1 manifest, its fixed 21-section inventory and
+`decodeLibraryArchive(bytes)` accepts the complete canonical v1 manifest, its fixed 22-section inventory and
 per-section and total row/byte accounting. Annotations, journals and provenance require explicit current-target
 mapping. Journals require `assessment:{meaningRevision,units}`. Only meaning revision 1 and integer units 0–20 are
 adoptable; null is an explicit archived absence, while unknown meanings remain visible unsupported evidence.

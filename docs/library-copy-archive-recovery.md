@@ -55,7 +55,7 @@ Every holding row returns `resolution:"unresolved"`; its page returns `effectsSu
 `fullRestoration:false`. Two copies with equal Subject, note or dates remain independent rows. There is no duplicate
 search or current-copy enumeration. Archive UUIDs, pins, timestamps and revisions never authorize native effects.
 
-Decision: the Copy adapter uses the shared canonical Library archive decoder and manifest. It validates all 21
+Decision: the Copy adapter uses the shared canonical Library archive decoder and manifest. It validates all 22
 sections and their exact totals before selecting holdings and progress. Provider rows and personal annotations,
 provenance and journals contribute only unsupported coverage counts/bytes. Journal assessment is not adopted by
 this journey and creates no votes or dates-to-progress effects. No completed artifact is relabelled or rebuilt

@@ -253,6 +253,34 @@ test('native references and required shapes are validated without admitting stor
   expect(decode(archive([evidence])).records[0]?.state).toBe('unavailable-old-state');
 });
 
+test('hosted checkpoint evidence keeps default or selected body language beside the exact body address', () => {
+  const checkpoint = {
+    section: 'hostedReading' as const,
+    subject_id: first,
+    subject_id_reference: reference(first),
+    catalogue_id: first,
+    publication_revision_id: second,
+    occurrence_id: label,
+    target_revision_id: second,
+    target_sha256: 'a'.repeat(64),
+    document_block_id: 'paragraph-1',
+    document_offset: 17,
+    revision: '9',
+    changed_at: at,
+  };
+  for (const language of [{}, { bodyLanguage: null }, { bodyLanguage: 'zh-Hant' }]) {
+    const row = { ...checkpoint, ...language };
+    const decoded = decode(archive([row]));
+    expect(decoded.records).toEqual([row]);
+    expect(decoded.coverage.find((coverage) => coverage.section === 'hostedReading')).toMatchObject({
+      rows: 1,
+      treatment: 'retained-unsupported',
+    });
+  }
+  refuses(archive([{ ...checkpoint, bodyLanguage: 'en-us' }]), 'invalid_record');
+  refuses(archive([{ ...checkpoint, target_sha256: 'other-body' }]), 'invalid_record');
+});
+
 test('raw upload, nesting, rows and record bytes are bounded before native admission', () => {
   expect(() => decodeLibraryArchive(new Uint8Array(LIBRARY_ARCHIVE_LIMITS().uploadBytes + 1))).toThrow(
     new ArchiveValidationError('bounds'),

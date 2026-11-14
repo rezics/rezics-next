@@ -29,6 +29,7 @@ export const exportSections = [
   'vndbEvidence',
   'anilistUploads',
   'anilistEvidence',
+  'hostedReading',
 ] as const;
 export type LibraryExportSection = (typeof exportSections)[number];
 type Capture = { export_id: string; created_at: string; expires_at: string };
