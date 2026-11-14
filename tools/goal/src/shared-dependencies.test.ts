@@ -14,6 +14,8 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { acquireDirectoryLease } from './lease.ts';
+import { checkPinnedBunInstallation, createBunExecutableValidationCache } from './check-compatibility.ts';
 import { dependencyKey, installShared, pruneStores, sealReadOnly } from './shared-dependencies.ts';
 
 function fixture() {
@@ -80,6 +82,75 @@ test('worktrees with one key share a read-only store and retain local workspace 
 function bunTarget(worktree: string): string {
   return resolve(worktree, 'node_modules', readlinkSync(join(worktree, 'node_modules/.bun')));
 }
+
+test('warm shared preparation lets a peer repair its private skeleton while validation stays call-local', () => {
+  const h = fixture();
+  try {
+    const publisher = h.tree('publisher');
+    const peer = h.tree('peer');
+    const stores = join(h.root, 'stores');
+    installShared(publisher, stores);
+    installShared(peer, stores);
+
+    const key = dependencyKey(publisher);
+    const publicationLease = acquireDirectoryLease(join(stores, '.leases', key));
+    try {
+      rmSync(join(peer, 'node_modules/@test/sample'), { recursive: true, force: true });
+      installShared(peer, stores);
+      expect(existsSync(join(stores, '.leases', key))).toBe(true);
+      expect(realpathSync(join(peer, 'node_modules/@test/sample'))).toBe(resolve(peer, 'packages/sample'));
+    } finally {
+      publicationLease.release();
+    }
+
+    writeFileSync(join(peer, 'packages/sample/package.json'), '{"name":"@test/sample","version":"2"}');
+    const lock = Bun.spawnSync(['bun', 'install', '--lockfile-only'], { cwd: peer });
+    if (lock.exitCode !== 0) throw new Error(new TextDecoder().decode(lock.stderr));
+    installShared(peer, stores);
+    expect(lstatSync(join(peer, 'node_modules/.bun')).isSymbolicLink()).toBe(false);
+    installShared(peer, stores);
+    expect(lstatSync(join(peer, 'node_modules/.bun')).isSymbolicLink()).toBe(false);
+
+    const scriptsRoot = resolve(import.meta.dir, '../../..');
+    const changedConsumer = join(h.root, 'changed-consumer');
+    mkdirSync(changedConsumer, { recursive: true });
+    writeFileSync(join(changedConsumer, 'package.json'), readFileSync(join(scriptsRoot, 'package.json')));
+    writeFileSync(join(changedConsumer, 'bun.lock'), readFileSync(join(scriptsRoot, 'bun.lock')));
+    symlinkSync(join(scriptsRoot, 'node_modules'), join(changedConsumer, 'node_modules'), 'dir');
+
+    const cache = createBunExecutableValidationCache();
+    const compatible = checkPinnedBunInstallation(changedConsumer, undefined, cache);
+    expect(compatible.filter((check) => check.status === 'incompatible')).toEqual([]);
+    expect(cache.physicalIdentities.size).toBe(1);
+    expect(cache.bytesHashed).toBeGreaterThan(0);
+    expect(cache.runtimeProbes).toBe(2);
+    const work = { bytesHashed: cache.bytesHashed, runtimeProbes: cache.runtimeProbes };
+
+    expect(checkPinnedBunInstallation(scriptsRoot, undefined, cache).every((check) => check.status === 'compatible')).toBe(
+      true,
+    );
+    expect(cache).toMatchObject(work);
+    expect(checkPinnedBunInstallation(changedConsumer, undefined, cache).every((check) => check.status === 'compatible')).toBe(
+      true,
+    );
+    expect(cache).toMatchObject(work);
+
+    writeFileSync(join(changedConsumer, 'bun.lock'), '{}');
+    const changed = checkPinnedBunInstallation(changedConsumer, undefined, cache);
+    expect(changed.find((check) => check.field === 'workerCheck.bun.lock')?.status).toBe('incompatible');
+    expect(cache).toMatchObject(work);
+
+    const laterPreparation = createBunExecutableValidationCache();
+    const later = checkPinnedBunInstallation(changedConsumer, undefined, laterPreparation);
+    expect(later.find((check) => check.field === 'workerCheck.bun.lock')?.status).toBe('incompatible');
+    expect(laterPreparation.physicalIdentities.size).toBe(1);
+    expect(laterPreparation.bytesHashed).toBe(work.bytesHashed);
+    expect(laterPreparation.runtimeProbes).toBe(2);
+  } finally {
+    h.close();
+  }
+});
+
 function requireCount(dir: string): number {
   return readdirSync(dir).reduce((n: number, name: string) => {
     const path = join(dir, name);
