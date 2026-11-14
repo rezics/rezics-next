@@ -2917,9 +2917,13 @@ suppress a low-width notice. Events retain their Goal metadata for shared inbox 
 to recover, reshape or dispatch real work. The backlog refill notice reports unregistered runnable source supply and
 eligible width separately; low-water is an alert, not a target. Within the existing
 stopped-task hour, completed source with structured pending compiler evidence stays visibly owed to its evidence receiver.
-The width event names the task, attempt, configured owner, unresolved evidence or authorization predicate, and existing
-`typing-recover` action; it does not present that stop as a source-writing retry. Other actionable source and proof stops
-keep the existing repair, reshape and cancellation path. Unknown owner or predicate stays explicit. Runtime metadata cannot observe unsubmitted
+The width event names the task, attempt, configured owner and structured authorization, input, result or physical-custody
+action. It reports the authorized command's coverage separately from original and recovery-check custody, including
+checks linked by an authenticated native replacement grant. It routes unresolved physical custody to the current
+control-plane owner and does not tell a source owner to repeat `typing-recover` for that custody. The event never widens
+a grant to cover a different pending command or treats compiler evidence as source-only acceptance or a money/native
+check result. Other actionable source and proof stops keep the existing repair, reshape and cancellation path. Unknown
+owner or predicate stays explicit. Runtime metadata cannot observe unsubmitted
 work, so queued Markdown is counted by the backlog sweep rather than this runtime projection. The notice uses the
 existing manager turn
 allowance, with at most one width event per Goal per 15-minute bucket; an identical event within the hour folds into
@@ -3222,7 +3226,7 @@ Decision: authenticated `typing-recover` may replace one consumed compiler grant
 
 Decision: a consumed exact Web compiler grant with unresolved physical evidence returns its check and run identity with terminal or unknown custody, and repeated queries do not re-advertise it. Permit the existing single compiler-only replacement only for that same Web run after verified resultless cleanup, unchanged installed Web inputs and existing authenticated owner or operations authority; terminal compiler receipts still settle normally.
 
-Decision: stopped-action recovery resolves a compiler-only check through its exact authenticated same-attempt native grant, current compiler input identity and owned result/custody; the parent attempt's `checks` remain the original checks and do not need to list the separately registered recovery check.
+Decision: stopped recovery exposes tagged authorization, current-input match, grant consumption, result and custody facts from the exact native token. Authorization remains a fact about the exact task, attempt, worktree, actor, session, token and grant check even when that check is outside the original attempt checks; pending command coverage is compared separately. It verifies one explicit replacement link before observing the grant's check alongside the original attempt checks, and routes unresolved physical custody to the current control-plane owner. A consumed or running grant never settles its result or custody, and no compiler grant is broadened, source-only acceptance settled or money/native check substituted.
 
 Decision: a clean, post-exit Web interface attempt blocked only by exhausted check-host budget can recover after its
 environment retry was withdrawn by stop, but only with authenticated authority, unchanged final source, a completed

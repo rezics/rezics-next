@@ -3,8 +3,14 @@ import type { ManagerEvent, ManagerInbox } from './contracts.ts';
 import { agentReportingEvidence } from './agents.ts';
 import { migrate } from './db.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
+import { resolveGoalManager } from './manager-ownership.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
-import { stoppedActionHint, stoppedActionProjection, type StoppedActionHint } from './stopped-action.ts';
+import {
+  stoppedActionHint,
+  stoppedActionProjection,
+  type StoppedActionHint,
+  type StoppedRecoveryReceivingAction,
+} from './stopped-action.ts';
 
 // Compatibility exports for synthetic callers; production reads its own loaded policy.
 export const WIDTH_WORKER_THRESHOLD = defaultPolicy.width.workerThreshold;
@@ -20,6 +26,17 @@ export const widthGovernorMigrations = [
       manager TEXT NOT NULL,
       delivered_at TEXT NOT NULL,
       PRIMARY KEY(goal, bucket)
+    );`,
+  },
+  {
+    module: 'width-governor',
+    version: 2,
+    sql: `CREATE TABLE width_governor_receiver_deliveries (
+      goal TEXT NOT NULL,
+      bucket INTEGER NOT NULL,
+      manager TEXT NOT NULL,
+      delivered_at TEXT NOT NULL,
+      PRIMARY KEY(goal, bucket, manager)
     );`,
   },
 ] as const;
@@ -65,6 +82,7 @@ export type EvidenceReceiverAction = {
   owner: string | null;
   missingPredicate: string;
   actionable: boolean;
+  receivingActions: StoppedRecoveryReceivingAction[];
 };
 
 export type WidthGoalSnapshot = WidthCounts & {
@@ -320,6 +338,7 @@ function addRow(
           owner: action.owner,
           missingPredicate: action.missingPredicate,
           actionable: action.actionable,
+          receivingActions: action.receivingActions,
         });
     }
     if (action.actionable) increment('actionableStopped');
@@ -448,7 +467,32 @@ function hasUndispatchedWork(goal: WidthGoalSnapshot): boolean {
   return goal.actionableReady > 0 || goal.actionableHeld > 0 || goal.actionableStopped > 0;
 }
 
-function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): string {
+function receivingActionText(
+  action: EvidenceReceiverAction,
+  receiving: StoppedRecoveryReceivingAction,
+  controlPlaneOwner: string | null,
+): string {
+  const receiver =
+    receiving.receiver === 'control-plane-owner'
+      ? `control-plane owner ${controlPlaneOwner ?? 'unresolved'}`
+      : `task owner ${action.owner ?? 'unknown'}`;
+  const checkIds = receiving.checkIds.length ? ` check ${receiving.checkIds.join(', ')}` : '';
+  const compiler = receiving.authorizedCommand ? ` for exact command ${JSON.stringify(receiving.authorizedCommand)}` : '';
+  const recoverCommand = `bun tools/goal/src/cli.ts typing-recover ${action.taskId} --expected-attempt ${action.attempt}`;
+  if (receiving.kind === 'physical-custody')
+    return receiving.actionable
+      ? `${receiver}: resolve terminal physical custody for${checkIds || ' the named attempt checks'}; no compiler command is requested.`
+      : `${receiver}: await terminal physical custody for${checkIds || ' the active exact check'}.`;
+  if (receiving.kind === 'input')
+    return `${receiver}: review retained compiler inputs; pending command coverage is ${receiving.commandCoverage ?? 'unknown'} (pending ${JSON.stringify(receiving.pendingCommand ?? [])}; authorized ${JSON.stringify(receiving.authorizedCommand ?? [])}), and input identity is ${receiving.inputMatch ?? 'unknown'}. Use authenticated \`${recoverCommand}\` to request authority for the exact pending command.`;
+  if (receiving.kind === 'result')
+    return `${receiver}: reconcile the exact compiler result${compiler}; native result state is ${receiving.resultState ?? 'unknown'}. Run authenticated \`${recoverCommand}\` to reconcile it.`;
+  return receiving.authorizedCommand
+    ? `${receiver}: use authenticated \`${recoverCommand}\` to retrieve the retained exact wrapper${compiler}.`
+    : `${receiver}: provide or renew authenticated compiler recovery authorization with \`${recoverCommand}\`.`;
+}
+
+function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy, controlPlaneOwner: string | null): string {
   const codexUnknown = goal.unknownCodexRunning + goal.unknownCodexClassification;
   // One hour is a display unit here; the stopped-task deadline comes from policy.
   const stoppedAge =
@@ -456,12 +500,12 @@ function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): stri
       ? 'an hour'
       : `${policy.backlog.stoppedTaskLimitMs / 60_000} minutes`;
   const receiverDetails = goal.evidenceReceiverActions
-    .map((action) => {
-      const owner = action.owner ?? 'unknown task owner';
-      return action.actionable
-        ? `${action.taskId} attempt ${action.attempt}, owner ${owner}: ${action.missingPredicate}; run \`bun tools/goal/src/cli.ts typing-recover ${action.taskId} --expected-attempt ${action.attempt}\` from an authenticated owning or operations manager session.`
-        : `${action.taskId} attempt ${action.attempt}, owner ${owner}: awaiting ${action.missingPredicate}.`;
-    })
+    .flatMap((action) =>
+      action.receivingActions.map(
+        (receiving) =>
+          `${action.taskId} attempt ${action.attempt}, owner ${action.owner ?? 'unknown'}: ${receivingActionText(action, receiving, controlPlaneOwner)}`,
+      ),
+    )
     .join(' ');
   const unlistedReceivers = Math.max(0, goal.evidenceReceivingStopped - goal.evidenceReceiverActions.length);
   const otherActionableStops = goal.actionableStopped - goal.actionableEvidenceReceivingStopped;
@@ -500,6 +544,7 @@ export async function sweepWidthGovernor(
   });
   const date = at instanceof Date ? at : new Date(at);
   const bucket = Math.floor(date.getTime() / policy.width.bucketMs);
+  const resolvedControlPlaneOwner = resolveGoalManager(db, 'control-plane', '') || null;
   const deliveredGoals: string[] = [];
   for (let index = 0; index < snapshot.goals.length; index++) {
     if (index > 0 && index % policy.width.sweepYieldItems === 0)
@@ -508,33 +553,65 @@ export async function sweepWidthGovernor(
     if (
       // The host schedules a single daily audit; it has no manager backlog to refill.
       goal.goal === 'daily-step-audit' ||
-      !goal.managerId ||
-      goal.managerConflict ||
       goal.running >= policy.width.workerThreshold ||
       !hasUndispatchedWork(goal)
     )
       continue;
 
-    const event: ManagerEvent = {
-      managerId: goal.managerId,
-      goalId: goal.goal,
-      kind: 'width',
-      summary: widthEventSummary(goal, policy),
-    };
-    const delivered = db
-      .transaction(() => {
-        if (noLongerActiveManager(db, goal.managerId!)) return false;
-        const inserted = db
-          .query(
-            'INSERT OR IGNORE INTO width_governor_deliveries(goal, bucket, manager, delivered_at) VALUES (?, ?, ?, ?)',
-          )
-          .run(goal.goal, bucket, goal.managerId, snapshot.asOf);
-        if (!inserted.changes) return false;
-        inbox.deliver(event);
-        return true;
-      })
-      .immediate();
-    if (delivered) deliveredGoals.push(goal.goal);
+    let delivered = false;
+    if (goal.managerId && !goal.managerConflict) {
+      const event: ManagerEvent = {
+        managerId: goal.managerId,
+        goalId: goal.goal,
+        kind: 'width',
+        summary: widthEventSummary(goal, policy, resolvedControlPlaneOwner),
+      };
+      delivered = db
+        .transaction(() => {
+          if (noLongerActiveManager(db, goal.managerId!)) return false;
+          const inserted = db
+            .query(
+              'INSERT OR IGNORE INTO width_governor_deliveries(goal, bucket, manager, delivered_at) VALUES (?, ?, ?, ?)',
+            )
+            .run(goal.goal, bucket, goal.managerId, snapshot.asOf);
+          if (!inserted.changes) return false;
+          inbox.deliver(event);
+          return true;
+        })
+        .immediate();
+    }
+    let receiverDelivered = false;
+    if (resolvedControlPlaneOwner && resolvedControlPlaneOwner !== goal.managerId) {
+      const physicalActions = goal.evidenceReceiverActions.flatMap((action) =>
+        action.receivingActions
+          .filter((receiving) => receiving.receiver === 'control-plane-owner' && receiving.actionable)
+          .map((receiving) =>
+            `${action.taskId} attempt ${action.attempt}, task owner ${action.owner ?? 'unknown'}: ${receivingActionText(action, receiving, resolvedControlPlaneOwner)}`,
+          ),
+      );
+      if (physicalActions.length) {
+        const custodyEvent: ManagerEvent = {
+          managerId: resolvedControlPlaneOwner,
+          goalId: goal.goal,
+          kind: 'width',
+          summary: `Width governor custody handoff for ${goal.goal}: ${physicalActions.join(' ')}`,
+        };
+        receiverDelivered = db
+          .transaction(() => {
+            if (noLongerActiveManager(db, resolvedControlPlaneOwner)) return false;
+            const inserted = db
+              .query(
+                'INSERT OR IGNORE INTO width_governor_receiver_deliveries(goal, bucket, manager, delivered_at) VALUES (?, ?, ?, ?)',
+              )
+              .run(goal.goal, bucket, resolvedControlPlaneOwner, snapshot.asOf);
+            if (!inserted.changes) return false;
+            inbox.deliver(custodyEvent);
+            return true;
+          })
+          .immediate();
+      }
+    }
+    if (delivered || receiverDelivered) deliveredGoals.push(goal.goal);
   }
   return { snapshot, deliveredGoals };
 }

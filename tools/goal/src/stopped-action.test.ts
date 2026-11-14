@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { sweepBacklog } from './backlog.ts';
@@ -17,6 +17,7 @@ import {
   grantWorkerTypingRecovery,
   workerCheckBudgetDirectory,
   workerCheckHostContentTree,
+  workerCheckHostTypingRecoveryObservation,
 } from './worker-check-budget.ts';
 import { physicalHistoryPath } from '../../../scripts/check-custody.ts';
 import { sweepWidthGovernor } from './width-governor.ts';
@@ -44,8 +45,10 @@ function prepareTypingRecovery(
     active?: boolean;
     resultless?: boolean;
     changedInputs?: boolean;
+    pendingCommand?: string[];
+    originalCustodyUnknown?: boolean;
   } = {},
-): { checkId: string; physicalRunId: string; worktree: string; originalCheckId: string } {
+): { checkId: string; physicalRunId: string; worktree: string; originalCheckId: string; token: string } {
   const worktree = join(stateDirectory, 'worktrees', taskId);
   mkdirSync(join(worktree, 'apps/web/scripts'), { recursive: true });
   mkdirSync(join(worktree, 'apps/web/src'), { recursive: true });
@@ -97,9 +100,45 @@ function prepareTypingRecovery(
       failureKind: null,
       blocker: null,
       checks,
-      typingEvidencePending: { result, command: webCompiler },
+      typingEvidencePending: { result, command: options.pendingCommand ?? webCompiler },
     }),
   );
+  let predecessor: (typeof grant & { stamp: string }) | undefined;
+  if (options.replacement) {
+    const budget = workerCheckBudgetDirectory(stateDirectory, taskId, 1);
+    mkdirSync(budget, { recursive: true });
+    predecessor = {
+      ...grant,
+      token: randomUUID(),
+      checkId: randomUUID(),
+      physicalRunId: randomUUID(),
+      stamp: '1',
+    };
+    writeFileSync(join(budget, 'typing-recovery', `${predecessor.token}.json`), JSON.stringify(predecessor));
+    writeFileSync(
+      join(budget, '1'),
+      JSON.stringify({
+        content: workerCheckHostContentTree(worktree),
+        typingRecovery: {
+          token: predecessor.token,
+          checkId: predecessor.checkId,
+          physicalRunId: predecessor.physicalRunId,
+        },
+      }),
+    );
+    db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,1,?,?,?)').run(
+      taskId,
+      'typing-recovery-authorized',
+      at,
+      JSON.stringify({
+        actor: predecessor.actor,
+        token: predecessor.token,
+        identity: predecessor.identity,
+        command: predecessor.command,
+        checkId: predecessor.checkId,
+      }),
+    );
+  }
   const authorization = {
     actor: { id: actorId, sessionId: `${actorId}-session` },
     token: grant.token,
@@ -113,7 +152,8 @@ function prepareTypingRecovery(
     at,
     JSON.stringify(authorization),
   );
-  if (originalCheckId) recordTerminalTypingResult(worktree, taskId, 1, originalCheckId, randomUUID(), webCompiler);
+  if (originalCheckId && !options.originalCustodyUnknown)
+    recordTerminalTypingResult(worktree, taskId, 1, originalCheckId, randomUUID(), webCompiler);
   if (options.changedInputs) {
     writeFileSync(join(worktree, 'apps/web/src/reader.ts'), 'export const reader = false\n');
     git(worktree, ['add', 'apps/web/src/reader.ts']);
@@ -137,21 +177,28 @@ function prepareTypingRecovery(
         command: grant.command,
       });
     writeFileSync(join(checkRoot, 'results', 'unrelated.json'), '{not a check result');
-    writeFileSync(
-      join(budget, '1'),
-      JSON.stringify({
-        content: workerCheckHostContentTree(worktree),
-        typingRecovery: { token: grant.token, checkId: grant.checkId, physicalRunId: grant.physicalRunId },
-      }),
-    );
     if (options.replacement) {
-      const predecessor = { ...grant, token: randomUUID(), checkId: randomUUID(), physicalRunId: randomUUID() };
-      writeFileSync(join(budget, 'typing-recovery', `${predecessor.token}.json`), JSON.stringify(predecessor));
+      if (!predecessor) throw new Error('Replacement fixture is missing its predecessor grant');
+      recordTerminalTypingResult(worktree, taskId, 1, predecessor.checkId, predecessor.physicalRunId, webCompiler, 143);
       writeFileSync(
         join(budget, 'typing-recovery', `${grant.token}.json`),
-        JSON.stringify({ ...grant, stamp: '1', replacementOf: predecessor.token }),
+        JSON.stringify({ ...grant, stamp: '2', replacementOf: predecessor.token }),
+      );
+      writeFileSync(
+        join(budget, '2'),
+        JSON.stringify({
+          content: workerCheckHostContentTree(worktree),
+          typingRecovery: { token: grant.token, checkId: grant.checkId, physicalRunId: grant.physicalRunId },
+        }),
       );
     } else {
+      writeFileSync(
+        join(budget, '1'),
+        JSON.stringify({
+          content: workerCheckHostContentTree(worktree),
+          typingRecovery: { token: grant.token, checkId: grant.checkId, physicalRunId: grant.physicalRunId },
+        }),
+      );
       writeFileSync(join(budget, 'typing-recovery', `${grant.token}.json`), JSON.stringify({ ...grant, stamp: '1' }));
     }
     if (options.terminal) {
@@ -163,7 +210,44 @@ function prepareTypingRecovery(
     physicalRunId: grant.physicalRunId,
     worktree,
     originalCheckId: originalCheckId ?? grant.checkId,
+    token: grant.token,
   };
+}
+
+function recordUnknownRunningTypingResult(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkId: string,
+  physicalRunId: string,
+  command: readonly string[],
+): void {
+  const root = join(worktree, '.temp/goal/checks');
+  mkdirSync(join(root, 'results'), { recursive: true });
+  mkdirSync(join(root, 'custody/history'), { recursive: true });
+  writeFileSync(
+    join(root, 'results', `${checkId}.json`),
+    JSON.stringify({
+      id: checkId,
+      status: 'running',
+      cwd: worktree,
+      argv: command,
+      physicalRunId,
+      ownership: { taskId, attempt },
+    }),
+  );
+  writeFileSync(
+    physicalHistoryPath(worktree, checkId, physicalRunId),
+    JSON.stringify({
+      version: 1,
+      id: checkId,
+      cwd: worktree,
+      physicalRunId,
+      status: 'running',
+      argv: command,
+      ownership: { taskId, attempt },
+    }),
+  );
 }
 
 function recordTerminalTypingResult(
@@ -484,9 +568,24 @@ test('completed source with a separately registered recovery check stays with it
       )
       .get('consumed-owner', 1)!.body;
     prepareTypingRecovery(db, temp.path, 'consumed-operations', 'quiet-operations', 'operations', true, 2, old);
-    prepareTypingRecovery(db, temp.path, 'grant-awaiting-run', 'pending-grant', 'pending-grant', false, 3, old, {
+    const awaitingGrant = prepareTypingRecovery(db, temp.path, 'grant-awaiting-run', 'pending-grant', 'pending-grant', false, 3, old, {
       distinctRecoveryCheck: true,
     });
+    const foreignAuthorization = db
+      .query<{ body: string }, [string, number]>(
+        "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'",
+      )
+      .get('grant-awaiting-run', 1)!;
+    const foreignBody = JSON.parse(foreignAuthorization.body) as { actor: { sessionId: string } };
+    foreignBody.actor.sessionId = 'different-session';
+    db.query(
+      "UPDATE worker_events SET body=? WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'",
+    ).run(JSON.stringify(foreignBody), 'grant-awaiting-run', 1);
+    expect(stoppedActionProjection(db, 'grant-awaiting-run', 1, 'typing-recovery')).toMatchObject({
+      kind: 'evidence-receiver',
+      receivingActions: [{ kind: 'authorization', receiver: 'task-owner', checkIds: [] }],
+    });
+    expect(awaitingGrant.checkId).not.toBe(awaitingGrant.originalCheckId);
     const failedSource = {
       id: 'failed-source',
       sequence: 4,
@@ -580,7 +679,7 @@ test('completed source with a separately registered recovery check stays with it
       attempt: 1,
       owner: 'quiet-owner',
       actionable: true,
-      missingPredicate: 'the exact compiler result and verified terminal custody',
+      missingPredicate: 'verified terminal custody for the exact authenticated compiler check',
     });
     expect(consumedOwner.originalCheckId).not.toBe(consumedOwner.checkId);
     expect(
@@ -593,7 +692,8 @@ test('completed source with a separately registered recovery check stays with it
     const ownerWidthNotice = inbox.pending('quiet-owner')[0]?.event.summary;
     expect(ownerWidthNotice).toContain('Completed source remains owed to its evidence receiver');
     expect(ownerWidthNotice).toContain('consumed-owner attempt 1, owner quiet-owner');
-    expect(ownerWidthNotice).toContain('typing-recover consumed-owner --expected-attempt 1');
+    expect(ownerWidthNotice).toContain('physical custody');
+    expect(ownerWidthNotice).not.toContain('typing-recover consumed-owner --expected-attempt 1');
     expect(ownerWidthNotice).not.toContain('retry with a rewritten brief');
 
     const recoverCalls: string[] = [];
@@ -655,7 +755,7 @@ test('completed source with a separately registered recovery check stays with it
     });
     expect(
       received.snapshot.goals.find(({ goal }) => goal === 'quiet-operations')?.evidenceReceiverActions[0],
-    ).toMatchObject({ missingPredicate: 'the exact compiler result and verified terminal custody' });
+    ).toMatchObject({ missingPredicate: 'verified terminal physical custody for the original attempt checks' });
     expect(
       db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('consumed-owner')!.body,
     ).toBe(originalTaskBody);
@@ -777,7 +877,166 @@ test('completed source with a separately registered recovery check stays with it
       kind: 'evidence-receiver',
       actionable: true,
       owner: 'changed-input-recovery',
+      receivingActions: [
+        { kind: 'input', commandCoverage: 'exact', inputMatch: 'stale' },
+        { kind: 'physical-custody', receiver: 'control-plane-owner' },
+      ],
     });
+  } finally {
+    db.close();
+    temp.close();
+  }
+});
+
+test('width keeps pending command coverage separate from original custody and routes custody to control-plane owner', async () => {
+  const temp = temporaryDirectory();
+  const db = openDb(join(temp.path, 'goal.sqlite'));
+  try {
+    new WorkerStore(db);
+    db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    db.query('INSERT INTO manager_sessions(id,state) VALUES (?,?)').run(
+      'custody-manager',
+      JSON.stringify({ id: 'custody-manager', kind: 'manager', status: 'running', goal: 'control-plane' }),
+    );
+    const at = Date.UTC(2026, 0, 3);
+    const old = new Date(at - 2 * 60 * 60_000).toISOString();
+    const retained = prepareTypingRecovery(
+      db,
+      temp.path,
+      'narrow-web-grant',
+      'retained-web',
+      'retained-web',
+      false,
+      1,
+      old,
+      {
+        distinctRecoveryCheck: true,
+        originalCustodyUnknown: true,
+        pendingCommand: [...webCompiler, '--include-ui'],
+      },
+    );
+    writeFileSync(
+      join(workerCheckBudgetDirectory(temp.path, 'narrow-web-grant', 1), '2'),
+      JSON.stringify({ typingRecovery: { token: randomUUID(), checkId: randomUUID(), physicalRunId: randomUUID() } }),
+    );
+    const action = stoppedActionProjection(db, 'narrow-web-grant', 1, 'typing-recovery');
+    expect(action).toMatchObject({
+      kind: 'evidence-receiver',
+      receivingActions: [
+        { kind: 'physical-custody', receiver: 'control-plane-owner', checkIds: [retained.originalCheckId] },
+        {
+          kind: 'input',
+          receiver: 'task-owner',
+          authorizedCommand: webCompiler,
+          pendingCommand: [...webCompiler, '--include-ui'],
+          commandCoverage: 'different',
+          inputMatch: 'current',
+        },
+        { kind: 'authorization', receiver: 'task-owner', authorizedCommand: webCompiler },
+      ],
+    });
+
+    const inbox = new SqliteManagerInbox(db, temp.path, () => at);
+    await sweepWidthGovernor(db, inbox, at);
+    const ownerNotice = inbox.pending('retained-web')[0]?.event.summary;
+    expect(ownerNotice).toContain('pending command coverage is different');
+    expect(ownerNotice).toContain('control-plane owner custody-manager');
+    const custodyNotice = inbox.pending('custody-manager').find(({ event }) => event.kind === 'width')?.event.summary;
+    expect(custodyNotice).toContain(`resolve terminal physical custody for check ${retained.originalCheckId}`);
+    expect(custodyNotice).not.toContain('typing-recover');
+
+    const consumedStale = prepareTypingRecovery(
+      db,
+      temp.path,
+      'consumed-stale-grant',
+      'retained-web-stale',
+      'retained-web-stale',
+      true,
+      2,
+      old,
+      {
+        distinctRecoveryCheck: true,
+        originalCustodyUnknown: true,
+        changedInputs: true,
+        pendingCommand: ['--local', '--', 'bun', 'services/kernel/scripts/typecheck.ts'],
+      },
+    );
+    recordUnknownRunningTypingResult(
+      consumedStale.worktree,
+      'consumed-stale-grant',
+      1,
+      consumedStale.checkId,
+      consumedStale.physicalRunId,
+      webCompiler,
+    );
+    expect(
+      workerCheckHostTypingRecoveryObservation({
+        db,
+        directory: workerCheckBudgetDirectory(temp.path, 'consumed-stale-grant', 1),
+        worktree: consumedStale.worktree,
+        taskId: 'consumed-stale-grant',
+        attempt: 1,
+        attemptCheckIds: [consumedStale.originalCheckId],
+        command: ['--local', '--', 'bun', 'services/kernel/scripts/typecheck.ts'],
+        token: consumedStale.token,
+      }),
+    ).toMatchObject({
+      authorization: 'authenticated',
+      commandCoverage: 'different',
+      inputMatch: 'stale',
+      consumption: 'consumed',
+      checkId: consumedStale.checkId,
+      resultState: 'running',
+      originalCustody: 'unknown',
+      grantCustody: 'unknown',
+      originalUnknownCheckIds: [consumedStale.originalCheckId],
+      grantUnknownCheckIds: [consumedStale.checkId],
+    });
+    expect(stoppedActionProjection(db, 'consumed-stale-grant', 1, 'typing-recovery')).toMatchObject({
+      kind: 'evidence-receiver',
+      receivingActions: [
+        {
+          kind: 'physical-custody',
+          receiver: 'control-plane-owner',
+          checkIds: [consumedStale.originalCheckId, consumedStale.checkId],
+        },
+        {
+          kind: 'input',
+          receiver: 'task-owner',
+          authorizedCommand: webCompiler,
+          commandCoverage: 'different',
+          inputMatch: 'stale',
+        },
+      ],
+    });
+    await sweepWidthGovernor(db, inbox, at);
+    const staleOwnerNotice = inbox.pending('retained-web-stale').find(({ event }) => event.kind === 'width')?.event.summary;
+    expect(staleOwnerNotice).toContain('pending command coverage is different');
+    expect(staleOwnerNotice).toContain('input identity is stale');
+    const staleCustodyNotice = inbox
+      .pending('custody-manager')
+      .find(({ event }) => event.kind === 'width' && event.summary.includes('consumed-stale-grant'))?.event.summary;
+    expect(staleCustodyNotice).toContain(`check ${consumedStale.originalCheckId}, ${consumedStale.checkId}`);
+    expect(staleCustodyNotice).not.toContain('typing-recover');
+    const recoveryResultPath = join(
+      consumedStale.worktree,
+      '.temp/goal/checks/results',
+      `${consumedStale.checkId}.json`,
+    );
+    const recoveryResult = JSON.parse(readFileSync(recoveryResultPath, 'utf8')) as { physicalRunId: string };
+    writeFileSync(recoveryResultPath, JSON.stringify({ ...recoveryResult, physicalRunId: randomUUID() }));
+    expect(
+      workerCheckHostTypingRecoveryObservation({
+        db,
+        directory: workerCheckBudgetDirectory(temp.path, 'consumed-stale-grant', 1),
+        worktree: consumedStale.worktree,
+        taskId: 'consumed-stale-grant',
+        attempt: 1,
+        attemptCheckIds: [consumedStale.originalCheckId],
+        command: ['--local', '--', 'bun', 'services/kernel/scripts/typecheck.ts'],
+        token: consumedStale.token,
+      }),
+    ).toMatchObject({ authorization: 'authenticated', consumption: 'consumed', resultState: 'invalid', grantCustody: 'unknown' });
   } finally {
     db.close();
     temp.close();

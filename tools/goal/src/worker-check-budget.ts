@@ -1754,6 +1754,330 @@ export function workerCheckHostConsumedTypingRecovery(input: {
   return undefined;
 }
 
+export type WorkerCheckHostTypingRecoveryObservation = {
+  authorization: 'missing' | 'invalid' | 'foreign' | 'authenticated';
+  commandCoverage: 'exact' | 'different' | 'unknown';
+  authorizedCommand?: string[];
+  inputMatch: 'current' | 'stale' | 'unknown';
+  consumption: 'unconsumed' | 'consumed' | 'unknown' | 'not-applicable';
+  checkId?: string;
+  physicalRunId?: string;
+  replacementOf?: string;
+  resultlessCleanup?: boolean;
+  resultState?: WorkerCheckHostConsumedTypingRecovery['resultState'];
+  originalCustody: 'terminal' | 'unknown';
+  grantCustody: 'not-consumed' | 'terminal' | 'unknown';
+  originalCheckIds: string[];
+  originalUnknownCheckIds: string[];
+  grantCheckIds: string[];
+  grantUnknownCheckIds: string[];
+};
+
+const MAX_RECOVERY_STAMP_READS = WORKER_CHECK_HOST_RUN_LIMIT + 4;
+const MAX_RECOVERY_CHECK_IDS = 64;
+const RECOVERY_EVIDENCE_MAX_BYTES = 256 * 1024;
+
+type RecoveryRecordRead = { state: 'absent' | 'invalid' } | { state: 'present'; value: CheckEvidence };
+
+function unknownRecoveryCheckIds(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  checkIds: readonly string[],
+): string[] {
+  if (checkIds.length === 0 || checkIds.length > MAX_RECOVERY_CHECK_IDS || !checkIds.every(isCheckId))
+    return [...checkIds];
+  return checkIds.filter(
+    (checkId) => workerCheckHostAttemptCheckCustody(worktree, taskId, attempt, [checkId], true) !== 'terminal',
+  );
+}
+
+function readBoundedRecoveryRecord(path: string): RecoveryRecordRead {
+  try {
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.size > RECOVERY_EVIDENCE_MAX_BYTES) return { state: 'invalid' };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { state: 'absent' };
+    if (['EACCES', 'EPERM', 'EISDIR', 'ENOTDIR', 'ELOOP'].includes(code ?? '')) return { state: 'invalid' };
+    throw error;
+  }
+  const record = readCheckEvidence(path);
+  return record ? { state: 'present', value: record } : { state: 'invalid' };
+}
+
+type TypingRecoveryConsumption = 'unconsumed' | 'consumed' | 'unknown';
+
+function exactRecoveryStamp(
+  directory: string,
+  stampName: string,
+  grant: TypingRecoveryGrant,
+): 'matching' | 'other' | 'invalid' {
+  if (!STAMP_NAME.test(stampName)) return 'invalid';
+  const source = readBoundedRecoveryRecord(join(directory, stampName));
+  if (source.state !== 'present') return 'invalid';
+  const stamp = source.value as WorkerCheckHostStampRecord;
+  const recovery = stamp.typingRecovery;
+  if (!recovery || recovery.token !== grant.token) return 'other';
+  if (
+    recovery.checkId !== grant.checkId ||
+    recovery.physicalRunId !== grant.physicalRunId ||
+    (grant.stamp !== undefined && grant.stamp !== stampName) ||
+    (stamp.typingRequest !== undefined &&
+      (stamp.typingRequest.physicalRunId !== grant.physicalRunId ||
+        JSON.stringify(stamp.typingRequest.command) !== JSON.stringify(grant.command)))
+  )
+    return 'invalid';
+  return 'matching';
+}
+
+function typingRecoveryConsumption(directory: string, grant: TypingRecoveryGrant): TypingRecoveryConsumption {
+  if (grant.stamp !== undefined) {
+    if (!STAMP_NAME.test(grant.stamp)) return 'unknown';
+    return exactRecoveryStamp(directory, grant.stamp, grant) === 'matching' ? 'consumed' : 'unknown';
+  }
+  let names: string[];
+  try {
+    names = stampNames(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'unconsumed';
+    return 'unknown';
+  }
+  if (names.length > MAX_RECOVERY_STAMP_READS) return 'unknown';
+  for (const name of names) {
+    const state = exactRecoveryStamp(directory, name, grant);
+    if (state === 'matching') return 'consumed';
+    if (state === 'invalid') return 'unknown';
+  }
+  return 'unconsumed';
+}
+
+function exactTypingRecoveryResultState(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  grant: TypingRecoveryGrant,
+): WorkerCheckHostConsumedTypingRecovery['resultState'] {
+  const path = join(worktree, '.temp', 'goal', 'checks', 'results', `${grant.checkId}.json`);
+  let stat: ReturnType<typeof lstatSync>;
+  try {
+    stat = lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'absent';
+    if (['EACCES', 'EPERM', 'EISDIR', 'ENOTDIR', 'ELOOP'].includes((error as NodeJS.ErrnoException).code ?? ''))
+      return 'invalid';
+    throw error;
+  }
+  if (!stat.isFile() || stat.size > CHECK_RESULT_MAX_BYTES) return 'invalid';
+  const result = readCheckEvidence(path);
+  if (
+    !result ||
+    result.id !== grant.checkId ||
+    result.cwd !== worktree ||
+    result.physicalRunId !== grant.physicalRunId ||
+    result.ownership?.taskId !== taskId ||
+    result.ownership.attempt !== attempt ||
+    JSON.stringify(result.argv) !== JSON.stringify(grant.command)
+  )
+    return 'invalid';
+  if (result.status === 'running' && result.exitCode === undefined) return 'running';
+  if (result.status === 'finished' && Number.isInteger(result.exitCode)) return 'finished';
+  return 'invalid';
+}
+
+function exactTypingRecoveryCustody(
+  worktree: string,
+  taskId: string,
+  attempt: number,
+  grant: TypingRecoveryGrant,
+): 'terminal' | 'unknown' {
+  const resultState = exactTypingRecoveryResultState(worktree, taskId, attempt, grant);
+  if (resultState === 'absent' || resultState === 'invalid') return 'unknown';
+  return workerCheckHostAttemptCheckCustody(worktree, taskId, attempt, [grant.checkId], true);
+}
+
+function validReplacementPredecessor(
+  input: {
+    db: Database;
+    directory: string;
+    stateDirectory: string;
+    worktree: string;
+    taskId: string;
+    attempt: number;
+  },
+  grant: TypingRecoveryGrant,
+): TypingRecoveryGrant | undefined | null {
+  if (grant.replacementOf === undefined) return null;
+  if (!/^[0-9a-f-]{36}$/.test(grant.replacementOf) || grant.replacementOf === grant.token) return undefined;
+  const source = readBoundedRecoveryRecord(recoveryPath(input.directory, grant.replacementOf));
+  if (source.state !== 'present') return undefined;
+  const prior = source.value as CheckEvidence & TypingRecoveryGrant;
+  if (
+    prior.version !== 1 ||
+    prior.token !== grant.replacementOf ||
+    prior.taskId !== input.taskId ||
+    prior.attempt !== input.attempt ||
+    prior.worktree !== input.worktree ||
+    prior.stateDirectory !== input.stateDirectory ||
+    prior.database !== input.db.filename ||
+    prior.identity !== grant.identity ||
+    JSON.stringify(prior.command) !== JSON.stringify(grant.command) ||
+    prior.replacementOf !== undefined ||
+    !isCheckId(prior.checkId) ||
+    !isPhysicalRunId(prior.physicalRunId) ||
+    !prior.actor ||
+    typeof prior.actor.id !== 'string' ||
+    !prior.actor.id ||
+    typeof prior.actor.sessionId !== 'string' ||
+    !prior.actor.sessionId ||
+    !authorizedTypingRecoveryEvent(input.db, prior) ||
+    typingRecoveryConsumption(input.directory, prior) !== 'consumed' ||
+    exactTypingRecoveryCustody(input.worktree, input.taskId, input.attempt, prior) !== 'terminal'
+  )
+    return undefined;
+  return prior;
+}
+
+/** Observe one exact authenticated recovery grant without treating missing or stale facts as compiler evidence. */
+export function workerCheckHostTypingRecoveryObservation(input: {
+  db: Database;
+  directory: string;
+  worktree: string;
+  taskId: string;
+  attempt: number;
+  attemptCheckIds: readonly string[];
+  command?: readonly string[];
+  token?: string;
+}): WorkerCheckHostTypingRecoveryObservation {
+  const originalCheckIds = [...new Set(input.attemptCheckIds)];
+  const validOriginalIds = originalCheckIds.length > 0 && originalCheckIds.every(isCheckId);
+  const exactOriginalCheckIds = validOriginalIds ? originalCheckIds : [];
+  const originalUnknownCheckIds = unknownRecoveryCheckIds(
+    input.worktree,
+    input.taskId,
+    input.attempt,
+    exactOriginalCheckIds,
+  );
+  const originalCustody = validOriginalIds && originalUnknownCheckIds.length === 0 ? 'terminal' : 'unknown';
+  const base: Omit<WorkerCheckHostTypingRecoveryObservation, 'authorization'> = {
+    originalCustody,
+    originalCheckIds: exactOriginalCheckIds,
+    originalUnknownCheckIds,
+    grantCustody: 'not-consumed' as const,
+    grantCheckIds: [] as string[],
+    grantUnknownCheckIds: [] as string[],
+    commandCoverage: 'unknown',
+    inputMatch: 'unknown',
+    consumption: 'not-applicable',
+  };
+  if (input.token === undefined) return { ...base, authorization: 'missing' };
+  if (!/^[0-9a-f-]{36}$/.test(input.token)) return { ...base, authorization: 'invalid' };
+
+  const source = readBoundedRecoveryRecord(recoveryPath(input.directory, input.token));
+  if (source.state !== 'present')
+    return { ...base, authorization: source.state === 'absent' ? 'foreign' : 'invalid' };
+  const grant = source.value as CheckEvidence & TypingRecoveryGrant;
+  if (
+    grant.version !== 1 ||
+    grant.token !== input.token ||
+    grant.taskId !== input.taskId ||
+    grant.attempt !== input.attempt ||
+    grant.worktree !== input.worktree ||
+    grant.stateDirectory !== dirname(input.db.filename) ||
+    grant.database !== input.db.filename ||
+    !isCheckId(grant.checkId) ||
+    !isPhysicalRunId(grant.physicalRunId) ||
+    typeof grant.identity !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(grant.identity) ||
+    !Array.isArray(grant.command) ||
+    grant.command.some((part) => typeof part !== 'string') ||
+    !grant.actor ||
+    typeof grant.actor.id !== 'string' ||
+    !grant.actor.id ||
+    typeof grant.actor.sessionId !== 'string' ||
+    !grant.actor.sessionId ||
+    !authorizedTypingRecoveryEvent(input.db, grant)
+  )
+    return { ...base, authorization: 'foreign' };
+
+  const stateDirectory = dirname(input.db.filename);
+  const directoryMatches = input.directory === workerCheckBudgetDirectory(stateDirectory, input.taskId, input.attempt);
+  const predecessor = directoryMatches
+    ? validReplacementPredecessor(
+        { db: input.db, directory: input.directory, stateDirectory, worktree: input.worktree, taskId: input.taskId, attempt: input.attempt },
+        grant,
+      )
+    : undefined;
+  if (!directoryMatches || predecessor === undefined)
+    return { ...base, authorization: 'foreign' };
+
+  const commandCoverage =
+    input.command === undefined
+      ? 'unknown'
+      : JSON.stringify(grant.command) === JSON.stringify(input.command)
+        ? 'exact'
+        : 'different';
+  let inputMatch: WorkerCheckHostTypingRecoveryObservation['inputMatch'] = 'unknown';
+  try {
+    if (isKnownTypingCompiler(input.worktree, grant.command))
+      inputMatch = recoveryIdentity(input.worktree, grant.command) === grant.identity ? 'current' : 'stale';
+  } catch {
+    inputMatch = 'unknown';
+  }
+  const consumption = typingRecoveryConsumption(input.directory, grant);
+  const resultState =
+    consumption === 'consumed'
+      ? exactTypingRecoveryResultState(input.worktree, input.taskId, input.attempt, grant)
+      : undefined;
+  const grantPhysicalCustody =
+    consumption === 'consumed'
+      ? exactTypingRecoveryCustody(input.worktree, input.taskId, input.attempt, grant)
+      : 'unknown';
+  const grantCheckIds = [
+    ...(predecessor ? [predecessor.checkId] : []),
+    ...(consumption === 'unconsumed' ? [] : [grant.checkId]),
+  ];
+  const grantUnknownCheckIds = [
+    ...(consumption === 'unknown' ? [grant.checkId] : []),
+    ...(consumption === 'consumed' && grantPhysicalCustody === 'unknown' ? [grant.checkId] : []),
+  ];
+  const grantCustody =
+    consumption !== 'consumed'
+      ? consumption === 'unconsumed'
+        ? 'not-consumed'
+        : 'unknown'
+      : grantPhysicalCustody;
+
+  return {
+    authorization: 'authenticated',
+    commandCoverage,
+    authorizedCommand: grant.command,
+    inputMatch,
+    consumption,
+    checkId: grant.checkId,
+    physicalRunId: grant.physicalRunId,
+    ...(grant.replacementOf ? { replacementOf: grant.replacementOf } : {}),
+    ...(resultState ? { resultState } : {}),
+    ...(consumption === 'consumed' && inputMatch === 'current'
+      ? {
+          resultlessCleanup: workerCheckHostAttemptHasResultlessCleanup(
+            input.worktree,
+            input.taskId,
+            input.attempt,
+            [grant.checkId],
+            grant.command,
+          ),
+        }
+      : {}),
+    originalCustody,
+    grantCustody,
+    originalCheckIds,
+    originalUnknownCheckIds,
+    grantCheckIds,
+    grantUnknownCheckIds,
+  };
+}
+
 function consumedTypingRecoveryResultState(
   worktree: string,
   checkId: string,
