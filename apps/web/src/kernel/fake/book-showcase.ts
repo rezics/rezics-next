@@ -1,4 +1,3 @@
-import type { KernelClient } from '@rezics/client';
 import {
   PAGE_GLOBAL_CONTEXT,
   definedViews,
@@ -92,25 +91,45 @@ const reviewBodies = [
 ];
 function threadRows(kind: 'review' | 'discussion', id: string, member: boolean) {
   const subject = { id, label: bookSubjectMap.get(id)!.labels.en! };
-  return (kind === 'review' ? bookReviewTitles : bookDiscussionTitles).map((title, index) => {
-    const thread = communityThread(kind, false, subject);
-    thread.id = bookId((kind === 'review' ? 1000 : 1100) + index);
-    thread.title = title;
-    thread.firstPost.id = bookId((kind === 'review' ? 1200 : 1300) + index);
-    thread.firstPost.threadId = thread.id;
-    thread.firstPost.revisionId = bookId((kind === 'review' ? 1400 : 1500) + index);
-    thread.firstPost.body = fromPlainText(
-      kind === 'review'
-        ? reviewBodies[index % reviewBodies.length]!
-        : `${title} We are comparing passages from the original and the revised edition. Please identify your edition and mark spoilers for readers who have not reached the final festival.`,
-      'blocks',
-    );
-    thread.firstPost.voteCitation =
-      kind === 'review' ? { questionId: QUESTION, units: 14 + (index % 6), revision: 1 } : null;
-    thread.reactions = { upvote: 4 + index * 3, like: 19 - index, insightful: index + 1 };
-    thread.viewerReaction = member ? 'like' : null;
-    return thread;
-  });
+  return (kind === 'review' ? bookReviewTitles : bookDiscussionTitles).map(
+    (title, index): ReturnType<typeof communityThread> => {
+      const base = communityThread(kind, false, subject);
+      const threadId = bookId((kind === 'review' ? 1000 : 1100) + index);
+      return {
+        ...base,
+        id: threadId,
+        title,
+        licence: 'CC0-1.0',
+        firstPost: {
+          id: bookId((kind === 'review' ? 1200 : 1300) + index),
+          threadId,
+          route: 1,
+          authorId: communityAuthor.id,
+          boardId: base.boardId,
+          parentId: null,
+          licence: 'CC0-1.0',
+          subjectIds: [id],
+          visibility: 'published',
+          securityRevision: '1',
+          createdAt: base.createdAt,
+          revisedAt: null,
+          mediaIds: [],
+          revisionId: bookId((kind === 'review' ? 1400 : 1500) + index),
+          body: fromPlainText(
+            kind === 'review'
+              ? reviewBodies[index % reviewBodies.length]!
+              : `${title} We are comparing passages from the original and the revised edition. Please identify your edition and mark spoilers for readers who have not reached the final festival.`,
+            'blocks',
+          ),
+          sha256: 'a'.repeat(64),
+          availability: 'available',
+          voteCitation: kind === 'review' ? { questionId: QUESTION, units: 14 + (index % 6), revision: 1 } : null,
+        },
+        reactions: { upvote: 4 + index * 3, like: 19 - index, insightful: index + 1 },
+        viewerReaction: member ? 'like' : null,
+      };
+    },
+  );
 }
 
 const collectionTitles = [
@@ -244,8 +263,11 @@ export function bookShowcasePage(
         body: communityThreadPage(read.threadKind, { id, label: item.labels.en! }, page.rows, page.next, read.place),
       };
     } else if (read.kind === 'collections') {
-      const page = windowOf(sparse ? [] : collections(id), read.limit, node, read.cursor);
-      reads[key] = { status: 200, body: { collections: page.rows, count: page.count, next: page.next } };
+      const rows = sparse ? [] : collections(id);
+      reads[key] = {
+        status: 200,
+        body: { collections: rows.slice(0, read.limit), count: { value: rows.length, exact: true }, next: null },
+      };
     }
   }
   return {
@@ -260,16 +282,20 @@ export function bookShowcasePage(
   };
 }
 
-type PageInput = Parameters<KernelClient['pages']['$read']['post']>[0];
+type PageInput = {
+  target: { subject?: string; view?: View; realm?: string };
+  languages?: string[];
+  continuation?: PageContinuation;
+};
 const pageAnswer: NonNullable<FakeRoute['story']> = async ({ request }) => {
   const input = (await request.json()) as PageInput;
-  if (!('subject' in input.target) || !isBookShowcase(input.target.subject)) return;
+  if (!isBookShowcase(input.target.subject)) return;
   const target = input.target;
   const failEditions = scenario === 'failure' && !failed;
   if (target.view === 'editions') failed = true;
   return {
     status: 200,
-    ...bookShowcasePage(target.subject, target.view as View | undefined, {
+    ...bookShowcasePage(target.subject!, target.view, {
       locale: input.languages?.[0] ?? language(request),
       ...('realm' in target && target.realm ? { realm: target.realm } : {}),
       ...(input.continuation ? { continuation: input.continuation } : {}),

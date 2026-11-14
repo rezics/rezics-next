@@ -1,4 +1,5 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
+import type { Release } from '@rezics/definitions';
 import synopsis from './book-synopsis.json';
 import definitions from '../recorded/definitions-release.json';
 
@@ -26,10 +27,11 @@ type Subject = SubjectRead['subject'];
 type Statement = Subject['statements'][string][number];
 type Snak = Statement['qualifiers'][number];
 type Summary = NonNullable<SubjectRead['summary']>;
-const release = definitions.release;
+type LabelledSummary = Summary & { label: NonNullable<Summary['label']> };
+const release = definitions.release as Release;
 let assertion = 10000;
 const snak = (property: string, content: unknown): Snak => ({
-  property: { id: property, data_type: release.properties[property as keyof typeof release.properties].datatype },
+  property: { id: property, data_type: release.properties[property]!.datatype },
   value: { type: 'value', content },
 });
 const reference = (url = bookSource) => ({ hash: 'book-bibliography', parts: [snak('schema:url', url)] });
@@ -283,14 +285,12 @@ export const bookSubjectMap = new Map(bookSubjects.map((item) => [item.id, item]
 for (const item of bookSubjects) {
   item.relationCounts = Object.fromEntries(
     Object.entries(item.statements)
-      .filter(
-        ([property]) => release.properties[property as keyof typeof release.properties].datatype === 'wikibase-item',
-      )
+      .filter(([property]) => release.properties[property]!.datatype === 'wikibase-item')
       .map(([property, rows]) => [property, rows.length]),
   );
 }
 export const isBookShowcase = (id: string | undefined) => id !== undefined && bookSubjectMap.has(id);
-export function bookSummary(id: string, locale = 'en'): Summary {
+export function bookSummary(id: string, locale = 'en'): LabelledSummary {
   const item = bookSubjectMap.get(id)!;
   const types = release.types as Record<string, { bases: string[] }>;
   const language = item.labels[locale] ? locale : 'en';
@@ -313,7 +313,15 @@ export function bookSummary(id: string, locale = 'en'): Summary {
               { format: 'webp', width: 640 },
             ],
             focalPoint: null,
-            credit: { rightsHolder: 'REZICS story illustration', license: 'CC0-1.0' },
+            credit: {
+              rightsHolder: 'REZICS story illustration',
+              license: 'CC0-1.0',
+              obligations: [],
+              via: {
+                name: 'Book showcase cover artwork',
+                url: 'https://github.com/rezics/rezics-next/tree/main/apps/web/.storybook/media',
+              },
+            },
           }
         : null,
   };
@@ -329,7 +337,12 @@ export function bookSubjectRead(
       .flat()
       .flatMap((row) =>
         row.value.type === 'value' && typeof row.value.content === 'string' && bookSubjectMap.has(row.value.content)
-          ? [[row.value.content, bookSummary(row.value.content, locale)]]
+          ? [
+              [
+                row.value.content,
+                { ...bookSummary(row.value.content, locale), labels: bookSubjectMap.get(row.value.content)!.labels },
+              ],
+            ]
           : [],
       ),
   );
@@ -352,7 +365,7 @@ export function bookSynopsisDocument(id: string): AuthoredDocument {
     language: 'en',
     digest: synopsis.digest,
     availability: 'available',
-    body: synopsis.body as AuthoredDocument['body'],
+    body: synopsis.body as NonNullable<AuthoredDocument['body']>,
   };
 }
 
