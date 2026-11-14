@@ -39,6 +39,7 @@ function addTask(
   goal = 'goal-a',
   manager = goal,
   after: string[] = [],
+  briefFields: Record<string, unknown> = {},
 ): void {
   db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
     id,
@@ -49,7 +50,7 @@ function addTask(
       sequence,
       currentAttempt,
       state,
-      brief: { goal, manager, after },
+      brief: { goal, manager, after, ...briefFields },
     }),
   );
 }
@@ -81,11 +82,17 @@ function addPendingStart(db: Database, id: string, attempt: number): void {
   );
 }
 
-function addManager(db: Database, id: string, status: string, goalStatus = 'active'): void {
+function addManager(
+  db: Database,
+  id: string,
+  status: string,
+  goalStatus = 'active',
+  extra: Record<string, unknown> = {},
+): void {
   db.exec('CREATE TABLE IF NOT EXISTS manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
   db.query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)').run(
     id,
-    JSON.stringify({ id, status, goalState: { status: goalStatus } }),
+    JSON.stringify({ id, status, goalState: { status: goalStatus }, ...extra }),
   );
 }
 
@@ -149,7 +156,7 @@ test('a low-width active Goal receives accurate, durable wakeable counts once pe
   expect(f.inbox.pending('goal-a')).toHaveLength(2);
 });
 
-test('concurrent and restarted sweeps deduplicate a bucket; high width and protected managers receive no event', async () => {
+test('concurrent sweeps wake controller-parked managers and keep protected managers quiet', async () => {
   const f = fixture();
   const live = new Set<number>();
   for (let index = 0; index < 10; index++) {
@@ -170,6 +177,18 @@ test('concurrent and restarted sweeps deduplicate a bucket; high width and prote
   addPendingStart(f.db, 'audit', 0);
   addTask(f.db, 'queued-ready', 16, 'ready', 0, 'queued-goal');
   addPendingStart(f.db, 'queued-ready', 0);
+  addTask(f.db, 'parked-ready', 17, 'ready', 0, 'parked-goal');
+  addManager(f.db, 'parked-goal', 'running', 'paused', {
+    waitingForInbox: true,
+    goalPauseOrigin: 'automatic',
+  });
+  addTask(f.db, 'operator-paused-ready', 18, 'ready', 0, 'operator-paused-goal');
+  addManager(f.db, 'operator-paused-goal', 'running', 'paused', {
+    waitingForInbox: false,
+    goalPauseOrigin: 'user',
+  });
+  addTask(f.db, 'usage-limited-ready', 19, 'ready', 0, 'usage-limited-goal');
+  addManager(f.db, 'usage-limited-goal', 'running', 'usageLimited');
 
   const at = Date.UTC(2026, 9, 31, 13, 0);
   const options = { processIsLive: (process: ProcessIdentity) => live.has(process.pid) };
@@ -184,12 +203,15 @@ test('concurrent and restarted sweeps deduplicate a bucket; high width and prote
     pendingStarts: 1,
     actionableReady: 0,
   });
-  expect(first.deliveredGoals).toEqual([]);
+  expect(first.deliveredGoals).toEqual(['parked-goal']);
   expect(second.deliveredGoals).toEqual([]);
   expect(f.inbox.pending('wide-goal')).toHaveLength(0);
   expect(f.inbox.pending('paused-goal')).toHaveLength(0);
   expect(f.inbox.pending('completed-goal')).toHaveLength(0);
   expect(f.inbox.pending('budget-goal')).toHaveLength(0);
+  expect(f.inbox.pending('parked-goal')).toHaveLength(1);
+  expect(f.inbox.pending('operator-paused-goal')).toHaveLength(0);
+  expect(f.inbox.pending('usage-limited-goal')).toHaveLength(0);
   expect(f.inbox.pending('queued-goal')).toHaveLength(0);
   expect(f.inbox.pending('supermanager')).toHaveLength(0);
 
@@ -266,7 +288,7 @@ test('width policy overrides preserve paged counts, threshold boundaries and buc
   expect((await run(199)).deliveredGoals).toEqual([]);
   expect((await run(200)).deliveredGoals).toEqual(['goal-a']);
   expect(delivered[0]).toContain('within 2 minutes');
-  expect(delivered[0]).toContain('at least 3 ready briefs');
+  expect(delivered[0]).toContain('low-water is an alert');
 });
 
 test('held work waiting on a progressing predecessor stays visible without waking its manager', async () => {
@@ -285,6 +307,45 @@ test('held work waiting on a progressing predecessor stays visible without wakin
   expect(result.deliveredGoals).toEqual(['goal-b']);
   expect(f.inbox.pending('goal-a')).toHaveLength(0);
   expect(f.inbox.pending('goal-b')).toHaveLength(1);
+});
+
+test('width separates registered source starts, dependency and check holds, and live writers from docs and proof', async () => {
+  const f = fixture();
+  const source = { kind: 'implementation', paths: ['src/feature.ts'] };
+  const live = identity(3401);
+  addTask(f.db, 'source-ready', 1, 'ready', 0, 'goal-a', 'goal-a', [], source);
+  addTask(f.db, 'source-pending', 2, 'ready', 1, 'goal-a', 'goal-a', [], source);
+  addPendingStart(f.db, 'source-pending', 1);
+  addTask(f.db, 'source-held', 3, 'held', 0, 'goal-a', 'goal-a', ['source-ready'], source);
+  addTask(f.db, 'source-writer', 4, 'running', 1, 'goal-a', 'goal-a', [], source);
+  addAttempt(f.db, 'source-writer', 1, 'running', 'codex', live);
+  addTask(f.db, 'source-check-wait', 5, 'running', 1, 'goal-a', 'goal-a', [], source);
+  addAttempt(f.db, 'source-check-wait', 1, 'waiting', 'codex', null);
+  addTask(f.db, 'docs-only', 6, 'ready', 0, 'goal-a', 'goal-a', [], {
+    kind: 'implementation',
+    paths: ['docs/guide.md'],
+  });
+  addTask(f.db, 'proof-only', 7, 'ready', 0, 'goal-a', 'goal-a', [], {
+    kind: 'verification',
+    paths: ['src/proof.ts'],
+  });
+
+  const result = await sweepWidthGovernor(f.db, f.inbox, Date.UTC(2026, 9, 31, 13), {
+    processIsLive: (process) => process.pid === live.pid,
+  });
+  const goal = result.snapshot.goals.find((entry) => entry.goal === 'goal-a');
+  expect(goal).toMatchObject({
+    ready: 4,
+    sourceReady: 2,
+    sourcePendingStarts: 1,
+    sourceHolds: 2,
+    sourceDependencyHolds: 1,
+    sourceWaiting: 1,
+    sourceWriters: 1,
+  });
+  expect(f.inbox.pending('goal-a')[0]?.event.summary).toContain(
+    'Source status: registered starts 2 (1 durable pending); held 2 (1 dependencies, 1 check or custody waits); live source writers 1.',
+  );
 });
 
 test('numeric process starts retain exact live width without accepting rounded or mismatched identities', () => {

@@ -2841,16 +2841,21 @@ held work, or actionable stopped work exists. A ready task with an existing star
 by itself; its wait belongs to queue admission. Held work with a progressing predecessor stays visible without waking
 the manager. A missing predecessor remains actionable. An explicit stop is an owner decision: keep its record visible and
 await an explicit retry or cancellation instead of a width wake or expiry. The
-event reports the current running and Codex counts, unknown process evidence, and known work counts. Ready, held, waiting
-and stale-identity attempts do not count as running. The manager
+event reports the current running and Codex counts, unknown process evidence, and known work counts. It also reports
+registered source starts, durable pending starts, dependency and check or custody holds, and confirmed live source
+writers separately. Documentation-only and verification tasks do not count as source. Ready, held, waiting and
+stale-identity attempts do not count as running. The manager
 is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
 suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The event tells the manager
-to recover, reshape or dispatch real work, and to keep at least eight ready briefs in its backlog. Within the existing
+to recover, reshape or dispatch real work. The backlog refill notice reports unregistered runnable source supply and
+eligible width separately; low-water is an alert, not a target. Within the existing
 stopped-task hour, recover completed source waiting only for compiler typing evidence first; then handle actual stopped
 source work as before by retrying with a rewritten brief, splitting or cancelling it. Runtime metadata cannot observe unsubmitted
-work, so Markdown files outside the task inventory are not counted. The notice uses the existing manager turn
+work, so queued Markdown is counted by the backlog sweep rather than this runtime projection. The notice uses the
+existing manager turn
 allowance, with at most one width event per Goal per 15-minute bucket; an identical event within the hour folds into
-the earlier one (see [shared inbox](#shared-inbox)). Paused, budget-limited and completed managers are protected.
+the earlier one (see [shared inbox](#shared-inbox)). Operator-paused, budget-limited, usage-limited and completed
+managers are protected; automatic inbox parks remain eligible.
 The single host-scheduled daily step audit stays visible in counts but has no backlog to refill, so it does not send
 a width event. Its dispatch failures and queue delays still use the existing flow notices.
 
@@ -2943,10 +2948,16 @@ host's socket. The host skips the minute while the previous child is still runni
   receives one event per run listing those tasks. Control-plane, stabilize and verification tasks are exempt.
 - **Chained briefs.** Before the dispatch above, each landed session's offer is answered; see
   [Chained briefs](#chained-briefs).
-- **Low backlog.** A running, active Goal manager whose backlog holds fewer than eight ready briefs receives at most
-  one event an hour asking it to keep at least eight, unless its scoped no-work disposition becomes stale or is
-  cleared. Only non-hidden `*.md` files directly in the Goal's backlog directory count as ready; at eight or more,
-  no low-backlog event is sent.
+- **Low backlog.** A running Goal manager below the configured low-water count of runnable source briefs receives the
+  existing event at most once an hour unless its scoped no-work disposition becomes stale or is cleared. A controller-parked native Goal remains
+  eligible only with persisted inbox-wait intent and automatic pause origin; explicit pauses and complete, budget-limited
+  or usage-limited Goals stay quiet. The notice separates source supply from eligible worker width and names registered
+  source starts, dependency and check or custody holds, and live source writers. It uses the existing capacity and
+  allowance observations without gating starts. Only implementation, interface, bulk-text and claim briefs
+  with writable non-documentation paths count; proof-only, documentation-only, continuation duplicates and unresolved
+  dependencies do not. Treat low-water as an alert, not a quota. Only non-hidden `*.md` files directly in the Goal
+  backlog are candidates; at or above the count, no low-backlog event is sent unless source supply is zero while width
+  remains eligible.
 
 Decision: `goal backlog disposition <goal> no-work` lets only the authenticated, unique running owner record that no
 additional writable outcome exists for the current scoped Goal evidence. The durable record binds to that owner
@@ -3453,6 +3464,8 @@ can keep running after work finishes. Activation may start the turn first; the s
 retain their meaning. Blocked Goals accept admitted explicit inbox turns without reactivation. Empty wakeups and
 recovery leave idle threads parked. See the
 [OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
+
+Decision: Zero runnable source with eligible width is actionable; the backlog sweep reports source supply separately from width, excludes documentation, proof, existing continuation duplicates and unresolved dependencies, and uses the existing cooldown plus authenticated no-work dedupe. The same notice identifies registered source starts, dependency and check or custody holds, and live source writers; automatic inbox parks may wake while operator pauses and complete, budget-limited or usage-limited Goals stay quiet.
 
 Decision: An inbox-parked Codex turn waits 250 ms to allow the common `turn/started` then UserMessage item ordering;
 this timing window alone never authorizes an interrupt. Same-thread, same-turn `item/started` or `item/completed`
