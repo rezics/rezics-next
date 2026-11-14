@@ -13,6 +13,11 @@ import {
 } from '../../services/importer/src/seed-remaining-request.ts';
 import { createImportFetch } from '../../services/importer/src/import-fetch.ts';
 import {
+  formatSeedReadinessError,
+  SeedReadinessError,
+  waitForKernelReadiness,
+} from '../../services/importer/src/seed-readiness.ts';
+import {
   developmentPersonalListScopes,
   readShowcasePersonalListExport,
   seedShowcasePersonalList,
@@ -150,6 +155,8 @@ export async function runDevelopmentSeed(
     runSeed?: typeof runCrossMediaSeedCli;
     createTokenProvider?: typeof createAccountTokenProvider;
     seedCatalogue?: typeof seedReviewedCatalogue;
+    waitForKernel?: typeof waitForKernelReadiness;
+    signal?: AbortSignal;
     root?: string;
   } = {},
 ): Promise<DevelopmentShowcaseReport> {
@@ -165,6 +172,8 @@ export async function runDevelopmentSeed(
   const gameEnvironmentBindings = env.REZICS_DEV_BANGUMI_GAME_ENVIRONMENT_BINDINGS?.trim();
   const gameGenreBindings = env.REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS?.trim();
   const exportPath = env.REZICS_DEV_VNDB_EXPORT?.trim();
+  await (options.waitForKernel ?? waitForKernelReadiness)({ origin: api, signal: options.signal });
+  options.signal?.throwIfAborted();
   const personalXml = exportPath ? await readShowcasePersonalListExport(exportPath) : undefined;
   const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();
   const root = options.root ?? resolve(import.meta.dir, '../..');
@@ -350,6 +359,7 @@ export async function runDevelopmentSeed(
 
 /** Seed CLI prints bounded operation metadata; remote bodies and credentials stay off the walk log. */
 export function seedFailureDetail(error: unknown): string {
+  if (error instanceof SeedReadinessError) return formatSeedReadinessError(error);
   return error instanceof ReviewedCatalogueCommandError
     ? formatReviewedCatalogueCommandError(error)
     : formatSeedError(error);
