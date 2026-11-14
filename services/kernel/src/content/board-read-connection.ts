@@ -1,13 +1,18 @@
 import type { Pool } from 'pg';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
+import { discardConnection, withBoundedReadOnlyTransaction, withConnection } from '../database/pool.ts';
 import type { AccessClient } from '../request/access.ts';
-import { within } from './access-port.ts';
-import { withReadConnection } from './read-connection.ts';
 
 const begin = 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY';
 
 function discardError(error: unknown, fallback: string): Error {
   return error instanceof Error ? error : new Error(fallback);
+}
+
+function isSettledServerError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const details = error as { code?: unknown; severity?: unknown };
+  return typeof details.code === 'string' && /^[0-9A-Z]{5}$/.test(details.code) && details.severity === 'ERROR';
 }
 
 /** Run a Board fact snapshot on one checkout, keeping visitor reads inside their original deadline. */
@@ -53,27 +58,17 @@ export function withBoardReadSnapshot<T>(
     });
   }
 
-  return withReadConnection(pool, deadline, async ({ client, uncertain, discard, retain }) => {
-    let open = false;
-    try {
-      await client.query(begin);
-      open = true;
-      const value = await within(deadline, () => read(client));
-      await client.query('COMMIT');
-      open = false;
-      return value;
-    } catch (error) {
-      retain(error);
-      if (uncertain) discard(error);
-      else if (open) {
-        try {
-          await client.query('ROLLBACK');
-          open = false;
-        } catch (rollbackError) {
-          discard(rollbackError);
-        }
+  return withBoundedReadOnlyTransaction(pool, deadline, read, {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error) {
+      try {
+        throwAccessUnavailable(error);
+      } catch (mapped) {
+        return mapped;
       }
-      throw error;
-    }
+      return error;
+    },
+    isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: (error) => !isSettledServerError(error),
   });
 }

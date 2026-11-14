@@ -641,6 +641,14 @@ Every SQL statement is stored in one reylo-typed `.sql` file and run through `pg
 Every statement the kernel sends is a `.sql` file under `src/`, typed by reylo and checked for partition binding.
 TypeScript sends only transaction control (`BEGIN ISOLATION LEVEL …`, `SET LOCAL …`, `COMMIT`, `ROLLBACK`).
 
+Decision: `database/pool.ts` owns physical checkout, accounting, nested-pool prevention and discard. A native read opts
+in through `withBoundedReadConnection` or `withBoundedReadOnlyTransaction`; one caller deadline covers checkout,
+transaction setup, every query, callback work, commit and safe rollback. Expiry retires the callback's client, late
+checkout sends no SQL, unresolved or uncertain native work and transaction phases discard the client, and settled
+PostgreSQL errors can roll back safely within the remaining deadline. Adapters retain their authorization, projection,
+logical homes, external preparation and SQL-versus-transport error mapping. An absent deadline keeps the existing
+path; commands, mutations and money callers do not opt in.
+
 Authenticated native reads reuse only the genuine actor snapshot from the installed Access instance and pool.
 Its lifetime ends at the earliest of the original request deadline, JWT expiry, and the actual authentication
 account observation plus 180 seconds; preparing another read never extends it. Authentication still performs

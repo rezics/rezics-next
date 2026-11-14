@@ -1,8 +1,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { ConfigError } from '../commerce/config.ts';
+import {
+  withBoundedReadLifetime,
+  type BoundedReadLifetimeOptions,
+} from './bounded-read-lifetime.ts';
 export { partitionReadClient, partitionReadClientObservation, partitionReadClients } from './read-snapshot.ts';
 export { boundedReadWindow } from './bounded-read-window.ts';
+export { BoundedReadDeadlineError, RetiredReadClientError } from './bounded-read-lifetime.ts';
 
 export const KERNEL_POOL_MAX = 10;
 const DEFAULT_ACQUIRE_TIMEOUT_MILLIS = 200;
@@ -93,8 +98,45 @@ function accountQuery<T>(accounting: QueryAccounting, args: unknown[], dispatch:
 
 export function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   const accounting = queryAccounting.getStore();
-  const dispatch = () => checkedOutConnection(pool, work, accounting);
+  const dispatch = () => {
+    if (heldPools.getStore()?.has(pool)) return Promise.reject(new NestedPoolCheckoutError());
+    return checkedOutConnection(pool, work, accounting);
+  };
   return accounting ? accounting.connection(dispatch) : dispatch();
+}
+
+type BoundedReadOptions = Omit<BoundedReadLifetimeOptions, 'transaction'>;
+
+/** Opt in to one finite physical checkout for native read work. */
+export function withBoundedReadConnection<T>(
+  pool: Pool,
+  deadline: number,
+  read: (client: PoolClient) => Promise<T>,
+  options: BoundedReadOptions = {},
+): Promise<T> {
+  return withBoundedReadLifetime(
+    (work) => withConnection(pool, work),
+    (client, error) => discardConnection(client, error),
+    deadline,
+    read,
+    options,
+  );
+}
+
+/** Opt in to a finite read-only repeatable-read transaction on one checkout. */
+export function withBoundedReadOnlyTransaction<T>(
+  pool: Pool,
+  deadline: number,
+  read: (client: PoolClient) => Promise<T>,
+  options: BoundedReadOptions = {},
+): Promise<T> {
+  return withBoundedReadLifetime(
+    (work) => withConnection(pool, work),
+    (client, error) => discardConnection(client, error),
+    deadline,
+    read,
+    { ...options, transaction: 'repeatable-read-read-only' },
+  );
 }
 
 async function checkedOutConnection<T>(
