@@ -25,7 +25,10 @@ test('unrelated local bulk cleanup advances while a remote receipt waits for His
 
   for (const [operationId, request] of [
     [localOperationId, { action: 'set_status', state: 'completed', selection: { kind: 'explicit' } }],
-    [remoteOperationId, { action: 'add_to_collection', collectionId: remoteCollectionId, selection: { kind: 'explicit' } }],
+    [
+      remoteOperationId,
+      { action: 'add_to_collection', collectionId: remoteCollectionId, selection: { kind: 'explicit' } },
+    ],
   ] as const) {
     await db.admin.query(
       `INSERT INTO library.bulk_operation
@@ -78,8 +81,12 @@ test('unrelated local bulk cleanup advances while a remote receipt waits for His
     client.release();
   }
   expect(
-    (await db.admin.query('SELECT operation_id FROM library.bulk_target WHERE route=$1 AND account_id=$2 ORDER BY operation_id', [route, accountId]))
-      .rows.map((row) => row.operation_id),
+    (
+      await db.admin.query(
+        'SELECT operation_id FROM library.bulk_target WHERE route=$1 AND account_id=$2 ORDER BY operation_id',
+        [route, accountId],
+      )
+    ).rows.map((row) => row.operation_id),
   ).toEqual([remoteOperationId]);
 
   const retry = await db.pool.connect();

@@ -493,12 +493,7 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
       } else {
         if (!(kind in ownedQueries())) throw new TypeError('Invalid graph namespace');
         if (kind === 'bulk_target') {
-          const settled = await verifyCollectionBulkHistoryDispositions(
-            tx,
-            route,
-            accountId,
-            bulkHistoryDispositions,
-          );
+          const settled = await verifyCollectionBulkHistoryDispositions(tx, route, accountId, bulkHistoryDispositions);
           removed = (
             await bulkTarget.run(tx, {
               route,

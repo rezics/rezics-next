@@ -91,7 +91,11 @@ function transaction(input: { sourceEvidence: TargetEvidence | null; sourceState
 }
 
 test('History accepts the exact committed source acknowledgement and tombstone-before-ack closure only', async () => {
-  const acknowledged = await libraryBulkReceiptReadiness(transaction({ sourceEvidence: evidence, sourceState: 'applied' }), artifact, barrier);
+  const acknowledged = await libraryBulkReceiptReadiness(
+    transaction({ sourceEvidence: evidence, sourceState: 'applied' }),
+    artifact,
+    barrier,
+  );
   expect(acknowledged).toEqual({ ready: true });
 
   const tombstonedBeforeAck = await libraryBulkReceiptReadiness(

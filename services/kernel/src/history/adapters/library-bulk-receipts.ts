@@ -20,7 +20,12 @@ import type {
   LibraryBulkReceiptDispositionPort,
   LibraryBulkReceiptLocator,
 } from '../contract/index.ts';
-import { decodeLocator, encodeLocator, LIBRARY_BULK_TARGET_COMMAND_KIND, LIBRARY_BULK_TARGET_COMMAND_KIND_ID } from '../contract/index.ts';
+import {
+  decodeLocator,
+  encodeLocator,
+  LIBRARY_BULK_TARGET_COMMAND_KIND,
+  LIBRARY_BULK_TARGET_COMMAND_KIND_ID,
+} from '../contract/index.ts';
 import { lockHistoryBarrier, recordHistoryReceivingProof, verifyCurrentHistoryReceiving } from './receiving.ts';
 import { minimizeHistoryReceipt } from './receipt.ts';
 import { nativePool } from './handles.ts';
@@ -88,13 +93,13 @@ function remoteTarget(row: SourceRow, route: number): boolean {
   const requestedCollectionId = row.request.collectionId;
   const targetRoute = typeof collectionId === 'string' ? routeOf(collectionId) : null;
   return (
-    (action === 'add_to_collection' && targetKind === 'subject') ||
-    (action === 'remove_from_collection' && targetKind === 'occurrence')
-  ) &&
+    ((action === 'add_to_collection' && targetKind === 'subject') ||
+      (action === 'remove_from_collection' && targetKind === 'occurrence')) &&
     targetRoute !== null &&
     targetRoute !== route &&
     row.receipt.partition === partitionOf(targetRoute) &&
-    collectionId === requestedCollectionId;
+    collectionId === requestedCollectionId
+  );
 }
 
 async function sourceRow(
@@ -146,13 +151,11 @@ function asEvidence(value: unknown): TargetEvidence | null {
 async function readReceipt(
   tx: CommandTransaction,
   binding: LibraryBulkReceiptBinding,
-): Promise<{ locator: Extract<HistoryArtifact['locator'], { artifactType: 'command-receipt/v1' }>; receipt: CoreReceipt } | null> {
-  const keys = nativeReceiptKeyCandidates(
-    tx,
-    LIBRARY_BULK_TARGET_COMMAND_KIND,
-    binding.accountId,
-    binding.receipt.key,
-  );
+): Promise<{
+  locator: Extract<HistoryArtifact['locator'], { artifactType: 'command-receipt/v1' }>;
+  receipt: CoreReceipt;
+} | null> {
+  const keys = nativeReceiptKeyCandidates(tx, LIBRARY_BULK_TARGET_COMMAND_KIND, binding.accountId, binding.receipt.key);
   const rows = (
     await tx.query<CoreReceipt>(
       `SELECT idempotency_key AS "idempotencyKey",request_digest AS digest,transaction_id AS "transactionId",
@@ -258,12 +261,9 @@ async function readiness(
   if (!validBinding(binding) || !evidenceMatches(evidence, coreReceipt, binding))
     return pending('library-bulk-receipt-response-unavailable');
   if (
-    !nativeReceiptKeyCandidates(
-      tx,
-      LIBRARY_BULK_TARGET_COMMAND_KIND,
-      sourceAccount,
-      binding.receipt.key,
-    ).includes(coreReceipt.idempotencyKey)
+    !nativeReceiptKeyCandidates(tx, LIBRARY_BULK_TARGET_COMMAND_KIND, sourceAccount, binding.receipt.key).includes(
+      coreReceipt.idempotencyKey,
+    )
   )
     return pending('library-bulk-receipt-locator-mismatch');
   const source = await sourceRow(tx, binding, 'share');
@@ -285,9 +285,7 @@ async function readiness(
   return pending('library-bulk-receipt-source-acknowledgement-pending');
 }
 
-export function createLibraryBulkReceiptDispositionPort(
-  history: HistoryRegistry,
-): LibraryBulkReceiptDispositionPort {
+export function createLibraryBulkReceiptDispositionPort(history: HistoryRegistry): LibraryBulkReceiptDispositionPort {
   return {
     async settle(poolHandle, source) {
       if (!validBinding(source)) return null;

@@ -415,7 +415,14 @@ export async function recordHistoryReceivingProof(
   }
   if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
   const encoded = Buffer.from(encodeLocator(locator));
-  const custodyGap = await historyReceivingGap(tx, partition, locator, remoteLibraryBulkReceipt ? undefined : barrier, pool, context);
+  const custodyGap = await historyReceivingGap(
+    tx,
+    partition,
+    locator,
+    remoteLibraryBulkReceipt ? undefined : barrier,
+    pool,
+    context,
+  );
   if (custodyGap) return custodyGap;
   if (!(await historyPhysicalProof(tx, partition, locator))) throw new TypeError('History physical copy remains');
   const rows = await nativeScope(tx, partition, locator.artifactType, encoded);

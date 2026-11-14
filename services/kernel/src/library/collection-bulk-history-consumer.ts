@@ -1,7 +1,10 @@
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { settleLibraryBulkReceiptDisposition, verifyLibraryBulkReceiptDisposition } from '../history/application/library-bulk-receipts.ts';
+import {
+  settleLibraryBulkReceiptDisposition,
+  verifyLibraryBulkReceiptDisposition,
+} from '../history/application/library-bulk-receipts.ts';
 import type { LibraryBulkReceiptBinding, LibraryBulkReceiptDisposition } from '../history/contract/index.ts';
 import { routeOf } from '../route/route.ts';
 import type { BulkAdmission } from './bulk-contract.ts';
@@ -25,7 +28,8 @@ function isRemoteTarget(row: SourceTarget, route: number): boolean {
   const remoteAction =
     (row.request.action === 'add_to_collection' && row.target.kind === 'subject') ||
     (row.request.action === 'remove_from_collection' && row.target.kind === 'occurrence');
-  const collectionId = row.target.collectionId ?? ('collectionId' in row.request ? row.request.collectionId : undefined);
+  const collectionId =
+    row.target.collectionId ?? ('collectionId' in row.request ? row.request.collectionId : undefined);
   const collectionRoute = typeof collectionId === 'string' ? routeOf(collectionId) : null;
   return remoteAction && collectionRoute !== null && collectionRoute !== route;
 }
@@ -36,19 +40,21 @@ export async function prepareCollectionBulkHistoryDispositions(
   route: number,
   accountId: string,
 ): Promise<readonly CollectionBulkHistoryDisposition[]> {
-  const rows = await withConnection(pool, async (client) =>
-    (
-      await client.query<SourceTarget>(
-        `SELECT target.operation_id AS "operationId",target.ordinal::text AS ordinal,
+  const rows = await withConnection(
+    pool,
+    async (client) =>
+      (
+        await client.query<SourceTarget>(
+          `SELECT target.operation_id AS "operationId",target.ordinal::text AS ordinal,
           operation.source_digest AS "sourceDigest",operation.request,target.target,target.receipt
          FROM library.bulk_operation operation
          JOIN library.bulk_target target ON target.route=operation.route
            AND target.operation_id=operation.operation_id AND target.account_id=operation.account_id
          WHERE operation.route=$1 AND operation.account_id=$2
          ORDER BY target.operation_id,target.ordinal LIMIT 100`,
-        [route, accountId],
-      )
-    ).rows,
+          [route, accountId],
+        )
+      ).rows,
   );
   const settled: CollectionBulkHistoryDisposition[] = [];
   for (const row of rows) {
