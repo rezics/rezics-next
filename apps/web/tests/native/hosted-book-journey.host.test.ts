@@ -69,7 +69,7 @@ class StageJournal {
       ...this.stages.map(({ label, state, observation }) => `- ${state} | ${label} | ${observation}`),
     ].join('\n');
     console.info(report);
-    if (this.stages.some(({ state }) => state === 'failed')) throw new Error(report);
+    if (this.stages.some(({ state }) => state !== 'passed')) throw new Error(report);
   }
 }
 
@@ -213,7 +213,99 @@ async function readStructure(client: KernelClient, catalogueId: string) {
 
 async function pickDraft(page: Page, title: string) {
   await page.getByRole('button', { name: 'Open a saved account draft', exact: true }).click();
-  await page.getByRole('button', { name: title, exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Server-saved drafts', exact: true })
+    .getByRole('button', { name: title, exact: true })
+    .click();
+}
+
+async function associateChapterLanguage(
+  page: Page,
+  chapterTitle: string,
+  language: string,
+  title: string,
+  makeDefault = false,
+) {
+  const outline = page.getByRole('region', { name: 'Book table of contents', exact: true });
+  await outline.getByRole('button', { name: `Organize ${chapterTitle}`, exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Chapter body languages', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Chapter body languages', exact: true });
+  await form.getByLabel('Language code', { exact: true }).fill(language);
+  await form.getByLabel('Chapter title in this language', { exact: true }).fill(title);
+  if (makeDefault)
+    await form.getByRole('button', { name: 'Declare this language as the default', exact: true }).click();
+  const consent = form.getByRole('region', { name: 'Permission for this saved version', exact: true });
+  await consent.getByRole('button', { name: 'Permit this version for this Book', exact: true }).click();
+  await consent
+    .getByText('Permission was granted for this saved version and this Book. This action did not publish anything.', {
+      exact: true,
+    })
+    .waitFor({ state: 'visible' });
+  await form.getByRole('button', { name: 'Attach saved version', exact: true }).click();
+  await form.waitFor({ state: 'hidden' });
+}
+
+async function activatePreparedBook(page: Page) {
+  const activation = page.getByRole('region', { name: 'Activate this prepared Book release', exact: true });
+  await activation.getByRole('button', { name: 'Check this sealed candidate', exact: true }).click();
+  const confirm = activation.getByRole('button', { name: 'Activate this exact release', exact: true });
+  const next = activation.getByRole('button', { name: 'Check next targets', exact: true });
+  // The witness has exactly two selected body targets; this is bounded explicit advancement, never a body/Book scan.
+  for (let step = 0; step < 4; step++) {
+    await confirm.or(next).waitFor({ state: 'visible' });
+    if (await confirm.isVisible()) break;
+    await next.click();
+  }
+  await confirm.click();
+  await activation
+    .getByText('Activation acknowledged for this exact release.', { exact: true })
+    .first()
+    .waitFor({ state: 'visible' });
+  await activation.getByRole('button', { name: 'Read current publication and verify reader', exact: true }).click();
+  await activation
+    .getByText('The current publication and anonymous exact reader are verified.', { exact: true })
+    .waitFor({ state: 'visible' });
+}
+
+async function assertPublishedLanguage(
+  client: KernelClient,
+  catalogueId: string,
+  release: string,
+  occurrenceId: string,
+  language: string,
+  expected: JourneyPost,
+) {
+  const result = await client
+    .hostedCatalogues({ id: catalogueId })
+    .occurrences({ occurrenceId })
+    .body.get({
+      query: {
+        kind: 'publication',
+        revisionId: release,
+        language,
+        targetPostId: expected.postId,
+        targetRevisionId: expected.revisionId,
+        targetSha256: expected.sha256,
+      },
+    });
+  if (result.status !== 200 || result.error || !result.data)
+    throw new Error(`Exact ${language} body returned HTTP ${result.status}`);
+  const value = result.data as {
+    selectedLanguage: string | null;
+    occurrence: { availability: string; target?: { postId: string; revisionId: string; sha256: string } };
+    document: { canonicalBytes: string; sha256: string; licence: string } | null;
+  };
+  expect(value.selectedLanguage).toBe(language);
+  expect(value.occurrence.availability).toBe('available');
+  expect(value.occurrence.target).toMatchObject({
+    postId: expected.postId,
+    revisionId: expected.revisionId,
+    sha256: expected.sha256,
+  });
+  expect(value.document?.sha256).toBe(expected.sha256);
+  expect(value.document?.licence).toBe('LicenseRef-rezics-terms');
+  expect(Buffer.from(value.document!.canonicalBytes, 'base64').toString('utf8')).toBe(serializeDocument(expected.body));
+  return value;
 }
 
 async function addChapterFromPicker(page: Page, title: string, draftTitle: string) {
@@ -322,13 +414,16 @@ function nativeStatus(result: { status: number }) {
 }
 
 nativeTest(
-  'mounted private Book drafts save, compare, preview, prepare an exact selection, and journal the missing initial activation',
+  'mounted private Book drafts bind published languages, activate exact nested selection and preserve frozen reader checkpoints',
   900_000,
   async () => {
     const journal = new StageJournal();
     let seed: HostedBookJourneySeed | undefined;
     let chapterOne: Awaited<ReturnType<typeof readNativePost>> | undefined;
     let chapterTwo: Awaited<ReturnType<typeof readNativePost>> | undefined;
+    let chapterFrench: Awaited<ReturnType<typeof readNativePost>> | undefined;
+    let authorRelease: string | undefined;
+    let frenchExactHref: string | undefined;
     let catalogueId: string | undefined;
     let partTitle: string | undefined;
     let chapterOneTitle: string | undefined;
@@ -363,6 +458,9 @@ nativeTest(
       };
     });
 
+    const frenchText =
+      'Mara comptait les lanternes depuis le pont du bac et dessinait le port silencieux sur sa carte.';
+    const frenchTitle = 'Les lanternes du port';
     const oneText = 'Mara counted the lanterns from the ferry deck and marked the quiet harbor on her chart.';
     if (seed) {
       const saved = await journal.run(
@@ -461,9 +559,26 @@ nativeTest(
       if (!second)
         journal.unreached('chapter two saved-version readback', 'Studio save and generated readback did not complete');
 
+      const frenchSaved = await journal.run(
+        'save an actual French chapter body as a separate private exact Post in Studio',
+        async () => {
+          const result = await saveChapterDraft(page, seed!.author, seed!.chapterFrench, frenchText, false);
+          chapterFrench = result.post;
+          return {
+            value: result.post,
+            observation: `post=${result.post.id} revision=${result.post.revisionId} sha256=${result.post.sha256} language=fr`,
+          };
+        },
+        () => pageObservation(page),
+      );
+      if (!frenchSaved)
+        journal.unreached('French saved-version readback', 'The French Post did not save through mounted Studio');
+
       await journal.run('anonymous direct reads conceal private chapter drafts before release', async () => {
         const firstDirect = await seed!.anonymous.posts({ id: seed!.chapterOne.postId }).get();
         const secondDirect = await seed!.anonymous.posts({ id: seed!.chapterTwo.postId }).get();
+        const frenchDirect = await seed!.anonymous.posts({ id: seed!.chapterFrench.postId }).get();
+        expect(frenchDirect.status).toBe(404);
         expect(nativeStatus(firstDirect)).toBe(404);
         expect(nativeStatus(secondDirect)).toBe(404);
         return {
@@ -662,6 +777,52 @@ nativeTest(
         journal.unreached('move and nest the second placement', 'The reordered root chapter or part was unavailable');
       }
 
+      if (book && chapterOne && chapterFrench && chapterOneOccurrence && chapterOneTitle) {
+        await journal.run(
+          'associate exact English default and saved French body through the mounted Book language form',
+          async () => {
+            await openBookStudio(page, catalogueId!);
+            await page.getByRole('button', { name: chapterOneTitle!, exact: true }).click();
+            await associateChapterLanguage(page, chapterOneTitle!, 'en', chapterOneTitle!, true);
+            await pickDraft(page, seed!.chapterFrench.title);
+            await associateChapterLanguage(page, chapterOneTitle!, 'fr', frenchTitle);
+            const current = await readStructure(seed!.author, catalogueId!);
+            const languages = await seed!.author
+              .hostedCatalogues({ id: catalogueId! })
+              .occurrences({ occurrenceId: chapterOneOccurrence! })
+              .languages.get({ query: { kind: 'structure', revisionId: current.head.revisionId, limit: '20' } });
+            if (languages.status !== 200 || languages.error || !languages.data)
+              throw new Error(`Draft language readback returned ${languages.status}`);
+            const rows = languages.data.items;
+            expect(rows.find((row) => row.language === 'en')).toMatchObject({
+              isDefault: true,
+              target: { postId: chapterOne!.id, revisionId: chapterOne!.revisionId, sha256: chapterOne!.sha256 },
+            });
+            expect(rows.find((row) => row.language === 'fr')).toMatchObject({
+              title: frenchTitle,
+              isDefault: false,
+              target: {
+                postId: chapterFrench!.id,
+                revisionId: chapterFrench!.revisionId,
+                sha256: chapterFrench!.sha256,
+              },
+            });
+            expect(current.items.find((row) => row.occurrenceId === chapterOneOccurrence)?.target?.postId).toBe(
+              chapterOne!.id,
+            );
+            return {
+              value: true,
+              observation: `chapter=${chapterOneOccurrence} languages=en,fr canonicalPost=${chapterOne!.id} FrenchPost=${chapterFrench!.id} head=${current.head.revisionId}`,
+            };
+          },
+          () => pageObservation(page),
+        );
+      } else
+        journal.unreached(
+          'mounted language association',
+          'The canonical chapter or saved French source was unavailable',
+        );
+
       if (book && chapterOne && chapterOneOccurrence && chapterOneTitle && chapterTwo && chapterTwoOccurrence) {
         const prepared = await journal.run(
           'review, recover, and seal the exact selected private candidate',
@@ -741,8 +902,8 @@ nativeTest(
               stageId: stageId!,
               selectedOccurrenceId: chapterOneOccurrence!,
               target: {
-                postId: chapterOne!.postId,
-                threadId: chapterOne!.threadId,
+                postId: chapterOne!.id,
+                threadId: seed!.chapterOne.threadId,
                 revisionId: chapterOne!.revisionId,
                 sha256: chapterOne!.sha256,
               },
@@ -806,9 +967,25 @@ nativeTest(
         preparationOperands &&
         candidateSealed
       ) {
+        await journal.run(
+          'activate the selected private candidate through mounted checks and explicit publication',
+          async () => {
+            await activatePreparedBook(page);
+            const owner = await readOwnedBook(seed!.author, seed!.authorAccountId, catalogueId!);
+            if (!owner.item.publicationId) throw new Error('Mounted activation did not produce a current release');
+            authorRelease = owner.item.publicationId;
+            expect(owner.item.headRevisionId).toBe(activationOperands!.expectedDraftHeadRevisionId);
+            return {
+              value: authorRelease,
+              observation: `activatedRelease=${authorRelease} sourceHead=${owner.item.headRevisionId} selected=${chapterOneOccurrence} languages=en,fr`,
+            };
+          },
+          () => pageObservation(page),
+        );
+
         const laterText = 'Mara revised the chart after sunrise, adding the ferry’s quiet western landing in blue ink.';
         const changed = await journal.run(
-          'save a later private chapter revision after candidate sealing',
+          'save a later private chapter revision after publication',
           async () => {
             const revised = await saveChapterDraft(page, seed!.author, seed!.chapterOne, laterText, false);
             return {
@@ -826,7 +1003,7 @@ nativeTest(
         );
         if (changed) {
           await journal.run(
-            'move the selected source placement after the sealed candidate',
+            'move the selected source placement after publication',
             async () => {
               await openBookStudio(page, catalogueId!);
               await movePlacementUnderPart(page, chapterOneTitle!, partTitle!);
@@ -843,7 +1020,7 @@ nativeTest(
               });
               expect(currentPost.revisionId).toBe(changed.revisionId);
               expect(owner.item.headRevisionId).not.toBe(activationOperands!.expectedDraftHeadRevisionId);
-              expect(owner.item.publicationId).toBeNull();
+              expect(owner.item.publicationId).toBe(authorRelease ?? null);
               return {
                 value: moved,
                 observation:
@@ -855,7 +1032,8 @@ nativeTest(
                   currentPost.revisionId +
                   ' newDraftHead=' +
                   owner.item.headRevisionId +
-                  ' currentPublication=null',
+                  ' currentPublication=' +
+                  authorRelease,
               };
             },
             () => pageObservation(page),
@@ -866,18 +1044,231 @@ nativeTest(
             'The later chapter version did not save',
           );
         }
-        journal.unreached(
-          'initial selected-candidate activation and private author reader',
-          'No mounted HTTP route or KernelClient operation exposes producer activateHostedPublicationCandidate. ' +
-            'The selected sealed stage remains unactivated; immutable preparation operands: ' +
-            preparationOperands,
-        );
-        journal.unreached(
-          'private author anonymous exact chapter bytes, discovery, progress, and stable old link',
-          'No initial release was activated; the independent prepublished reader control below cannot satisfy this author stage. ' +
-            'Immutable preparation operands: ' +
-            preparationOperands,
-        );
+        if (authorRelease && chapterFrench) {
+          await journal.run(
+            'later private French edits do not change either frozen published language',
+            async () => {
+              const privateText = 'Brouillon privé ultérieur : la carte du port reste secrète après la publication.';
+              const laterFrench = await saveChapterDraft(page, seed!.author, seed!.chapterFrench, privateText, false);
+              expect(laterFrench.post.revisionId).not.toBe(chapterFrench!.revisionId);
+              const frozenEnglish = {
+                ...seed!.chapterOne,
+                revisionId: chapterOne!.revisionId,
+                sha256: chapterOne!.sha256,
+                body: chapterOne!.body,
+              };
+              const frozenFrench = {
+                ...seed!.chapterFrench,
+                revisionId: chapterFrench!.revisionId,
+                sha256: chapterFrench!.sha256,
+                body: chapterFrench!.body,
+              };
+              await assertPublishedLanguage(
+                seed!.anonymous,
+                catalogueId!,
+                authorRelease!,
+                chapterOneOccurrence!,
+                'en',
+                frozenEnglish,
+              );
+              await assertPublishedLanguage(
+                seed!.anonymous,
+                catalogueId!,
+                authorRelease!,
+                chapterOneOccurrence!,
+                'fr',
+                frozenFrench,
+              );
+              expect((await seed!.anonymous.posts({ id: seed!.chapterOne.postId }).get()).status).toBe(404);
+              expect((await seed!.anonymous.posts({ id: seed!.chapterFrench.postId }).get()).status).toBe(404);
+              const publishedLanguages = await seed!.anonymous
+                .hostedCatalogues({ id: catalogueId! })
+                .occurrences({ occurrenceId: chapterOneOccurrence! })
+                .languages.get({ query: { kind: 'publication', revisionId: authorRelease!, limit: '20' } });
+              if (publishedLanguages.status !== 200 || publishedLanguages.error || !publishedLanguages.data)
+                throw new Error(`Published language page returned ${publishedLanguages.status}`);
+              expect(publishedLanguages.data.items.map((row) => row.language).sort()).toEqual(['en', 'fr']);
+              expect(publishedLanguages.data.nextCursor).toBeNull();
+              expect(JSON.stringify(publishedLanguages.data)).not.toContain(seed!.chapterTwo.postId);
+
+              const excluded = await seed!.anonymous
+                .hostedCatalogues({ id: catalogueId! })
+                .occurrences({ occurrenceId: chapterTwoOccurrence! })
+                .metadata.get({ query: { kind: 'publication', revisionId: authorRelease! } });
+              expect(excluded.status).toBe(404);
+              return {
+                value: laterFrench.post,
+                observation: `publishedFrench=${chapterFrench!.revisionId} laterPrivateFrench=${laterFrench.post.revisionId} English=${chapterOne!.revisionId} excludedChapter=${excluded.status}`,
+              };
+            },
+            () => pageObservation(page),
+          );
+
+          await journal.run(
+            'anonymous reader chooses a published French body, Automatic and exact browser history without changing interface locale',
+            async () => {
+              const context = await auth.newContext('anonymous');
+              try {
+                const reader = await context.newPage();
+                reader.setDefaultTimeout(60_000);
+                await reader.goto(
+                  `${stack.web}/en/books/${catalogueId}/read?release=${authorRelease}&occurrence=${chapterOneOccurrence}&subject=${seed!.subjectId}&language=en&preferred=en`,
+                  { waitUntil: 'domcontentloaded' },
+                );
+                await hydrate(reader);
+                await reader
+                  .getByRole('heading', { name: chapterOneTitle!, exact: true })
+                  .waitFor({ state: 'visible' });
+                await reader.locator('[data-slot="book-language-controls"] summary').click();
+                await reader
+                  .locator('[data-slot="book-language-controls"]')
+                  .getByRole('button')
+                  .filter({ hasText: frenchTitle })
+                  .click();
+                await reader.waitForURL((url) => url.searchParams.get('bodyLanguage') === 'fr');
+                await reader.getByRole('heading', { name: frenchTitle, exact: true }).waitFor({ state: 'visible' });
+                await reader
+                  .locator('article.book-reading-display')
+                  .getByText(frenchText, { exact: true })
+                  .waitFor({ state: 'visible' });
+                expect(await reader.locator('article.book-reading-display').getAttribute('lang')).toBe('fr');
+                expect(await reader.locator('html').getAttribute('lang')).toBe('en');
+                const exact = new URL(reader.url());
+                expect(exact.searchParams.get('bodyPost')).toBe(chapterFrench!.id);
+                expect(exact.searchParams.get('bodyRevision')).toBe(chapterFrench!.revisionId);
+                expect(exact.searchParams.get('bodySha256')).toBe(chapterFrench!.sha256);
+                frenchExactHref = reader.url();
+                expect(await reader.locator('main').innerText()).not.toContain('Brouillon privé ultérieur');
+                expect(await reader.locator('main').innerText()).not.toContain(laterText);
+                await reader.goBack({ waitUntil: 'domcontentloaded' });
+                await reader
+                  .getByRole('heading', { name: chapterOneTitle!, exact: true })
+                  .waitFor({ state: 'visible' });
+                await reader.goForward({ waitUntil: 'domcontentloaded' });
+                await reader.getByRole('heading', { name: frenchTitle, exact: true }).waitFor({ state: 'visible' });
+                await reader.locator('[data-slot="book-language-controls"] summary').click();
+                await reader
+                  .locator('[data-slot="book-language-controls"]')
+                  .getByRole('button', { name: 'Automatic', exact: true })
+                  .click();
+                await reader.waitForURL(
+                  (url) =>
+                    url.searchParams.get('language') === 'automatic' && url.searchParams.get('bodyLanguage') === 'en',
+                );
+                await reader
+                  .getByRole('heading', { name: chapterOneTitle!, exact: true })
+                  .waitFor({ state: 'visible' });
+                expect(await reader.locator('article.book-reading-display').innerText()).toContain(oneText);
+                expect(await reader.locator('html').getAttribute('lang')).toBe('en');
+                await reader.goto(frenchExactHref, { waitUntil: 'domcontentloaded' });
+                await reader.getByRole('heading', { name: frenchTitle, exact: true }).waitFor({ state: 'visible' });
+                expect(await reader.locator('article.book-reading-display').innerText()).toContain(frenchText);
+                return {
+                  value: frenchExactHref,
+                  observation: `exactFrench=${frenchExactHref} automatic=en UI=en backward/forward=true privateLaterBodies=absent`,
+                };
+              } finally {
+                await context.close();
+              }
+            },
+          );
+
+          if (frenchExactHref)
+            await journal.run(
+              'member checkpoint and Continue retain French exact identity without applying its block position to English',
+              async () => {
+                const target = new URL(frenchExactHref!);
+                const member = await auth.signIn('bob', { returnTo: target.pathname + target.search });
+                const reader = pageFrom(member);
+                await hydrate(reader);
+                await reader.getByRole('heading', { name: frenchTitle, exact: true }).waitFor({ state: 'visible' });
+                const anchor = reader.locator('article.book-reading-display [data-block-id]').first();
+                const blockId = await anchor.getAttribute('data-block-id');
+                if (!blockId) throw new Error('French body did not expose its authored block identity');
+                await reader.getByRole('button', { name: 'Save visible block', exact: true }).click();
+                await reader.getByText('Reading position saved.', { exact: true }).waitFor({ state: 'visible' });
+                const current = await seed!.member.libraryHostedReading.metadata.get({
+                  query: { subjectId: seed!.subjectId },
+                });
+                if (current.status !== 200 || current.error || !current.data)
+                  throw new Error(`French checkpoint readback returned ${current.status}`);
+                expect(current.data).toMatchObject({
+                  state: 'saved',
+                  address: {
+                    catalogueId,
+                    publicationRevisionId: authorRelease,
+                    occurrenceId: chapterOneOccurrence,
+                    bodyLanguage: 'fr',
+                    targetPostId: chapterFrench!.id,
+                    targetRevisionId: chapterFrench!.revisionId,
+                    targetSha256: chapterFrench!.sha256,
+                    documentPosition: { blockId, offset: 0 },
+                  },
+                });
+                await reader.evaluate(() => {
+                  const page = window as Window & { __bookLanguageScrollCalls?: unknown[] };
+                  page.__bookLanguageScrollCalls = [];
+                  const original = window.scrollBy.bind(window);
+                  window.scrollBy = ((...args: Parameters<typeof window.scrollBy>) => {
+                    page.__bookLanguageScrollCalls!.push(args);
+                    return Reflect.apply(original, window, args);
+                  }) as typeof window.scrollBy;
+                });
+                await reader.locator('[data-slot="book-language-controls"] summary').click();
+                await reader
+                  .locator('[data-slot="book-language-controls"]')
+                  .getByRole('button', { name: 'Automatic', exact: true })
+                  .click();
+                await reader.waitForURL((url) => url.searchParams.get('bodyLanguage') === 'en');
+                await reader
+                  .getByRole('heading', { name: chapterOneTitle!, exact: true })
+                  .waitFor({ state: 'visible' });
+                await reader
+                  .getByRole('link', { name: 'Resume saved chapter', exact: true })
+                  .waitFor({ state: 'visible' });
+                expect(
+                  await reader.evaluate(
+                    () => (window as Window & { __bookLanguageScrollCalls?: unknown[] }).__bookLanguageScrollCalls,
+                  ),
+                ).toEqual([]);
+                const stillFrench = await seed!.member.libraryHostedReading.metadata.get({
+                  query: { subjectId: seed!.subjectId },
+                });
+                expect(stillFrench.data).toMatchObject({
+                  address: {
+                    bodyLanguage: 'fr',
+                    targetRevisionId: chapterFrench!.revisionId,
+                    documentPosition: { blockId, offset: 0 },
+                  },
+                });
+                await reader.getByRole('link', { name: 'Resume saved chapter', exact: true }).click();
+                await reader.waitForURL((url) => url.searchParams.get('bodyLanguage') === 'fr');
+                await reader.getByRole('heading', { name: frenchTitle, exact: true }).waitFor({ state: 'visible' });
+                await reader.goto(`${stack.web}/en/library/continue`, { waitUntil: 'domcontentloaded' });
+                await hydrate(reader);
+                const continuation = reader
+                  .locator('a[href*="/books/"][href*="bodyLanguage=fr"]')
+                  .filter({ hasText: frenchTitle });
+                await continuation.click();
+                await reader.getByRole('heading', { name: frenchTitle, exact: true }).waitFor({ state: 'visible' });
+                expect(new URL(reader.url()).searchParams.get('bodySha256')).toBe(chapterFrench!.sha256);
+                expect(await reader.locator('article.book-reading-display').innerText()).toContain(frenchText);
+                return {
+                  value: current.data,
+                  observation: `savedLanguage=fr savedRevision=${chapterFrench!.revisionId} block=${blockId} EnglishOffsetReuse=false resumed/Continue=fr`,
+                };
+              },
+            );
+          else
+            journal.unreached(
+              'member French checkpoint and Continue',
+              'The anonymous exact French reader was not admitted',
+            );
+        } else
+          journal.unreached(
+            'published language reader, private edits and checkpoints',
+            'The selected private release did not activate',
+          );
       } else {
         journal.unreached(
           'later private edit, move isolation, and initial activation boundary',
@@ -885,24 +1276,28 @@ nativeTest(
         );
         journal.unreached(
           'private author anonymous exact chapter bytes, discovery, progress, and stable old link',
-          'No mounted initial activation receipt is available',
+          'No acknowledged initial activation receipt is available',
         );
       }
     } else {
       for (const label of [
         'private saved chapter preview and revision comparison',
         'save chapter two as a separate private exact draft in Studio',
+        'save an actual French chapter body as a separate private exact Post in Studio',
+        'associate exact English default and saved French body through the mounted Book language form',
         'anonymous direct reads conceal private chapter drafts before release',
         'start Book, add and reorder chapters, create a part, and move chapters under it',
         'review, recover, and seal an exact selected private candidate',
         'later private edit and move isolation',
-        'initial selected-candidate activation and private author reader',
-        'private author anonymous exact chapter bytes, discovery, progress, and stable old link',
+        'activate the selected private candidate through mounted checks and explicit publication',
+        'later private French edits do not change either frozen published language',
+        'anonymous reader chooses a published French body, Automatic and exact browser history without changing interface locale',
+        'member checkpoint and Continue retain French exact identity without applying its block position to English',
       ])
         journal.unreached(label, 'Generated private fixture setup did not complete');
     }
 
-    await journal.finish('PRIVATE-DRAFT AUTHOR JOURNEY (initial activation separately reported)');
+    await journal.finish('PRIVATE BOOK AUTHOR-TO-READER LANGUAGE JOURNEY');
   },
   lifecycle,
 );

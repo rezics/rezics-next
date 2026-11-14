@@ -249,6 +249,10 @@ export interface StudioPort {
 }
 export interface BookOrganizerPort {
   canBindChapterLanguage?(): boolean;
+  createSourceConsent?(
+    document: ExactDocument,
+    signal: AbortSignal,
+  ): Promise<StudioResult<import('./hosted-source-consent').HostedSourceConsentVisit>>;
   /** Return a fresh complete bounded structure; reject stale structure revisions atomically. */
   change(
     input: { catalogueId: string; expectedRevision: string; change: BookStructureChange; idempotencyKey: string },

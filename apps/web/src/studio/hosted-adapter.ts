@@ -1,3 +1,4 @@
+import { HostedSourceConsentVisit } from './hosted-source-consent';
 import * as v from 'valibot';
 import { bookTocRows } from './book-toc';
 import {
@@ -59,6 +60,7 @@ export class HostedBookAdapter implements BookOrganizerPort {
     private readonly native: HostedBookNative,
     private readonly current: () => boolean,
     private readonly resolveTarget: HostedTargetResolver,
+    private readonly consentOptions?: Omit<ConstructorParameters<typeof HostedSourceConsentVisit>[0], 'isCurrent'>,
   ) {}
 
   isCurrent = (): boolean => this.current();
@@ -69,6 +71,20 @@ export class HostedBookAdapter implements BookOrganizerPort {
     this.book?.placements.flatMap((placement) =>
       placement.kind === 'chapter' ? [structuredClone(placement.target)] : [],
     ) ?? [];
+
+  createSourceConsent = async (
+    document: ExactDocument,
+    signal: AbortSignal,
+  ): Promise<StudioResult<HostedSourceConsentVisit>> => {
+    if (!this.current() || signal.aborted || !this.book || !this.consentOptions) return ended();
+    const catalogueId = this.book.revision.catalogueId;
+    const target = await this.target(document, signal);
+    if (!target.ok) return target;
+    if (!this.current() || signal.aborted || this.book?.revision.catalogueId !== catalogueId) return ended();
+    const visit = new HostedSourceConsentVisit({ ...this.consentOptions, isCurrent: this.current });
+    visit.select({ catalogueId, target: target.value });
+    return { ok: true, value: visit };
+  };
 
   private async exclusive<T>(signal: AbortSignal, run: () => Promise<StudioResult<T>>): Promise<StudioResult<T>> {
     if (!this.current() || signal.aborted) return ended();
