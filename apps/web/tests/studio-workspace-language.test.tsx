@@ -16,6 +16,7 @@ const { getByRole, queryByRole, waitFor } = await import('@testing-library/dom')
 const { fromPlainText } = await import('@rezics/document');
 const { editionDocumentDigest } = await import('../src/content-editions/edition-model');
 const { StudioWorkspace } = await import('../src/studio/workspace');
+const { workbenchCopy } = await import('../src/studio/workbench-copy');
 const language = await import('../src/studio/workspace-language');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale, locales } = await import('../src/paraglide/runtime.js');
@@ -301,16 +302,22 @@ test.each(cases)(
       expect(v.title().value).toBe('Switch me');
       expect(queryByRole(v.host, 'button', { name: m.studio_workspace_retry(), exact: true })).toBeNull();
       f.saveFailure(null);
-      await v.open('post-二');
+      await v.open(m.own_drafts_no_title());
       expect(getByRole(v.host, 'region', { name: m.studio_workspace_switch_region() })).toBeTruthy();
       expect(f.port.open).not.toHaveBeenCalled();
       await v.click(m.studio_workspace_keep_editing());
       expect(v.title().value).toBe('Switch me');
-      await v.open('post-二');
+      await v.open(m.own_drafts_no_title());
       await v.click(m.studio_workspace_save_switch());
       await waitFor(() => expect(v.title().value).toBe(''));
-      expect(getByRole(v.host, 'heading', { name: 'post-二', exact: true })).toBeTruthy();
-      expect(document.activeElement?.textContent).toBe('post-二');
+      expect(getByRole(v.host, 'heading', { name: m.own_drafts_no_title(), exact: true })).toBeTruthy();
+      expect(queryByRole(v.host, 'heading', { name: 'post-二', exact: true })).toBeNull();
+      expect(document.activeElement?.textContent).toBe(m.own_drafts_no_title());
+      await v.click(workbenchCopy[locale].draftActions);
+      const identity = v.host.querySelector<HTMLDetailsElement>('.studio-document .studio-technical')!;
+      expect(identity.textContent).toContain('post-二');
+      expect(identity.textContent).toContain(f.second.revision.exact.revisionId);
+      expect(identity.textContent).toContain(f.second.revision.exact.sha256);
       await v.change(v.title(), 'Local only');
       await v.click(m.studio_workspace_discard_review());
       expect(v.host.textContent).toContain(m.studio_workspace_discard_prompt());
@@ -345,7 +352,7 @@ test.each(locales)(
       expect(v.host.textContent).toContain(m.studio_workspace_preview_saved());
       for (const kind of ['denied', 'withdrawn', 'invalid', 'stale', 'unavailable', 'transport'] as const) {
         f.openFailure(kind);
-        await v.open('post-二');
+        await v.open(m.own_drafts_no_title());
         await waitFor(() =>
           expect(getByRole(v.host, 'alert').textContent).toContain(
             language.workspaceFailureMessage(kind === 'transport' ? 'unavailable' : kind),
@@ -386,6 +393,7 @@ test('German publication progress locks the default editor independently of its 
   const release = f.holdPublish();
   const v = await mount(f);
   try {
+    await v.click(workbenchCopy.de.publication);
     await v.click(m.studio_release_review());
     await waitFor(() => expect(getByRole(v.host, 'checkbox', { name: m.studio_account_confirm() })).toBeTruthy());
     await act(async () => getByRole(v.host, 'checkbox', { name: m.studio_account_confirm() }).click());
