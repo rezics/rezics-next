@@ -29,6 +29,10 @@ type Snak = Statement['qualifiers'][number];
 type Summary = NonNullable<SubjectRead['summary']>;
 type LabelledSummary = Summary & { label: NonNullable<Summary['label']> };
 const release = definitions.release as Release;
+export const bookStoryLabels = {
+  author: release.properties['schema:author']?.labels.en,
+  bookType: release.types['schema:Book']?.labels.en,
+};
 let assertion = 10000;
 const snak = (property: string, content: unknown): Snak => ({
   property: { id: property, data_type: release.properties[property]!.datatype },
@@ -169,15 +173,22 @@ const interludeTitles = [
   'The City at Four in the Morning',
   'A Day to Give Back',
 ];
+const bookPartSpecs = [
+  ['Part I — Low Water', 'The harbour begins to give back the things its residents thought were lost.'],
+  ['Part II — Names in the Margins', 'Letters and maps connect the people who remember the city differently.'],
+  ['Part III — Returning Tide', 'The final interludes follow the city as it makes room for return.'],
+] as const;
 export const bookContents = interludeTitles.map((title, index) => {
+  const partIndex = Math.floor(index / 5);
   const item = subject(bookId(200 + index), 'schema:Book', title, [
-    bookStatement('wdt:P361', book.id, position(index + 1)),
+    bookStatement('wdt:P361', bookId(220 + partIndex), position((index % 5) + 1)),
     bookStatement('schema:author', index % 2 ? bookCoauthor.id : bookAuthor.id),
     bookStatement('schema:inLanguage', 'ja'),
   ]);
   item.descriptions = {
-    en: `Interlude ${index + 1} in the composite novel. Catalogue metadata; no hosted chapter text is implied.`,
+    en: `Interlude ${index + 1}, Part ${partIndex + 1} of the composite novel. Catalogue metadata only; no hosted chapter text is supplied.`,
   };
+  item.sourceRecords = sources;
   return item;
 });
 const volumeTitles = ['The Orchard of Returning Ships', 'Letters from the Low-Water City', 'The Ferryman’s Almanac'];
@@ -267,11 +278,24 @@ long.labels = Object.fromEntries(
 long.aliases.en!.push(
   'An extraordinarily long alternate bibliographic title: an atlas of every day that was borrowed, misplaced, translated, remembered and returned to the people of the harbour',
 );
+export const bookParts = bookPartSpecs.map(([title, description], index) => {
+  const part = subject(bookId(220 + index), 'schema:Book', title, [
+    bookStatement('wdt:P361', book.id, position(index + 1)),
+    bookStatement('schema:author', bookAuthor.id),
+    bookStatement('schema:inLanguage', 'ja'),
+  ]);
+  part.descriptions = {
+    en: `${description} Synthetic catalogue grouping only; hosted chapter text is not supplied.`,
+  };
+  part.sourceRecords = sources;
+  return part;
+});
 export const bookSubjects: Subject[] = [
   primary,
   series,
   ...seriesVolumes.slice(1),
   ...bookEditions,
+  ...bookParts,
   ...bookContents,
   ...people,
   ...characters,
@@ -307,7 +331,7 @@ export function bookSummary(id: string, locale = 'en'): LabelledSummary {
             media: bookId(70 + (item.type === 'bf:Instance' ? 1 : item.type === 'schema:BookSeries' ? 2 : 0)),
             width: 640,
             height: 960,
-            placeholder: { thumbhash: '', color: '#213c47' },
+            placeholder: { thumbhash: '3OcRJYB4d3h/iIeHeEh3eIhw+j3A', color: '#213c47' },
             variants: [
               { format: 'webp', width: 320 },
               { format: 'webp', width: 640 },
@@ -316,7 +340,6 @@ export function bookSummary(id: string, locale = 'en'): LabelledSummary {
             credit: {
               rightsHolder: 'REZICS story illustration',
               license: 'CC0-1.0',
-              obligations: [],
               via: {
                 name: 'Book showcase cover artwork',
                 url: 'https://github.com/rezics/rezics-next/tree/main/apps/web/.storybook/media',

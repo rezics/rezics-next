@@ -69,6 +69,26 @@ export const bookStorySubject = (state: BookScenario) =>
   state === 'sparse' ? bookSparse : state === 'long' ? bookLong : book;
 const language = (request: Request) => request.headers.get('accept-language')?.split(',')[0]?.trim() ?? 'en';
 const freshness = { consistency: 'eventual', target_seconds: 10, caught_up: true };
+type BookCursor = { scope: string; node: string; offset: number };
+const cursorByAddress = new Map<string, string>();
+const addressByCursor = new Map<string, BookCursor>();
+let cursorSequence = 0;
+function opaqueCursor(scope: string, node: string, offset: number): string {
+  const address = `${scope}\0${node}\0${offset}`;
+  const known = cursorByAddress.get(address);
+  if (known) return known;
+  if (addressByCursor.size >= 256) {
+    const oldest = addressByCursor.entries().next().value as [string, BookCursor] | undefined;
+    if (oldest) {
+      addressByCursor.delete(oldest[0]);
+      cursorByAddress.delete(`${oldest[1].scope}\0${oldest[1].node}\0${oldest[1].offset}`);
+    }
+  }
+  const cursor = `book-window-${bookId(9000 + cursorSequence++)}`;
+  cursorByAddress.set(address, cursor);
+  addressByCursor.set(cursor, { scope, node, offset });
+  return cursor;
+}
 
 export const bookReviewTitles = [
   'A city worth getting lost in',
@@ -193,13 +213,19 @@ function relationRows(id: string, property: string, inverse: boolean, locale: st
   );
 }
 
-function windowOf<T>(rows: T[], limit: number, node: string, cursor?: string) {
-  const offset = cursor ? Number(cursor.split(':')[2]) : 0;
-  const page = rows.slice(offset, offset + limit);
+function windowOf<T>(rows: T[], limit: number, node: string, cursor?: string, scope = node) {
+  const address = cursor ? addressByCursor.get(cursor) : undefined;
+  const offset = cursor
+    ? address?.scope === scope && address.node === node
+      ? Math.min(address.offset, rows.length)
+      : rows.length
+    : 0;
+  const boundedLimit = Number.isSafeInteger(limit) ? Math.min(24, Math.max(1, limit)) : 12;
+  const page = rows.slice(offset, offset + boundedLimit);
   return {
     rows: page,
     count: { value: rows.length, exact: true },
-    next: offset + page.length < rows.length ? `book:${node}:${offset + page.length}` : null,
+    next: offset + page.length < rows.length ? opaqueCursor(scope, node, offset + page.length) : null,
   };
 }
 
@@ -230,6 +256,26 @@ export function bookShowcasePage(
   });
   const selected = options.continuation ? plan.nodes[options.continuation.node] : undefined;
   const reads: SubjectPageData['reads'] = {};
+  const catalogueDirections: NonNullable<NonNullable<SubjectPageData['catalogue']>['directions']> = [];
+  const admittedDirections = new Set<string>();
+  const properties = definitions.release.properties as Record<string, { relation?: { inverse?: string | null } }>;
+  for (const read of Object.values(plan.reads)) {
+    if (read.kind !== 'links' && read.kind !== 'relations') continue;
+    const direction: 'forward' | 'inverse' = read.kind === 'links' ? 'inverse' : 'forward';
+    const key = `${read.property}:${direction}`;
+    if (admittedDirections.has(key)) continue;
+    admittedDirections.add(key);
+    catalogueDirections.push({
+      state: 'admitted',
+      property: read.property,
+      direction,
+      inverse: properties[read.property]?.relation?.inverse ?? null,
+      sourceTypes: [],
+      targetTypes: [],
+      release: definitions.digest,
+      qualifiers: [],
+    });
+  }
   const sparse = id === bookSparse.id;
   for (const [key, read] of Object.entries(plan.reads)) {
     const node = Object.keys(plan.nodes).find((name) => plan.nodes[name] === key)!;
@@ -247,7 +293,7 @@ export function bookShowcasePage(
     }
     if (read.kind === 'links' || read.kind === 'relations') {
       const rows = relationRows(id, read.property, read.kind === 'links', locale);
-      const page = windowOf(rows, read.limit, node, read.cursor);
+      const page = windowOf(rows, read.limit, node, read.cursor, `${id}:${context.id}:${resolved.key}:${node}`);
       reads[key] = {
         status: 200,
         body: {
@@ -265,6 +311,7 @@ export function bookShowcasePage(
         read.limit,
         node,
         read.cursor,
+        `${id}:${context.id}:${node}:${read.place}:${read.threadKind}`,
       );
       reads[key] = {
         status: 200,
@@ -272,9 +319,10 @@ export function bookShowcasePage(
       };
     } else if (read.kind === 'collections') {
       const rows = sparse ? [] : collections(id);
+      const page = windowOf(rows, read.limit, node, read.cursor, `${id}:${context.id}:${node}`);
       reads[key] = {
         status: 200,
-        body: { collections: rows.slice(0, read.limit), count: { value: rows.length, exact: true }, next: null },
+        body: { collections: page.rows, count: page.count, next: page.next },
       };
     }
   }
@@ -285,6 +333,13 @@ export function bookShowcasePage(
     template: { scope: resolved.scope, key: resolved.key },
     document: resolved.document,
     views: definedViews(profile, target),
+    catalogue: {
+      state: 'released',
+      type: item.type,
+      digest: definitions.digest,
+      definitions: definitions.release,
+      directions: catalogueDirections,
+    },
     reads,
     ...(options.continuation ? { continuation: options.continuation } : {}),
   };
@@ -429,6 +484,7 @@ export const routes: FakeRoute[] = [
         6,
         'lists',
         new URL(request.url).searchParams.get('cursor') ?? undefined,
+        `${match?.[1]}:collections`,
       );
       return { status: 200, collections: page.rows, count: page.count, next: page.next };
     },
@@ -447,6 +503,7 @@ export const routes: FakeRoute[] = [
         6,
         kind === 'review' ? 'reviews' : 'threads',
         query.get('cursor') ?? undefined,
+        `${match?.[1]}:threads:${kind}:${query.get('place') ?? GLOBAL}`,
       );
       return {
         status: 200,
@@ -473,6 +530,7 @@ export const routes: FakeRoute[] = [
         Number(query.get('limit') ?? 12),
         property,
         query.get('cursor') ?? undefined,
+        `${match?.[1]}:relations:${property}:${inverse ? 'inverse' : 'forward'}`,
       );
       return {
         status: 200,
