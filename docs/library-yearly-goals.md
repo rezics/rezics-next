@@ -2,6 +2,7 @@
 
 Decision: count completed consumption occurrences in the reported Gregorian year; each repeated completion is another occurrence.
 Decision: target editing follows the native owner actions independently of progress availability; uncertain commands retain their exact reviewed body, revision and idempotency key for retry.
+Decision: the mounted page uses the prepared no-store BFF and generated KernelClient; session/exposure replacement retires its visit, and uncertain retry retains the sealed original dispatch credential and sender.
 
 ## Native contract
 
@@ -103,8 +104,7 @@ proposed target until the owner explicitly refreshes and reviews the current rev
 original body and idempotency key for exact retry; receipt resolution precedes current-state readback. Replacing the
 selected year or current viewer retires callbacks and private page state.
 
-The mounted Kernel GET/PUT routes and shared receipt lifecycle are delivered. The installed `@rezics/client` Kernel
-surface does not yet expose the yearly-goal route binding. Keep year and History navigation available while the target
-and progress states remain unavailable until Content's shared client publisher emits that binding. Web consumes the
-published `KernelClient` types; no local client declaration, raw-fetch substitute or second generator is part of this
-contract.
+The mounted Kernel GET/PUT routes, shared receipt lifecycle and installed `@rezics/client` yearly-goal binding are
+delivered. Web consumes that generated `KernelClient` through a prepared private BFF with no-store responses and
+abortable browser visits. Reads bind the exact selected year and current owner; private snapshots remain in mounted
+state and never enter SSR or the shared query cache.

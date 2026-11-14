@@ -44,6 +44,7 @@ export type YearlyGoalWriteResult =
 
 /** A narrow seam for the mounted Kernel reader and command; the owning route supplies the published client binding. */
 export type YearlyGoalPageApi = {
+  current?: () => boolean;
   read(year: number): Promise<YearlyGoalReadResult>;
   write(command: YearlyGoalCommand): Promise<YearlyGoalWriteResult>;
 };
@@ -102,7 +103,7 @@ function YearlyGoalScreen({
     } else {
       setLoaded({ state: 'loading' });
       void api.read(year).then((result) => {
-        if (generation.current === current) setLoaded(result);
+        if (generation.current === current && (api.current?.() ?? true)) setLoaded(result);
       });
     }
     return () => {
@@ -118,7 +119,7 @@ function YearlyGoalScreen({
     setOperation('refreshing');
     setLoaded({ state: 'loading' });
     const result = await api.read(year);
-    if (generation.current !== current) return;
+    if (generation.current !== current || !(api.current?.() ?? true)) return;
     setLoaded(result);
     setOperation(
       result.state === 'ready'
@@ -140,7 +141,7 @@ function YearlyGoalScreen({
     const current = generation.current;
     setOperation('sending');
     const result = await api.write(command);
-    if (generation.current !== current) return;
+    if (generation.current !== current || !(api.current?.() ?? true)) return;
     if (result.state === 'applied') {
       setPending(undefined);
       setMode('view');
@@ -148,7 +149,7 @@ function YearlyGoalScreen({
       setOperation('saved');
       if (year === undefined) return;
       const readback = await api.read(year);
-      if (generation.current !== current) return;
+      if (generation.current !== current || !(api.current?.() ?? true)) return;
       setLoaded(readback);
       return;
     }
@@ -549,6 +550,8 @@ export function YearlyGoalPage({
   viewerSubject?: string | null;
   api?: YearlyGoalPageApi | undefined;
 }) {
-  const key = `${year ?? 'invalid'}:${viewerSubject ?? 'no-viewer'}:${sessionState}`;
+  const source = useRef({ api, version: 0 });
+  if (source.current.api !== api) source.current = { api, version: source.current.version + 1 };
+  const key = `${getLocale()}:${year ?? 'invalid'}:${viewerSubject ?? 'no-viewer'}:${sessionState}:${source.current.version}`;
   return <YearlyGoalScreen key={key} year={year} sessionState={sessionState} viewerSubject={viewerSubject} api={api} />;
 }
