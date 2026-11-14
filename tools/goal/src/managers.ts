@@ -6,7 +6,7 @@ import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { join } from 'node:path';
 import type { AppServer, CodexPool, Notification } from './app-server.ts';
 import { migrate } from './db.ts';
-import { SqliteManagerInbox } from './inbox.ts';
+import { SqliteManagerInbox, type InboxEntry } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import { managerOwnership, ownedGoals } from './manager-ownership.ts';
 import {
@@ -15,7 +15,7 @@ import {
   type GoalMutationOrigin,
   isHarnessGoalContinuation,
 } from './manager-session-transport.ts';
-import { readGoalDocuments, renderManagerOpening } from './prompts.ts';
+import { renderManagerOpening } from './prompts.ts';
 import { recordFlow } from './flow.ts';
 import type { PromptBudgetManifest } from './types.ts';
 import type { ProcessIdentity } from './process.ts';
@@ -1533,7 +1533,14 @@ export class ManagerSessions {
     if (!goals.length) return '';
     delete state.pendingGoalReads;
     this.save(state);
-    return readGoalDocuments(state.cwd, goals).join('\n\n');
+    const references = goals.map((goal) => `docs/goals/${goal}.md and .temp/goal/${goal}/CONTINUATION.md`);
+    return `Read the assigned Goal documents if present: ${references.join('; ')}.`;
+  }
+  private inboxWakeSummary(entry: InboxEntry): string {
+    const { id, event } = entry;
+    if (event.summary.length <= this.policy.worker.summaryCharacters) return event.summary;
+    const reference = event.taskId ? ` Task ${event.taskId}.` : '';
+    return `Inbox #${id}: ${event.kind}.${reference} Read the original with ${this.services.command.join(' ')} inbox thread ${id} if needed. Act on the decision; do not paste the diagnostic.`;
   }
   private async dispatch(id: string): Promise<void> {
     let state = this.get(id);
@@ -1598,7 +1605,8 @@ export class ManagerSessions {
       state = this.get(id);
       assertManagedManager(state);
       const current: ManagedManagerState = state;
-      const summary = prefix ? [prefix, event.event.summary].filter(Boolean).join('\n\n') : event.event.summary;
+      const wake = this.inboxWakeSummary(event);
+      const summary = prefix ? `${prefix}\n\n${wake}` : wake;
       prefix = '';
       const delivered = await this.transport.deliverToSession(
         client,

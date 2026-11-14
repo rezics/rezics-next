@@ -2503,6 +2503,10 @@ inbox history retains a short task reference. Only the operations owner receives
 folded by shared cause without path or task ID in the wake. Offloaded starts do not emit a second background error
 for an attempt already settled and reported by the child.
 
+Landing failure alerts name the failed stage and link retained evidence when the diagnostic exceeds the summary
+budget. Codex wake-ups present an inbox pointer for any older over-budget summary and leave its original row
+intact. Assignment wake-ups reference Goal documents instead of embedding their bodies.
+
 A delivery identical to one made to the same recipient within the last hour is not stored again: the earlier row's
 `delivery_count` and `last_delivered_at` change, nobody is woken, and `inbox read` shows the count as `deliveries`.
 Identity is the recipient, kind, sender, task, reply target and the summary's first line, so the same alarm for two

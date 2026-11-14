@@ -284,6 +284,13 @@ export class WorkerJob implements GateOutcomeSink {
       }),
     );
   }
+  private landingFailureSummary(label: string, outcome: GateOutcome): string {
+    const detail = outcome.firstFailure?.assertion ?? outcome.stage;
+    const summary = `${label}: ${detail}`;
+    return summary.length <= this.policy.worker.summaryCharacters
+      ? summary.replace(/[\r\n]+/g, ' ')
+      : `${label}: ${outcome.stage} failed. Read the retained attempt evidence for the diagnostic.`;
+  }
   async runHostTask(kind: HostStartKind, taskId: string): Promise<void> {
     try {
       if (kind === 'retry') {
@@ -2765,7 +2772,7 @@ export class WorkerJob implements GateOutcomeSink {
           managerId: task.brief.manager,
           taskId: task.id,
           kind: failureClass as ManagerEventKind,
-          summary: `${failureClass}: ${outcome.firstFailure?.assertion ?? outcome.stage}`.replace(/[\r\n]+/g, ' '),
+          summary: this.landingFailureSummary(failureClass, outcome),
           evidencePath,
         };
         store.event(outcome, 'manager-event', event);
@@ -2791,7 +2798,7 @@ export class WorkerJob implements GateOutcomeSink {
             managerId: task.brief.manager,
             taskId: task.id,
             kind: 'stalled' as const,
-            summary: `Repeated environment failure: ${outcome.firstFailure.assertion}`.replace(/[\r\n]+/g, ' '),
+            summary: this.landingFailureSummary('Repeated environment failure', outcome),
             evidencePath,
           };
           store.event(outcome, 'manager-event', event);
