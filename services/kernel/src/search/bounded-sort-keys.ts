@@ -17,11 +17,7 @@ function isScalarString(value: string): boolean {
   return true;
 }
 
-function analysisBatches(
-  names: readonly string[],
-  maximumValues: number,
-  emptyRequestBytes: number,
-): string[][] {
+function analysisBatches(names: readonly string[], maximumValues: number, emptyRequestBytes: number): string[][] {
   const batches: string[][] = [];
   let current: string[] = [];
   let requestBytes = emptyRequestBytes;
@@ -79,10 +75,7 @@ export async function prepareBoundedSortKeys<
 
   // Read the owner limits only when native normalization is needed. One key yields one token, so the value count
   // keeps all concurrently analyzed batches within the engine's token ceiling.
-  const maximumValues = Math.max(
-    1,
-    Math.floor(ENGINE_ANALYSIS_LIMITS.tokens / ENGINE_ANALYSIS_LIMITS.concurrency),
-  );
+  const maximumValues = Math.max(1, Math.floor(ENGINE_ANALYSIS_LIMITS.tokens / ENGINE_ANALYSIS_LIMITS.concurrency));
   const emptyRequestBytes = encoder.encode(JSON.stringify({ normalizer: NAME_KEY_NORMALIZER, text: [] })).byteLength;
   const batches = analysisBatches(names, maximumValues, emptyRequestBytes);
   const normalized = new Map<string, string>();
