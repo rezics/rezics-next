@@ -4227,6 +4227,10 @@ Private watch methods refuse an operator acting as a different account, even wit
 Decision: inventory retains each original active watch episode and native target observation through final disclosure; a missing or concealed target remains privately removable, while a changed live episode or still-disclosed target requires a safe retry.
 Native watch receipts and private change events enroll their account owner in shared history erasure; the permanent
 command-kind assignments are `content.board.watch=8` and `content.watch.remove=9`.
+Decision: shared History registers only these two receipts and their two v1 private events as exact no-response and
+no-projection dispositions; source, owner association, account barrier, effects settlement and open-consumer proofs
+still gate payload minimization, while applied receipt replay metadata and current watch commands remain unchanged.
+The one-time registry digest change reopens pending History work at its existing bounded cadence.
 `board_activity` is independent of `thread_watch`, optional, default-on, in-app only, without historical backfill.
 Decision: opening fanout uses 20 recipients per durable page, matching the native Inbox's default presentation page.
 
