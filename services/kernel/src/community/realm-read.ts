@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import { createResourcePublicEligibility, deadlineClient, accessCheck } from './domain-ports.ts';
 import type { ResourceEligibility } from '../access/index.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccessCheck, AccessClient, Actor, Resource } from '../request/access.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
@@ -58,10 +58,15 @@ export async function readRealm(
       { ...resource, eligibility },
       { pool: deps.pool, deadline: context.deadline },
     );
-    return await withConnection(deps.pool, async (client) => {
-      if (!(await allowRealmRead(check, deadlineClient(client, context.deadline)))) return null;
-      return current ? record(current) : null;
-    });
+    return await withBoundedReadConnection(
+      deps.pool,
+      context.deadline,
+      async (client) => {
+        if (!(await allowRealmRead(check, client))) return null;
+        return current ? record(current) : null;
+      },
+      { isUncertainSettledQueryError: () => true },
+    );
   } catch (error) {
     if (realmReadDenied(error)) return null;
     throw error;

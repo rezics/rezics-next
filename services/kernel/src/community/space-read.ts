@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import { createResourcePublicEligibility } from './domain-ports.ts';
 import type { ResourceEligibility } from '../access/index.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccessCheck, AccessClient, Actor, Resource } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
@@ -53,34 +53,44 @@ export async function readSpaceForViewer(
 ): Promise<(Space & { realmId: string | null }) | null> {
   const route = routeOf(spaceId);
   if (route === null) return null;
-  const current = await withConnection(deps.pool, async (client) => {
-    if (check && !(await check(client))) return null;
-    const space = await readSpace(client, spaceId, time);
-    if (!space) return null;
-    const slot = await realmSpace.run(client, { route, space: spaceId, at: time });
-    const realmId = slot?.realm_id ?? null;
-    const binding = realmId ? await bindingRead.run(client, { route, id: realmId, at: time, subject: null }) : null;
-    return { space, realmId, binding };
-  });
+  const current = await withBoundedReadConnection(
+    deps.pool,
+    context.deadline,
+    async (client) => {
+      if (check && !(await check(client))) return null;
+      const space = await readSpace(client, spaceId, time);
+      if (!space) return null;
+      const slot = await realmSpace.run(client, { route, space: spaceId, at: time });
+      const realmId = slot?.realm_id ?? null;
+      const binding = realmId ? await bindingRead.run(client, { route, id: realmId, at: time, subject: null }) : null;
+      return { space, realmId, binding };
+    },
+    { isUncertainSettledQueryError: () => true },
+  );
   if (!current) return null;
   // Release the Space connection before Access prepares separately anchored evidence.
   // In particular, a pool of one must never need a nested checkout.
   const realm = current.realmId ? await readRealm(deps, actor, current.realmId, context) : null;
-  return withConnection(deps.pool, async (client) => {
-    if (check && !(await check(client))) return null;
-    const final = await readSpace(client, spaceId, time);
-    if (
-      !final ||
-      final.headRevisionId !== current.space.headRevisionId ||
-      final.lifecycleVersion !== current.space.lifecycleVersion
-    )
-      return null;
-    const binding = realm ? await bindingRead.run(client, { route, id: realm.realmId, at: time, subject: null }) : null;
-    return {
-      ...final,
-      realmId: binding && canonicalize(binding) === canonicalize(current.binding) ? (realm?.realmId ?? null) : null,
-    };
-  });
+  return withBoundedReadConnection(
+    deps.pool,
+    context.deadline,
+    async (client) => {
+      if (check && !(await check(client))) return null;
+      const final = await readSpace(client, spaceId, time);
+      if (
+        !final ||
+        final.headRevisionId !== current.space.headRevisionId ||
+        final.lifecycleVersion !== current.space.lifecycleVersion
+      )
+        return null;
+      const binding = realm ? await bindingRead.run(client, { route, id: realm.realmId, at: time, subject: null }) : null;
+      return {
+        ...final,
+        realmId: binding && canonicalize(binding) === canonicalize(current.binding) ? (realm?.realmId ?? null) : null,
+      };
+    },
+    { isUncertainSettledQueryError: () => true },
+  );
 }
 
 export function spaceReadEligibility(
