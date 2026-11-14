@@ -73,6 +73,10 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
           supervisor: { pid: 1, started: '1', group: 1 },
         }),
         outputTree: async (_root, command) => command(),
+        assertCompilerDatabaseReady: async (container, url) => {
+          expect(container).toBe('fixture-container');
+          expect(url).toBe('postgres://rezics:rezics@127.0.0.1:5432/rezics');
+        },
         prepareSqlAnalysis: async (env) => {
           const prepared = await prepareReyloAnalysisCache(env, options);
           analysisResults.push({ analyzed: prepared.analyzedFiles, total: prepared.totalFiles });

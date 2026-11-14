@@ -53,7 +53,8 @@ TypeScript diagnostics and exit status are preserved.
 
 `typecheck --emit-client` declares `KERNEL_CLIENT_OUTPUT` from
 [`scripts/check-output-tree.ts`](../../scripts/check-output-tree.ts): the closed `kernel-client-v1` profile owns exactly
-`packages/client/src/kernel`. Combined `--emit-schema=` also declares its existing schema file. The official generator
+`packages/client/src/kernel`. Combined `--emit-schema=library,search` declares each selected existing module schema
+file from the same migrated compiler database; `core` selects the core schema. The official generator
 runs once after physical admission, migration validation and prepared-source custody; compiler/database placement and
 exit codes retain the compiler contract. `.reylo` caches are never returned. External `REYLO_CONFIG` stays unsupported.
 
