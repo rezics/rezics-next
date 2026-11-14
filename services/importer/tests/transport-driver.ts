@@ -5,7 +5,49 @@ import { isImportSourceRecord } from '../src/source-record-runtime.ts';
 import {
   type ImportSourceRecordMetadataCommand,
   type ImportSourceRecordMetadataResult,
+  type ImportSourceObservationHead,
 } from '../src/import-contract.ts';
+import { sourceObservation, type SourceObservation } from '../../kernel/src/rating/source-provider.ts';
+
+/** Explicit canonical provider heads for local protocol doubles, including clears. */
+export function sourceObservationFixture() {
+  const heads = new Map<string, ImportSourceObservationHead>();
+  const orders = new Map<string, number>();
+  const read = (subjectId: string): ImportSourceObservationHead =>
+    heads.get(subjectId) ?? { state: 'empty', digest: null, observation: null };
+  const observe = (subjectId: string, value: SourceObservation) => {
+    const observed = sourceObservation(subjectId, 'vndb', value);
+    if (read(subjectId).digest === observed.digest) return;
+    const order = (orders.get(subjectId) ?? 0) + 1;
+    orders.set(subjectId, order);
+    heads.set(subjectId, {
+      state: value.count === 0 ? 'cleared' : 'published',
+      digest: observed.digest,
+      observation: {
+        ...observed,
+        payloadVersion: 1,
+        sourceAlias: observed.payload.sourceAlias,
+        sourceRecordId: value.sourceRecordId,
+        asOf: value.asOf,
+        nativeOrder: String(order),
+        legacy: false,
+        provenance: { kind: 'unversioned', digest: observed.digest },
+      },
+    } as ImportSourceObservationHead);
+  };
+  const inspect = (subjectId: string) => {
+    const head = read(subjectId);
+    return {
+      source: 'vndb',
+      head,
+      resolution: {
+        put: { expectedObservation: head.digest },
+        clear: { expectedObservation: head.digest },
+      },
+    };
+  };
+  return { read, observe, inspect };
+}
 
 /** Local protocol double only. Real authorization/selection proof uses the kernel API fixture. */
 export function sourceRecordMetadataFixture() {

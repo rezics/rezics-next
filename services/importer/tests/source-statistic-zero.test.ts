@@ -1,4 +1,4 @@
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { sourceObservationFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -78,6 +78,7 @@ async function fixture() {
   const batches: BatchWriteRequest[] = [];
   let candidate = 0;
   const metadata = sourceRecordMetadataFixture();
+  const observations = sourceObservationFixture();
   const transport = createImportTransport({
     origin: 'https://zero.import.test',
     tokenProvider: async () => 'local-protocol-token',
@@ -87,6 +88,8 @@ async function fixture() {
       const request = new Request(input, init),
         path = new URL(request.url).pathname;
       if (path === '/v1/source-records:setMetadata') return metadata.fetch(request);
+      if (request.method === 'GET' && path === `/v1/subjects/${subject}/source-statistics/vndb/observations`)
+        return Response.json(observations.inspect(subject));
       if (request.method === 'GET') {
         const facts = new URL(request.url).searchParams.get('fieldGroup') === 'facts';
         return Response.json({ fenced: fenced && facts, securityRevision: fenced && facts ? '1' : null });
@@ -115,6 +118,7 @@ async function fixture() {
       const bytes = await request.text();
       writes.push({ method: request.method, bytes, key: request.headers.get('idempotency-key') });
       if (failure === 'denied') return Response.json({ code: 'forbidden' }, { status: 403 });
+      observations.observe(subject, JSON.parse(bytes));
       if (failure === 'lost') throw new TypeError('Local committed clear response lost');
       return request.method === 'POST'
         ? new Response(null, { status: 204 })
@@ -131,6 +135,7 @@ async function fixture() {
           transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
         writeSourceStatistic: transport.writeSourceStatistic,
         clearSourceStatistic: transport.clearSourceStatistic,
+        readSourceObservationHead: transport.readSourceObservationHead,
       },
     });
   let importer = open();
