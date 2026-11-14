@@ -139,10 +139,12 @@ function record<T>(result: T, session: { record: (value: T) => void }) {
   session.record(result);
 }
 
-const activationResponse = {
-  200: withHeaders(strictContentSchema(HostedPublicationActivationProgressSchema()), responseHeaders),
-  ...failures(),
-};
+function activationResponse() {
+  return memoizedValue(activationResponse, () => ({
+    200: withHeaders(strictContentSchema(HostedPublicationActivationProgressSchema()), responseHeaders),
+    ...failures(),
+  }));
+}
 
 /** Adds only the private preparation author API. It is registered by the
  * existing hosted chapter route owner and never changes publication pointers. */
@@ -335,7 +337,7 @@ export function hostedPublicationActivationRoutes(
         params: stageParams(),
         headers,
         body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
-        response: activationResponse,
+        response: activationResponse(),
         detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_start_activation' },
       },
       async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
@@ -356,7 +358,7 @@ export function hostedPublicationActivationRoutes(
         params: stageParams(),
         headers,
         body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
-        response: activationResponse,
+        response: activationResponse(),
         detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_advance_activation' },
       },
       async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
@@ -377,7 +379,7 @@ export function hostedPublicationActivationRoutes(
         params: stageParams(),
         headers,
         body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
-        response: activationResponse,
+        response: activationResponse(),
         detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_activate' },
       },
       async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {

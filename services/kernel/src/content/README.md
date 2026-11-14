@@ -89,7 +89,9 @@ keeps worker authorization free of transport compilation while preserving closed
 
 Decision: hosted conversion, preparation and exact-disclosure schemas memoize shared IDs, targets and staging limits
 when requested; route parameters and rate metadata are built at mount, and candidate cleanup resolves its phase SQL
-table on first use, preserving the published bounds and HTTP contracts.
+table on first use, preserving the published bounds and HTTP contracts. Activation response construction is a
+memoized getter used by the unmounted activation route factory, so importing its route module defers the imported
+progress and problem schema calls while retaining response and schema identity.
 
 Feed's mounted list operation consumes the shared immutable declaration catalogue through the
 Kernel transport adapter. Content retains the Feed query/result schemas and current disclosure
