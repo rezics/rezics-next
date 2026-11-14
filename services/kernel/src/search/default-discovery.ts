@@ -218,12 +218,9 @@ async function enrichDiscoveryPage(
 }
 
 async function readDiscoveryFigures(config: DefaultDiscoverySearchConfig, ids: readonly string[], deadline: number) {
-  return withBoundedReadOnlyTransaction(
-    config.pool,
-    deadline,
-    (client) => readPublicFigureViews(client, ids),
-    { deadlineError: () => new SearchUnavailableError('Search discovery read deadline expired') },
-  );
+  return withBoundedReadOnlyTransaction(config.pool, deadline, (client) => readPublicFigureViews(client, ids), {
+    deadlineError: () => new SearchUnavailableError('Search discovery read deadline expired'),
+  });
 }
 
 /** Default public catalogue/Account candidates, also consumed by the home feed with its current Actor.
