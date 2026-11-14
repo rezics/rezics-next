@@ -560,6 +560,12 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
       'thread recovery after provider replacement',
       replacementRpcOffset,
     );
+    await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/goal/get' && message.params.threadId === originalThreadId,
+      'the replacement host to read the resumed thread state',
+      replacementRpcOffset,
+    );
     const replacement = appServerRegistryEntry(f.path);
     expect(replacement.identity.pid).not.toBe(initial.identity.pid);
     expect(jsonLines(serverStartPath)).toHaveLength(2);
@@ -587,6 +593,12 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
         message.params.threadId === originalThreadId &&
         message.params.model === 'gpt-6.1-sol',
       'bounded clean rejoin after a failed private endpoint',
+      reconnectRpcOffset,
+    );
+    await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/goal/get' && message.params.threadId === originalThreadId,
+      'the reconnecting host to read the resumed thread state',
       reconnectRpcOffset,
     );
     const recovered = appServerRegistryEntry(f.path);
