@@ -2,8 +2,9 @@ import * as v from 'valibot';
 import type { StudioResult } from './contract';
 import {
   hostedId,
+  hostedKey,
+  hostedOwnerViewer,
   type HostedBookNative,
-  type HostedOwnerViewer,
   type HostedPublicationPointNative,
 } from './hosted-contract';
 import type { HostedReleaseReaderAdmission } from './hosted-release-reader-link';
@@ -22,25 +23,27 @@ export const activationProgress = v.strictObject({
   restartRequired: v.boolean(),
 });
 export type ActivationProgress = v.InferOutput<typeof activationProgress>;
-export type ActivationKind = 'start' | 'advance' | 'activate';
-export type ActivationRequest = Readonly<{
-  kind: ActivationKind;
-  catalogueId: string;
-  stageId: string;
+/** The server-function HTTP boundary admits the command envelope; native authority stays with Content. */
+export const activationRequest = v.strictObject({
+  kind: v.picklist(['start', 'advance', 'activate']),
+  catalogueId: hostedId,
+  stageId: hostedId,
   /** A response comparison operand, never a writable native authority assertion. */
-  candidateGenerationId: string;
-  expectedViewer: HostedOwnerViewer;
-  idempotencyKey: string;
-  /** The native commands digest exactly this intent. Restart is an explicit advance, with a fresh key. */
-  body: Readonly<{ stageId: string }>;
-}>;
+  candidateGenerationId: hostedId,
+  expectedViewer: hostedOwnerViewer,
+  idempotencyKey: hostedKey,
+  /** The stage is a path operand. Every activation command has the native strict empty body. */
+  body: v.strictObject({}),
+});
+export type ActivationRequest = Readonly<v.InferOutput<typeof activationRequest>>;
+export type ActivationKind = ActivationRequest['kind'];
 export type ActivationCommand = (
   input: ActivationRequest,
   signal: AbortSignal,
   csrfToken: string,
 ) => Promise<StudioResult<ActivationProgress>>;
 
-/** A future generated transport binds these native operations. No URL or proxy method is guessed here. */
+/** The generated server transport and illustrative consumers share this operation boundary. */
 export type ActivationOperation = (
   input: Omit<ActivationRequest, 'kind'>,
   signal: AbortSignal,

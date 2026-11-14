@@ -946,21 +946,22 @@ affected Web typecheck after commit; ordinary acceptance, native, browser, Story
 ## Hosted Book author-to-reader witness
 
 Decision: keep the private author and prepublished reader journals independent; compare and preview saved revisions,
-organize and select exact draft occurrences through mounted Studio, recover and seal the selected candidate, record
-initial activation as unreached with its immutable operands, and use supplied catalogue titles with the existing
-fallback. Resume the author journal only after Content exposes activation through the mounted HTTP route and
-generated KernelClient operation; the point-publication control remains a separate outcome.
+organize and select exact draft occurrences through mounted Studio, recover and seal the selected candidate, retain
+its immutable activation operands, and use supplied catalogue titles with the existing fallback. Ordinary Studio
+binds Content's mounted activation operations through the generated KernelClient. The verifier resumes the retained
+author journal from those operands; the point-publication control remains a separate outcome.
 
 The private author journal creates deterministic drafts through generated native setup, saves and compares exact
 Post revisions in the mounted Studio, previews the saved chapter, and creates, reorders, moves and nests chapter
 occurrences through current controls. It then confirms the current draft and absent release, selects one exact root
 chapter, reloads through its selected-stage locator, freezes the single occurrence, advances and seals a private
-candidate. The mounted route stops there: the producer `activateHostedPublicationCandidate` has no installed HTTP
-route or generated KernelClient operation. The journal retains the catalogue, native owner and epoch, source head,
+candidate. The retained journal ends at that sealed candidate; the ordinary route continues through explicit
+activation checks and activation. The journal retains the catalogue, native owner and epoch, source head,
 absent expected release, stage ID, selected occurrence and exact Post/revision/digest as immutable operands. It does
 not call the old batch publication route or claim that the sealed candidate is public. A later private Post revision
 and structure move verify that the current draft still names the candidate's original exact source. The private
-author's anonymous release bytes, member progress and stable reader link remain unreached.
+author's activation receipt, anonymous release bytes, member progress and stable reader link remain deferred
+acceptance; the transport binding does not establish those observations.
 
 The independent control begins with its native one-chapter release, then uses mounted Studio to save another exact
 version of that private Post, add a second draft occurrence, issue exact source permission during point review, and
@@ -968,7 +969,7 @@ explicitly publish that occurrence. The journal checks that permission alone lea
 then checks the exact published bytes and direct-Post privacy. A different member discovers the supplied Book title,
 reads the original exact chapter, saves and resumes a Library checkpoint, and opens the old release/occurrence link
 after a later move and withdrawal. This control demonstrates the installed point-consent and reader paths; it does
-not complete the private author's missing initial activation.
+not complete the private author's initial activation acceptance.
 
 Legacy parity comparison: at `legacy-final` revision `95167ceab7173dc1c5fb0ee70568c5c95f1dba8d`, chapter history
 and comparison, ordered nested Book contents, reading progress and resume already existed. The mounted witness pins
@@ -997,8 +998,8 @@ Sources read before design: Content's [Authoring and release and Prepared Book p
 `routes/studio.tsx`, `hosted-legacy-baseline-native.ts`, and `hosted-publication-point.ts`.
 
 Decision: one focused state/transport proof covers retry, remount and stale authority, with only the named interrupted
-desktop and expired narrow stories. The mounted preparation methods are absent from generated KernelClient emission;
-the existing typed proxy extension seam binds them locally. Deferred acceptance: `bun run --cwd apps/web test
+desktop and expired narrow stories. Preparation uses the generated KernelClient catalogue and stage operations.
+Deferred acceptance: `bun run --cwd apps/web test
 tests/studio-hosted-release-preparation.test.tsx`; browser, native, ordinary acceptance and Storybook builds stay with
 the dev verifier. Source verification uses changed-file formatting and the Web workspace typecheck.
 
@@ -1041,7 +1042,7 @@ Sources read before design: Content's [Private-to-public boundary](../../../../s
 `hosted-publication-point.ts`, `hosted-publication-point-view.tsx`, `hosted-draft-point-entry.tsx`,
 `hosted-source-consent-view.tsx`, `hosted-release-preparation-actions.ts` and the existing point/preparation fixtures.
 The point route and exact-version source permission controls are mounted. The journey uses them only on the
-prepublished control, where point publication is available; they do not supply the missing initial activation route.
+prepublished control, where point publication is available; they do not establish initial activation acceptance.
 
 Deferred acceptance: `bun run --cwd apps/web test tests/studio-hosted-source-consent.test.tsx`. Focused coverage
 pins explicit issue/revoke without publication, exact retry operands and key, denial, selection/session retirement
@@ -1051,11 +1052,11 @@ workspace typecheck after commit. Native, browser, ordinary acceptance, root and
 
 ## Prepared Book release activation
 
-Decision: keep ordinary Studio preparation-only while Content's activation producer is unmounted; retain the existing
-injectable consumer and resume its direct generated binding only after native currentness acceptance. Add no further
-seam or inferred HTTP operation. Point publication stays independent. Deliver the generated transport binding and its
-focused transport and ordinary-entry assertions together once that producer exists, retaining the injectable
-assertions. One visit retains the exact catalogue, stage, source,
+Decision: ordinary Studio continues from a sealed preparation through Content's mounted generated activation
+operations. `hosted-release-activation-actions.ts` binds the existing injectable consumer; `routes/studio.tsx` passes
+that transport to `HostedReleasePreparationEntry.activation`. Point publication stays independent. Generated
+declaration emission, native currentness proof and publication acceptance remain separately scheduled; they do not
+hold consumer source wiring. One visit retains the exact catalogue, stage, source,
 sealed candidate generation and previous release.
 Each explicit check advances one native page of at most 20 targets; pause retains the candidate, and a native restart
 uses explicit advance to reset authority without preparing or sealing again. Readiness never activates a release.
@@ -1077,19 +1078,23 @@ Sources read before design: [Web Book acceptance](../../../../docs/goals/web.md#
 `hosted-publication-activation-currentness.test.ts`, preparation contract/controller/entry/actions/native/view,
 `hosted-release-reader-link.ts`, its anonymous admission/action, and the existing preparation tests and stories.
 
-Content's [handoff](../../../../services/kernel/src/content/hosted-chapters.md#release-candidate-disposition-and-implementation-handoff)
-requires native two-pool currentness acceptance before mounting `startHostedPublicationActivation`,
-`advanceHostedPublicationActivationAuthority` and `activateHostedPublicationCandidate`. Preparation routes and
-generated KernelClient lack these operations. Bind them to
-`createHostedReleaseActivationTransport` through `HostedReleasePreparationEntry.activation` with current private
-admission/no-store, existing owner/publication reads and anonymous exact-reader admission. No guessed endpoint,
-handwritten Client method or Studio fixture supplies this producer.
+Content owns the [activation semantics](../../../../services/kernel/src/content/hosted-chapters.md#release-candidate-disposition-and-implementation-handoff)
+and the producer mounted by `hosted-chapters-routes.ts`. The generated stage at
+`client.hostedCatalogues({ id }).publicationPreparations({ stageId })` supplies `$startActivation`,
+`$advanceActivation` and `$activate`. Each posts the strict empty body `{}` with the retained idempotency key and
+current private admission; catalogue and stage remain path operands. The server function admits the HTTP envelope,
+keeps its response private/no-store and leaves native authorization and receipt replay to Content. The existing
+activation boundary binds the returned progress to the retained stage and candidate generation. No owner read
+precedes an exact command retry. Existing owner/publication reads and anonymous exact-reader admission run only in
+their separate readback flow. Web adds no handwritten Client method or replacement progress DTO.
 
-Binding preflight reads that handoff, `services/kernel/src/content/hosted-publication-preparation-routes.ts`, generated
-`packages/client/src/kernel/content/hosted-chapters-routes.d.ts`, the activation contract/native transport/entry,
-preparation entry and `apps/web/tests/studio-hosted-release-activation.test.tsx` before choosing the integration.
+Binding sources are `services/kernel/src/content/hosted-publication-preparation-routes.ts`, its schema and mount in
+`hosted-chapters-routes.ts`, the Client's exported `HostedPublicationActivationProgress`, the activation
+contract/native transport/actions/entry, and the ordinary preparation entry. Content owns official declaration
+emission; source integration does not assert that emission or native currentness acceptance has run.
 
-Deferred acceptance: after integration, run `bun run --cwd apps/web test tests/studio-hosted-release-activation.test.tsx`.
+Deferred acceptance: align the existing focused command-body assertions with the native empty body and add generated
+transport and ordinary-entry coverage, then run `bun run --cwd apps/web test tests/studio-hosted-release-activation.test.tsx`.
 Focused cases cover explicit checks/activation, pause/restart, same-intent replay, observations versus receipts,
 readback retry and exact-reader admission, malformed external progress, replacement and late replies. Three stories
 exercise the consumer with explicitly illustrative operations: desktop checks then activation, narrow authority
@@ -1098,4 +1103,5 @@ must use the ordinary Studio preparation entry to activate a real sealed private
 publication receipt, match that receipt to the current owner publication and pass anonymous exact-reader admission.
 Injectable tests and illustrative stories cannot prove this journey. Native/browser/root/growth suites and promotion
 acceptance remain unverified here.
-Source validation formats changed files, runs the design detector once and submits one final affected Web typecheck.
+The source-only pass does not run checks or expand test coverage. Declaration generation, affected Web typing,
+focused execution and native/visual acceptance remain with their scheduled owners.

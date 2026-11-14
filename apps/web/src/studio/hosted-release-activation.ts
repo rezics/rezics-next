@@ -212,7 +212,7 @@ export class HostedReleaseActivationVisit {
             candidateGenerationId: state.review.candidateGenerationId,
             expectedViewer: { ...this.options.owner.viewer },
             idempotencyKey: crypto.randomUUID(),
-            body: { stageId: state.review.stageId },
+            body: {},
           };
     this.request = request;
     this.readerLink.clear();

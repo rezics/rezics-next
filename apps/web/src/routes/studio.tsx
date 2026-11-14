@@ -44,6 +44,7 @@ import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
 import { getLocale, localizeHref, type Locale } from '../paraglide/runtime.js';
 import { historicalReaderSource, type HistoricalReaderSource } from '../threads/historical-reader-provenance';
+import { hostedReleaseActivationTransport } from '../studio/hosted-release-activation-actions';
 
 const searchSchema = v.pipe(
   v.strictObject({
@@ -433,7 +434,8 @@ function BookStudioEntry({
   prepare: boolean;
   stageId: string | null;
 }) {
-  if (prepare) return <HostedReleasePreparationEntry {...props} stageId={stageId} />;
+  if (prepare)
+    return <HostedReleasePreparationEntry {...props} stageId={stageId} activation={hostedReleaseActivationTransport} />;
   if (baseline) return <HostedLegacyBaselineEntry {...props} />;
   if (points) return <HostedDraftPointEntry {...props} />;
   if (append) return <HostedRootAppendEntry {...props} />;
