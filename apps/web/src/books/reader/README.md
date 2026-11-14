@@ -23,6 +23,28 @@ Existing [reader stories](../../stories/hosted-book-reader.stories.tsx) cover `M
 composition changes. The production route and subscription retirement witnesses remain in
 [hosted-book-reader.test.tsx](../../../tests/hosted-book-reader.test.tsx).
 
+## Chapter body languages
+
+The reader offers actual published chapter title/body languages and Automatic under Content's
+[language-selection contract](../../../../../services/kernel/src/content/hosted-chapters.md#chapter-body-languages).
+This control chooses authored chapter content independently of interface locale. It consumes native, currently
+readable alternatives; it does not infer translations from labels or text, manufacture bodies, or inspect private
+drafts. Direction and language annotations describe the selected body rather than authorizing another selection.
+
+Keep the language preference separate from the exact `BookSelection.body`. When creating a new chapter destination,
+use the explicit language, ordered preferred-language keys and declared default through Content's native selection.
+Render its actual language and selected title. Outline, previous/next and browser navigation preserve that preference
+while admitting the chosen exact address. Changing the control explicitly selects a new body address; refresh,
+preference changes and later publication/draft edits never silently replace a pinned body. A revoked or concealed
+pinned alternative is unavailable, and its private language metadata is absent from choices. Missing preferences may
+fall back only while creating a new selection, with the actual served language reported.
+
+The chooser uses the existing bounded native page/continuation and current-viewer lifetime. Retire its options and
+pending responses when viewer, catalogue, frozen publication or occurrence changes; no per-language body prefetch or
+whole-book scan. Saved reading checkpoints retain their exact body identity. Do not carry a block offset into a
+different language body. Extend the existing native author-to-reader journey and mounted reader tests to prove
+published alternatives, fallback, exact-link preservation and access revocation; source presence alone is not parity.
+
 ## Production admission and links
 
 `routes/books.$id.read.tsx` follows the existing file-route generator and locale rewrite. It has no public cache,

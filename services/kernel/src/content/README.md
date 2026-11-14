@@ -7,10 +7,10 @@ adds one catalogue at an existing Post identity, in that Post's home; `post:revi
 editing and release. Columns and individual articles need no catalogue. No Subject, edition benefit, separate
 editor, scheduler or global grant is created. Bibliographic associations remain with Semantic.
 
-`hosted-chapters` owns immutable structure revisions and release manifests. Each structure is a bounded tree
-of at most 512 occurrences and depth 16. Parts may be empty; a root-only list is a tree. Caller-supplied occurrence
+`hosted-chapters` owns immutable structure revisions and release manifests. Ordered structures use bounded native
+operations; the 512-placement direct-request limit is not a total structure or release ceiling. Depth remains 16. Parts may be empty; a root-only list is a tree. Caller-supplied occurrence
 UUIDs identify placements permanently, including across moves and removals. Distinct occurrences may select the
-same Post. An occurrence cannot change kind or target Post; chapter revision/digest selections may change in a
+same Post. An occurrence cannot change kind or canonical default target Post; chapter revision/digest selections may change in a
 new structure revision. Sibling positions are dense zero-based integers; the stored preorder supplies navigation.
 Replacing the structure requires its exact head revision. Commands use native receipts and reauthorize retries;
 an attachment failure rolls back only the structure command, never the independently saved Post.
@@ -22,6 +22,11 @@ consent and current native disclosure are owned in
 [hosted chapters](hosted-chapters.md#private-to-public-boundary); unselected revisions stay private. Later body or
 structure edits do not change a released revision's bytes. Releasing an empty selection withdraws the current TOC;
 explicit historical manifests still obey current catalogue and target Access.
+
+The [chapter body-language contract](hosted-chapters.md#chapter-body-languages) adds explicit draft language
+associations to existing exact authored targets, frozen atomically by publication. It preserves the default target,
+ordinary source authority and old exact body links. Web supplies the language control; neither UI locale nor a
+mutable draft chooses different bytes for an already pinned body.
 
 Books, Posts and fixed editions share exact-selection, retained-version, current-use and reclamation invariants.
 Content owns Book candidate storage and the immutable publication descriptor; Access and Commerce retain their

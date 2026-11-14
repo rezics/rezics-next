@@ -69,7 +69,7 @@ parts, duplicate Post selections under distinct occurrences and root-only chapte
 parent children. Duplicate IDs, cycles, missing parents and noncontiguous sibling positions are invalid requests.
 
 Revise replaces the complete tree and retains immutable history. Occurrence identity permanently fixes the kind
-and target Post, even after removal; moves, titles, sibling order and exact revision selections may change. Target
+and canonical default target Post, even after removal; moves, titles, sibling order and exact revision selections may change. Target
 attachment validation uses exact native `readPostMetadata`, followed by its retained original source observation
 and prepared ancestry/current Access check. Create, revise and publish compare thread, Post, revision, stored
 SHA-256, author and licence without loading revision bodies, even when selecting an old revision. Each distinct
@@ -117,6 +117,43 @@ Decision: bulk and point catalogue mutations complete exact chapter attachment a
 attempt-bound Post authorization evidence. Keep the absolute request deadline, Access evidence TTL, receipt replay
 order, and transactional authority/container checks unchanged.
 
+## Chapter body languages
+
+Chapter body-language choice is part of the first-public Book reader. Content owns an explicit draft language
+association for a stable chapter occurrence and the immutable publication selection of its alternatives. Each
+canonical language key selects an existing exact thread/Post/revision/SHA target and its authored chapter title.
+The existing canonical default target Post and occurrence kind remain permanent. Language associations do not
+retarget that default, infer translations, create another document model or copy body bytes into hosted storage.
+Ordinary Post editing, revisions, authorship, licence and source consent retain their existing owners.
+
+A binding change uses the expected draft head and the existing chapter-target attachment/authority machinery.
+Publication atomically freezes the selected language bindings, default and TOC under one release. Each selected
+alternative passes its own exact source eligibility; selecting a language grants no additional draft or direct
+Post visibility. Later private body edits or association changes cannot replace a frozen target. Every public
+language list and body resolution rechecks current catalogue and exact target disclosure. Inaccessible alternatives
+supply no private language label, count or target metadata.
+
+Language preference is separate from an exact body address. While creating a chapter destination, try the explicit
+language, then the caller's preferred exact language keys in order, then the declared default, using only actual
+readable alternatives in the selected release. Report the actual selected language and title. Do not infer a
+translation from tag prefixes, UI locale, similar text or neighboring chapters. Once an address pins the exact
+Post/revision/digest, a preference never substitutes different bytes. Changing language explicitly creates a new
+exact selection. An unavailable pinned target remains unavailable; fallback applies only when creating a new
+selection. Existing single-language destinations retain the default body.
+
+Store and read associations by publication/draft identity, occurrence and canonical language key. One exact choice
+uses keyed access; language enumeration uses the existing hosted page budget and sparse continuation, without eager
+body fetches or whole-book scans. Point association changes and prepared publication reuse existing request,
+selection-ingestion and target-proof step bounds; additional alternatives count as real target work rather than
+multiplying an unchecked nested array. Direct request caps are not lifetime language or complete-release ceilings.
+Large sets make resumable progress under the existing publication preparation instead of a new arbitrary limit.
+
+Web preserves language preference through outline and previous/next destinations and browser navigation, independently
+of interface locale. The native exact body remains authoritative for a saved/resumed hosted-reading checkpoint;
+positions from one alternative cannot be reinterpreted as positions in another. The
+[reader owner](../../../../apps/web/src/books/reader/README.md#chapter-body-languages) owns the control and address
+lifetime; native and mounted acceptance remain separate release obligations.
+
 ## Versioned outline adoption
 
 Decision: adopt the [shared versioned ordered forest](../../../../docs/knowledge-workspaces.md#shared-versioned-outline-primitive)
@@ -124,7 +161,7 @@ with Book-owned placement values, identity bindings, authorization and release m
 keyed copy-on-write balancing only; Book uses stable occurrence handles, generation/as-of node and occurrence lookup,
 count/rank/select, split/join, sibling/preorder/chapter indexes, current membership proof, head CAS and a distinct
 Book adapter. Implement point add, reorder/reparent and removal against an expected draft with stable
-`parentId`/`beforeOccurrenceId` anchors. Parts may parent children; chapters cannot. Occurrence kind and target Post
+`parentId`/`beforeOccurrenceId` anchors. Parts may parent children; chapters cannot. Occurrence kind and canonical default target Post
 remain permanent; a title or exact target revision change creates a new value under the same occurrence. Do not
 introduce a universal graph table, a parallel permission engine, or Knowledge's notebook/document schema. There is
 no permanent total structure cap, eager migration, global key relabel, history chain or per-edit full copy. This
@@ -346,7 +383,7 @@ against the expected public snapshot, not the draft; an anchor present only in t
 Any not-yet-public ancestor must be explicitly reviewed/selected in the same depth-bounded operand; never silently
 publish private ancestor titles. `replacePublishedChapter` changes exactly one already-selected occurrence's chosen
 body revision/digest, retaining its public parent, order and other values unless explicitly selected in that bounded
-operand. Kind/target Post identity stays permanent. It does not copy newer draft choices into other public chapters.
+operand. Kind/canonical default target Post identity stays permanent. It does not copy newer draft choices into other public chapters.
 
 Under current catalogue Post author/container/`post:revise` admission, read that exact source occurrence and its
 ancestor chain, then validate only the changed exact targets through native metadata and retained original Access/
