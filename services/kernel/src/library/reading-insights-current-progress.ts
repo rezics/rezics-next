@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { readAccount, deadlineClient, within } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { readAccount } from './access-port.ts';
+import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Actor } from '../request/access.ts';
@@ -199,120 +199,106 @@ export function createReadingInsightsCurrentProgressReads(deps: { pool: Pool }) 
       if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
     };
     alive();
-    return within(deadline, () =>
-      withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        let committed = false;
-        try {
-          await client.query('BEGIN');
-          await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
-            route,
-            actor.accountId,
-          ]);
-          const authorize = async () => {
-            const owner = await readAccount(client, route, actor.accountId);
-            if (
-              !owner ||
-              owner.kind !== 'actor' ||
-              owner.state !== 'active' ||
-              owner.fenced ||
-              !Number.isSafeInteger(actor.authnEpoch) ||
-              actor.authnEpoch < 1 ||
-              owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-            )
-              throw new ProblemError('forbidden');
-          };
-          await authorize();
-          await client.query('SAVEPOINT reading_insights_current_progress_schema');
-          let head: Head | undefined;
-          try {
-            head = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
-          } catch (error) {
-            if (typeof error !== 'object' || error === null || !('code' in error) || error.code !== '42P01')
-              throw error;
-            await client.query('ROLLBACK TO SAVEPOINT reading_insights_current_progress_schema');
-          }
-          if (!head) {
-            const value = unavailable('not_installed');
-            await authorize();
-            await client.query('COMMIT');
-            committed = true;
-            alive();
-            return value;
-          }
-          if (!head.installed) {
-            const value = unavailable('not_installed', head.initialized, head.retained);
-            await authorize();
-            await client.query('COMMIT');
-            committed = true;
-            alive();
-            return value;
-          }
-          if (!head.maintenance_ready) {
-            const value = unavailable('maintenance_unavailable', head.initialized, head.retained);
-            await authorize();
-            await client.query('COMMIT');
-            committed = true;
-            alive();
-            return value;
-          }
-          if (BigInt(head.initialized) < BigInt(head.retained)) {
-            const value = unavailable('initializing', head.initialized, head.retained);
-            await authorize();
-            alive();
-            await client.query('COMMIT');
-            committed = true;
-            alive();
-            return value;
-          }
-
-          const scopes = (await client.query<ScopeRow>(scopesSql, [route, actor.accountId])).rows;
-          const active = currentScope(scopes.find((scope) => scope.scope === 'active'));
-          const backlog = currentScope(scopes.find((scope) => scope.scope === 'backlog'));
-          const currentSessions = BigInt(head.current_sessions);
-          const coveredSessions = BigInt(head.covered_sessions);
-          const value: ReadingInsightsCurrentProgress = {
-            state: 'available',
-            scope: 'active_and_backlog_sessions',
-            coverage: {
-              initializedSessions: head.initialized,
-              retainedSessions: head.retained,
-              currentSessions: head.current_sessions,
-              activeSessions: head.active_sessions,
-              backlogSessions: head.backlog_sessions,
-              coveredSessions: head.covered_sessions,
-              unsupportedSessions: (currentSessions > coveredSessions
-                ? currentSessions - coveredSessions
-                : 0n
-              ).toString(),
-            },
-            currentness: {
-              state: 'snapshot',
-              source: 'reading_insights_current_progress_v1',
-              revision: head.revision,
-              retainedSourceRevision: head.source_revision,
-            },
-            active,
-            backlog,
-            limit: READING_INSIGHTS_CURRENT_PROGRESS_GROUP_LIMIT,
-          };
-          if (new TextEncoder().encode(JSON.stringify(value)).byteLength > MAX_READING_INSIGHTS_CURRENT_PROGRESS_BYTES)
-            throw new ProblemError('dependency_unavailable');
-          await authorize();
-          const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
-          if (!latest || JSON.stringify(latest) !== JSON.stringify(head))
-            throw new ProblemError('dependency_unavailable');
-          alive();
-          await client.query('COMMIT');
-          committed = true;
-          alive();
-          return value;
-        } catch (error) {
-          if (!committed) await connection.query('ROLLBACK');
+    return withReadingDashboardReadConnection(deps.pool, { deadline, signal }, async (client) => {
+      await client.query('BEGIN');
+      await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+        route,
+        actor.accountId,
+      ]);
+      const authorize = async () => {
+        const owner = await readAccount(client, route, actor.accountId);
+        if (
+          !owner ||
+          owner.kind !== 'actor' ||
+          owner.state !== 'active' ||
+          owner.fenced ||
+          !Number.isSafeInteger(actor.authnEpoch) ||
+          actor.authnEpoch < 1 ||
+          owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+        )
+          throw new ProblemError('forbidden');
+      };
+      await authorize();
+      await client.query('SAVEPOINT reading_insights_current_progress_schema');
+      let head: Head | undefined;
+      try {
+        head = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
+      } catch (error) {
+        if (typeof error !== 'object' || error === null || !('code' in error) || error.code !== '42P01')
           throw error;
-        }
-      }),
-    );
+        await client.query('ROLLBACK TO SAVEPOINT reading_insights_current_progress_schema');
+      }
+      if (!head) {
+        const value = unavailable('not_installed');
+        await authorize();
+        await client.query('COMMIT');
+        alive();
+        return value;
+      }
+      if (!head.installed) {
+        const value = unavailable('not_installed', head.initialized, head.retained);
+        await authorize();
+        await client.query('COMMIT');
+        alive();
+        return value;
+      }
+      if (!head.maintenance_ready) {
+        const value = unavailable('maintenance_unavailable', head.initialized, head.retained);
+        await authorize();
+        await client.query('COMMIT');
+        alive();
+        return value;
+      }
+      if (BigInt(head.initialized) < BigInt(head.retained)) {
+        const value = unavailable('initializing', head.initialized, head.retained);
+        await authorize();
+        alive();
+        await client.query('COMMIT');
+        alive();
+        return value;
+      }
+
+      const scopes = (await client.query<ScopeRow>(scopesSql, [route, actor.accountId])).rows;
+      const active = currentScope(scopes.find((scope) => scope.scope === 'active'));
+      const backlog = currentScope(scopes.find((scope) => scope.scope === 'backlog'));
+      const currentSessions = BigInt(head.current_sessions);
+      const coveredSessions = BigInt(head.covered_sessions);
+      const value: ReadingInsightsCurrentProgress = {
+        state: 'available',
+        scope: 'active_and_backlog_sessions',
+        coverage: {
+          initializedSessions: head.initialized,
+          retainedSessions: head.retained,
+          currentSessions: head.current_sessions,
+          activeSessions: head.active_sessions,
+          backlogSessions: head.backlog_sessions,
+          coveredSessions: head.covered_sessions,
+          unsupportedSessions: (currentSessions > coveredSessions
+            ? currentSessions - coveredSessions
+            : 0n
+          ).toString(),
+        },
+        currentness: {
+          state: 'snapshot',
+          source: 'reading_insights_current_progress_v1',
+          revision: head.revision,
+          retainedSourceRevision: head.source_revision,
+        },
+        active,
+        backlog,
+        limit: READING_INSIGHTS_CURRENT_PROGRESS_GROUP_LIMIT,
+      };
+      if (new TextEncoder().encode(JSON.stringify(value)).byteLength > MAX_READING_INSIGHTS_CURRENT_PROGRESS_BYTES)
+        throw new ProblemError('dependency_unavailable');
+      await authorize();
+      const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
+      if (!latest || JSON.stringify(latest) !== JSON.stringify(head))
+        throw new ProblemError('dependency_unavailable');
+      alive();
+      await client.query('COMMIT');
+      alive();
+      return value;
+    });
   }
   return { currentProgress };
 }

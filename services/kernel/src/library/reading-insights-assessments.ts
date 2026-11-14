@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { readAccount, deadlineClient, within } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { readAccount } from './access-port.ts';
+import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Actor } from '../request/access.ts';
@@ -154,67 +154,57 @@ export function createReadingInsightsAssessmentReads(deps: { pool: Pool }) {
       if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
     };
     alive();
-    return within(deadline, () =>
-      withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        let committed = false;
-        try {
-          await client.query('BEGIN');
-          await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
-            route,
-            actor.accountId,
-          ]);
-          const authorize = async () => {
-            const owner = await readAccount(client, route, actor.accountId);
-            if (
-              !owner ||
-              owner.kind !== 'actor' ||
-              owner.state !== 'active' ||
-              owner.fenced ||
-              !Number.isSafeInteger(actor.authnEpoch) ||
-              actor.authnEpoch < 1 ||
-              owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-            )
-              throw new ProblemError('forbidden');
-          };
-          await authorize();
-          await client.query('SAVEPOINT reading_insights_assessment_schema');
-          let snapshot: Snapshot | undefined;
-          let installed = true;
-          try {
-            snapshot = (await client.query<Snapshot>(snapshotSql, [route, actor.accountId])).rows[0];
-          } catch (error) {
-            if (
-              typeof error !== 'object' ||
-              error === null ||
-              !('code' in error) ||
-              (error.code !== '42P01' && error.code !== '42703')
-            )
-              throw error;
-            await client.query('ROLLBACK TO SAVEPOINT reading_insights_assessment_schema');
-            installed = false;
-          }
-          const value = present(snapshot);
-          const encoded = JSON.stringify(value);
-          if (new TextEncoder().encode(encoded).byteLength > MAX_READING_INSIGHTS_ASSESSMENT_BYTES)
-            throw new ProblemError('dependency_unavailable');
-          await authorize();
-          if (installed && snapshot) {
-            const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
-            if (JSON.stringify(latest) !== JSON.stringify(snapshot.head))
-              throw new ProblemError('dependency_unavailable');
-          }
-          alive();
-          await client.query('COMMIT');
-          committed = true;
-          alive();
-          return value;
-        } catch (error) {
-          if (!committed) await connection.query('ROLLBACK');
+    return withReadingDashboardReadConnection(deps.pool, { deadline, signal }, async (client) => {
+      await client.query('BEGIN');
+      await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+        route,
+        actor.accountId,
+      ]);
+      const authorize = async () => {
+        const owner = await readAccount(client, route, actor.accountId);
+        if (
+          !owner ||
+          owner.kind !== 'actor' ||
+          owner.state !== 'active' ||
+          owner.fenced ||
+          !Number.isSafeInteger(actor.authnEpoch) ||
+          actor.authnEpoch < 1 ||
+          owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+        )
+          throw new ProblemError('forbidden');
+      };
+      await authorize();
+      await client.query('SAVEPOINT reading_insights_assessment_schema');
+      let snapshot: Snapshot | undefined;
+      let installed = true;
+      try {
+        snapshot = (await client.query<Snapshot>(snapshotSql, [route, actor.accountId])).rows[0];
+      } catch (error) {
+        if (
+          typeof error !== 'object' ||
+          error === null ||
+          !('code' in error) ||
+          (error.code !== '42P01' && error.code !== '42703')
+        )
           throw error;
-        }
-      }),
-    );
+        await client.query('ROLLBACK TO SAVEPOINT reading_insights_assessment_schema');
+        installed = false;
+      }
+      const value = present(snapshot);
+      const encoded = JSON.stringify(value);
+      if (new TextEncoder().encode(encoded).byteLength > MAX_READING_INSIGHTS_ASSESSMENT_BYTES)
+        throw new ProblemError('dependency_unavailable');
+      await authorize();
+      if (installed && snapshot) {
+        const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
+        if (JSON.stringify(latest) !== JSON.stringify(snapshot.head))
+          throw new ProblemError('dependency_unavailable');
+      }
+      alive();
+      await client.query('COMMIT');
+      alive();
+      return value;
+    });
   }
   return { assessments };
 }

@@ -1,8 +1,8 @@
 import type { Pool } from 'pg';
-import { readAccount, deadlineClient, within } from './access-port.ts';
+import { readAccount } from './access-port.ts';
 import type { KernelClock } from '../clock.ts';
 import type { CommandResult } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -85,11 +85,11 @@ export function createYearlyCompletionGoalReads(dependencies: { pool: Pool }) {
         if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
       };
       alive();
-      return within(deadline, () =>
-        withConnection(dependencies.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          let committed = false;
-          try {
+      try {
+        return await withReadingDashboardReadConnection(
+          dependencies.pool,
+          { deadline, signal },
+          async (client) => {
             await client.query('BEGIN');
             await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
               route,
@@ -126,21 +126,19 @@ export function createYearlyCompletionGoalReads(dependencies: { pool: Pool }) {
             await authorize();
             alive();
             await client.query('COMMIT');
-            committed = true;
             alive();
             if (!row) return { state: 'none', revision: null };
             return row.target === null
               ? { state: 'none', revision: row.revision }
               : { state: 'set', target: row.target, revision: row.revision };
-          } catch (error) {
-            if (!committed) await connection.query('ROLLBACK');
-            if (error instanceof TargetInstallationUnavailableError)
-              return { state: 'unavailable', reason: 'not_installed' };
-            if (isMissingInstallation(error)) return { state: 'unavailable', reason: 'not_installed' };
-            throw error;
-          }
-        }),
-      );
+          },
+        );
+      } catch (error) {
+        if (error instanceof TargetInstallationUnavailableError)
+          return { state: 'unavailable', reason: 'not_installed' };
+        if (isMissingInstallation(error)) return { state: 'unavailable', reason: 'not_installed' };
+        throw error;
+      }
     },
   };
 }

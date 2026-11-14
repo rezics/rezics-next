@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { readAccount, deadlineClient, within } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { readAccount } from './access-port.ts';
+import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Actor } from '../request/access.ts';
@@ -53,46 +53,42 @@ export function createConsumptionStatisticsReads(deps: { pool: Pool }) {
         if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
       };
       alive();
-      return within(deadline, () =>
-        withConnection(deps.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          try {
-            await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-            alive();
-            const owner = await readAccount(client, route, actor.accountId);
-            if (
-              !owner ||
-              owner.kind !== 'actor' ||
-              owner.state !== 'active' ||
-              owner.fenced ||
-              !Number.isSafeInteger(actor.authnEpoch) ||
-              actor.authnEpoch < 1 ||
-              owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-            )
-              throw new ProblemError('forbidden');
-            const result = await client.query<SummaryRow>(summarySql, [route, actor.accountId]);
-            const row = result.rows[0];
-            if (!row?.complete) throw new ProblemError('dependency_unavailable');
-            alive();
-            await client.query('COMMIT');
-            alive();
-            return {
-              scope: 'retained_native_sessions',
-              completedOccurrences: row.completed,
-              distinctCompletedSubjects: row.subjects,
-              repeatOccurrences: row.repeats,
-              completedOccurrencesWithUnknownProfile: row.unknown,
-              coverage: { nativeSessions: 'complete', otherHistory: 'unavailable', unitMeaning: 'not_evaluated' },
-              currentness: { state: 'snapshot', revision: row.revision },
-            };
-          } catch (error) {
-            await connection.query('ROLLBACK');
-            if (typeof error === 'object' && error !== null && 'code' in error && error.code === '42P01')
-              throw new ProblemError('dependency_unavailable');
-            throw error;
-          }
-        }),
-      );
+      return withReadingDashboardReadConnection(deps.pool, { deadline, signal }, async (client) => {
+        try {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          alive();
+          const owner = await readAccount(client, route, actor.accountId);
+          if (
+            !owner ||
+            owner.kind !== 'actor' ||
+            owner.state !== 'active' ||
+            owner.fenced ||
+            !Number.isSafeInteger(actor.authnEpoch) ||
+            actor.authnEpoch < 1 ||
+            owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+          )
+            throw new ProblemError('forbidden');
+          const result = await client.query<SummaryRow>(summarySql, [route, actor.accountId]);
+          const row = result.rows[0];
+          if (!row?.complete) throw new ProblemError('dependency_unavailable');
+          alive();
+          await client.query('COMMIT');
+          alive();
+          return {
+            scope: 'retained_native_sessions',
+            completedOccurrences: row.completed,
+            distinctCompletedSubjects: row.subjects,
+            repeatOccurrences: row.repeats,
+            completedOccurrencesWithUnknownProfile: row.unknown,
+            coverage: { nativeSessions: 'complete', otherHistory: 'unavailable', unitMeaning: 'not_evaluated' },
+            currentness: { state: 'snapshot', revision: row.revision },
+          };
+        } catch (error) {
+          if (typeof error === 'object' && error !== null && 'code' in error && error.code === '42P01')
+            throw new ProblemError('dependency_unavailable');
+          throw error;
+        }
+      });
     },
   };
 }

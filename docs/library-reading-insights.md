@@ -14,6 +14,8 @@ rows without a captured descriptor remain unavailable, and labels or current pro
 Decision: Assessment coverage includes retained non-retired sessions, including active sessions; retirement removes a session from the panel and restoration receives it again. Keep exact values and half-point frequencies within each meaning revision, report historical null presence as unknown, and never average incompatible revisions.
 Decision: Insights returns diary navigation as the existing `library_diary.list` operation and its query values; Diary retains ownership of the destination and allocation.
 Decision: Current progress groups retained `active` sessions as active and retained `abandoned` sessions as backlog; completed and retired sessions are excluded.
+Decision: Private overview panels and the yearly-goal read share one bounded connection lifetime; expiry blocks late
+SQL, discards uncertain clients, and permits rollback only within the original request deadline.
 
 Decision: The Web overview uses the installed callable client and closed Valibot HTTP-boundary pattern, retains private
 values only in component state, and requires explicit refresh after reader or source replacement.
