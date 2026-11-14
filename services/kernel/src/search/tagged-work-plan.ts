@@ -202,17 +202,14 @@ export function taggedWorkHitScanBound(plan: TaggedWorkPlan | undefined, limit: 
   return plan?.scanBound ?? Math.min(600, 6 * limit + 3);
 }
 
-/**
- * Concept statements compile to a property superset. A prepared snapshot retains that
- * raw set, including rejects and duplicates, so serving may walk the direct ceiling.
- */
+/** The prepared serving allowance remains 600 output candidates after bounded predicate preparation. */
 export const TAGGED_WORK_PREPARED_RAW_BOUND = 600;
 
 export function taggedWorkRawBound(prepared: boolean, plan: TaggedWorkPlan | undefined, limit: number): number {
   return prepared && plan !== undefined ? TAGGED_WORK_PREPARED_RAW_BOUND : taggedWorkHitScanBound(plan, limit);
 }
 
-/** Direct windows stay `2 × remaining hits + 1`; prepared tagged-work pages the retained superset. */
+/** Direct windows stay `2 × remaining hits + 1`; prepared tagged-work pages indexed output candidates. */
 export function taggedWorkEngineWindow(input: {
   prepared: boolean;
   remainingHits: number;

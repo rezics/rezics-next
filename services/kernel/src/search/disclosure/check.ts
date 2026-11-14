@@ -196,12 +196,16 @@ export async function checkHits<NativeHit extends Hit>(
     spoilerThreshold?: SpoilerThreshold;
     observeRelationRelease?: () => Promise<CurrentRelationRelease | null>;
     conceptFilter?: ConceptFilterExecution;
+    /** Return aligned three-valued matches for bounded internal preparation. */
+    includeOutcomes?: boolean;
     /** Re-evaluate a stale indexed text hint against the current native Subject projection. */
     currentText?: (subject: IndexedSubject) => Promise<RelationFacetMatch>;
   },
 ): Promise<{
   passed: { hit: NativeHit; subject: IndexedSubject }[];
   dropped: number;
+  /** Aligned current predicate results for internal preparation consumers; false is definitive. */
+  outcomes?: readonly RelationFacetMatch[];
   relationRejected?: true;
   /** An eligible candidate has undecidable text; it cannot certify counts or a consumed continuation. */
   textRejected?: true;
@@ -219,15 +223,21 @@ export async function checkHits<NativeHit extends Hit>(
     throw new Error('Inverse disclosure requires the current filter plan and runtime release observer');
   const observeRelease = options?.observeRelationRelease;
   const releaseBefore = observeRelease ? await observeRelease() : undefined;
-  if (observeRelease && !releaseBefore) return { passed: [], dropped: hits.length, relationRejected: true };
+  if (observeRelease && !releaseBefore)
+    return {
+      passed: [],
+      dropped: hits.length,
+      ...(options?.includeOutcomes ? { outcomes: hits.map(() => 'not_proven' as const) } : {}),
+      relationRejected: true,
+    };
   const relationProperties = new Set(options?.relationProperties);
   let relationRejected = false;
   let sourceChanged = false;
   let textRejected = false;
-  const currentTextMatches = async (subject: IndexedSubject): Promise<boolean> => {
+  const currentTextMatch = async (subject: IndexedSubject): Promise<RelationFacetMatch> => {
     const match = options?.currentText ? await options.currentText(subject) : true;
     textRejected ||= match === 'not_proven';
-    return match === true;
+    return match;
   };
   const hints = new Map<string, number>();
   if (plan) {
@@ -257,6 +267,9 @@ export async function checkHits<NativeHit extends Hit>(
   }
 
   const checked: ({ hit: NativeHit; subject: IndexedSubject } | undefined)[] = new Array(hits.length);
+  const outcomes: RelationFacetMatch[] | undefined = options?.includeOutcomes
+    ? hits.map(() => 'not_proven')
+    : undefined;
   const partitions = [...groups];
   const lifetime = new RequestSourceLifetime();
   type Point = { probe: RelationFacetProbe; inverse?: true; result?: RelationFacetMatch };
@@ -284,7 +297,7 @@ export async function checkHits<NativeHit extends Hit>(
         for (const [id, subject] of read.value.subjects) subjects.set(id, subject);
       }
       const points = new Map<string, Point>();
-      const evaluations = new Map<string, () => Promise<{ passed: boolean; relationRejected: boolean }>>();
+      const evaluations = new Map<string, () => Promise<{ match: RelationFacetMatch; relationRejected: boolean }>>();
       const eligible: { hit: NativeHit; subject: IndexedSubject; index: number }[] = [];
       for (const { hit, index } of group.candidates) {
         const subject = subjects.get(hit.id);
@@ -293,8 +306,10 @@ export async function checkHits<NativeHit extends Hit>(
           subject.visibility !== 'visible' ||
           subject.redirect !== null ||
           subject.securityRevision !== hit.securityRevision
-        )
+        ) {
+          if (outcomes) outcomes[index] = false;
           continue;
+        }
         if (plan) {
           eligible.push({ hit, subject, index });
           if (evaluations.has(subject.id)) continue;
@@ -351,7 +366,7 @@ export async function checkHits<NativeHit extends Hit>(
               (clause) => clause.facet === 'statement' && 'values' in clause && clause.concept,
             );
             if (conceptLeaves) {
-              if (!options?.conceptFilter) return { passed: false, relationRejected: true };
+              if (!options?.conceptFilter) return { match: 'not_proven', relationRejected: true };
               const current = await matchNativeConceptFilter(
                 options.conceptFilter.reader,
                 partition,
@@ -386,18 +401,17 @@ export async function checkHits<NativeHit extends Hit>(
                 },
               );
               if (current.status === 'restart') throw new SearchOperationError('search_restart_required');
-              if (current.status !== 'current' || current.match === 'not_proven')
-                return { passed: false, relationRejected: true };
-              return { passed: current.match === true, relationRejected: false };
+              if (current.status !== 'current') return { match: 'not_proven', relationRejected: true };
+              return { match: current.match, relationRejected: current.match === 'not_proven' };
             }
             // Bounded uncertainty remains unknown through negation and cannot disclose a hit.
-            const passed = plan.evaluate(resolved) === true;
+            const match = plan.evaluate(resolved);
             return {
-              passed,
+              match,
               // Live rejection invalidates the indexed candidate total. Qualified negatives
               // also need this: bounded uncertainty cannot certify final exhaustion.
               relationRejected:
-                !passed &&
+                match !== true &&
                 values.some((value, leaf) => {
                   const clause = plan.leaves[leaf]!;
                   if (value === 'not_proven') return true;
@@ -425,7 +439,9 @@ export async function checkHits<NativeHit extends Hit>(
           })
         )
           continue;
-        if (await currentTextMatches(subject)) checked[index] = { hit, subject };
+        const match = await currentTextMatch(subject);
+        if (outcomes) outcomes[index] = match;
+        if (match === true) checked[index] = { hit, subject };
       }
       const pending = [...points.values()];
       pagePoints.push(...pending);
@@ -471,9 +487,9 @@ export async function checkHits<NativeHit extends Hit>(
             }
           }
         }
-        const outcomes = new Map<string, { passed: boolean; relationRejected: boolean }>();
+        const outcomesBySubject = new Map<string, { match: RelationFacetMatch; relationRejected: boolean }>();
         for (const { hit, subject, index } of eligible) {
-          outcomes.set(subject.id, await evaluations.get(subject.id)!());
+          outcomesBySubject.set(subject.id, await evaluations.get(subject.id)!());
         }
         // Reanchor identity, disclosure and facts after retained concept membership work.
         const retired = new Set<string>();
@@ -505,12 +521,16 @@ export async function checkHits<NativeHit extends Hit>(
         }
         sourceChanged ||= retired.size > 0;
         for (const { hit, subject, index } of eligible) {
-          const result = outcomes.get(subject.id)!;
           if (retired.has(subject.id)) {
             relationRejected = true;
+            if (outcomes) outcomes[index] = 'not_proven';
             continue;
           }
-          if (result.passed && (await currentTextMatches(subject))) checked[index] = { hit, subject };
+          const result = outcomesBySubject.get(subject.id)!;
+          let match = result.match;
+          if (match === true) match = await currentTextMatch(subject);
+          if (outcomes) outcomes[index] = match;
+          if (match === true) checked[index] = { hit, subject };
           relationRejected ||= result.relationRejected;
         }
       });
@@ -553,16 +573,27 @@ export async function checkHits<NativeHit extends Hit>(
   for (const dispatch of dispatches) await dispatch();
   lifetime.throwIfFailed();
   if (sourceChanged || (retained && !(await retained.revalidate())))
-    return { passed: [], dropped: hits.length, relationRejected: true };
+    return {
+      passed: [],
+      dropped: hits.length,
+      ...(outcomes ? { outcomes: hits.map(() => 'not_proven' as const) } : {}),
+      relationRejected: true,
+    };
   if (observeRelease) {
     const releaseAfter = await observeRelease();
     if (releaseAfter?.digest !== releaseBefore!.digest || releaseAfter?.head !== releaseBefore!.head)
-      return { passed: [], dropped: hits.length, relationRejected: true };
+      return {
+        passed: [],
+        dropped: hits.length,
+        ...(outcomes ? { outcomes: hits.map(() => 'not_proven' as const) } : {}),
+        relationRejected: true,
+      };
   }
   const passed = checked.filter((entry) => entry !== undefined);
   return {
     passed,
     dropped: hits.length - passed.length,
+    ...(outcomes ? { outcomes } : {}),
     ...(relationRejected ? { relationRejected: true } : {}),
     ...(textRejected ? { textRejected: true } : {}),
   };

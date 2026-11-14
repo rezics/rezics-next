@@ -41,6 +41,7 @@ import { bulkLines, type IndexAction, type SearchDocument } from './document.ts'
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { subjectPartition } from './source.ts';
 import { writeIndexActions } from './write-actions.ts';
+import { createPreparedDiscoveryOutputSegment } from './prepared-discovery-output.ts';
 import type { PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
 import { observationIsDisclosableFromUnknown } from './query-privacy-observation.ts';
 
@@ -1806,21 +1807,47 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               }
               throw error;
             }
-            const accepted = new Set(
-              'representation' in recovery.bootstrap.definition.capture
-                ? raw.map((_hit, index) => index)
-                : checked.accepted,
-            );
+            const capture = recovery.bootstrap.definition.capture;
             let nextOutputOrdinal = outputCount;
-            const entries: PublicFilterPreparationSegmentEntry[] = raw.map((hit, index) => {
-              const outputOrdinal = accepted.has(index) ? nextOutputOrdinal++ : null;
-              return {
-                rawOrdinal: rawCount + index,
-                outputOrdinal,
-                payload: { hit, owner: checked.rows[index]! },
-              };
-            });
-            const nextRawCount = rawCount + raw.length;
+            let entries: readonly PublicFilterPreparationSegmentEntry[];
+            let nextRawCount: number;
+            if ('representation' in capture) {
+              const segment = await createPreparedDiscoveryOutputSegment({
+                hits: raw as readonly DiscoveryEngineHit[],
+                ownerRows: checked.rows,
+                ownerPositions: checked.accepted,
+                rawCount,
+                outputCount,
+                filter: capture.filterDocument,
+                registry: config.registry!,
+                release: meaning.release,
+                meter: {
+                  sourceRead(keys) {
+                    m.cost.inputKeys += keys;
+                    m.cost.rows += keys;
+                    m.check();
+                  },
+                  relationBatch() {
+                    m.cost.dependencyPoints++;
+                    m.check();
+                  },
+                },
+              });
+              entries = segment.entries;
+              nextRawCount = segment.rawCount;
+              nextOutputOrdinal = segment.outputCount;
+            } else {
+              const accepted = new Set(checked.accepted);
+              entries = raw.map((hit, index) => {
+                const outputOrdinal = accepted.has(index) ? nextOutputOrdinal++ : null;
+                return {
+                  rawOrdinal: rawCount + index,
+                  outputOrdinal,
+                  payload: { hit, owner: checked.rows[index]! },
+                };
+              });
+              nextRawCount = rawCount + raw.length;
+            }
             if (nextRawCount > PUBLIC_FILTER_PREPARATION_RAW_LIMIT) return m.unavailable('dependency_unavailable');
             const appended = m.take(
               await custody.appendPreparationSegment(
