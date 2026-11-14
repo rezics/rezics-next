@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { withConnection } from '../database/pool.ts';
+import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, Actor } from '../request/access.ts';
@@ -61,7 +61,8 @@ export async function listCreatorOffers(
     epoch = cursor.epoch;
   }
   requireAccessDeadline(input.deadline);
-  return withConnection(pool, async (connection) => {
+  let transaction: 'none' | 'beginning' | 'open' | 'committing' | 'committed' | 'rolling-back' | 'rolled-back' = 'none';
+  return withBoundedReadConnection(pool, input.deadline, async (connection) => {
     const client = deadlineClient(connection, input.deadline);
     const source = async () => {
       const partition = await readPartition(client, home);
@@ -80,9 +81,10 @@ export async function listCreatorOffers(
         throw new CommandUnavailableError('fenced', home);
       return partition;
     };
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    let committed = false;
     try {
+      transaction = 'beginning';
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      transaction = 'open';
       // The mounted metadata prepares the sole native formula on the actual acting account.
       if (!(await check(client))) throw new ProblemError('forbidden');
       const partition = await source();
@@ -98,8 +100,9 @@ export async function listCreatorOffers(
           contentEdition: contentEditionTermsView(decodeCapturedContentEdition(row.contentEdition)),
         };
       });
+      transaction = 'committing';
       await client.query('COMMIT');
-      committed = true;
+      transaction = 'committed';
       // Leave the snapshot before the final current account/formula and native source fence.
       if (!(await check(client))) throw new ProblemError('forbidden');
       epoch = partition.epoch;
@@ -114,8 +117,25 @@ export async function listCreatorOffers(
             : null,
       };
     } catch (error) {
-      if (!committed) await connection.query('ROLLBACK');
+      if (transaction === 'open') {
+        transaction = 'rolling-back';
+        try {
+          await client.query('ROLLBACK');
+          transaction = 'rolled-back';
+        } catch {
+          // Keep the original domain or query failure; the bounded reader retires unresolved cleanup.
+        }
+      }
       throw error;
     }
+  }, {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    // The primitive already exempts settled PostgreSQL server errors; other query failures leave IO uncertain.
+    isUncertainError: () => true,
+    isUncertainWorkError: () =>
+      transaction === 'beginning' ||
+      transaction === 'open' ||
+      transaction === 'committing' ||
+      transaction === 'rolling-back',
   });
 }
