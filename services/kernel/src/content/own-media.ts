@@ -28,7 +28,7 @@ const mediaActions = ['media:read_reservation', 'media:read', 'media:erase', 'th
 type MediaRow = Readonly<{
   id: string;
   context_id: string;
-  purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner' | 'cover';
+  purpose: 'post-image' | 'knowledge-image' | 'avatar' | 'realm-icon' | 'realm-banner' | 'cover';
   state: 'reserved' | 'uploaded' | 'available' | 'rejected';
   media_type: string | null;
   byte_count: string | number | null;
@@ -46,6 +46,7 @@ type MediaRow = Readonly<{
   variants_json: string;
   browser_reservation: boolean;
   observation_json: string;
+  related_knowledge: boolean;
 }>;
 
 type OwnMediaEntry = OwnMediaInventoryPage['entries'][number];
@@ -254,24 +255,27 @@ function baseCandidate(
         ? { id: row.context_id, kind: 'account' as const }
         : null;
   const variants = variantKeys(row);
-  const readableVariants = row.purpose === 'post-image' && row.claimed_at === null ? [] : variants;
+  const relatedKnowledge = row.purpose === 'knowledge-image' && row.related_knowledge;
+  const browserImage = row.purpose === 'post-image' || row.purpose === 'knowledge-image';
+  const readableVariants = browserImage && row.claimed_at === null ? [] : variants;
   const readable =
     isAvailable &&
     authorized.read &&
     ((row.purpose === 'post-image' && containerAvailable) ||
+      (relatedKnowledge && row.claimed_at !== null) ||
       (row.purpose === 'avatar' && row.context_id === actor.accountId && readableVariants.length > 0));
   const read: ReadAction | null = readable
     ? {
         operationId: 'media.authorize_download',
-        variants: [...(row.purpose === 'post-image' ? ['original'] : []), ...readableVariants],
+        variants: [...(browserImage ? ['original'] : []), ...readableVariants],
         recheckAtUse: true,
       }
     : null;
   const canResume =
-    row.purpose === 'post-image' &&
+    browserImage &&
     row.browser_reservation &&
     live &&
-    containerAvailable &&
+    ((row.purpose === 'post-image' && containerAvailable) || relatedKnowledge) &&
     Date.parse(row.created_at) + 24 * 60 * 60_000 > now &&
     (state === 'reserved' || state === 'uploaded');
   return {
@@ -290,7 +294,7 @@ function baseCandidate(
           }
         : null,
       retry:
-        row.purpose === 'post-image' && state === 'rejected'
+        (row.purpose === 'post-image' || relatedKnowledge) && state === 'rejected'
           ? { operationId: 'media.create', guidance: 'choose-new-file' }
           : null,
     },

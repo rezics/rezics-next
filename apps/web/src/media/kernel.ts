@@ -1,3 +1,4 @@
+import { knowledgeMediaQuery, type KnowledgeMediaSelection } from '@rezics/definitions/knowledge-media';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 
@@ -177,10 +178,11 @@ export async function authorizeDownload(
   id: string,
   variant: string,
   credential: string | null,
+  knowledge?: KnowledgeMediaSelection,
 ): Promise<DownloadDecision> {
   try {
     const { data, error } = await client.media({ id }).$authorizeDownload.get({
-      query: { variant },
+      query: { variant, ...(knowledge ? knowledgeMediaQuery(knowledge) : {}) },
       headers: viewerHeaders(credential),
     });
     if (error) throwClientError(error);

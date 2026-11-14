@@ -14,6 +14,7 @@ The active definitions are:
 - [Library and Collections](library.md) — same commerce manager; separate owner documentation
 - [Imports](imports.md)
 - [Web and Auth interfaces](web.md)
+- [Complete editor product](editor.md) — shared editor, reading, preferences and host integration
 - [Performance](performance.md)
 
 Commerce and Library retain the original combined manager scope, tasks and native/main completion requirements.

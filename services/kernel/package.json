@@ -27,6 +27,7 @@
     "@rezics/composition": "workspace:*",
     "@rezics/definitions": "workspace:*",
     "@rezics/document": "workspace:*",
+    "@rezics/editor": "workspace:*",
     "@rezics/filter": "workspace:*",
     "@rezics/operations": "workspace:*",
     "@rezics/money": "workspace:*",

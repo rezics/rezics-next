@@ -18,11 +18,7 @@ SELECT head.digest, head.last_order::text AS "lastOrder",
          head.last_seek_order = 0 OR observation.seek_order IS NULL OR
          (((observation.payload->>'count')::integer > 0) <> (projection.subject_id IS NOT NULL)) OR
          (projection.subject_id IS NOT NULL AND projection.observation_digest IS DISTINCT FROM head.digest)
-       END OR EXISTS (
-         SELECT 1 FROM rating.source_statistic_observation AS unkeyed
-         WHERE unkeyed.route = input.route AND unkeyed.subject_id = input.subject_id
-           AND unkeyed.source = input.source AND unkeyed.seek_order IS NULL
-       ) AS "needsMaterialization"
+       END AS "inconsistent"
 FROM input
 LEFT JOIN rating.source_statistic_head AS head
   ON head.route = input.route AND head.subject_id = input.subject_id AND head.source = input.source

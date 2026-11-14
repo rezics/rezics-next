@@ -1095,20 +1095,23 @@ provider request, ballot read or source-history sort.
 
 #### Explicit observation materialization
 
-`materializeSourceObservations(pool, { route, subjectId, source, limit? })` is offline maintenance for one
-subject/provider slot, never called by runtime reads or writes. It locks the Subject and reads at most 257
-envelopes, refusing slots above the chosen bound (maximum 256) before mutation. It validates canonical digests,
-preserves figures, original transaction IDs, aliases, dates, licences and attribution, and materializes a missing
-head from its retained projection once. Unknown native order stays null. It assigns stable storage seek keys,
-checks persisted envelope/head/projection readback, and commits atomically. Mixed initialized/uninitialized
-traversals fail rather than invalidate established cursors. Fences and erased records are neither altered nor
-recreated. Empty slots and retained clear observations remain distinct.
+`prepareSourceObservationMaterialization(pool)` is an explicit operator preparation for retained development
+data before the canonical migration. It installs temporary nullable seek storage, operational progress and
+conversion indexes; these are not an alternative runtime model. Fresh schema and the canonical migration
+require a nonnull seek key directly. Unknown `nativeOrder` remains nullable in both cases.
 
-The transition migration adds seek keys without an unbounded data backfill. Retained slots must pass bounded
-maintenance before runtime use; unconverted or inconsistent slots return unavailable. After all retained slots
-are converted and native readback is accepted, validate `source_statistic_observation_seek_order_present` and
-set `seek_order NOT NULL`. Fresh baselines already require nonnull seek keys. Runtime current, exact and history
-paths only consume persisted envelopes; no virtual head or lazy writer adoption remains.
+`materializeSourceObservations(pool, { route, subjectId, source, limit? })` performs one resumable transaction
+for a subject/provider slot, examining at most 256 observations per step. The operator invokes subsequent steps
+until `done`; every step commits its durable cursor. There is no lifetime history cap or full-history transaction.
+Unknown native positions traverse in stored digest order first, followed by known native positions in original
+order, assigning internal seek keys without asserting historical chronology. Original transaction IDs, facts,
+figures, aliases, dates, licences and attribution survive. Current head/projection facts and readback are checked;
+a clear head remains a clear, and empty remains empty. Runtime publication stays unavailable until that slot's
+conversion completes. Erasure cannot be reversed by retained operator progress.
+
+The operator completes bounded conversion of retained slots before applying the canonical nonnull migration.
+Runtime current, exact and history paths consume only persisted envelopes; no virtual head, mutable payload
+reconstruction or lazy writer adoption remains.
 
 #### Operation Cost: source-observation inspection
 

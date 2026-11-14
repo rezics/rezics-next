@@ -35,6 +35,8 @@ import { ReadingCard } from './reading-card';
 import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from './adapters/library-view.tsx';
 import { ReadingNavigation, SettingsNavigationProvider, useSettingsNavigationOwner } from './reading-navigation';
 import { DisplayPreferences } from './display-preferences';
+import { EditorPreferencesCard } from './editor-preferences-card';
+import { confirmAccountPreferenceVersion } from '../editor/preference-version';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
 import type { NativePreferenceFailure, SettingsPage } from './preferences';
@@ -119,6 +121,7 @@ export function accountPreferenceIO(
 ): {
   reading: ReadingIO;
   shelf: ReadingIO;
+  editor: ReadingIO;
   notifications: NotificationEditorIO & { confirmed: (version: number) => void };
 } {
   const read = async () => {
@@ -141,6 +144,7 @@ export function accountPreferenceIO(
   return {
     reading,
     shelf: reading,
+    editor: reading,
     notifications: {
       read,
       confirmed: notify,
@@ -374,7 +378,10 @@ function SettingsSections({
     return accountPreferenceIO(
       page.accountId,
       owner.credential,
-      (next) => setVersion((current) => Math.max(current, next)),
+      (next) => {
+        confirmAccountPreferenceVersion(queryClient, page.accountId, next);
+        setVersion((current) => Math.max(current, next));
+      },
       preferenceIO,
       owner.readCurrent,
     );
@@ -427,6 +434,16 @@ function SettingsSections({
     display: (
       <div id="display" className="scroll-mt-6 space-y-6">
         <DisplayPreferences />
+        {'preferences' in page ? (
+          <EditorPreferencesCard
+            initial={page.preferences}
+            version={version}
+            io={io.editor}
+            onVersionChange={io.notifications.confirmed}
+          />
+        ) : (
+          <EditorPreferencesCard />
+        )}
         {'preferences' in page ? (
           <ShelfCard
             initial={page.preferences}
@@ -578,12 +595,14 @@ export function SettingsSessionRecovery({
   retrying = false,
   retryFailed = false,
   onRetry,
+  editorPreferences,
 }: {
   state: SettingsSessionObservation['state'];
   sessionRead?: Pick<QueryState, 'status' | 'fetchStatus'> | undefined;
   retrying?: boolean;
   retryFailed?: boolean;
   onRetry: () => void;
+  editorPreferences?: ReactNode;
 }) {
   const failed = retryFailed || state === 'unavailable' || sessionRead?.status === 'error';
   const retryable = failed || retrying || state !== 'unknown';
@@ -606,6 +625,7 @@ export function SettingsSessionRecovery({
       ) : null}
       <div id="display" className="scroll-mt-6">
         <DisplayPreferences />
+        {editorPreferences}
       </div>
     </div>
   );
@@ -615,14 +635,17 @@ export function SettingsSessionRecovery({
 export function SignedOutSettings({
   returnTo,
   SignInPrompt,
+  editorPreferences,
 }: {
   returnTo: string;
   SignInPrompt: SettingsContentPort['SignInPrompt'];
+  editorPreferences?: ReactNode;
 }) {
   return (
     <div className="space-y-8">
       <div id="display" className="scroll-mt-6">
         <DisplayPreferences />
+        {editorPreferences}
       </div>
       <AccountSafetyCard state="signed-out" returnTo={returnTo} SignInPrompt={SignInPrompt} />
     </div>
@@ -763,7 +786,11 @@ export function SettingsPageView({
           PrivacySection={PrivacySection}
         />
       ) : signedOut ? (
-        <SignedOutSettings returnTo={location.publicHref} SignInPrompt={content.SignInPrompt} />
+        <SignedOutSettings
+          returnTo={location.publicHref}
+          SignInPrompt={content.SignInPrompt}
+          editorPreferences={<EditorPreferencesCard />}
+        />
       ) : (
         <div className="space-y-3">
           <SettingsSessionRecovery
@@ -772,6 +799,7 @@ export function SettingsPageView({
             retrying={retrying}
             retryFailed={retryFailed}
             onRetry={retry}
+            editorPreferences={<EditorPreferencesCard />}
           />
           {/* Any requested account selection keeps its Back link while this session cannot open the detail. */}
           {page.signedIn && requestedManagedTarget !== undefined ? (

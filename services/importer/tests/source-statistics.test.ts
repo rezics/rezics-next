@@ -1,4 +1,4 @@
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { sourceObservationFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -51,6 +51,7 @@ test('VNDB imports and refreshes its licensed source statistic through the API w
   const requests: { method: string; path: string; body?: unknown; key?: string }[] = [];
   const stored = new Map<string, unknown>();
   const sequence = { value: 0 };
+  const observations = sourceObservationFixture();
   const transport = {
     setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async batchWrite(request: BatchWriteRequest) {
@@ -59,6 +60,9 @@ test('VNDB imports and refreshes its licensed source statistic through the API w
     },
     async readFence() {
       return { fenced: false, securityRevision: null };
+    },
+    async readSourceObservationHead(input: { subjectId: string }) {
+      return observations.read(input.subjectId);
     },
     async writeSourceStatistic(input: { subjectId: string; value: Record<string, unknown>; idempotencyKey: string }) {
       requests.push({
@@ -69,6 +73,7 @@ test('VNDB imports and refreshes its licensed source statistic through the API w
       });
       const { expectedObservation: _cas, ...value } = input.value;
       stored.set(input.subjectId, value);
+      observations.observe(input.subjectId, value as never);
     },
   } as unknown as ImportTransport;
   const importer = new Importer({ path: ':memory:', transport });
@@ -143,6 +148,29 @@ test('VNDB imports and refreshes its licensed source statistic through the API w
   } finally {
     await importer.close();
   }
+});
+
+test('the production transport reads explicit empty, published and cleared canonical heads', async () => {
+  const observations = sourceObservationFixture();
+  const transport = createImportTransport({
+    origin: 'https://observation.import.test',
+    tokenProvider: async () => 'local-protocol-token',
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      expect(request.method).toBe('GET');
+      expect(new URL(request.url).pathname).toBe(`/v1/subjects/${subjectId}/source-statistics/vndb/observations`);
+      return Response.json(observations.inspect(subjectId));
+    }) as typeof fetch,
+  });
+  expect((await transport.readSourceObservationHead({ subjectId })).state).toBe('empty');
+  const value = {
+    sourceRecordId: 'v123', count: 2, asOf: '2026-10-25', scale: { min: 1, max: 10 },
+    mean: 7, licence: 'ODbL-1.0', attribution: 'VNDB',
+  };
+  observations.observe(subjectId, value);
+  expect((await transport.readSourceObservationHead({ subjectId })).state).toBe('published');
+  observations.observe(subjectId, { sourceRecordId: value.sourceRecordId, count: 0, asOf: value.asOf });
+  expect((await transport.readSourceObservationHead({ subjectId })).state).toBe('cleared');
 });
 
 test('the production import transport PUTs the VNDB statistic route with its idempotency key', async () => {
@@ -221,6 +249,7 @@ async function statisticRefreshFixture() {
   let sourceSnapshotAsOf = '2026-11-04';
   let failure: 'denied' | 'lost' | null = null;
   const metadata = sourceRecordMetadataFixture();
+  const observations = sourceObservationFixture();
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'local-protocol-token',
@@ -229,6 +258,8 @@ async function statisticRefreshFixture() {
       const request = new Request(input, init);
       const url = new URL(request.url);
       if (url.pathname === '/v1/source-records:setMetadata') return metadata.fetch(request);
+      if (request.method === 'GET' && url.pathname === `/v1/subjects/${subjectId}/source-statistics/vndb/observations`)
+        return Response.json(observations.inspect(subjectId));
       if (request.method === 'GET' && url.pathname === '/v1/sourceFences:check')
         return Response.json({ fenced: false, securityRevision: null });
       if (request.method === 'POST' && url.pathname === '/v1/subjects:batchWrite') {
@@ -242,6 +273,7 @@ async function statisticRefreshFixture() {
       statisticRuns.push(importer.session.store.activeRun('vndb')!);
       writes.push({ body, key: request.headers.get('idempotency-key') });
       if (failure === 'denied') return Response.json({ code: 'forbidden' }, { status: 403 });
+      observations.observe(subjectId, JSON.parse(body));
       if (failure === 'lost') throw new TypeError('Local statistic acknowledgement unavailable');
       return Response.json({ source: 'vndb', ...JSON.parse(body) });
     }) as typeof fetch,
@@ -255,6 +287,7 @@ async function statisticRefreshFixture() {
         readFence: (tuple) =>
           transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
         writeSourceStatistic: (input, signal) => transport.writeSourceStatistic(input, signal),
+        readSourceObservationHead: transport.readSourceObservationHead,
       },
     });
   let importer = open();

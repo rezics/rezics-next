@@ -4,7 +4,7 @@ const read = (path: string) => Bun.file(new URL(path, import.meta.url)).text();
 
 test('reply composer starts compact and grows to a bounded scrolling editor', async () => {
   const composer = await read('../src/threads/composer.tsx');
-  const styles = await read('../../../packages/ui/src/components/rich-text-editor.tsx');
+  const styles = await read('../../../packages/editor/src/components/rich-text-editor.tsx');
   const css = await read('../src/styles.css');
   const source = `${composer}\n${styles}\n${css}`;
   expect(source).toContain('thread-reply-editor');
@@ -25,10 +25,10 @@ test('send is unavailable without content and uses contrasting colors in either 
 
 test('new thread body begins around eight lines, grows, and exposes supported formatting actions', async () => {
   const composer = await read('../src/threads/composer.tsx');
-  const editor = await read('../../../packages/ui/src/components/rich-text-editor.tsx');
-  const toolbar = await read('../../../packages/ui/src/components/editor-touch-bar.tsx');
-  const selection = await read('../../../packages/ui/src/components/editor-selection-menu.tsx');
-  const blocks = await read('../../../packages/ui/src/components/editor-slash-menu.tsx');
+  const editor = await read('../../../packages/editor/src/components/rich-text-editor.tsx');
+  const toolbar = await read('../../../packages/editor/src/components/editor-touch-bar.tsx');
+  const selection = await read('../../../packages/editor/src/components/editor-selection-menu.tsx');
+  const blocks = await read('../../../packages/editor/src/components/editor-slash-menu.tsx');
   const css = await read('../src/styles.css');
   expect(composer).toContain('thread-opening-editor');
   expect(css).toContain('min-height: 8lh');

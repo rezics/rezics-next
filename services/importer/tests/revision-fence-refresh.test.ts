@@ -1,4 +1,4 @@
-import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { sourceObservationFixture, sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -43,6 +43,7 @@ function fixture() {
   const statistics: { body: string; key: string | null }[] = [];
   let fault: 'denied' | 'interrupted' | 'statistic-denied' | null = null;
   const metadata = sourceRecordMetadataFixture();
+  const observations = sourceObservationFixture();
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'local-protocol-token',
@@ -51,6 +52,9 @@ function fixture() {
       const request = new Request(input, init);
       const url = new URL(request.url);
       if (url.pathname === '/v1/source-records:setMetadata') return metadata.fetch(request);
+      const observationRoute = /^\/v1\/subjects\/([0-9a-f-]{36})\/source-statistics\/vndb\/observations$/.exec(url.pathname);
+      if (request.method === 'GET' && observationRoute)
+        return Response.json(observations.inspect(observationRoute[1]!));
       if (request.method === 'GET' && url.pathname === '/v1/sourceFences:check') {
         const key = tupleKey(
           url.searchParams.get('source')!,
@@ -65,6 +69,7 @@ function fixture() {
         const body = await request.text();
         statistics.push({ body, key: request.headers.get('idempotency-key') });
         if (fault === 'statistic-denied') return Response.json({ code: 'forbidden' }, { status: 403 });
+        observations.observe(url.pathname.split('/')[3]!, JSON.parse(body));
         return Response.json({ source: 'vndb', ...JSON.parse(body) });
       }
       expect(request.method).toBe('POST');
@@ -117,6 +122,7 @@ function fixture() {
             fieldGroup: tuple.field_group,
           }),
         writeSourceStatistic: (input, signal) => transport.writeSourceStatistic(input, signal),
+        readSourceObservationHead: transport.readSourceObservationHead,
       },
       afterBulkSuccess(request) {
         if (

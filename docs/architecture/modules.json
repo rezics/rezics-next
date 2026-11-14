@@ -157,6 +157,19 @@
       "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
     },
     {
+      "path": "packages/editor/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".css", ".json", ".svg"],
+      "exclude": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.stories.*",
+        "**/test/**",
+        "**/tests/**",
+        "**/fixtures/**",
+        "**/stories/**"
+      ]
+    },
+    {
       "path": "packages/ui/src",
       "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".css", ".json", ".svg"],
       "exclude": [
@@ -305,6 +318,7 @@
         "access-policy",
         "auth-contract",
         "auth-service",
+        "editor-preferences",
         "kernel-access-contract",
         "kernel-access-core",
         "kernel-commerce",
@@ -836,7 +850,6 @@
         "services/kernel/src/semantic/adapters/progress-identity-statements.ts",
         "services/kernel/src/semantic/adapters/public-summary-schema.ts",
         "services/kernel/src/semantic/adapters/public-summary.ts",
-
         "services/kernel/src/semantic/adapters/index.ts",
         "services/kernel/src/semantic/credit-search.ts",
         "services/kernel/src/semantic/deletion/index.ts",
@@ -1594,10 +1607,15 @@
         "apps/web/src/settings/adapters/presentation.tsx",
         "apps/web/src/inbox/ports/content.ts",
         "apps/web/src/inbox/adapters/content.ts",
-        "apps/web/src/inbox/adapters/presentation.tsx"
+        "apps/web/src/inbox/adapters/presentation.tsx",
+        "apps/web/src/settings/actions.ts",
+        "apps/web/src/settings/reading-preferences.ts",
+        "apps/web/src/settings/managed-read-deadline.ts"
       ],
       "allowedDependencies": [
         "client",
+        "editor",
+        "editor-preferences",
         "ui",
         "web-app",
         "web-content",
@@ -1688,19 +1706,20 @@
         "apps/web/src/threads/authoring-departure.tsx"
       ],
       "allowedDependencies": [
+        "browser-reader-lifetime",
         "client",
         "composition",
         "definitions",
         "definitions-compiler",
         "definitions-compiler-adapter",
         "document",
+        "editor",
         "kernel-rating",
         "ui",
         "web-accounts",
         "web-app",
         "web-library",
-        "web-search",
-        "browser-reader-lifetime"
+        "web-search"
       ],
       "capabilities": ["content-pages"]
     },
@@ -1800,6 +1819,7 @@
         "definitions-compiler",
         "definitions-compiler-adapter",
         "document",
+        "editor",
         "filter",
         "kernel-zones",
         "ui",
@@ -1906,13 +1926,11 @@
         "apps/web/src/paraglide/messages.d.ts",
         "apps/web/src/paraglide/runtime.js",
         "apps/web/src/paraglide/runtime.d.ts",
-        "apps/web/src/kernel/exposure.ts",
         "apps/web/src/kernel/query.ts",
         "apps/web/src/kernel/platform-closed.ts",
         "apps/web/src/session/query.ts",
         "apps/web/src/session/guard.ts",
         "apps/web/src/session/performance-ambient.ts",
-        "apps/web/src/shell/page-heading.tsx",
         "apps/web/src/shell/head.ts",
         "apps/web/src/shell/head-context.ts",
         "apps/web/src/subject/subject-href.ts",
@@ -1937,26 +1955,34 @@
         "apps/web/src/kernel/use-sync-external-store-with-selector.ts",
         "apps/web/src/session/expected-reader.ts",
         "apps/web/src/kernel/languages.ts",
-        "apps/web/src/shell/route-state.tsx"
+        "apps/web/src/shell/route-state.tsx",
+        "apps/web/src/editor/preferred-rich-text-editor.tsx",
+        "apps/web/src/editor/preferences.tsx",
+        "apps/web/src/editor/labels.ts",
+        "apps/web/src/editor/behavior-labels.ts",
+        "apps/web/src/editor/command-labels.ts",
+        "apps/web/src/editor/preference-version.ts"
       ],
       "allowedDependencies": [
-        "content-edition-contract",
+        "browser-reader-lifetime",
         "client",
         "composition",
+        "content-edition-contract",
         "definitions",
         "definitions-compiler",
         "definitions-compiler-adapter",
         "document",
+        "editor",
+        "editor-preferences",
         "filter",
         "ui",
         "web-commerce",
         "web-content",
+        "web-display-definition-cache",
         "web-library",
         "web-performance",
         "web-search",
-        "web-semantic",
-        "web-display-definition-cache",
-        "browser-reader-lifetime"
+        "web-semantic"
       ],
       "capabilities": ["web-interface"]
     },
@@ -2179,6 +2205,30 @@
       "capabilities": ["recorded-money-values"]
     },
     {
+      "id": "editor-preferences",
+      "kind": "core",
+      "owner": "accounts",
+      "paths": ["packages/editor/src/preferences.ts"],
+      "publicEntries": ["@rezics/editor/preferences"],
+      "allowedDependencies": [],
+      "capabilities": ["editor-preferences"]
+    },
+    {
+      "id": "editor",
+      "kind": "UI/transport library",
+      "owner": "web",
+      "paths": ["packages/editor/src/**"],
+      "publicEntries": [
+        "@rezics/editor",
+        "@rezics/editor/reader",
+        "@rezics/editor/schema",
+        "@rezics/editor/styles.css"
+      ],
+      "allowedDependencies": ["document", "editor-preferences", "ui"],
+      "capabilities": ["document-editing", "document-rendering"],
+      "excludes": ["packages/editor/src/preferences.ts"]
+    },
+    {
       "id": "ui",
       "kind": "UI/transport library",
       "owner": "web",
@@ -2195,7 +2245,7 @@
         "@rezics/ui/list-row",
         "@rezics/ui/*"
       ],
-      "allowedDependencies": ["document"],
+      "allowedDependencies": [],
       "capabilities": ["ui-components"]
     },
     {
@@ -2213,6 +2263,7 @@
         "definitions-compiler",
         "definitions-compiler-adapter",
         "document",
+        "editor-preferences",
         "filter",
         "money",
         "operations",

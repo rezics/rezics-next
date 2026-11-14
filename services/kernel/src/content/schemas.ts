@@ -1764,8 +1764,24 @@ export function AuthorPostsResponseSchema() {
 }
 
 const mediaLength = t.Integer({ minimum: 1, maximum: 20 * 1024 * 1024 });
+export const KnowledgeMediaSelectionSchema = t.Union([
+  t.Object({
+    representation: t.Literal('authoring'),
+    documentId: ContentIdSchema,
+    revisionId: ContentIdSchema,
+    sourceSha256: mediaDigest,
+  }, closed),
+  t.Object({
+    representation: t.Literal('public'),
+    documentId: ContentIdSchema,
+    revisionId: ContentIdSchema,
+    sourceSha256: mediaDigest,
+    publicationId: ContentIdSchema,
+  }, closed),
+]);
 export const DocumentMediaInputSchema = t.Object(
   {
+    knowledge: t.Optional(KnowledgeMediaSelectionSchema),
     ids: t.Array(t.Intersect([ContentIdSchema, t.String({ minLength: 36, maxLength: 36 })]), {
       minItems: 1,
       maxItems: 32,
@@ -1850,7 +1866,7 @@ export const MediaReservationInputSchema = t.Union([
   t.Object(
     {
       containerId: ContentIdSchema,
-      purpose: t.Union([t.Literal('post-image'), t.Literal('avatar')]),
+      purpose: t.Union([t.Literal('post-image'), t.Literal('knowledge-image'), t.Literal('avatar')]),
       ...mediaReservationFields,
     },
     closed,
@@ -1904,7 +1920,7 @@ export const MediaReservationResponseSchema = t.Object(
       t.Object(
         {
           ...mediaReservationMetadata.properties,
-          purpose: t.Union([t.Literal('avatar'), t.Literal('realm-icon'), t.Literal('realm-banner')]),
+          purpose: t.Union([t.Literal('knowledge-image'), t.Literal('avatar'), t.Literal('realm-icon'), t.Literal('realm-banner')]),
         },
         closed,
       ),
@@ -1918,7 +1934,14 @@ export const MediaCompletionResponseSchema = t.Object(
   },
   closed,
 );
-export const MediaDownloadQuerySchema = t.Object({ variant: t.String({ minLength: 1, maxLength: 32 }) }, closed);
+export const MediaDownloadQuerySchema = t.Object({
+  variant: t.String({ minLength: 1, maxLength: 32 }),
+  knowledgeRepresentation: t.Optional(t.Union([t.Literal('authoring'), t.Literal('public')])),
+  knowledgeDocumentId: t.Optional(ContentIdSchema),
+  knowledgeRevisionId: t.Optional(ContentIdSchema),
+  knowledgeSourceSha256: t.Optional(mediaDigest),
+  knowledgePublicationId: t.Optional(ContentIdSchema),
+}, closed);
 export const MediaDownloadResponseSchema = t.Object(
   {
     allowed: t.Literal(true),
@@ -1969,6 +1992,7 @@ export const OwnMediaInventoryEntrySchema = t.Object(
     id: ContentIdSchema,
     purpose: t.Union([
       t.Literal('post-image'),
+      t.Literal('knowledge-image'),
       t.Literal('avatar'),
       t.Literal('realm-icon'),
       t.Literal('realm-banner'),

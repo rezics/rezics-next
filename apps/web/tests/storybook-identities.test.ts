@@ -4,7 +4,13 @@ import { resolve } from 'node:path';
 import { loadCsf } from 'storybook/internal/csf-tools';
 
 const root = resolve(import.meta.dir, '../../..');
-const directories = ['apps/web/src/stories', 'apps/web/src/shell', 'apps/auth/src/stories', 'packages/ui/src'];
+const directories = [
+  'apps/web/src/stories',
+  'apps/web/src/shell',
+  'apps/auth/src/stories',
+  'packages/ui/src',
+  'packages/editor/src',
+];
 const viewportIdentity =
   /(?:^|[-\s/])(?:phone|desktop|mobile|tablet|narrow)(?:[-\s/]|$)|(?:^|-)(?:320|360|390|768|1280|1440)(?:-|$)/i;
 const catalogues = directories.flatMap((directory) =>
@@ -19,7 +25,7 @@ const catalogues = directories.flatMap((directory) =>
 test('every published outcome has a viewport-independent identity, including hidden aliases', () => {
   const ids = { web: new Set<string>(), ui: new Set<string>() };
   for (const { file, csf } of catalogues) {
-    const catalogue = file.startsWith('packages/ui/') ? ids.ui : ids.web;
+    const catalogue = file.startsWith('packages/') ? ids.ui : ids.web;
     for (const [key, story] of Object.entries(csf._stories)) {
       expect(`${story.id} ${story.name}`, file).not.toMatch(viewportIdentity);
       expect(key, file).not.toMatch(/Phone|Desktop|Mobile|Tablet|Narrow|(?:320|360|390|768|1280|1440)/);
@@ -31,6 +37,7 @@ test('every published outcome has a viewport-independent identity, including hid
   expect(ids.web.has('pages-catalogue-book-and-book-series-work-editor--current-book')).toBe(true);
   expect(ids.web.has('pages-library-collection-comparison--phone-390')).toBe(false);
   expect(ids.ui.has('components-menu--plain-entries')).toBe(true);
+  expect(ids.ui.has('components-richtexteditor--blocks-profile')).toBe(true);
 });
 
 test('canonical fixtures leave viewport and theme selection to the toolbar', () => {

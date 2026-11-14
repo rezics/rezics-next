@@ -1,4 +1,5 @@
 import {
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -173,6 +174,171 @@ function enumerateDeclaredFiles(root: string, path: string): DeclaredFile[] {
 export function clearDeclaredArtifacts(root: string, paths: readonly string[]): void {
   for (const path of validateArtifactDeclarations(paths)) {
     for (const file of enumerateDeclaredFiles(root, path)) unlinkSync(file.absolute);
+  }
+}
+
+export type ArtifactPublicationState = {
+  path: string;
+  fingerprint: string | null;
+  content: string | null;
+  source?: boolean;
+};
+
+function publicationPaths(paths: readonly string[]): string[] {
+  const declarations = validateArtifactDeclarations(paths);
+  return declarations.includes(KERNEL_CLIENT_OUTPUT.transport)
+    ? [...new Set([...declarations, KERNEL_CLIENT_OUTPUT.root])]
+    : declarations;
+}
+
+/** Fingerprint caller ownership separately from fresh physical output evidence. */
+function publicationState(
+  root: string,
+  path: string,
+  budget = { files: 0, bytes: 0, entries: 0 },
+): ArtifactPublicationState {
+  const target = safeOutputTreePath(root, path);
+  const identity = createHash('sha256');
+  const content = createHash('sha256');
+  const limit = path === KERNEL_CLIENT_OUTPUT.root ? KERNEL_CLIENT_OUTPUT : null;
+  const stamp = (file: string) => {
+    const stat = lstatSync(file);
+    return [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeMs, stat.ctimeMs].join(':');
+  };
+  const visit = (file: string, relativePath: string): void => {
+    artifactRelativePath(relativePath || path);
+    if (++budget.entries > (limit?.maxMembers ?? CHECK_ARTIFACTS_MAX_FILES) * 1024)
+      throw new Error('check-artifacts: caller output traversal bound');
+    const stat = lstatSync(file);
+    if (stat.isSymbolicLink() || (!stat.isDirectory() && (!stat.isFile() || stat.nlink !== 1)))
+      throw new Error('check-artifacts: unsafe caller output');
+    const before = stamp(file);
+    identity.update(`${relativePath}\0${before}\0`);
+    content.update(`${relativePath}\0${stat.isDirectory() ? 'directory' : 'file'}\0`);
+    if (stat.isDirectory()) {
+      for (const child of readdirSync(file).sort())
+        visit(join(file, child), `${relativePath}/${child}`.replace(/^\//, ''));
+    } else {
+      budget.files++;
+      budget.bytes += stat.size;
+      if (
+        budget.files > (limit?.maxMembers ?? CHECK_ARTIFACTS_MAX_FILES) ||
+        budget.bytes > (limit?.maxBytes ?? CHECK_ARTIFACTS_MAX_BYTES)
+      )
+        throw new Error('check-artifacts: caller output exceeds artifact bounds');
+      const digest = createHash('sha256').update(readFileSync(file)).digest('hex');
+      identity.update(digest);
+      content.update(digest);
+    }
+    if (before !== stamp(file)) throw new Error('check-artifacts: caller output changed while fingerprinting');
+  };
+  try {
+    lstatSync(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { path, fingerprint: null, content: null };
+    throw error;
+  }
+  visit(target, '');
+  return { path, fingerprint: identity.digest('hex'), content: content.digest('hex') };
+}
+
+export function captureArtifactPublicationState(root: string, paths: readonly string[]): ArtifactPublicationState[] {
+  const ordinary = { files: 0, bytes: 0, entries: 0 };
+  return publicationPaths(paths).map((path) =>
+    publicationState(root, path, path === KERNEL_CLIENT_OUTPUT.root ? undefined : ordinary),
+  );
+}
+
+export function assertArtifactPublicationState(root: string, expected: readonly ArtifactPublicationState[]): void {
+  const ordinary = { files: 0, bytes: 0, entries: 0 };
+  for (const prior of expected) {
+    if (
+      publicationState(root, prior.path, prior.path === KERNEL_CLIENT_OUTPUT.root ? undefined : ordinary)
+        .fingerprint !== prior.fingerprint
+    )
+      throw new Error(`check-artifacts: caller output changed before publication: ${prior.path}`);
+  }
+}
+
+/** Publish a complete staged catalogue, retaining prior caller bytes until all receivers finish. */
+export function publishArtifactReturns(
+  root: string,
+  stage: string,
+  paths: readonly string[],
+  expected: readonly ArtifactPublicationState[],
+  receive?: () => readonly ArtifactPublicationState[] | void,
+  checkpoint?: (state: readonly ArtifactPublicationState[]) => void,
+): void {
+  assertArtifactPublicationState(root, expected);
+  const temporary = `.temp/check-return-publication/${randomUUID()}`;
+  const directory = safeOutputTreePath(root, `${temporary}/new`, true);
+  mkdirSync(directory, { mode: 0o700 });
+  const priorDirectory = safeOutputTreePath(root, `${temporary}/prior`, true);
+  mkdirSync(priorDirectory, { mode: 0o700 });
+  const changes: Array<{ path: string; backup?: string; published?: ArtifactPublicationState }> = [];
+  let retain = false;
+  try {
+    const ready = paths.map((path, index) => {
+      const source = safeOutputTreePath(stage, path);
+      const prepared = join(directory, String(index));
+      const before = publicationState(stage, path);
+      cpSync(source, prepared, { recursive: true, errorOnExist: true, force: false });
+      if (publicationState(root, `${temporary}/new/${index}`).content !== before.content)
+        throw new Error(`check-artifacts: staged output changed while preparing: ${path}`);
+      return { path, prepared, content: before.content };
+    });
+    assertArtifactPublicationState(root, expected);
+    for (const [index, item] of ready.entries()) {
+      const prior = expected.find(({ path }) => path === item.path);
+      if (!prior) throw new Error('check-artifacts: caller output custody is missing');
+      assertArtifactPublicationState(root, [prior]);
+      const destination = safeOutputTreePath(root, item.path, true);
+      const change: (typeof changes)[number] = { path: item.path };
+      changes.push(change);
+      if (prior.fingerprint !== null) {
+        change.backup = `${temporary}/prior/${index}`;
+        renameSync(destination, join(root, change.backup));
+        if (publicationState(root, change.backup).content !== prior.content)
+          throw new Error(`check-artifacts: caller output changed during publication: ${item.path}`);
+      }
+      if (existsSync(destination))
+        throw new Error(`check-artifacts: caller output appeared during publication: ${item.path}`);
+      renameSync(item.prepared, destination);
+      change.published = publicationState(root, item.path);
+      if (change.published.content !== item.content)
+        throw new Error(`check-artifacts: caller output changed during publication: ${item.path}`);
+    }
+    const received = receive?.() ?? [];
+    for (const change of changes) assertArtifactPublicationState(root, [change.published!]);
+    checkpoint?.(
+      expected.map((prior) => ({
+        ...prior,
+        ...(changes.find(({ path }) => path === prior.path)?.published ??
+          received.find(({ path }) => path === prior.path) ??
+          {}),
+      })),
+    );
+  } catch (error) {
+    for (const change of changes.reverse()) {
+      try {
+        const current = publicationState(root, change.path);
+        if (change.published) {
+          if (current.fingerprint !== change.published.fingerprint) throw new Error('published output changed');
+          rmSync(safeOutputTreePath(root, change.path), { recursive: true });
+        } else if (current.fingerprint !== null) throw new Error('caller output appeared');
+        if (change.backup) renameSync(join(root, change.backup), safeOutputTreePath(root, change.path, true));
+      } catch {
+        retain = true;
+      }
+    }
+    if (retain)
+      throw new Error(
+        `check-artifacts: publication failed; caller changes preserved and prior outputs retained at ${temporary}`,
+        { cause: error },
+      );
+    throw error;
+  } finally {
+    if (!retain) rmSync(safeOutputTreePath(root, temporary), { recursive: true, force: true });
   }
 }
 

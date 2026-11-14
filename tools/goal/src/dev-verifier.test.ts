@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -1071,6 +1072,15 @@ test('routed result identity includes the effective Web file and captured candid
   };
   const one = check('tests/one.test.ts');
   const sameSelection = selectionIdentity([one]);
+  const oldSignature = createHash('sha256').update(JSON.stringify({
+    version: 4,
+    index: one.index,
+    command: one.command,
+    closure: [...one.closure].sort(),
+    taskId: null,
+    cwd: one.cwd,
+  })).digest('hex');
+  expect(one.signature).not.toBe(oldSignature);
   const key = runCacheKey(ctx.settings, 'a'.repeat(40), one, sameSelection);
 
   expect(runCacheKey(ctx.settings, 'a'.repeat(40), one, sameSelection)).toBe(key);

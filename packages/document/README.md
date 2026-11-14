@@ -57,7 +57,10 @@ establishes the JSON shape, not profile conformance. The profile schemas reject
 undeclared node types, marks and attributes so editor deserialization cannot
 silently discard them. Runtime validation additionally checks ProseMirror
 content expressions, table spans, unique IDs and footnote reference resolution. Lists require a leading
-paragraph in each item; table cells contain blocks. An empty editable document
+paragraph in each item; table cells contain blocks. A row may have no physical cells only when valid
+rowspans from earlier rows cover its full width. Tables have a positive rectangular grid and at least one
+physical cell; uncovered positions and overlapping spans remain invalid. This additive row acceptance
+supports full-table merged cells under the existing document version. An empty editable document
 contains one empty paragraph. Empty paragraph content can be omitted.
 
 Decision: Blocks tables have a static per-table expanded-map bound of 65,536
@@ -134,7 +137,7 @@ editor/import preservation, shared controls, messages, visit retirement and cons
 Decision: Text and Blocks snapshots store inline `footnoteReference` nodes keyed by case-sensitive labels and
 top-level `footnoteDefinition` blocks with ordinary profile content; definitions keep normal unique block IDs,
 imports accept `[^label]` and `[^label]:` with indented continuations, and the `DocumentBody` export from
-`@rezics/ui/document-body` renders local references to each focusable summary and one accessible disclosure per definition.
+`@rezics/editor/reader` renders local references to each focusable summary and one accessible disclosure per definition.
 Labels are unique and every reference resolves; the
 shared reader owns disclosure state per document visit. Labels match `[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}`; note
 definitions cannot contain nested footnote references.

@@ -1131,7 +1131,7 @@ export class Importer {
     const read = this.options.transport.readSourceObservationHead;
     if (!read) return { kind: 'unavailable', code: 'source_observation_unavailable' };
     try {
-      return headFromInspection(await write(() => read.call(this.options.transport, { subjectId }, signal)));
+      return headFromInspection(subjectId, await write(() => read.call(this.options.transport, { subjectId }, signal)));
     } catch (error) {
       if (
         error instanceof ImportTransportError &&
@@ -1156,7 +1156,7 @@ export class Importer {
     let head: RetainedObservationHead | null = null;
     if (!read) return { head: null, figure: null, figureUnavailable: true };
     try {
-      const current = headFromInspection(await write(() => read.call(this.options.transport, { subjectId }, signal)));
+      const current = headFromInspection(subjectId, await write(() => read.call(this.options.transport, { subjectId }, signal)));
       if (current.kind === 'unavailable') return { head: null, figure: null, figureUnavailable: true };
       head = current.kind === 'head' ? current.head : null;
     } catch {

@@ -13,7 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBlocker, useRouter } from '@tanstack/react-router';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { RichTextEditor } from '@rezics/ui/rich-text-editor';
+import { PreferredRichTextEditor as RichTextEditor } from '../../editor/preferred-rich-text-editor';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -791,10 +791,7 @@ function RecipeEditorLive({
           )}
         </div>
         {id && currentHref && (
-          <a
-            className={`${recipeActionClassName} inline-flex items-center underline`}
-            href={currentHref}
-          >
+          <a className={`${recipeActionClassName} inline-flex items-center underline`} href={currentHref}>
             {draftRead ? m.candidate_view_public({}, o) : m.recipe_visit_return({}, o)}
           </a>
         )}
@@ -811,10 +808,7 @@ function RecipeEditorLive({
               <>
                 <p role="status">{m.recipe_return_unsupported({}, o)}</p>
                 {currentHref && (
-                  <a
-                    className={`${recipeActionClassName} inline-flex items-center underline`}
-                    href={currentHref}
-                  >
+                  <a className={`${recipeActionClassName} inline-flex items-center underline`} href={currentHref}>
                     {m.candidate_view_public({}, o)}
                   </a>
                 )}
@@ -831,15 +825,13 @@ function RecipeEditorLive({
           {m.catalogue_create_search({}, o)}
         </a>
       )}
-      {(
-        (observesCreate && !created) ||
+      {((observesCreate && !created) ||
         session !== 'signed-in' ||
         query.isPending ||
         query.isFetching ||
         readUnavailable ||
         (read && selectedOccurrence && !occurrenceAvailable) ||
-        (read && read.fields.length === 0)
-      ) && (
+        (read && read.fields.length === 0)) && (
         <section className="min-w-0 space-y-3 rounded-xl border border-border bg-muted/20 p-4 sm:p-5">
           {observesCreate && !created ? (
             <CreateAuthorityStatus
@@ -1952,7 +1944,11 @@ function RecipeFieldLive({
             </Field>
           )}
         </fieldset>
-        {reviewRequired && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 p-3">{m.catalogue_create_invalid_field({}, o)}</p>}
+        {reviewRequired && (
+          <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+            {m.catalogue_create_invalid_field({}, o)}
+          </p>
+        )}
         <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3 border-t border-border pt-4">
           {confirmingRemoval ? (
             <div

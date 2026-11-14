@@ -9,7 +9,8 @@ import { useKnowledgeLifecycle } from './lifecycle-controller';
 import { KnowledgeLifecyclePanel } from './lifecycle-panel';
 import type { KnowledgeLifecycleOperations } from './lifecycle';
 import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
-import { RichTextEditor, type RichTextEditorLabels } from '@rezics/ui';
+import { PreferredRichTextEditor as RichTextEditor } from '../editor/preferred-rich-text-editor';
+import { type RichTextEditorLabels } from '@rezics/editor';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
@@ -1834,6 +1835,7 @@ function DocumentDraftFields({
       <div className="min-w-0 space-y-2">
         <p className="text-sm font-medium">{m.knowledge_private_body({}, options)}</p>
         <RichTextEditor
+          preset="knowledge"
           key={editorVersion}
           value={draft.body}
           onSnapshotPending={() => {

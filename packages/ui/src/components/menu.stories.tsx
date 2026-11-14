@@ -222,7 +222,7 @@ export const CurrentAndLocalizedEntries: Story = {
     const role = sheet ? 'button' : 'menuitem';
     const trigger = await screen.findByRole('button', { name: 'Open menu' });
     const expectCurrent = async (name: string, link = false) => {
-      const row = await screen.findByRole(sheet && link ? 'link' : role, { name, exact: true });
+      const row = await screen.findByRole(sheet && link ? 'link' : role, { name });
       await expect(row).toHaveAttribute('aria-current', 'page');
       await expect(row).toHaveAccessibleName(name);
       await expect(row).not.toHaveAttribute('aria-checked');

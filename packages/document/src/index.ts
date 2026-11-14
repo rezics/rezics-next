@@ -15,6 +15,7 @@ import {
 export * from './types.ts';
 export * from './schema.ts';
 export { fromMarkdown } from './markdown.ts';
+export { DOCUMENT_TABLE_MAP_CELL_BUDGET } from './table-map-budget.ts';
 
 /** Reject data that JSON would silently omit or coerce before entering a snapshot. */
 function isJson(value: unknown, ancestors = new Set<object>()): boolean {
@@ -117,7 +118,10 @@ function checkBlock(profile: DocumentProfile, block: unknown): CheckedBlock | nu
   node.check();
   let validTables = true;
   const tables = (child: ProseMirrorNode) => {
-    if (child.type.name === 'table' && TableMap.get(child).problems?.length) validTables = false;
+    if (child.type.name === 'table') {
+      const map = TableMap.get(child);
+      if (map.width < 1 || map.height < 1 || map.problems?.length) validTables = false;
+    }
   };
   tables(node);
   node.descendants(tables);

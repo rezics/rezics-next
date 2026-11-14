@@ -1,7 +1,7 @@
 import type { FutureThreadUploadEpisode } from './thread-upload-episode/episode';
 import { sessionCsrfToken } from '../reader/lifetime/index';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import type { UploadedImage } from '@rezics/ui';
+import type { UploadedImage } from '@rezics/editor';
 import type { Media, ReservationInput } from '../media/kernel';
 import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import { UploadRefusal } from './upload-vocabulary';

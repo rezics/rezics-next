@@ -11,7 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { catalogueEditor, useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
-import { RichTextEditor } from '@rezics/ui';
+import { PreferredRichTextEditor as RichTextEditor } from '../../editor/preferred-rich-text-editor';
 import { DocumentBody } from '../../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
