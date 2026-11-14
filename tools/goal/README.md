@@ -990,7 +990,6 @@ protocol or representation meaning; they are not operator limits.
 | `policy.watchdog.processPollingCommands`              | `2`                                                                        | Recent process-inspection commands before reporting repeated polling.                                                                                                                       |
 | `policy.watchdog.longAttemptReportMs`                 | `3600000`                                                                  | Minimum interval between reports for the same long attempt (ms).                                                                                                                            |
 | `policy.width.workerThreshold`                        | `10`                                                                       | Confirmed live workers below which an eligible Goal receives a width event.                                                                                                                 |
-| `policy.width.residentSourceMinimum`                  | `60`                                                                       | Confirmed source writers below which the configured resident receives one native width event per low episode.                                                                               |
 | `policy.width.bucketMs`                               | `900000`                                                                   | Width-event deduplication bucket duration (ms).                                                                                                                                             |
 | `policy.width.pageSize`                               | `64`                                                                       | Active task rows per width-snapshot database page.                                                                                                                                          |
 | `policy.width.sweepYieldItems`                        | `8`                                                                        | Goal snapshots processed before yielding the width sweep.                                                                                                                                   |
@@ -1336,7 +1335,7 @@ changed workflows, integrated source and published visual review remain part of 
 Decision: one `efficiency_report_deliveries` row is the immutable observation and report for a UTC bucket. The first
 capture stores report bytes/hash, aggregate and Web product-line additions, pinned `dev` revision, half-open
 commit-date window, filter version, a separate aggregate revision-delta backfill count, attribution, aggregate rolling
-total and private-duty alerts atomically. A retry returns those bytes; a different metric or source revision reports
+total and measured alerts atomically. A retry returns those bytes; a different metric or source revision reports
 `conflicting` and records the first competing attribution against the original report ref without rewriting the
 observation. Aggregate rolling totals use only stored measured observations and remain informational during the Web
 campaign. Newly visible older commits are reported as aggregate backfill from the prior captured source revision and
@@ -1351,40 +1350,17 @@ Filter v3 keeps aggregate output and adds source-only Web counts from the bounda
 [delivery efficiency](../../docs/development/efficiency.md#output-and-flow), excluding fixtures and formatting-only
 additions.
 
-The private duty keeps its existing hourly sleep boundary, inbox alarm, and Telegram sender. After the source is
-promoted, the controller replaces the existing `.temp/goal/watch/hourly-report.sh` bridge in place at its ordinary
-post-send boundary. Remove its `lines()` helper and the `n=$(lines ...)` / `n2=$(lines ...)` calls. Keep its current
-`run`, `stop`, `ready`, allowance, and non-product alarm collection, then replace message construction and the direct
-Telegram send with this native call. The native capture alerts only when measured Web additions in this completed hour
-are below the current campaign target; the all-product two-hour sum remains informational:
+The existing maintenance/host schedule invokes `efficiency-report.ts --send --scheduled`. Configure its notifier
+through `integration.hourlyReportNotifier`; the report is passed as the final argv item without a shell. No tracked
+program sends directly to Telegram or changes account pacing.
 
-```bash
-duty_context=$(jq -cn \
-  --arg label "$label" \
-  --argjson runningTasks "$run" \
-  --argjson stoppedTasks "$stop" \
-  --arg readyBriefs "$ready" \
-  --arg allowance "codex $a%, codex-1 $b% $burn" \
-  --arg alarms "$alarms" \
-  '{label:$label,runningTasks:$runningTasks,stoppedTasks:$stoppedTasks,readyBriefs:$readyBriefs,allowance:$allowance,alarms:($alarms|split("\\n")|map(select(length>0)|sub("^• ";"")))}')
-duty=$(printf '%s\n' "$duty_context" | bun tools/goal/scripts/efficiency-report.ts \
-  --send --scheduled --private-duty --json --bucket "$h1")
-msg=$(jq -r '.report' <<<"$duty")
-delivery=$(jq -r '.delivery.disposition' <<<"$duty")
-printf 'hourly report delivery: %s\n' "$delivery" >> "$(dirname "$0")/hourly-report.log"
-if [ "$(jq '.alerts | length' <<<"$duty")" -gt 0 ]; then
-  if ! bun tools/goal/scripts/supermanager-watch.ts --db "$PWD/.temp/goal/goal.sqlite" \
-    --emit --source hourly-report --summary "$msg" >> "$(dirname "$0")/hourly-report.log" 2>&1; then
-    bun .temp/goal/telegram.ts text "Monitoring failure: the hourly alert could not reach the supermanager inbox; inspect event delivery." 2>&1 | tail -1 >> "$(dirname "$0")/hourly-report.log"
-  fi
-fi
-```
+A terminal notifier outcome and the resident's native inbox event commit together. The event carries the first frozen
+report, report reference and delivery outcome. Its durable delivery key is scoped to resident and UTC bucket, so a
+competing claim stays quiet and replay does not wake the resident again after the report is consumed or the ordinary
+inbox fold window expires. A replay can fill a missing native handoff without rerunning a completed notifier.
 
-The native call passes the frozen report to `.temp/goal/telegram.ts hourly-text` and returns its delivery state
-and report reference. The private notifier projects one bounded Telegram chat message from the report; the complete
-frozen report remains in Goal and is also available to the native inbox bridge. Keep the inbox fallback above, remove the bridge's final direct `telegram.ts text "$msg"`
-send to avoid a second sender, and restart the one existing bridge process after its current boundary send. Do not add
-a second timer or watcher. Delivery remains first-write and at-most-once across that restart.
+The resident retires the old private hourly bridge when handing delivery to this existing schedule. The private-duty
+CLI and per-domain manager census are removed; there is one notifier and no additional watcher, timer or bridge.
 
 Decision: Current waiting-state ages use one report-local task/attempt cohort projection with indexed latest-transition lookups by sequence; first capture freezes those values with the bucket and replay does not recompute them.
 
@@ -1394,7 +1370,7 @@ Set `integration.hourlyReportNotifier` in untracked local settings to an argv ar
 UTC hour. Goal appends the report as the final argument, runs without a shell, discards notifier output, and stops the
 notifier after `integration.hourlyReportTimeoutMs` (default `20000`, maximum from `policy.validation.hourlyReportMaxTimeoutMs`). Keep credentials in the
 notifier's secret store; Goal logs only a fixed delivery status and discards notifier output. Each hour's report and delivery outcome are stored
-durably; a sent, failed or uncertain outcome is not retried in that bucket. The manager host starts the report runner
+durably; a sent, failed or uncertain outcome is not retried in that bucket. The existing Goal host starts the report runner
 as a child and continues serving commands while it runs. Without a configured notifier, the report remains available
 as a local command and the host sends nothing. Add `--send` to deliver a report manually; the default command only
 prints it.
@@ -2911,14 +2887,6 @@ the earlier one (see [shared inbox](#shared-inbox)). Operator-paused, budget-lim
 managers are protected; automatic inbox parks remain eligible.
 The single host-scheduled daily step audit stays visible in counts but has no backlog to refill, so it does not send
 a width event. Its dispatch failures and queue delays still use the existing flow notices.
-
-The same token-free width sweep notifies the configured resident supermanager when actual source-writing concurrency
-falls below `policy.width.residentSourceMinimum`, including when every ready queue is empty. It counts the canonical
-managed `sourceWriters` projection and confirmed code-only writing identities; check waits, unknown identities and
-dead processes do not count. The native `width` mail includes per-manager live source and managed ready counts, so the
-resident can direct refill and start repairs. SQLite retains one low episode across host restarts. The notice rearms
-only after a later sweep observes concurrency at or above the threshold; no extra timer or model polling is added.
-Read it through the registered resident's existing `inbox read <manager>` command.
 
 The code-only launcher owns `<state>/code-only-writers.json` and replaces it atomically while maintaining lifecycle
 under its launch lock. Its format is `{ "version": 1, "writers": [{ "id": "...", "manager": "...", "goal": "...",

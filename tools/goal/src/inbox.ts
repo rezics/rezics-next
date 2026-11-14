@@ -116,13 +116,44 @@ export class SqliteManagerInbox implements ManagerInbox {
    * An identical delivery within the last hour only increments that row's count and wakes nobody. A quiet delivery
    * (see `quietDelivery`) is read with the next `inbox read` but sends no wakeup.
    */
-  deliver(delivered: ManagerEvent): void {
+  deliver(delivered: ManagerEvent, deliveryKey?: string): void {
     if (!wakingKinds.has(delivered.kind)) throw new Error(`Recorded-only event cannot be delivered: ${delivered.kind}`);
     // A summary is one line. Refusing a multi-line one failed every recovery sweep that settled the same worker result
     // (2026-11-02), so it is folded instead.
     const event = /[\r\n]/.test(delivered.summary)
       ? { ...delivered, summary: delivered.summary.replace(/\s*[\r\n]+\s*/g, ' ') }
       : delivered;
+    if (deliveryKey !== undefined) {
+      this.db
+        .transaction(() => {
+          if (
+            this.db
+              .query('SELECT inbox_id FROM manager_inbox_delivery_keys WHERE manager=? AND delivery_key=?')
+              .get(event.managerId, deliveryKey)
+          )
+            return;
+          const fields = sharedInboxFields(event);
+          const semanticKey = unfoldedKinds.has(event.kind) ? undefined : dedupeKey(event.managerId, fields);
+          let row =
+            semanticKey === undefined
+              ? null
+              : this.db
+                  .query('SELECT id FROM manager_inbox WHERE manager=? AND dedupe_key=? ORDER BY id DESC LIMIT 1')
+                  .get(event.managerId, semanticKey);
+          if (!row) {
+            this.deliver(event);
+            row = this.db
+              .query('SELECT id FROM manager_inbox WHERE manager=? ORDER BY id DESC LIMIT 1')
+              .get(event.managerId);
+          }
+          if (!row) throw new Error('Keyed inbox delivery did not retain its event');
+          this.db
+            .query('INSERT INTO manager_inbox_delivery_keys(manager, delivery_key, inbox_id) VALUES (?, ?, ?)')
+            .run(event.managerId, deliveryKey, (row as { id: number }).id);
+        })
+        .immediate();
+      return;
+    }
     const quiet = quietDelivery(event);
     if (!this.insert(event.managerId, event, true, quiet) || quiet) return;
     // The committed row is authoritative. A signal is only a wakeup hint.

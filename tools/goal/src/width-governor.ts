@@ -31,12 +31,6 @@ export const widthGovernorMigrations = [
       manager TEXT NOT NULL,
       delivered_at TEXT NOT NULL,
       PRIMARY KEY(goal, bucket, manager)
-    );
-    CREATE TABLE width_resident_episodes (
-      manager TEXT PRIMARY KEY,
-      episode INTEGER NOT NULL,
-      low INTEGER NOT NULL,
-      observed_at TEXT NOT NULL
     );`,
   },
 ] as const;
@@ -872,145 +866,12 @@ function widthEventSummary(
 
 export type WidthGovernorSweep = { snapshot: WidthSnapshot; deliveredGoals: string[] };
 
-export type WidthGovernorOptions = WidthSnapshotOptions & {
-  residentManagerId?: string;
-  stateDirectory?: string;
-};
-
-type SourceOwnerCounts = { live: number; ready: number };
-type CodeOnlySourceWriters = { live: number; owners: Map<string, number>; unavailable?: string };
-
-/** The code-only launcher publishes writing identities atomically; other lifecycle phases never count. */
-function readCodeOnlySourceWriters(
-  db: Database,
-  directory: string | undefined,
-  processIsLive: (identity: ProcessIdentity) => boolean,
-): CodeOnlySourceWriters {
-  const result: CodeOnlySourceWriters = { live: 0, owners: new Map() };
-  if (!directory) return result;
-  let registry: { version?: unknown; writers?: unknown };
-  try {
-    registry = JSON.parse(readFileSync(join(directory, 'code-only-writers.json'), 'utf8'));
-    if (!registry || registry.version !== 1 || !Array.isArray(registry.writers))
-      throw new Error('invalid code-only writer registry');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
-      result.unavailable = error instanceof Error ? error.message : String(error);
-    return result;
-  }
-  const seen = new Set<string>();
-  if (tableExists(db, 'worker_current_attempts')) {
-    const rows = db
-      .query(`SELECT pid, process_start, process_boot, process_group FROM worker_current_attempts
-        WHERE task_state='running' AND attempt_state='running'`)
-      .all() as Pick<WidthRow, 'pid' | 'process_start' | 'process_boot' | 'process_group'>[];
-    for (const row of rows) {
-      const identity = isProcessIdentity(row);
-      if (identity) seen.add(identityKey(identity));
-    }
-  }
-  for (const entry of registry.writers as unknown[]) {
-    if (!entry || typeof entry !== 'object') continue;
-    const writer = entry as { phase?: unknown; manager?: unknown; identity?: Partial<ProcessIdentity> };
-    if (writer.phase !== 'writing' || !writer.identity || typeof writer.identity !== 'object') continue;
-    const identity = isProcessIdentity({
-      pid: writer.identity.pid ?? null,
-      process_start: writer.identity.start ?? null,
-      process_boot: writer.identity.boot ?? null,
-      process_group: writer.identity.group ?? null,
-    });
-    if (!identity || seen.has(identityKey(identity)) || !processIsLive(identity)) continue;
-    seen.add(identityKey(identity));
-    result.live++;
-    const owner = typeof writer.manager === 'string' && writer.manager ? writer.manager : 'unknown';
-    result.owners.set(owner, (result.owners.get(owner) ?? 0) + 1);
-  }
-  return result;
-}
-
-function residentOwnerCounts(db: Database, snapshot: WidthSnapshot): Map<string, SourceOwnerCounts> {
-  const owners = new Map<string, SourceOwnerCounts>();
-  if (tableExists(db, 'manager_sessions')) {
-    const rows = db
-      .query(`SELECT id FROM manager_sessions WHERE json_extract(state, '$.status')='running'
-        AND coalesce(json_extract(state, '$.kind'), 'managed')='managed'`)
-      .all() as { id: string }[];
-    for (const row of rows) owners.set(row.id, { live: 0, ready: 0 });
-  }
-  for (const goal of snapshot.goals) {
-    const owner = goal.managerId ?? 'unknown';
-    const counts = owners.get(owner) ?? { live: 0, ready: 0 };
-    counts.live += goal.sourceWriters;
-    counts.ready += goal.sourceReady;
-    owners.set(owner, counts);
-  }
-  return owners;
-}
-
-/** One native resident notification per low-source episode, including an empty ready queue. */
-function notifyResidentLowWidth(
-  db: Database,
-  inbox: ManagerInbox,
-  snapshot: WidthSnapshot,
-  options: WidthGovernorOptions,
-  policy: ControlPolicy,
-): void {
-  const manager = options.residentManagerId;
-  if (!manager) return;
-  const external = readCodeOnlySourceWriters(db, options.stateDirectory, options.processIsLive ?? sameProcess);
-  const live = snapshot.system.sourceWriters + external.live;
-  const minimum = policy.width.residentSourceMinimum;
-  db.transaction(() => {
-    const previous = db.query('SELECT episode, low FROM width_resident_episodes WHERE manager=?').get(manager) as {
-      episode: number;
-      low: number;
-    } | null;
-    if (live >= minimum) {
-      if (previous?.low)
-        db.query('UPDATE width_resident_episodes SET low=0, observed_at=? WHERE manager=?').run(snapshot.asOf, manager);
-      return;
-    }
-    if (previous?.low) return;
-    const episode = (previous?.episode ?? 0) + 1;
-    const owners = residentOwnerCounts(db, snapshot);
-    for (const [owner, count] of external.owners) {
-      const counts = owners.get(owner) ?? { live: 0, ready: 0 };
-      counts.live += count;
-      owners.set(owner, counts);
-    }
-    const perOwner = [...owners]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([owner, counts]) => `${owner} ${counts.live}/${counts.ready}`)
-      .join('; ');
-    db.query(`INSERT INTO width_resident_episodes(manager, episode, low, observed_at) VALUES (?, ?, 1, ?)
-      ON CONFLICT(manager) DO UPDATE SET episode=excluded.episode, low=1, observed_at=excluded.observed_at`).run(
-      manager,
-      episode,
-      snapshot.asOf,
-    );
-    inbox.deliver({
-      managerId: manager,
-      kind: 'width',
-      from: 'system:resident-width',
-      summary:
-        `Source concurrency below ${minimum}: ${live} confirmed live; episode ${episode}; observed ${snapshot.asOf}. ` +
-        `Managed source writers ${snapshot.system.sourceWriters}; code-only source writers ${external.live}; ` +
-        `managed ready ${snapshot.system.sourceReady}; check/custody waits ${snapshot.system.sourceWaiting}; ` +
-        `unknown managed process identities ${snapshot.system.unknownRunning}. ` +
-        `Owners live source/managed ready: ${perOwner || 'none'}. ` +
-        (external.unavailable ? `Code-only writer evidence unavailable: ${external.unavailable}. ` : '') +
-        'Direct the responsible managers to refill independent writable outcomes and repair start failures now. ' +
-        'Waiting checks, unknown identities and dead processes do not count as coding concurrency.',
-    });
-  }).immediate();
-}
-
 /** Send at most one durable wakeable width event to each eligible Goal in the current UTC bucket. */
 export async function sweepWidthGovernor(
   db: Database,
   inbox: ManagerInbox,
   at: Date | number = new Date(),
-  options: WidthGovernorOptions = {},
+  options: WidthSnapshotOptions = {},
 ): Promise<WidthGovernorSweep> {
   const policy = options.policy ?? defaultPolicy;
   migrate(db, widthGovernorMigrations);
@@ -1023,7 +884,6 @@ export async function sweepWidthGovernor(
   const date = at instanceof Date ? at : new Date(at);
   const bucket = Math.floor(date.getTime() / policy.width.bucketMs);
   const resolvedControlPlaneOwner = resolveGoalManager(db, 'control-plane', '') || null;
-  notifyResidentLowWidth(db, inbox, snapshot, options, policy);
   const deliveredGoals: string[] = [];
   for (let index = 0; index < snapshot.goals.length; index++) {
     if (index > 0 && index % policy.width.sweepYieldItems === 0)
