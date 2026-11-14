@@ -8,6 +8,9 @@ import { ThreadReactions } from '../../threads/thread-reactions';
 import type { SubjectReactionKind, SubjectReactions } from './subject-reactions';
 import { FollowTargetControl } from '../../library/follow-target-control';
 
+const actionRowClass =
+  'flex min-w-0 w-full flex-wrap gap-2 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere';
+
 /**
  * Library actions lead at the available header width; reactions, follow and overflow wrap in a separate row.
  * Reporting lives only in the menu. When the counts could not be read the cluster says so
@@ -43,13 +46,10 @@ export function SubjectHeaderActions({
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
   return (
     <>
-      <div className="flex min-w-0 w-full flex-wrap items-center gap-2" data-slot="subject-library-actions">
+      <div className={`${actionRowClass} items-center`} data-slot="subject-library-actions">
         {children}
       </div>
-      <div
-        className="flex min-w-0 w-full flex-wrap items-start gap-2 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11 [&_a]:min-w-11"
-        data-slot="subject-header-actions"
-      >
+      <div className={`${actionRowClass} items-start`} data-slot="subject-header-actions">
         <PublicReactionRecovery
           key={JSON.stringify([id, locale])}
           available={reactions !== null}
@@ -93,7 +93,7 @@ export function SubjectHeaderActions({
           </div>
         ) : null}
         <FollowTargetControl targetId={id} />
-        <div className="shrink-0">
+        <div className="min-w-0 max-w-full">
           <PostActions target={{ kind: 'subject', id }} verification={verification} />
         </div>
       </div>

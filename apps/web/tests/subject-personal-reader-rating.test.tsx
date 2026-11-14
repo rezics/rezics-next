@@ -448,6 +448,10 @@ test('subject preferences and own rating retire across the complete mounted read
       oldRange.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
     });
     expect(oldRange.getAttribute('aria-valuenow')).toBe('12');
+    await main.render();
+    expect(panel(main).querySelector('input[type="range"]')).toBe(oldRange);
+    expect(oldRange.getAttribute('aria-valuenow')).toBe('12');
+    expect(panel(main).querySelectorAll('[data-slot="rating-control-reserved"]')).toHaveLength(1);
     await clickControlSave(main);
     expect(main.writes).toHaveLength(6);
     expect(main.writes[5]).toMatchObject({ units: 12, expectedReader: 'reader-a' });

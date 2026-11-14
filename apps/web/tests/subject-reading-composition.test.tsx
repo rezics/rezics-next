@@ -17,6 +17,14 @@ import { subjectHref } from '../src/subject/subject-href';
 import { screenProfileFixture } from '../src/kernel/fake/catalogue-screen-profile';
 import { ScreenReadingBoundary } from '../src/features/pages/data';
 import recordedSubject from '../src/kernel/recorded/subject.json';
+import { readingOverviewExample } from '../src/kernel/fake/reading-overview';
+import { ratingsFixtures } from '../src/kernel/fake/ratings';
+import { suppliedRatingSources } from '../src/features/pages/subject-ratings';
+import {
+  RatingControlContext,
+  RatingsPreviewContext,
+  RatingsRecoveryContext,
+} from '../src/features/pages/subject-ratings-view';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -146,6 +154,8 @@ test('The default Subject reader does not describe admitted incoming editions as
   for (const slot of ['subject-library-actions', 'subject-header-actions']) {
     const classes = html.match(new RegExp(`class="([^"]+)" data-slot="${slot}"`))?.[1];
     expect(classes).toContain('w-full flex-wrap');
+    expect(classes).toContain('[&_button]:min-h-11');
+    expect(classes).toContain('[&_a]:min-h-11');
     expect(classes).not.toMatch(/sm:(?:flex-nowrap|col-start|row-start)/);
   }
   expect(html.indexOf('data-slot="subject-library-actions"')).toBeLessThan(
@@ -171,7 +181,8 @@ test('The default Subject reader does not describe admitted incoming editions as
     ([, read]) => read.kind === 'links' && read.property === 'schema:exampleOfWork',
   )?.[0];
   if (!editionKey) throw new Error('Expected the default composition editions read.');
-  const renderPage = (page: SubjectPageData) => {
+  const sources = suppliedRatingSources(ratingsFixtures['subject-ratings-global'].preview);
+  const renderPage = (page: SubjectPageData, rating?: typeof sources) => {
     content = (
       <SubjectPage
         page={page}
@@ -184,12 +195,61 @@ test('The default Subject reader does not describe admitted incoming editions as
         renderJsonLd={false}
       />
     );
+    if (rating) {
+      const control = {
+        subjectId: subjectBody(page)!.subject.id,
+        locale: 'en',
+        returnTo: '/en/subjects',
+        session: 'signed-out',
+        own: undefined,
+      } as const;
+      content = (
+        <RatingsPreviewContext.Provider value={rating}>
+          <RatingsRecoveryContext.Provider value={() => {}}>
+            <RatingControlContext.Provider value={control}>{content}</RatingControlContext.Provider>
+          </RatingsRecoveryContext.Provider>
+        </RatingsPreviewContext.Provider>
+      );
+    }
     return renderToStaticMarkup(
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     );
   };
+  // Exercise the ordinary consumers with ready, unavailable and failed public sources; private admission stays independent.
+  for (const domain of ['book', 'game', 'anime'] as const) {
+    const fixture = readingOverviewExample(domain);
+    for (const state of ['ready', 'failed', 'unavailable', 'missing'] as const) {
+      const rating: typeof sources | undefined =
+        state === 'missing' ? undefined : { ...sources, figure: state === 'ready' ? sources.figure : { kind: state } };
+      const reading = renderPage(fixture.page, rating);
+      expect(reading).toContain('data-slot="subject-summary"');
+      expect(reading.match(/data-slot="rating-control-reserved"/g) ?? []).toHaveLength(state === 'missing' ? 0 : 1);
+      expect(reading.match(/data-slot="book-identity-ratings"/g) ?? []).toHaveLength(state === 'missing' ? 0 : 1);
+      if (state === 'missing') continue;
+      const ratingStart = reading.indexOf('data-slot="book-identity-ratings"');
+      expect(ratingStart).toBeGreaterThan(
+        reading.indexOf('</section>', reading.indexOf('data-slot="subject-summary"')),
+      );
+      const facts = reading.indexOf(
+        `data-slot="${domain === 'book' ? 'subject-summary' : domain === 'game' ? 'game-reader' : 'screen-profile-reader'}"`,
+      );
+      expect(facts).toBeGreaterThan(-1);
+      expect(ratingStart).toBeGreaterThan(reading.indexOf('</section>', facts));
+      expect(reading.indexOf('data-slot="review-list"')).toBeGreaterThan(ratingStart);
+      if (state !== 'ready') {
+        expect(reading).toContain(`data-source="figure" data-state="${state}"`);
+        expect(reading).toContain('data-source="question" data-state="ready"');
+        expect(reading).toContain(m.subject_section_retry());
+        expect(reading).not.toContain('data-slot="public-rating-figure"');
+      }
+    }
+    const unknownQuestion = renderPage(fixture.page, { ...sources, question: { kind: 'unavailable' } });
+    expect(unknownQuestion).toContain('data-source="question" data-state="unavailable"');
+    expect(unknownQuestion).toContain('data-slot="public-rating-figure"');
+    expect(unknownQuestion).not.toContain('data-slot="rating-control-reserved"');
+  }
   const renderLoaded = async (recording: typeof ownEmpty) => {
     const loaded = await loadSubjectPage(
       createKernelClient('https://kernel.invalid', {

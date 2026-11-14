@@ -521,8 +521,11 @@ full reviews own reactions, reporting and continuation. Synopsis retains languag
 Context, names, tags, editorial tools and Sources render once in Details after primary reading. Attribution and
 action-specific warnings remain with their owning component. No preference model is introduced.
 
-Focused actual-consumer regressions pin shared hierarchy, nested projection, missing shelf labels and distinct
-domain capabilities. Complete-page rich, sparse and section-failure stories are synthetic contract examples;
+The [composition regression](../../../tests/subject-reading-composition.test.tsx) pins DOM reading order, one
+personal control, independent rating-source recovery and wrapping action rows; the [personal rating
+journey](../../../tests/subject-personal-reader-rating.test.tsx) pins private draft preservation and native retirement.
+Existing regressions retain nested projection, missing shelf labels and distinct domain capabilities.
+Complete-page rich, sparse and section-failure stories are synthetic contract examples;
 retained literary mounted suites and browser/visual review run in the dev verifier. Canonical literary story ids
 remain unchanged. The Book showcase owns its comprehensive fixture family independently.
 
