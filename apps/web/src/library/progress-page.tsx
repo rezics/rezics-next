@@ -1396,7 +1396,7 @@ function ProgressIndexPageContent({
               ) : null}
             </nav>
           </Exposure>
-        ) : null}
+        ) : null
       }
       startOpen={!sessions.length}
       startContent={
