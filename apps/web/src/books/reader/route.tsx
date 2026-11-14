@@ -200,19 +200,24 @@ export function HostedBookVisitView({
       if (
         coordinates.catalogues.generation() !== catalogueGeneration ||
         coordinates.catalogueFocusOnRead() !== catalogueFocus
-      ) return;
+      )
+        return;
       const active = document.activeElement;
       if (active !== catalogueFocus.owner && !(active === document.body && !catalogueFocus.owner?.isConnected)) return;
-      const row = [...(catalogueRegion.current?.querySelectorAll<HTMLAnchorElement>('[data-book-catalogue]') ?? [])]
-        .find((element) => element.dataset.bookCatalogue === catalogueFocus.catalogueId);
+      const row = [
+        ...(catalogueRegion.current?.querySelectorAll<HTMLAnchorElement>('[data-book-catalogue]') ?? []),
+      ].find((element) => element.dataset.bookCatalogue === catalogueFocus.catalogueId);
       coordinates.cancelFocus();
       (row ?? catalogueHeading.current)?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [visit, locale, coordinates, catalogueFocus, catalogueGeneration, chooser?.subjectId, chooser?.cursor]);
-  useEffect(() => () => {
-    if (!navigation) coordinates.retire();
-  }, [coordinates, navigation]);
+  useEffect(
+    () => () => {
+      if (!navigation) coordinates.retire();
+    },
+    [coordinates, navigation],
+  );
   const admission = useMemo<NativeHostedBookAdmissionSource>(
     () => ({
       getSnapshot: () => (visit.state === 'ready' ? visit.admission : { state: 'unavailable' }),
@@ -223,12 +228,10 @@ export function HostedBookVisitView({
   const open = useCallback<BookReaderNavigation>(
     (address, contentsReturn, focus) => {
       coordinates.captureFocus(focus);
-      const href = withBookCatalogueReturn(hostedBookAddressHref(
-        address,
-        locale,
-        contentsReturn,
-        visit.state === 'ready' ? visit.subjectId : undefined,
-      ), catalogueReturn);
+      const href = withBookCatalogueReturn(
+        hostedBookAddressHref(address, locale, contentsReturn, visit.state === 'ready' ? visit.subjectId : undefined),
+        catalogueReturn,
+      );
       navigate(href);
     },
     [locale, navigate, visit, coordinates, catalogueReturn],
@@ -243,18 +246,23 @@ export function HostedBookVisitView({
     'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal rounded-sm underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring [overflow-wrap:anywhere]';
   const ordinaryActivation = (event: MouseEvent<HTMLAnchorElement>) =>
     event.button === 0 && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
-  const failure = visit.state === 'denied'
-    ? m.book_reader_denied({}, options)
-    : visit.state === 'not-found'
-      ? m.book_reader_not_found({}, options)
-      : visit.state === 'changed'
-        ? m.book_reader_changed({}, options)
-        : m.book_reader_unavailable({}, options);
+  const failure =
+    visit.state === 'denied'
+      ? m.book_reader_denied({}, options)
+      : visit.state === 'not-found'
+        ? m.book_reader_not_found({}, options)
+        : visit.state === 'changed'
+          ? m.book_reader_changed({}, options)
+          : m.book_reader_unavailable({}, options);
   if (chooser) {
     const page = visit.state === 'catalogues' ? visit.page : null;
     const previous = coordinates.catalogues.previous(chooser.cursor);
     const href = (cursor: string | null) => hostedBookSubjectHref(chooser.subjectId, locale, cursor ?? undefined);
-    const traverse = (event: MouseEvent<HTMLAnchorElement>, cursor: string | null, movement: 'next' | 'exact' | 'first') => {
+    const traverse = (
+      event: MouseEvent<HTMLAnchorElement>,
+      cursor: string | null,
+      movement: 'next' | 'exact' | 'first',
+    ) => {
       if (!ordinaryActivation(event)) return;
       event.preventDefault();
       coordinates.captureCatalogueFocus(null, event.detail === 0);
@@ -263,7 +271,12 @@ export function HostedBookVisitView({
       else navigate(href(cursor));
     };
     return (
-      <section ref={catalogueRegion} className="mx-auto grid min-w-0 max-w-3xl gap-4 px-4 py-8" lang={locale} data-slot="hosted-book-catalogues">
+      <section
+        ref={catalogueRegion}
+        className="mx-auto grid min-w-0 max-w-3xl gap-4 px-4 py-8"
+        lang={locale}
+        data-slot="hosted-book-catalogues"
+      >
         <h1 ref={catalogueHeading} tabIndex={-1} className="text-2xl font-semibold [overflow-wrap:anywhere]">
           {m.book_reader_catalogues_heading({}, options)}
         </h1>
@@ -272,18 +285,26 @@ export function HostedBookVisitView({
             {page.items.length === 0 ? <p role="status">{m.book_reader_catalogues_empty({}, options)}</p> : null}
             <ol className="grid min-w-0 gap-3">
               {page.items.map((item, index) => {
-                const target = withBookCatalogueReturn(hostedBookHref(item.catalogueId, locale, {
-                  subject: page.subjectId,
-                  release: item.revisionId,
-                }), chooser);
+                const target = withBookCatalogueReturn(
+                  hostedBookHref(item.catalogueId, locale, {
+                    subject: page.subjectId,
+                    release: item.revisionId,
+                  }),
+                  chooser,
+                );
                 return (
                   <li key={item.catalogueId} className="min-w-0">
-                    <a className={linkClass} data-book-catalogue={item.catalogueId} href={target} onClick={(event) => {
-                      if (!ordinaryActivation(event)) return;
-                      event.preventDefault();
-                      coordinates.captureFocus(event.detail === 0 ? { kind: 'heading' } : null, true);
-                      navigate(target);
-                    }}>
+                    <a
+                      className={linkClass}
+                      data-book-catalogue={item.catalogueId}
+                      href={target}
+                      onClick={(event) => {
+                        if (!ordinaryActivation(event)) return;
+                        event.preventDefault();
+                        coordinates.captureFocus(event.detail === 0 ? { kind: 'heading' } : null, true);
+                        navigate(target);
+                      }}
+                    >
                       {item.title || m.book_reader_publication({ number: index + 1 }, options)}
                     </a>
                   </li>
@@ -299,15 +320,23 @@ export function HostedBookVisitView({
         )}
         <nav aria-label={m.book_reader_catalogues_heading({}, options)} className="flex min-w-0 flex-wrap gap-3">
           {!page ? (
-            <Button variant="outline" className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]" onClick={(event) => {
-              coordinates.captureCatalogueFocus(null, event.detail === 0);
-              reload();
-            }}>
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
+              onClick={(event) => {
+                coordinates.captureCatalogueFocus(null, event.detail === 0);
+                reload();
+              }}
+            >
               {m.book_reader_retry({}, options)}
             </Button>
           ) : null}
           {previous ? (
-            <a className={linkClass} href={href(previous.cursor)} onClick={(event) => traverse(event, previous.cursor, 'exact')}>
+            <a
+              className={linkClass}
+              href={href(previous.cursor)}
+              onClick={(event) => traverse(event, previous.cursor, 'exact')}
+            >
               {m.book_reader_catalogues_previous({}, options)}
             </a>
           ) : null}
@@ -317,7 +346,11 @@ export function HostedBookVisitView({
             </a>
           ) : null}
           {page?.nextCursor ? (
-            <a className={linkClass} href={href(page.nextCursor)} onClick={(event) => traverse(event, page.nextCursor, 'next')}>
+            <a
+              className={linkClass}
+              href={href(page.nextCursor)}
+              onClick={(event) => traverse(event, page.nextCursor, 'next')}
+            >
               {m.book_reader_catalogues_more({}, options)}
             </a>
           ) : null}
@@ -326,12 +359,16 @@ export function HostedBookVisitView({
     );
   }
   const catalogueReturnLink = catalogueReturn ? (
-    <a className={linkClass} href={hostedBookSubjectHref(catalogueReturn.subjectId, locale, catalogueReturn.cursor ?? undefined)} onClick={(event) => {
-      if (!ordinaryActivation(event)) return;
-      event.preventDefault();
-      coordinates.captureCatalogueFocus(location?.catalogueId ?? null, event.detail === 0);
-      navigate(hostedBookSubjectHref(catalogueReturn.subjectId, locale, catalogueReturn.cursor ?? undefined));
-    }}>
+    <a
+      className={linkClass}
+      href={hostedBookSubjectHref(catalogueReturn.subjectId, locale, catalogueReturn.cursor ?? undefined)}
+      onClick={(event) => {
+        if (!ordinaryActivation(event)) return;
+        event.preventDefault();
+        coordinates.captureCatalogueFocus(location?.catalogueId ?? null, event.detail === 0);
+        navigate(hostedBookSubjectHref(catalogueReturn.subjectId, locale, catalogueReturn.cursor ?? undefined));
+      }}
+    >
       {m.book_reader_catalogues_return({}, options)}
     </a>
   ) : null;
@@ -340,24 +377,30 @@ export function HostedBookVisitView({
     const contents = !!location && (search?.view === 'contents' || (search?.view === undefined && !search?.occurrence));
     const first =
       location && contents
-        ? withBookCatalogueReturn(hostedBookHref(location.catalogueId, locale, {
-            release: search?.release,
-            occurrence: search?.occurrence,
-            subject: search?.subject,
-            view: 'contents',
-            parent: search?.parent,
-          }), catalogueReturn)
+        ? withBookCatalogueReturn(
+            hostedBookHref(location.catalogueId, locale, {
+              release: search?.release,
+              occurrence: search?.occurrence,
+              subject: search?.subject,
+              view: 'contents',
+              parent: search?.parent,
+            }),
+            catalogueReturn,
+          )
         : null;
     const chapter =
       location && contents && search?.occurrence
-        ? withBookCatalogueReturn(hostedBookHref(location.catalogueId, locale, {
-            release: search.release,
-            occurrence: search.occurrence,
-            subject: search.subject,
-            view: 'chapter',
-            returnParent: search.parent,
-            returnCursor: search.cursor,
-          }), catalogueReturn)
+        ? withBookCatalogueReturn(
+            hostedBookHref(location.catalogueId, locale, {
+              release: search.release,
+              occurrence: search.occurrence,
+              subject: search.subject,
+              view: 'chapter',
+              returnParent: search.parent,
+              returnCursor: search.cursor,
+            }),
+            catalogueReturn,
+          )
         : null;
     return (
       <section className="mx-auto grid max-w-3xl gap-4 px-4 py-8" lang={locale} data-slot="hosted-book-visit">
@@ -424,7 +467,10 @@ export function HostedBookVisitView({
   return (
     <div className="min-w-0">
       {catalogueReturnLink ? (
-        <nav className="mx-auto flex max-w-[52rem] flex-wrap gap-2 px-4 pt-4 sm:px-8" aria-label={m.book_reader_catalogues_heading({}, options)}>
+        <nav
+          className="mx-auto flex max-w-[52rem] flex-wrap gap-2 px-4 pt-4 sm:px-8"
+          aria-label={m.book_reader_catalogues_heading({}, options)}
+        >
           {catalogueReturnLink}
         </nav>
       ) : null}
@@ -433,7 +479,9 @@ export function HostedBookVisitView({
         contentsReturn={visit.contentsReturn}
         admission={admission}
         locale={locale}
-        hrefForAddress={(address) => withBookCatalogueReturn(hostedBookAddressHref(address, locale, origin, visit.subjectId), catalogueReturn)}
+        hrefForAddress={(address) =>
+          withBookCatalogueReturn(hostedBookAddressHref(address, locale, origin, visit.subjectId), catalogueReturn)
+        }
         onNavigate={open}
         onReload={reread}
         contentsNavigation={coordinates.contents}

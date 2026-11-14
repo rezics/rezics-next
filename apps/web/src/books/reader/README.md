@@ -73,15 +73,15 @@ import { HostedBookReaderLink } from '../reader/route';
 
 Canonical links use `/{locale}/books/{catalogueId}/read`. Their bounded search coordinates are:
 
-| Field                          | Meaning                                                                            |
-| ------------------------------ | ---------------------------------------------------------------------------------- |
-| `release`                      | Frozen native publication revision; omitted only to select the current publication |
-| `occurrence`                   | Stable native placement; exact target is resolved from that frozen publication     |
-| `view`                         | `chapter`, `contents`, or Subject `catalogues`; no occurrence defaults to contents |
-| `subject`                      | Subject associated with the discovery link; native Library validates every save    |
-| `parent`, `cursor`             | One bounded contents level and its opaque continuation                             |
-| `returnParent`, `returnCursor` | Originating bounded contents position retained by a chapter link                   |
-| `catalogueReturn`, `catalogueCursor` | Explicit Subject chooser return marker (`1`) and its exact optional cursor |
+| Field                                | Meaning                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| `release`                            | Frozen native publication revision; omitted only to select the current publication |
+| `occurrence`                         | Stable native placement; exact target is resolved from that frozen publication     |
+| `view`                               | `chapter`, `contents`, or Subject `catalogues`; no occurrence defaults to contents |
+| `subject`                            | Subject associated with the discovery link; native Library validates every save    |
+| `parent`, `cursor`                   | One bounded contents level and its opaque continuation                             |
+| `returnParent`, `returnCursor`       | Originating bounded contents position retained by a chapter link                   |
+| `catalogueReturn`, `catalogueCursor` | Explicit Subject chooser return marker (`1`) and its exact optional cursor         |
 
 No ordinal, current Post head, semantic relationship or scalar progress creates an occurrence selection. Reused
 bodies have different occurrence links even when their exact Post/revision/digest is identical. A move changes

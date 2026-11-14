@@ -1079,7 +1079,8 @@ test('Subject discovery keeps sparse continuation and a current publication link
     ]);
     expect(links.map((link) => link.getAttribute('href'))).toEqual(
       populated.items.map(
-        (item) => `/${locale}/books/${item.catalogueId}/read?subject=${ids.post}&release=${ids.release}&catalogueReturn=1&catalogueCursor=${encodeURIComponent(illustrativeBookCursor)}`,
+        (item) =>
+          `/${locale}/books/${item.catalogueId}/read?subject=${ids.post}&release=${ids.release}&catalogueReturn=1&catalogueCursor=${encodeURIComponent(illustrativeBookCursor)}`,
       ),
     );
     expect(links.every((link) => link.classList.contains('min-h-11'))).toBe(true);
@@ -1663,18 +1664,29 @@ test('chooser coordinates bound exact predecessors, preserve pending traversal, 
   for (const locale of locales) {
     for (const cursor of [null, illustrativeBookCursor, 'x'.repeat(4096)]) {
       const origin = { subjectId: ids.post, cursor };
-      const href = withBookCatalogueReturn(hostedBookHref(ids.catalogue, locale, {
-        release: ids.release, occurrence: ids.first, returnCursor: illustrativeBookLastCursor,
-      }), origin);
+      const href = withBookCatalogueReturn(
+        hostedBookHref(ids.catalogue, locale, {
+          release: ids.release,
+          occurrence: ids.first,
+          returnCursor: illustrativeBookLastCursor,
+        }),
+        origin,
+      );
       const search = parseHostedBookSearch(Object.fromEntries(new URL(href, 'https://reader.test').searchParams));
       expect(bookCatalogueReturn(search)).toEqual(origin);
       expect(search.release).toBe(ids.release);
       expect(search.occurrence).toBe(ids.first);
       expect(search.returnCursor).toBe(illustrativeBookLastCursor);
     }
-    for (const label of [m.book_reader_catalogues_heading, m.book_reader_catalogues_previous,
-      m.book_reader_catalogues_first, m.book_reader_catalogues_more, m.book_reader_catalogues_return,
-      m.book_reader_catalogues_recovery]) expect(label({}, { locale })).not.toContain('book_reader_');
+    for (const label of [
+      m.book_reader_catalogues_heading,
+      m.book_reader_catalogues_previous,
+      m.book_reader_catalogues_first,
+      m.book_reader_catalogues_more,
+      m.book_reader_catalogues_return,
+      m.book_reader_catalogues_recovery,
+    ])
+      expect(label({}, { locale })).not.toContain('book_reader_');
   }
   expect(bookCatalogueReturn({ subject: ids.post })).toBeNull();
   expect(() => parseHostedBookSearch({ catalogueReturn: 'other' })).toThrow();
@@ -1697,29 +1709,61 @@ test('the mounted chooser rereads exact sparse, previous, retry, first and selec
   let expired = false;
   let unavailableBook = false;
   let publicationReads = 0;
-  const row = { catalogueId: ids.catalogue, revisionId: ids.release, kind: 'publication' as const,
-    sourceRevisionId: ids.structure, threadId: ids.thread, title: 'The selected public opening' };
-  const native = createKernelClient('https://kernel.test', { fetch: async (input) => {
-    const url = new URL(String(input));
-    const cursor = url.searchParams.get('cursor');
-    cursors.push(cursor);
-    expect(Object.fromEntries(url.searchParams)).toEqual({ includeTitle: '1', limit: '20', ...(cursor ? { cursor } : {}) });
-    if (cursor === failedCursor) { failedCursor = undefined; return Response.json({}, { status: 503 }); }
-    if (expired && cursor) return Response.json({}, { status: 400 });
-    return Response.json({ subjectId: ids.post,
-      items: cursor === illustrativeBookCursor ? [] : [{ ...row, ...(cursor ? {} : { catalogueId: ids.author }) }],
-      nextCursor: cursor === null ? illustrativeBookCursor : cursor === illustrativeBookCursor ? illustrativeBookLastCursor : null,
-    });
-  } });
-  mock.module('../src/books/reader/native-visit', () => ({ readHostedBookVisit: async ({ data }: Parameters<typeof actualVisit.readHostedBookVisit>[0]) => {
-    if (data.search.view === 'catalogues') {
-      const result = await readHostedDiscovery(native, null, data.catalogueId, data.search.cursor, new AbortController().signal);
-      return result.state === 'ready' ? { state: 'catalogues', page: result.value } : result;
-    }
-    publicationReads++;
-    return unavailableBook ? { state: 'denied' } : observeHostedBookVisit(api, data, { kind: 'anonymous' }, m.book_reader_title());
-  } }));
-  mock.module('../src/books/reader/native-read', () => ({ ...actualRead,
+  const row = {
+    catalogueId: ids.catalogue,
+    revisionId: ids.release,
+    kind: 'publication' as const,
+    sourceRevisionId: ids.structure,
+    threadId: ids.thread,
+    title: 'The selected public opening',
+  };
+  const native = createKernelClient('https://kernel.test', {
+    fetch: async (input) => {
+      const url = new URL(String(input));
+      const cursor = url.searchParams.get('cursor');
+      cursors.push(cursor);
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        includeTitle: '1',
+        limit: '20',
+        ...(cursor ? { cursor } : {}),
+      });
+      if (cursor === failedCursor) {
+        failedCursor = undefined;
+        return Response.json({}, { status: 503 });
+      }
+      if (expired && cursor) return Response.json({}, { status: 400 });
+      return Response.json({
+        subjectId: ids.post,
+        items: cursor === illustrativeBookCursor ? [] : [{ ...row, ...(cursor ? {} : { catalogueId: ids.author }) }],
+        nextCursor:
+          cursor === null
+            ? illustrativeBookCursor
+            : cursor === illustrativeBookCursor
+              ? illustrativeBookLastCursor
+              : null,
+      });
+    },
+  });
+  mock.module('../src/books/reader/native-visit', () => ({
+    readHostedBookVisit: async ({ data }: Parameters<typeof actualVisit.readHostedBookVisit>[0]) => {
+      if (data.search.view === 'catalogues') {
+        const result = await readHostedDiscovery(
+          native,
+          null,
+          data.catalogueId,
+          data.search.cursor,
+          new AbortController().signal,
+        );
+        return result.state === 'ready' ? { state: 'catalogues', page: result.value } : result;
+      }
+      publicationReads++;
+      return unavailableBook
+        ? { state: 'denied' }
+        : observeHostedBookVisit(api, data, { kind: 'anonymous' }, m.book_reader_title());
+    },
+  }));
+  mock.module('../src/books/reader/native-read', () => ({
+    ...actualRead,
     readNativeHostedBook: async ({ data }: Parameters<typeof actualRead.readNativeHostedBook>[0]) =>
       readHostedBook(api, data.request, data.publicationTitle, new AbortController().signal),
   }));
@@ -1728,17 +1772,36 @@ test('the mounted chooser rereads exact sparse, previous, retry, first and selec
     setLocale('en', { reload: false });
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
-    const parent = createRootRoute({ component: () => <QueryClientProvider client={client}><Outlet /></QueryClientProvider> });
+    const parent = createRootRoute({
+      component: () => (
+        <QueryClientProvider client={client}>
+          <Outlet />
+        </QueryClientProvider>
+      ),
+    });
     const child = Route.update({ getParentRoute: () => parent, path: '/books/$id/read', id: '/books/$id/read' });
     const history = createMemoryHistory({ initialEntries: [hostedBookSubjectHref(ids.post, 'en')] });
     const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
-    const router = createRouter({ routeTree: parent.addChildren([child]), history,
-      rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href } });
-    host = document.createElement('main'); document.body.append(host); root = createRoot(host);
-    await act(async () => { await router.load(); root!.render(<RouterProvider router={router} />); });
+    const router = createRouter({
+      routeTree: parent.addChildren([child]),
+      history,
+      rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
+    });
+    host = document.createElement('main');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => {
+      await router.load();
+      root!.render(<RouterProvider router={router} />);
+    });
     await settle();
-    const find = (name: string) => [...host.querySelectorAll<HTMLAnchorElement>('a')].find((anchor) => anchor.textContent === name);
-    const link = (name: string) => { const anchor = find(name); expect(anchor).toBeDefined(); return anchor!; };
+    const find = (name: string) =>
+      [...host.querySelectorAll<HTMLAnchorElement>('a')].find((anchor) => anchor.textContent === name);
+    const link = (name: string) => {
+      const anchor = find(name);
+      expect(anchor).toBeDefined();
+      return anchor!;
+    };
     expect(cursors).toEqual([null]);
     expect(find(m.book_reader_catalogues_previous())).toBeUndefined();
     const modified = new window.MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true });
@@ -1751,14 +1814,19 @@ test('the mounted chooser rereads exact sparse, previous, retry, first and selec
     expect(document.activeElement).toBe(host.querySelector('h1'));
     expect(new URL(link(m.book_reader_catalogues_previous()).href).searchParams.has('cursor')).toBe(false);
     const more = link(m.book_reader_catalogues_more());
-    await act(async () => { more.focus(); more.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })); });
+    await act(async () => {
+      more.focus();
+      more.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+    });
     await settle();
     expect(cursors).toEqual([null, illustrativeBookCursor, illustrativeBookLastCursor]);
     expect(document.activeElement).not.toBe(host.querySelector('h1'));
     failedCursor = illustrativeBookCursor;
     await click(link(m.book_reader_catalogues_previous()));
     expect(host.textContent).toContain(m.book_reader_unavailable());
-    expect(new URL(history.location.href, 'https://reader.test').searchParams.get('cursor')).toBe(illustrativeBookCursor);
+    expect(new URL(history.location.href, 'https://reader.test').searchParams.get('cursor')).toBe(
+      illustrativeBookCursor,
+    );
     await click(button(m.book_reader_retry()));
     expect(cursors.slice(-2)).toEqual([illustrativeBookCursor, illustrativeBookCursor]);
     expect(host.textContent).toContain(m.book_reader_catalogues_empty());
@@ -1778,10 +1846,18 @@ test('the mounted chooser rereads exact sparse, previous, retry, first and selec
     expect(cursors).toHaveLength(beforeReturn + 1);
     expect(cursors.at(-1)).toBe(illustrativeBookLastCursor);
     expect(document.activeElement).toBe(host.querySelector('li a'));
-    expect(new URL(link(m.book_reader_catalogues_previous()).href).searchParams.get('cursor')).toBe(illustrativeBookCursor);
-    await act(async () => { history.back(); }); await settle();
+    expect(new URL(link(m.book_reader_catalogues_previous()).href).searchParams.get('cursor')).toBe(
+      illustrativeBookCursor,
+    );
+    await act(async () => {
+      history.back();
+    });
+    await settle();
     expect(publicationReads).toBe(2);
-    await act(async () => { history.forward(); }); await settle();
+    await act(async () => {
+      history.forward();
+    });
+    await settle();
     expect(cursors).toHaveLength(beforeReturn + 2);
     unavailableBook = true;
     await click(host.querySelector<HTMLAnchorElement>('li a')!);
@@ -1790,12 +1866,18 @@ test('the mounted chooser rereads exact sparse, previous, retry, first and selec
     expect(cursors.at(-1)).toBe(illustrativeBookLastCursor);
     const navigation = hostedBookNavigationForRouter(router, client);
     navigation.retire(); // A direct/reloaded address has no predecessor evidence.
-    await act(async () => { await router.invalidate(); }); await settle();
+    await act(async () => {
+      await router.invalidate();
+    });
+    await settle();
     expect(host.querySelector('li a')?.textContent).toBe(row.title);
     expect(find(m.book_reader_catalogues_previous())).toBeUndefined();
     expect(find(m.book_reader_catalogues_first())).toBeDefined();
     expired = true;
-    await act(async () => { await router.invalidate(); }); await settle();
+    await act(async () => {
+      await router.invalidate();
+    });
+    await settle();
     expect(host.textContent).toContain(m.book_reader_changed());
     expect(find(m.book_reader_catalogues_previous())).toBeUndefined();
     const beforeRetry = cursors.length;
@@ -1807,7 +1889,8 @@ test('the mounted chooser rereads exact sparse, previous, retry, first and selec
     expect(find(m.book_reader_catalogues_previous())).toBeUndefined();
     expect(new URL(history.location.href, 'https://reader.test').searchParams.has('cursor')).toBe(false);
     navigation.retire();
-    await act(async () => root!.unmount()); root = undefined;
+    await act(async () => root!.unmount());
+    root = undefined;
   } finally {
     mock.module('../src/books/reader/native-visit', () => actualVisit);
     mock.module('../src/books/reader/native-read', () => actualRead);

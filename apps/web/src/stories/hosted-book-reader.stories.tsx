@@ -7,7 +7,13 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { HostedBookReader, type HostedBookReaderProps } from '../books/reader/hosted-book-reader';
 import { HostedBookCheckpointControls } from '../books/reader/checkpoint-controls';
-import { createHostedBookNavigation, HostedBookVisitView, parseHostedBookSearch, hostedBookSubjectHref, type HostedBookVisit } from '../books/reader/route';
+import {
+  createHostedBookNavigation,
+  HostedBookVisitView,
+  parseHostedBookSearch,
+  hostedBookSubjectHref,
+  type HostedBookVisit,
+} from '../books/reader/route';
 import { readHostedDiscovery } from '../books/reader/discovery';
 import { observeHostedBookVisit } from '../books/reader/visit';
 import { hostedBookAddressHref } from '../books/reader/address';
@@ -426,8 +432,13 @@ function CatalogueJourney({ state }: { state: CatalogueState }) {
     return { book, client, navigation: createHostedBookNavigation() };
   });
   const locale = getLocale();
-  const [href, setHref] = useState(() => hostedBookSubjectHref(illustrativeBookIds.post, locale,
-    state === 'multiple' || state === 'selected' ? undefined : illustrativeBookCursor));
+  const [href, setHref] = useState(() =>
+    hostedBookSubjectHref(
+      illustrativeBookIds.post,
+      locale,
+      state === 'multiple' || state === 'selected' ? undefined : illustrativeBookCursor,
+    ),
+  );
   const [retry, setRetry] = useState(0);
   const [visit, setVisit] = useState<{ href: string; locale: string; value: HostedBookVisit } | null>(null);
   const [transportReady, setTransportReady] = useState(false);
@@ -437,7 +448,8 @@ function CatalogueJourney({ state }: { state: CatalogueState }) {
     const transport: typeof fetch = async (input, init) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
-      if (!url.pathname.startsWith(`/v1/hostedCatalogues/${illustrativeBookIds.catalogue}`)) return fallback(input, init);
+      if (!url.pathname.startsWith(`/v1/hostedCatalogues/${illustrativeBookIds.catalogue}`))
+        return fallback(input, init);
       const { api } = await runtime.book.ready;
       const query = Object.fromEntries(url.searchParams) as Parameters<typeof api.children>[1];
       const occurrence = url.pathname.split('/occurrences/')[1]?.split('/')[0];
@@ -445,17 +457,22 @@ function CatalogueJourney({ state }: { state: CatalogueState }) {
         ? await api.children(illustrativeBookIds.catalogue, query)
         : url.pathname.endsWith('/navigation')
           ? await api.navigate(illustrativeBookIds.catalogue, occurrence!, {
-              ...query, direction: url.searchParams.get('direction') as 'previous' | 'next',
+              ...query,
+              direction: url.searchParams.get('direction') as 'previous' | 'next',
             })
           : url.pathname.endsWith('/metadata')
             ? await api.metadata(illustrativeBookIds.catalogue, occurrence!, query)
             : occurrence
               ? await api.resolve(illustrativeBookIds.catalogue, occurrence, query)
               : await api.catalogue(illustrativeBookIds.catalogue, query);
-      return Response.json(result.state === 'ready' ? result.value : {}, { status: result.state === 'ready' ? 200 : 503 });
+      return Response.json(result.state === 'ready' ? result.value : {}, {
+        status: result.state === 'ready' ? 200 : 503,
+      });
     };
     globalThis.fetch = transport;
-    void runtime.book.ready.then(() => { if (current) setTransportReady(true); });
+    void runtime.book.ready.then(() => {
+      if (current) setTransportReady(true);
+    });
     return () => {
       current = false;
       if (globalThis.fetch === transport) globalThis.fetch = fallback;
@@ -472,23 +489,40 @@ function CatalogueJourney({ state }: { state: CatalogueState }) {
       const catalogueId = decodeURIComponent(url.pathname.split('/').at(-2)!);
       let value: HostedBookVisit;
       if (search.view === 'catalogues') {
-        const native = createKernelClient('https://illustrative-discovery.test', { fetch: async () => {
-          if (state === 'failed' && retry === 0) {
-            return Response.json({}, { status: 503 });
-          }
-          const row = { catalogueId: illustrativeBookIds.catalogue, revisionId: illustrativeBookIds.release,
-            sourceRevisionId: illustrativeBookIds.structure, threadId: illustrativeBookIds.thread, kind: 'publication',
-            title: 'The observatory, the coast, and the long way home / 天文台から海へ' };
-          return Response.json({ subjectId: illustrativeBookIds.post,
-            items: search.cursor === illustrativeBookCursor ? [] : [row],
-            nextCursor: !search.cursor ? illustrativeBookCursor : search.cursor === illustrativeBookCursor ? illustrativeBookLastCursor : null,
-          });
-        } });
+        const native = createKernelClient('https://illustrative-discovery.test', {
+          fetch: async () => {
+            if (state === 'failed' && retry === 0) {
+              return Response.json({}, { status: 503 });
+            }
+            const row = {
+              catalogueId: illustrativeBookIds.catalogue,
+              revisionId: illustrativeBookIds.release,
+              sourceRevisionId: illustrativeBookIds.structure,
+              threadId: illustrativeBookIds.thread,
+              kind: 'publication',
+              title: 'The observatory, the coast, and the long way home / 天文台から海へ',
+            };
+            return Response.json({
+              subjectId: illustrativeBookIds.post,
+              items: search.cursor === illustrativeBookCursor ? [] : [row],
+              nextCursor: !search.cursor
+                ? illustrativeBookCursor
+                : search.cursor === illustrativeBookCursor
+                  ? illustrativeBookLastCursor
+                  : null,
+            });
+          },
+        });
         const read = await readHostedDiscovery(native, null, catalogueId, search.cursor, controller.signal);
         value = read.state === 'ready' ? { state: 'catalogues', page: read.value } : read;
       } else {
         const { api } = await runtime.book.ready;
-        value = await observeHostedBookVisit(api, { catalogueId, locale, search }, { kind: 'anonymous' }, m.book_reader_title());
+        value = await observeHostedBookVisit(
+          api,
+          { catalogueId, locale, search },
+          { kind: 'anonymous' },
+          m.book_reader_title(),
+        );
       }
       if (!controller.signal.aborted) setVisit({ href, locale, value });
     };
@@ -496,8 +530,10 @@ function CatalogueJourney({ state }: { state: CatalogueState }) {
     return () => controller.abort();
   }, [runtime, state, href, locale, retry, transportReady]);
   const url = new URL(href, 'https://illustrative-reader.test');
-  const location = { catalogueId: decodeURIComponent(url.pathname.split('/').at(-2)!),
-    search: parseHostedBookSearch(Object.fromEntries(url.searchParams)) };
+  const location = {
+    catalogueId: decodeURIComponent(url.pathname.split('/').at(-2)!),
+    search: parseHostedBookSearch(Object.fromEntries(url.searchParams)),
+  };
   return (
     <QueryClientProvider client={runtime.client}>
       <main className="min-w-0">
@@ -506,15 +542,27 @@ function CatalogueJourney({ state }: { state: CatalogueState }) {
           its exact address. These examples do not establish native catalogue-to-reader acceptance.
         </p>
         {visit?.href === href && visit.locale === locale ? (
-          <HostedBookVisitView visit={visit.value} locale={locale} navigation={runtime.navigation} location={location}
+          <HostedBookVisitView
+            visit={visit.value}
+            locale={locale}
+            navigation={runtime.navigation}
+            location={location}
             navigate={(target) => {
               const path = new URL(target, window.location.origin).pathname;
               if (path !== new URL(href, window.location.origin).pathname) runtime.navigation.retireReading();
               setVisit(null);
               setHref(target);
             }}
-            reload={() => { setVisit(null); setRetry((value) => value + 1); }} />
-        ) : <p role="status" className="px-4 py-8">{m.book_reader_loading()}</p>}
+            reload={() => {
+              setVisit(null);
+              setRetry((value) => value + 1);
+            }}
+          />
+        ) : (
+          <p role="status" className="px-4 py-8">
+            {m.book_reader_loading()}
+          </p>
+        )}
       </main>
     </QueryClientProvider>
   );
@@ -563,7 +611,9 @@ export const SelectedCatalogueReturn: Story = {
     await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_catalogues_more() }));
     await userEvent.click(await canvas.findByRole('link', { name: /The observatory/ }));
     const back = await canvas.findByRole('link', { name: m.book_reader_catalogues_return() });
-    await expect(new URL(back.getAttribute('href')!, window.location.origin).searchParams.get('cursor')).toBe(illustrativeBookLastCursor);
+    await expect(new URL(back.getAttribute('href')!, window.location.origin).searchParams.get('cursor')).toBe(
+      illustrativeBookLastCursor,
+    );
     await userEvent.click(back);
     await canvas.findByRole('link', { name: /The observatory/ });
     await expect(canvas.getByRole('link', { name: m.book_reader_catalogues_previous() })).toBeVisible();
