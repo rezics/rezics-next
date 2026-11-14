@@ -322,6 +322,12 @@ Missing or mismatched binding, no reservation identity, ambiguous attempts or in
 unknown with custody retained. Do not reconstruct a host/run from log text, host names or timestamps, and do not
 signal another run or launch a replacement check during recovery.
 
+A completed remote wrapper exit 75 may receive physical cleanup without a compiler receipt only when the exact local
+runner is terminal and one original host/run remains bound with no native or settlement receipt. The receiver invokes
+cleanup-only reconciliation for that identity, records its positive cleanup independently, preserves exit 75 and the
+unknown compiler result, and does not replay the source. A newer terminal check does not establish the older run's
+custody; repeated receives reuse the older run's recorded cleanup.
+
 Decision: Cancelled cleanup validates stored remote attempt IDs with the same 1–96 ASCII letter, digit and hyphen
 contract as `reconcileRemoteRun`; local physical run IDs remain UUIDs, and cleanup still requires explicit cancellation
 and matching ownership and custody.
