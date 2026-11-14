@@ -12787,5 +12787,6 @@
   "library_insights_value": "값 있음(0 포함)",
   "library_insights_within_profile": "프로필 내 반복",
   "library_insights_year": "완료 연도",
-  "library_insights_year_help": "올해로 종료일을 명시한 실제 완료만 집계합니다. 연도만 기록한 완료는 월 미지정으로 남습니다."
+  "library_insights_year_help": "올해로 종료일을 명시한 실제 완료만 집계합니다. 연도만 기록한 완료는 월 미지정으로 남습니다.",
+  "library_insights_unallocated_help": "종료일이 없거나 지원되지 않는 기록은 보존된 전체 이력에 해당하며 올해에 배정할 수 없습니다."
 }

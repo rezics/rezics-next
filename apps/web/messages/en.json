@@ -12794,5 +12794,6 @@
   "library_insights_value": "Has a value (including zero)",
   "library_insights_within_profile": "Repeats within profile",
   "library_insights_year": "Completion year",
-  "library_insights_year_help": "Only actual completions with an explicitly reported finish in this year count. Year-only finishes remain unallocated to a month."
+  "library_insights_year_help": "Only actual completions with an explicitly reported finish in this year count. Year-only finishes remain unallocated to a month.",
+  "library_insights_unallocated_help": "Missing or unsupported finish dates cover retained history and cannot be assigned to this year."
 }

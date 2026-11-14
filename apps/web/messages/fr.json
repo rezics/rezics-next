@@ -12787,5 +12787,6 @@
   "library_insights_value": "Avec valeur (zéro inclus)",
   "library_insights_within_profile": "Répétitions dans le profil",
   "library_insights_year": "Année de fin",
-  "library_insights_year_help": "Seules les fins effectives explicitement déclarées dans cette année comptent. Les dates limitées à l’année restent sans mois."
+  "library_insights_year_help": "Seules les fins effectives explicitement déclarées dans cette année comptent. Les dates limitées à l’année restent sans mois.",
+  "library_insights_unallocated_help": "Les dates de fin absentes ou non prises en charge couvrent l’historique conservé et ne peuvent pas être attribuées à cette année."
 }

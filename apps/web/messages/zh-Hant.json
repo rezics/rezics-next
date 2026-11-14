@@ -12787,5 +12787,6 @@
   "library_insights_value": "有數值（含零）",
   "library_insights_within_profile": "設定組內重複次數",
   "library_insights_year": "完成年份",
-  "library_insights_year_help": "僅計入明確填報在該年結束的實際完成紀錄。僅有年份的紀錄不分配月份。"
+  "library_insights_year_help": "僅計入明確填報在該年結束的實際完成紀錄。僅有年份的紀錄不分配月份。",
+  "library_insights_unallocated_help": "缺少或不支援結束日期的計數涵蓋保留的全部歷史，不能分配到此年份。"
 }

@@ -12787,5 +12787,6 @@
   "library_insights_value": "値あり（ゼロを含む）",
   "library_insights_within_profile": "プロファイル内の再完了",
   "library_insights_year": "完了年",
-  "library_insights_year_help": "この年の終了日を明示的に申告した実際の完了のみを数えます。年のみの記録は月未割当に残ります。"
+  "library_insights_year_help": "この年の終了日を明示的に申告した実際の完了のみを数えます。年のみの記録は月未割当に残ります。",
+  "library_insights_unallocated_help": "終了日なし・未対応の件数は保持された全履歴が対象で、この年には割り当てられません。"
 }

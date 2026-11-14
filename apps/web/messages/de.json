@@ -12787,5 +12787,6 @@
   "library_insights_value": "Mit Wert (einschließlich null)",
   "library_insights_within_profile": "Wiederholungen je Profil",
   "library_insights_year": "Abschlussjahr",
-  "library_insights_year_help": "Nur tatsächliche Abschlüsse mit ausdrücklich gemeldetem Ende in diesem Jahr zählen. Jahresgenaue Angaben bleiben ohne Monat."
+  "library_insights_year_help": "Nur tatsächliche Abschlüsse mit ausdrücklich gemeldetem Ende in diesem Jahr zählen. Jahresgenaue Angaben bleiben ohne Monat.",
+  "library_insights_unallocated_help": "Fehlende oder nicht unterstützte Enddaten betreffen den beibehaltenen Verlauf und können diesem Jahr nicht zugeordnet werden."
 }

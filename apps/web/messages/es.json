@@ -12787,5 +12787,6 @@
   "library_insights_value": "Con valor (incluido cero)",
   "library_insights_within_profile": "Repeticiones dentro del perfil",
   "library_insights_year": "Año de finalización",
-  "library_insights_year_help": "Solo cuentan finalizaciones reales con fecha de fin declarada en este año. Las fechas con solo año quedan sin mes."
+  "library_insights_year_help": "Solo cuentan finalizaciones reales con fecha de fin declarada en este año. Las fechas con solo año quedan sin mes.",
+  "library_insights_unallocated_help": "Las fechas de fin ausentes o no compatibles abarcan el historial conservado y no se pueden asignar a este año."
 }

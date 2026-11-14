@@ -3,8 +3,8 @@
 This owner document covers the retained-profile distribution, private assessment coverage and current-progress
 projections. New native sessions capture accepting unit meaning and assessment presence, while old rows without
 captured unit meaning remain unavailable for dimensional interpretation. The complete private insights journey still
-needs its reachable Web page; the generated client now includes the overview route. Existing all-time/year counts, month navigation, journal
-reads and commands, and diary allocation remain authoritative and unchanged.
+needs mounted Web acceptance; the generated client now includes the overview route. Existing all-time/year counts,
+month navigation, journal reads and commands, and diary allocation remain authoritative and unchanged.
 
 Decision: Group historical completions by the entire immutable accepting profile pin, including release and accepting
 Type; show profile identity with historical labels unavailable until accepted descriptors are retained, never infer books
@@ -78,8 +78,8 @@ The mounted route and schema are exported by `reading-insights-routes.ts`. Conte
 official `@rezics/client` declarations, callable client and root exports for `readingInsightsOverviewSchema`, including
 `readingInsightsCurrentProgressSchema`, and `library_reading_insights.overview` at `GET /v1/libraryReadingInsights`.
 The installed generated client now exposes `libraryReadingInsights.get` through Kernel composition. The package root
-does not yet export the runtime overview schema; Web uses the existing closed Valibot HTTP-boundary pattern. A local response type, declaration patch or substitute request cannot satisfy this boundary. The panel
-is composed with the all-time/year summary, retained-profile distribution, current-progress and assessment panels by
+does not yet export the runtime overview schema; Web uses the existing closed Valibot HTTP-boundary pattern. A local
+response type, declaration patch or substitute request cannot satisfy this boundary. The panel is composed with the all-time/year summary, retained-profile distribution, current-progress and assessment panels by
 that overview operation. The native receiver is delivered independently of the Web continuation.
 
 ## Coverage, installation and cleanup
@@ -141,7 +141,8 @@ unknowns, repeated completion, cross-year correction, original receipt replay, c
 restoration, last-source cleanup, ranked remainder, partial initialization, bounded backfill and independent
 64/512/4096 retained-source populations. No existing test or frozen acceptance is edited. The typed mounted producer
 is in `reading-insights-routes.ts`; Content owns generated client/declaration/root-export publication. No generator,
-raw-fetch Web adapter or handwritten client delivery is added. The generated client is installed; rendered evidence remains pending.
+raw-fetch Web adapter or handwritten client delivery is added. The generated client is installed; rendered evidence
+remains pending.
 
 Current progress is maintained per retained owner from each session's captured accepting descriptors and native
 operands. Active sessions and abandoned backlog sessions are separate; completed and retired sessions are excluded.

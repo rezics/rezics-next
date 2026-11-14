@@ -12787,5 +12787,6 @@
   "library_insights_value": "有数值（含零）",
   "library_insights_within_profile": "配置组内重复次数",
   "library_insights_year": "完成年份",
-  "library_insights_year_help": "仅计入明确填报在该年结束的实际完成记录。仅有年份的记录不分配月份。"
+  "library_insights_year_help": "仅计入明确填报在该年结束的实际完成记录。仅有年份的记录不分配月份。",
+  "library_insights_unallocated_help": "缺少或不支持结束日期的计数覆盖保留的全部历史，不能分配到此年份。"
 }
