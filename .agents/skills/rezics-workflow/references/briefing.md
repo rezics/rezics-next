@@ -15,6 +15,8 @@ Managers:
       verification briefs; product workers on dev preflight their own. Check current task state before reshape.
 - [ ] Apply its overlap rule when setting dependencies. Name existing tests whose old behaviour the new contract
       replaces; the worker updates them, while frozen acceptance is reconciled by its owner before dispatch.
+- [ ] Confirm cross-owner lifecycle steps against the owner's scoped contract and delivered interface before requiring
+      them in acceptance. Keep permanent takedowns permanent; a newly permitted source is separate from restoration.
 - [ ] Apply [checkout and landing discipline](../../../../docs/development/delivery.md#checkout-and-landing-discipline)
       when splitting control-plane and companion work or assigning a shared module workspace.
 - [ ] Use the configured route, not a model selection copied from old memory. Keep private settings outside Git.
