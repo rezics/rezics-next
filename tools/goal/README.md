@@ -3193,11 +3193,16 @@ than a second wake scheduler.
 the host persists until stopped and exits when its 60-second sweep finds its state directory missing. An untracked
 `<managerDirectory>/<goal>.json` can select a local `pool`, `objective`, `brief`, `effort`, `supermanager` and `limits`;
 otherwise scoped task briefs and a matching local manager pool supply the defaults. Termspaces owns the tmux windows.
-Each manager host starts a loopback WebSocket app-server for its Codex pool and records the process identity. The
-app-server leads its own process group, so its helpers and thread writers share that group. The host stops the group on
-shutdown; a replacement host reclaims every surviving recorded group and waits until it is empty before resuming
-persisted threads, so resume never meets a writer left by the previous host. A record written before this change names a
-shared group, so only its process is stopped. Recovery and actionable inbox wakes match a manager-owned Codex pane
+Each manager host starts a loopback WebSocket app-server for its Codex pool and records its process birth, pool
+identity, executable, environment fingerprint and endpoint in the private state directory. The app-server leads its own
+process group, so its helpers and thread writers share that group. A routine host restart hands off the live server and
+its endpoint; the replacement host adopts it only when the process, pool, account home, executable, environment and
+loopback endpoint all match, including proof that the recorded process owns the listener socket. If the recorded server
+is gone or a bounded reconnect fails, the host stops only that
+verified group and rejoins the stored thread on one new server for the same pool. An explicit provider daemon upgrade
+that replaces the recorded process may therefore require this clean rejoin. Other host shutdowns still stop recorded
+groups and wait until they are empty before removing the registry. A record written before this change names a shared
+group, so only its process is stopped. Recovery and actionable inbox wakes match a manager-owned Codex pane
 semantically only when its command proves the same manager role, `CODEX_HOME`, thread, executable and remaining
 arguments, and its current pane path matches the manager's working directory; only the `--remote` endpoint may differ.
 Tmux's supported quoting wrappers are parsed as literal argv without executing the recorded command. Endpoint repair
@@ -3218,6 +3223,9 @@ executable and configuration directory, interactive window and turn-accounting h
 The Stdio and WebSocket transports share one internal JSON-RPC implementation for request tracking, deadlines,
 notifications, response decoding, initialization and terminal rejection; framing, connection, readiness and owned
 child lifecycle remain with the transports ([control-plane simplification research](research/control-plane-simplification.md)).
+Decision: Goal host restarts hand off the same loopback app-server per pool and adopt only an exact live process and
+private endpoint; a dead or failed attachment gets one bounded same-pool rejoin. The installed Codex daemon is not used
+because its shared inherited environment and remote-management settings do not fit per-pool ownership.
 Decision: ManagerSessions is the durable Goal coordinator; `manager-session-transport.ts` owns the provider connection
 cache, concrete Codex/Claude session requests, viewer argv and window prompt/respawn. Prompt rendering, launch-manifest
 accounting, inbox delivery, renewal and budget stay with ManagerSessions. Extraction tests pin saved-thread ordering,

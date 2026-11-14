@@ -232,6 +232,8 @@ export type ManagerServices = {
   backlogDirectory?: string;
   now?: () => number;
   onAppServerStart?(identity: ProcessIdentity): void;
+  /** Keep the owned app-server process group for the successor host when a restart handoff is active. */
+  handoffAppServersOnClose?: () => boolean;
   onError?: (error: unknown) => void;
 };
 

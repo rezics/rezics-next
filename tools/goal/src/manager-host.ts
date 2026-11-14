@@ -1,6 +1,17 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { chmodSync, closeSync, existsSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readlinkSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -20,6 +31,17 @@ import { ManagerSessions } from './managers.ts';
 import { defaultPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { sameProcess, terminateProcessGroup, type ProcessIdentity } from './process.ts';
+import {
+  appServerEnvironmentFingerprint,
+  appServerEndpointOwnership,
+  attachPool,
+  connectPool,
+  ForeignAppServerEndpointError,
+  isPrivateAppServerEndpoint,
+  selectedAppServerExecutable,
+  type AppServerAttachment,
+  type CodexPool,
+} from './app-server.ts';
 import type { Task } from './types.ts';
 import { activeOrdinaryProofRunner } from './verification.ts';
 import { currentCodeVersion } from './runtime-version.ts';
@@ -220,6 +242,8 @@ export function startOrphanRecoveryTimer(
 }
 
 const appServerRegistryName = 'manager-app-servers.json';
+const appServerHandoffName = 'manager-app-servers-handoff.json';
+type AppServerRegistryEntry = { identity: ProcessIdentity; attachment?: AppServerAttachment };
 
 export type ManagerHostOptions = { terminalProcessSweep?: TerminalProcessSweep };
 
@@ -236,25 +260,225 @@ function isProcessIdentity(value: unknown): value is ProcessIdentity {
   );
 }
 
-function readAppServerRegistry(path: string): ProcessIdentity[] {
+function isAppServerAttachment(value: unknown): value is AppServerAttachment {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const attachment = value as Partial<AppServerAttachment>;
+  return (
+    attachment.version === 1 &&
+    isProcessIdentity(attachment.identity) &&
+    typeof attachment.poolId === 'string' &&
+    Boolean(attachment.poolId) &&
+    typeof attachment.codexHome === 'string' &&
+    Boolean(attachment.codexHome) &&
+    typeof attachment.executable === 'string' &&
+    Boolean(attachment.executable) &&
+    typeof attachment.endpoint === 'string' &&
+    /^[a-f0-9]{64}$/.test(attachment.environmentFingerprint ?? '') &&
+    typeof attachment.selectedExecutablePath === 'string' &&
+    Number.isSafeInteger(attachment.selectedExecutableDevice) &&
+    Number.isSafeInteger(attachment.selectedExecutableInode) &&
+    typeof attachment.processExecutablePath === 'string' &&
+    Number.isSafeInteger(attachment.processExecutableDevice) &&
+    Number.isSafeInteger(attachment.processExecutableInode)
+  );
+}
+
+function sameIdentity(left: ProcessIdentity, right: ProcessIdentity): boolean {
+  return (
+    left.pid === right.pid &&
+    left.start === right.start &&
+    left.boot === right.boot &&
+    left.group === right.group
+  );
+}
+
+function readAppServerRegistry(path: string): AppServerRegistryEntry[] {
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
-    if (!Array.isArray(parsed) || !parsed.every(isProcessIdentity))
-      throw new Error(`Invalid app-server process registry: ${path}`);
-    return parsed;
+    if (!Array.isArray(parsed)) throw new Error(`Invalid app-server process registry: ${path}`);
+    const entries: AppServerRegistryEntry[] = [];
+    for (const value of parsed) {
+      if (isProcessIdentity(value)) {
+        // Older hosts stored only the process identity; those records cannot establish a safe endpoint handoff.
+        entries.push({ identity: value });
+        continue;
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value))
+        throw new Error(`Invalid app-server process registry: ${path}`);
+      const candidate = value as { identity?: unknown; attachment?: unknown };
+      const attachment = candidate.attachment;
+      if (!isProcessIdentity(candidate.identity) || (attachment !== undefined && !isAppServerAttachment(attachment)))
+        throw new Error(`Invalid app-server process registry: ${path}`);
+      if (attachment && !sameIdentity(candidate.identity, attachment.identity))
+        throw new Error(`Mismatched app-server process registry identity: ${path}`);
+      entries.push({
+        identity: candidate.identity,
+        ...(attachment ? { attachment } : {}),
+      });
+    }
+    return entries;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
 }
 
-function writeAppServerRegistry(path: string, identities: ProcessIdentity[]): void {
+function writeAppServerRegistry(path: string, entries: AppServerRegistryEntry[]): void {
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
-    writeFileSync(temporary, JSON.stringify(identities), { mode: 0o600 });
+    writeFileSync(temporary, JSON.stringify(entries), { mode: 0o600 });
     renameSync(temporary, path);
   } finally {
     rmSync(temporary, { force: true });
+  }
+}
+
+function writeAppServerIdentity(path: string, identity: ProcessIdentity): void {
+  const entries = readAppServerRegistry(path).filter((entry) => entry.identity.pid !== identity.pid);
+  entries.push({ identity });
+  writeAppServerRegistry(path, entries);
+}
+
+function writeAppServerAttachment(path: string, attachment: AppServerAttachment): void {
+  const entries = readAppServerRegistry(path).filter((entry) => entry.identity.pid !== attachment.identity.pid);
+  entries.push({ identity: attachment.identity, attachment });
+  writeAppServerRegistry(path, entries);
+}
+
+function removeAppServerIdentity(path: string, identity: ProcessIdentity): void {
+  const entries = readAppServerRegistry(path).filter((entry) => !sameIdentity(entry.identity, identity));
+  writeAppServerRegistry(path, entries);
+}
+
+/** Retire pre-handoff records and dead owners; a complete live attachment is left for exact pool recovery. */
+async function prepareAppServerRegistry(path: string, policy: typeof defaultPolicy.appServer): Promise<void> {
+  const kept: AppServerRegistryEntry[] = [];
+  for (const entry of readAppServerRegistry(path)) {
+    if (!entry.attachment) {
+      await stopRecordedAppServer(entry.identity, policy);
+      continue;
+    }
+    if (!sameProcess(entry.identity)) {
+      // A dead leader can still have thread writers or helpers in its recorded private process group.
+      await stopRecordedAppServer(entry.identity, policy);
+      continue;
+    }
+    kept.push(entry);
+  }
+  writeAppServerRegistry(path, kept);
+}
+
+function processArgs(pid: number): string[] {
+  return readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
+}
+
+function processEnvironment(pid: number): Map<string, string> {
+  return new Map(
+    readFileSync(`/proc/${pid}/environ`, 'utf8')
+      .split('\0')
+      .filter(Boolean)
+      .map((entry) => {
+        const separator = entry.indexOf('=');
+        return [entry.slice(0, separator), entry.slice(separator + 1)] as [string, string];
+      }),
+  );
+}
+
+function appServerProcessProof(pool: CodexPool, attachment: AppServerAttachment): 'adopt' | 'stale' | 'obsolete' | 'refuse' {
+  try {
+    if (!isPrivateAppServerEndpoint(attachment.endpoint)) return 'refuse';
+    if (attachment.environmentFingerprint !== appServerEnvironmentFingerprint(pool)) return 'refuse';
+    if (!sameProcess(attachment.identity)) return 'stale';
+    if (attachment.identity.group !== attachment.identity.pid) return 'refuse';
+    const args = processArgs(attachment.identity.pid);
+    const serverArgument = args.indexOf('app-server');
+    if (
+      serverArgument < 0 ||
+      args[serverArgument + 1] !== '--listen' ||
+      args[serverArgument + 2] !== 'ws://127.0.0.1:0' ||
+      processEnvironment(attachment.identity.pid).get('CODEX_HOME') !== attachment.codexHome
+    )
+      return 'refuse';
+    const executableLink = readlinkSync(`/proc/${attachment.identity.pid}/exe`);
+    const processPath = executableLink.replace(/ \(deleted\)$/, '');
+    const processStat = statSync(`/proc/${attachment.identity.pid}/exe`);
+    if (
+      processPath !== attachment.processExecutablePath ||
+      processStat.dev !== attachment.processExecutableDevice ||
+      processStat.ino !== attachment.processExecutableInode
+    )
+      return 'refuse';
+    const selected = selectedAppServerExecutable(pool);
+    if (selected !== attachment.selectedExecutablePath) return 'obsolete';
+    const selectedStat = statSync(selected);
+    if (
+      selectedStat.dev !== attachment.selectedExecutableDevice ||
+      selectedStat.ino !== attachment.selectedExecutableInode
+    )
+      return 'obsolete';
+    return 'adopt';
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (['ENOENT', 'ESRCH'].includes(code ?? '') && !sameProcess(attachment.identity)) return 'stale';
+    throw error;
+  }
+}
+
+function buildAppServerAttachment(pool: CodexPool, endpoint: string | undefined, identity: ProcessIdentity | undefined): AppServerAttachment | undefined {
+  if (!endpoint || !identity) return undefined;
+  if (!isPrivateAppServerEndpoint(endpoint)) throw new Error(`Refusing non-private app-server endpoint: ${endpoint}`);
+  if (!sameProcess(identity) || identity.group !== identity.pid) return undefined;
+  const args = processArgs(identity.pid);
+  const serverArgument = args.indexOf('app-server');
+  if (
+    serverArgument < 0 ||
+    args[serverArgument + 1] !== '--listen' ||
+    args[serverArgument + 2] !== 'ws://127.0.0.1:0' ||
+    processEnvironment(identity.pid).get('CODEX_HOME') !== pool.codexHome
+  )
+    return undefined;
+  if (appServerEndpointOwnership(identity, endpoint) !== 'owned')
+    throw new Error(`App-server process does not own its loopback endpoint: ${endpoint}`);
+  const processExecutablePath = readlinkSync(`/proc/${identity.pid}/exe`).replace(/ \(deleted\)$/, '');
+  const processExecutable = statSync(`/proc/${identity.pid}/exe`);
+  const selectedExecutablePath = selectedAppServerExecutable(pool);
+  const selectedExecutable = statSync(selectedExecutablePath);
+  return {
+    version: 1,
+    identity,
+    poolId: pool.id,
+    codexHome: pool.codexHome,
+    executable: pool.executable ?? 'codex',
+    endpoint,
+    environmentFingerprint: appServerEnvironmentFingerprint(pool),
+    selectedExecutablePath,
+    selectedExecutableDevice: selectedExecutable.dev,
+    selectedExecutableInode: selectedExecutable.ino,
+    processExecutablePath,
+    processExecutableDevice: processExecutable.dev,
+    processExecutableInode: processExecutable.ino,
+  };
+}
+
+function restartHandoffRequested(stateDirectory: string, codeRetiring: boolean | undefined): boolean {
+  if (codeRetiring) return true;
+  try {
+    const value = JSON.parse(readFileSync(join(stateDirectory, appServerHandoffName), 'utf8')) as {
+      version?: unknown;
+      requestedAt?: unknown;
+      requesterPid?: unknown;
+    };
+    return (
+      value.version === 1 &&
+      Number.isSafeInteger(value.requestedAt) &&
+      Number.isSafeInteger(value.requesterPid) &&
+      Number(value.requesterPid) > 0 &&
+      Date.now() - Number(value.requestedAt) >= 0 &&
+      Date.now() - Number(value.requestedAt) <= 120_000
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }
 
@@ -291,8 +515,8 @@ async function stopRecordedAppServer(identity: ProcessIdentity, policy: typeof d
 }
 
 export async function stopRecordedAppServers(path: string, policy: typeof defaultPolicy.appServer): Promise<void> {
-  const identities = readAppServerRegistry(path);
-  for (const identity of identities) await stopRecordedAppServer(identity, policy);
+  const entries = readAppServerRegistry(path);
+  for (const entry of entries) await stopRecordedAppServer(entry.identity, policy);
   rmSync(path, { force: true });
 }
 
@@ -309,6 +533,61 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
   let registrySafe = false;
   let managers!: ManagerSessions;
   const registryPath = join(runtime.stateDirectory, appServerRegistryName);
+  const handoffPath = join(runtime.stateDirectory, appServerHandoffName);
+  const handoffAppServers = () => restartHandoffRequested(runtime.stateDirectory, runtime.codeRetirement?.retiring);
+  const connectManagerPool = async (
+    pool: CodexPool,
+    onStart?: (identity: ProcessIdentity) => void,
+  ) => {
+    const entries = readAppServerRegistry(registryPath);
+    const samePoolId = entries.filter((entry) => entry.attachment?.poolId === pool.id);
+    if (samePoolId.length > 1) throw new Error(`Multiple recorded app-servers for manager pool ${pool.id}`);
+    const entry = samePoolId[0];
+    let attachment = entry?.attachment;
+    if (attachment) {
+      if (
+        attachment.codexHome !== pool.codexHome ||
+        attachment.executable !== (pool.executable ?? 'codex')
+      )
+        throw new Error(`Refusing manager pool identity change for ${pool.id}`);
+      const proof = appServerProcessProof(pool, attachment);
+      if (proof === 'refuse') throw new Error(`Refusing unverified manager app-server for pool ${pool.id}`);
+      if (proof === 'stale') {
+        await stopRecordedAppServer(attachment.identity, policy.appServer);
+        removeAppServerIdentity(registryPath, attachment.identity);
+        attachment = undefined;
+      } else if (proof === 'obsolete') {
+        await stopRecordedAppServer(attachment.identity, policy.appServer);
+        removeAppServerIdentity(registryPath, attachment.identity);
+        attachment = undefined;
+      } else {
+        try {
+          const adopted = await attachPool(pool, attachment, policy.appServer);
+          writeAppServerAttachment(registryPath, attachment);
+          return adopted;
+        } catch (error) {
+          if (error instanceof ForeignAppServerEndpointError) throw error;
+          // One bounded same-pool recovery: retire only the proven old group, then launch once and resume the stored
+          // thread. A foreign endpoint or changed environment is refused before this recovery path.
+          console.error(`Manager app-server reattach failed for ${pool.id}; starting one clean rejoin: ${String(error)}`);
+          await stopRecordedAppServer(attachment.identity, policy.appServer);
+          removeAppServerIdentity(registryPath, attachment.identity);
+          attachment = undefined;
+        }
+      }
+    }
+    const diagnosticsPath = join(
+      runtime.stateDirectory,
+      'manager-app-servers',
+      `${createHash('sha256').update(pool.id).digest('hex')}.log`,
+    );
+    const created = runtime.managerServices.connect
+      ? await runtime.managerServices.connect(pool, onStart)
+      : await connectPool(pool, onStart, process.env, policy.appServer, diagnosticsPath);
+    const createdAttachment = buildAppServerAttachment(pool, created.endpoint, created.identity);
+    if (createdAttachment) writeAppServerAttachment(registryPath, createdAttachment);
+    return created;
+  };
   const server = createServer((socket) => {
     const lines = createInterface({ input: socket });
     socket.once('close', () => lines.close());
@@ -426,15 +705,20 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
     }
   };
   try {
-    await stopRecordedAppServers(registryPath, policy.appServer);
+    await prepareAppServerRegistry(registryPath, policy.appServer);
     registrySafe = true;
+    rmSync(handoffPath, { force: true });
     const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory, undefined, policy.inbox);
     const onAppServerStart = runtime.managerServices.onAppServerStart;
     managers = new ManagerSessions(runtime.db, inbox, {
       ...runtime.managerServices,
+      connect: connectManagerPool,
+      handoffAppServersOnClose: handoffAppServers,
       onAppServerStart(identity) {
-        const records = readAppServerRegistry(registryPath).filter((record) => record.pid !== identity.pid);
-        records.push(identity);
+        const current = readAppServerRegistry(registryPath);
+        const existing = current.find((record) => sameIdentity(record.identity, identity));
+        const records = current.filter((record) => record.identity.pid !== identity.pid);
+        records.push(existing ?? { identity });
         writeAppServerRegistry(registryPath, records);
         onAppServerStart?.(identity);
       },
@@ -590,9 +874,17 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
     if (stateTimer) clearInterval(stateTimer);
     if (codePoll) clearInterval(codePoll);
     closeServer();
-    if (managers) await managers.close();
-    rmSync(runtime.managerSocket, { force: true });
-    if (registrySafe) rmSync(registryPath, { force: true });
-    lease.release();
+    const handoff = handoffAppServers();
+    try {
+      if (managers) await managers.close();
+    } finally {
+      rmSync(runtime.managerSocket, { force: true });
+      try {
+        if (registrySafe && !handoff) await stopRecordedAppServers(registryPath, policy.appServer);
+      } finally {
+        if (!handoff) rmSync(handoffPath, { force: true });
+        lease.release();
+      }
+    }
   }
 }

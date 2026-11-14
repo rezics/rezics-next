@@ -462,9 +462,12 @@ export class ManagerSessionTransport {
     this.unsubscribers = [];
   }
   async close(): Promise<void> {
+    const handoff = this.services.handoffAppServersOnClose?.() === true;
     for (const client of this.pools.values()) {
       try {
-        await (await client).close();
+        const connected = await client;
+        if (handoff && connected.detach) await connected.detach();
+        else await connected.close();
       } catch {}
     }
     this.pools.clear();
