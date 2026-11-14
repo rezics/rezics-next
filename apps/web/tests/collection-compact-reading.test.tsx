@@ -2,6 +2,7 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { m } from '../src/paraglide/messages.js';
+import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import type { CollectionReadMember } from '../src/library/collection-member-details';
 import type { CollectionMember } from '../src/library/reads';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
@@ -22,10 +23,10 @@ const address = (layout: 'list' | 'grid', cursor = 'next+/=') => {
   return `${route.pathname}${route.search}`;
 };
 const note = `  Supplied note\n\n\t${'界'.repeat(600)}\n `;
-const members: CollectionMember[] = [2, 3].map((n) => ({
+const members: CollectionMember[] = [2, 3, 5].map((n) => ({
   id: id(n),
   addedAt: '2026-11-01T00:00:00Z',
-  note: n === 2 ? note : 'Second occurrence note',
+  note: n === 2 ? note : n === 3 ? 'Second occurrence note' : 'Last duplicate occurrence note',
   subject: { id: id(4), type: 'work', types: ['work'], label: 'Identical title', typeLabel: 'Book', cover: null },
   facts: {
     creator: [10, 11, 12].map((n) => ({ kind: 'item', id: id(n), labels: { en: 'Same name' } })),
@@ -41,6 +42,8 @@ for (const layout of ['list', 'grid'] as const) {
     const { Window } = await import(
       Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
     );
+    const previousLocale = getLocale();
+    setLocale('en', { reload: false });
     const currentHref = address(layout);
     const alternateLayout = layout === 'list' ? 'grid' : 'list';
     const window = new Window({ url: `https://rezics.test${currentHref}`, width: 390 });
@@ -58,6 +61,13 @@ for (const layout of ['list', 'grid'] as const) {
     );
     for (const [key, value] of Object.entries(globals))
       Object.defineProperty(globalThis, key, { configurable: true, value });
+    const scrolled: HTMLElement[] = [];
+    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value(this: HTMLElement) {
+        scrolled.push(this);
+      },
+    });
     const copied: string[] = [];
     let failCopy = false;
     let finishCopy: (() => void) | undefined;
@@ -85,12 +95,14 @@ for (const layout of ['list', 'grid'] as const) {
       href = currentHref,
       returnSource = source,
       view: 'list' | 'grid' = layout,
+      pageReady = true,
     ) =>
       act(async () =>
         root.render(
           createElement(CollectionReadMembers, {
             members: rows,
             layout: view,
+            pageReady,
             currentHref: href,
             returnSource,
             listPresentations: presentations,
@@ -103,22 +115,44 @@ for (const layout of ['list', 'grid'] as const) {
       );
     const openers = () => [...host.querySelectorAll<HTMLButtonElement>('[data-collection-detail-opener]')];
     const detail = () => host.querySelector<HTMLElement>('[data-slot="member-reading-detail"]');
-    const open = async (index: number) => {
+    const open = async (index: number, input: 'pointer' | 'keyboard' = 'keyboard') => {
       const opener = openers()[index]!;
-      opener.focus();
-      await act(async () => opener.click());
+      if (input === 'keyboard') opener.focus();
+      const focused = window.document.activeElement;
+      const scrollCount = scrolled.length;
+      // A keyboard-generated button click has detail 0; pointer activation has detail 1.
+      await act(async () =>
+        opener.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: input === 'pointer' ? 1 : 0 })),
+      );
       expect(opener.getAttribute('aria-expanded')).toBe('true');
-      expect(window.document.activeElement).toBe(detail());
+      expect(window.document.activeElement).toBe(focused);
+      expect(scrolled).toHaveLength(scrollCount);
+      const item = opener.closest('[data-slot="list-row"], [data-slot="collection-member-card"]')!;
+      expect(detail()!.closest('[data-slot="list-row"], [data-slot="collection-member-card"]')).toBe(item);
+      expect(detail()!.closest('[class*="line-clamp"], [class*="overflow-y-auto"]')).toBeNull();
+      if (item.nextElementSibling)
+        expect(
+          detail()!.compareDocumentPosition(item.nextElementSibling) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+        ).not.toBe(0);
+      expect(opener.compareDocumentPosition(detail()!) & window.Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      if (layout === 'grid' && item.querySelector('[data-slot="cover-card"]'))
+        expect(detail()!.closest('[data-slot="cover-card"]')).toBe(item.querySelector('[data-slot="cover-card"]'));
+      expect(host.querySelectorAll('[data-slot="member-reading-detail"]')).toHaveLength(1);
       return opener;
     };
-    const close = async () => act(async () => detail()!.querySelector<HTMLButtonElement>('button')!.click());
+    const close = async () =>
+      act(async () => {
+        const control = detail()!.querySelector<HTMLButtonElement>('button')!;
+        control.focus();
+        control.click();
+      });
     try {
       await render();
       expect(host.querySelector('[data-slot="collection-member-note"]')).toBeNull();
       expect(host.querySelector('[data-slot="cover-card-actions-row"]')).toBeNull();
       expect(host.querySelectorAll('section[aria-label="Members"]')).toHaveLength(1);
-      expect(openers()).toHaveLength(2);
-      expect(host.querySelectorAll(layout === 'list' ? 'ul > li' : '[role="listitem"]')).toHaveLength(2);
+      expect(openers()).toHaveLength(3);
+      expect(host.querySelectorAll(layout === 'list' ? 'ul > li' : '[role="listitem"]')).toHaveLength(3);
       const first = await open(0);
       expect(detail()!.querySelector('[data-slot="collection-member-note"]')!.textContent).toBe(note);
       expect(detail()!.querySelectorAll('dl > div')).toHaveLength(12);
@@ -162,23 +196,51 @@ for (const layout of ['list', 'grid'] as const) {
       expect(host.querySelectorAll('[data-slot="member-reading-detail"]')).toHaveLength(1);
       expect(detail()!.textContent).toContain('Second occurrence note');
       expect(detail()!.textContent).not.toContain(note);
+      detail()!.querySelector<HTMLButtonElement>('button')!.focus();
       await act(async () =>
         detail()!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
       );
       expect(window.document.activeElement).toBe(second);
 
-      // Address, native observation and layout replacement retire detail without restoring stale opener focus.
+      // Opening another occurrence replaces the previous detail, even for the same Subject.
+      await open(0);
+      const middle = await open(1);
+      expect(first.getAttribute('aria-expanded')).toBe('false');
+      expect(detail()!.textContent).toContain('Second occurrence note');
+      const last = await open(2, 'pointer');
+      expect(window.document.activeElement).toBe(middle);
+      expect(middle.getAttribute('aria-expanded')).toBe('false');
+      expect(detail()!.textContent).toContain('Last duplicate occurrence note');
+      expect(detail()!.textContent).not.toContain('Second occurrence note');
+      expect(scrolled).toHaveLength(0);
+      await close();
+      expect(window.document.activeElement).toBe(last);
+      await open(2);
+      await act(async () => last.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+      expect(detail()).toBeNull();
+      expect(window.document.activeElement).toBe(last);
+
+      // Page, reader, native observation, layout, locale and pending/failed admission retire the detail.
       for (const replace of [
         () => render(members, address(layout, 'other-cursor')),
         () => render(members, currentHref, {}),
         () => render(members.map((member) => ({ ...member }))),
         () => render(members, address(alternateLayout), source, alternateLayout),
+        async () => {
+          setLocale('ja', { reload: false });
+          await render();
+        },
+        () => render(members, currentHref, source, layout, false),
       ]) {
+        setLocale('en', { reload: false });
         await render();
         const opener = await open(0);
         await replace();
         expect(detail()).toBeNull();
         expect(window.document.activeElement).not.toBe(opener);
+        setLocale('en', { reload: false });
+        await render();
+        expect(detail()).toBeNull();
       }
       // A clipboard completion belongs to the retired detail only.
       await render();
@@ -231,6 +293,7 @@ for (const layout of ['list', 'grid'] as const) {
       expect(detail()!.textContent).toContain(note);
     } finally {
       await act(async () => root.unmount());
+      setLocale(previousLocale, { reload: false });
       await window.happyDOM.close();
       for (const [key, descriptor] of previous) {
         if (descriptor) Object.defineProperty(globalThis, key, descriptor);

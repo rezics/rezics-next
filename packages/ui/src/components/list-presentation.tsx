@@ -9,6 +9,7 @@ import {
   type ListPresentation,
 } from './cover.tsx';
 import { ContentItem, ContentItemHeading } from './content-item.tsx';
+import { independentControlsClassName } from './content-interaction.ts';
 import { ListRow, ListRowControl, ListRowLink } from './list-row.tsx';
 import { CoverCard, type CoverCardProps } from './cover-card.tsx';
 import { Button } from '../shadcn/button.tsx';
@@ -205,14 +206,14 @@ export function MemberReadingItem({
           </ListRowLink>
         )}
         {cover && (
-          <ListRowControl data-content-item-slot="visual" className="shrink-0">
+          <div data-content-item-slot="visual" className={cn('shrink-0', independentControlsClassName)}>
             <div
               data-slot="member-list-row-cover"
               className={cn('shrink-0', presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24')}
             >
               <Cover {...cover} size="fill" decorative />
             </div>
-          </ListRowControl>
+          </div>
         )}
         <div className="min-w-0 flex-1 @min-[40rem]/content-item:grid @min-[40rem]/content-item:grid-cols-[minmax(0,1fr)_fit-content(40%)] @min-[40rem]/content-item:items-start @min-[40rem]/content-item:gap-x-4">
           <div className="min-w-0">
@@ -224,12 +225,15 @@ export function MemberReadingItem({
             >
               {title}
             </ContentItemHeading>
-            <ListRowControl
+            <div
               data-content-item-slot="metadata"
-              className="mt-2 min-w-0 text-[13px] leading-snug text-muted-foreground sm:text-sm"
+              className={cn(
+                'mt-2 min-w-0 text-[13px] leading-snug text-muted-foreground sm:text-sm',
+                independentControlsClassName,
+              )}
             >
               <div className="line-clamp-4 min-w-0 w-full space-y-1">{metadata}</div>
-            </ListRowControl>
+            </div>
             <p data-slot="collection-member-position" className="mt-2 line-clamp-1 text-xs text-muted-foreground">
               {position}
             </p>

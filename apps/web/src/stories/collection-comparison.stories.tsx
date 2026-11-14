@@ -24,7 +24,11 @@ const members: CollectionMember[] = [
   ...[2, 3].map((n) => ({
     id: id(n),
     addedAt: '2026-10-01T00:00:00Z',
-    note: n === 2 ? 'Read this occurrence first.' : 'Revisit this occurrence later.',
+    note:
+      n === 2
+        ? 'Read this occurrence first. ' +
+          'Keep the complete supplied note beside its original occurrence. '.repeat(12).trim()
+        : 'Revisit this occurrence later.',
     subject: { id: id(4), type: 'schema:Book', types: ['schema:Book'], label: 'Identical title', cover: null },
     facts:
       n === 2
@@ -236,7 +240,11 @@ function boundedWidth(canvasElement: HTMLElement) {
   expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 
-async function inspectOccurrence(canvasElement: HTMLElement, occurrence: string) {
+async function inspectOccurrence(
+  canvasElement: HTMLElement,
+  occurrence: string,
+  input: 'pointer' | 'keyboard' = 'pointer',
+) {
   const item = canvasElement.querySelector<HTMLElement>(
     `[data-collection-members] [data-collection-member-id="${occurrence}"]`,
   )!;
@@ -256,13 +264,21 @@ async function inspectOccurrence(canvasElement: HTMLElement, occurrence: string)
     bounds.top + bounds.height / 2,
   );
   await expect(hit === opener || opener.contains(hit)).toBe(true);
-  await userEvent.pointer([
-    { keys: '[MouseLeft>]', target: opener },
-    { keys: '[/MouseLeft]', target: opener },
-  ]);
+  const view = canvasElement.ownerDocument.defaultView!;
+  const scrollY = view.scrollY;
+  if (input === 'keyboard') {
+    opener.focus();
+    await userEvent.keyboard('{Enter}');
+  } else {
+    await userEvent.pointer([
+      { keys: '[MouseLeft>]', target: opener },
+      { keys: '[/MouseLeft]', target: opener },
+    ]);
+  }
   const detail = await waitFor(() => {
     const current = canvasElement.querySelector<HTMLElement>('[data-slot="member-reading-detail"]')!;
-    expect(current).toHaveFocus();
+    expect(opener).toHaveFocus();
+    expect(item.contains(current)).toBe(true);
     expect(current.querySelector('[data-collection-member-id]')).toHaveAttribute(
       'data-collection-member-id',
       occurrence,
@@ -271,6 +287,8 @@ async function inspectOccurrence(canvasElement: HTMLElement, occurrence: string)
     return current;
   });
   await expect(canvasElement.querySelectorAll('[data-slot="member-reading-detail"]')).toHaveLength(1);
+  await expect(Math.abs(view.scrollY - scrollY)).toBeLessThanOrEqual(1);
+  await expect(detail.getBoundingClientRect().bottom).toBeLessThanOrEqual(item.getBoundingClientRect().bottom + 1);
   boundedWidth(canvasElement);
   return { opener, detail };
 }
@@ -344,6 +362,13 @@ async function recoverExample(canvasElement: HTMLElement, missingDefinitions = f
   await expect(mountedAddress(canvasElement)).toBe(beforeRecovery);
   // Establish actual recovered rows and cards, including when List is already the story's initial choice.
   await selectPresentation(canvasElement, 'list');
+  const first = await inspectOccurrence(canvasElement, id(2), 'keyboard');
+  await userEvent.tab();
+  await expect(within(first.detail).getByRole('button', { name: m.collection_reading_close() })).toHaveFocus();
+  await userEvent.keyboard('{Escape}');
+  await expect(first.opener).toHaveFocus();
+  await expect(first.opener).toHaveAttribute('aria-expanded', 'false');
+  await expect(canvasElement.querySelector('[data-slot="member-reading-detail"]')).toBeNull();
   await selectPresentation(canvasElement, 'grid');
   const references: string[] = [];
   const referenceIds: string[] = [];
