@@ -4,7 +4,7 @@ import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts'
 import {
   discoveryDocumentActions,
   discoveryDocumentId,
-  mixedDiscoveryIndexDefinition,
+  discoveryIndexDefinition,
 } from '../../src/search/discovery-documents.ts';
 import { requiresAdvancedDiscoverySearch } from '../../src/search/discovery-request.ts';
 import { readDiscoveryEngineResult } from '../../src/search/discovery-query.ts';
@@ -35,13 +35,7 @@ const snapshot = {
   position: 9007199254740997n,
   accounts: [{ id, revision: 9007199254740995n, accountKind: 'actor' as const, handle: null, displayName: 'Reader' }],
 };
-const [action] = discoveryDocumentActions(
-  registry,
-  { owner: 'accounts', snapshot },
-  [key],
-  undefined,
-  'mixed-public-v1',
-);
+const [action] = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, [key], undefined);
 if (action?.op !== 'index') throw new Error('Expected projection');
 const document = action.document;
 const index = 'test-discovery-g1';
@@ -56,7 +50,7 @@ const plan = { sort: 'id' as const, size: 3, filter: { match_all: {} } };
 
 test('mixed decoder preserves exact native Account revision and tagged identity without a public total', () => {
   expect(document).toMatchObject({
-    document_format: 2,
+    document_format: 1,
     identity: action.id,
     names: ['Reader'],
     descriptions: [],
@@ -74,12 +68,12 @@ test('mixed decoder preserves exact native Account revision and tagged identity 
       },
     ],
   });
-  expect(mixedDiscoveryIndexDefinition().mappings._meta).toMatchObject({
-    discovery_document_format: 2,
+  expect(discoveryIndexDefinition().mappings._meta).toMatchObject({
+    discovery_document_format: 1,
     comparator: 'mixed-public-v1',
   });
   for (const source of [
-    { ...document, document_format: 1 },
+    { ...document, document_format: 2 },
     { ...document, identity: id },
     { ...document, revision: '09007199254740995' },
     { ...document, descriptions: ['private biography'] },
@@ -108,6 +102,7 @@ test('mixed continuation retains a raw consumed prefix without an engine frontie
     retained: { execution: 'actual-execution-locator', consumed: 2 },
     queried: {
       consumer: {
+        catalogue: null,
         physicalTarget: index,
         incarnation: 'native-uuid',
         consumerGeneration: '1',

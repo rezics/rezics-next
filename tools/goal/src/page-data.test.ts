@@ -580,7 +580,7 @@ test('fresh incomplete seed artifacts permit route checks while boot failures an
     const artifactBytes = '{"published":507,"omissions":[{"code":"legacy-candidate-not-exact"}]}';
     writeFileSync(artifact, artifactBytes);
     const handoff = `Cross-media seed artifact handoff ${JSON.stringify({
-      version: 2,
+      version: 1,
       state: 'publication-incomplete',
       artifact,
       artifactSha256: createHash('sha256').update(artifactBytes).digest('hex'),
@@ -589,6 +589,9 @@ test('fresh incomplete seed artifacts permit route checks while boot failures an
     const seed = pageDataSeedStatus(1, `${handoff}\nCross-media seed publication incomplete`, artifact);
     expect(seed).toEqual({ status: 'publication-incomplete', omissions: 1 });
     if (!seed) throw new Error('expected the fresh incomplete artifact handoff');
+    expect(() => pageDataSeedStatus(1, handoff.replace('"version":1', '"version":2'), artifact)).toThrow(
+      'did not match this fresh result',
+    );
     expect(pageDataSeedStatus(0, 'Cross-media seed completed', artifact)).toBeUndefined();
     expect(() => pageDataSeedStatus(1, 'Error: issuer boot failed', artifact)).toThrow(PageDataStackError);
     expect(() => pageDataSeedStatus(1, handoff, `${artifact}.stale`)).toThrow('did not match this fresh result');

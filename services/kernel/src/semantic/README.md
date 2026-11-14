@@ -2756,10 +2756,10 @@ sealed request replay/conflict rules apply. `POST .../:root:activate` takes
 root. The CAS and `com.rezics.definitions.catalogue.activated.v1` invalidation commit
 together. Building another root leaves the old head usable; old immutable pins remain
 readable after activation. The bounded Release1 publication, activation, historical
-read and construction paths retain their own original head and meaning. The explicit
-`legacyReleaseKinds` adapter accepts at most 100 selected IDs within one original
-bounded Release1, uses the original `compatibilityKind`, and never fabricates a
-catalogue root, profile or changed historical digest.
+read and construction paths retain their own original head and meaning. Kind resolution
+uses the canonical catalogue; immutable historical releases and their digests remain readable.
+Native head, Kind and build-status reads require the stored canonical build pin; a superseded pin remains
+historical evidence and is unavailable until the coordinated catalogue rebuild, never relabelled in a response.
 
 `createNativeDefinitionCatalogue({pool,access})` is the actual mounted request reader.
 It imports the native Actor and Access accounting port. Native Access preparation,

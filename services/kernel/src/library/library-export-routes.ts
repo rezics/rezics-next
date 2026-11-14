@@ -8,13 +8,13 @@ import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { createLibraryExport, exportAuthorityTypes, type LibraryExportDependencies } from './library-export.ts';
-import { exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
+import { exportSections } from './library-export-format.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String({ format: 'uuid' }) }, closed);
 const text = t.String();
 const nullable = t.Union([text, t.Null()]);
-const sectionV1 = t.Union([
+const sections = t.Tuple([
   t.Literal('entries'),
   t.Literal('labels'),
   t.Literal('assignments'),
@@ -29,91 +29,25 @@ const sectionV1 = t.Union([
   t.Literal('history'),
   t.Literal('occurrences'),
   t.Literal('malEvidence'),
-]);
-const sectionV2 = t.Union([
-  ...sectionV1.anyOf,
   t.Literal('annotations'),
   t.Literal('provenance'),
   t.Literal('journals'),
-]);
-const sectionsV1 = t.Tuple([
-  t.Literal('entries'),
-  t.Literal('labels'),
-  t.Literal('assignments'),
-  t.Literal('sessions'),
-  t.Literal('holdings'),
-  t.Literal('collections'),
-  t.Literal('collectionPins'),
-  t.Literal('bangumiUploads'),
-  t.Literal('bangumiEvidence'),
-  t.Literal('malImports'),
-  t.Literal('units'),
-  t.Literal('history'),
-  t.Literal('occurrences'),
-  t.Literal('malEvidence'),
-]);
-const sectionsV2 = t.Tuple([
-  ...sectionsV1.items,
-  t.Literal('annotations'),
-  t.Literal('provenance'),
-  t.Literal('journals'),
-]);
-const sectionsV3 = t.Tuple([...sectionsV2.items]);
-const sectionsV4 = t.Tuple([
-  ...sectionsV3.items,
   t.Literal('vndbUploads'),
   t.Literal('vndbEvidence'),
   t.Literal('anilistUploads'),
   t.Literal('anilistEvidence'),
+  t.Literal('hostedReading'),
 ]);
-const manifestV1Fields = {
+const manifestFields = {
   format: t.Literal('https://rezics.com/formats/library-export'),
   version: t.Literal(1),
+  coverage: t.Literal('private-library-owner-facts-v1'),
   exportId: text,
   capturedAt: text,
   expiresAt: text,
   privacy: t.Literal('private'),
   completeness: t.Literal('supported-native-facts'),
-  sections: sectionsV1,
-  omissions: t.Record(text, text),
-  fullExport: t.Literal(false),
-};
-const manifestV2Fields = {
-  format: t.Literal('https://rezics.com/formats/library-export'),
-  version: t.Literal(2),
-  coverage: t.Literal('private-library-owner-facts-v2'),
-  exportId: text,
-  capturedAt: text,
-  expiresAt: text,
-  privacy: t.Literal('private'),
-  completeness: t.Literal('supported-native-facts'),
-  sections: sectionsV2,
-  omissions: t.Record(text, text),
-  fullExport: t.Literal(false),
-};
-const manifestV3Fields = {
-  format: t.Literal('https://rezics.com/formats/library-export'),
-  version: t.Literal(3),
-  coverage: t.Literal('private-library-owner-facts-v3'),
-  exportId: text,
-  capturedAt: text,
-  expiresAt: text,
-  privacy: t.Literal('private'),
-  completeness: t.Literal('supported-native-facts'),
-  sections: sectionsV3,
-  omissions: t.Record(text, text),
-  fullExport: t.Literal(false),
-};
-const manifestV4Fields = {
-  format: t.Literal('https://rezics.com/formats/library-export'),
-  version: t.Literal(4),
-  coverage: t.Literal('private-library-owner-facts-v4'),
-  exportId: text,
-  capturedAt: text,
-  expiresAt: text,
-  privacy: t.Literal('private'),
-  completeness: t.Literal('supported-native-facts'),
-  sections: sectionsV4,
+  sections,
   omissions: t.Record(text, text),
   fullExport: t.Literal(false),
 };
@@ -125,26 +59,11 @@ const state = t.Union([
   t.Literal('expired'),
   t.Literal('limit'),
 ]);
-const statusSchema = t.Union([
-  t.Object({ ...manifestV1Fields, state, first: nullable }, closed),
-  t.Object({ ...manifestV2Fields, state, first: nullable }, closed),
-  t.Object({ ...manifestV3Fields, state, first: nullable }, closed),
-  t.Object({ ...manifestV4Fields, state, first: nullable }, closed),
-]);
+const statusSchema = t.Object({ ...manifestFields, state, first: nullable }, closed);
 const sectionTotal = t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed);
-function sectionTotalsV2() {
-  return memoizedValue(sectionTotalsV2, () =>
-    t.Object(Object.fromEntries(exportSectionsV2.map((section) => [section, sectionTotal])), closed),
-  );
-}
-function sectionTotalsV3() {
-  return memoizedValue(sectionTotalsV3, () =>
-    t.Object(Object.fromEntries(exportSectionsV3.map((section) => [section, sectionTotal])), closed),
-  );
-}
-function sectionTotalsV4() {
-  return memoizedValue(sectionTotalsV4, () =>
-    t.Object(Object.fromEntries(exportSectionsV4.map((section) => [section, sectionTotal])), closed),
+function sectionTotals() {
+  return memoizedValue(sectionTotals, () =>
+    t.Object(Object.fromEntries(exportSections.map((section) => [section, sectionTotal])), closed),
   );
 }
 const year = t.Integer({ minimum: 1, maximum: 9999 });
@@ -186,7 +105,14 @@ const timestampFact = t.Union([
     closed,
   ),
 ]);
-const legacyRecord = t.Object({ section: sectionV1 }, { additionalProperties: true });
+const nativeRecord = t.Object(
+  {
+    section: t.Union(
+      exportSections.filter((section) => section !== 'hostedReading').map((section) => t.Literal(section)),
+    ),
+  },
+  { additionalProperties: true },
+);
 const annotationRecord = t.Object(
   {
     section: t.Literal('annotations'),
@@ -236,23 +162,7 @@ const journalRecordFields = {
   completedAt: nullable,
   lastChangedAt: nullable,
 };
-const journalRecordV2 = t.Object(
-  {
-    ...journalRecordFields,
-    journal: t.Object(
-      {
-        sessionId: text,
-        revision: t.Integer({ minimum: 1 }),
-        startDate: nullableDate,
-        finishDate: nullableDate,
-        reflection: nullable,
-      },
-      closed,
-    ),
-  },
-  closed,
-);
-const journalRecordV3 = t.Object(
+const journalRecord = t.Object(
   {
     ...journalRecordFields,
     journal: t.Object(
@@ -299,12 +209,31 @@ const anilistEvidenceRecord = t.Object(
   { section: t.Literal('anilistEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
   closed,
 );
+const hostedReadingRecord = t.Object(
+  {
+    section: t.Literal('hostedReading'),
+    subject_id: text,
+    subject_id_reference: t.Object({ id: text, href: text }, closed),
+    catalogue_id: text,
+    publication_revision_id: text,
+    occurrence_id: text,
+    target_post_id: text,
+    target_revision_id: text,
+    target_sha256: text,
+    bodyLanguage: t.Optional(nullable),
+    document_block_id: nullable,
+    document_offset: t.Union([t.Integer({ minimum: 0, maximum: 2097152 }), t.Null()]),
+    revision: text,
+    changed_at: text,
+  },
+  closed,
+);
 const exportRecord = t.Union([
-  legacyRecord,
+  nativeRecord,
+  hostedReadingRecord,
   annotationRecord,
   provenanceRecord,
-  journalRecordV2,
-  journalRecordV3,
+  journalRecord,
   vndbUploadRecord,
   anilistUploadRecord,
   vndbEvidenceRecord,
@@ -312,39 +241,15 @@ const exportRecord = t.Union([
 ]);
 function finalManifest() {
   return memoizedValue(finalManifest, () =>
-    t.Union([
-      t.Object(
-        { ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) },
-        closed,
-      ),
-      t.Object(
-        {
-          ...manifestV2Fields,
-          rows: t.Integer({ minimum: 0 }),
-          recordBytes: t.Integer({ minimum: 0 }),
-          sectionTotals: sectionTotalsV2(),
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...manifestV3Fields,
-          rows: t.Integer({ minimum: 0 }),
-          recordBytes: t.Integer({ minimum: 0 }),
-          sectionTotals: sectionTotalsV3(),
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...manifestV4Fields,
-          rows: t.Integer({ minimum: 0 }),
-          recordBytes: t.Integer({ minimum: 0 }),
-          sectionTotals: sectionTotalsV4(),
-        },
-        closed,
-      ),
-    ]),
+    t.Object(
+      {
+        ...manifestFields,
+        rows: t.Integer({ minimum: 0 }),
+        recordBytes: t.Integer({ minimum: 0 }),
+        sectionTotals: sectionTotals(),
+      },
+      closed,
+    ),
   );
 }
 function pageSchema() {
@@ -383,31 +288,15 @@ type StatusOutput = Awaited<ReturnType<ExportService['get']>>;
 type PageOutput = Awaited<ReturnType<ExportService['page']>>;
 
 function statusView(value: StatusOutput): Static<typeof statusSchema> {
-  const omissions = { ...value.omissions };
-  switch (value.version) {
-    case 1:
-      return { ...value, sections: [...value.sections], omissions };
-    case 2:
-      return { ...value, sections: [...value.sections], omissions };
-    case 3:
-      return { ...value, sections: [...value.sections], omissions };
-    case 4:
-      return { ...value, sections: [...value.sections], omissions };
-  }
+  return { ...value, sections: [...value.sections], omissions: { ...value.omissions } };
 }
-
 function finalManifestView(value: NonNullable<PageOutput['manifest']>): Static<ReturnType<typeof finalManifest>> {
-  const omissions = { ...value.omissions };
-  switch (value.version) {
-    case 1:
-      return { ...value, sections: [...value.sections], omissions };
-    case 2:
-      return { ...value, sections: [...value.sections], omissions, sectionTotals: { ...value.sectionTotals } };
-    case 3:
-      return { ...value, sections: [...value.sections], omissions, sectionTotals: { ...value.sectionTotals } };
-    case 4:
-      return { ...value, sections: [...value.sections], omissions, sectionTotals: { ...value.sectionTotals } };
-  }
+  return {
+    ...value,
+    sections: [...value.sections],
+    omissions: { ...value.omissions },
+    sectionTotals: { ...value.sectionTotals },
+  };
 }
 
 function pageView(value: PageOutput): Static<ReturnType<typeof pageSchema>> {

@@ -9,7 +9,7 @@ import nodeSchema from '../schema/catalogue-node.json';
 
 export const KIND_FORMAT = 'https://rezics.com/definitions/kind/1';
 export const KIND_REDUCTION = 'https://rezics.com/definitions/kind-reduction/1';
-export const CATALOGUE_FORMAT = 'https://rezics.com/definitions/catalogue/2';
+export const CATALOGUE_FORMAT = 'https://rezics.com/definitions/catalogue/1';
 export const CATALOGUE_NODE_FORMAT = 'https://rezics.com/definitions/catalogue-node/1';
 export const CATALOGUE_LIMITS = Object.freeze({
   declarationBytes: 65536,
@@ -47,7 +47,7 @@ export type PinnedKindDeclaration = Readonly<{
   declarationDigest: string;
   declaration: KindDeclarationV1;
 }>;
-export type CatalogueRootV2 = Readonly<{
+export type CatalogueRootV1 = Readonly<{
   format: typeof CATALOGUE_FORMAT;
   kindSpec: typeof KIND_FORMAT;
   reduction: typeof KIND_REDUCTION;
@@ -245,8 +245,8 @@ export function requireConstructibleKind(declaration: KindDeclarationV1): void {
       'Filter catalogue construction requires the actual native producer; offline activation-ready publication is unsupported',
     );
 }
-export function parseCatalogueRoot(value: unknown): CatalogueRootV2 {
-  return checked<CatalogueRootV2>(value, rootValidator, CATALOGUE_LIMITS.nodeBytes, 'catalogue root');
+export function parseCatalogueRoot(value: unknown): CatalogueRootV1 {
+  return checked<CatalogueRootV1>(value, rootValidator, CATALOGUE_LIMITS.nodeBytes, 'catalogue root');
 }
 export function parseCataloguePin(value: unknown): KindCataloguePin {
   const bytes = catalogueBytes(value);

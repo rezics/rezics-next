@@ -13,7 +13,7 @@ export {
 } from './language.ts';
 export {
   buildCatalogue,
-  compatibilityKind,
+  exactTypeKind,
   lookupCatalogueKind,
   parseKindDeclaration,
   readCatalogueArtifact,

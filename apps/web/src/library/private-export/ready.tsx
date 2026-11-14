@@ -39,12 +39,7 @@ export function ExportReady({
     () =>
       manifest.sections.map((section) => ({
         section,
-        total:
-          manifest.version === 1
-            ? null
-            : manifest.version === 4
-              ? manifest.sectionTotals[section]
-              : manifest.sectionTotals[section as keyof typeof manifest.sectionTotals],
+        total: manifest.sectionTotals[section],
       })),
     [manifest],
   );
@@ -104,9 +99,7 @@ export function ExportReady({
             <li>{m.library_export_manifest_identity({ value: manifest.exportId })}</li>
             <li>{m.library_export_manifest_format({ value: manifest.format })}</li>
             <li>{m.library_export_version({ version: manifest.version })}</li>
-            {manifest.version !== 1 ? (
-              <li>{m.library_export_manifest_coverage({ value: manifest.coverage })}</li>
-            ) : null}
+            <li>{m.library_export_manifest_coverage({ value: manifest.coverage })}</li>
             <li>{m.library_export_completeness({ value: manifest.completeness })}</li>
             <li>
               <code>fullExport: {String(manifest.fullExport)}</code>

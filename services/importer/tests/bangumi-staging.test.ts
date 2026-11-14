@@ -7,9 +7,9 @@ import { tmpdir } from 'node:os';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { runImportCli } from '../src/cli.ts';
 import { Importer } from '../src/importer.ts';
-import { ImportSession, importOwnerIsBusy } from '../src/import-session.ts';
+import { ImportSession, importOwnerIsBusy, readImportProcessIdentity } from '../src/import-session.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
-import { STAGING_ACTIVE_GENERATION, STAGING_INCOMPATIBLE, captureIdentity } from '../src/staging-checkpoint.ts';
+import { STAGING_ACTIVE_GENERATION, STAGING_INCOMPATIBLE, captureFileIdentity } from '../src/staging-checkpoint.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const types = [
@@ -38,8 +38,9 @@ function dump(rows: readonly (typeof types)[number][] = types, rename?: (row: (t
   return rows.map((row) => JSON.stringify(subject(row, rename?.(row) ?? row.name))).join('\n') + '\n';
 }
 
-function identityOf(bytes: string, extra: Partial<Parameters<typeof captureIdentity>[0]> = {}) {
-  return captureIdentity({
+function identityOf(bytes: string, extra: Partial<Parameters<typeof captureFileIdentity>[0]> = {}) {
+  return captureFileIdentity({
+    compression: 'none',
     sha256: createHash('sha256').update(bytes).digest('hex'),
     bytes: Buffer.byteLength(bytes),
     sourceAlias: 'bangumi',
@@ -258,9 +259,13 @@ test('Bangumi checkpoint start treats a live or uninspectable owner as busy, and
     expect(b.acquire('bangumi')).toBe('busy');
     a.release(own);
     expect(importOwnerIsBusy({ pid: process.pid, birth: 'not-a-birth' })).toBe(true);
+    const priorBirth = readImportProcessIdentity().birth.replace(
+      /:[0-9]+$/,
+      (start) => `:${BigInt(start.slice(1)) + 1n}`,
+    );
     a.store.database
       .prepare('INSERT INTO import_owners VALUES(?,?,?,?)')
-      .run('bangumi', process.pid, 'different-birth', 'old');
+      .run('bangumi', process.pid, priorBirth, 'old');
     const reused = a.acquire('bangumi');
     expect(reused).not.toBe('busy');
     if (reused !== 'busy') a.release(reused);

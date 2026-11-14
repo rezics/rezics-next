@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -146,25 +147,32 @@ test('help names dump-set checkpointing and gzip dump-set files are admitted bef
   }
 });
 
-test('gzip Open Library and Wikidata CLI resume convert only the suffix', async () => {
+test('gzip Open Library and gzip/zstd Wikidata CLI resume convert only the suffix', async () => {
   const root = await mkdtemp('/dev/shm/cli-gz-resume-');
   try {
     const key = await account(root);
-    for (const source of ['openlibrary', 'wikidata'] as const) {
-      const dumpPath = join(root, `${source}.gz`);
-      const state = join(root, `${source}.sqlite`);
+    for (const [source, compression] of [
+      ['openlibrary', 'gzip'],
+      ['wikidata', 'gzip'],
+      ['wikidata', 'zstd'],
+    ] as const) {
+      const dumpPath = join(root, `${source}.${compression}`);
+      const state = join(root, `${source}-${compression}.sqlite`);
       const plain =
         source === 'openlibrary'
           ? olLine(1, 'A') + olLine(2, 'B') + olLine(3, 'C') + olLine(4, 'D')
           : wikiDump([wiki(21), wiki(22), wiki(23), wiki(24)]);
-      await writeFile(dumpPath, gzipSync(Buffer.from(plain)), { mode: 0o600 });
+      const encoded =
+        compression === 'gzip' ? gzipSync(Buffer.from(plain)) : spawnSync('/usr/bin/zstd', ['-cq'], { input: plain });
+      if ('status' in encoded) expect(encoded.status).toBe(0);
+      await writeFile(dumpPath, 'stdout' in encoded ? encoded.stdout : encoded, { mode: 0o600 });
       const flags = [
         '--source',
         source,
         '--dump',
         dumpPath,
         '--compression',
-        'gzip',
+        compression,
         '--state',
         state,
         '--api',
@@ -199,10 +207,22 @@ test('gzip Open Library and Wikidata CLI resume convert only the suffix', async 
       const stored = new ImportSession(state, { create: false });
       try {
         expect(stored.store.stagingCheckpoint(source, '1')?.committedOrdinal).toBe(2);
-        expect(stored.store.stagingCheckpoint(source, '1')?.identity.decoderId).toBe('dumps-gzip-v1');
+        expect(stored.store.stagingCheckpoint(source, '1')?.identity.decoderId).toBe(`dumps-${compression}-v1`);
       } finally {
         stored.close();
       }
+      const inspected = await runImportCli([
+        'inspect',
+        '--source',
+        source,
+        '--state',
+        state,
+        '--generation',
+        '1',
+        '--json',
+      ]);
+      expect(inspected.code).toBe(0);
+      expect(JSON.parse(inspected.stdout).generation.checkpoint).toMatchObject({ committedOrdinal: 2, memberCount: 1 });
       const second = wrap(source, () => {});
       const resumed = await runImportCli([...flags, '--resume-staging', '--generation', '1'], {
         fetch: blocked,
@@ -250,7 +270,7 @@ test('dump-set CLI resumes the same generation and a changed budget keeps the ch
     await writeFile(
       manifest,
       JSON.stringify({
-        version: 2,
+        version: 1,
         source: 'openlibrary',
         members: [
           { family: 'author', path: 'authors.txt.gz', compression: 'gzip' },

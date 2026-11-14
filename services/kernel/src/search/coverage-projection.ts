@@ -107,12 +107,8 @@ export function createCoverageProjection(options: ProjectionOptions): Pick<Subje
           return snapshot;
         },
       };
-      const calendarFormat = await readSubjectCalendarMappingFormat(
-        options.search,
-        incarnation.prefix,
-        incarnation.generation,
-      );
-      const creditFormat = await readSubjectCreditMappingFormat(options.search, options.prefix, incarnation.generation);
+      await readSubjectCalendarMappingFormat(options.search, incarnation.prefix, incarnation.generation);
+      await readSubjectCreditMappingFormat(options.search, options.prefix, incarnation.generation);
       const indexer = createSubjectIndexer({
         pool: options.pool,
         search,
@@ -120,8 +116,7 @@ export function createCoverageProjection(options: ProjectionOptions): Pick<Subje
         listing: options.listing,
         index: incarnation.index,
         consumer: incarnation.consumer,
-        ...(calendarFormat === null ? {} : { calendarFormat }),
-        ...(creditFormat === null ? {} : { creditFormat }),
+
         aroundApply: async (_home, envelopes, apply) => {
           const last = envelopes.at(-1)!;
           slot = {

@@ -25,7 +25,7 @@ const binding = {
   request: 'search',
 };
 const state: ConceptBrowseState = {
-  version: 2,
+  version: 1,
   selection: { ...selection, includeChildren: true },
   binding,
   retained: { id: 'retained', revision: '1' },

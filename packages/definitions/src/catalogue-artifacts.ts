@@ -16,8 +16,8 @@ import type { Release } from './portable.ts';
 export function parseKindDeclaration(value: unknown) {
   return nativeCompiler().parseKindDeclaration(value);
 }
-export function compatibilityKind(release: Release, digest: string, typeId: string) {
-  return nativeCompiler().compatibilityKind(release, digest, typeId);
+export function exactTypeKind(release: Release, digest: string, typeId: string) {
+  return nativeCompiler().exactTypeKind(release, digest, typeId);
 }
 export async function buildCatalogue(input: CatalogueBuildInput, store: CatalogueArtifactStore) {
   return nativeCompiler().buildCatalogue(input, store);

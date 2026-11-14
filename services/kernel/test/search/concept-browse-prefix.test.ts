@@ -19,7 +19,7 @@ const binding = {
   principal: 'reader',
   request: 'search',
 };
-const state: ConceptBrowseState = { version: 2, selection, binding, retained: { id: 'retained', revision: '1' } };
+const state: ConceptBrowseState = { version: 1, selection, binding, retained: { id: 'retained', revision: '1' } };
 const request = { subject: newId(0), selection };
 const observation = 'a'.repeat(64);
 const graph: ConceptBrowseSource = {

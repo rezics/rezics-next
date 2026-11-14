@@ -16,7 +16,6 @@ import type {
   DiscoveryOwnerAdapterSlots,
   DiscoveryOwnerKind,
   DiscoveryOwnerKey,
-  DiscoveryOwnerMetadataSummary,
   DiscoveryOwnerRegistration,
   DiscoveryOmittedKind,
   DiscoveryReadContext,
@@ -65,14 +64,8 @@ export type {
   PublicSpaceDiscoverySummary,
 } from './discovery-api.ts';
 
-/** This format is opt-in; legacy Subject IDs and generation receipts retain their meaning. */
+/** Canonical native discovery documents retain all current owner projections. */
 export const DISCOVERY_DOCUMENT_FORMAT = 1;
-/** Successor requires a complete native rebuild; format 1 retains its original reader. */
-export const MIXED_DISCOVERY_DOCUMENT_FORMAT = 2;
-/** Calendar facts are written only to a physical generation using the matching successor mapping. */
-export const MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT = 3;
-/** Calendar and credited-name successor: Subject documents carry complete credit projections. */
-export const MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT = 4;
 export const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
 export const MAX_ACCOUNT_DISCOVERY_BATCH = ACCOUNT_DISCOVERY_BATCH_SIZE;
 
@@ -82,11 +75,6 @@ export function discoveryPartition(id: string): number {
   return partitionOf(route);
 }
 
-/** Compatibility for the earlier projection adapter; native mixed writers use discoveryDocumentId. */
-export function discoveryIdentity(owner: DiscoveryKey['owner'], id: string): string {
-  discoveryPartition(id);
-  return `${owner === 'accounts' ? 'account' : 'subject'}:${id}`;
-}
 export type DiscoveryDocument =
   | { owner: 'semantic'; kind: string; value: IndexedSubject }
   | { owner: 'accounts'; kind: 'account'; value: IndexedAccount };
@@ -170,12 +158,8 @@ export type DiscoverySnapshot =
   | { owner: 'semantic'; snapshot: SubjectSnapshot }
   | { owner: 'accounts'; snapshot: AccountSnapshot };
 type DocumentIdentity = {
-  document_format:
-    | typeof DISCOVERY_DOCUMENT_FORMAT
-    | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT
-    | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT
-    | typeof MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
-  identity?: string;
+  document_format: typeof DISCOVERY_DOCUMENT_FORMAT;
+  identity: string;
   id: string;
   kind: string;
   route: number;
@@ -192,9 +176,9 @@ export type IndexedDiscoveryDocument =
       handle: string | null;
       display_name: string | null;
       revision: string;
-      names?: string[];
-      descriptions?: string[];
-      name_sort?: string | null;
+      names: string[];
+      descriptions: string[];
+      name_sort: string | null;
     });
 export type DiscoveryIndexAction =
   | { op: 'index'; id: string; version: bigint; document: IndexedDiscoveryDocument }
@@ -205,11 +189,7 @@ export type DiscoveryIndexDefinition = {
   settings: Record<string, unknown>;
   mappings: {
     _meta: {
-      discovery_document_format:
-        | typeof DISCOVERY_DOCUMENT_FORMAT
-        | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT
-        | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT
-        | typeof MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT;
+      discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT;
       identity?: string;
       name_sort_format: number;
       document_identity: string;

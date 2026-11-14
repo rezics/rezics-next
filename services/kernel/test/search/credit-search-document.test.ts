@@ -2,11 +2,8 @@ import { expect, test } from 'bun:test';
 import { readCreditIndexSnapshot } from '../../src/search/credit-index.ts';
 import { creditSearchFields } from '../../src/search/credit-search-document.ts';
 import type { CreditSearchEntry, CreditSearchProjection } from '../../src/search/credit-search.ts';
-import { discoverySubjectActions, documentActions } from '../../src/search/document.ts';
-import {
-  mixedCreditDiscoveryIndexDefinition,
-  mixedDiscoveryDocumentCodec,
-} from '../../src/search/discovery-documents.ts';
+import { documentActions } from '../../src/search/document.ts';
+import { discoveryIndexDefinition, hasDiscoveryDocumentFormat } from '../../src/search/discovery-documents.ts';
 import { readSubjectCreditMappingFormatForIndex, subjectIndexDefinition } from '../../src/search/indices.ts';
 import type { OpenSearch } from '../../src/search/opensearch.ts';
 import {
@@ -63,7 +60,7 @@ test('only a complete projection publishes names; every other state is an explic
   expect(creditSearchFields(undefined)).toEqual({ credit_search_complete: false, credited_names: [] });
 });
 
-test('credit fields are written only for credit-successor generations and never change legacy documents', () => {
+test('canonical Subject documents always preserve complete credited-name projections', () => {
   const id = work;
   const subject: IndexedSubject = {
     id,
@@ -82,25 +79,17 @@ test('credit fields are written only for credit-successor generations and never 
     subjects: [subject],
     creditSearch: new Map([[id, complete]]),
   };
-  const legacy = documentActions(snapshot, [id])[0]!;
-  expect(legacy.op === 'index' && 'credited_names' in legacy.document).toBe(false);
-  const successor = documentActions(snapshot, [id], undefined, undefined, 1)[0]!;
+  const successor = documentActions(snapshot, [id])[0]!;
   expect(successor.op === 'index' && successor.document).toMatchObject({
     credit_search_complete: true,
     credited_names: [{ targetId: person, name: { value: 'Ada Writer' } }],
   });
-  const family = discoverySubjectActions(snapshot, [id], undefined, undefined, 1)[0]!;
-  expect(family.op === 'index' && family.document).toMatchObject({
-    family: 'subject',
-    credit_search_complete: true,
-    credited_names: [{ targetId: person }],
-  });
 });
 
-test('the discovery successor is its own codec and index-only reads attach one projection per visible Subject', async () => {
-  const definition = mixedCreditDiscoveryIndexDefinition();
-  expect(mixedDiscoveryDocumentCodec(definition.mappings)).toBe('mixed-credit-v1');
-  expect(definition.mappings._meta.discovery_document_format).toBe(4);
+test('canonical discovery mapping and index-only reads attach one projection per visible Subject', async () => {
+  const definition = discoveryIndexDefinition();
+  expect(hasDiscoveryDocumentFormat(definition.mappings)).toBe(true);
+  expect(definition.mappings._meta.discovery_document_format).toBe(1);
   expect(definition.mappings.properties).toMatchObject({
     credit_search_complete: { type: 'boolean' },
     credited_names: { type: 'nested' },
@@ -124,9 +113,9 @@ test('the discovery successor is its own codec and index-only reads attach one p
   expect(snapshot.creditSearch!.get(work)).toEqual({ state: 'unsupported' });
 });
 
-test('credit writer selection follows the immutable physical mapping and leaves legacy generations unchanged', async () => {
+test('canonical writer mapping admission refuses missing credited-name fields', async () => {
   const index = 'credit-test-subjects-g4';
-  let mapping: unknown = mixedCreditDiscoveryIndexDefinition().mappings;
+  let mapping: unknown = discoveryIndexDefinition().mappings;
   const search = {
     request: async (method: string, path: string) => {
       expect(method).toBe('GET');
@@ -135,8 +124,8 @@ test('credit writer selection follows the immutable physical mapping and leaves 
     },
   } as unknown as OpenSearch;
   expect(await readSubjectCreditMappingFormatForIndex(search, index)).toBe(1);
-  mapping = subjectIndexDefinition().mappings;
-  expect(await readSubjectCreditMappingFormatForIndex(search, index)).toBeNull();
+  mapping = { ...(subjectIndexDefinition().mappings as object), _meta: {} };
+  await expect(readSubjectCreditMappingFormatForIndex(search, index)).rejects.toThrow('canonical');
 });
 
 function subject(id: string): IndexedSubject {

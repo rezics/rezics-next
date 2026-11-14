@@ -118,7 +118,7 @@ export function createScopePreparation(
   async function step(record: ScopePreparationRecord, deadline: number, work: ScopeWork): Promise<void> {
     if (record.definition.kind === 'concept') {
       const state: ConceptBrowseState = {
-        version: 2,
+        version: 1,
         selection: record.definition.selection,
         binding: record.definition.binding,
         retained: { id: record.scope_id, revision: record.revision },

@@ -250,8 +250,8 @@ export async function startSearchIndexing(options: {
         if (stopped) return;
         const prepared = await Promise.allSettled(
           liveGenerations.map(async (generation) => {
-            const calendarFormat = await readSubjectCalendarMappingFormat(search, options.prefix, generation);
-            const creditFormat = await readSubjectCreditMappingFormat(search, options.prefix, generation);
+            await readSubjectCalendarMappingFormat(search, options.prefix, generation);
+            await readSubjectCreditMappingFormat(search, options.prefix, generation);
             return createSubjectIndexer({
               pool: options.pool,
               search,
@@ -259,8 +259,7 @@ export async function startSearchIndexing(options: {
               listing: options.listing,
               index: subjectIndexName(options.prefix, generation),
               consumer: subjectConsumer(options.prefix, generation),
-              ...(calendarFormat === null ? {} : { calendarFormat }),
-              ...(creditFormat === null ? {} : { creditFormat }),
+
               writer: createSearchWriterGuard({
                 consumer: subjectConsumer(options.prefix, generation),
                 pool: options.pool,
@@ -268,8 +267,6 @@ export async function startSearchIndexing(options: {
                 source: options.source,
                 listing: options.listing,
                 index: subjectIndexName(options.prefix, generation),
-                ...(calendarFormat === null ? {} : { calendarFormat }),
-                ...(creditFormat === null ? {} : { creditFormat }),
               }),
               ...(options.publicPreparation ? { aroundApply: options.publicPreparation.writer(generation) } : {}),
             });
@@ -543,14 +540,16 @@ export function startDiscoveryIndexing(options: {
         if (
           reviewSource &&
           registry.ownerAdapters?.review?.readiness === 'ready' &&
-          (await withSearchConnection(options.pool, async (client) =>
-            (
-              await client.query(
-                `SELECT 1 FROM search.discovery_population
+          (await withSearchConnection(
+            options.pool,
+            async (client) =>
+              (
+                await client.query(
+                  `SELECT 1 FROM search.discovery_population
                WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND owner='review'`,
-                [target.prefix, target.generation],
-              )
-            ).rowCount === 1,
+                  [target.prefix, target.generation],
+                )
+              ).rowCount === 1,
           ))
         ) {
           if (stopped || paused) return;
@@ -608,7 +607,13 @@ export function startDiscoveryIndexing(options: {
     const target = retiring.find((row) => row.generation > lastRetirement) ?? retiring[0];
     if (!target) return;
     lastRetirement = target.generation;
-    await retireDiscovery(options.pool, search, target, generations.find((row) => row.state === 'active'), turn);
+    await retireDiscovery(
+      options.pool,
+      search,
+      target,
+      generations.find((row) => row.state === 'active'),
+      turn,
+    );
   };
   const step = async (turn: SearchTurn) => {
     if (stopped || paused) return;
@@ -787,10 +792,12 @@ async function retireDiscovery(
           const status = await withSearchConnection(pool, (client) => readErasureStatus(client, copy.id));
           if (status) {
             await turn.call(() => registerRetiredErasure(pool, target, copy.id));
-            await turn.call(() => resolveLateErasureItem(
-              { pool },
-              { accountId: copy.id, participant: 'search', locator: copyLocator(target) },
-            ));
+            await turn.call(() =>
+              resolveLateErasureItem(
+                { pool },
+                { accountId: copy.id, participant: 'search', locator: copyLocator(target) },
+              ),
+            );
           }
         }
         await withSearchConnection(pool, (client) =>

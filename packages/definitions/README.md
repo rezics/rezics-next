@@ -1443,7 +1443,7 @@ release it replaces. It is a separate directed relation from P155/P156 sequence
 chronology and from P1365/P1366, whose released target remains Organization.
 VNDB `releases_supersedes.id` targets `rid` through `rezics:releaseSupersedes`. P155/P156 retain work chronology; P749 retains child-to-parent organization relations; P1365/P1366 retain Organization replacement. Unresolved provider codes are not turned into native assertions.
 
-## Versioned catalogue distribution
+## Catalogue distribution
 
 `Release1` remains an immutable, complete, bounded release. The separate catalogue
 command distributes any finite number of those releases and exact-Type Kind declarations
@@ -1456,20 +1456,21 @@ Author a local JSON manifest, for example:
 {
   "releases": ["releases/books.json", "releases/music.json"],
   "declarations": ["kinds/featured-book.json"],
-  "compatibility": "all"
+  "typeKinds": "all"
 }
 ```
 
 `releases` is a required nonempty array of explicit immutable Release1 JSON file paths.
 `declarations` is an optional array of explicit Kind JSON paths. Paths are relative to
-the manifest (absolute local paths also work). `compatibility` is optional: omit it
+the manifest (absolute local paths also work). `typeKinds` is optional: omit it
 for no generated declarations, use `"all"` for one declaration per released Type,
 or supply exact `[{"releaseDigest":"sha256:<64 lowercase hex>","typeId":"schema:Book"}]`
-pins to select Types. Each generated declaration uses the Type ID, labels and optional
+pins to select Types. `exactTypeKind` constructs the same canonical declaration directly.
+Each generated declaration uses the Type ID, labels and optional
 descriptions, `eligible: true`, precedence zero and that exact Type for condition and
 presentation. Repeated typed directory keys reject, including overlapping generated
 and explicit Kind IDs. With shared Types in several releases, select one exact release
-pin per compatibility Kind instead of `"all"`.
+pin per Type-derived Kind instead of `"all"`.
 
 ```sh
 bun run --cwd packages/definitions catalogue build --input inputs.json --output catalogue
@@ -1485,7 +1486,7 @@ Kind ID, and one with a useful stderr diagnostic for invalid input, incomplete c
 corruption or I/O failure. A missing Kind differs from missing addressed bytes.
 
 The output is `root.json` (one closed pinned root) and `objects/<64 lowercase hex>.json`
-(canonical UTF-8 objects addressed by `sha256:<hex>`). The addressed catalogue/2 root
+(canonical UTF-8 objects addressed by `sha256:<hex>`). The addressed catalogue/1 root
 contains only `format`, `kindSpec`, `reduction` and `directoryDigest`. Directory nodes
 use the catalogue-node/1 schema: ordered, disjoint branch ranges or typed leaf entries.
 Leaf keys are `declaration:<exact Kind ID>` and `release:<full sha256 digest>`; comparison
@@ -1514,7 +1515,7 @@ Release1 artifacts use the original validator and digests, including historical
 construction compatibility, without applying new-publication-only construction caps.
 
 `@rezics/definitions` and the server `@rezics/definitions/catalogue` entry expose
-`buildCatalogue`, `verifyCatalogue`, `lookupCatalogueKind`, `compatibilityKind` and
+`buildCatalogue`, `verifyCatalogue`, `lookupCatalogueKind`, `exactTypeKind` and
 `readCatalogueArtifact`. Builders accept an inert `CatalogueArtifactStore` with
 `read(digest)`/`put(digest, bytes)`; lookup and verification accept only an inert
 `CatalogueArtifactReader.read(digest)` returning bytes or `undefined`. These are byte

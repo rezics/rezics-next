@@ -10,7 +10,7 @@ import {
   applyStagingRetirementPlan,
   type StagingRetirementDeletePhase,
 } from '../src/staging-retirement.ts';
-import { captureIdentity } from '../src/staging-checkpoint.ts';
+import { captureFileIdentity } from '../src/staging-checkpoint.ts';
 import { RETENTION_LOCAL_MAINTENANCE } from '../src/retention.ts';
 import { RunStore, type SourceProjection } from '../src/run-store.ts';
 import { Importer } from '../src/importer.ts';
@@ -85,7 +85,8 @@ function completeIgnored(
 }
 
 function identityFor(alias: string) {
-  return captureIdentity({
+  return captureFileIdentity({
+    compression: 'none',
     sha256: 'c'.repeat(64),
     bytes: 32,
     sourceAlias: alias,
@@ -111,7 +112,7 @@ function seedJourney(path: string) {
     const capture = store.beginCheckpointed(source, identityFor(source));
     if (capture === 'busy') throw new Error('busy');
     store.stage(capture, staged(source, 'Q3', 'f'.repeat(64)));
-    store.commitStagingRecord(capture, { ordinal: 1, recordKey: 'Q3', digest: 'f'.repeat(64) });
+    store.commitStagingRecord(capture, { memberIndex: 0, ordinal: 1, recordKey: 'Q3', digest: 'f'.repeat(64) });
     store.retainConversionDiagnostics(capture, {
       recordKey: 'Q3',
       digest: 'f'.repeat(64),

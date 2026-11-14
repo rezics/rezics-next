@@ -15,7 +15,6 @@ import {
 import {
   ReleaseSearchRelevanceStateConflict,
   ReleaseSearchRelevanceStateExpired,
-  ReleaseSearchRelevanceStatePreparing,
   type ReleaseSearchRelevanceBinding,
   type ReleaseSearchRelevanceLocation,
   type ReleaseSearchRelevanceState,
@@ -56,17 +55,17 @@ function memoryRelevanceState(
     return value;
   }
   return {
-    async start(binding, now, initialWorks = []) {
+    async start(binding, now) {
       const execution = uuid();
       const node = uuid();
       const root = uuid();
-      roots.set(root, new Set(initialWorks));
+      roots.set(root, new Set<string>());
       sessions.set(execution, { binding: bindingKey(binding), expires: now + 15 * 60_000 });
       nodes.set(key(execution, node), {
         parent: null,
-        works: new Set(initialWorks),
+        works: new Set<string>(),
         root,
-        digest: JSON.stringify([...new Set(initialWorks)].sort()),
+        digest: JSON.stringify([...new Set<string>()].sort()),
       });
       return { execution, node };
     },
@@ -357,7 +356,7 @@ test('a stale native filter candidate cannot claim a work before its first curre
   expect(page.keys).toEqual([{ kind: 'work', id: f.id(0) }]);
 });
 
-test('a valid inline relevance cursor seeds private progress during protocol migration', async () => {
+test('canonical relevance cursors retain private lineage and refuse inline work imports', async () => {
   const f = await fixture();
   const relevanceRequest = { ...request, sort: 'relevance' as const };
   f.subjects[6]!.type = 'edition';
@@ -380,15 +379,15 @@ test('a valid inline relevance cursor seeds private progress during protocol mig
   const first = await streams.groups(relevanceRequest, null, 1);
   expect(first.keys).toEqual([{ kind: 'work', id: f.id(0) }]);
   const current = JSON.parse(first.after) as { binding: string; namesAfter: string };
-  const legacy = JSON.stringify({
+  expect(JSON.parse(first.after).version).toBe(1);
+  expect(JSON.parse(first.after)).toHaveProperty('relevance');
+  const inline = JSON.stringify({
     version: 1,
     binding: current.binding,
     namesAfter: current.namesAfter,
     seenWorks: [f.id(0)],
   });
-  const resumed = await streams.groups(relevanceRequest, legacy, 1);
-  expect(resumed.keys).toEqual([]);
-  expect(JSON.parse(resumed.after)).toHaveProperty('relevance');
+  await expect(streams.groups(relevanceRequest, inline, 1)).rejects.toBeInstanceOf(ReleaseGroupingUnavailable);
 });
 
 test('relevance resumes beyond 128 works with current ownership, interleaved repeats and replayable branches', async () => {
@@ -484,59 +483,6 @@ test('relevance resumes beyond 128 works with current ownership, interleaved rep
   await expect(reopened.groups(relevanceRequest, firstAfter!, 20)).rejects.toBeInstanceOf(
     ReleaseGroupingRestartRequired,
   );
-});
-
-test('legacy membership preparation leaves its native candidate for the next bounded slice', async () => {
-  const f = await fixture();
-  const relevanceRequest = { ...request, sort: 'relevance' as const };
-  f.subjects[6]!.type = 'edition';
-  f.links.set(f.id(6), { complete: true, values: [{ kind: 'work', id: f.id(0) }] });
-  const nativePositions: (string | null)[] = [];
-  const relevance = async (_request: ReleaseGroupingRequest, after: string | null) => {
-    nativePositions.push(after);
-    const offset = after === null ? 0 : Number(after);
-    const keys =
-      offset === 0
-        ? [
-            {
-              id: f.id(6),
-              pool: 'pool-0',
-              partition: subjectPartition(f.id(6)),
-              name: null,
-              securityRevision: 0,
-              after: '1',
-            },
-          ]
-        : [];
-    return { keys, after: String(offset + keys.length), exhausted: keys.length === 0 };
-  };
-  const state = f.relevanceProgress.state;
-  let prepare = true;
-  const preparingState: ReleaseSearchRelevanceState = {
-    ...state,
-    async seen(...args) {
-      if (prepare) {
-        prepare = false;
-        throw new ReleaseSearchRelevanceStatePreparing();
-      }
-      return state.seen(...args);
-    },
-  };
-  const streams = createReleaseSearchCandidateStreams({
-    ...f,
-    relevance,
-    relevanceProgress: { ...f.relevanceProgress, state: preparingState },
-  });
-  const prepared = await streams.groups(relevanceRequest, null, 1);
-  expect(prepared.keys).toEqual([]);
-  expect(prepared.exhausted).toBe(false);
-  const preparationCursor = JSON.parse(prepared.after) as { namesAfter: string | null; migrationPulse: number };
-  expect(preparationCursor.namesAfter).toBeNull();
-  expect([0, 1]).toContain(preparationCursor.migrationPulse);
-
-  const resumed = await streams.groups(relevanceRequest, prepared.after, 1);
-  expect(resumed.keys).toEqual([{ kind: 'work', id: f.id(0) }]);
-  expect(nativePositions).toEqual([null, null]);
 });
 
 test('full authority retires both streams on resume and during complete link reads, beyond name cuts', async () => {

@@ -113,7 +113,7 @@ export class SeedPublicationIncompleteError extends Error {
 }
 
 export type SeedArtifactHandoff = Readonly<{
-  version: 2;
+  version: 1;
   state: 'publication-incomplete';
   artifact: string;
   artifactSha256: string;
@@ -124,7 +124,7 @@ export type SeedArtifactHandoff = Readonly<{
 export function seedArtifactHandoff(error: unknown): SeedArtifactHandoff | undefined {
   return error instanceof SeedPublicationIncompleteError
     ? {
-        version: 2,
+        version: 1,
         state: 'publication-incomplete',
         artifact: error.resultPath,
         artifactSha256: error.artifactSha256,

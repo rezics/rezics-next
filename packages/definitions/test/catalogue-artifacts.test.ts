@@ -9,7 +9,7 @@ import {
   buildCatalogue,
   lookupCatalogueKind,
   verifyCatalogue,
-  compatibilityKind,
+  exactTypeKind,
   catalogueBytes,
   catalogueDigest,
   parseCatalogueJson,
@@ -21,7 +21,7 @@ import {
   KIND_REDUCTION,
   type CatalogueArtifactReader,
   type CatalogueNodeV1,
-  type CatalogueRootV2,
+  type CatalogueRootV1,
   type KindCataloguePin,
 } from '../src/catalogue-artifacts.ts';
 import { publishCatalogueRoot, readCatalogueRootFile } from '../src/catalogue-files.ts';
@@ -98,7 +98,7 @@ test('Definition authors build and verify more than 1024 Types, resolve a nonini
     const selectedId = 'scale:T1151';
     // A custom Kind proves stable Kind, condition Type and presentation Type are independently pinned.
     const custom = {
-      ...compatibilityKind(selected, selectedDigest, selectedId),
+      ...exactTypeKind(selected, selectedDigest, selectedId),
       id: 'kind:Featured',
       auto: { eligible: false, precedence: -2147483648 },
       presentation: { type: { releaseDigest: releaseDigest(releases[0]!), typeId: 'scale:T0000' } },
@@ -106,7 +106,7 @@ test('Definition authors build and verify more than 1024 Types, resolve a nonini
     await writeFile(join(temporary, 'kind.json'), JSON.stringify(custom));
     await writeFile(
       join(temporary, 'inputs.json'),
-      JSON.stringify({ releases: paths, declarations: ['kind.json'], compatibility: 'all' }),
+      JSON.stringify({ releases: paths, declarations: ['kind.json'], typeKinds: 'all' }),
     );
     const output = join(temporary, 'output');
     const built = await cli('build', '--input', join(temporary, 'inputs.json'), '--output', output);
@@ -114,6 +114,7 @@ test('Definition authors build and verify more than 1024 Types, resolve a nonini
     expect(built.code, built.stderr).toBe(0);
     const rootFile = join(output, 'root.json');
     const { pin, store } = await readCatalogueRootFile(rootFile);
+    expect(pin.format).toBe('https://rezics.com/definitions/catalogue/1');
     const verified = await cli('verify', '--root', rootFile);
     expect(verified.code, verified.stderr).toBe(0);
     const report = await verifyCatalogue(pin, store);
@@ -175,7 +176,7 @@ test('Definition authors build and verify more than 1024 Types, resolve a nonini
     const firstObjects = (await readdir(join(output, 'objects'))).sort();
     await writeFile(
       join(temporary, 'reversed.json'),
-      JSON.stringify({ releases: [...paths].reverse(), declarations: ['kind.json'], compatibility: 'all' }),
+      JSON.stringify({ releases: [...paths].reverse(), declarations: ['kind.json'], typeKinds: 'all' }),
     );
     const repeated = await cli('build', '--input', join(temporary, 'reversed.json'), '--output', output);
     expect(repeated.code, repeated.stderr).toBe(0);
@@ -189,7 +190,7 @@ test('Definition authors build and verify more than 1024 Types, resolve a nonini
       await store.put(digest, bytes);
       return digest;
     }
-    const rootValue = parseCatalogueJson((await store.read(pin.rootDigest))!, 262144) as CatalogueRootV2;
+    const rootValue = parseCatalogueJson((await store.read(pin.rootDigest))!, 262144) as CatalogueRootV1;
     const nodeValue = parseCatalogueJson((await store.read(rootValue.directoryDigest))!, 262144) as CatalogueNodeV1;
     async function withDirectory(value: unknown): Promise<KindCataloguePin> {
       const directoryDigest = await storeValue(value);
@@ -197,7 +198,7 @@ test('Definition authors build and verify more than 1024 Types, resolve a nonini
     }
     const badVersion = {
       ...pin,
-      rootDigest: await storeValue({ ...rootValue, format: 'https://rezics.com/definitions/catalogue/3' }),
+      rootDigest: await storeValue({ ...rootValue, format: 'https://rezics.com/definitions/catalogue/2' }),
     };
     await expect(verifyCatalogue(badVersion, store)).rejects.toThrow('version');
     await expect(
@@ -332,14 +333,14 @@ test('Definition authors build and verify more than 1024 Types, resolve a nonini
     const historicalPin = await buildCatalogue(
       {
         releases: [historicalConstruction],
-        compatibility: [{ releaseDigest: releaseDigest(historicalConstruction), typeId: selectedId }],
+        typeKinds: [{ releaseDigest: releaseDigest(historicalConstruction), typeId: selectedId }],
       },
       store,
     );
     expect((await verifyCatalogue(historicalPin, store)).declarations).toBe(1);
     const badProfile = structuredClone(selected);
     delete badProfile.libraryProfiles;
-    await expect(buildCatalogue({ releases: [badProfile], compatibility: 'all' }, store)).rejects.toThrow(
+    await expect(buildCatalogue({ releases: [badProfile], typeKinds: 'all' }, store)).rejects.toThrow(
       'Invalid Release1',
     );
     const conflicting = structuredClone(selected);

@@ -10,7 +10,7 @@ import {
 } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { parseCopyArchive, COPY_ARCHIVE_LIMITS } from '../../src/library/copy-archive-format.ts';
-import { exportSections, exportSectionsV2, exportSectionsV4 } from '../../src/library/library-export-format.ts';
+import { exportSections } from '../../src/library/library-export-format.ts';
 import { createCopyArchive } from '../../src/library/copy-archive.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
@@ -451,53 +451,36 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
   expect(() => parseCopyArchive(new TextEncoder().encode('['.repeat(17) + ']'.repeat(17)))).toThrow('invalid_request');
 });
 
-function artifactVersion(version: number) {
+function artifactWithUnsupportedEvidence() {
   const a = structuredClone(artifact);
-  a.manifest.version = version;
-  a.manifest.sections = [...(version === 1 ? exportSections : version === 4 ? exportSectionsV4 : exportSectionsV2)];
-  a.records = a.records.filter((row) => a.manifest.sections.includes(row.section));
-  if (version === 1) {
-    delete a.manifest.coverage;
-    delete a.manifest.sectionTotals;
-  } else {
-    a.manifest.coverage = `private-library-owner-facts-v${version}`;
-    a.records.push({
-      section: 'bangumiEvidence',
-      upload_id: a.manifest.exportId,
-      ordinal: 0,
-      evidence: { private_note: 'unsupported provider evidence' },
-    });
-    if (version >= 3)
-      for (const row of a.records.filter((record) => record.section === 'journals')) {
-        if (!isRecord(row.journal)) throw new Error('Missing journal payload in exported journal record');
-        row.journal.assessment = { meaningRevision: 1, units: 17 };
-      }
-    if (version === 4)
-      a.records.push({
-        section: 'vndbEvidence',
-        upload_id: a.manifest.exportId,
-        ordinal: 0,
-        evidence: { score: '0', progress: 'unknown' },
-      });
-    a.records.sort(
-      (aRow, bRow) => a.manifest.sections.indexOf(aRow.section) - a.manifest.sections.indexOf(bRow.section),
-    );
-    a.manifest.sectionTotals = Object.fromEntries(
-      a.manifest.sections.map((section) => {
-        const rows = a.records.filter((row) => row.section === section);
-        return [section, { rows: rows.length, recordBytes: rows.reduce((n, row) => n + bytes(row).length, 0) }];
-      }),
-    );
-  }
+  a.records.push({
+    section: 'bangumiEvidence',
+    upload_id: a.manifest.exportId,
+    ordinal: 0,
+    evidence: { private_note: 'unsupported provider evidence' },
+  });
+  a.records.push({
+    section: 'vndbEvidence',
+    upload_id: a.manifest.exportId,
+    ordinal: 0,
+    evidence: { score: '0', progress: 'unknown' },
+  });
+  a.records.sort((aRow, bRow) => a.manifest.sections.indexOf(aRow.section) - a.manifest.sections.indexOf(bRow.section));
+  a.manifest.sectionTotals = Object.fromEntries(
+    a.manifest.sections.map((section) => {
+      const rows = a.records.filter((row) => row.section === section);
+      return [section, { rows: rows.length, recordBytes: rows.reduce((n, row) => n + bytes(row).length, 0) }];
+    }),
+  );
   a.manifest.rows = a.records.length;
   a.manifest.recordBytes = a.records.reduce((n, row) => n + bytes(row).length, 0);
   return a;
 }
 
-test('fixed V1 and current V2/V3/V4 preserve exact accounting and unsupported facts stay unretained', () => {
-  expect(artifact.manifest.version).toBe(2); // Actual installed producer, not a synthetic upload format.
-  for (const version of [1, 2, 3, 4]) {
-    const a = artifactVersion(version);
+test('canonical export preserves exact accounting and unsupported facts stay unretained', () => {
+  expect(artifact.manifest.version).toBe(1); // Actual installed producer, not a synthetic upload format.
+  {
+    const a = artifactWithUnsupportedEvidence();
     const parsed = parseCopyArchive(bytes(a));
     expect(parsed.coverage.reduce((n, section) => n + section.recordBytes, 0)).toBe(a.manifest.recordBytes);
     expect(parsed.holdings).toHaveLength(12);
@@ -508,8 +491,7 @@ test('fixed V1 and current V2/V3/V4 preserve exact accounting and unsupported fa
     const capturedHolding = a.records.find((row) => row.section === 'holdings');
     if (!firstHolding || !capturedHolding) throw new Error('The expected holding record is missing');
     expect(isDeepStrictEqual(firstHolding.evidence, capturedHolding)).toBe(true);
-    if (version === 1) expect(parsed.coverage.some((row) => row.section === 'annotations')).toBe(false);
-    if (version !== 1) {
+    {
       expect(parsed.coverage.find((row) => row.section === 'journals')).toMatchObject({
         records: 1,
         support: 'unsupported',
@@ -884,15 +866,15 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
   expect(await json(await send('DELETE', `/${measureUpload.uploadId}`))).toMatchObject({ complete: true });
 }, 120000);
 
-test('V1 and declared V3/V4 use the existing native upload/review/apply/result journey', async () => {
-  for (const version of [1, 3, 4]) {
-    const a = artifactVersion(version);
+test('canonical archives use the existing native upload/review/apply/result journey', async () => {
+  {
+    const a = artifactWithUnsupportedEvidence();
     a.manifest.capturedAt = '2000-01-01T00:00:00.000001Z';
     a.manifest.expiresAt = '2000-01-01T00:15:00.000001Z'; // A completed local file outlives capture delivery.
     const uploaded = await json(await send('POST', '', a, entryKey()));
     const suffix = `/${uploaded.uploadId}`;
     const page = await json(await send('GET', suffix));
-    expect(page).toMatchObject({ effectsSupported: false, fullRestoration: false, manifest: { version } });
+    expect(page).toMatchObject({ effectsSupported: false, fullRestoration: false, manifest: { version: 1 } });
     const review = await json(
       await send(
         'POST',

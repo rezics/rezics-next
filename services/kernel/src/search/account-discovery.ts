@@ -19,14 +19,14 @@ import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';
 import {
   discoveryDocumentActions,
   discoveryDocumentId,
-  mixedDiscoveryDocumentCodec,
+  hasDiscoveryDocumentFormat,
   parseDiscoveryDocumentId,
   parseDiscoveryDocumentKey,
   secondScopeDiscoveryDocumentActions,
   type AnyDiscoveryIndexAction,
   type SecondScopeDiscoveryIndexAction,
 } from './discovery-documents.ts';
-import { discoveryIndexName, discoveryPhysicalTargetMatches, readDiscoveryDocumentCodec } from './indices.ts';
+import { discoveryIndexName, discoveryPhysicalTargetMatches, requireDiscoveryIndexFormat } from './indices.ts';
 import { writeDiscoveryActions, validateRefreshResponse, validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { validateObservation } from './indexer.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
@@ -40,13 +40,12 @@ import {
   type AccountSnapshot,
   type IndexedAccount,
 } from './discovery.ts';
-import { MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
+import { DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
 import { reviewDiscoveryDocument } from './review-discovery.ts';
 import { assertDiscoveryCapabilityBinding, DiscoveryProducerCoverageError } from './generations.ts';
 import type { DiscoveryMetadataKind, DiscoveryMetadataProducers, DiscoveryOmittedKind } from './index.ts';
 import type { ReviewDiscoveryRefresh } from '../content/index.ts';
 import { assertCompleteSearch } from './complete-search.ts';
-import { accountDocumentActions } from './document.ts';
 import type { SubjectSource } from './source.ts';
 
 const MAX_NATIVE_REVISION = 9_223_372_036_854_775_807n;
@@ -203,49 +202,6 @@ export function validateAccountPage(
   return { partition, position: observed, accounts, next };
 }
 
-/** One native bootstrap page. Persist next only after the existing writer settles all returned actions. */
-export async function prepareAccountPopulationPage(
-  source: AccountDiscoverySource,
-  partition: number,
-  after: AccountFrontier | null,
-  limit = MAX_ACCOUNT_DISCOVERY_BATCH,
-) {
-  // Validate caller input before handing it to the native owner.
-  partitionNumber(partition);
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ACCOUNT_DISCOVERY_BATCH)
-    throw new RangeError('Account population page limit must be from 1 to 100');
-  if (after !== null) frontier(after, partition);
-  const snapshot = validateAccountPage(await source.page(partition, after, limit), partition, after, limit);
-  return {
-    snapshot,
-    actions: accountDocumentActions(
-      snapshot,
-      snapshot.accounts.map(({ id }) => id),
-    ),
-  };
-}
-
-/** Event keys only; reread current native rows, retaining every tail within the same checkpoint obligation. */
-export async function* prepareAccountCatchup(
-  source: AccountDiscoverySource,
-  partition: number,
-  ids: readonly string[],
-  atLeast: bigint,
-) {
-  partitionNumber(partition);
-  const unique = [...new Set(ids)];
-  // Reject foreign keys in the entire batch before admitting any prefix.
-  for (const id of unique) {
-    if (discoveryPartition(id) !== partition) throw new RangeError('Account discovery key is outside its partition');
-  }
-  position(atLeast, 0n);
-  for (let offset = 0; offset < unique.length; offset += MAX_ACCOUNT_DISCOVERY_BATCH) {
-    const chunk = unique.slice(offset, offset + MAX_ACCOUNT_DISCOVERY_BATCH);
-    const snapshot = validateAccountSnapshot(await source.read(partition, chunk), partition, chunk, atLeast);
-    yield { snapshot, actions: accountDocumentActions(snapshot, chunk) };
-  }
-}
-
 export type DiscoveryCensus = {
   partition: number;
   position: bigint;
@@ -335,8 +291,7 @@ function projectionSearch(search: OpenSearch, context?: DiscoveryProjectionConte
     const milliseconds = projectionRemaining(admitted);
     options?.signal?.throwIfAborted();
     const controller = new AbortController();
-    const abort = () =>
-      controller.abort(admitted.signal?.aborted ? admitted.signal.reason : options?.signal?.reason);
+    const abort = () => controller.abort(admitted.signal?.aborted ? admitted.signal.reason : options?.signal?.reason);
     admitted.signal?.addEventListener('abort', abort, { once: true });
     options?.signal?.addEventListener('abort', abort, { once: true });
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -425,7 +380,7 @@ export async function readDiscoveryWriterPhysicalTarget(pool: Pick<Pool, 'query'
     settings.uuid !== row.index_uuid ||
     !record(mappings) ||
     mappings.incarnation !== row.incarnation ||
-    mixedDiscoveryDocumentCodec(mapping) === undefined ||
+    !hasDiscoveryDocumentFormat(mapping) ||
     !record(alias) ||
     alias.is_write_index !== true ||
     Object.keys(alias).length !== 1
@@ -579,7 +534,7 @@ export function createDiscoveryProjection(options: {
   const { pool, search, registry, listing, target } = options;
   const metadataProducers = options.metadataProducers ?? {};
   let metadataPopulationOwners: Promise<ReadonlySet<string>> | undefined;
-  let documentCodec: Promise<Awaited<ReturnType<typeof readDiscoveryDocumentCodec>>> | undefined;
+  let documentMapping: Promise<void> | undefined;
   const accounts = registry.get('account');
   if (accounts.owner !== 'accounts') throw new TypeError('Account source is required');
   const subject = registry.entries.find((entry) => entry.owner === 'semantic');
@@ -589,7 +544,7 @@ export function createDiscoveryProjection(options: {
     chunk: readonly DiscoveryKey[],
     atLeast: bigint,
   ): Promise<DiscoveryIndexAction[]> {
-    const codec = await (documentCodec ??= readDiscoveryDocumentCodec(
+    await (documentMapping ??= requireDiscoveryIndexFormat(
       search,
       discoveryIndexName(target.prefix, target.generation),
     ));
@@ -619,7 +574,7 @@ export function createDiscoveryProjection(options: {
         bindings = await readAccountDiscoveryBindings(pool, partition, ids);
         if (pendingClaimHomes().size > 0) throw new Error('Account discovery revision moved; retry');
       }
-      actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, undefined, codec);
+      actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, undefined);
       for (const key of chunk)
         if (!(await locateAccount(pool, target, key))) {
           await eraseDiscoveryAccount(pool, search, registry, key.id);
@@ -627,10 +582,7 @@ export function createDiscoveryProjection(options: {
         }
     } else {
       if (!subject || subject.owner !== 'semantic') throw new Error('Subject source is required');
-      const snapshot =
-        codec === 'mixed-credit-v1'
-          ? await readCreditIndexSnapshot(subject.source, partition, ids)
-          : await subject.source.read(partition, ids);
+      const snapshot = await readCreditIndexSnapshot(subject.source, partition, ids);
       validateObservation(snapshot, partition, ids, atLeast, true);
       const counts = await listing.read(
         partition,
@@ -646,7 +598,7 @@ export function createDiscoveryProjection(options: {
         ...snapshot,
         subjects: snapshot.subjects.filter((row) => kinds.get(row.id)?.has(row.type)),
       };
-      actions = discoveryDocumentActions(registry, { owner, snapshot: keyedSnapshot }, chunk, counts, codec);
+      actions = discoveryDocumentActions(registry, { owner, snapshot: keyedSnapshot }, chunk, counts);
     }
     // Both owner families use the same native ICU normalizer and normalized512/missing-last rule.
     return prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
@@ -916,10 +868,7 @@ export function createDiscoveryProjection(options: {
     if (context) projectionRemaining(context);
     return prepared;
   }
-  async function applyReviews(
-    actions: readonly SecondScopeDiscoveryIndexAction[],
-    held: HeldDiscoveryTarget,
-  ) {
+  async function applyReviews(actions: readonly SecondScopeDiscoveryIndexAction[], held: HeldDiscoveryTarget) {
     if (
       actions.length > 100 ||
       actions.some((action) => {
@@ -1036,8 +985,7 @@ export function createDiscoveryProjection(options: {
    */
   async function creditDependents(query: CreditDependentQuery): Promise<DiscoveryKey[]> {
     const index = discoveryIndexName(target.prefix, target.generation);
-    // Only a credit-codec generation can index credited names; older generations have no dependents to refresh.
-    if ((await (documentCodec ??= readDiscoveryDocumentCodec(search, index))) !== 'mixed-credit-v1') return [];
+    await (documentMapping ??= requireDiscoveryIndexFormat(search, index));
     const found = new Map<string, DiscoveryKey>();
     for (const chunk of 'creators' in query ? chunksOf(query.creators, 256) : [[]]) {
       let after: unknown[] | undefined;
@@ -1047,10 +995,7 @@ export function createDiscoveryProjection(options: {
           _source: ['id', 'route', 'kind'],
           query: {
             bool: {
-              filter: [
-                { term: { document_format: MIXED_CREDIT_DISCOVERY_DOCUMENT_FORMAT } },
-                creditDependentClause(query, chunk),
-              ],
+              filter: [{ term: { document_format: DISCOVERY_DOCUMENT_FORMAT } }, creditDependentClause(query, chunk)],
             },
           },
           sort: [{ identity: 'asc' }],

@@ -73,7 +73,7 @@ test('successor projection retains precision and distinct dates while historical
     ],
   };
   const old = documentActions(snapshot, [id])[0]!;
-  const next = documentActions(snapshot, [id], undefined, 1)[0]!;
+  const next = documentActions(snapshot, [id], undefined)[0]!;
   if (old.op !== 'index' || next.op !== 'index') throw new Error('Expected documents');
   expect(old.document.facts).toEqual([{ property, year: 2024, qualifiers: [] }]);
   expect(next.document.facts).toHaveLength(3);

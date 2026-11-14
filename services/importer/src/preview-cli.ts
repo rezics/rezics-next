@@ -31,7 +31,7 @@ const USAGE = [
   '       rezics-import preview --help',
   'Pages default to 20 rows. Preview is local and offline; it never imports, writes import state, or contacts the API.',
   'gzip is admitted only for Open Library and Wikidata streamed dumps. zstd is admitted only for VNDB archives and Wikidata streamed dumps as one regular local file. Default --compression none. --plan-dir does not reopen or decompress input.',
-  '--dump-set is Open Library only and mutually exclusive with --dump and --plan-dir. Members declare none or gzip in a version-2 manifest; version 1 stays plain.',
+  '--dump-set is Open Library only and mutually exclusive with --dump and --plan-dir. Canonical version-1 manifest members declare none or gzip explicitly.',
   '--decode-budget is the whole-set decoded-byte ceiling for gzip, zstd or a dump set (default 256 GiB), never a per-member multiple.',
 ].join('\n');
 

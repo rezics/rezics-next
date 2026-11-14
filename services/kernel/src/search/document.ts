@@ -2,7 +2,6 @@ import { calendarInterval, isCalendarDate } from '@rezics/filter';
 import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { normalizePublicRatingFigure } from './rating-source.ts';
 import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
-import { discoveryIdentity, type AccountSnapshot } from './discovery.ts';
 import { DOCUMENT_TEXT_COST, DOCUMENT_TEXT_RECIPE } from './document-text.ts';
 import { publicNames } from './document-names.ts';
 import { creditSearchFields, type CreditedNameDocument, type CreditSearchFields } from './credit-search-document.ts';
@@ -18,8 +17,8 @@ export type SubjectFact =
       year: number;
       month?: number;
       day?: number;
-      time_lower?: string;
-      time_upper?: string;
+      time_lower: string;
+      time_upper: string;
       qualifiers: string[];
     }
   | { property: string; amount: number; unit: string; qualifiers: string[] };
@@ -43,9 +42,9 @@ export type SubjectDocument = {
   /** Published Global standard-question score and prior identity; absent figures omit both fields. */
   rating_score?: number | null;
   rating_prior_epoch?: number | null;
-  /** Present only for generations carrying the credit mapping; an incomplete cut publishes no names. */
-  credit_search_complete?: boolean;
-  credited_names?: CreditedNameDocument[];
+  /** An incomplete creator projection publishes no names. */
+  credit_search_complete: boolean;
+  credited_names: CreditedNameDocument[];
   /** Coverage remains explicit when a bounded native projection is incomplete or unavailable. */
   document_text_coverage?: 'complete' | 'partial' | 'unsupported' | 'preparing' | 'unavailable';
   /** Opaque current native Subject observation chosen by the page reference selector. */
@@ -64,27 +63,7 @@ export type SubjectDocument = {
   }[];
 };
 
-/** Public index allowlist. Live profile/verification/avatar data is always hydrated by Accounts. */
-export type AccountDocument = {
-  family: 'account';
-  kind: 'account';
-  identity: string;
-  id: string;
-  partition: number;
-  account_revision: string;
-  active_handle: string | null;
-  names: string[];
-  name_sort: string | null;
-  descriptions: [];
-  statements: [];
-  facts: [];
-  relation_facet_overflow: [];
-};
-
-export type DiscoverySubjectDocument = SubjectDocument & { family: 'subject'; kind: string; identity: string };
-export type SearchDocument = SubjectDocument | AccountDocument;
-
-export type IndexAction<Document extends SearchDocument = SubjectDocument> =
+export type IndexAction<Document extends SubjectDocument = SubjectDocument> =
   | { op: 'index'; id: string; version: bigint; document: Document }
   | { op: 'delete'; id: string; version: bigint };
 
@@ -92,7 +71,7 @@ function uniqueValues(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
-function statementFact(statement: IndexedStatement, calendarFormat?: 1): SubjectFact | undefined {
+function statementFact(statement: IndexedStatement): SubjectFact | undefined {
   const facet = statement.facet;
   if (facet === undefined) return undefined;
   const qualifiers = uniqueValues((statement.qualifiers ?? []).map((item) => `${item.property}=${item.value}`));
@@ -102,31 +81,28 @@ function statementFact(statement: IndexedStatement, calendarFormat?: 1): Subject
     case 'code':
       return { property, value: statement.value, qualifiers };
     case 'time':
-      if (calendarFormat === 1) {
-        if (!isCalendarDate(facet)) return undefined;
-        const interval = calendarInterval(facet);
-        return {
-          property,
-          year: facet.year,
-          ...(facet.month === undefined ? {} : { month: facet.month }),
-          ...(facet.day === undefined ? {} : { day: facet.day }),
-          time_lower: interval.lower,
-          time_upper: interval.upper,
-          qualifiers,
-        };
-      }
-      return { property, year: facet.year, qualifiers };
+      if (!isCalendarDate(facet)) return undefined;
+      const interval = calendarInterval(facet);
+      return {
+        property,
+        year: facet.year,
+        ...(facet.month === undefined ? {} : { month: facet.month }),
+        ...(facet.day === undefined ? {} : { day: facet.day }),
+        time_lower: interval.lower,
+        time_upper: interval.upper,
+        qualifiers,
+      };
     case 'quantity':
       return { property, amount: facet.amount, unit: facet.unit, qualifiers };
   }
 }
 
 /** Facet-capable statements only, in source order. An exact duplicate fact is dropped. */
-function subjectFacts(statements: readonly IndexedStatement[], calendarFormat?: 1): SubjectFact[] {
+function subjectFacts(statements: readonly IndexedStatement[]): SubjectFact[] {
   const facts: SubjectFact[] = [];
   const seen = new Set<string>();
   for (const statement of statements) {
-    const fact = statementFact(statement, calendarFormat);
+    const fact = statementFact(statement);
     if (fact === undefined) continue;
     const identity = JSON.stringify(fact);
     if (seen.has(identity)) continue;
@@ -197,12 +173,7 @@ function documentTextFields(
   };
 }
 
-function subjectDocument(
-  partition: number,
-  subject: IndexedSubject,
-  calendarFormat?: 1,
-  credit?: CreditSearchFields,
-): SubjectDocument {
+function subjectDocument(partition: number, subject: IndexedSubject, credit: CreditSearchFields): SubjectDocument {
   // The source owns standard-question proof; this boundary validates Global and exact subject binding.
   const rating =
     subject.publicRating === undefined
@@ -223,13 +194,13 @@ function subjectDocument(
     descriptions: uniqueValues(subject.descriptions.map((item) => item.value)),
     name_sort: labels[0]?.value ?? MISSING_NAME,
     statements: uniqueValues(subject.statements.map((item) => `${item.property}=${item.value}`)),
-    facts: subjectFacts(subject.statements, calendarFormat),
+    facts: subjectFacts(subject.statements),
     ...documentTextFields(subject, partition),
     ...(rating === undefined ? {} : { rating_score: rating.score, rating_prior_epoch: rating.priorEpoch }),
     ...(subject.relationFacetOverflow === undefined || subject.relationFacetOverflow.length === 0
       ? {}
       : { relation_facet_overflow: uniqueValues(subject.relationFacetOverflow) }),
-    ...(credit ?? {}),
+    ...credit,
   };
 }
 
@@ -237,10 +208,6 @@ export function documentActions(
   snapshot: SubjectSnapshot,
   ids: readonly string[],
   counts?: ReadonlyMap<string, number>,
-  /** Explicit successor projection; legacy physical writers retain their historical shape. */
-  calendarFormat?: 1,
-  /** Explicit credit successor; only generations whose mapping carries `credited_names` receive the fields. */
-  creditFormat?: 1,
 ): IndexAction[] {
   const subjects = new Map<string, IndexedSubject>();
   for (const subject of snapshot.subjects) {
@@ -256,8 +223,8 @@ export function documentActions(
     seen.add(id);
     const subject = subjects.get(id);
     if (subject?.visibility === 'visible' && subject.redirect === null) {
-      const credit = creditFormat === 1 ? creditSearchFields(snapshot.creditSearch?.get(id)) : undefined;
-      const document = subjectDocument(snapshot.partition, subject, calendarFormat, credit);
+      const credit = creditSearchFields(snapshot.creditSearch?.get(id));
+      const document = subjectDocument(snapshot.partition, subject, credit);
       actions.push({
         op: 'index',
         id,
@@ -269,71 +236,7 @@ export function documentActions(
   return actions;
 }
 
-/** The caller admits the native snapshot before constructing these positioned replacements/deletes. */
-export function accountDocumentActions(
-  snapshot: AccountSnapshot,
-  ids: readonly string[],
-): IndexAction<AccountDocument>[] {
-  const requested = new Set(ids);
-  const seen = new Set<string>();
-  for (const id of requested) {
-    if (subjectPartition(id) !== snapshot.partition) throw new RangeError('Account key is outside its partition');
-  }
-  for (const account of snapshot.accounts) {
-    if (subjectPartition(account.id) !== snapshot.partition || !requested.has(account.id) || seen.has(account.id))
-      throw new TypeError('Account snapshot contains a duplicate, foreign or unrequested key');
-    seen.add(account.id);
-  }
-  const accounts = new Map(snapshot.accounts.map((account) => [account.id, account]));
-  return [...requested].map((id) => {
-    const identity = discoveryIdentity('accounts', id);
-    const account = accounts.get(id);
-    if (!account) return { op: 'delete', id: identity, version: snapshot.position };
-    const names = uniqueValues([account.handle, account.displayName].filter((name) => name !== null));
-    return {
-      op: 'index',
-      id: identity,
-      version: snapshot.position,
-      document: {
-        family: 'account',
-        kind: 'account',
-        identity,
-        id,
-        partition: snapshot.partition,
-        account_revision: account.revision.toString(),
-        active_handle: account.handle,
-        names,
-        name_sort: account.displayName ?? account.handle ?? MISSING_NAME,
-        descriptions: [],
-        statements: [],
-        facts: [],
-        relation_facet_overflow: [],
-      },
-    };
-  });
-}
-
-/** Same Subject projection and native version; only the new generation's identity envelope changes. */
-export function discoverySubjectActions(
-  snapshot: SubjectSnapshot,
-  ids: readonly string[],
-  counts?: ReadonlyMap<string, number>,
-  calendarFormat?: 1,
-  creditFormat?: 1,
-): IndexAction<DiscoverySubjectDocument>[] {
-  return documentActions(snapshot, ids, counts, calendarFormat, creditFormat).map((action) => {
-    const id = discoveryIdentity('semantic', action.id);
-    if (action.op === 'delete') return { ...action, id };
-    if (action.document.type === 'account') throw new TypeError('Discovery kind collision');
-    return {
-      ...action,
-      id,
-      document: { ...action.document, family: 'subject', kind: action.document.type, identity: id },
-    };
-  });
-}
-
-export function bulkLines<Document extends SearchDocument>(
+export function bulkLines<Document extends SubjectDocument>(
   index: string,
   actions: readonly IndexAction<Document>[],
 ): unknown[] {

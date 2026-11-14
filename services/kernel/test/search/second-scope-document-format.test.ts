@@ -3,7 +3,7 @@ import type { Release } from '@rezics/definitions';
 import release from '../../../../packages/definitions/release/rezics.json';
 import {
   discoveryBulkBody,
-  mixedDiscoveryIndexDefinition,
+  discoveryIndexDefinition,
   parseDiscoveryDocumentKey,
   parseDiscoveryHitKey,
   secondScopeDiscoveryDocumentActions,
@@ -85,7 +85,7 @@ const contentObservation: SecondScopeDiscoveryObservation = {
   },
 };
 
-test('Collection, review and Space snapshots share format 2 with exact native keys and versions', () => {
+test('Collection, review and Space snapshots share canonical format 1 with exact native keys and versions', () => {
   const collectionActions = secondScopeDiscoveryDocumentActions(registry, collectionObservation, [collectionKey]);
   const contentActions = secondScopeDiscoveryDocumentActions(registry, contentObservation, [spaceKey, reviewKey]);
   expect(collectionActions[0]).toMatchObject({
@@ -122,7 +122,7 @@ test('Collection, review and Space snapshots share format 2 with exact native ke
   const review = contentActions[1]!;
   if (review.op !== 'index') throw new Error('Expected a review document');
   expect(review.document).toEqual({
-    document_format: 2,
+    document_format: 1,
     identity: review.id,
     owner: 'content',
     kind: 'review',
@@ -144,7 +144,7 @@ test('Collection, review and Space snapshots share format 2 with exact native ke
   expect(JSON.parse(body.trim().split('\n')[1]!).source_position).toBe(position.toString());
   expect(JSON.parse(body.trim().split('\n')[1]!).source_version).toBe('review-lifecycle:8');
 
-  const mapping = mixedDiscoveryIndexDefinition().mappings;
+  const mapping = discoveryIndexDefinition().mappings;
   expect(mapping.dynamic).toBe('strict');
   for (const action of [...collectionActions, ...contentActions]) {
     if (action.op !== 'index') continue;
@@ -202,7 +202,7 @@ test('incomplete, foreign and expanded documents fail before indexing or hit dis
   expect(() =>
     validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, revision: Number(revision) }),
   ).toThrow();
-  expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, document_format: 1 })).toThrow();
+  expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, document_format: 2 })).toThrow();
   expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, owner: 'commerce' })).toThrow();
   expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, owner: 'semantic' })).toThrow();
 });

@@ -46,7 +46,7 @@ Warm-cache measurement on check host a: SQL analysis took 4.06 s, `tsconfig.json
 
 Repository-relative `REYLO_CONFIG` is a bounded explicit `--reylo-config=` argv input, revalidated by the receiving
 entrypoint. Paths resolve from each selected SQL workspace and must remain inside the checkout. External/absolute
-projects are explicitly unsupported. Kernel's core or existing module `--emit-schema=` modes declare their bounded
+projects are explicitly unsupported. Kernel's core or existing module `--emit-schema=` modes (a comma-separated selection such as `library,search`) declare their bounded
 schema.sql returns. Disposable compiler analyses are consumed within the same run, not returned recursively.
 `--emit-client` declares the closed [Kernel client output profile](../../services/kernel/README.md#client-declaration-output-placement).
 Its bounded versioned bundle uses the existing physical return pipeline. Source, attempt and complete byte custody

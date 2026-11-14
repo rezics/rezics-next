@@ -65,7 +65,7 @@ async function publisher(f: CollectionKindFixture) {
     release.catalogue = { ...release.catalogue, version };
     const objects = new Map<string, Uint8Array>();
     const pin = await buildCatalogue(
-      { releases: [release], compatibility: 'all' },
+      { releases: [release], typeKinds: 'all' },
       {
         read: async (digest) => objects.get(digest),
         put: async (digest, bytes) => {

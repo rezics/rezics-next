@@ -173,6 +173,7 @@ test('retained pages finish polyhierarchy and cycles without duplicate expansion
   });
   const { store, members } = retention();
   const state = (await startConceptBrowse(selection, binding, store))!;
+  expect(state.version).toBe(1);
   expect(await currentConceptMembership(source, store, state, 'missing')).toBe('not_proven');
   const result = await finish(source, store, state);
   expect(result.status).toBe('complete');

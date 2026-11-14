@@ -226,7 +226,7 @@ export function MalCurrentAssignments({ subjectId, disabled = false }: { subject
             ))}
           </ul>
         </>
-      )}
+      ) : null}
     </section>
   );
 }

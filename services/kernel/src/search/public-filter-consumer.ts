@@ -37,7 +37,7 @@ import { SCOPE_HIT_TEMPLATE } from './query-templates.ts';
 import { type SearchPlan, type SearchResult } from './query.ts';
 import { admitHitPayload } from './query-payload.ts';
 import { validateScopeOrderedHit } from './scope-ordered.ts';
-import { bulkLines, type IndexAction, type SearchDocument } from './document.ts';
+import { bulkLines, type IndexAction, type SubjectDocument } from './document.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { subjectPartition } from './source.ts';
 import { writeIndexActions } from './write-actions.ts';
@@ -539,7 +539,7 @@ export async function queryScopeOrderedKeys(
 export async function applyPublicFilterConsumerActions(
   search: OpenSearch,
   retainedConsumer: PublicFilterConsumer,
-  retainedActions: readonly IndexAction<SearchDocument>[],
+  retainedActions: readonly IndexAction<SubjectDocument>[],
   requestContext: PublicFilterConsumerContext,
 ): Promise<void> {
   // Copy before the first await, including document bodies and external versions.
@@ -571,7 +571,7 @@ export async function applyPublicFilterConsumerActions(
     ids.add(action.id);
   }
   // Enforce the sink step's byte ceiling before any metadata, normalization or write I/O.
-  const admitBytes = (batch: readonly IndexAction<SearchDocument>[]) => {
+  const admitBytes = (batch: readonly IndexAction<SubjectDocument>[]) => {
     const bytes = bulkLines(consumer.physicalTarget, batch).reduce<number>((total, line) => {
       const serialized = JSON.stringify(line);
       if (serialized === undefined) throw new TypeError('Repair bulk must contain native JSON');
@@ -660,17 +660,15 @@ import {
   type PublicFilterRepairWriterReceipt,
 } from './writer-guard.ts';
 import { createDiscoveryProjection, nativeDiscoveryRegistry } from './account-discovery.ts';
-import { mixedDiscoveryDocumentCodec } from './discovery-documents.ts';
+import { hasDiscoveryDocumentFormat } from './discovery-documents.ts';
 import { discoveryConsumer } from './generations.ts';
 import { subjectConsumer } from './runner.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compilePublicSuggestion } from './public-suggestion-input.ts';
-import { type SubjectDocument } from './document.ts';
 import type { DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
 import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
 import { readDiscoveryEngineResult } from './discovery-query.ts';
-import { readDiscoveryDocumentCodec } from './indices.ts';
 
 const emptyConsumerCost = (): CustodyCost => ({
   inputKeys: 0,
@@ -967,7 +965,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         query_timeout: supplied !== undefined && supplied > 0 ? Math.min(supplied, timeout) : timeout,
       };
     };
-    const wrapQuery = (db: Pick<Pool, 'query'>, reserved = false) =>
+    const wrapQuery =
+      (db: Pick<Pool, 'query'>, reserved = false) =>
       async (query: string | NativeReadQueryConfig, values?: unknown[]) => {
         const request = reserved ? (query as NativeReadQueryConfig) : reserveQuery(query, values);
         const result = await db.query(request);
@@ -1027,17 +1026,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
                 if (uncertainty) throw uncertainty;
                 remaining(context);
                 const statement = typeof query === 'string' ? query : query.text;
-                const terminal =
-                  /^\s*(COMMIT|END|ROLLBACK|ABORT)(?:\s+(?:WORK|TRANSACTION))?\s*;?\s*$/i.exec(statement);
-                const expected = terminal
-                  ? /^(COMMIT|END)$/i.test(terminal[1]!)
-                    ? 'COMMIT'
-                    : 'ROLLBACK'
-                  : undefined;
+                const terminal = /^\s*(COMMIT|END|ROLLBACK|ABORT)(?:\s+(?:WORK|TRANSACTION))?\s*;?\s*$/i.exec(
+                  statement,
+                );
+                const expected = terminal ? (/^(COMMIT|END)$/i.test(terminal[1]!) ? 'COMMIT' : 'ROLLBACK') : undefined;
                 // A terminal command is uncertain until its exact native reply. In
                 // particular, COMMIT in an aborted transaction replies ROLLBACK.
-                if (/^\s*(BEGIN|START\s+TRANSACTION|COMMIT|END|ROLLBACK|ABORT)\b/i.test(statement))
-                  unfinished = true;
+                if (/^\s*(BEGIN|START\s+TRANSACTION|COMMIT|END|ROLLBACK|ABORT)\b/i.test(statement)) unfinished = true;
                 const result = await observedQuery(query, values);
                 if (expected) {
                   if (result.command !== expected) {
@@ -1390,7 +1385,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       !record(mapping.body[target]) ||
       !record(mapping.body[target].mappings) ||
       !record(mapping.body[target].mappings._meta) ||
-      mixedDiscoveryDocumentCodec(mapping.body[target].mappings) === undefined ||
+      !hasDiscoveryDocumentFormat(mapping.body[target].mappings) ||
       mapping.body[target].mappings._meta.incarnation !== row.incarnation ||
       settings.status !== 200 ||
       !record(settings.body) ||
@@ -1662,9 +1657,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
       await mixedGeneration(m);
       const compiled = compileDiscoveryConsumerCapture(plan, meaning, config.registry);
-      // Credited text needs the credit codec: an older physical mapping would return no credited hit, not readiness.
-      if (compiled.creditEvidence && (await readDiscoveryDocumentCodec(m.native, target)) !== 'mixed-credit-v1')
-        throw new ConsumerFailure('dependency_unavailable');
       const sort =
         plan.sort === 'relevance'
           ? [{ _score: 'desc' }, { id: 'asc' }, { kind: 'asc' }, { identity: 'asc' }]
@@ -2849,7 +2841,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       guard = await mixedRepairWriter(q, m);
     } else {
       if (!subjectTarget) throw new ConsumerFailure('source_pending');
-      const creditFormat = await readSubjectCreditMappingFormatForIndex(m.native, target);
+      await readSubjectCreditMappingFormatForIndex(m.native, target);
       guard = createSearchWriterGuard({
         pool: m.pool,
         search: m.native,
@@ -2857,7 +2849,6 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         consumer: subjectConsumer(subjectTarget[1]!, Number(subjectTarget[2])),
         source: createRatedSubjectSource(m.pool, origin.routeKey, config.creditSearch).source,
         listing: subjectListingSource(m.pool),
-        ...(creditFormat === null ? {} : { creditFormat }),
       });
     }
     const locator = encodeNative({

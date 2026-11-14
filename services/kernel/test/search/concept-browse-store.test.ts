@@ -61,7 +61,7 @@ test('root seeding owns the definition before awaiting storage', async () => {
   const creating = store.create(mutable, binding);
   mutable.concept = 'changed';
   const retained = await creating;
-  expect(await store.read({ version: 2, selection, binding, retained })).toEqual({
+  expect(await store.read({ version: 1, selection, binding, retained })).toEqual({
     status: 'building',
     next: { parent: 'root', after: null },
   });

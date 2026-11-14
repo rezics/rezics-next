@@ -319,14 +319,14 @@ test('owner exports a populated Library and restores Collection, Entry and progr
     manifest: { version: number; coverage?: string; rows: number; sections: string[] };
     records: { section: string }[];
   };
-  expect(artifact.manifest.version).toBe(4);
-  expect(artifact.manifest.coverage).toBe('private-library-owner-facts-v4');
+  expect(artifact.manifest.version).toBe(1);
+  expect(artifact.manifest.coverage).toBe('private-library-owner-facts-v1');
   expect(artifact.records.some((row) => row.section === 'entries')).toBe(true);
   expect(artifact.records.some((row) => row.section === 'collections')).toBe(true);
   expect(artifact.records.some((row) => row.section === 'occurrences')).toBe(true);
   expect(artifact.records.some((row) => row.section === 'labels')).toBe(true);
   expect(artifact.records.some((row) => row.section === 'sessions')).toBe(true);
-  expect(new TextDecoder().decode(await readFile(archivePath))).toContain('"version":4');
+  expect(new TextDecoder().decode(await readFile(archivePath))).toContain('"version":1');
 
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.setViewportSize({ width: 390, height: 844 });

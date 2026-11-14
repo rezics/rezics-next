@@ -49,7 +49,13 @@
     "_meta": {
       "discovery_document_format": 1,
       "name_sort_format": 1,
-      "document_identity": "discovery-v1:percent-encoded-kind:uuid"
+      "document_identity": "discovery-v1:percent-encoded-kind:uuid",
+      "comparator": "mixed-public-v1",
+      "second_scope_kinds": {
+        "collection": "commerce",
+        "review": "content",
+        "space": "content"
+      }
     },
     "dynamic": "strict",
     "properties": {
@@ -161,6 +167,9 @@
       "revision": {
         "type": "keyword"
       },
+      "source_version": {
+        "type": "keyword"
+      },
       "account_kind": {
         "type": "keyword"
       },
@@ -168,7 +177,6 @@
         "type": "text",
         "analyzer": "cjk_bigram_v2",
         "index_options": "offsets",
-        "copy_to": "search_text",
         "fields": {
           "exact": {
             "type": "keyword",
@@ -185,7 +193,6 @@
         "type": "text",
         "analyzer": "cjk_bigram_v2",
         "index_options": "offsets",
-        "copy_to": "search_text",
         "fields": {
           "exact": {
             "type": "keyword",
@@ -197,6 +204,10 @@
             "max_shingle_size": 3
           }
         }
+      },
+      "identity": {
+        "type": "keyword",
+        "ignore_above": 512
       }
     }
   }

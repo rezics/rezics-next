@@ -1,20 +1,22 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import type { LibraryExportStatus } from '@rezics/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import {
   EXPORT_COMPLETENESS,
   EXPORT_FORMAT,
   EXPORT_PAGE_ROWS,
   EXPORT_PRIVACY,
-  EXPORT_SECTIONS_V1,
-  EXPORT_SECTIONS_V2,
-  EXPORT_SECTIONS_V3,
-  EXPORT_SECTIONS_V4,
-  EXPORT_V2_COVERAGE,
-  EXPORT_V3_COVERAGE,
-  EXPORT_V4_COVERAGE,
+  EXPORT_SECTIONS,
+  EXPORT_COVERAGE,
   EXPORT_VERSION,
   type ExportArtifact,
   type ExportCommand,
@@ -24,11 +26,8 @@ import {
   type ExportRecord,
   type ExportStatus,
   type ExportSectionTotals,
-  type ExportSection,
-  type ExportVersion,
   encodedRecordBytes,
   isExportStatus,
-  sectionsForExportVersion,
 } from '../src/library/private-export/contract';
 import type { ReactNode } from 'react';
 import { exportCallTotal, expectedExportCalls } from '../src/library/private-export/cost';
@@ -103,7 +102,7 @@ const visit = (viewer = 'alice', csrf = 'csrf-1'): ExportVisit => {
   };
 };
 
-function coverage(extra: Partial<ExportStatus> = {}, version: ExportVersion = EXPORT_VERSION): ExportStatus {
+function coverage(extra: Partial<ExportStatus> = {}): ExportStatus {
   const common = {
     format: EXPORT_FORMAT,
     exportId,
@@ -116,21 +115,19 @@ function coverage(extra: Partial<ExportStatus> = {}, version: ExportVersion = EX
     state: 'collecting',
     first,
   };
-  const versioned =
-    version === 1
-      ? { ...common, version: 1 as const, sections: [...EXPORT_SECTIONS_V1] }
-      : version === 2
-        ? { ...common, version: 2 as const, coverage: EXPORT_V2_COVERAGE, sections: [...EXPORT_SECTIONS_V2] }
-        : version === 3
-          ? { ...common, version: 3 as const, coverage: EXPORT_V3_COVERAGE, sections: [...EXPORT_SECTIONS_V3] }
-          : { ...common, version: 4 as const, coverage: EXPORT_V4_COVERAGE, sections: [...EXPORT_SECTIONS_V4] };
-  return { ...versioned, ...extra } as ExportStatus;
+  return {
+    ...common,
+    version: EXPORT_VERSION,
+    coverage: EXPORT_COVERAGE,
+    sections: [...EXPORT_SECTIONS],
+    ...extra,
+  } as ExportStatus;
 }
 
-function manifest(records: readonly ExportRecord[], version: ExportVersion = EXPORT_VERSION): ExportManifest {
-  const status = coverage({ state: 'ready', first: null }, version);
+function manifest(records: readonly ExportRecord[]): ExportManifest {
+  const status = coverage({ state: 'ready', first: null });
   const { state: _state, first: _first, ...base } = status;
-  const sections = version === 1 ? [] : sectionsForExportVersion(version);
+  const sections = EXPORT_SECTIONS;
   const sectionTotals = Object.fromEntries(
     sections.map((section) => [
       section,
@@ -142,9 +139,8 @@ function manifest(records: readonly ExportRecord[], version: ExportVersion = EXP
         { rows: 0, recordBytes: 0 },
       ),
     ]),
-  ) as ExportSectionTotals<ExportSection>;
+  ) as ExportSectionTotals;
   const recordBytes = records.reduce((sum, record) => sum + encodedRecordBytes(record), 0);
-  if (base.version === 1) return { ...base, rows: records.length, recordBytes };
   return { ...base, rows: records.length, recordBytes, sectionTotals };
 }
 
@@ -232,7 +228,6 @@ function recordingPort(
   options: {
     create?: ExportPort['create'];
     status?: ExportStatus;
-    version?: ExportVersion;
     failCreateOnce?: boolean;
     failPageOnce?: boolean;
     staleOnStatus?: boolean;
@@ -262,13 +257,12 @@ function recordingPort(
       createAttempts += 1;
       if (options.failCreateOnce && createAttempts === 1) return { kind: 'unknown', command };
       if (options.create) return options.create(command);
-      return { kind: 'status', status: coverage({}, options.version) };
+      return { kind: 'status', status: coverage({}) };
     },
     async status(command) {
       statuses.push(command.exportId);
-      if (options.staleOnStatus)
-        return { kind: 'status', status: coverage({ state: 'stale', first: null }, options.version) };
-      return { kind: 'status', status: options.status ?? coverage({ state: 'ready', first }, options.version) };
+      if (options.staleOnStatus) return { kind: 'status', status: coverage({ state: 'stale', first: null }) };
+      return { kind: 'status', status: options.status ?? coverage({ state: 'ready', first }) };
     },
     async page(command) {
       pageCursors.push(command.cursor);
@@ -279,7 +273,7 @@ function recordingPort(
     },
     async cancel(command) {
       cancels.push(command.exportId);
-      return { kind: 'cancelled', status: coverage({ state: 'cancelled', first: null }, options.version) };
+      return { kind: 'cancelled', status: coverage({ state: 'cancelled', first: null }) };
     },
   };
   return { port, creates, pageCursors, cancels, statuses };
@@ -338,14 +332,25 @@ async function mount(
     component: () => (
       <QueryClientProvider client={client}>
         <LibraryExportPortContext.Provider value={port}>
-          {presentation ?? <PrivateLibraryExportPage visit={current} {...runtime} />}
+          <Outlet />
         </LibraryExportPortContext.Provider>
       </QueryClientProvider>
     ),
   });
+  const exportRoute = createRoute({
+    getParentRoute: () => tree,
+    path: '/en/library/export',
+    component: () => presentation ?? <PrivateLibraryExportPage visit={current} {...runtime} />,
+  });
+  const recoveryRoute = createRoute({
+    getParentRoute: () => tree,
+    path: '/library/recover-archive',
+    component: () => <h1>{m.library_archive_title()}</h1>,
+  });
   const router = createRouter({
-    routeTree: tree,
+    routeTree: tree.addChildren([exportRoute, recoveryRoute]),
     history: createMemoryHistory({ initialEntries: ['/en/library/export'] }),
+    isServer: false,
   });
   await router.load();
   await act(async () => {
@@ -416,7 +421,7 @@ test('empty continuation reaches a final manifest; missing manifest yields no fi
   expect(snap.stage).toBe('unavailable');
 });
 
-test('version 3 preserves owner records and assessments, then verifies every section total before saving exact bytes', async () => {
+test('canonical export preserves owner records and assessments, then verifies every section total before saving exact bytes', async () => {
   const records: ExportRecord[] = [
     recordOf(0),
     {
@@ -449,13 +454,13 @@ test('version 3 preserves owner records and assessments, then verifies every sec
     journalRecord(2, 0),
     journalRecord(3, null),
   ];
-  const finalManifest = manifest(records, 3);
+  const finalManifest = manifest(records);
   const pages = [
     pageOf(records.slice(0, 2), { next: 'cursor-empty', state: 'collecting' }),
     pageOf([], { next: 'cursor-final', state: 'collecting' }),
     pageOf(records.slice(2), { state: 'ready', manifest: finalManifest }),
   ];
-  const ready = recordingPort(pages, { version: 3 });
+  const ready = recordingPort(pages);
   const delivered: Uint8Array[] = [];
   const journey = createExportJourney({
     port: ready.port,
@@ -472,17 +477,17 @@ test('version 3 preserves owner records and assessments, then verifies every sec
   expect(snap.cost.emptyPages).toBe(1);
   expect(snap.cost.maxPageRecords).toBeLessThanOrEqual(EXPORT_PAGE_ROWS);
   expect(ready.pageCursors).toEqual([first, 'cursor-empty', 'cursor-final']);
-  expect(snap.manifest?.version).toBe(3);
-  expect(Object.keys(snap.manifest?.version === 3 ? snap.manifest.sectionTotals : {})).toEqual([...EXPORT_SECTIONS_V3]);
-  expect(snap.manifest?.version === 3 ? snap.manifest.sectionTotals.annotations : null).toEqual({
+  expect(snap.manifest?.version).toBe(1);
+  expect(Object.keys(snap.manifest?.sectionTotals ?? {})).toEqual([...EXPORT_SECTIONS]);
+  expect(snap.manifest?.sectionTotals.annotations).toEqual({
     rows: 1,
     recordBytes: encodedRecordBytes(records[1]!),
   });
-  expect(snap.manifest?.version === 3 ? snap.manifest.sectionTotals.units : null).toEqual({
+  expect(snap.manifest?.sectionTotals.units).toEqual({
     rows: 0,
     recordBytes: 0,
   });
-  expect(snap.manifest?.version === 3 ? snap.manifest.sectionTotals.journals.rows : null).toBe(2);
+  expect(snap.manifest?.sectionTotals.journals.rows).toBe(2);
   await journey.download();
   expect(delivered).toHaveLength(1);
   const exactBytes = new TextDecoder().decode(delivered[0]);
@@ -492,13 +497,13 @@ test('version 3 preserves owner records and assessments, then verifies every sec
   expect(parseAssembledArtifact(delivered[0]!)).toEqual({ manifest: finalManifest, records });
 });
 
-test('mounted version 4 coverage reaches the completed download state with all 21 totals', async () => {
+test('mounted canonical coverage reaches the completed download state with all 22 totals', async () => {
   const originalCreate = URL.createObjectURL;
   const originalRevoke = URL.revokeObjectURL;
   URL.createObjectURL = () => 'blob:https://site.test/private-export';
   URL.revokeObjectURL = () => {};
   try {
-    const capture = exportRecording(4);
+    const capture = exportRecording();
     const recording = recordedExportPort(capture);
     const files: Uint8Array[] = [];
     await mount(recording.port, visit(), {
@@ -508,12 +513,13 @@ test('mounted version 4 coverage reaches the completed download state with all 2
         return true;
       },
     });
-    expect(host.textContent).toContain(m.library_export_version({ version: 4 }));
+    expect(host.textContent).toContain(m.library_export_version({ version: 1 }));
     expect(host.textContent).toContain(m.library_export_section_annotations());
     expect(host.textContent).toContain(m.library_export_section_provenance());
     expect(host.textContent).toContain(m.library_export_section_journals());
     expect(host.textContent).toContain(m.library_export_section_vndb());
     expect(host.textContent).toContain(m.library_export_section_anilist());
+    expect(host.textContent).toContain(m.library_export_section_hosted_reading());
     await click(m.library_export_capture());
     await waitFor(m.library_export_ready());
     expect(host.textContent).toContain(m.library_export_section_total({ rows: 0, bytes: 0 }));
@@ -533,72 +539,21 @@ test('mounted version 4 coverage reaches the completed download state with all 2
   }
 });
 
-test('stored version 1 keeps its original sections and retries the exact cursor', async () => {
-  const records = [recordOf(7)];
-  const stored = coverage({}, 1);
-  const oldPage = pageOf(records, { state: 'ready', manifest: manifest(records, 1) });
-  const calls = recordingPort([oldPage], {
-    create: async () => ({ kind: 'status', status: stored }),
-    failPageOnce: true,
-  });
-  const journey = createExportJourney({ port: calls.port, visit: visit() });
-
-  let snap = await journey.capture();
-  expect(snap.notice).toMatchObject({ kind: 'unknown', command: { kind: 'page', cursor: first } });
-  snap = await journey.retryUnknown();
-  expect(snap.stage).toBe('ready');
-  expect(snap.hasArtifact).toBe(true);
-  expect(snap.manifest).toMatchObject({
-    version: 1,
-    sections: [...EXPORT_SECTIONS_V1],
-    rows: 1,
-    recordBytes: encodedRecordBytes(records[0]!),
-  });
-  expect(snap.manifest?.version === 1 && 'sectionTotals' in snap.manifest).toBe(false);
-  expect(calls.creates).toHaveLength(1);
-  expect(calls.pageCursors).toEqual([first, first]);
-});
-
-test('stored version 2 keeps its original journal shape, totals and exact retry cursor', async () => {
-  const records = [journalRecord(7)];
-  const stored = coverage({}, 2);
-  const pages = [pageOf(records, { state: 'ready', manifest: manifest(records, 2) })];
-  const calls = recordingPort(pages, { create: async () => ({ kind: 'status', status: stored }), failPageOnce: true });
-  const delivered: Uint8Array[] = [];
-  const journey = createExportJourney({
-    port: calls.port,
-    visit: visit(),
-    deliver(file) {
-      delivered.push(file.bytes.slice());
-      return true;
-    },
-  });
-
-  let snap = await journey.capture();
-  expect(snap.notice).toMatchObject({ kind: 'unknown', command: { kind: 'page', cursor: first } });
-  snap = await journey.retryUnknown();
-  expect(snap.manifest?.version).toBe(2);
-  expect(calls.pageCursors).toEqual([first, first]);
-  await journey.download();
-  expect(new TextDecoder().decode(delivered[0]!)).not.toContain('assessment');
-});
-
-test('version 3 refuses missing or malformed journal assessment fields', async () => {
+test('canonical export refuses missing or malformed journal assessment fields', async () => {
   for (const record of [journalRecord(8), journalRecord(9, 21)]) {
-    const page = pageOf([record], { state: 'ready', manifest: manifest([record], 3) });
-    const journey = createExportJourney({ port: recordingPort([page], { version: 3 }).port, visit: visit() });
+    const page = pageOf([record], { state: 'ready', manifest: manifest([record]) });
+    const journey = createExportJourney({ port: recordingPort([page]).port, visit: visit() });
     const snap = await journey.capture();
     expect(snap.stage).toBe('unavailable');
     expect(snap.hasArtifact).toBe(false);
   }
 });
 
-test('mixed versions, captures and section totals refuse the final artifact', async () => {
-  const capture = exportRecording(4);
+test('mixed captures and section totals refuse the final artifact', async () => {
+  const capture = exportRecording();
   const records = capture.pages.flatMap((page) => page.records);
   const last = capture.pages.at(-1)!;
   const good = last.manifest!;
-  if (good.version !== 4) throw new Error('Expected a version 4 fixture');
   const wrongTotals = {
     ...good,
     sectionTotals: {
@@ -614,13 +569,7 @@ test('mixed versions, captures and section totals refuse the final artifact', as
     ...good,
     exportId: '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb',
   };
-  const mismatches: ExportManifest[] = [
-    manifest(records, 1),
-    manifest(records, 2),
-    manifest(records, 3),
-    wrongCapture,
-    wrongTotals,
-  ];
+  const mismatches: ExportManifest[] = [wrongCapture, wrongTotals];
   for (const mismatched of mismatches) {
     const recording = recordedExportPort({
       ...capture,
@@ -644,90 +593,93 @@ test('mixed versions, captures and section totals refuse the final artifact', as
   expect(terminalSnap.hasArtifact).toBe(false);
 });
 
-test('V4 requires its exact inventory and coverage; V3 cannot append providers and unknown versions stay unavailable', () => {
-  expect(EXPORT_SECTIONS_V3).toHaveLength(17);
-  expect(EXPORT_SECTIONS_V4.slice(17)).toEqual(['vndbUploads', 'vndbEvidence', 'anilistUploads', 'anilistEvidence']);
-  const producer = exportRecording(4);
-  expect(producer.status.sections).toEqual([...EXPORT_SECTIONS_V4]);
+test('canonical export requires all 22 section totals and rejects superseded coverage', () => {
+  expect(EXPORT_SECTIONS).toHaveLength(22);
+  const producer = exportRecording();
+  expect(producer.status.sections).toEqual([...EXPORT_SECTIONS]);
   const final = producer.pages.at(-1)!.manifest!;
-  if (final.version !== 4) throw new Error('Expected the published V4 producer');
-  expect(Object.keys(final.sectionTotals)).toEqual([...EXPORT_SECTIONS_V4]);
-  expect(EXPORT_SECTIONS_V4.slice(17).map((section) => final.sectionTotals[section].rows)).toEqual([1, 2, 1, 1]);
+  expect(Object.keys(final.sectionTotals)).toEqual([...EXPORT_SECTIONS]);
+  expect(EXPORT_SECTIONS.slice(17, 21).map((section) => final.sectionTotals[section].rows)).toEqual([1, 2, 1, 1]);
+  expect(final.sectionTotals.hostedReading.rows).toBe(1);
+  expect(
+    producer.pages.flatMap((page) => page.records).find((record) => record.section === 'hostedReading'),
+  ).toMatchObject({
+    bodyLanguage: 'zh-Hans',
+    target_post_id: '0192f3a0-6c1e-7b2a-9d4e-220000000001',
+    document_block_id: 'chapter-text',
+    document_offset: 12,
+  });
   const installed: LibraryExportStatus = producer.status;
   expect(isExportStatus(installed)).toBe(true);
   for (const status of [
-    { ...coverage(), version: 5 },
-    { ...coverage(), coverage: EXPORT_V3_COVERAGE },
-    { ...coverage(), sections: EXPORT_SECTIONS_V3 },
-    { ...coverage({}, 3), sections: EXPORT_SECTIONS_V4 },
-    { ...coverage(), sections: [...EXPORT_SECTIONS_V4].reverse() },
+    { ...coverage(), version: 4 },
+    { ...coverage(), coverage: 'private-library-owner-facts-v4' },
+    { ...coverage(), sections: EXPORT_SECTIONS.slice(0, 17) },
+    { ...coverage(), sections: [...EXPORT_SECTIONS].reverse() },
   ])
     expect(isExportStatus(status)).toBe(false);
 });
 
-test('producer V1/V4 retain exact cursors, sections and file bytes across unknown create/page and save retry', async () => {
-  for (const version of [1, 4] as const) {
-    const capture = exportRecording(version);
-    const recording = recordedExportPort(capture);
-    let createFailed = false,
-      pageFailed = false;
-    const calls: ExportCommand[] = [];
-    const port: ExportPort = {
-      ...recording.port,
-      async create(command) {
-        calls.push(command);
-        if (!createFailed) {
-          createFailed = true;
-          return { kind: 'unknown', command };
-        }
-        return recording.port.create(command);
-      },
-      async page(command) {
-        calls.push(command);
-        if (!pageFailed) {
-          pageFailed = true;
-          return { kind: 'unknown', command };
-        }
-        return recording.port.page(command);
-      },
-    };
-    const files: Uint8Array[] = [];
-    const journey = createExportJourney({
-      port,
-      visit: visit(),
-      now: recording.now,
-      deliver: (file) => {
-        files.push(file.bytes);
-        return files.length > 1;
-      },
-    });
-    expect((await journey.capture()).hasArtifact).toBe(false);
-    expect((await journey.retryUnknown()).hasArtifact).toBe(false);
-    expect((await journey.retryUnknown()).stage).toBe('ready');
-    expect(calls[0]).toEqual(calls[1]);
-    expect(calls[2]).toEqual(calls[3]);
-    expect(recording.commands.filter((command) => command.kind === 'page').map((command) => command.cursor)).toEqual([
-      capture.status.first,
-      ...capture.pages.slice(0, -1).map((page) => page.next),
-    ]);
-    expect((await journey.download()).stage).toBe('save-failed');
-    await journey.download();
-    expect(files[0]).toBe(files[1]);
-    expect(new TextDecoder().decode(files[0])).toBe(capture.artifact);
-    const journals = capture.pages.flatMap((page) => page.records).filter((record) => record.section === 'journals');
-    if (version === 4)
-      for (const units of [null, 0])
-        expect(journals.map((record) => record.journal)).toContainEqual(
-          expect.objectContaining({ assessment: { meaningRevision: 1, units } }),
-        );
-    expect(capture.status.sections).toHaveLength(version === 1 ? 14 : 21);
-  }
+test('producer retains exact cursors, sections and file bytes across unknown create/page and save retry', async () => {
+  const capture = exportRecording();
+  const recording = recordedExportPort(capture);
+  let createFailed = false,
+    pageFailed = false;
+  const calls: ExportCommand[] = [];
+  const port: ExportPort = {
+    ...recording.port,
+    async create(command) {
+      calls.push(command);
+      if (!createFailed) {
+        createFailed = true;
+        return { kind: 'unknown', command };
+      }
+      return recording.port.create(command);
+    },
+    async page(command) {
+      calls.push(command);
+      if (!pageFailed) {
+        pageFailed = true;
+        return { kind: 'unknown', command };
+      }
+      return recording.port.page(command);
+    },
+  };
+  const files: Uint8Array[] = [];
+  const journey = createExportJourney({
+    port,
+    visit: visit(),
+    now: recording.now,
+    deliver: (file) => {
+      files.push(file.bytes);
+      return files.length > 1;
+    },
+  });
+  expect((await journey.capture()).hasArtifact).toBe(false);
+  expect((await journey.retryUnknown()).hasArtifact).toBe(false);
+  expect((await journey.retryUnknown()).stage).toBe('ready');
+  expect(calls[0]).toEqual(calls[1]);
+  expect(calls[2]).toEqual(calls[3]);
+  expect(recording.commands.filter((command) => command.kind === 'page').map((command) => command.cursor)).toEqual([
+    capture.status.first,
+    ...capture.pages.slice(0, -1).map((page) => page.next),
+  ]);
+  expect((await journey.download()).stage).toBe('save-failed');
+  await journey.download();
+  expect(files[0]).toBe(files[1]);
+  expect(new TextDecoder().decode(files[0])).toBe(capture.artifact);
+  const journals = capture.pages.flatMap((page) => page.records).filter((record) => record.section === 'journals');
+  for (const units of [null, 0])
+    expect(journals.map((record) => record.journal)).toContainEqual(
+      expect.objectContaining({ assessment: { meaningRevision: 1, units } }),
+    );
+  expect(capture.status.sections).toHaveLength(22);
 });
 
 test('failure, source invalidation, expiry and viewer or credential retirement clear incomplete producer bytes', async () => {
   for (const outcome of ['unavailable', 'retire', 'stale', 'expiry', 'viewer', 'csrf'] as const) {
     const current = visit();
-    const capture = exportRecording(4);
+    const capture = exportRecording();
     const recording = recordedExportPort(capture);
     let clock = recording.now();
     let journey: ReturnType<typeof createExportJourney>;
@@ -1181,7 +1133,7 @@ test('review and ready put the primary action before inspection and restore whil
   ).toBeTruthy();
   const coverageDetails = host.querySelector('details')!;
   expect(coverageDetails.open).toBe(false);
-  expect(coverageDetails.querySelectorAll('ul:first-child > li')).toHaveLength(21);
+  expect(coverageDetails.querySelectorAll('ul:first-child > li')).toHaveLength(22);
   await click(m.library_export_capture());
   await waitFor(m.library_export_ready());
   const download = button(m.library_export_download())!;
@@ -1191,7 +1143,7 @@ test('review and ready put the primary action before inspection and restore whil
   expect(download.closest('details')).toBeNull();
   expect(download.compareDocumentPosition(inspection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(inspection.compareDocumentPosition(restore) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(inspection.querySelectorAll('section li')).toHaveLength(21);
+  expect(inspection.querySelectorAll('section li')).toHaveLength(22);
   const omissionDetails = host.querySelector('dl')!;
   expect(omissionDetails.closest('details')).toBeNull();
   expect(omissionDetails.querySelectorAll('dd')).toHaveLength(6);
@@ -1294,6 +1246,7 @@ test('bytes-lost presentation offers original replay rather than download and re
 test('restore navigation uses the router and keeps the completed original archive for the same owner', async () => {
   const fixture = recordingPort(pagesFor(1));
   const router = await mount(fixture.port);
+  const blockers = spyOn(router.history, 'block');
   await click(m.library_export_capture());
   await waitFor(m.library_export_ready());
   const original = completedArchiveFor('alice')!;
@@ -1305,13 +1258,29 @@ test('restore navigation uses the router and keeps the completed original archiv
     destination.dispatchEvent(activation);
   });
   expect(activation.defaultPrevented).toBe(true);
-  await waitFor(m.library_export_leave_completed(), document.body);
+  await waitFor(m.library_export_leave_completed(), document.body).catch((cause) => {
+    throw new Error(
+      `Export departure state: ${JSON.stringify({
+        isServer: router.isServer,
+        location: router.state.location.pathname,
+        history: router.history.location.pathname,
+        status: router.state.status,
+        routes: router.state.matches.map((match) => match.routeId),
+        blockerSubscriptions: blockers.mock.calls.length,
+        stage: host.querySelector('[data-export-stage]')?.getAttribute('data-export-stage'),
+        dialogs: document.querySelectorAll('[role="alertdialog"]').length,
+      })}`,
+      { cause },
+    );
+  });
   const leave = [...document.querySelectorAll('button')].find((item) => item.textContent === m.library_export_leave())!;
   await act(async () => {
     leave.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
   });
   await settle();
   expect(router.state.location.pathname).toBe('/library/recover-archive');
+  expect(host.textContent).toContain(m.library_archive_title());
+  expect(host.querySelector('[data-export-stage]')).toBeNull();
   expect(completedArchiveFor('alice')).toBe(original);
   expect(new TextDecoder().decode(original.bytes)).toBe(originalText);
   expect(fixture.creates).toHaveLength(1);

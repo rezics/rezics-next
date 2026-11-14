@@ -3,25 +3,20 @@
 This document owns the native discovery source format. Query authorization, current disclosure, candidate order and
 shared analyzer requirements remain under [universal search conditions](../../../../docs/search-conditions.md).
 
-## Compatibility
+## Canonical v1
 
-Format 1 remains the immutable legacy Subject/Account source shape and mapping. Its UUID-only receipt and parser
-semantics do not change. Format 2 is the immutable `mixed-public-v1` source shape: it uses the strict shared mapping
-in [`discovery-mixed-v1.json`](../../db/search/indices/discovery-mixed-v1.json), tagged `_id` values of
-`discovery-v1:<percent-encoded-kind>:<canonical-routable-uuid>`, and an identical `_source.identity`.
+All Discovery owners use one native v1 document and mapping. The mapping in
+[`discovery.json`](../../db/search/indices/discovery.json) supplies tagged `_id` values of
+`discovery-v1:<percent-encoded-kind>:<canonical-routable-uuid>` and an identical `_source.identity`.
+Its constructor always includes precise calendar intervals and credited-name fields; physical generations
+must be fully populated and reconciled before publication. There is no older writer or decoder selection.
+The separate Subject-only index retains raw Subject UUIDs as its domain identity, not as a Discovery format.
 
-Format 3 is the calendar successor to format 2. Its strict mapping derives from format 2 and adds calendar fields
-to nested date facts. Semantic Subject and Account projections use format 3 only when their physical generation
-has that matching mapping; the generation's stored UUID and mapping determine the writer codec. Format 2 physical
-generations and their documents keep their year-only projection. The second-scope owner adapters continue to emit
-their existing format-2 shape because those records have no calendar facts.
-
-**Decision:** second-scope kinds keep format 2's common public text and native revision fields in either physical
-mapping. A generation may publish them only with the expanded registry and matching mapping receipt.
-
-Format 2 is additive by owner and kind. Subject and Account retain their existing exact field allowlists and
-validation. The second-scope kinds use only the common identity fields plus `revision`, `names`, `descriptions` and
-`name_sort`; a new kind never widens the Subject or Account allowlist. Format 1 rejects all second-scope kinds.
+Subject, Account and the second-scope kinds retain distinct exact field allowlists. Every owner shares the
+identity, exact source-position and common public text fields. Subject dates retain their known components
+and derived interval bounds; complete creator projections publish exact credited-name witnesses, while an
+incomplete projection publishes no names. Second-scope owners carry their native revision and source-version
+fields without gaining Subject facts or Account profile data.
 
 ## Second-scope identities and public fields
 
@@ -49,9 +44,8 @@ All kinds use the existing `cjk_bigram_v2` analyzer and shared `names`, `descrip
 mapping remains `dynamic: "strict"`; its `second_scope_kinds` metadata binds Collection to Commerce and review and
 Space to Content. No per-kind engine, index or client is introduced.
 
-Format 1 readers retain their existing meaning. Format 2 readers decode existing Subject and Account documents as
-before. Format 3 readers validate calendar components and interval keys against their matching mapping. Both mixed
-formats decode a second-scope document only when its owner/kind pair and allowlisted fields match. The mapping
-metadata and expanded closed registry are generation inputs: population, replay, reconciliation and continuing
-writes use the selected physical codec, and publication follows complete current coverage. An old generation or
-receipt cannot establish coverage for a kind absent from its registry.
+The canonical reader validates each owner's exact identity and allowed fields. Mapping metadata and the
+expanded closed registry remain generation inputs: population, replay, reconciliation and continuing writes use
+the complete canonical mapping, and publication follows complete current coverage. An old development index
+requires a coordinated rebuild; its mapping or receipt cannot establish canonical coverage or a kind absent
+from its registry. No live index is relabelled or upgraded in place by this contract.

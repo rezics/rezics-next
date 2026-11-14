@@ -269,8 +269,10 @@ const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly st
     'committed_ordinal',
     'skipped',
     'rolling_digest',
+    'identity_json',
+    'completed_members',
   ],
-  run_staging_prefix: ['source', 'run_id', 'ordinal', 'record_key', 'digest'],
+  run_staging_prefix: ['source', 'run_id', 'ordinal', 'record_key', 'digest', 'member_index'],
   run_retention_work: [
     'plan_id',
     'source',
@@ -806,27 +808,17 @@ export class RunStore<Projection = BatchStatement[]> {
         digest TEXT NOT NULL, head_json TEXT NOT NULL,
         PRIMARY KEY(source, subject_id, association_key)) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_staging_checkpoints (
-        source TEXT NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL,
+        source TEXT NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL CHECK(version=1),
         sha256 TEXT NOT NULL, bytes INTEGER NOT NULL, source_alias TEXT NOT NULL,
         source_kind TEXT NOT NULL, converter_revision TEXT NOT NULL, decoder_id TEXT NOT NULL,
         disappearance_threshold REAL NOT NULL, committed_ordinal INTEGER NOT NULL,
         skipped INTEGER NOT NULL, rolling_digest TEXT NOT NULL,
-        identity_json TEXT, completed_members INTEGER NOT NULL DEFAULT 0,
+        identity_json TEXT NOT NULL, completed_members INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(source, run_id)) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_staging_prefix (
         source TEXT NOT NULL, run_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
-        record_key TEXT NOT NULL, digest TEXT NOT NULL, member_index INTEGER NOT NULL DEFAULT 0,
+        record_key TEXT NOT NULL, digest TEXT NOT NULL, member_index INTEGER NOT NULL,
         PRIMARY KEY(source, run_id, ordinal)) WITHOUT ROWID`);
-      const checkpointColumns = this.all<{ name: string }>('PRAGMA table_info(run_staging_checkpoints)');
-      if (checkpointColumns.length && !checkpointColumns.some(({ name }) => name === 'identity_json'))
-        this.database.exec('ALTER TABLE run_staging_checkpoints ADD COLUMN identity_json TEXT');
-      if (checkpointColumns.length && !checkpointColumns.some(({ name }) => name === 'completed_members'))
-        this.database.exec(
-          'ALTER TABLE run_staging_checkpoints ADD COLUMN completed_members INTEGER NOT NULL DEFAULT 0',
-        );
-      const prefixColumns = this.all<{ name: string }>('PRAGMA table_info(run_staging_prefix)');
-      if (prefixColumns.length && !prefixColumns.some(({ name }) => name === 'member_index'))
-        this.database.exec('ALTER TABLE run_staging_prefix ADD COLUMN member_index INTEGER NOT NULL DEFAULT 0');
       this.database.exec('CREATE INDEX IF NOT EXISTS run_generation_seq ON run_generations(source, seq)');
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_retention_work (
         plan_id TEXT PRIMARY KEY,
@@ -1182,7 +1174,7 @@ export class RunStore<Projection = BatchStatement[]> {
       committed_ordinal: number;
       skipped: number;
       rolling_digest: string;
-      identity_json: string | null;
+      identity_json: string;
       completed_members: number;
     }>(
       `SELECT version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
@@ -1204,7 +1196,7 @@ export class RunStore<Projection = BatchStatement[]> {
       committedOrdinal: row.committed_ordinal,
       skipped: row.skipped,
       rollingDigest: row.rolling_digest,
-      completedMembers: row.completed_members ?? 0,
+      completedMembers: row.completed_members,
       identityJson: row.identity_json,
     });
   }
@@ -1236,7 +1228,7 @@ export class RunStore<Projection = BatchStatement[]> {
       run.id,
       ordinal,
     );
-    return row ? { ordinal, recordKey: row.record_key, digest: row.digest, memberIndex: row.member_index ?? 0 } : null;
+    return row ? { ordinal, recordKey: row.record_key, digest: row.digest, memberIndex: row.member_index } : null;
   }
   stagedIdentity(run: Run, recordKey: string): { digest: string; projection: string } | null {
     validateRun(run);
@@ -1257,7 +1249,7 @@ export class RunStore<Projection = BatchStatement[]> {
     keyId(record.recordKey);
     identifier(record.digest, 64, /^[a-f0-9]{64}$/u);
     if (!Number.isSafeInteger(record.ordinal) || record.ordinal < 1) fail();
-    const memberIndex = record.memberIndex ?? 0;
+    const memberIndex = record.memberIndex;
     if (!Number.isSafeInteger(memberIndex) || memberIndex < 0) fail();
     if (skippedDelta !== 0 && skippedDelta !== 1) fail();
     return this.transaction(() => {
@@ -1265,7 +1257,7 @@ export class RunStore<Projection = BatchStatement[]> {
       const current = this.stagingCheckpoint(run.source, run.id);
       if (!current) throw new Error('Staging checkpoint is missing');
       if (record.ordinal !== current.committedOrdinal + 1) throw new Error('Staging checkpoint ordinal jumped');
-      const rolling = extendPrefixDigest(current.rollingDigest, record, current.version);
+      const rolling = extendPrefixDigest(current.rollingDigest, record);
       this.write(
         'INSERT INTO run_staging_prefix(source,run_id,ordinal,record_key,digest,member_index) VALUES(?,?,?,?,?,?)',
         run.source,
