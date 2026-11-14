@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createKernelClient } from '@rezics/client';
 import type { StudioResult, StudioSelection } from '../src/studio/contract';
 import type {
+  HostedBookNative,
   HostedDraftPointRequest,
   HostedOwnedBook,
   HostedOutlineWindowRequest,
@@ -124,7 +125,9 @@ async function fixture() {
         _csrf?: string,
       ): Promise<StudioResult<typeof receipt>> => ok(receipt),
     ),
-    readOwn: mock(async () => ok({ ...owner, item: { ...owner.item, headRevisionId: id(8) } })),
+    readOwn: mock(async (..._args: Parameters<HostedBookNative['readOwn']>): Promise<StudioResult<HostedOwnedBook>> =>
+      ok({ ...owner, item: { ...owner.item, headRevisionId: id(8) } }),
+    ),
     readOutlineWindow: mock(
       async (
         { revision, cursor }: HostedOutlineWindowRequest,
@@ -186,7 +189,7 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>) {
   };
 }
 
-test('owned entry opens bounded editing; mounted nested chapter review freezes exact body/version and stable anchors', async () => {
+test('bounded chapter review retains exact anchors; acknowledged edits explicitly continue with fresh heads and commands', async () => {
   const f = await fixture();
   const inventory = new HostedInventoryVisit(
     { listOwn: async () => ok({ ...f.owner, items: [f.owner.item], nextCursor: null }) },
@@ -239,6 +242,59 @@ test('owned entry opens bounded editing; mounted nested chapter review freezes e
     expect(f.native.writeDraftPoint.mock.calls[0]![2]).toBe('original-csrf');
     expect(active(f).receipt).toEqual(receipt);
     expect(f.native.readOutlineWindow.mock.calls.at(-1)![0].revision.revisionId).toBe(receipt.revisionId);
+    const acknowledgedWindow = active(f).outline;
+    const fresh = deferred<StudioResult<HostedOwnedBook>>();
+    f.native.readOwn.mockImplementationOnce(() => fresh.promise);
+    await ui.click('Next edit');
+    await act(async () => {
+      await f.visit.nextEdit();
+      await f.visit.submit();
+      await f.visit.review();
+    });
+    expect(active(f)).toMatchObject({
+      phase: 'next-edit',
+      refreshing: true,
+      intent: null,
+      selection: null,
+      title: '',
+      receipt,
+      choice: { kind: 'part', parent: null, before: null, move: null, removal: null, update: null, versionHead: null },
+    });
+    expect(acknowledgedWindow.snapshot()).toEqual({ kind: 'ended' });
+    expect(f.visit.picker.target(f.selection.revision.exact)).toBeNull();
+    expect(f.visit.canEdit()).toBe(false);
+    expect(f.native.readOwn.mock.calls).toHaveLength(1);
+    expect(f.native.readOwn.mock.calls[0]!.slice(0, 2)).toEqual([accountId, id(1)]);
+    expect(f.native.readOwn.mock.calls[0]![3]).toEqual(f.owner.viewer);
+    expect(f.native.writeDraftPoint).toHaveBeenCalledTimes(1);
+    f.native.readOutlineWindow.mockImplementationOnce(async ({ revision }) =>
+      ok({ ...revision, items: [], nextCursor: null }),
+    );
+    await act(async () => fresh.resolve(ok({ ...f.owner, item: { ...f.owner.item, headRevisionId: id(80) } })));
+    expect(active(f)).toMatchObject({ phase: 'idle', head: id(80), intent: null });
+    await act(async () => f.visit.nextEdit());
+    expect(f.native.readOwn).toHaveBeenCalledTimes(1);
+    expect(document.activeElement?.textContent).toBe('Choose an edit');
+    expect(ui.host.textContent).toContain('Earlier edit acknowledged');
+    await act(async () => f.visit.observe(part.occurrenceId, 'removal'));
+    expect(active(f).choice.removal).toBeNull();
+    await ui.click('Insert saved chapter');
+    await ui.click('Open a saved account draft');
+    await ui.click('Exact saved chapter');
+    await ui.click('Review edit');
+    const next = active(f).intent!.request;
+    expect(next.body.expectedRevisionId).toBe(id(80));
+    expect(next.idempotencyKey).not.toBe(intent.request.idempotencyKey);
+    expect(next.body.occurrenceId).not.toBe(intent.request.body.occurrenceId);
+    expect(f.readDocument).toHaveBeenCalledTimes(2);
+    const secondReceipt = { ...receipt, revisionId: id(81) };
+    f.native.writeDraftPoint.mockImplementationOnce(async () => ok(secondReceipt));
+    await ui.click('Save reviewed edit');
+    expect(active(f)).toMatchObject({ phase: 'acknowledged', receipt: secondReceipt });
+    await ui.click('Next edit');
+    expect(active(f)).toMatchObject({ phase: 'idle', head: id(8), intent: null, selection: null });
+    expect(f.native.readOwn).toHaveBeenCalledTimes(2);
+    expect(f.native.writeDraftPoint).toHaveBeenCalledTimes(2);
   } finally {
     await ui.close();
   }
@@ -288,6 +344,9 @@ test('unknown replay keeps original key and intent; historical acknowledgement s
     const intent = active(f).intent!;
     f.native.writeDraftPoint.mockImplementationOnce(async () => hostedFailure('uncertain', 'Unknown'));
     await ui.click('Save reviewed edit');
+    await act(async () => f.visit.nextEdit());
+    expect(active(f).intent).toBe(intent);
+    expect(f.native.readOwn).not.toHaveBeenCalled();
     expect(queryByRole(ui.host, 'button', { name: 'Review edit' })).toBeNull();
     f.native.readOutlineWindow.mockImplementationOnce(async () => hostedFailure('unavailable', 'Read failed'));
     await ui.click('Recover original edit');
@@ -671,4 +730,129 @@ test('late move feedback respects focus elsewhere; session replacement retires a
     elsewhere.remove();
     await ui.close();
   }
+});
+
+test.each(['unavailable', 'denied'] as const)('next-edit %s owner read stays locked and retries only the read', async (kind) => {
+  const f = await fixture(),
+    ui = await mount(f);
+  try {
+    await act(async () => {
+      f.visit.setTitle('First edit');
+      await f.visit.review();
+      await f.visit.submit();
+    });
+    f.native.readOwn.mockImplementationOnce(async () => hostedFailure(kind, 'Reopen the Book or retry reading.'));
+    await ui.click('Next edit');
+    expect(active(f)).toMatchObject({ phase: 'next-edit', refreshing: false, intent: null, error: { kind }, receipt });
+    expect(ui.host.textContent).toContain('Editing stays locked');
+    expect(ui.host.textContent).toContain('Reopen the Book or retry reading.');
+    expect(document.activeElement?.textContent).toBe('Current Book head for the next edit');
+    await act(async () => {
+      f.visit.setTitle('Cannot edit before a current read');
+      await f.visit.review();
+      await f.visit.submit();
+    });
+    expect(active(f).title).toBe('');
+    expect(f.native.readOutlineWindow).toHaveBeenCalledTimes(2);
+    f.native.readOwn.mockImplementationOnce(async () => hostedFailure(kind, 'Reopen the Book or retry reading.'));
+    (getByRole(ui.host, 'button', { name: 'Retry reading for next edit' }) as HTMLButtonElement).focus();
+    await ui.click('Retry reading for next edit');
+    expect(document.activeElement?.textContent).toBe('Current Book head for the next edit');
+    expect(active(f).phase).toBe('next-edit');
+    await ui.click('Retry reading for next edit');
+    expect(active(f)).toMatchObject({ phase: 'idle', head: id(8), error: null, intent: null, receipt });
+    expect(document.activeElement?.textContent).toBe('Choose an edit');
+    expect(f.native.readOwn).toHaveBeenCalledTimes(3);
+    expect(f.native.writeDraftPoint).toHaveBeenCalledTimes(1);
+  } finally {
+    await ui.close();
+  }
+});
+
+test.each(['focus', 'pointer', 'Tab'] as const)('next-edit orientation is cancelled by %s navigation while reading', async (navigation) => {
+  const f = await fixture(),
+    ui = await mount(f);
+  const elsewhere = document.body.appendChild(document.createElement('button'));
+  try {
+    await act(async () => {
+      f.visit.setTitle('Part');
+      await f.visit.review();
+      await f.visit.submit();
+    });
+    const pending = deferred<StudioResult<HostedOwnedBook>>();
+    f.native.readOwn.mockImplementationOnce(() => pending.promise);
+    const next = getByRole(ui.host, 'button', { name: 'Next edit' }) as HTMLButtonElement;
+    next.focus();
+    await ui.click('Next edit');
+    if (navigation === 'focus') elsewhere.focus();
+    else if (navigation === 'pointer') elsewhere.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    const focus = document.activeElement;
+    await act(async () => pending.resolve(ok(f.owner)));
+    expect(active(f).phase).toBe('idle');
+    expect(document.activeElement).toBe(focus?.isConnected ? focus : document.body);
+  } finally {
+    elsewhere.remove();
+    await ui.close();
+  }
+});
+
+test('next-edit owner reads abort on session, viewer, source, CSRF or credential retirement and departure', async () => {
+  const changes: (Partial<HistoricalReaderObservation> | null)[] = [
+    { generation: 2 },
+    { subject: id(99) },
+    { sourceId: 'replacement' },
+    { csrfReady: false },
+    { credentialMode: 'anonymous' },
+    { healthy: false },
+    null,
+  ];
+  for (const change of changes) {
+    const f = await fixture();
+    f.visit.setTitle('Part');
+    await f.visit.review();
+    await f.visit.submit();
+    const pending = deferred<StudioResult<HostedOwnedBook>>();
+    f.native.readOwn.mockImplementationOnce(() => pending.promise);
+    const reading = f.visit.nextEdit();
+    const signal = f.native.readOwn.mock.calls[0]![2];
+    if (change) f.change(change);
+    else f.visit.dispose();
+    expect(signal.aborted).toBe(true);
+    pending.resolve(ok(f.owner));
+    await reading;
+    expect(f.visit.snapshot()).toEqual({ kind: 'ended' });
+    expect(f.visit.picker.snapshot()).toEqual({ kind: 'ended' });
+    expect(f.native.readOutlineWindow).toHaveBeenCalledTimes(1);
+    expect(f.native.writeDraftPoint).toHaveBeenCalledTimes(1);
+    f.visit.dispose();
+  }
+});
+
+test('next edit retires an unfinished receipt window and late readback cannot replace the fresh owner head', async () => {
+  const f = await fixture();
+  f.visit.setTitle('Part');
+  await f.visit.review();
+  const readback = deferred<StudioResult<HostedOutlineWindowPage>>();
+  f.native.readOutlineWindow.mockImplementationOnce(() => readback.promise);
+  const acknowledged = deferred<void>();
+  const stop = f.visit.subscribe(() => {
+    if (active(f).phase === 'acknowledged') acknowledged.resolve();
+  });
+  const sending = f.visit.submit();
+  await acknowledged.promise;
+  stop();
+  const historicalWindow = active(f).outline;
+  const signal = f.native.readOutlineWindow.mock.calls[0]![1];
+  await f.visit.nextEdit();
+  expect(signal.aborted).toBe(true);
+  readback.resolve(ok({ ...receipt, kind: 'structure', sourceRevisionId: null, items: [part], nextCursor: null }));
+  await sending;
+  expect(historicalWindow.snapshot()).toEqual({ kind: 'ended' });
+  expect(active(f)).toMatchObject({ phase: 'idle', head: id(8), receipt, intent: null });
+  expect(active(f).outline).not.toBe(historicalWindow);
+  expect(f.native.readOwn).toHaveBeenCalledTimes(1);
+  expect(f.native.readOutlineWindow).toHaveBeenCalledTimes(2);
+  expect(f.native.writeDraftPoint).toHaveBeenCalledTimes(1);
+  f.visit.dispose();
 });

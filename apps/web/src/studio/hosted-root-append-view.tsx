@@ -65,13 +65,54 @@ export function HostedRootAppendView({ visit, locale }: { visit: HostedRootAppen
   const titleId = useId();
   const feedback = useRef<HTMLHeadingElement>(null);
   const title = useRef<HTMLInputElement>(null);
+  const saved = useRef<HTMLHeadingElement>(null);
+  const focusRequest = useRef<{ origin: Element | null; target: 'feedback' | 'edit' | 'next-edit' } | null>(null);
   const options = { locale };
   const phase = state.kind === 'active' ? state.phase : 'ended';
+  const refreshing = state.kind === 'active' && state.refreshing;
   useEffect(() => {
-    if (!visit.isCurrent()) return;
-    if (['review', 'acknowledged', 'uncertain', 'stale', 'rejected'].includes(phase)) feedback.current?.focus();
-    else if (phase === 'idle') title.current?.focus();
-  }, [visit, phase]);
+    const moved = () => {
+      focusRequest.current = null;
+    };
+    const keyed = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') moved();
+    };
+    document.addEventListener('focusin', moved);
+    document.addEventListener('pointerdown', moved);
+    document.addEventListener('keydown', keyed);
+    return () => {
+      document.removeEventListener('focusin', moved);
+      document.removeEventListener('pointerdown', moved);
+      document.removeEventListener('keydown', keyed);
+    };
+  }, []);
+  useEffect(() => {
+    const pending = focusRequest.current;
+    if (!pending || !visit.isCurrent()) return;
+    const ready =
+      pending.target === 'next-edit'
+        ? phase === 'idle' || (phase === 'next-edit' && !refreshing)
+        : pending.target === 'edit'
+          ? phase === 'idle' || (phase === 'stale' && !refreshing)
+          : ['review', 'acknowledged', 'uncertain', 'stale', 'rejected'].includes(phase);
+    if (!ready) return;
+    focusRequest.current = null;
+    const stillHere =
+      document.activeElement === pending.origin ||
+      (!pending.origin?.isConnected && document.activeElement === document.body);
+    if (stillHere) {
+      if (pending.target === 'feedback' || phase === 'stale' || phase === 'next-edit') feedback.current?.focus();
+      else if (pending.target === 'next-edit') saved.current?.focus();
+      else title.current?.focus();
+    }
+  }, [visit, state, phase, refreshing]);
+  const focusAfter = (
+    action: () => void | Promise<void>,
+    target: 'feedback' | 'edit' | 'next-edit' = 'feedback',
+  ) => {
+    focusRequest.current = { origin: document.activeElement, target };
+    void action();
+  };
   if (state.kind === 'ended') return <p role="alert">{m.studio_root_append_ended({}, options)}</p>;
   const selection = state.selection;
   const editable = visit.canEdit();
@@ -80,14 +121,18 @@ export function HostedRootAppendView({ visit, locale }: { visit: HostedRootAppen
   const feedbackTitle =
     state.phase === 'acknowledged'
       ? m.studio_root_append_acknowledged({}, options)
-      : state.phase === 'uncertain'
-        ? m.studio_root_append_uncertain({}, options)
-        : state.phase === 'stale'
-          ? m.studio_root_append_stale({}, options)
-          : state.phase === 'rejected'
-            ? m.studio_root_append_rejected({}, options)
-            : m.studio_root_append_review({}, options);
-  const reviewing = ['review', 'submitting', 'uncertain', 'stale', 'acknowledged', 'rejected'].includes(state.phase);
+      : state.phase === 'next-edit'
+        ? m.studio_draft_command_current_head({}, options)
+        : state.phase === 'uncertain'
+          ? m.studio_root_append_uncertain({}, options)
+          : state.phase === 'stale'
+            ? m.studio_root_append_stale({}, options)
+            : state.phase === 'rejected'
+              ? m.studio_root_append_rejected({}, options)
+              : m.studio_root_append_review({}, options);
+  const reviewing = ['review', 'submitting', 'uncertain', 'stale', 'acknowledged', 'next-edit', 'rejected'].includes(
+    state.phase,
+  );
   return (
     <main className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8">
       <header className="studio-header">
@@ -98,12 +143,22 @@ export function HostedRootAppendView({ visit, locale }: { visit: HostedRootAppen
         <p className="studio-help max-w-prose">{m.studio_root_append_help({}, options)}</p>
       </header>
       <div className="studio-stack gap-8">
-        <p className="studio-help break-all">{m.studio_root_append_head({ revisionId: state.head }, options)}</p>
+        {phase !== 'next-edit' ? (
+          <p className="studio-help break-all">{m.studio_root_append_head({ revisionId: state.head }, options)}</p>
+        ) : null}
+        {state.receipt && phase !== 'acknowledged' ? (
+          <p className="studio-help break-all">
+            {m.studio_draft_command_history({ revisionId: state.receipt.revisionId }, options)}
+          </p>
+        ) : null}
         <section
           className="studio-stack"
           aria-label={m.studio_root_append_saved({}, options)}
           aria-busy={state.phase === 'selecting'}
         >
+          <h2 ref={saved} tabIndex={-1}>
+            {m.studio_root_append_saved({}, options)}
+          </h2>
           <HostedDraftPickerView
             picker={visit.picker}
             disabled={locked}
@@ -111,7 +166,6 @@ export function HostedRootAppendView({ visit, locale }: { visit: HostedRootAppen
           />
           {selection ? (
             <>
-              <h2>{m.studio_root_append_saved({}, options)}</h2>
               <h3>{selection.revision.title}</h3>
               <time dateTime={selection.revision.savedAt}>{selection.revision.savedAt}</time>
               <dl className="grid min-w-0 gap-2 break-all sm:grid-cols-[auto_minmax(0,1fr)]">
@@ -140,7 +194,7 @@ export function HostedRootAppendView({ visit, locale }: { visit: HostedRootAppen
                   <Button
                     type="button"
                     disabled={!state.title.trim() || [...state.title.trim()].length > 256}
-                    onClick={() => void visit.review()}
+                    onClick={() => focusAfter(visit.review)}
                   >
                     {m.studio_root_append_review({}, options)}
                   </Button>
@@ -170,17 +224,37 @@ export function HostedRootAppendView({ visit, locale }: { visit: HostedRootAppen
             {state.phase === 'acknowledged' ? (
               <p role="status">{m.studio_root_append_receipt({ revisionId: state.receipt!.revisionId }, options)}</p>
             ) : null}
+            {phase === 'acknowledged' || phase === 'next-edit' ? (
+              <p className="studio-help">{m.studio_draft_command_next_help({}, options)}</p>
+            ) : null}
+            {phase === 'next-edit' && state.error && !refreshing ? (
+              <div role="alert" className="studio-stack">
+                <p>{m.studio_draft_command_next_failed({}, options)}</p>
+                <p>{state.error.message}</p>
+              </div>
+            ) : null}
             {state.phase === 'rejected' ? <p role="alert">{m.studio_root_append_rejected_help({}, options)}</p> : null}
             <div className="studio-action-row">
+              {phase === 'acknowledged' || phase === 'next-edit' ? (
+                <Button
+                  type="button"
+                  disabled={refreshing}
+                  onClick={() => focusAfter(visit.nextEdit, 'next-edit')}
+                >
+                  {phase === 'acknowledged'
+                    ? m.studio_draft_command_next_edit({}, options)
+                    : m.studio_draft_command_retry_next({}, options)}
+                </Button>
+              ) : null}
               {state.phase === 'review' || state.phase === 'uncertain' ? (
-                <Button type="button" onClick={() => void visit.submit()}>
+                <Button type="button" onClick={() => focusAfter(visit.submit)}>
                   {state.phase === 'uncertain'
                     ? m.studio_root_append_replay({}, options)
                     : m.studio_root_append_submit({}, options)}
                 </Button>
               ) : null}
               {state.phase === 'review' ? (
-                <Button type="button" variant="outline" onClick={visit.cancelReview}>
+                <Button type="button" variant="outline" onClick={() => focusAfter(visit.cancelReview, 'edit')}>
                   {m.studio_root_append_edit({}, options)}
                 </Button>
               ) : null}
@@ -189,7 +263,7 @@ export function HostedRootAppendView({ visit, locale }: { visit: HostedRootAppen
                   type="button"
                   variant="outline"
                   disabled={state.refreshing}
-                  onClick={() => void visit.refreshHead()}
+                  onClick={() => focusAfter(visit.refreshHead, 'edit')}
                 >
                   {m.studio_root_append_refresh({}, options)}
                 </Button>

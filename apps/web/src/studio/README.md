@@ -215,7 +215,9 @@ dirty-editor protection, Book/article publication and frozen public reading keep
 The route owns departure/locale/credential lifetime; source, account and session incarnation changes permanently
 retire the visit, picker, selection and window, abort requests and fence late commands, reads and focus. All actions
 use shared controls, wrapping 44px targets and distinct `studio_root_append_*` messages in all eight launch locales.
-Review and recovery move keyboard focus to the relevant heading; editing returns it to the title field.
+Review, recovery and explicit next-edit orientation request keyboard focus only while the initiating focus remains;
+later focus, pointer or Tab navigation cancels that request. Next-edit success returns to the saved-draft heading,
+and review editing returns to the title field. The shared draft-command continuation below also applies to append.
 
 Sources read before design: this owner, the [native bounded-root contract](../../../../services/kernel/src/content/hosted-chapters.md#bounded-root-append),
 [Web outcome and acceptance](../../../../docs/goals/web.md#acceptance), installed `hosted-chapters-routes.d.ts`,
@@ -272,6 +274,7 @@ receipts and pages retain HTTP validation; no Client declaration, complete-tree 
 `hosted-draft-point-lifecycle.ts` owns shared root-append/point replay, stale refresh, receipt and retirement.
 An HTTP200 receipt acknowledges the write independently of observation. Its exact revision, including historical
 replay, selects a new bounded window; failed readback retries only that exact page and never resubmits the command.
+
 Decision: after acknowledgement, both callers offer explicit Next edit. It discards the sealed command, title,
 selected saved version and all point anchors, closes the picker and retires the receipt window before one native
 owner-head read. Only a successful owner observation admits a new operation, using the existing picker, outline,
@@ -289,10 +292,18 @@ contracts; and the read-only main checkout `.reference/INDEX.md`. The brief's ap
 `hosted-root-append.ts`, `hosted-root-append-view.tsx` and `studio-hosted-root-append.test.tsx`.
 
 Account, session incarnation, source, credential, locale and departure retire selections, abort pending requests and
-fence late results and focus. Shared wrapping 44px controls and eight-locale `studio_draft_point_*` messages retain
+fence late results and focus. Shared wrapping 44px controls and eight-locale point and draft-command messages retain
 the existing Studio appearance. Review/recovery requests keyboard focus only while the initiating focus remains;
 subsequent focus, pointer or Tab movement cancels that request. Legacy body editing, native recovery,
 remove/update and publication keep their existing entry paths.
+
+Continuation acceptance source extends `studio-hosted-draft-points.test.tsx` and the delivered
+`studio-hosted-root-append.test.tsx`: fresh-head continuation, repeated activation, failed/denied read retry,
+cleared selections including removed anchors, a second key/occurrence and acknowledgement, original uncertain
+replay, retirement and cancelled orientation. Existing exact-replay and deep/bounded-outline assertions remain.
+Point stories add only fresh-next-edit and failed-next-read states at phone and desktop widths. Execution is
+deferred: the verifier runs both suites, mounted native repeated editing, original Book acceptance and
+keyboard/phone/theme/eight-locale review. This source-only continuation claims no compiler, test or native pass.
 
 Sources read before design: this owner's Stable draft outline anchors and Native author outline window sections;
 `hosted-draft-points.ts`, `hosted-draft-point-lifecycle.ts`, `hosted-draft-point-view.tsx`, `hosted-native.ts`,

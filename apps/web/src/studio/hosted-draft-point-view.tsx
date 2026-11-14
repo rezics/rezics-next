@@ -167,7 +167,7 @@ export function HostedDraftPointView({
   const titleInput = useRef<HTMLInputElement>(null);
   const feedback = useRef<HTMLHeadingElement>(null);
   const operation = useRef<HTMLHeadingElement>(null);
-  const focusRequest = useRef<{ origin: Element | null; target: 'feedback' | 'edit' } | null>(null);
+  const focusRequest = useRef<{ origin: Element | null; target: 'feedback' | 'edit' | 'next-edit' } | null>(null);
   const phase = state.kind === 'active' ? state.phase : 'ended';
   const titleEditable = state.kind === 'active' && state.choice.kind !== 'move' && state.choice.kind !== 'remove';
   const refreshing = state.kind === 'active' && state.refreshing;
@@ -193,21 +193,27 @@ export function HostedDraftPointView({
     const pending = focusRequest.current;
     if (!pending || !visit.isCurrent()) return;
     const ready =
-      pending.target === 'edit'
-        ? phase === 'idle' || (phase === 'stale' && !refreshing)
-        : ['review', 'acknowledged', 'uncertain', 'stale', 'rejected'].includes(phase);
+      pending.target === 'next-edit'
+        ? phase === 'idle' || (phase === 'next-edit' && !refreshing)
+        : pending.target === 'edit'
+          ? phase === 'idle' || (phase === 'stale' && !refreshing)
+          : ['review', 'acknowledged', 'uncertain', 'stale', 'rejected'].includes(phase);
     if (!ready) return;
     focusRequest.current = null;
     const stillHere =
       document.activeElement === pending.origin ||
       (!pending.origin?.isConnected && document.activeElement === document.body);
     if (stillHere) {
-      if (pending.target === 'feedback' || phase === 'stale') feedback.current?.focus();
+      if (pending.target === 'feedback' || phase === 'stale' || phase === 'next-edit') feedback.current?.focus();
+      else if (pending.target === 'next-edit') operation.current?.focus();
       else if (titleEditable) titleInput.current?.focus();
       else operation.current?.focus();
     }
-  }, [visit, phase, titleEditable, refreshing]);
-  const focusAfter = (action: () => void | Promise<void>, target: 'feedback' | 'edit' = 'feedback') => {
+  }, [visit, state, phase, titleEditable, refreshing]);
+  const focusAfter = (
+    action: () => void | Promise<void>,
+    target: 'feedback' | 'edit' | 'next-edit' = 'feedback',
+  ) => {
     focusRequest.current = { origin: document.activeElement, target };
     void action();
   };
@@ -222,13 +228,15 @@ export function HostedDraftPointView({
   const feedbackTitle =
     phase === 'acknowledged'
       ? m.studio_draft_point_acknowledged({}, options)
-      : phase === 'uncertain'
-        ? m.studio_draft_point_uncertain({}, options)
-        : phase === 'stale'
-          ? m.studio_draft_point_stale({}, options)
-          : phase === 'rejected'
-            ? m.studio_draft_point_rejected({}, options)
-            : m.studio_draft_point_review({}, options);
+      : phase === 'next-edit'
+        ? m.studio_draft_command_current_head({}, options)
+        : phase === 'uncertain'
+          ? m.studio_draft_point_uncertain({}, options)
+          : phase === 'stale'
+            ? m.studio_draft_point_stale({}, options)
+            : phase === 'rejected'
+              ? m.studio_draft_point_rejected({}, options)
+              : m.studio_draft_point_review({}, options);
   return (
     <main className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8 [overflow-wrap:anywhere]">
       <header className="studio-header">
@@ -249,7 +257,9 @@ export function HostedDraftPointView({
         </div>
       </header>
       <div className="studio-stack gap-8">
-        <p className="studio-help break-all">{m.studio_draft_point_head({ revisionId: state.head }, options)}</p>
+        {phase !== 'next-edit' ? (
+          <p className="studio-help break-all">{m.studio_draft_point_head({ revisionId: state.head }, options)}</p>
+        ) : null}
         <section className="studio-stack" aria-label={m.studio_draft_point_operation({}, options)}>
           <h2 ref={operation} tabIndex={-1}>
             {m.studio_draft_point_operation({}, options)}
@@ -470,6 +480,20 @@ export function HostedDraftPointView({
               {m.studio_draft_point_receipt({ revisionId: state.receipt!.revisionId }, options)}
             </p>
           ) : null}
+          {state.receipt && phase !== 'acknowledged' ? (
+            <p className="studio-help break-all">
+              {m.studio_draft_command_history({ revisionId: state.receipt.revisionId }, options)}
+            </p>
+          ) : null}
+          {phase === 'acknowledged' || phase === 'next-edit' ? (
+            <p className="studio-help">{m.studio_draft_command_next_help({}, options)}</p>
+          ) : null}
+          {phase === 'next-edit' && state.error && !refreshing ? (
+            <div role="alert" className="studio-stack">
+              <p>{m.studio_draft_command_next_failed({}, options)}</p>
+              <p>{state.error.message}</p>
+            </div>
+          ) : null}
           {phase === 'rejected' ? <p role="alert">{m.studio_draft_point_rejected_help({}, options)}</p> : null}
           {state.refreshing || phase === 'submitting' || phase === 'selecting' || phase === 'preparing' ? (
             <p role="status">{m.studio_draft_point_loading({}, options)}</p>
@@ -485,6 +509,17 @@ export function HostedDraftPointView({
             </p>
           ) : null}
           <div className="studio-action-row">
+            {phase === 'acknowledged' || phase === 'next-edit' ? (
+              <Button
+                type="button"
+                disabled={refreshing}
+                onClick={() => focusAfter(visit.nextEdit, 'next-edit')}
+              >
+                {phase === 'acknowledged'
+                  ? m.studio_draft_command_next_edit({}, options)
+                  : m.studio_draft_command_retry_next({}, options)}
+              </Button>
+            ) : null}
             {editable && phase !== 'review' ? (
               <Button type="button" disabled={!draftPointReady(state)} onClick={() => focusAfter(visit.review)}>
                 {m.studio_draft_point_review({}, options)}

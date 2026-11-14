@@ -205,7 +205,7 @@ test('owned Book inventory offers append before any complete outline or document
   }
 });
 
-test('mounted exact review freezes the saved target, title, owner head and same-key unknown replay; failed readback never resubmits', async () => {
+test('append review freezes exact replay; failed readback never resubmits and next edit reads a fresh head for a new command', async () => {
   const f = await fixture(),
     ui = await mount(f);
   f.native.appendRootChapter.mockImplementationOnce(async () => hostedFailure('uncertain', 'Unknown result'));
@@ -237,7 +237,9 @@ test('mounted exact review freezes the saved target, title, owner head and same-
     await act(async () => {
       f.visit.setTitle('Must not replace uncertain operands');
       await f.visit.review();
+      await f.visit.nextEdit();
     });
+    expect(f.native.readOwn).not.toHaveBeenCalled();
     f.native.readOutlineWindow.mockImplementationOnce(async () => hostedFailure('unavailable', 'Read failed'));
     await ui.click('Recover original append');
     expect(f.native.appendRootChapter.mock.calls[1]![0]).toEqual(first[0]);
@@ -253,6 +255,34 @@ test('mounted exact review freezes the saved target, title, owner head and same-
     expect(f.native.appendRootChapter).toHaveBeenCalledTimes(2);
     expect(f.native.readOutlineWindow).toHaveBeenCalledTimes(3);
     expect(f.readDocument).toHaveBeenCalledTimes(1);
+    f.native.readOwn.mockImplementationOnce(async () => hostedFailure('denied', 'Reopen the Book.'));
+    await ui.click('Next edit');
+    expect(f.visit.snapshot()).toMatchObject({ phase: 'next-edit', intent: null, selection: null, title: '', receipt });
+    expect(ui.host.textContent).not.toContain('Selected server body');
+    expect(ui.host.textContent).toContain('Editing stays locked');
+    await ui.click('Retry reading for next edit');
+    expect(f.visit.snapshot()).toMatchObject({ phase: 'idle', head: id(8), intent: null, selection: null });
+    expect(document.activeElement?.textContent).toBe('Selected saved draft');
+    await ui.select();
+    await ui.click('Review append');
+    const secondReceipt = { ...receipt, revisionId: id(10) };
+    f.native.appendRootChapter.mockImplementationOnce(async () => ok(secondReceipt));
+    await ui.click('Append this saved chapter');
+    const next = f.native.appendRootChapter.mock.calls[2]![0];
+    expect(next.body.expectedRevisionId).toBe(id(8));
+    expect(next.idempotencyKey).not.toBe(first[0].idempotencyKey);
+    expect(next.body.occurrenceId).not.toBe(first[0].body.occurrenceId);
+    expect(f.readDocument).toHaveBeenCalledTimes(2);
+    expect(f.visit.snapshot()).toMatchObject({ phase: 'acknowledged', receipt: secondReceipt });
+    const pending = deferred<StudioResult<HostedOwnedBook>>();
+    f.native.readOwn.mockImplementationOnce(() => pending.promise);
+    await ui.click('Next edit');
+    const away = getByRole(ui.host, 'link', { name: 'Return to your Books' }) as HTMLAnchorElement;
+    away.focus();
+    await act(async () => pending.resolve(ok(f.owner)));
+    expect(document.activeElement).toBe(away);
+    expect(f.native.appendRootChapter).toHaveBeenCalledTimes(3);
+    expect(f.native.readOwn).toHaveBeenCalledTimes(3);
   } finally {
     await ui.close();
   }

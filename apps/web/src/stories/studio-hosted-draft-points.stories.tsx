@@ -19,6 +19,8 @@ type Scenario =
   | 'anchor-version-review'
   | 'stale-recovery'
   | 'acknowledged-read-failure'
+  | 'next-edit-ready'
+  | 'next-edit-read-failure'
   | 'move-review'
   | 'move-stale-recovery'
   | 'move-uncertain-replay';
@@ -110,15 +112,22 @@ async function prepare(scenario: Scenario, locale: Locale): Promise<HostedDraftP
   });
   const target = { threadId: id(30), postId: id(31), revisionId: id(32), sha256: 'b'.repeat(64) };
   let commands = 0;
+  let ownerHead = id(8);
+  let ownerReads = 0;
   const native: DraftPointTransport = {
-    readOwn: async () => ok({ ...owner, item: { ...owner.item, headRevisionId: id(8) } }),
+    readOwn: async () => {
+      if (scenario === 'next-edit-read-failure' && ++ownerReads === 1)
+        return { ok: false, error: { kind: 'unavailable', message: 'Illustrative current owner read failure.' } };
+      return ok({ ...owner, item: { ...owner.item, headRevisionId: ownerHead } });
+    },
     writeDraftPoint: async () => {
       commands++;
       if (scenario === 'stale-recovery' || (scenario === 'move-stale-recovery' && commands === 1))
         return { ok: false, error: { kind: 'stale', message: 'Illustrative stale draft response.' } };
       if (scenario === 'move-uncertain-replay' && commands === 1)
         return { ok: false, error: { kind: 'uncertain', message: 'Illustrative unknown result.' } };
-      return ok({ catalogueId: id(1), revisionId: id(9) });
+      ownerHead = id(8 + commands);
+      return ok({ catalogueId: id(1), revisionId: ownerHead });
     },
     readOutlineWindow: async ({ revision, cursor }) => {
       if (revision.revisionId === id(9) && scenario === 'acknowledged-read-failure')
@@ -220,6 +229,10 @@ async function prepare(scenario: Scenario, locale: Locale): Promise<HostedDraftP
     await visit.select(entry.id);
     await visit.review();
     if (scenario !== 'anchor-version-review') await visit.submit();
+    if (scenario === 'next-edit-ready' || scenario === 'next-edit-read-failure') {
+      ownerHead = id(50); // A later owner head differs from the historical receipt.
+      await visit.nextEdit();
+    }
   }
   return visit;
 }
@@ -257,7 +270,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Owned-author /studio stable-anchor editing. Constructed responses are illustrative. Existing insert stories retain their IDs. Move review retains source, parent and before anchors from three replacing pages with large native positions and an unobserved parent. Move stale recovery requires observations at the refreshed head; uncertain recovery replays the original intent. These constructed responses do not prove native behavior. Named states run at phone390 and desktop1280. Review all eight locale globals and both themes. Native author-to-reader evidence, its existing journal, private publication and prepublished reader verdicts remain separate verifier obligations.',
+          'Owned-author /studio stable-anchor editing. Constructed responses are illustrative. Existing insert stories retain their IDs. Move review retains source, parent and before anchors from three replacing pages with large native positions and an unobserved parent. Move stale recovery requires observations at the refreshed head; uncertain recovery replays the original intent. Next-edit stories show cleared choices at a newly read owner head and a retryable failed owner read with a historical acknowledgement. These constructed responses do not prove native behavior. Named states run at phone390 and desktop1280. Review all eight locale globals and both themes. Native author-to-reader evidence, its existing journal, private publication and prepublished reader verdicts remain separate verifier obligations.',
       },
     },
   },
@@ -286,6 +299,22 @@ export const AcknowledgedReadFailurePhone: Story = {
 };
 export const AcknowledgedReadFailureDesktop: Story = {
   args: { scenario: 'acknowledged-read-failure' },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
+export const NextEditReadyPhone: Story = {
+  args: { scenario: 'next-edit-ready' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+};
+export const NextEditReadyDesktop: Story = {
+  args: { scenario: 'next-edit-ready' },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
+export const NextEditReadFailurePhone: Story = {
+  args: { scenario: 'next-edit-read-failure' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+};
+export const NextEditReadFailureDesktop: Story = {
+  args: { scenario: 'next-edit-read-failure' },
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
 };
 
