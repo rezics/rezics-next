@@ -5,6 +5,9 @@ import { compileKinds } from '../query.ts';
 import { readSubjectSummaries, summaryAuthorization, type SubjectSummary } from '../../semantic/summaries.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from '../../semantic/http/summaries.ts';
 import { activeRelease } from '../../semantic/definitions.ts';
+import { withBoundedReadOnlyTransaction } from '../../database/pool.ts';
+import { deadlineFor, withRequestDeadline } from '../../request/deadline.ts';
+import { ProblemError } from '../../http/problem-error.ts';
 import { relatedReadEligibility } from '../../semantic/eligibility.ts';
 import { routeOf } from '../../route/route.ts';
 import type { Resource, AccessCheck } from '../../request/access.ts';
@@ -126,35 +129,70 @@ export type SearchHttpResponse = Omit<PublicSearchPage, 'subjects'> & {
   })[];
 };
 
+function catalogueExpired(): ProblemError {
+  return new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+}
+
+function requireCatalogueTime(deadline: number): void {
+  if (!Number.isFinite(deadline) || Date.now() >= deadline) throw catalogueExpired();
+}
+
+async function completeCatalogue<T>(deadline: number | undefined, read: (deadline: number) => Promise<T>): Promise<T> {
+  const requested = deadline ?? deadlineFor(10_000);
+  requireCatalogueTime(requested);
+  const original = Math.min(requested, deadlineFor(Math.max(1, requested - Date.now())));
+  requireCatalogueTime(original);
+  return withRequestDeadline(original, async () => {
+    const result = await read(original);
+    requireCatalogueTime(original);
+    return result;
+  });
+}
+
 /** Shared native summary hydration for catalogue and suggestion responses. */
 export function createCatalogueResponseAdapter({ pool, routeKey }: { pool: Pool; routeKey: Uint8Array }) {
+  const readActiveRelease = (deadline: number) =>
+    withBoundedReadOnlyTransaction(pool, deadline, activeRelease, {
+      deadlineError: catalogueExpired,
+      isUncertainSettledQueryError: () => true,
+    });
+
   async function fill<T extends { subjects: { id: string; type: string; labels: Record<string, string> }[] }>(
     page: T,
     authorize: (resource: Resource) => Promise<AccessCheck>,
     languages: readonly string[] = [],
     active: Awaited<ReturnType<typeof activeRelease>> | undefined = undefined,
+    deadline?: number,
   ): Promise<Omit<T, 'subjects'> & { subjects: (T['subjects'][number] & { summary: SubjectSummary | null })[] }> {
-    active = active === undefined ? await activeRelease(pool) : active;
-    const summaries = active
-      ? await readSubjectSummaries(
-          {
-            client: { query: pool.query.bind(pool) },
-            pool,
-            routeKey,
-            release: active.release,
-            authorize: summaryAuthorization(async (id, batch) => {
-              const route = routeOf(id)!;
-              return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
-            }),
-          },
-          page.subjects.map((subject) => subject.id),
-          { languages },
-        )
-      : new Map();
-    return {
-      ...page,
-      subjects: page.subjects.map((subject) => ({ ...subject, summary: summaries.get(subject.id) ?? null })),
-    };
+    return completeCatalogue(deadline, async (original) => {
+      // Close metadata custody before native SubjectReading prepares authorization and owns its snapshot.
+      const release = active === undefined ? await readActiveRelease(original) : active;
+      requireCatalogueTime(original);
+      const summaries = release
+        ? await readSubjectSummaries(
+            {
+              client: { query: pool.query.bind(pool) },
+              pool,
+              routeKey,
+              deadline: original,
+              release: release.release,
+              authorize: summaryAuthorization(async (id, batch) => {
+                requireCatalogueTime(original);
+                const route = routeOf(id)!;
+                const check = await authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                requireCatalogueTime(original);
+                return check;
+              }),
+            },
+            page.subjects.map((subject) => subject.id),
+            { languages },
+          )
+        : new Map();
+      return {
+        ...page,
+        subjects: page.subjects.map((subject) => ({ ...subject, summary: summaries.get(subject.id) ?? null })),
+      };
+    });
   }
   function publicBases<
     T extends {
@@ -199,15 +237,19 @@ export function createCatalogueResponseAdapter({ pool, routeKey }: { pool: Pool;
     authorize: (resource: Resource) => Promise<AccessCheck>,
     languages: readonly string[] = [],
     active: Awaited<ReturnType<typeof activeRelease>> | undefined = undefined,
+    deadline?: number,
   ) {
-    const release = active === undefined ? await activeRelease(pool) : active;
-    const filled = await fill(
-      { subjects: selectedCataloguePublicationShells(subjects) },
-      authorize,
-      languages,
-      release,
-    );
-    return publicBases(filled, languages, release);
+    return completeCatalogue(deadline, async (original) => {
+      const release = active === undefined ? await readActiveRelease(original) : active;
+      const filled = await fill(
+        { subjects: selectedCataloguePublicationShells(subjects) },
+        authorize,
+        languages,
+        release,
+        original,
+      );
+      return publicBases(filled, languages, release);
+    });
   }
 
   return { fill, publicBases, renderSelected };
