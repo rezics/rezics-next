@@ -10,10 +10,13 @@ import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { subjectGenerations } from './indices.ts';
-import { activeRelease } from './native-bindings.ts';
 import type { OpenSearch, SearchRequestOptions } from './opensearch.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
-import { discloseRealmRatingWindow, readRealmRatingCanonical } from './realm-rating-native-read.ts';
+import {
+  discloseRealmRatingWindow,
+  readRealmRatingCanonical,
+  readRealmRatingRelease,
+} from './realm-rating-native-read.ts';
 import type { RealmRatingContext, RealmRatingHit, RealmRatingQuery, RealmRatingSource } from './realm-rating-order.ts';
 import type { SubjectSource } from './source.ts';
 import type { SearchFrontier } from './useful-page.ts';
@@ -191,7 +194,7 @@ export function createRealmRatingNativeSource(deps: Dependencies): RealmRatingSo
     if (observed.populationId !== query.populationId || observed.question.id !== STANDARD_QUESTION_ID) throw notReady();
     let meaning: { digest: string; head: number } | null = null;
     if (query.release !== undefined || query.meaningDigest !== undefined || query.filter !== undefined) {
-      const current = await activeRelease(deps.pool);
+      const current = await readRealmRatingRelease(deps.pool, query.deadline);
       if (!current || !query.release || !query.meaningDigest) throw notReady();
       if (
         current.digest !== query.meaningDigest ||

@@ -1,67 +1,92 @@
 # Native Realm rating Search
 
 `createRealmRatingNativeSource` in [realm-rating-native.ts](realm-rating-native.ts) is installed as
-`realmRatings` in the production `createSearchService` caller in [server.ts](../server.ts).
-Observation and both reads return typed `index_not_ready` with Retry-After until complete
-native order is available, including for authenticated readers and empty predicates.
+`realmRatings` in [server.ts](../server.ts). The installation supplies the same configured
+`rated.source` used by the outer Search reader. Its route fences, native relation capabilities
+and current Subject facts remain authoritative for predicate execution.
 
-## Readiness
+## Current execution
 
-Content exports `createRealmRankOrderSource` / `RealmRankOrderSource` in
-[realm-rank.ts](../rating/realm-rank.ts). Its `readScoredPartition` seeks
-`score DESC, subject_id DESC`, its candidates have no canonical name, and its input
-has no complete Subject predicate capability. `proveFigures` supplies exact native
-figure eligibility probes, not a canonical unscored seek. These exports do not yet
-supply the complete order required here. The older scored-only `createRealmRankSource`
-and its API remain unchanged. Question/prior publication observations do not add
-canonical population/name seeks or complete predicate execution. The named
-`35-realm-rank-complete-order.md` is absent.
+Observation reads live Realm Access and ban authority, question identity/revision/provenance,
+prior eligibility and generation, figure publication, canonical Subject population, Search
+generation and current release digest/head. These observations and the admitted principal,
+text and filter bind the continuation. Internal before/after observations retain the original
+request and do not renew its work allowance or grant authority.
 
-Decision: retain typed unavailability for the selected Realm until Content supplies
-complete canonical predicate/order execution; never adapt the partial score/UUID seek.
+The native `readCanonicalPartition` supplies bounded name/ID seeks across the complete
+canonical Subject population, independent of Realm membership, threads and Spaces. Each raw
+row carries native figure eligibility, including proven absence. Search validates the complete
+figure before suppressing a scored row from the unscored complement; zero remains scored.
+Canonical Subject and figure evidence retain their native snapshots. Indexed absence and a
+fetched scored prefix prove neither membership nor exhaustion. Only complete empty native
+seeks retire homes; a short page alone does not.
 
-The replacement binding must consume the complete admitted Search text/catalogue/resource
-predicate once, with canonical identity/name generation, question identity/revision/scale,
-same-question/population prior eligibility interval, figure publication and independent
-home epochs/snapshots. A figure position is not a canonical Subject position merely
-because both are numbers. Private below-threshold figures cannot affect order or readiness.
-The complete Subject domain is independent of Realm membership, threads and Spaces.
+[realm-rating-native-read.ts](realm-rating-native-read.ts) evaluates the full admitted predicate
+on current facts through `checkHits`, with the original filter expression and `currentText`.
+The configured source must return each Subject at the exact canonical home position observed
+for the request. Text uses the analyzer installed on the selected Search generation, including
+term, phrase and Boolean semantics. Relations retain native overflow, qualifier, inverse and
+before/after release checks. `not_proven` refuses the window, including under negation; it
+cannot establish a rejection or a consumed continuation. Definitive rejects are charged and
+refilled within the existing raw allowance.
 
-Search's complete-order consumer merges scored tuples as `score DESC, name_sort ASC`
-(missing names last), then canonical ID ascending. An unscored seek returning a scored
-tuple rejects before disclosure, even if that tuple otherwise validates. Unscored tuples
-use `name_sort ASC`
-(missing last), then canonical ID ascending. Zero is a scored value. Figure and canonical
-Subject snapshots retain independent home positions; the consumer validates each source's
-snapshot without equating those positions.
+Subject Access is prepared and evaluated before current hydration and again for accepted
+candidates. Native Realm observations bracket reads and final disclosure, including empty
+pages. Changed source cuts, release heads, names, identity, question, prior or publication
+evidence restart or refuse; live authority denial keeps the owner's outcome. Compatibility
+compositions may omit `source` only for predicate-free traversal, leaving facts to their outer
+reader. The production composition always supplies it.
 
-Final native validation must include dependencies discovered during hydration and empty
-pages. Changes to names, identity, prior, question, source or current Realm/Subject authority
-must restart or refuse before disclosure. Inactive-prior ABA requires an eligibility
-interval. Missing native evidence cannot establish an unscored Subject or empty success.
+## Request lifetime
 
-## Cost
+All native calls and Access preparation retain the original Pool and absolute deadline.
+Release observations use separate `withBoundedReadOnlyTransaction` calls, including the
+before/after relation observations. Each local snapshot finishes before Subject, relation,
+Rating or engine work starts. Checkout, queries and cleanup share that deadline; uncertain
+clients are retired by the bounded read owner.
 
-Touches: the Search consumer performs finite partition merges and bounded candidate
-checks. The installed native readiness boundary still issues no native statements, seeks,
-hydration or candidate retention; those zero operations describe refusal only.
+Current predicate work propagates that same deadline with `withRequestDeadline` through the
+existing configured source and its retained relation operations. The Search transport caps
+generation and analyzer requests to the remaining time and checks expiry after completion.
+No source or permission adapter is reconstructed from Pool, and no observation caches Access.
 
-Bound: successful useful-page execution remains unadmitted. Derive partition count P,
-finite windows W, raw window size B and producer terms S, E(B), H(B) from the complete
-capability before dispatch. The bound is C_compile + P*W*(S+E(B)+H(B)) + C_final,
-with memory at most P*B tuples plus the finite merge frontier. Use static sums and indexed
-LIMIT. A scored preview, local filtering or fitted refill cap does not establish W.
-Unresolved native terms require Performance review before admission.
+The shared rated source also enriches Subjects through Rating's
+[public-rating-source.ts](../rating/public-rating-source.ts). That owner's `read` still uses
+unbounded `withConnection`; propagating the ambient deadline does not retrofit physical
+checkout/query/cleanup bounds there. Bounding that existing owner is a separate dependency;
+Search must preserve the configured source rather than substitute a new one.
 
-Growth check: actual installed-path 1x/4x/16x complete-order execution remains **unmeasured**.
-The continuation must exercise the installed service with fixed request/page limits,
-sparse rejection and currentness invalidation, recording native statements,
-examined/returned rows, seeks, actions and retained candidates. Separate per-step
-work from total resumable preparation/catch-up. Refusal and injected-source tests do not
-prove installed native order. The canonical tie fixture exercises first, next and empty
-final consumer pages with Alpha on the smaller UUID. The separate scored-only descending
-UUID continuation assertion remains in `test/rating/realm-rank.test.ts`.
+## Remaining scored dependency
 
-Decision: keep each consumer seek restricted to its declared scored or unscored phase;
-bind complete native traversal through Content's existing factory once it supplies
-canonical predicate and unscored capabilities.
+Content's existing `RealmRankOrderSource` owns the indexed scored canonical seek. The retained
+`readScoredPartition` orders by score descending and ID descending, without a canonical name.
+Search uses it only to distinguish an empty scored population from unavailable complete order.
+A returned scored candidate still produces typed `index_not_ready` with Retry-After. No active
+prior, or complete empty native scored seeks, permits the current unscored traversal.
+
+The required scored key is score descending, canonical name ascending (missing last, C
+collation), then ID ascending. The delivered callable must accept strict cross-home keys and
+bounded limits under the same observation, live actor and deadline; return native generation,
+epoch/position, name/security revision and complete figure proofs; and reobserve empty reads.
+The existing scored-only compatibility API and sole Rating publication writer remain owned
+by Content. Search's consumer update must use the exact committed API when delivered. No
+callable is assumed here, and no local tie sort or filtered prefix replaces the native seek.
+
+## Cost and deferred acceptance
+
+For P occupied canonical homes and raw window B, the merge retains at most 16 rows per home
+plus B selected rows. Each call reserves at most P+B seeks and 16P+16B rows, with P <= 4096
+and B <= 200; native reobservations add O(P*(P+B)) frontier metadata work. The request permits
+at most three calls per phase, 6*4096+600 seeks, 51*4096+9600 reserved rows, and
+min(600, 3*B0) selected raw candidates, where B0 is its first requested window. Empty seeks,
+unused buffered candidates, suppressed rows and predicate rejects do not refund work. A cap
+hit is unavailable, never successful exhaustion. Current source, relation and analyzer work
+retain their existing bounded batches and share the request deadline.
+
+Installed runtime acceptance and 1x/4x/16x growth remain deferred and unmeasured. The smallest
+next check is installed Realm discovery with current text plus an advanced filter, a changed
+source cut/Access and a finite expiry. Final acceptance still requires the existing
+Realm/default-worker discovery with complete scored/unscored order after the sole Rating
+callable is received, including first/next/empty pages, sparse rejection and currentness
+invalidation. Record native statements, examined/returned rows, seeks and retained candidates;
+source inspection or refusal alone does not prove installed complete order.

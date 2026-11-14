@@ -4,6 +4,7 @@ import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { RealmRankOrderObservation, RealmRankOrderSource } from '../rating/realm-rank.ts';
 import { accessCheck } from '../request/access.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
@@ -28,6 +29,14 @@ const restart = () => new ProblemError('search_restart_required');
 const BATCH_SIZE = 16;
 type NameKey = { name: string | null; id: string };
 type NativePage = Awaited<ReturnType<RealmRankOrderSource['readCanonicalPartition']>>;
+
+/** Each release observation closes its local snapshot before any native owner work. */
+export function readRealmRatingRelease(pool: Pool, deadline: number): ReturnType<typeof activeRelease> {
+  return withBoundedReadOnlyTransaction(pool, deadline, (client) => activeRelease(client), {
+    deadlineError: () => new ProblemError('deadline_exceeded'),
+    isUncertainSettledQueryError: () => true,
+  });
+}
 
 function compareNames(left: NameKey, right: NameKey): number {
   if (left.name !== right.name) {
@@ -254,19 +263,23 @@ export async function discloseRealmRatingWindow(input: {
         analyzer, text: texts,
       }),
     );
-    const checked = await checkHits(source, candidates, clauses, {
-      ...(query.filter ? { filter: query.filter, relationProperties } : {}),
-      ...(query.text ? { currentText: (subject: IndexedSubject) => text.matchesText(subject, query.text!) } : {}),
-      includeOutcomes: true,
-      ...(query.release
-        ? { observeRelationRelease: async () => {
-            const release = await activeRelease(pool);
-            if (!release) throw notReady();
-            if (release.digest !== context.meaningDigest) throw restart();
-            return release;
-          } }
-        : {}),
-    });
+    // Carry the original deadline through the configured source and retained
+    // relation work. Do not hold a local transaction around these owners.
+    const checked = await withRequestDeadline(query.deadline, () =>
+      checkHits(source, candidates, clauses, {
+        ...(query.filter ? { filter: query.filter, relationProperties } : {}),
+        ...(query.text ? { currentText: (subject: IndexedSubject) => text.matchesText(subject, query.text!) } : {}),
+        includeOutcomes: true,
+        ...(query.release
+          ? { observeRelationRelease: async () => {
+              const release = await readRealmRatingRelease(pool, query.deadline);
+              if (!release) throw notReady();
+              if (release.digest !== context.meaningDigest) throw restart();
+              return release;
+            } }
+          : {}),
+      }),
+    );
     if (!checked.outcomes || checked.outcomes.length !== candidates.length || checked.outcomes.includes('not_proven'))
       throw notReady();
     accepted = new Set(checked.passed.map(({ hit }) => hit));
