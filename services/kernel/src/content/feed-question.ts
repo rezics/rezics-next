@@ -1,6 +1,5 @@
 import type { Actor } from '../request/access.ts';
-import { deadlineClient } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import {
   qualifyReviewContextWitnesses,
   resolveRatingQuestionSelection,
@@ -46,8 +45,8 @@ async function readSubjectReviewCandidates(
 ): Promise<Readonly<{ candidates: ReadonlyMap<string, readonly string[]>; overflow: ReadonlySet<string> }>> {
   if (subjectIds.length === 0) return { candidates: new Map(), overflow: new Set() };
   const unique = [...new Set(subjectIds)];
-  const result = await withConnection(dependencies.pool, async (client) =>
-    deadlineClient(client, deadline).query<SubjectReviewCandidate>(subjectReviewCandidatesSql, [
+  const result = await withBoundedReadConnection(dependencies.pool, deadline, (client) =>
+    client.query<SubjectReviewCandidate>(subjectReviewCandidatesSql, [
       unique,
       perSubjectLimit + 1,
     ]),
