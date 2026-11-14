@@ -1,14 +1,16 @@
 import type { NativeCreationContextRequest, NativeCreationContextResult } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
+import { authoritativeTimeValue } from '../command/command.ts';
 import type { Access, AccessContext } from '../request/access.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { accessClock } from './access-clock.ts';
 import { readAccount } from './account-data.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { approvalResolutionReadOptions } from './approval-resolution-work.ts';
 import { readAssignment } from './delegation-commands.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
 import { requireAccessDeadline } from './unavailable.ts';
+import { accessCheckout } from './work.ts';
 import {
   type createWorkflowApprovals,
   workflowApprovalBinding,
@@ -30,9 +32,12 @@ async function readParties(config: NativeSource, request: LifecycleRequest) {
   if (!binding || !source) return { kind: 'unavailable', reason: 'historical-provenance' } as const;
   if (accessClock(config.access)().getTime() >= Date.parse(binding.expiresAt)) throw new WorkflowApprovalDeniedError();
   const actor = request.actor;
-  const account = await within(request.deadline, () =>
-    withConnection(config.pool, (client) =>
-      readAccount(deadlineClient(client, request.deadline), routeOf(actor.accountId)!, actor.accountId),
+  const account = await accessCheckout(request.work, () =>
+    withBoundedReadConnection(
+      config.pool,
+      request.deadline,
+      (client) => readAccount(client, routeOf(actor.accountId)!, actor.accountId, request.work),
+      approvalResolutionReadOptions,
     ),
   );
   if (
@@ -47,18 +52,24 @@ async function readParties(config: NativeSource, request: LifecycleRequest) {
   const assignment =
     actor.requestedBy === null
       ? ({ kind: 'none' } as const)
-      : await within(request.deadline, () =>
-          withConnection(config.pool, (client) =>
-            readAssignment(
-              deadlineClient(client, request.deadline),
-              actor.requestedBy,
-              actor.accountId,
-              accessClock(config.access),
-            ),
+      : await accessCheckout(request.work, () =>
+          withBoundedReadConnection(
+            config.pool,
+            request.deadline,
+            (client) =>
+              readAssignment(
+                client,
+                actor.requestedBy,
+                actor.accountId,
+                request.time
+                  ? () => new Date(authoritativeTimeValue(request.time!))
+                  : accessClock(config.access),
+                request.work,
+              ),
+            approvalResolutionReadOptions,
           ),
         );
   if (assignment.kind === 'unresolved') throw new WorkflowApprovalDeniedError();
-  requireAccessDeadline(request.deadline);
   if (accessClock(config.access)().getTime() >= Date.parse(binding.expiresAt)) throw new WorkflowApprovalDeniedError();
   return {
     kind: 'available',
@@ -99,13 +110,13 @@ export async function readNativeCreationContext(
   const request = await config.approvals.resolve(input.approvalReference, operation, boundary);
   // Opening approval names both sides, but naming is not relation provenance.
   if (operation.kind === 'opening') {
-    const subject = await within(boundary.deadline, () =>
-      withConnection(config.pool, (client) =>
-        readAccount(
-          deadlineClient(client, boundary.deadline),
-          routeOf(operation.subjectAccountId)!,
-          operation.subjectAccountId,
-        ),
+    const subject = await accessCheckout(request.work, () =>
+      withBoundedReadConnection(
+        config.pool,
+        request.deadline,
+        (client) =>
+          readAccount(client, routeOf(operation.subjectAccountId)!, operation.subjectAccountId, request.work),
+        approvalResolutionReadOptions,
       ),
     );
     if (
