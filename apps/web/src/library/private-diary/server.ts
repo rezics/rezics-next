@@ -60,13 +60,9 @@ export const readPrivateDiary = createServerFn({ method: 'GET' })
     const client = kernelClient();
     const failure = (error: unknown) => thrownReadFailure(error, signal);
     const [diary, summary, reportedYear] = await Promise.all([
-      readDiaryPage(
-        client,
-        identity.authorization,
-        data.cursor,
-        { year: data.year, month: data.month },
-        signal,
-      ).catch(failure),
+      readDiaryPage(client, identity.authorization, data.cursor, { year: data.year, month: data.month }, signal).catch(
+        failure,
+      ),
       data.year === undefined
         ? readConsumptionSummary(client, identity.authorization, signal).catch(failure)
         : Promise.resolve({ kind: 'not-selected' as const }),

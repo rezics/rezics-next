@@ -4,28 +4,40 @@ import * as start from '../.storybook/react-start';
 import { readConsumptionSummary, readDiaryPage, readReportedYearSummary } from '../src/library/private-diary/native';
 
 const counts = (count = '0') => ({
-  completedOccurrences: count, distinctCompletedSubjects: count,
-  repeatOccurrences: '0', completedOccurrencesWithUnknownProfile: '0',
+  completedOccurrences: count,
+  distinctCompletedSubjects: count,
+  repeatOccurrences: '0',
+  completedOccurrencesWithUnknownProfile: '0',
 });
 const summary = {
-  ...counts('9007199254740993'), scope: 'retained_native_sessions',
+  ...counts('9007199254740993'),
+  scope: 'retained_native_sessions',
   coverage: { nativeSessions: 'complete', otherHistory: 'unavailable', unitMeaning: 'not_evaluated' },
   currentness: { state: 'snapshot', revision: 'original-summary' },
 };
 const bucket = (count = '0') => ({ ...counts(count), finishPrecision: { year: count, month: '0', day: '0' } });
 const yearSummary = {
-  ...summary, ...bucket('9007199254740993'), year: 2020,
-  calendar: 'gregorian', dateSource: 'explicitly_reported_journal_finish',
+  ...summary,
+  ...bucket('9007199254740993'),
+  year: 2020,
+  calendar: 'gregorian',
+  dateSource: 'explicitly_reported_journal_finish',
   months: Array.from({ length: 12 }, (_, i) => ({ ...bucket(), month: i + 1 })),
   monthUnallocated: bucket('9007199254740993'),
   coverage: {
-    ...summary.coverage, initializedSessions: '9007199254740993', retainedSessions: '9007199254740993',
-    completedOccurrencesWithMissingFinish: '0', completedOccurrencesWithUnsupportedFinish: '0',
+    ...summary.coverage,
+    initializedSessions: '9007199254740993',
+    retainedSessions: '9007199254740993',
+    completedOccurrencesWithMissingFinish: '0',
+    completedOccurrencesWithUnsupportedFinish: '0',
   },
 };
 const page = {
-  occurrences: [], order: 'recorded_started_desc_id_desc', next: 'opaque-next',
-  continuation: 'original-continuation', expiresAt: '2026-11-15T00:00:00.000Z',
+  occurrences: [],
+  order: 'recorded_started_desc_id_desc',
+  next: 'opaque-next',
+  continuation: 'original-continuation',
+  expiresAt: '2026-11-15T00:00:00.000Z',
 };
 const headers = new Headers();
 const calls: { url: URL; init: RequestInit }[] = [];
@@ -73,13 +85,24 @@ function deferred() {
 }
 
 test('one exact page of 25 and its selected summary use private, manual, request-bound native GETs', async () => {
-  for (const address of [{}, { year: 2020 }, { year: 2020, month: 7 }, {
-    year: 2020, month: 'unallocated', cursor: 'opaque+/=&cursor',
-  }]) {
+  for (const address of [
+    {},
+    { year: 2020 },
+    { year: 2020, month: 7 },
+    {
+      year: 2020,
+      month: 'unallocated',
+      cursor: 'opaque+/=&cursor',
+    },
+  ]) {
     calls.length = 0;
     const result = await readPrivateDiary({ data: address });
     expect(result).toMatchObject({
-      kind: 'ready', address, viewer: 'owner', csrfToken: 'csrf', diary: { kind: 'ready', page },
+      kind: 'ready',
+      address,
+      viewer: 'owner',
+      csrfToken: 'csrf',
+      diary: { kind: 'ready', page },
     });
     expect(result).toMatchObject(
       'year' in address
@@ -87,10 +110,12 @@ test('one exact page of 25 and its selected summary use private, manual, request
         : { summary: { kind: 'ready', value: summary }, reportedYear: null },
     );
     expect(calls.map(({ url }) => url.pathname)).toEqual([
-      '/v1/libraryDiary', 'year' in address ? '/v1/libraryReportedYearSummary' : '/v1/libraryConsumptionSummary',
+      '/v1/libraryDiary',
+      'year' in address ? '/v1/libraryReportedYearSummary' : '/v1/libraryConsumptionSummary',
     ]);
     expect(Object.fromEntries(calls[0]!.url.searchParams)).toEqual({
-      limit: '25', ...Object.fromEntries(Object.entries(address).map(([key, value]) => [key, String(value)])),
+      limit: '25',
+      ...Object.fromEntries(Object.entries(address).map(([key, value]) => [key, String(value)])),
     });
     expect(Object.fromEntries(calls[1]!.url.searchParams)).toEqual('year' in address ? { year: '2020' } : {});
     for (const { init } of calls) {
@@ -103,32 +128,37 @@ test('one exact page of 25 and its selected summary use private, manual, request
 });
 
 test('a refused, lost or redirected sibling preserves the other native result without retry or refill', async () => {
-  for (const address of [{}, { year: 2020 }]) for (const failed of ['diary', 'summary']) {
-    for (const failure of ['refusal', 'transport', 'redirect']) {
-      calls.length = 0;
-      respond = async (url) => {
-        if (url.pathname.endsWith('libraryDiary') !== (failed === 'diary')) return success(url);
-        if (failure === 'transport') throw new TypeError('connection lost');
-        return failure === 'redirect'
-          ? new Response(null, { status: 302, headers: { location: 'https://other.test/private' } })
-          : Response.json({ code: 'forbidden' }, { status: 403 });
-      };
-      const bad = { kind: failure === 'refusal' ? 'denied' : 'unavailable' };
-      expect(await readPrivateDiary({ data: address })).toMatchObject({
-        kind: 'ready', diary: failed === 'diary' ? bad : { kind: 'ready', page },
-        ...('year' in address
-          ? { reportedYear: failed === 'summary' ? bad : { kind: 'ready', value: yearSummary } }
-          : { summary: failed === 'summary' ? bad : { kind: 'ready', value: summary } }),
-      });
-      expect(calls).toHaveLength(2);
-      expect(calls.every(({ init }) => init.redirect === 'manual')).toBe(true);
+  for (const address of [{}, { year: 2020 }])
+    for (const failed of ['diary', 'summary']) {
+      for (const failure of ['refusal', 'transport', 'redirect']) {
+        calls.length = 0;
+        respond = async (url) => {
+          if (url.pathname.endsWith('libraryDiary') !== (failed === 'diary')) return success(url);
+          if (failure === 'transport') throw new TypeError('connection lost');
+          return failure === 'redirect'
+            ? new Response(null, { status: 302, headers: { location: 'https://other.test/private' } })
+            : Response.json({ code: 'forbidden' }, { status: 403 });
+        };
+        const bad = { kind: failure === 'refusal' ? 'denied' : 'unavailable' };
+        expect(await readPrivateDiary({ data: address })).toMatchObject({
+          kind: 'ready',
+          diary: failed === 'diary' ? bad : { kind: 'ready', page },
+          ...('year' in address
+            ? { reportedYear: failed === 'summary' ? bad : { kind: 'ready', value: yearSummary } }
+            : { summary: failed === 'summary' ? bad : { kind: 'ready', value: summary } }),
+        });
+        expect(calls).toHaveLength(2);
+        expect(calls.every(({ init }) => init.redirect === 'manual')).toBe(true);
+      }
     }
-  }
 });
 
 test('abort rejects late success and normalized errors while replacement and command receipts stay independent', async () => {
   for (const [address, abortResponse] of [
-    [{}, 'late-success'], [{ year: 2020 }, 'late-success'], [{}, 'error'], [{ year: 2020 }, 'error'],
+    [{}, 'late-success'],
+    [{ year: 2020 }, 'late-success'],
+    [{}, 'error'],
+    [{ year: 2020 }, 'error'],
   ] as const) {
     const lifetime = new AbortController();
     request = new Request('https://site.test/library/history', { signal: lifetime.signal });
@@ -151,8 +181,10 @@ test('abort rejects late success and normalized errors while replacement and com
     request = new Request('https://site.test/library/history');
     const replacement = { year: 2020, month: 4, cursor: 'replacement+/=' };
     expect(await readPrivateDiary({ data: replacement })).toMatchObject({
-      kind: 'ready', address: replacement,
-      diary: { kind: 'ready', page }, reportedYear: { kind: 'ready', value: yearSummary },
+      kind: 'ready',
+      address: replacement,
+      diary: { kind: 'ready', page },
+      reportedYear: { kind: 'ready', value: yearSummary },
     });
     expect(calls.slice(2).every(({ init }) => init.signal === request.signal && !init.signal.aborted)).toBe(true);
     expect(calls.slice(0, 2).every(({ init }) => init.signal === abandonedSignal && init.signal.aborted)).toBe(true);
@@ -176,11 +208,13 @@ test('abort rejects late success and normalized errors while replacement and com
   release.resolve();
   await rejected;
   await expect(readPrivateDiary({ data: {} })).rejects.toThrow('visit left');
-  await expect(Promise.all([
-    readDiaryPage(client, 'Bearer current', undefined, {}, request.signal),
-    readConsumptionSummary(client, 'Bearer current', request.signal),
-    readReportedYearSummary(client, 'Bearer current', 2020, request.signal),
-  ])).rejects.toThrow('visit left');
+  await expect(
+    Promise.all([
+      readDiaryPage(client, 'Bearer current', undefined, {}, request.signal),
+      readConsumptionSummary(client, 'Bearer current', request.signal),
+      readReportedYearSummary(client, 'Bearer current', 2020, request.signal),
+    ]),
+  ).rejects.toThrow('visit left');
   expect(calls).toHaveLength(0);
   respond = async () => Response.json({ cancelled: true });
   const command = { viewer: 'owner', csrfToken: 'csrf', continuation: page.continuation };
