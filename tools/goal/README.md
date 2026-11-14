@@ -3182,11 +3182,11 @@ shared group, so only its process is stopped. Recovery and actionable inbox wake
 semantically only when its command proves the same manager role, `CODEX_HOME`, thread, executable and remaining
 arguments, and its current pane path matches the manager's working directory; only the `--remote` endpoint may differ.
 Tmux's supported quoting wrappers are parsed as literal argv without executing the recorded command. Endpoint repair
-opens a sibling pane at the authoritative pool endpoint and retains the original pane, so visible unsent drafts remain
-in place. The Codex transport cannot export and restore a draft as editable input; drafts are not migrated to the new
-pane. An exited stale pane is repaired only when the native Goal is active or an inbox wake explicitly activates it.
-Current-endpoint viewers, missing viewers, and command or path mismatches are left alone, and an existing current
-endpoint sibling prevents repeat launches after an immediate exit. Recovery keeps an inbox-parked thread paused
+reuses a single pane with a proven empty composer at the authoritative pool endpoint. When empty input cannot be
+proven, repair keeps an original pane with possible unsent input in a separate draft window. The transport cannot
+migrate its editable draft. An exited stale pane is repaired only when the native Goal is active or an inbox wake
+explicitly activates it. An existing current-endpoint viewer is reused and a same-endpoint failure prevents repeated
+launches. Missing viewers and command or path mismatches are left alone. Recovery keeps an inbox-parked thread paused
 without resuming it; a later wake reuses that thread. Explicit manager stop still closes its owned window.
 The neutral host and shared app-server start with inherited provider session markers removed. Each manager launch then
 uses its selected provider account: Codex pool processes receive that pool's `CODEX_HOME`, while Claude receives its
@@ -3797,8 +3797,9 @@ once a minute.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 Decision: `verify` and `promote` accept no arguments; a sole `--help` or `-h` prints usage before runtime hooks, and other trailing arguments fail before either hook.
 Decision: Reconnect only a proven Goal-owned Codex viewer for the same role, account, thread and cwd. Keep the current
-viewer in the manager window. Close obsolete viewers with a visible empty composer; move others to separate draft
-windows. On viewer attachment or recovery, bounded asynchronous startup probes may select Leave paused in the exact Codex
+viewer in the manager window. Identify empty input by the live cursor row and Codex's dim placeholder, not a
+historical prompt. Reuse the empty pane in place across endpoint changes and close empty duplicates, including
+previously archived viewers of that same thread. Preserve uncertain input in separate draft windows. On viewer attachment or recovery, bounded asynchronous startup probes may select Leave paused in the exact Codex
 resume menu. They do not block manager recovery, submit a prompt or resume the Goal. Unknown panes and unrelated dialogs
 remain untouched.
 Decision: A Goal-owned Codex viewer runs under a terminal shell. Ctrl+C still reaches Codex; exiting the viewer
