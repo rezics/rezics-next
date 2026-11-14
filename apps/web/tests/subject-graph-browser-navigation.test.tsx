@@ -518,6 +518,10 @@ test('current relation labels, missing meanings and long node labels share manua
     expect(table.textContent).not.toContain('urn:relation:current-name-unavailable');
     expect(table.textContent).not.toContain(property);
     expect(table.textContent).toContain(longLabel);
+    const inspect = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Selected meaning')!;
+    await ui.click(inspect);
+    expect(ui.window.document.activeElement?.tagName).toBe('H2');
+    expect(ui.window.location.hash).toBe('');
     const diagramSwitch = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent === 'Graph diagram',
     )!;

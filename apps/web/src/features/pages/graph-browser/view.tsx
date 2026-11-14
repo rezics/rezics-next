@@ -1114,7 +1114,15 @@ export function GraphBrowserPage({
           </div>
           <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]">
             <div id={workspaceId} className="min-w-0 space-y-4 rounded-lg border p-3 sm:p-4">
-              <a className={linkClass} href={`#${inspectorId}`}>{m.graph_explore_inspect({}, o)}</a>
+              <Button
+                type="button"
+                variant="link"
+                className={actionClass}
+                aria-controls={inspectorId}
+                onClick={() => detailHeadingRef.current?.focus()}
+              >
+                {m.graph_explore_inspect({}, o)}
+              </Button>
               <div hidden={viewMode !== 'list'}>
                 <GraphList projection={projection!} selected={selected} selectionConfirmed={selectionConfirmed} onSelect={select} locale={locale} />
               </div>
