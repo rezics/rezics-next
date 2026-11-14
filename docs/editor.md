@@ -66,6 +66,38 @@ and clear no-match feedback. Replacement is undoable and preserves marks and non
 provides searchable available actions and keyboard access. An outline/statistics surface reuses the existing
 writing inspection where the host supplies it; a standalone editor can expose its own local bounded projection.
 
+### Bounded bulk text execution
+
+Bulk replacement retains the maintained native steps, maps and history semantics. It must not retain a complete
+intermediate document per match, coarsen unchanged positions into a paragraph replacement, or impose a logical
+match-count cap. The measured ordinary transaction construction exceeds 6 GiB for 100,000 admitted single-character
+matches; merely limiting decorations or hiding Replace all does not repair this class.
+
+Adopt a private, version-pinned compact transaction adapter for proven monotone, closed inline-text replacements.
+It records native steps/maps, materializes prefix documents lazily with bounded internal retention, caches exact
+inversions for their owned step/prefix, and joins final text once per resulting mark run. Native step prototypes,
+serialization, mapping, merging and foreign-prefix inversion remain correct. This is an owned execution path,
+not a replacement for arbitrary ProseMirror transactions or a new document format. Unknown, structural or mixed
+operations retain the maintained verified path; their identity-repair processing cannot be suppressed.
+
+The existing history commands and visit-bound browser history-input handlers use the same bounded construction
+for undo/redo. No global EditorState prototype mutation, custom StepMap, collapsed mirror identity or rewritten
+history branch is adopted. Prefix observations must preserve immutable Node/Fragment values and document/selection
+identity rules. Resolve virtual prefixes without retaining a native resolution cache for every prefix, and expose
+a real final document to the live editor. Explicit selection restoration preserves direction, bookmark and stored
+marks; it is part of the owned command rather than an invisible flag equivalence claim.
+
+Only a factory-proven topology/ID-preserving whole append batch may bypass redundant UniqueID step replay. Mixed
+or unknown batches follow normal identity repair. Content/profile validation and outgoing snapshot limits always
+remain active. Check encoded output expansion before allocation/dispatch, and validate the complete result. Clear
+transient find decorations before mapping a bulk edit, then rebuild them against the admitted result.
+
+The implementation must establish native differential equivalence for step JSON, prefix contents, inversions,
+maps/deletion flags, selection, bookmarks, mixed fallback and partial non-history edits. Real dispatch, history
+application, undo and redo must meet measured memory/interaction bounds on dense, spaced and near-ceiling content.
+Forward construction alone does not satisfy this contract. The comparison and proof obligations are recorded in
+[bulk text research](research/editor-bulk-text-gpt-6.md).
+
 ## User preferences
 
 The portable preference model contains sparse overrides over documented preset defaults. It validates closed
