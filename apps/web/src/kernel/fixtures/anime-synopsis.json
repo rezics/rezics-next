@@ -1,0 +1,72 @@
+{
+  "body": {
+    "version": "rezics-document-v1",
+    "profile": "text",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "attrs": {
+            "textAlign": null,
+            "id": "0193a000-0000-7000-8000-000000009000",
+            "lang": null,
+            "dir": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "At the edge of a coastal city, apprentice astronomer Nagi begins work at an observatory due to close. She expects quiet nights and a little time to decide what comes next. Instead, the visitors keep arriving."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "textAlign": null,
+            "id": "0193a000-0000-7000-8000-000000009001",
+            "lang": null,
+            "dir": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "A night bus driver, a letter carrier and a retired music teacher each bring their own map of the city. Between cloudy evenings and brief clear skies, Nagi starts to understand why this small place on the hill matters to so many people."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "textAlign": null,
+            "id": "0193a000-0000-7000-8000-000000009002",
+            "lang": null,
+            "dir": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "The first season follows a year of departures and reunions. In the second, a packet of undelivered letters takes the story beyond the observatory. The changing landscape, hand-painted skies and patient conversations keep the everyday world in view."
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "attrs": {
+            "textAlign": null,
+            "id": "0193a000-0000-7000-8000-000000009003",
+            "lang": null,
+            "dir": null
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Along the way, a misplaced notebook becomes a shared star chart. Plans for the future are drawn in pencil, invitations are left on the kitchen table, and there is always room for one more person beside the telescope."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "digest": "f58fc77493538255bd48b49daa22a271ac453bf47c9942345c797965a4d92f6e"
+}

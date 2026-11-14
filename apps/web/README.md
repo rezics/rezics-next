@@ -786,6 +786,32 @@ destinations that normally open a new tab. Other stories retain their navigation
 returns, failed-section retry and personal readback. `tests/book-showcase.test.ts` pins the transport and released
 view contract. The dev verifier runs acceptance and browser checks after landing.
 
+The canonical Anime showcase lives at **Library/Anime**, with stable `pages-library-anime--*` IDs.
+Its invented production, The Last Observatory, has three exact Season identities, 28 exact Episode identities,
+a companion film, people, characters, original local vector/WebP art and synthetic community writing. All fixtures
+illustrate installed contracts; none is a provider recording or native API acceptance. Every entry shares canonical
+IDs across locale, theme and viewport globals. The common Subject shell and released composition serve all tabs.
+The main story has no play sequence: navigation and tab changes are deliberate reader actions.
+
+Canonical Anime entries for the existing Web publisher:
+
+- `pages-library-anime--series` is the main member page; `--signed-out` is its public visit.
+- Direct tabs: `--contents`, `--characters`, `--credits`, `--relations`, `--reviews`, `--discussion`, `--lists`
+  and `--details`, all with the same `pages-library-anime` prefix.
+- `--season`, `--later-episode-window` and `--episode` enter the same Season One membership graph. Episode
+  starts at the exact episode in its later parent window; Return restores that frontier and selected assertion.
+- `--sparse-season`, `--failed-page-retry` and `--member-progress` expose missing facts, deliberate retry and
+  the existing private scalar progress destination. A page retry consumes the single authored failure; no timer
+  makes it succeed. Library state and public membership remain independent.
+
+`src/kernel/fixtures/anime-showcase.ts` owns the shared identities and asserted graph;
+`src/kernel/fake/anime-showcase.ts` answers the released page/read contracts and native continuation shapes.
+The [page owner](src/features/pages/README.md#routed-anime-reading) owns reading composition and disclosure.
+Artwork is authored SVG with local 320/640 WebP variants, exact dimensions and CC0 credit in cover summaries;
+there is no external image dependency or CSS cover overlay. Publication remains with the existing Web publisher.
+Decision: the authorized source-only window defers test writing/runs, typecheck, builds, browser/cover decode,
+keyboard and phone/desktop acceptance and capture sweeps to the dev verifier. Existing tests are retained unchanged.
+
 Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and
 `src/kernel/fixtures/`; add no new routes or entries to `fake.ts` or `fixtures.json`. Each route module exports a
 `routes` array typed as `FakeRoute[]` from `fake-modules.ts`: each route has a `method`, an exact pathname or regular
