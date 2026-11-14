@@ -19,7 +19,7 @@ import { configureTestReceiptKeys } from '../../support/receipt-keys.ts';
 import { ACCOUNT_ROLE_BITS } from '../../../src/history/contract/contracts.ts';
 import { bindCommandHistoryEvidence } from '../../../src/history/adapters/record.ts';
 import { createCopyArchive } from '../../../src/library/copy-archive.ts';
-import { exportSectionsV2, LIBRARY_EXPORT_FORMAT } from '../../../src/library/library-export-format.ts';
+import { exportSections, LIBRARY_EXPORT_FORMAT } from '../../../src/library/library-export-format.ts';
 import { createSessionCommands } from '../../../src/library/sessions.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import type { Access, AccountActor, ActionCatalogue, ActionMetadata } from '../../../src/request/access.ts';
@@ -45,7 +45,7 @@ const actions: ActionCatalogue = new Map<string, ActionMetadata>([
   ['progress_session:update', own],
 ]);
 const scopes = [...actions.keys()];
-const v2Omissions = {
+const omissions = {
   trash: 'excluded; current live facts and retained session history only',
   providerIdentifiers:
     'only explicitly reviewed owner observations and retained import evidence; no shared custody scan or inferred identifiers',
@@ -53,8 +53,7 @@ const v2Omissions = {
     'retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded',
   commerce: 'excluded; orders and financial evidence use Commerce retention/export policy',
   publication: 'excluded; stored rules only, no dynamic evaluation or working publication output',
-  reimport:
-    'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection; provenance remains unsupported',
+  reimport: 'reviewed recovery of supported native facts only; unsupported evidence never authorizes execution',
 } as const;
 
 export type GrowthPerson = {
@@ -116,7 +115,7 @@ function v2Artifact(exportId: string, capturedAt: string, session: Record<string
   };
   const size = Buffer.byteLength(JSON.stringify(record), 'utf8');
   const sectionTotals = Object.fromEntries(
-    exportSectionsV2.map((section) => [
+    exportSections.map((section) => [
       section,
       section === 'sessions' ? { rows: 1, recordBytes: size } : { rows: 0, recordBytes: 0 },
     ]),
@@ -125,15 +124,15 @@ function v2Artifact(exportId: string, capturedAt: string, session: Record<string
   return {
     manifest: {
       format: LIBRARY_EXPORT_FORMAT,
-      version: 2 as const,
-      coverage: 'private-library-owner-facts-v2' as const,
+      version: 1 as const,
+      coverage: 'private-library-owner-facts-v1' as const,
       exportId,
       capturedAt,
       expiresAt,
       privacy: 'private' as const,
       completeness: 'supported-native-facts' as const,
-      sections: [...exportSectionsV2],
-      omissions: { ...v2Omissions },
+      sections: [...exportSections],
+      omissions: { ...omissions },
       fullExport: false as const,
       rows: 1,
       recordBytes: size,

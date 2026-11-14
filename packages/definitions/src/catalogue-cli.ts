@@ -70,8 +70,7 @@ async function main(argv: readonly string[]) {
     let typeKinds: 'all' | DefinitionTypePin[] = [];
     if (manifest.typeKinds === 'all') typeKinds = 'all';
     else if (manifest.typeKinds !== undefined) {
-      if (!Array.isArray(manifest.typeKinds))
-        catalogueFail('invalid', 'typeKinds must be "all" or exact Type pins');
+      if (!Array.isArray(manifest.typeKinds)) catalogueFail('invalid', 'typeKinds must be "all" or exact Type pins');
       typeKinds = manifest.typeKinds.map((value) => {
         const pin = object(value, ['releaseDigest', 'typeId']);
         assertCatalogueDigest(pin.releaseDigest);

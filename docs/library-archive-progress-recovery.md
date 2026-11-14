@@ -1,6 +1,6 @@
 # Native archive progress recovery
 
-This extends the existing private Library archive owner. It accepts completed Library export V1/V2/V3/V4 artifacts
+This extends the existing private Library archive owner. It accepts completed canonical v1 Library exports
 with their original manifests and validated section totals. It is not another importer or a general
 progress engine. Each reviewed archive occurrence creates one fresh native Session. Existing Sessions, Entry state,
 entitlement, repeat history, publication and ownership are untouched.
@@ -50,19 +50,18 @@ measure editor and Web323 the export interface. This contract adds no DTO adapte
 | State                                      | Archived active stays active. completed and abandoned use the actual native terminal transition after supported values. Retired or unknown states have no recovery plan.                                                                                                                                                                         |
 | Historical dates                           | Source start, finish and last-change timestamps remain separately visible and are listed as unsupported. Native Session and transition times use their current command times.                                                                                                                                                                    |
 | Version Subject, revision, pin and history | The old version Subject is displayed as unsupported mapping. Archived IDs, profile pins and revisions never authorize or choose commands. Exported progress History is not restored. No existing Session is corrected, retired or reopened.                                                                                                      |
-| Journal/reflection/assessment              | Unsupported. This progress journey discards journal dates, reflection and V3 assessment; no public votes or historical progress are created.                                                                                                                                                                                                     |
+| Journal/reflection/assessment              | Unsupported. This progress journey discards journal dates, reflection and private assessment; no public votes or historical progress are created.                                                                                                                                                                                                     |
 
 The review reports recovery as complete, partial or unsupported alongside applicable. A partial review can apply its
 admitted operands while preserving each unsupported fact in the review result. The final result rereads the accepted
 current Session and exact completed IDs through their native owner methods. Applying does not restore old History or
 claim complete historical recovery.
 
-Version compatibility and per-section byte accounting belong to the existing
-[bounded copy adapter](library-copy-archive-recovery.md). V2/V3/V4 additions remain unsupported coverage here;
-only Session/unit records enter the existing progress evidence table. The installed producer emits V4; V3 is a
-declared decoding seam pending producer delivery. Recovery continues to use the persisted original native
-operands, key and checkpoint contract. Artifact versions do not change review epochs, native acknowledgement,
-current profile/Subject admission or partial outcomes.
+Canonical manifest validation and per-section byte accounting belong to the
+[bounded copy adapter](library-copy-archive-recovery.md). Annotations, provenance, journals and provider evidence
+remain unsupported coverage here; only Session/unit records enter the existing progress evidence table.
+Recovery uses persisted original native operands, key and checkpoint contracts. No archive evidence changes review
+epochs, acknowledgement, current profile/Subject admission or partial outcomes.
 
 ## Review epochs, retry and cancellation
 
@@ -190,7 +189,7 @@ stack and bounded fixture. Unrelated same-owner Session/unit/History rows are se
 callers remain the production apply, result and owner-remove paths. Sequential scans are allowed only while a
 relation stays within the shared eight-page tiny-heap limit; unit, History, archive child tables and
 `progress_session` are checked once they exceed it. Source review alone establishes neither a native Session
-failure nor a pass. The fixture encodes a V2 artifact from the native Session; the focused owner-outcome test in
+failure nor a pass. The fixture encodes a canonical v1 artifact from the native Session; the focused owner-outcome test in
 `copy-archive.test.ts` is not a substitute for these measurements.
 
 Each whole caller uses public `checkGrowth` `captureMode: 'cost-folded'` in one capture; raw remains the default and
@@ -220,9 +219,8 @@ memory, so navigation stays blocked while acknowledgement is unresolved. Native 
 Cancellation stops unclaimed effects and original-command replay reconciles an in-flight claim. Removal repeats the
 native bounded DELETE until complete; accepted Sessions remain independently readable.
 
-Current V4 files reach native validation as original bytes, including provider rows, exact version and final totals.
+Canonical v1 files reach native validation as original bytes, including provider rows, exact version and final totals.
 Unsupported sections stay in manifest and coverage evidence; only explicitly reviewed Session/unit facts are adopted.
-Retained V1/V2/V3 artifacts keep their original inventories and absent assessment semantics.
 
 For a composed caller let H/O/T be holdings/occurrence/unit pages inspected, M membership reviews, R final reviews,
 A confirmed applications, L original-command retries and D bounded deletion calls. Native HTTP operations are

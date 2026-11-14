@@ -90,12 +90,7 @@ async function put(store: CatalogueArtifactStore, value: unknown): Promise<strin
 function makePin(rootDigest: string): KindCataloguePin {
   return { format: CATALOGUE_FORMAT, rootDigest, kindSpec: KIND_FORMAT, reduction: KIND_REDUCTION };
 }
-export function exactTypeKind(
-  release: Release,
-  digest: string,
-  typeId: string,
-  host: CompilerHost,
-): KindDeclarationV1 {
+export function exactTypeKind(release: Release, digest: string, typeId: string, host: CompilerHost): KindDeclarationV1 {
   assertCatalogueDigest(digest);
   assertKindId(typeId);
   const type = Object.hasOwn(release.types, typeId) ? release.types[typeId] : undefined;

@@ -158,12 +158,7 @@ beforeAll(async () => {
       )
     ).status,
   ).toBe(200);
-  // Seed a supported installed capture before paging. The current V4 default remains refused by recovery.
   const capture = await response('POST', '/v1/libraryExports');
-  await f.pool.query(
-    'UPDATE library.library_export SET format_version=2 WHERE route=$1 AND account_id=$2 AND export_id=$3',
-    [routeOf(owner.actor.accountId), owner.actor.accountId, capture.exportId],
-  );
   const status = await response('GET', `/v1/libraryExports/${capture.exportId}`);
   const records: unknown[] = [];
   let cursor = status.first,
@@ -177,7 +172,7 @@ beforeAll(async () => {
     cursor = page.next;
     if (page.manifest) manifest = page.manifest;
   }
-  expect(manifest).toMatchObject({ version: 2 });
+  expect(manifest).toMatchObject({ version: 1 });
   artifact = JSON.stringify({ manifest, records });
   work = await createWorkClient(f.pool.options.connectionString!, f.pool);
   const service = createCopyArchive({

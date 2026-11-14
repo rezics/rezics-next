@@ -19,12 +19,8 @@ import { initialExportSeek, readExportSourcePage, type ExportSeek } from './libr
 import {
   libraryExportManifest as manifest,
   LIBRARY_EXPORT_LIMITS,
-  sectionsForVersion,
+  exportSections,
   type LibraryExportFinalManifest,
-  type LibraryExportFinalManifestV2,
-  type LibraryExportFinalManifestV3,
-  type LibraryExportFinalManifestV4,
-  type LibraryExportVersion,
 } from './library-export-format.ts';
 
 export type LibraryExportDependencies = {
@@ -37,7 +33,6 @@ export type LibraryExportDependencies = {
 type State = 'collecting' | 'ready' | 'stale' | 'cancelled' | 'expired' | 'limit';
 type Capture = {
   export_id: string;
-  format_version: LibraryExportVersion;
   generation: string;
   created_at: string;
   expires_at: string;
@@ -73,7 +68,7 @@ function binding(accountId: string, capture: Capture) {
       accountId,
       exportId: capture.export_id,
       generation: capture.generation,
-      ...(capture.format_version >= 2 ? { formatVersion: capture.format_version } : {}),
+      formatVersion: 1,
     },
   };
 }
@@ -82,20 +77,8 @@ function cursor(deps: LibraryExportDependencies, accountId: string, capture: Cap
     deps.tokens,
     binding(accountId, capture),
     {
-      epoch: capture.format_version,
-      after: [
-        seek.section,
-        seek.parent,
-        seek.after,
-        seek.rows,
-        seek.bytes,
-        ...(capture.format_version === 4
-          ? [JSON.stringify(seek.sectionTotals)]
-          : capture.format_version >= 2
-            ? // Retained epochs keep their original nested-array wire representation.
-              [seek.sectionTotals as unknown as Parameters<typeof encodeCursor>[2]['after'][number]]
-            : []),
-      ],
+      epoch: 1,
+      after: [seek.section, seek.parent, seek.after, seek.rows, seek.bytes, JSON.stringify(seek.sectionTotals)],
     },
     Date.parse(capture.created_at),
   );
@@ -110,20 +93,17 @@ function seekOf(
   const result = decodeCursor(deps.tokens, binding(accountId, capture), token, now);
   if (!result.ok) throw new ProblemError('invalid_cursor');
   const [section, parent, after, rows, bytes, counters] = result.after;
-  let sectionTotals: unknown = counters;
-  if (capture.format_version === 4) {
-    if (typeof counters !== 'string') throw new ProblemError('invalid_cursor');
-    try {
-      sectionTotals = JSON.parse(counters);
-    } catch {
-      throw new ProblemError('invalid_cursor');
-    }
+  if (typeof counters !== 'string') throw new ProblemError('invalid_cursor');
+  let sectionTotals: unknown;
+  try {
+    sectionTotals = JSON.parse(counters);
+  } catch {
+    throw new ProblemError('invalid_cursor');
   }
-  const expectedLength = capture.format_version === 1 ? 5 : 6;
-  const sections = sectionsForVersion(capture.format_version);
+  const sections = exportSections;
   if (
-    result.epoch !== capture.format_version ||
-    result.after.length !== expectedLength ||
+    result.epoch !== 1 ||
+    result.after.length !== 6 ||
     typeof section !== 'number' ||
     section < 0 ||
     !Number.isSafeInteger(section) ||
@@ -140,7 +120,6 @@ function seekOf(
     bytes > LIBRARY_EXPORT_LIMITS.recordBytes
   )
     throw new ProblemError('invalid_cursor');
-  if (capture.format_version === 1) return { section, parent, after, rows, bytes };
   if (
     !Array.isArray(sectionTotals) ||
     sectionTotals.length !== sections.length ||
@@ -173,7 +152,7 @@ function status(deps: LibraryExportDependencies, accountId: string, capture: Cap
     fullExport: false as const,
     first:
       capture.state === 'collecting' || capture.state === 'ready'
-        ? cursor(deps, accountId, capture, initialExportSeek(capture.format_version))
+        ? cursor(deps, accountId, capture, initialExportSeek())
         : null,
   };
 }
@@ -181,18 +160,13 @@ function status(deps: LibraryExportDependencies, accountId: string, capture: Cap
 function finalManifest(capture: Capture, seek: ExportSeek): LibraryExportFinalManifest {
   const metadata = manifest(capture);
   const totals = { fullExport: false as const, rows: seek.rows, recordBytes: seek.bytes };
-  if (metadata.version === 1) return { ...metadata, ...totals };
   const sectionTotals = Object.fromEntries(
     metadata.sections.map((section, index) => {
-      const [rows, recordBytes] = seek.sectionTotals![index]!;
+      const [rows, recordBytes] = seek.sectionTotals[index]!;
       return [section, { rows, recordBytes }];
     }),
   );
-  return metadata.version === 2
-    ? { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifestV2['sectionTotals'] }
-    : metadata.version === 3
-      ? { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifestV3['sectionTotals'] }
-      : { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifestV4['sectionTotals'] };
+  return { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifest['sectionTotals'] };
 }
 
 /** No private artifact is retained: signed keysets replay only against the original unchanged source. */
@@ -284,7 +258,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
   async function current(tx: OperationalTransaction, route: number, accountId: string, id: string, now: number) {
     const capture = (
       await tx.query<Capture>(
-        `SELECT export_id,format_version,generation::text,created_at::text,expires_at::text,state
+        `SELECT export_id,generation::text,created_at::text,expires_at::text,state
       FROM library.library_export WHERE route=$1 AND account_id=$2 AND export_id=$3 FOR UPDATE`,
         [route, accountId, id],
       )
@@ -298,12 +272,8 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
         AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)
         OR EXISTS (SELECT 1 FROM library.bangumi_upload WHERE route=$1 AND account_id=$2
           AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)
-        ${
-          capture.format_version === 4
-            ? `OR EXISTS (SELECT 1 FROM library.vndb_import WHERE route=$1 AND account_id=$2
-          AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)`
-            : ''
-        }`,
+        OR EXISTS (SELECT 1 FROM library.vndb_import WHERE route=$1 AND account_id=$2
+          AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)`,
           [route, accountId, capture.created_at, new Date(now).toISOString()],
         )
       ).rowCount !== 0;
@@ -352,10 +322,10 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           const source = await generation(tx, route, account.accountId);
           const at = new Date(authoritativeTimeValue(command.time)).toISOString();
           await tx.query(
-            `INSERT INTO library.library_export(route,account_id,export_id,format_version,generation,created_at,expires_at,state)
-          VALUES($1,$2,$3,4,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
+            `INSERT INTO library.library_export(route,account_id,export_id,generation,created_at,expires_at,state)
+          VALUES($1,$2,$3,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
           ON CONFLICT(route,account_id) DO UPDATE SET export_id=EXCLUDED.export_id,generation=EXCLUDED.generation,
-            format_version=EXCLUDED.format_version,created_at=EXCLUDED.created_at,expires_at=EXCLUDED.expires_at,state='collecting'`,
+            created_at=EXCLUDED.created_at,expires_at=EXCLUDED.expires_at,state='collecting'`,
             [route, account.accountId, id, source, at],
           );
           signal?.throwIfAborted();
@@ -390,7 +360,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
             manifest: null,
           };
         const seek = seekOf(deps, accountId, capture, token, now);
-        const page = await readExportSourcePage(tx, route, accountId, seek, capture.created_at, capture.format_version);
+        const page = await readExportSourcePage(tx, route, accountId, seek, capture.created_at);
         // Expiry has no row write. Recheck after serialization as well as before reading,
         // including replay of a completed download under the original request identity.
         const final = await current(tx, route, accountId, id, Math.max(now, clock().getTime()));

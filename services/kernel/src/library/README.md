@@ -102,8 +102,8 @@ rechecks current catalogue/target Access on get. Get returns the saved address a
 unavailable resume when current authority withholds bytes; it never silently changes the selection.
 TOC withdrawal removes current `for_subject` discovery; historical exact reads remain on Content
 resolve. Ordinary Entry/Progress keep Book page units. Private facts grant no read access and join
-account erasure. The v4 Library export decoder stays frozen for Web, so checkpoints ride the next
-export format; `readHostedReadingExportPage` is the installed hook. Fewest tests: current discovery
+account erasure. The canonical Library export currently omits checkpoints;
+`readHostedReadingExportPage` is the installed hook for later coverage. Fewest tests: current discovery
 and empty TOC, CAS save/get/clear, withheld resume keeping the address, position bounds.
 
 Acceptance choice: focused source fixtures pin those states; native/browser acceptance stays in the
@@ -4146,11 +4146,11 @@ results. Fresh native commands fence their retained source and entry incarnation
 new native receipt operand; already admitted receipts remain replayable. Notes, the explicit MAL priority mapping and
 provenance field meaning remain owned by [the metadata contract](../../../../docs/library-import-entry-metadata.md).
 
-Expired label-preview reconciliation is still unavailable. V4 retains its private inert parsed evidence contract;
+Expired label-preview reconciliation is still unavailable. Canonical Library export retains its private inert parsed evidence contract;
 native recovery consumers still refuse it. Focused HTTP cases cover actual lost native acknowledgements, expiry,
 interrupted dispatch, corrected target/independent consent and source spelling. The inclusive caller derivation counts
 whole retained-document decoding, each repeated source observation/dispatch, SQL work and cleanup. Frozen, independent
-all-pool 64/512/4096, V4 composition and terminal acceptance remain integration work.
+all-pool 64/512/4096, canonical export composition and terminal acceptance remain integration work.
 
 Decision: after Bangumi evidence expiry, metadata recovery replays only the exact started annotation or provenance
 receipt, and score recovery reconciles only the retained Rating receipt before an independent current Rating read.

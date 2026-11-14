@@ -1,8 +1,7 @@
 import { ProblemError } from '../http/problem-error.ts';
-import { parseStrictJson } from '../http/strict-json.ts';
 import { routeOf } from '../route/route.ts';
-import { sectionsForVersion, LIBRARY_EXPORT_FORMAT } from './library-export-format.ts';
-import { decodeLibraryArchive, ArchiveValidationError } from './library-archive.ts';
+import { exportSections, type LibraryArchiveManifest } from './library-export-format.ts';
+import { decodeLibraryArchive, type LibraryArchive } from './library-archive.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import type { LibraryProfilePin } from './profile.ts';
 
@@ -38,44 +37,12 @@ export type ArchivedHolding = {
   created_at: string;
   updated_at: string;
 };
-type CopyArchiveManifestBase = {
-  format: typeof LIBRARY_EXPORT_FORMAT;
-  exportId: string;
-  capturedAt: string;
-  expiresAt: string;
-  privacy: 'private';
-  completeness: 'supported-native-facts';
-  sections: string[];
-  omissions: Record<string, string>;
-  fullExport: false;
-  rows: number;
-  recordBytes: number;
-};
-/** Original manifests and all section totals remain evidence, including unsupported provider rows. */
-export type CopyArchiveManifest = CopyArchiveManifestBase &
-  (
-    | { version: 1 }
-    | {
-        version: 2;
-        coverage: 'private-library-owner-facts-v2';
-        sectionTotals: Record<string, { rows: number; recordBytes: number }>;
-      }
-    | {
-        version: 4;
-        coverage: 'private-library-owner-facts-v4';
-        sectionTotals: Record<string, { rows: number; recordBytes: number }>;
-      }
-    | {
-        version: 3;
-        coverage: 'private-library-owner-facts-v3';
-        sectionTotals: Record<string, { rows: number; recordBytes: number }>;
-      }
-  );
+/** The archive producer and all recovery consumers share one canonical manifest. */
+export type CopyArchiveManifest = LibraryArchiveManifest;
 export type ArchiveSectionCoverage = {
   section: string;
   records: number;
-  /** Absent on uploads retained before per-section byte accounting was installed. */
-  recordBytes?: number;
+  recordBytes: number;
   support: 'evidence-only' | 'unsupported';
 };
 export type ArchivedProgressMeasure = { unit: string; amount: string | null; total: string | null };
@@ -109,7 +76,7 @@ export type ArchivedProgressUnit = {
 };
 export type ParsedCopyArchive = {
   manifest: CopyArchiveManifest;
-  coverage: (ArchiveSectionCoverage & { recordBytes: number })[];
+  coverage: ArchiveSectionCoverage[];
   holdings: { ordinal: number; evidence: ArchivedHolding }[];
   progress: {
     ordinal: number;
@@ -331,205 +298,26 @@ function progressUnit(value: Record<string, unknown>): ArchivedProgressUnit {
   return value as ArchivedProgressUnit;
 }
 
-/** Recognize current envelopes without retaining or adopting their private payloads. */
-function unsupportedCurrentRecord(value: Record<string, unknown>, version: 2 | 3 | 4) {
-  switch (value.section) {
-    case 'annotations':
-      exact(value, [
-        'section',
-        'accountId',
-        'subjectId',
-        'entryIncarnationId',
-        'libraryProfilePin',
-        'annotationRevision',
-        'note',
-        'priority',
-        'annotationUpdatedAt',
-      ]);
-      if (
-        !uuid(value.accountId) ||
-        !uuid(value.subjectId) ||
-        !(value.entryIncarnationId === null || uuid(value.entryIncarnationId)) ||
-        !Number.isSafeInteger(value.annotationRevision) ||
-        Number(value.annotationRevision) < 1 ||
-        !(value.note === null || text(value.note, 4096)) ||
-        !(
-          value.priority === null ||
-          (Number.isInteger(value.priority) && Number(value.priority) >= 1 && Number(value.priority) <= 100)
-        ) ||
-        !(value.annotationUpdatedAt === null || stamp(value.annotationUpdatedAt))
-      )
-        invalid();
-      break;
-    case 'provenance':
-      exact(value, ['section', 'accountId', 'subjectId', 'entryIncarnationId', 'libraryProfilePin', 'observation']);
-      exact(object(value.observation), [
-        'provider',
-        'recordId',
-        'revision',
-        'privacy',
-        'sourceCreated',
-        'sourceUpdated',
-        'recordedAt',
-      ]);
-      if (
-        !uuid(value.accountId) ||
-        !uuid(value.subjectId) ||
-        !(value.entryIncarnationId === null || uuid(value.entryIncarnationId))
-      )
-        invalid();
-      break;
-    case 'journals': {
-      exact(value, [
-        'section',
-        'accountId',
-        'sessionId',
-        'subjectId',
-        'versionSubjectId',
-        'state',
-        'progressRevision',
-        'libraryProfilePin',
-        'startedAt',
-        'completedAt',
-        'lastChangedAt',
-        'journal',
-      ]);
-      const journal = object(value.journal);
-      exact(journal, [
-        'sessionId',
-        'revision',
-        'startDate',
-        'finishDate',
-        'reflection',
-        ...(version >= 3 ? ['assessment'] : []),
-      ]);
-      if (!uuid(value.sessionId) || journal.sessionId !== value.sessionId) invalid();
-      if (
-        !uuid(value.accountId) ||
-        !uuid(value.subjectId) ||
-        !(value.versionSubjectId === null || uuid(value.versionSubjectId)) ||
-        !text(value.state, 64) ||
-        !Number.isSafeInteger(value.progressRevision) ||
-        Number(value.progressRevision) < 1 ||
-        !Number.isSafeInteger(journal.revision) ||
-        Number(journal.revision) < 0 ||
-        !stamp(value.startedAt) ||
-        !(value.completedAt === null || stamp(value.completedAt)) ||
-        !(value.lastChangedAt === null || stamp(value.lastChangedAt)) ||
-        !(journal.reflection === null || text(journal.reflection, 4096))
-      )
-        invalid();
-      if (version >= 3) {
-        const assessment = object(journal.assessment);
-        exact(assessment, ['meaningRevision', 'units']);
-        if (
-          assessment.meaningRevision !== 1 ||
-          !(
-            assessment.units === null ||
-            (Number.isInteger(assessment.units) && Number(assessment.units) >= 0 && Number(assessment.units) <= 20)
-          )
-        )
-          invalid();
-      }
-      break;
-    }
-  }
-}
-
 /** Parse the installed Web artifact, never a synthetic row-list or an unfinished page. */
 export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
   if (bytes.byteLength > COPY_ARCHIVE_LIMITS.bytes) throw new ProblemError('content_too_large');
-  let raw: unknown;
+  let archive: LibraryArchive;
   try {
     const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     boundedDepth(source);
-    raw = parseStrictJson(source);
+    archive = decodeLibraryArchive(bytes);
   } catch {
     return invalid();
   }
-  const archive = object(raw);
-  exact(archive, ['manifest', 'records']);
-  const m = object(archive.manifest);
-  if (m.version !== 1 && m.version !== 2 && m.version !== 3 && m.version !== 4) invalid();
-  const version = m.version as 1 | 2 | 3 | 4;
-  // Current external files reach the common strict boundary before any supported-row selection.
-  if (version === 4) {
-    try {
-      decodeLibraryArchive(bytes);
-    } catch (error) {
-      if (error instanceof ArchiveValidationError) return invalid();
-      throw error;
-    }
-  }
-  const installedSections: readonly string[] = sectionsForVersion(version);
-  exact(m, [
-    'format',
-    'version',
-    'exportId',
-    'capturedAt',
-    'expiresAt',
-    'privacy',
-    'completeness',
-    'sections',
-    'omissions',
-    'fullExport',
-    'rows',
-    'recordBytes',
-    ...(version === 1 ? [] : ['coverage', 'sectionTotals']),
-  ]);
-  if (
-    m.format !== LIBRARY_EXPORT_FORMAT ||
-    (version !== 1 && m.coverage !== `private-library-owner-facts-v${version}`) ||
-    m.privacy !== 'private' ||
-    m.completeness !== 'supported-native-facts' ||
-    m.fullExport !== false ||
-    !uuid(m.exportId) ||
-    !stamp(m.capturedAt) ||
-    !stamp(m.expiresAt) ||
-    Date.parse(m.expiresAt) <= Date.parse(m.capturedAt) ||
-    !Number.isSafeInteger(m.rows) ||
-    Number(m.rows) < 0 ||
-    Number(m.rows) > COPY_ARCHIVE_LIMITS.records ||
-    !Number.isSafeInteger(m.recordBytes) ||
-    Number(m.recordBytes) < 0 ||
-    Number(m.recordBytes) > COPY_ARCHIVE_LIMITS.bytes
-  )
-    invalid();
-  // V1 keeps its fixed decoder; current versions preserve the producer's exact inventory order.
-  const sections = m.sections;
-  if (
-    !Array.isArray(sections) ||
-    sections.length !== installedSections.length ||
-    new Set(sections).size !== installedSections.length ||
-    installedSections.some((s, index) => (version === 1 ? !sections.includes(s) : sections[index] !== s))
-  )
-    invalid();
-  const omissions = object(m.omissions);
-  if (version !== 1)
-    exact(omissions, ['trash', 'providerIdentifiers', 'personalImportEvidence', 'commerce', 'publication', 'reimport']);
-  if (Object.keys(omissions).length > 32 || Object.entries(omissions).some(([k, v]) => !text(k, 200) || !text(v, 2000)))
-    invalid();
-  const totals = version === 1 ? null : object(m.sectionTotals);
-  if (totals) {
-    exact(totals, installedSections);
-    for (const section of installedSections) {
-      const total = object(totals[section]);
-      exact(total, ['rows', 'recordBytes']);
-      if (
-        !Number.isSafeInteger(total.rows) ||
-        Number(total.rows) < 0 ||
-        Number(total.rows) > Number(m.rows) ||
-        !Number.isSafeInteger(total.recordBytes) ||
-        Number(total.recordBytes) < 0 ||
-        Number(total.recordBytes) > Number(m.recordBytes)
-      )
-        invalid();
-    }
-  }
+  const m = archive.manifest;
+  const installedSections = exportSections;
+  const totals = object(m.sectionTotals);
   const records = archive.records;
   if (!Array.isArray(records) || records.length !== m.rows) invalid();
   const archiveRecords = records as unknown[];
-  const coverage = new Map(installedSections.map((section) => [section, { records: 0, recordBytes: 0 }]));
+  const coverage = new Map<string, { records: number; recordBytes: number }>(
+    installedSections.map((section) => [section, { records: 0, recordBytes: 0 }]),
+  );
   const holdings: ParsedCopyArchive['holdings'] = [];
   const progress: ParsedCopyArchive['progress'] = [];
   const sessions = new Set<string>();
@@ -570,8 +358,6 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
       retainedBytes += size;
       if (retainedBytes > COPY_ARCHIVE_LIMITS.evidenceBytes) invalid();
       progress.push({ ordinal, evidence, sourceSessionId: evidence.session_id, sourceUnitId: evidence.unit_id });
-    } else if (version !== 1) {
-      unsupportedCurrentRecord(record, version);
     }
   }
   if (progress.some((row) => row.evidence.section === 'units' && !sessions.has(row.sourceSessionId))) invalid();
@@ -582,7 +368,7 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
       if (actual.records !== expected.rows || actual.recordBytes !== expected.recordBytes) invalid();
     }
   return {
-    manifest: m as CopyArchiveManifest,
+    manifest: m,
     coverage: [...coverage].map(([section, counts]) => ({
       section,
       ...counts,

@@ -291,11 +291,6 @@ beforeAll(async () => {
   await targetLabels.createLabel(main.actor, { name: 'my chosen label' }, key());
 
   const created = await json(await send(source, 'POST', '/v1/libraryExports'));
-  // Read the V3 schema from the installed producer while V4 provider sections stay unsupported.
-  await f.pool.query(
-    'UPDATE library.library_export SET format_version=3 WHERE route=$1 AND account_id=$2 AND export_id=$3',
-    [routeOf(source.actor.accountId), source.actor.accountId, created.exportId],
-  );
   const captured = await json(await send(source, 'GET', `/v1/libraryExports/${created.exportId}`));
   const records: RecordRow[] = [];
   let cursor = captured.first as string | null;
@@ -315,20 +310,36 @@ beforeAll(async () => {
   expect(records.filter((row) => row.section === 'labels')).toHaveLength(2);
   expect(records.filter((row) => row.section === 'assignments')).toHaveLength(1);
   expect(records.filter((row) => row.section === 'journals')).toHaveLength(2);
-  expect(artifact.manifest.version).toBe(3);
+  expect(artifact.manifest.version).toBe(1);
   expect(artifact.manifest.recordBytes).toBe(
     records.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row), 'utf8'), 0),
   );
-  expect(Object.keys(artifact.manifest.sectionTotals as Record<string, unknown>)).toHaveLength(17);
+  expect(Object.keys(artifact.manifest.sectionTotals as Record<string, unknown>)).toHaveLength(21);
 }, 120_000);
 
 afterAll(async () => {
   await f?.close();
 });
 
+test('canonical provider evidence is retained privately without becoming a recovery operand', async () => {
+  const uploadId = randomUUID();
+  const rows: RecordRow[] = [
+    { section: 'vndbUploads', upload_id: uploadId, state: 'active', expires_at: '2026-01-01T00:00:00Z' },
+    { section: 'vndbEvidence', upload_id: uploadId, ordinal: 0, evidence: { score: '0', private: true } },
+    { section: 'anilistUploads', upload_id: uploadId, cancelled: false, score_format: 'POINT_10', row_count: 1 },
+    { section: 'anilistEvidence', upload_id: uploadId, ordinal: 0, evidence: { score: null } },
+  ];
+  const uploaded = await upload(source, framed(rows));
+  const preview = await previewAll(source, uploaded.uploadId);
+  expect(preview.records.map((row: any) => ({ evidence: row.evidence, status: row.status }))).toEqual(
+    rows.map((evidence) => ({ evidence, status: 'unsupported' })),
+  );
+  expect((await send(main, 'GET', `${mergePath}/${uploaded.uploadId}`)).status).toBe(404);
+});
+
 test('the actual installed archive is privately reviewed, explicitly merged and replayed through native commands', async () => {
   const wrong = framed(artifact.records);
-  expect(wrong.manifest.version).toBe(3);
+  expect(wrong.manifest.version).toBe(1);
   const publicVoteCommands = createVoteCommands({ pool: f.pool, access: f.access });
   const publicVoteBefore = await publicVoteCommands.readOwnVote(main.actor, STANDARD_QUESTION_ID, subjects[0]);
   expect(publicVoteBefore?.units).toBe(7);
@@ -938,23 +949,14 @@ test('unknown archived state remains readable but cannot enter the current profi
   ).toBe('unsupported');
 });
 
-test('V3 unknown and V2 absent assessments stay inert while an explicit archived null clears', async () => {
+test('unknown assessment meanings stay inert while an explicit archived null clears', async () => {
   const sourceRow = artifact.records.find((row) => row.section === 'journals')!;
-  const cases: { version: 2 | 3; journal: Record<string, unknown>; expected: 'unsupported' | 'accepted' }[] = [
+  const cases: { journal: Record<string, unknown>; expected: 'unsupported' | 'accepted' }[] = [
     {
-      version: 3,
       journal: { ...(sourceRow.journal as Record<string, unknown>), assessment: { meaningRevision: 2, units: 14 } },
       expected: 'unsupported',
     },
     {
-      version: 2,
-      journal: Object.fromEntries(
-        Object.entries(sourceRow.journal as Record<string, unknown>).filter(([name]) => name !== 'assessment'),
-      ),
-      expected: 'unsupported',
-    },
-    {
-      version: 3,
       journal: { ...(sourceRow.journal as Record<string, unknown>), assessment: { meaningRevision: 1, units: null } },
       expected: 'accepted',
     },
@@ -968,8 +970,8 @@ test('V3 unknown and V2 absent assessments stay inert while an explicit archived
     await sessions.patchSessionJournal(owner.actor, target.id, { revision: 0, assessment: { units: 17 } }, key());
     const manifest = {
       ...artifact.manifest,
-      version: c.version,
-      coverage: `private-library-owner-facts-v${c.version}`,
+      version: 1,
+      coverage: 'private-library-owner-facts-v1',
     };
     const id = (await upload(owner, framed([{ ...sourceRow, journal: c.journal }], manifest))).uploadId as string;
     const row = (await previewAll(owner, id)).records.find((item: any) => item.section === 'journals')!;
@@ -1240,7 +1242,7 @@ test('missing personal targets stay inert and concurrent annotation or journal r
   ).toMatchObject([{ status: 'stale' }, { status: 'stale' }]);
 });
 
-test('annotation application rejects a recreated Entry and expiry cleanup removes retained v2 evidence', async () => {
+test('annotation application rejects a recreated Entry and expiry cleanup removes retained personal evidence', async () => {
   const original = await f.commands.readEntry(staleIncarnation.actor, subjects[0]);
   const { id } = await makeUpload(staleIncarnation);
   const annotation = (await previewAll(staleIncarnation, id)).records.find((row: any) => row.section === 'annotations');

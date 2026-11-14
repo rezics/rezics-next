@@ -7,7 +7,7 @@ import {
   type ArchiveRecord,
   type ArchiveValidationCode,
 } from '../../src/library/library-archive.ts';
-import { exportSectionsV2, exportSectionsV4, libraryExportManifest } from '../../src/library/library-export-format.ts';
+import { exportSections, libraryExportManifest } from '../../src/library/library-export-format.ts';
 
 const first = randomUUID(),
   second = randomUUID(),
@@ -52,35 +52,19 @@ function assignment() {
     subject_id_reference: reference(first),
   };
 }
-function archive(records: ArchiveRecord[] = [entry(first), entry(second, 'planned'), named(), assignment()]) {
+function archiveFacts(records: ArchiveRecord[]) {
   return {
     manifest: {
       ...libraryExportManifest({
         export_id: randomUUID(),
         created_at: at,
         expires_at: '2026-01-01 00:15:00.123456+00',
-      }),
-      fullExport: false,
-      rows: records.length,
-      recordBytes: records.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row)), 0),
-    },
-    records,
-  };
-}
-function archiveV2(records: ArchiveRecord[]) {
-  return {
-    manifest: {
-      ...libraryExportManifest({
-        export_id: randomUUID(),
-        created_at: at,
-        expires_at: '2026-01-01 00:15:00.123456+00',
-        format_version: 2,
       }),
       fullExport: false,
       rows: records.length,
       recordBytes: records.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row)), 0),
       sectionTotals: Object.fromEntries(
-        exportSectionsV2.map((section) => {
+        exportSections.map((section) => {
           const rows = records.filter((row) => row.section === section);
           return [
             section,
@@ -95,6 +79,8 @@ function archiveV2(records: ArchiveRecord[]) {
     records,
   };
 }
+const archive = (records: ArchiveRecord[] = [entry(first), entry(second, 'planned'), named(), assignment()]) =>
+  archiveFacts(records);
 const decode = (value: unknown) => decodeLibraryArchive(Buffer.from(JSON.stringify(value)));
 function refuses(value: unknown, code: ArchiveValidationCode) {
   expect(() => decode(value)).toThrow(new ArchiveValidationError(code));
@@ -150,7 +136,7 @@ test('unsupported versions, unfinished captures and inconsistent final counts ar
   refuses({ ...file, manifest: { ...file.manifest, state: 'collecting' } }, 'invalid_envelope');
 });
 
-test('version 2 retains exact annotation presence, partial journal dates and reviewable provenance', () => {
+test('canonical archive retains exact annotation presence, partial journal dates and reviewable provenance', () => {
   const annotation = {
     section: 'annotations',
     accountId: first,
@@ -187,9 +173,10 @@ test('version 2 retains exact annotation presence, partial journal dates and rev
       startDate: { year: 2004, month: 2 },
       finishDate: null,
       reflection: 'evidence only',
+      assessment: { meaningRevision: 1, units: null },
     },
   } as ArchiveRecord;
-  const file = archiveV2([annotation, provenance, journal]);
+  const file = archiveFacts([annotation, provenance, journal]);
   const decoded = decode(file);
   expect(decoded.records).toEqual(file.records);
   expect(decoded.coverage.find((row) => row.section === 'annotations')).toMatchObject({
@@ -202,10 +189,10 @@ test('version 2 retains exact annotation presence, partial journal dates and rev
     treatment: 'requires-explicit-mapping',
     rows: 1,
   });
-  const v1 = decode(archive([]));
-  expect(v1.coverage.find((row) => row.section === 'journals')).toMatchObject({
+  const empty = decode(archive([]));
+  expect(empty.coverage.find((row) => row.section === 'journals')).toMatchObject({
     capture: 'empty',
-    treatment: 'retained-unsupported',
+    treatment: 'requires-explicit-mapping',
   });
 });
 
@@ -230,7 +217,7 @@ test('invalid archived calendar dates and empty notes are rejected without norma
       reflection: null,
     },
   } as ArchiveRecord;
-  refuses(archiveV2([journal]), 'invalid_record');
+  refuses(archiveFacts([journal]), 'invalid_record');
   const annotation = {
     section: 'annotations',
     accountId: first,
@@ -242,7 +229,7 @@ test('invalid archived calendar dates and empty notes are rejected without norma
     priority: null,
     annotationUpdatedAt: at,
   } as ArchiveRecord;
-  refuses(archiveV2([annotation]), 'invalid_record');
+  refuses(archiveFacts([annotation]), 'invalid_record');
 });
 
 test('duplicate native rows and names cannot select repeated effects or guess label equivalence', () => {
@@ -292,7 +279,7 @@ test('malformed, duplicate-key and non-Unicode inputs never reflect private sour
   expect(() => decodeLibraryArchive(new Uint8Array([0xff]))).toThrow(new ArchiveValidationError('invalid_json'));
 });
 
-test('V4 validates the original complete manifest and retains provider evidence without admitting it', () => {
+test('canonical archive validates the original complete manifest and retains provider evidence without admitting it', () => {
   const provider = {
     section: 'vndbEvidence' as const,
     upload_id: randomUUID(),
@@ -301,7 +288,7 @@ test('V4 validates the original complete manifest and retains provider evidence 
   };
   const records: ArchiveRecord[] = [entry(first), provider];
   const sectionTotals = Object.fromEntries(
-    exportSectionsV4.map((section) => {
+    exportSections.map((section) => {
       const rows = records.filter((row) => row.section === section);
       return [
         section,
@@ -316,7 +303,6 @@ test('V4 validates the original complete manifest and retains provider evidence 
         export_id: randomUUID(),
         created_at: at,
         expires_at: '2026-01-01 00:15:00.123456+00',
-        format_version: 4,
       }),
       fullExport: false,
       rows: records.length,
@@ -342,7 +328,7 @@ test('V4 validates the original complete manifest and retains provider evidence 
     },
     'inconsistent_manifest',
   );
-  refuses({ ...file, manifest: { ...file.manifest, sections: exportSectionsV2 } }, 'incomplete_capture');
-  const raw = JSON.stringify(file).replace('"version":4', '"version":4,"version":4');
+  refuses({ ...file, manifest: { ...file.manifest, sections: exportSections.slice(0, -1) } }, 'incomplete_capture');
+  const raw = JSON.stringify(file).replace('"version":1', '"version":1,"version":1');
   expect(() => decodeLibraryArchive(Buffer.from(raw))).toThrow(new ArchiveValidationError('invalid_json'));
 });

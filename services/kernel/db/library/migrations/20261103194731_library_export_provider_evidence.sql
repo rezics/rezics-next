@@ -1,8 +1,4 @@
 -- migrate:up
-ALTER TABLE library.library_export ALTER COLUMN format_version SET DEFAULT 4;
-ALTER TABLE library.library_export DROP CONSTRAINT library_export_format_version_check;
-ALTER TABLE library.library_export ADD CONSTRAINT library_export_format_version_check CHECK(format_version IN (1,2,3,4));
-
 -- Source-owned parsed row index: no XML, decisions or export artifact. Parent removal owns cleanup.
 -- Building this once avoids detoasting/parsing the entire retained VNDB array on every export page.
 CREATE TABLE library.vndb_import_row (
@@ -46,7 +42,7 @@ CREATE TRIGGER export_owner_fence AFTER INSERT OR UPDATE OR DELETE ON library.vn
 CREATE TRIGGER export_owner_fence AFTER INSERT OR UPDATE OR DELETE ON library.list_import_anilist
   FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
--- MAL uses the same source-owned keyset seam; older formats keep their exact wire meaning.
+-- MAL uses the same source-owned keyset seam.
 ALTER TABLE library.list_import_mal ADD COLUMN export_cancelled boolean
   GENERATED ALWAYS AS ((document->>'canceled')::boolean) STORED;
 CREATE TABLE library.list_import_mal_row (
@@ -76,4 +72,4 @@ CREATE TRIGGER export_owner_fence AFTER INSERT OR UPDATE OR DELETE ON library.li
   FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 -- migrate:down
--- Forward only: captures and their cursor epochs must retain their declared format meaning.
+-- Forward only: source-owned parsed evidence and indexes.

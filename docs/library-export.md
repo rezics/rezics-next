@@ -4,17 +4,12 @@ The authenticated native API exports current owner facts independently of public
 Decision: use a fifteen-minute fenced, replayable page stream with no retained private artifact; a source change
 after a completed stream requires a new request identity. Local delivery is single-flight per visit; false or thrown
 save failures retry the exact completed bytes under the same capture. Installed import evidence joins this fence;
-a supported Bangumi or MAL member, or a V4 VNDB member, that expires after capture makes the original capture stale.
+a supported Bangumi or MAL member, or a VNDB member, that expires after capture makes the original capture stale.
 Decision: a Bangumi upload expiring between its header and evidence sections invalidates the live capture even when the
 source generation is unchanged; the later evidence page is never delivered under that capture.
-Decision: version 2 appends independent `annotations`, `provenance` and `journals` sections; version 1 retains its
-original coverage, and reviewed V2 annotation/journal date/reflection recovery is owned by the existing archive consumer.
-Decision: version 3 adds the private occurrence assessment to each journal record. Version 4 appends VNDB and AniList
-upload/evidence sections because installed V3 captures already bind the 17-section vocabulary. Versions
-1, 2 and 3 keep their original record shapes; a missing legacy assessment is not inferred. The existing archive consumer
-continues to recover V2 annotations and journal dates/reflection. Installed archive consumers accept original V1–V4
-manifests and bytes without projecting the file into another version. Each recovery owner specifies which facts it
-can adopt; V4 provider evidence remains retained, counted and unsupported by archive recovery.
+The canonical v1 artifact contains all 21 owner-fact sections, including independent annotations, accepted
+source observations, occurrence journals with private assessment, and VNDB/AniList upload evidence. Recovery
+owners explicitly select supported facts; provider evidence stays retained and counted without execution authority.
 
 ## Mounted methods and Web handoff
 
@@ -34,7 +29,7 @@ A status has `format`, a supported `version`, `exportId`, `capturedAt`, `expires
 `completeness:"supported-native-facts"`, `fullExport:false`, `sections`, `omissions` and `first`.
 A page has `{exportId,state,records,next,manifest}`. Each record has `section` and the fields below.
 Only the final page has a manifest; it adds cumulative `rows` and `recordBytes` to the format/version/coverage
-fields. Versions 2, 3 and 4 include `sectionTotals` for every declared section, including sections with zero rows. A
+fields. The manifest includes `sectionTotals` for every declared section, including sections with zero rows. A
 non-final page never asserts completeness. An empty intermediate page can still have `next`.
 Web fetches sequentially, keeps the original identity and cursors, and assembles a local JSON artifact
 `{manifest,records}` only after a final `ready` page. The manifest's omissions must remain visible with the file.
@@ -46,7 +41,7 @@ Download uses those exact collected bytes; a local save failure can retry them. 
 Web owns `/library/export` as the signed-in Library portability visit. Commerce owns capture, paging, cancellation,
 fences, expiry and artifact semantics. The page binds `KernelClient.libraryExports` when post, status GET, pages GET
 and DELETE are present. Decision: export adoption remains unavailable until complete generated declarations and
-installed client typing agree on V4 coverage, all 21 sections and the journal assessment contract. Missing methods
+installed client typing agree on canonical v1 coverage, all 21 sections and the journal assessment contract. Missing methods
 render unavailable rather than a local engine or successful fixture. Decision: use the create response's original
 `first` cursor on the happy path and call status GET only to replay lost bytes or reread a still-valid capture.
 
@@ -61,34 +56,28 @@ after the final manifest. Partial, stale, expired, cancelled or limit outcomes e
 Cancellation during traversal, viewer or session replacement, unmount and terminal failure clear private bytes.
 Return uses locale-aware `/library` with no shelf or filter operands.
 
-Version 1 is the fixed historical coverage set below and never implies annotation, provenance or journal coverage.
-New captures use version 4. Stored version 1, 2 and 3 captures keep their original sections, record shapes, manifest
-fields and byte accounting; their cursor epochs remain 1, 2 and 3. Version 2, 3 and 4 cursors carry per-section counters.
-Unsupported versions and cursor shapes are refused. The archive consumer accepts original V1, V2, V3 and V4 manifests; its
-supported annotation, journal and assessment operations are specified in
-[Personal archive annotation, journal and assessment recovery](library-archive-personal-fact-recovery.md). V3 keeps
-the exact V2 section order and adds the declared assessment object; V4 provider sections remain unsupported evidence in
-archive recovery; they are retained and counted rather than omitted before native validation.
+## Canonical inventory and omissions
 
-## Version matrix and section additions
+The format is `https://rezics.com/formats/library-export`, `version:1`, with coverage
+`private-library-owner-facts-v1`. Its fixed section order is `entries`, `labels`, `assignments`, `sessions`,
+`holdings`, `collections`, `collectionPins`, `bangumiUploads`, `bangumiEvidence`, `malImports`, `units`, `history`,
+`occurrences`, `malEvidence`, `annotations`, `provenance`, `journals`, `vndbUploads`, `vndbEvidence`,
+`anilistUploads`, `anilistEvidence`. Final accounting requires `rows`, `recordBytes` and every section's
+`sectionTotals`, including empty sections. No generation selector, older parser or alternate writer is installed.
 
-| Version | Capture use                                | Sections                                                                       | Final accounting                                               |
-| ------- | ------------------------------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| 1       | Existing stored captures and their retries | The original 14 sections listed in the first installed manifest                | `rows` and `recordBytes`; no new section claim or counters     |
-| 2       | Existing captures and their retries        | The version 1 sections followed by `annotations`, `provenance`, and `journals` | `rows`, `recordBytes`, and `sectionTotals` for all 17 sections |
-| 3       | Existing captures and their retries        | Version 2 sections; journals add private assessment                            | `rows`, `recordBytes`, and all 17 section totals               |
-| 4       | New captures                               | Version 3 sections followed by four provider sections                          | `rows`, `recordBytes`, and all 21 section totals               |
+| Omission | Meaning |
+| --- | --- |
+| `trash` | Current live facts and retained Session history only |
+| `providerIdentifiers` | Explicitly reviewed owner observations and retained import evidence; no shared custody scan or inferred IDs |
+| `personalImportEvidence` | Retained Bangumi, unexpired MAL/VNDB and retained AniList parsed rows; no raw uploads, wrapper documents, credentials or review/apply capabilities |
+| `commerce` | Orders and financial evidence use Commerce retention/export policy |
+| `publication` | Stored rules only; no dynamic evaluation or working publication output |
+| `reimport` | Reviewed recovery of supported native facts only; unsupported evidence never authorizes execution |
 
-| Omission                 | Version 1                                                                                                             | Version 2                                                                                                                 | Version 3                                                                              |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `trash`                  | Excluded; current live facts and retained session history only                                                        | Same                                                                                                                      | Same                                                                                   |
-| `providerIdentifiers`    | Stored personal import evidence only; no shared custody scan or inferred identifiers                                  | Explicitly reviewed owner observations and retained import evidence only; no shared custody scan or inferred identifiers  | Same as version 2                                                                      |
-| `personalImportEvidence` | Retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded | Retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded | Same as version 2                                                                      |
-| `commerce`               | Excluded; orders and financial evidence use Commerce retention/export policy                                          | Same                                                                                                                      | Same                                                                                   |
-| `publication`            | Excluded; stored rules only, no dynamic evaluation or working publication output                                      | Same                                                                                                                      | Same                                                                                   |
-| `reimport`               | Unavailable; no installed re-import endpoint is promised                                                              | V1 recovery plus reviewed V2 annotations and journal dates/reflection; provenance remains unsupported                     | V1/V2 recovery plus reviewed V3 occurrence assessments; provenance remains unsupported |
+Annotation and journal operations are specified in
+[Personal archive annotation, journal and assessment recovery](library-archive-personal-fact-recovery.md).
 
-Version 2 additions use independent owner-indexed selections. An annotation record preserves the account and Subject,
+Independent facts use independent owner-indexed selections. An annotation record preserves the account and Subject,
 the current entry incarnation and profile pin when an entry row exists, `annotationRevision`, note, priority and
 `annotationUpdatedAt`. A revision remains present after both values are cleared. A missing entry row does not hide
 the retained annotation.
@@ -99,23 +88,17 @@ private and source-visible values stay distinct. Source-visible privacy grants n
 uploads, credentials, internal review tokens and reconstructed provider identities are not included.
 
 A journal record contains one live occurrence's owner, session and Subject identity, original profile pin, progress
-revision, and the native journal `{sessionId,revision,startDate,finishDate,reflection}`. Reported dates remain plain
+revision, and the native journal `{sessionId,revision,startDate,finishDate,reflection,assessment}`. Reported dates remain plain
 partial calendar objects: absent month or day components remain absent, and a cleared date is `null`. Empty
 reflections remain distinct from `null`. The progress revision and journal revision are independent. A retired
 occurrence is not exported even while its audit rows remain in erasure custody. Existing MAL evidence remains its
 own section; no importer-to-journal provenance link or new completion is inferred.
 
-## Version 4 provider evidence and assessment seam
+## Provider evidence and assessment
 
-Decision: version 4 appends `vndbUploads`, `vndbEvidence`, `anilistUploads`, `anilistEvidence`, in that order,
-uses coverage `private-library-owner-facts-v4`, epoch 4 cursors and totals for all 21 sections. V4 binds the
-fixed counter pairs as a JSON string cursor component; retained epochs keep their original component shape. V1/V2/V3 sections,
-byte accounting, cursor shapes and decoding remain fixed. New captures never reinterpret an older identity.
-`fullExport` remains false. V4 `personalImportEvidence` declares retained Bangumi, unexpired MAL and VNDB, and
-retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities are excluded.
-V4 `reimport` explicitly declares recovery unavailable to the installed V1/V2 archive consumer. That consumer
-refuses V3/V4 with `unsupported_version`; a future consumer must retain unsupported evidence privately and never
-execute exported capabilities. Unknown format versions remain unavailable to Web, never empty success.
+The four provider sections follow journals in the canonical inventory. Cursor epoch 1 carries the fixed
+per-section counter pairs as a JSON string component. `fullExport` remains false; provider evidence is
+private retained source meaning, never authority to execute a recovery command.
 
 VNDB metadata is `{upload_id,state,expires_at}`. Its native lifetime is 24 hours; only uploads unexpired at capture
 are selected, including cancelled uploads with retained evidence. Each evidence record is `{upload_id,ordinal,evidence}`,
@@ -132,20 +115,20 @@ missing/null/zero, unfamiliar vocabulary, fuzzy date components and original dec
 Wrapper documents and raw JSON are excluded; their absence is not a supported empty section. Cancellation retains
 evidence, removal deletes it. Imported scores are never native votes; provider dates never create occurrences.
 
-V4 applies credential/capability-shaped key redaction recursively to all retained evidence, including arrays of
+The exporter applies credential/capability-shaped key redaction recursively to all retained evidence, including arrays of
 `{field,...}` descriptions and nested parsed XML nodes. Review IDs, command/client keys, receipts, authority grants,
 confirmation and apply/recovery state keys are also removed. Allowed unknown vocabulary values stay original.
-V1/V2/V3 retain their historical redaction and byte meaning. SQL projection and final JSON encoding both enforce
+SQL projection and final JSON encoding both enforce
 65,536-byte record bounds before delivery, including escaping and UTF-8; oversize returns `limit`, never truncation.
 
 The received occurrence producer seam is `journal.assessment:{meaningRevision:1,units:number|null}` with integer
-units 0..20. V3 serializes the installed producer-owned `journal_assessment_meaning_revision` and nullable
+units 0..20. The journal record serializes the installed producer-owned `journal_assessment_meaning_revision` and nullable
 `journal_assessment_units` columns. The assessment owner retains its CAS/write semantics; this export adds no
 assessment adoption or archive writer.
-V1/V2 absence never establishes an assessment. Their serialized journals stay unchanged.
+Missing assessment is invalid; unknown assessment meanings remain inert evidence.
 
 The same owner source generation covers VNDB parent and indexed evidence rows, plus every AniList header/source/
-review mutation, cancellation, pruning and deletion. Owner/expiry-indexed MAL and Bangumi probes, plus the V4 VNDB
+review mutation, cancellation, pruning and deletion. Owner/expiry-indexed MAL and Bangumi probes, plus the VNDB
 probe, run before and after each page and on status and original create replay. Expiry needs no row write to make
 collecting or completed captures stale.
 The final page rechecks current owner, source and time under the existing account barrier and source lock; no GET
@@ -159,7 +142,7 @@ Let P=16 and S<=17 be candidates, Uv<=4 retained VNDB uploads, Ua<=5 retained An
 preparation/locks/receipt work and native section counters remain on the existing Library request payer.
 Each page adds no account-wide discovery: direct metadata uses one owner-indexed P+1 seek; provider evidence uses
 at most one owner/upload parent seek and one owner/upload/ordinal P+1 seek. Header-only AniList's partial index
-avoids reading unrelated rows. Expiry uses owner/expiry-indexed existence probes for MAL and Bangumi, plus V4 VNDB,
+avoids reading unrelated rows. Expiry uses owner/expiry-indexed existence probes for MAL and Bangumi, plus VNDB,
 per currentness check; each page does two currentness checks, each with one exact control-row lock and one
 source-generation lock.
 Create uses the existing command receipt/transaction, exact owner capture lock/upsert, generation lock, then status
@@ -186,9 +169,9 @@ whole-caller budget measurements remain unmeasured here and belong to controller
 References inspected: `legacy-final:packages/model/src/native-export.ts` (bounded continuation and revision binding),
 `legacy-final:services/main/src/modules/library-import/formats/vndb.ts` (private identifiers and precision), installed
 VNDB/AniList parsers and upload lifetime owners, and the retained AniList MediaList/FuzzyDate reference. No legacy
-code was copied. The existing Web export interface and canonical archive consumer retain their owners for the V4 handoff.
+code was copied. The existing Web export interface and canonical archive consumer retain their owners for the canonical artifact.
 
-## Version 2 accounting and work bounds
+## Accounting and work bounds
 
 The fixed returned-record page size is `P=16`; each indexed keyset selection fetches at most `P+1=17` candidate
 keys. One direct section page uses one owner-keyset statement. A nested section uses one indexed parent seek and one
@@ -199,11 +182,11 @@ without scanning unrelated owner history. A deep cursor uses the same keyset pre
 work.
 
 Each SQL-projected row is capped at 65,536 encoded bytes before it reaches the driver, preserving the original
-version 1 bound. Versions 2, 3 and 4 also refuse a serialized record above 65,536 bytes; all versions cap serialized page
-records at 120,000 UTF-8 bytes. The worst-case version 2 source buffer is 17 rows times 65,536 bytes, plus fixed SQL
-row metadata. Version 3 adds only the fixed assessment meaning revision and nullable integer to journal records.
+fixed owner bound. The exporter refuses a serialized record above 65,536 bytes; the exporter caps serialized page
+records at 120,000 UTF-8 bytes. The worst-case source buffer is 17 rows times 65,536 bytes, plus fixed SQL
+row metadata. Assessment adds only the fixed assessment meaning revision and nullable integer to journal records.
 `recordBytes` is the sum of UTF-8 bytes of each exact `JSON.stringify(record)` value; it excludes
-the page envelope, cursor, and final manifest. Version 2 and 3 section totals use the same byte definition and count every
+the page envelope, cursor, and final manifest. Section totals use the same byte definition and count every
 declared section, including empty sections. The whole stream stops at 100,000 records or 32 MiB of record bytes.
 An oversized supported row returns `limit` with no records or manifest; it is never truncated.
 
@@ -217,17 +200,17 @@ An oversized supported row returns `limit` with no records or manifest; it is ne
   component C and explicit retries R. K is the actual page count, not `ceil(N / 16)`, because parent transitions may
   emit empty pages. Projection/serialization is `O(N + B)`; retained bytes are `O(B + manifest/framing + one page)`.
 - Installed caps: 16 returned fact rows plus one sentinel row and one parent key per page, 64 KiB per SQL-projected
-  row, an additional 64 KiB encoded record cap in versions 2–4, 120,000 encoded record bytes per page, stream stop at
+  row, an additional 64 KiB encoded record cap per record, 120,000 encoded record bytes per page, stream stop at
   100,000 records or 32 MiB, fifteen-minute fixed expiry, 4096-character cursors
   (`docs/library-export.md` and `library-export-routes.ts`).
 - Test reference: `apps/web/tests/private-library-export.test.tsx` growth cases at 16/128/1,024 records with empty
   continuation pages.
 
-MAL metadata cancellation and parsed rows also have source-owned stored projections in V4: the export uses
+MAL metadata cancellation and parsed rows also have source-owned stored projections in the canonical artifact: the export uses
 owner/upload/ordinal page+1 seeks without reopening its retained document. The existing 48 MiB document and 500-row
 source cap bound one source write comparison; a rows change replaces at most 500 child rows under the existing
 source payer. Header cancellation is computed on writes. Three retained uploads bound terminal cascade cleanup at
-1,500 rows; pruning/deletion owns the same cascade. V1/V2/V3 keep their original record bytes and section positions.
+1,500 rows; pruning/deletion owns the same cascade.
 
 ## Stored field meanings
 
@@ -249,9 +232,9 @@ current metadata visibility, provider identity or entitlement. No subject metada
 | collections    | Own active metadata: identity, title/description/privacy/revision, membership kind, builtin identity/pins, presentation kind, stored rule/filter/sort/release/revision and dates                                                           |
 | collectionPins | Owner `collection_ids` ordering and revision; references do not disclose referenced Collections                                                                                                                                            |
 | occurrences    | Own curated live `member_id`, parent/subject IDs, note, `ordinal_key`, member revision and `added_at`; duplicates retain independent identity and order                                                                                    |
-| annotations    | Version 2 and 3; owner/Subject identity, entry incarnation and pin when present, note/priority and annotation revision/update time; independent of other optional rows                                                                     |
-| provenance     | Version 2 and 3; one accepted owner observation with declared provider/record ID, native revision, privacy and source timestamp precision                                                                                                  |
-| journals       | Version 2 preserves the earlier private journal shape; version 3 adds assessment `{meaningRevision:1,units}`. Missing v1/v2 assessment is legacy-absent, not inferred                                                                      |
+| annotations    | owner/Subject identity, entry incarnation and pin when present, note/priority and annotation revision/update time; independent of other optional rows                                                                     |
+| provenance     | one accepted owner observation with declared provider/record ID, native revision, privacy and source timestamp precision                                                                                                  |
+| journals       | Private journal dates, reflection and assessment `{meaningRevision,units}`; only supported meanings are adoptable                                                                      |
 
 | bangumiUploads / bangumiEvidence | Owner upload identity/cancellation and original ordinal/evidence, including stored provider IDs and field meanings; no reviews, choice tokens or apply internals |
 | malImports / malEvidence | Unexpired owner upload identity/cancellation/expiry and indexed parsed source rows, including original provider IDs, dates/precision and unknown vocabulary; credential-shaped fields excluded |
@@ -269,12 +252,11 @@ regardless of any Collection visibility field.
 
 Installed native owner tables supply these sections, including retained Bangumi and unexpired MAL row evidence.
 Raw MAL XML/envelope metadata and review/apply internals are excluded; credential/capability-shaped field keys are
-removed. Version 4 also includes unexpired VNDB and retained AniList uploads and parsed rows; other import stores are unavailable; no shared provider custody is scanned and no identifier is invented.
-All four formats declare their fixed section sets; versions 2, 3 and 4 report zero totals for empty sections without fabricating
+removed. The artifact includes unexpired VNDB and retained AniList uploads and parsed rows; other import stores are unavailable; no shared provider custody is scanned and no identifier is invented.
+The format declares its fixed section set and reports zero totals for empty sections without fabricating
 fact records. `ready` means all supported native sections were exhausted, never a completed full account export.
 Trash, published/working output, credentials, Access capabilities, secrets, other accounts and Commerce order or
-financial evidence are excluded. The existing archive consumer supports only its documented V1/V2 recovery subset;
-the V3 assessment format is not accepted for recovery.
+financial evidence are excluded. The archive consumer supports its documented reviewed recovery subset, including occurrence assessment.
 
 One control row per owner survives for at most the current capture; no private fact payload is retained server-side.
 Native fact fences cover entries, labels, assignments, sessions, measures/history, copies, Collection metadata,
@@ -288,7 +270,7 @@ allows a new identity. An older replaced identity returns `404`, including its o
 
 Keysets use owner/parent indexes with no offsets. Each page examines at most seventeen fact rows and one parent key,
 guards SQL-projected rows at 65,536 bytes, returns at most sixteen records, and emits at most 120,000 encoded record
-bytes. Versions 2, 3 and 4 also cap each final encoded record at 65,536 bytes. A stream stops at
+bytes. The exporter also caps each final encoded record at 65,536 bytes. A stream stops at
 100,000 records or 32 MiB; `limit` returns no records or manifest and requires a narrower future format or support.
 `stale`, `expired`, `cancelled` and `limit` return no records, next cursor or successful manifest. Expiry is fixed
 at capture plus fifteen minutes; retries never renew it. Malformed/cross-capture cursors return `400 invalid_cursor`;

@@ -1,10 +1,9 @@
 # Personal archive annotation, journal, assessment and source-observation recovery
 
 This journey extends the existing private [archive review and merge](library-archive-merge.md) consumer. It uses the
-installed V2/V3 export sections and the native Entry and Session commands; it adds no archive format, retention store,
-exporter, or restoration path. V3 keeps the V2 section inventory and adds a private occurrence assessment; V4 appends
-provider sections as retained unsupported evidence, while its existing personal-fact sections remain reviewable. [Library export](library-export.md) remains the authority for
-producer facts and format limits.
+canonical v1 export sections and native Entry and Session commands; it adds no archive format, retention store,
+exporter, or restoration path. Provider sections remain retained unsupported evidence, while personal-fact sections
+are reviewable. [Library export](library-export.md) owns producer facts and format limits.
 
 Decision: Recovered annotations, source observations and occurrence assessments remain private; archived identity, visibility, revisions and audit times never authorize publication or select a current occurrence.
 
@@ -16,13 +15,12 @@ with its explicit cleared/unknown/absent meaning. Unsupported rows remain eviden
 
 ## Evidence and supported operations
 
-`decodeLibraryArchive(bytes)` accepts completed V1, V2, V3 and V4 manifests using exact per-version section inventories
-and final record/byte totals. V1/V2 retain their original shapes; V2/V3 annotations, journals and provenance require
-explicit current-target mapping. V3 adds the required `assessment:{meaningRevision,units}` journal object without
-changing the V2 inventory. Only meaning revision 1 and integer units 0–20 are adoptable; null is an explicit archived
-absence, while unknown meanings remain visible unsupported evidence. V1/V2 assessment absence is never zero or clear.
-Other unimplemented sections and V4 provider sections remain retained unsupported evidence. Missing sections are not
-synthesized. Archived account, Subject, Entry, Session, pin, revision, capture, audit, completion and source-observation
+`decodeLibraryArchive(bytes)` accepts the complete canonical v1 manifest, its fixed 21-section inventory and
+per-section and total row/byte accounting. Annotations, journals and provenance require explicit current-target
+mapping. Journals require `assessment:{meaningRevision,units}`. Only meaning revision 1 and integer units 0–20 are
+adoptable; null is an explicit archived absence, while unknown meanings remain visible unsupported evidence.
+Provider and other unimplemented sections remain retained unsupported evidence. Missing sections are not synthesized.
+Archived accounts, Subjects, Entries, Sessions, pins, revisions, capture times, audit times and source-observation
 values never grant authority.
 
 The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET /:id`, `GET /:id/preview`,
@@ -37,7 +35,7 @@ occurrence editor.
 | `provenance`  | Explicitly mapped readable canonical Subject                          | `privacy`, `sourceCreated`, `sourceUpdated`           | `createEntryPersonalCommands().admitSourceObservation` or `.correctSourceObservation` |
 
 Each field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit clear
-uses the native null/clear operation. For V1/V2, a missing assessment is unsupported and never clears. For V3, setting
+uses the native null/clear operation. Setting
 supported `{meaningRevision:1,units:null}` adopts the archived absence by sending native `assessment:null`; clearing a
 supported non-null assessment sends the same native clear operation. Unknown revisions/scales remain unsupported and
 are never converted. Setting absent or null annotation, date or reflection values remains unsupported. Empty notes and
@@ -54,7 +52,7 @@ Decision: native reflection text excludes malformed Unicode and U+0000, which th
 archive review retains that evidence and explicitly refuses its adoption. Archived assessment remains separate from
 public Subject votes and aggregate enjoyment.
 
-Decision: V3 assessment `set` with archived `units:null` sends native `assessment:null`; V1/V2 absence and unknown
+Decision: Assessment `set` with archived `units:null` sends native `assessment:null`; unknown
 meaning revisions remain unsupported.
 
 Each field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit clear
@@ -141,8 +139,8 @@ composed growth measurements remain deferred to integration.
 
 ## Verification and ownership
 
-Focused native coverage uses actual V2/V3 exports, adopts assessment zero/nonzero/null on separate repeated occurrences,
-preserves V1/V2 absence and unknown meaning, and verifies combined journal PATCH replay and separation from public
+Focused native coverage uses canonical v1 exports, adopts assessment zero/nonzero/null on separate repeated occurrences,
+preserves unsupported assessment meanings, and verifies combined journal PATCH replay and separation from public
 votes. It also admits exact source observations with source-visible, unknown,
 absent, cleared, fractional, partial, and unknown-zone values, and reads the values back through the addressed native
 reader. It also covers duplicate admission, observation-cap refusal, competing corrections, changed canonical
