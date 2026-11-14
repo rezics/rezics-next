@@ -386,7 +386,7 @@ export function createCollectionPublicationFinalActivation(
           await declareCollectionPublicationHistory(
             tx,
             finalCommandKind,
-            { accountRoute: route, accountId: ownerAccountId },
+            { accountRoute: creation.source.target.route, accountId: creation.source.locator.ownerAccountId },
             2,
           );
           const work = prepared.work;

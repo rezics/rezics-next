@@ -101,7 +101,7 @@ async function run() {
         clearTimeout(timer);
         rejectPending();
         process.removeListener('disconnect', lost);
-        if (process.connected) process.disconnect();
+        if (process.connected) process.disconnect?.();
         process.exit(exitCode);
       }
     }));
