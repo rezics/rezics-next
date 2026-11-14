@@ -1809,9 +1809,11 @@ When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every 
 five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
 line of SSH stderr. A successful probe clears that outage, so a later pair of failures can report a new incident. The
 watchdog does not probe when no hosts file is present and does not include the configured identity path in its alert.
-Decision: check wakes use their original pool after live occupancy and allowance admission; check-host retries wait
-only when every performance-approved host is in outage, while started remote runs stay on their recorded host and
-identity and new runs use existing probes to select a responding approved host.
+Decision: check wakes use their original pool after live occupancy and allowance admission. A newly reported reset
+window starts a fresh burn series; repeated recovery preserves the original check result, session, pool and attempt,
+then resumes that session once. Check-host retries wait only when every performance-approved host is in outage, while
+started remote runs stay on their recorded host and identity and new runs use existing probes to select a responding
+approved host.
 
 ## Integration, promotion, culprit isolation and attempt fencing
 

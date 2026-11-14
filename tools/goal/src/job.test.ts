@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
+  appendFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -35,11 +36,12 @@ import type { Attempt, RetryIntent } from './types.ts';
 function waitingResumeCli(checkId: string): string {
   const waiting = JSON.stringify({ status: 'waiting', summary: 'check is running', checks: [checkId] });
   return `#!/usr/bin/env bun
-import { writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const root = process.cwd();
 if (process.argv.includes('resume')) {
+  appendFileSync(join(root, '.temp/goal/resume-count'), 'resume\\n');
   writeFileSync(join(root, '.temp/goal/resume-args.json'), JSON.stringify(process.argv));
   writeFileSync(join(root, '.temp/goal/resume-started'), 'yes');
   writeFileSync('result.txt', 'accepted');
@@ -584,8 +586,13 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
     let used = 50;
     let resetsAt = Date.now() + 8 * 60 * 60_000;
     let occupied = false;
+    const observedOriginalResets: number[] = [];
     Object.defineProperty(h.tasks, 'reader', {
-      value: (pool: (typeof h.settings.pools)[number]) => poolReading(pool, used, resetsAt),
+      value: (pool: (typeof h.settings.pools)[number]) => {
+        const reading = poolReading(pool, used, resetsAt);
+        if (pool.name === h.settings.pools[0]!.name) observedOriginalResets.push(reading.windows[0]!.resetsAt!);
+        return reading;
+      },
     });
     Object.defineProperty(h.store, 'runningAttemptsByPool', {
       value: () => (occupied ? { [h.settings.pools[0]!.name]: 1 } : {}),
@@ -598,10 +605,14 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
     const original = h.store.attempt(ref);
     expect(original.state).toBe('waiting');
     occupied = true;
+    const weeklyWindowMs = 10080 * 60_000;
 
     const results = join(task.worktree, '.temp/goal/checks/results');
     mkdirSync(results, { recursive: true });
-    writeFileSync(join(results, `${checkId}.json`), JSON.stringify({ status: 'finished', exitStatus: 0 }));
+    const checkResult = join(results, `${checkId}.json`);
+    const readCheckResult = () =>
+      JSON.parse(readFileSync(checkResult, 'utf8')) as { status: string; exitStatus: number };
+    writeFileSync(checkResult, JSON.stringify({ status: 'finished', exitStatus: 0 }));
     writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
     recovery = job.recoverOrphans();
     const queue = join(h.settings.stateDirectory, 'capacity-queue');
@@ -632,6 +643,7 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
     });
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+    expect(readCheckResult()).toEqual({ status: 'finished', exitStatus: 0 });
     expect(readdirSync(queue)).toHaveLength(0);
 
     occupied = false;
@@ -643,14 +655,29 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
     recovery = undefined;
     expect(h.store.attempt(ref)).toMatchObject({ state: 'waiting', pool: original.pool, session: original.session });
     expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+    expect(readCheckResult()).toEqual({ status: 'finished', exitStatus: 0 });
 
-    resetsAt += 7 * 24 * 60 * 60_000;
+    // Advancing exactly one configured weekly window changes reset identity without changing the pool or attempt.
+    resetsAt += weeklyWindowMs;
     recovery = job.recoverOrphans();
     await recovery;
     recovery = undefined;
     const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
     expect(args).toContain(original.session!);
-    expect(h.store.attempt(ref).state).toBe('exited');
+    expect(observedOriginalResets.at(-1)).toBe(resetsAt);
+    expect(readCheckResult()).toEqual({ status: 'finished', exitStatus: 0 });
+    expect(h.store.attempt(ref)).toMatchObject({
+      state: 'exited',
+      attempt: 1,
+      pool: original.pool,
+      session: original.session,
+      checks: [checkId],
+    });
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+
+    // A repeated recovery sees the exited same attempt and cannot launch the retained session again.
+    await job.recoverOrphans();
+    expect(readFileSync(join(task.worktree, '.temp/goal/resume-count'), 'utf8')).toBe('resume\n');
     expect(h.store.task(task.id).currentAttempt).toBe(1);
   } finally {
     if (recovery) {
