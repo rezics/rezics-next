@@ -100,6 +100,94 @@ async function preparationEventCount(catalogueId: string): Promise<number> {
   );
 }
 
+async function waitForBlockedStageRow(blockerPid: number): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const waiting = await f.native.pool.query(
+      `SELECT 1 FROM pg_stat_activity
+       WHERE datname=current_database() AND wait_event_type='Lock'
+         AND $1=ANY(pg_blocking_pids(pid))
+         AND query ILIKE '%content.hosted_publication_staging%'
+         AND query ILIKE '%FOR UPDATE%'`,
+      [blockerPid],
+    );
+    if (waiting.rowCount) return;
+    await Bun.sleep(5);
+  }
+  throw new Error('Fresh preparation did not wait on the retained stage row');
+}
+
+test('fresh prepare waits on an existing stage before acquiring the catalogue lock', async () => {
+  const book = await newBook();
+  const input = {
+    stageId: book.newId(),
+    expectedRevisionId: book.created.revisionId,
+    expectedPublicationId: book.published.revisionId,
+    mode: 'whole',
+  } as const;
+  const first = await f.native.call('POST', `${book.path}:prepareRelease`, input);
+  expect(first.status).toBe(202);
+
+  const route = routeOf(book.catalogueId)!;
+  const readStage = () =>
+    f.native.pool.query(
+      `SELECT (SELECT count(*)::text FROM content.hosted_publication_staging
+               WHERE route=$1 AND catalogue_id=$2) AS retained_count,
+              source_revision_id,expected_head_revision_id,expected_publication_id,mode,status,
+              to_char(expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS expires_at
+       FROM content.hosted_publication_staging
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, book.catalogueId, input.stageId],
+    );
+  const retainedBefore = await readStage();
+  expect(retainedBefore.rows).toHaveLength(1);
+
+  const held = await f.native.pool.connect();
+  await held.query('BEGIN');
+  const blockerPid = (await held.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+  let catalogueLockAcquired = false;
+  let repeated:
+    | Promise<{ value: Awaited<ReturnType<typeof f.native.call>> } | { error: unknown }>
+    | undefined;
+  try {
+    await held.query(
+      `SELECT 1 FROM content.hosted_publication_staging
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 FOR UPDATE`,
+      [route, book.catalogueId, input.stageId],
+    );
+    repeated = f.native
+      .call('POST', `${book.path}:prepareRelease`, input, { key: crypto.randomUUID() })
+      .then((value) => ({ value }), (error: unknown) => ({ error }));
+    await waitForBlockedStageRow(blockerPid);
+
+    const probe = await f.native.pool.connect();
+    try {
+      await probe.query('BEGIN');
+      await probe.query(
+        `SELECT 1 FROM content.hosted_catalogue WHERE route=$1 AND catalogue_id=$2 FOR UPDATE NOWAIT`,
+        [route, book.catalogueId],
+      );
+      catalogueLockAcquired = true;
+    } catch {
+      await probe.query('ROLLBACK').catch(() => {});
+    } finally {
+      await probe.query('ROLLBACK').catch(() => {});
+      probe.release();
+    }
+  } finally {
+    await held.query('ROLLBACK').catch(() => {});
+    held.release();
+    if (repeated) await repeated;
+  }
+
+  if (!repeated) throw new Error('Fresh preparation was not submitted');
+  const retry = await repeated;
+  if ('error' in retry) throw retry.error;
+  expect(catalogueLockAcquired).toBe(true);
+  expect(retry.value.status).toBe(412);
+  expect((await readStage()).rows).toEqual(retainedBefore.rows);
+});
+
 test('progress emits only for a persisted expiry transition and authorized receipt replay emits no duplicate', async () => {
   const book = await newBook();
   const started = await f.native.call('POST', `${book.path}:prepareRelease`, {
