@@ -72,7 +72,14 @@ function value(snapshot: CollectionMetadataHistorySnapshot, field: CollectionMet
     case 'description':
       return snapshot.description ?? m.library_collection_metadata_history_empty_value();
     case 'visibility':
-      return snapshot.visibility;
+      switch (snapshot.visibility) {
+        case 'private':
+          return m.library_collection_visibility_private();
+        case 'unlisted':
+          return m.library_collection_visibility_unlisted();
+        case 'public':
+          return m.library_collection_visibility_public();
+      }
     case 'presentationKind':
       return snapshot.presentationKind ?? m.library_collection_metadata_history_empty_value();
     case 'coverMediaId':
@@ -144,6 +151,7 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
 }
 
 function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource }: Props) {
+  const [hasOpened, setHasOpened] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [page, setPage] = useState<ReadState<CollectionMetadataHistoryPage>>({ state: 'loading' });
@@ -173,6 +181,7 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
   }
 
   useEffect(() => {
+    if (!hasOpened) return;
     mounted.current = true;
     retireResults();
     const operation = generation.current;
@@ -195,7 +204,7 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
       basis.current = null;
       observedPage.current = null;
     };
-  }, [attempt, collectionId, cursor, source]);
+  }, [attempt, collectionId, cursor, hasOpened, source]);
 
   function currentComparison(request: ComparisonRequest): boolean {
     return (
@@ -278,7 +287,13 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
   const fields = [...new Set(selectedDetails.flatMap((change) => change.changedFields))];
 
   return (
-    <details id="collection-metadata-history" className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+    <details
+      id="collection-metadata-history"
+      className="rounded-2xl border border-border bg-card p-4 sm:p-6"
+      onToggle={(event) => {
+        if (event.currentTarget.open && isCurrent()) setHasOpened(true);
+      }}
+    >
       <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_collection_metadata_history()}</summary>
       <div className="space-y-4 pt-3">
         <p className="max-w-3xl text-sm text-muted-foreground">{m.library_collection_metadata_history_description()}</p>
@@ -417,56 +432,92 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
               <p role="status">{m.library_collection_metadata_history_compared()}</p>
             ) : null}
             {selectedDetails.length === 2 ? (
-              <div className="overflow-x-auto rounded-xl border border-border">
-                <table className="min-w-[48rem] w-full border-collapse text-start text-sm">
-                  <thead>
-                    <tr className="bg-muted/50">
-                      <th scope="col" className="p-3">
-                        {m.library_collection_metadata_history_field()}
-                      </th>
-                      {selectedDetails.map((change) => (
-                        <th scope="col" colSpan={2} key={change.revision} className="p-3">
-                          {m.library_collection_metadata_history_revision({ revision: change.revision })}
+              <>
+                <div className="space-y-3 lg:hidden">
+                  {fields.map((field) => (
+                    <article key={field} className="rounded-xl border border-border p-3">
+                      <h3 className="mb-3 font-semibold">{fieldLabel(field)}</h3>
+                      <div className="space-y-3">
+                        {selectedDetails.map((change) => (
+                          <section key={change.revision} className="rounded-lg bg-muted/40 p-3">
+                            <h4 className="mb-2 font-medium">
+                              {m.library_collection_metadata_history_revision({ revision: change.revision })}
+                            </h4>
+                            <dl className="grid grid-cols-2 gap-3 text-sm">
+                              <div className="min-w-0">
+                                <dt className="mb-1 text-muted-foreground">
+                                  {m.library_collection_metadata_history_before()}
+                                </dt>
+                                <dd className="whitespace-pre-wrap break-words">
+                                  {value(change.before, field)}
+                                </dd>
+                              </div>
+                              <div className="min-w-0">
+                                <dt className="mb-1 text-muted-foreground">
+                                  {m.library_collection_metadata_history_after()}
+                                </dt>
+                                <dd className="whitespace-pre-wrap break-words">
+                                  {value(change.after, field)}
+                                </dd>
+                              </div>
+                            </dl>
+                          </section>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto rounded-xl border border-border lg:block">
+                  <table className="min-w-[48rem] w-full border-collapse text-start text-sm">
+                    <thead>
+                      <tr className="bg-muted/50">
+                        <th scope="col" className="p-3">
+                          {m.library_collection_metadata_history_field()}
                         </th>
-                      ))}
-                    </tr>
-                    <tr>
-                      <th scope="col" className="p-3" />
-                      {selectedDetails.flatMap((change) => [
-                        <th scope="col" key={`${change.revision}-before`} className="p-3">
-                          {m.library_collection_metadata_history_before()}
-                        </th>,
-                        <th scope="col" key={`${change.revision}-after`} className="p-3">
-                          {m.library_collection_metadata_history_after()}
-                        </th>,
-                      ])}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fields.map((field) => (
-                      <tr key={field} className="border-t border-border align-top">
-                        <th scope="row" className="p-3">
-                          {fieldLabel(field)}
-                        </th>
+                        {selectedDetails.map((change) => (
+                          <th scope="col" colSpan={2} key={change.revision} className="p-3">
+                            {m.library_collection_metadata_history_revision({ revision: change.revision })}
+                          </th>
+                        ))}
+                      </tr>
+                      <tr>
+                        <th scope="col" className="p-3" />
                         {selectedDetails.flatMap((change) => [
-                          <td
-                            key={`${change.revision}-${field}-before`}
-                            className="max-w-64 whitespace-pre-wrap break-words p-3"
-                          >
-                            {value(change.before, field)}
-                          </td>,
-                          <td
-                            key={`${change.revision}-${field}-after`}
-                            className="max-w-64 whitespace-pre-wrap break-words p-3"
-                          >
-                            {value(change.after, field)}
-                          </td>,
+                          <th scope="col" key={`${change.revision}-before`} className="p-3">
+                            {m.library_collection_metadata_history_before()}
+                          </th>,
+                          <th scope="col" key={`${change.revision}-after`} className="p-3">
+                            {m.library_collection_metadata_history_after()}
+                          </th>,
                         ])}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {fields.map((field) => (
+                        <tr key={field} className="border-t border-border align-top">
+                          <th scope="row" className="p-3">
+                            {fieldLabel(field)}
+                          </th>
+                          {selectedDetails.flatMap((change) => [
+                            <td
+                              key={`${change.revision}-${field}-before`}
+                              className="max-w-64 whitespace-pre-wrap break-words p-3"
+                            >
+                              {value(change.before, field)}
+                            </td>,
+                            <td
+                              key={`${change.revision}-${field}-after`}
+                              className="max-w-64 whitespace-pre-wrap break-words p-3"
+                            >
+                              {value(change.after, field)}
+                            </td>,
+                          ])}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : null}
           </>
         ) : null}
