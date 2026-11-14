@@ -13,7 +13,6 @@ import {
   type FollowingWindowHistory,
 } from './following-kind-navigation/window-history';
 import { Exposure, useOperation } from '../kernel/exposure';
-import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
@@ -42,13 +41,12 @@ import { FollowingInspection, type FollowingSpaceReader } from './following-read
 import { useFollowingReturn } from './following-reading/return';
 import {
   clearFollowingReturn,
-  followingDestinationClick,
   followingReturnFrontier,
   followingReturnMatchesWindow,
   followingReturnTrigger,
   readFollowingReturn,
 } from './following-reading/return-context';
-import { SubjectCover } from './subject-row';
+import { FollowingReadingRow } from './following-reading/row';
 import { createFollowIntent, type FollowIntentOwner } from './mine-following-intent';
 
 type ReviewFollow = (targetId: string) => Promise<FollowState | null>;
@@ -632,11 +630,29 @@ function MineFollowingPageState({
   };
 
   return (
-    <article ref={article} className="max-w-4xl space-y-8 text-foreground">
-      <header>
-        <PageHeading ref={listHeading} tabIndex={-1}>
-          {m.library_following_heading()}
-        </PageHeading>
+    <article ref={article} className="max-w-6xl space-y-6 text-foreground sm:space-y-8">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-2">
+          <PageHeading ref={listHeading} tabIndex={-1}>
+            {m.library_following_heading()}
+          </PageHeading>
+          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{m.following_reading_intro()}</p>
+        </div>
+        {!addressRejected && page.signedIn && onRefresh ? (
+          <Button
+            className="min-h-11"
+            variant="outline"
+            disabled={!!status || navigationDisabled}
+            onClick={() => {
+              if (refreshCurrent ? !refreshCurrent() : page.forbidden ? !origin.isCurrent() : !reading.returnCurrent())
+                return;
+              reading.close(false);
+              onRefresh();
+            }}
+          >
+            {m.following_reading_refresh()}
+          </Button>
+        ) : null}
       </header>
       <nav aria-label={m.following_kind_label()} className="flex flex-wrap gap-2">
         {(['all', 'subject', 'collection', 'space'] as const).map((value) => {
@@ -702,77 +718,58 @@ function MineFollowingPageState({
         <p role="status">{m.library_follow_removed()}</p>
       ) : null}
       {reading.suspended ? <p role="status">{m.following_reading_return_preparing()}</p> : null}
-      {!addressRejected && page.signedIn && onRefresh ? (
-        <Button
-          className="min-h-11"
-          variant="outline"
-          disabled={!!status || navigationDisabled}
-          onClick={() => {
-            if (refreshCurrent ? !refreshCurrent() : page.forbidden ? !origin.isCurrent() : !reading.returnCurrent())
-              return;
-            reading.close(false);
-            onRefresh();
-          }}
-        >
-          {m.following_reading_refresh()}
-        </Button>
-      ) : null}
-      {reading.selection ? (
-        <FollowingInspection
-          key={reading.selection.id}
-          selection={reading.selection}
-          subject={readingOrigin.subject}
-          locale={locale}
-          canReadCollection={canReadCollection}
-          close={reading.close}
-          readSpace={readSpace}
-          returnFrontier={
-            readingOrigin.subject
-              ? followingReturnFrontier(
-                  locale,
-                  readingOrigin.subject,
-                  cursor,
-                  kind,
-                  reading.selection.row.follow.targetId,
-                )
-              : null
-          }
-        />
-      ) : null}
-      {!addressRejected && !page.forbidden && active.length ? (
-        <ul className="list-none space-y-1" aria-label={m.library_following_heading()}>
-          {active.map((row) => {
-            const { follow, title, kind: kindLabel, reason, destination } = row;
-            const href =
-              reading.suspended || (destination?.kind === 'collection' && !canReadCollection)
-                ? undefined
-                : destination?.href;
-            return (
-              <ContentItem
-                key={follow.targetId}
-                data-follow-target={follow.targetId}
-                data-follow-target-type={follow.targetType}
-                className="px-4"
-                title={title.text}
-                {...(title.lang ? { titleLang: title.lang } : {})}
-                headingLevel={3}
-                {...(href ? { href } : {})}
-                onClickCapture={(event) => {
-                  if (!(event.target instanceof Element) || !event.target.closest('a')) return;
-                  const frontier = readingOrigin.subject
-                    ? followingReturnFrontier(locale, readingOrigin.subject, cursor, kind, follow.targetId)
-                    : null;
-                  followingDestinationClick(event, () => reading.current(), frontier);
-                }}
-                visual={follow.target?.cover ? <SubjectCover subject={follow.target} ratio="2:3" /> : undefined}
-                metadata={
-                  <div className="min-w-0 space-y-1">
-                    <p>{kindLabel}</p>
-                    <p>{reason}</p>
-                  </div>
-                }
-                actions={
-                  <div className="flex flex-wrap items-center gap-2">
+      <div
+        className={
+          reading.selection ? 'grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8' : 'max-w-4xl'
+        }
+      >
+        {reading.selection ? (
+          <aside className="min-w-0 xl:order-2">
+            <FollowingInspection
+              key={reading.selection.id}
+              selection={reading.selection}
+              subject={readingOrigin.subject}
+              locale={locale}
+              canReadCollection={canReadCollection}
+              close={reading.close}
+              readSpace={readSpace}
+              returnFrontier={
+                readingOrigin.subject
+                  ? followingReturnFrontier(
+                      locale,
+                      readingOrigin.subject,
+                      cursor,
+                      kind,
+                      reading.selection.row.follow.targetId,
+                    )
+                  : null
+              }
+            />
+          </aside>
+        ) : null}
+        {!addressRejected && !page.forbidden && active.length ? (
+          <ul className="min-w-0 list-none space-y-1 xl:order-1" aria-label={m.library_following_heading()}>
+            {active.map((row) => {
+              const { follow, title } = row;
+              return (
+                <FollowingReadingRow
+                  key={follow.targetId}
+                  row={row}
+                  selected={reading.selection?.row.follow.targetId === follow.targetId}
+                  suspended={reading.suspended}
+                  disabled={!!status}
+                  canReadCollection={canReadCollection}
+                  current={reading.current}
+                  frontier={
+                    readingOrigin.subject
+                      ? followingReturnFrontier(locale, readingOrigin.subject, cursor, kind, follow.targetId)
+                      : null
+                  }
+                  inspect={(trigger) => {
+                    const current = prepared.byId.get(follow.targetId);
+                    if (current) reading.select(current, trigger);
+                  }}
+                  controls={
                     <span hidden={!canUnfollow}>
                       <FollowTargetControl
                         origin={origin}
@@ -795,40 +792,26 @@ function MineFollowingPageState({
                         }}
                       />
                     </span>
-                    <Button
-                      data-following-inspect=""
-                      className="min-h-11"
-                      variant="outline"
-                      disabled={!!status}
-                      aria-disabled={reading.suspended || undefined}
-                      aria-label={m.following_reading_inspect_target({ title: title.text })}
-                      onClick={(event) => {
-                        const current = prepared.byId.get(follow.targetId);
-                        if (current) reading.select(current, event.currentTarget);
-                      }}
-                    >
-                      {m.following_reading_inspect()}
-                    </Button>
-                  </div>
-                }
-              />
-            );
-          })}
-        </ul>
-      ) : !addressRejected && !page.forbidden && page.signedIn ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyDescription>
-              {firstPageEmpty ? m.library_following_empty() : m.library_following_page_empty()}
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <a href={`/${getLocale()}/search`} className={buttonVariants({ variant: 'outline' })}>
-              {m.search_heading()}
-            </a>
-          </EmptyContent>
-        </Empty>
-      ) : null}
+                  }
+                />
+              );
+            })}
+          </ul>
+        ) : !addressRejected && !page.forbidden && page.signedIn ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>
+                {firstPageEmpty ? m.library_following_empty() : m.library_following_page_empty()}
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <a href={`/${getLocale()}/search`} className={buttonVariants({ variant: 'outline' })}>
+                {m.search_heading()}
+              </a>
+            </EmptyContent>
+          </Empty>
+        ) : null}
+      </div>
       {nextUnavailable && !addressRejected && !page.forbidden ? (
         <p role="status">{m.following_navigation_unavailable()}</p>
       ) : null}
