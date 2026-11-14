@@ -1,10 +1,12 @@
 import { isDeepStrictEqual } from 'node:util';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { documentActions, type IndexAction, type SubjectDocument } from './document.ts';
 import { readCreditIndexSnapshot } from './credit-index.ts';
 import { withConnection } from '../database/pool.ts';
 import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
-import { withRequestDeadline } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import { withSingleCommandAttempt } from '../command/command.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness, subjectSource } from './native-bindings.ts';
 import type {
@@ -26,7 +28,7 @@ import {
 } from './account-discovery.ts';
 import {
   discoveryIndexName,
-  discoveryIndexUuid,
+  readDiscoveryPhysicalIdentity,
   discoveryAlias,
   createDiscoveryIndex,
   readDiscoveryDocumentCodec,
@@ -66,10 +68,10 @@ import {
   subjectGenerations,
   subjectIndexName,
 } from './indices.ts';
-import { SearchUnavailableError, type OpenSearch, type SearchRequestOptions } from './opensearch.ts';
+import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestOptions } from './opensearch.ts';
 import { assertCompleteSearch } from './complete-search.ts';
-import { readFreshness } from './freshness.ts';
 import reconcile from './reconcile.sql';
+import freshness from './freshness.sql';
 import lockRebuild from './rebuild-lock.sql';
 import unlockRebuild from './rebuild-unlock.sql';
 
@@ -90,6 +92,215 @@ export { discoveryConsumer } from './consumer-name.ts';
 export { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 export type RebuildReason = 'timeout' | 'mismatch' | 'busy' | 'running' | 'limit';
 export type PartitionCount = { partition: number; indexed: number; source: number };
+
+/** Absolute admission deadline, including time spent waiting for the supervisor. */
+export type SearchTurnContext = Readonly<{ deadline?: number; signal?: AbortSignal }>;
+
+const SEARCH_TURN_MS = 30_000;
+const searchTurns = new AsyncLocalStorage<SearchTurn>();
+const pendingSearchCheckouts = new WeakMap<Pool, number>();
+export type SearchTurn = ReturnType<typeof admitSearchTurn>;
+
+/** Admission belongs to the caller, before queueing. Closing a turn never renews its deadline. */
+export function admitSearchTurn(context: SearchTurnContext = {}) {
+  const deadline = context.deadline ?? deadlineFor(SEARCH_TURN_MS);
+  if (!Number.isFinite(deadline)) throw new RangeError('Search turn deadline must be finite');
+  const outside: <T>(work: () => T) => T = searchTurns.getStore()?.outside ?? AsyncLocalStorage.snapshot();
+  const expired = new SearchUnavailableError('Search maintenance deadline expired');
+  const controller = new AbortController();
+  let closed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancel = () => controller.abort(context.signal?.reason ?? expired);
+  if (context.signal?.aborted) cancel();
+  else context.signal?.addEventListener('abort', cancel, { once: true });
+  const expire = () => {
+    if (Date.now() >= deadline) controller.abort(expired);
+    else timer = setTimeout(expire, Math.min(2_147_483_647, Math.max(1, deadline - Date.now())));
+  };
+  expire();
+  const check = () => {
+    if (controller.signal.aborted) throw controller.signal.reason;
+    if (closed || Date.now() >= deadline) throw expired;
+  };
+  const call = async <T>(work: () => Promise<T>): Promise<T> => {
+    check();
+    // Await physical settlement. A caller's cancellation is not evidence that native work stopped.
+    const value = await work();
+    check();
+    return value;
+  };
+  const requestOptions = (options?: SearchRequestOptions): SearchRequestOptions => {
+    check();
+    return {
+      ...options,
+      timeoutMs: Math.min(options?.timeoutMs ?? Infinity, Math.max(1, Math.floor(deadline - Date.now()))),
+      signal: options?.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
+    };
+  };
+  return {
+    deadline,
+    signal: controller.signal,
+    outside,
+    check,
+    call,
+    search(search: OpenSearch): OpenSearch {
+      return {
+        request<T>(
+          method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
+          path: string,
+          body?: unknown,
+          options?: SearchRequestOptions,
+        ) {
+          return call(() => search.request<T>(method, path, body, requestOptions(options)));
+        },
+        bulk<T>(lines: readonly unknown[], options?: SearchRequestOptions) {
+          return call(() => search.bulk<T>(lines, requestOptions(options)));
+        },
+        ...(search.bulkRaw
+          ? {
+              bulkRaw<T>(body: string, options?: SearchRequestOptions) {
+                return call(() => search.bulkRaw!<T>(body, requestOptions(options)));
+              },
+            }
+          : {}),
+      };
+    },
+    close() {
+      closed = true;
+      clearTimeout(timer);
+      context.signal?.removeEventListener('abort', cancel);
+    },
+  };
+}
+
+export function runSearchTurn<T>(turn: SearchTurn, work: () => Promise<T>): Promise<T> {
+  return searchTurns.run(turn, () =>
+    withRequestDeadline(turn.deadline, () => withSingleCommandAttempt(() => turn.call(work))),
+  );
+}
+
+/** Relays own their lifetime; do not capture a maintenance deadline in their asynchronous scans. */
+export function outsideSearchTurn<T>(work: () => T): T {
+  const run = () => searchTurns.exit(() => withRequestDeadline(Date.now() + SEARCH_TURN_MS, work));
+  // Restore all caller contexts, including command retry policy, before starting long-lived work.
+  const turn = searchTurns.getStore();
+  return turn ? turn.outside(run) : run();
+}
+
+async function withSearchTurn<T>(context: SearchTurnContext | undefined, work: (turn: SearchTurn) => Promise<T>) {
+  const parent = searchTurns.getStore();
+  if (parent && context === undefined) return parent.call(() => work(parent));
+  const turn = admitSearchTurn({
+    ...context,
+    ...(parent
+      ? {
+          deadline: Math.min(parent.deadline, context?.deadline ?? Infinity),
+          signal: context?.signal ? AbortSignal.any([parent.signal, context.signal]) : parent.signal,
+        }
+      : {}),
+  });
+  try {
+    return await runSearchTurn(turn, () => work(turn));
+  } finally {
+    turn.close();
+  }
+}
+
+/** Check native boundaries without changing the Pool identity or pretending to cancel an unsupported owner. */
+export async function searchTurnCall<T>(work: () => Promise<T>): Promise<T> {
+  const turn = searchTurns.getStore();
+  return turn ? turn.call(work) : work();
+}
+
+/** Long-lived transports use the current turn only while maintenance is actually calling them. */
+export function searchForTurn(search: OpenSearch): OpenSearch {
+  return searchTurns.getStore()?.search(search) ?? search;
+}
+
+/** A producer may outlive this turn when installed in a relay. Resolve the context at each call. */
+export function searchTurnMetadataProducers(producers: DiscoveryMetadataProducers): DiscoveryMetadataProducers {
+  return Object.fromEntries(
+    Object.entries(producers).flatMap(([kind, producer]) => {
+      if (!producer) return [];
+      return [[kind, {
+        ...producer,
+        readiness: () => searchTurnCall(() => producer.readiness()),
+        page: (...args: Parameters<DiscoveryMetadataProducer['page']>) => searchTurnCall(() => producer.page(...args)),
+        read: (...args: Parameters<DiscoveryMetadataProducer['read']>) => searchTurnCall(() => producer.read(...args)),
+        position: (partition: number) => searchTurnCall(() => producer.position(partition)),
+      }] as const];
+    }),
+  );
+}
+
+/** Only local SQL uses a bounded client. Every native owner still receives the original Pool. */
+export async function withSearchConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  const turn = searchTurns.getStore();
+  if (!turn) return withConnection(pool, work);
+  turn.check();
+  let acquired = false;
+  let checkout: Promise<unknown> | undefined;
+  let body: Promise<T> | undefined;
+  const failure = (error: unknown) => (error instanceof Error ? error : new Error('Search session became uncertain'));
+  try {
+    return await withBoundedReadLifetime(
+      (read) => {
+        turn.check();
+        const pending = pendingSearchCheckouts.get(pool) ?? 0;
+        if (pending >= (pool.options.max ?? 10))
+          throw new SearchUnavailableError('Search maintenance checkouts are still pending');
+        pendingSearchCheckouts.set(pool, pending + 1);
+        const acquiredOrFailed = () => {
+          const left = (pendingSearchCheckouts.get(pool) ?? 1) - 1;
+          if (left) pendingSearchCheckouts.set(pool, left);
+          else pendingSearchCheckouts.delete(pool);
+        };
+        const operation = withConnection(pool, async (raw) => {
+          acquired = true;
+          acquiredOrFailed();
+          try {
+            turn.check();
+            return await read(raw);
+          } catch (error) {
+            // Also covers a lost BEGIN/COMMIT or advisory-lock response, even between queries.
+            discardConnection(raw, failure(error));
+            throw error;
+          } finally {
+            // If engine work holds a session lock, keep it until that work actually settles.
+            // A retired query facade prevents the continuation from dispatching another statement.
+            await body?.catch(() => undefined);
+          }
+        }).finally(() => {
+          if (!acquired) acquiredOrFailed();
+        });
+        checkout = operation;
+        return operation;
+      },
+      discardConnection,
+      turn.deadline,
+      (client) => {
+        const guarded = Object.create(client) as PoolClient;
+        guarded.query = new Proxy(client.query, {
+          apply(query, _receiver, args: unknown[]) {
+            turn.check();
+            return Reflect.apply(query, client, args);
+          },
+        });
+        body = turn.call(() => work(guarded));
+        return body;
+      },
+      {
+        deadlineError: () => new SearchUnavailableError('Search maintenance database deadline expired'),
+        isUncertainSettledQueryError: () => true,
+        isUncertainWorkError: () => true,
+      },
+    );
+  } finally {
+    // Successful local reads close before an owner can check out from the same Pool (including max=1).
+    // A late checkout has no dispatched work; its callback checks the retired lifetime and releases it.
+    if (acquired) await checkout?.catch(() => undefined);
+  }
+}
 
 export class RebuildError extends Error {
   readonly reason: RebuildReason;
@@ -220,7 +431,7 @@ export async function rebuildSubjects(options: {
   search: OpenSearch;
   source: SubjectSource;
   prefix: string;
-  runner: { refresh(): Promise<void> };
+  runner: { refresh(context?: SearchTurnContext): Promise<void> };
   /** The real default worker owns identified reconciliation and alias activation. */
   publication?: 'native';
   /** Successor date projection. Omit to prepare the calendar format; null retains the legacy writer shape. */
@@ -319,7 +530,7 @@ export async function rebuildSubjects(options: {
       if ((await readSubjectCreditMappingFormat(search, options.prefix, generation)) !== 1)
         throw new SearchUnavailableError('Search rebuild requires the credited-name projection');
       check();
-      await options.runner.refresh();
+      await options.runner.refresh({ deadline, signal: lifetime.signal });
       check();
 
       if (options.publication === 'native') {
@@ -541,9 +752,9 @@ export async function assertDiscoveryCapabilityBinding(
   target: DiscoveryTarget,
   producers: DiscoveryMetadataProducers,
 ): Promise<void> {
-  const witnesses = await discoveryCapabilityWitnesses(producers);
+  const witnesses = await discoveryCapabilityWitnesses(searchTurnMetadataProducers(producers));
   if (Object.keys(witnesses).length === 0) return;
-  const row = await withConnection(
+  const row = await withSearchConnection(
     pool,
     async (client) =>
       (
@@ -632,9 +843,15 @@ function admitLiveDiscovery(rows: DiscoveryGeneration[]): DiscoveryGeneration[] 
   return rows;
 }
 
-export async function discoveryGenerations(pool: Pool, prefix: string): Promise<DiscoveryGeneration[]> {
-  return withConnection(pool, async (client) =>
-    admitLiveDiscovery((await client.query<DiscoveryGeneration>(DISCOVERY_LIVE_GENERATIONS_SQL, [prefix])).rows),
+export async function discoveryGenerations(
+  pool: Pool,
+  prefix: string,
+  context?: SearchTurnContext,
+): Promise<DiscoveryGeneration[]> {
+  return withSearchTurn(context, () =>
+    withSearchConnection(pool, async (client) =>
+      admitLiveDiscovery((await client.query<DiscoveryGeneration>(DISCOVERY_LIVE_GENERATIONS_SQL, [prefix])).rows),
+    ),
   );
 }
 
@@ -645,10 +862,21 @@ export async function allocateDiscovery(
   registry: DiscoveryRegistry,
   requiredKinds: readonly string[] = [],
   producerKinds: readonly string[] = ['account', 'subject'],
+  context?: SearchTurnContext,
+): Promise<void> {
+  return withSearchTurn(context, () => allocateDiscoveryTurn(pool, prefix, registry, requiredKinds, producerKinds));
+}
+
+async function allocateDiscoveryTurn(
+  pool: Pool,
+  prefix: string,
+  registry: DiscoveryRegistry,
+  requiredKinds: readonly string[],
+  producerKinds: readonly string[],
 ): Promise<void> {
   assertDiscoveryProducerCoverage(discoveryProducerRegistrations(registry), requiredKinds, producerKinds);
   discoveryAlias(prefix);
-  await withConnection(pool, async (client) => {
+  await withSearchConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,1))', [discoveryAlias(prefix)]);
@@ -727,7 +955,10 @@ async function mapBounded<T, Result>(
 ): Promise<Result[]> {
   const results: Result[] = [];
   for (let offset = 0; offset < items.length; offset += concurrency) {
-    const settled = await Promise.allSettled(items.slice(offset, offset + concurrency).map(work));
+    const settled = await Promise.allSettled(
+      items.slice(offset, offset + concurrency).map((item) => searchTurnCall(() => work(item))),
+    );
+    searchTurns.getStore()?.check();
     const batch: Result[] = [];
     for (const outcome of settled) {
       if (outcome.status === 'rejected') throw outcome.reason;
@@ -747,12 +978,17 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection, row: 
   let next: { route: number; id: string } | null, keys: DiscoveryKey[], position: bigint;
   if (row.owner === 'accounts') {
     const after = row.after_id === null ? null : { route: row.after_route!, id: row.after_id };
-    const page = validateAccountPage(await account.source.page(partition, after, 100), partition, after, 100);
+    const page = validateAccountPage(
+      await searchTurnCall(() => account.source.page(partition, after, 100)),
+      partition,
+      after,
+      100,
+    );
     keys = page.accounts.map(({ id }) => ({ owner: 'accounts', kind: 'account', id, route: routeOf(id)! }));
     next = page.next;
     position = page.position;
   } else if (row.owner === 'semantic') {
-    const rows = await withConnection(
+    const rows = await withSearchConnection(
       pool,
       async (client) =>
         (
@@ -783,9 +1019,9 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection, row: 
     const actions = projection.prepareOwnerPageActions(row.owner, partition, page);
     next = page.next;
     position = page.position;
-    await projection.applyNativeActions(actions);
+    await searchTurnCall(() => projection.applyNativeActions(actions));
     await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
-    await withConnection(pool, async (client) => {
+    await withSearchConnection(pool, async (client) => {
       await client.query(
         `UPDATE search.discovery_population SET after_route=$5,after_id=$6,continuation=$7::jsonb,
         complete=$8,position=GREATEST(position,$9),native_epoch=$12
@@ -809,8 +1045,8 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection, row: 
     });
     return false;
   }
-  await projection.project(partition, keys, 0n, true);
-  await withConnection(pool, async (client) => {
+  await searchTurnCall(() => projection.project(partition, keys, 0n, true));
+  await withSearchConnection(pool, async (client) => {
     await client.query(
       `UPDATE search.discovery_population SET after_route=$5,after_id=$6,complete=$7,position=GREATEST(position,$8)
       WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4 AND after_id IS NOT DISTINCT FROM $9::uuid AND NOT complete`,
@@ -845,8 +1081,8 @@ async function reconcileDiscoveryPage(
   const entry =
     row.owner === 'accounts' ? registry.get('account') : registry.entries.find((entry) => entry.owner === 'semantic');
   if (!entry || entry.owner !== row.owner) throw new Error('Both native discovery producers are required');
-  const census = await entry.source.count(partition);
-  const witness = (await readAccountDiscoveryWitness(pool, [partition])).get(partition);
+  const census = await searchTurnCall(() => entry.source.count(partition));
+  const witness = (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
   if (!witness) throw new Error('Native Account/claim witness is absent');
   const indexed = BigInt(row.indexed);
   const reset =
@@ -886,9 +1122,8 @@ async function reconcileDiscoveryPage(
   const codec = await readDiscoveryDocumentCodec(search, discoveryIndexName(target.prefix, target.generation));
   if (entry.owner === 'accounts') {
     const snapshot = validateAccountSnapshot(
-      await entry.source.read(
-        partition,
-        keys.map(({ id }) => id),
+      await searchTurnCall(() =>
+        entry.source.read(partition, keys.map(({ id }) => id)),
       ),
       partition,
       keys.map(({ id }) => id),
@@ -898,15 +1133,10 @@ async function reconcileDiscoveryPage(
   } else {
     const snapshot =
       codec === 'mixed-credit-v1'
-        ? await readCreditIndexSnapshot(
-            entry.source,
-            partition,
-            keys.map(({ id }) => id),
+        ? await searchTurnCall(() =>
+            readCreditIndexSnapshot(entry.source, partition, keys.map(({ id }) => id)),
           )
-        : await entry.source.read(
-            partition,
-            keys.map(({ id }) => id),
-          );
+        : await searchTurnCall(() => entry.source.read(partition, keys.map(({ id }) => id)));
     validateObservation(
       snapshot,
       partition,
@@ -914,9 +1144,8 @@ async function reconcileDiscoveryPage(
       census.position,
       true,
     );
-    const counts = await projection.listing.read(
-      partition,
-      snapshot.subjects.map(({ id }) => id),
+    const counts = await searchTurnCall(() =>
+      projection.listing.read(partition, snapshot.subjects.map(({ id }) => id)),
     );
     expected = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts, codec);
   }
@@ -940,11 +1169,11 @@ async function reconcileDiscoveryPage(
       mismatch = true;
   }
   if (mismatch) {
-    await projection.project(partition, keys, 0n, true);
+    await searchTurnCall(() => projection.project(partition, keys, 0n, true));
     return false;
   }
-  const finish = await entry.source.count(partition),
-    end = (await readAccountDiscoveryWitness(pool, [partition])).get(partition);
+  const finish = await searchTurnCall(() => entry.source.count(partition)),
+    end = (await searchTurnCall(() => readAccountDiscoveryWitness(pool, [partition]))).get(partition);
   const stable =
     finish.position === census.position &&
     finish.count === census.count &&
@@ -955,7 +1184,7 @@ async function reconcileDiscoveryPage(
   if (!stable) return false;
   if (exhausted && total !== BigInt(census.count)) {
     // A missing identity has no engine key to repair. Rewalk only this native owner/partition.
-    await withConnection(pool, async (client) => {
+    await withSearchConnection(pool, async (client) => {
       await client.query('BEGIN');
       try {
         await client.query(
@@ -976,7 +1205,7 @@ async function reconcileDiscoveryPage(
     return false;
   }
   const last = keys.at(-1);
-  await withConnection(pool, async (client) => {
+  await withSearchConnection(pool, async (client) => {
     await client.query(
       `UPDATE search.discovery_population SET after_route=$5,after_id=$6,indexed=$7,census=$8,reconcile_position=$9,
       revision=$10,claim_revision=$11,certified=$12 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4
@@ -1028,13 +1257,13 @@ async function reconcileMetadataDiscoveryPage(
       return false;
     }
     const actions = projection.prepareOwnerPageActions(kind, row.partition, page);
-    await projection.applyNativeActions(actions);
+    await searchTurnCall(() => projection.applyNativeActions(actions));
     await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
     if (page.next === null && (await producer.position(row.partition)) !== page.position) {
       await restartMetadataReconciliation(pool, target, row.partition, kind);
       return false;
     }
-    await withConnection(pool, (client) =>
+    await withSearchConnection(pool, (client) =>
       client.query(
         `UPDATE search.discovery_population SET after_route=$5,after_id=$6,continuation=$7::jsonb,
        native_complete=$8,reconcile_position=$9,native_epoch=$12
@@ -1099,10 +1328,8 @@ async function reconcileMetadataDiscoveryPage(
       throw new GenerationReconciliationMismatch();
     return { route: key.route, id: key.id };
   });
-  const snapshot = await projection.prepareOwnerActions(
-    kind,
-    row.partition,
-    keys.map(({ id }) => id),
+  const snapshot = await searchTurnCall(() =>
+    projection.prepareOwnerActions(kind, row.partition, keys.map(({ id }) => id)),
   );
   if (row.reconcile_position !== null && BigInt(row.reconcile_position) !== snapshot.position) {
     await restartMetadataReconciliation(pool, target, row.partition, kind);
@@ -1113,16 +1340,18 @@ async function reconcileMetadataDiscoveryPage(
     keys: snapshot.keys,
     records: snapshot.records,
   });
-  await projection.applyNativeActions(actions);
+  await searchTurnCall(() => projection.applyNativeActions(actions));
   await assertDiscoveryCapabilityBinding(pool, target, projection.metadataProducers);
   const exhausted = hits.length < 100;
-  const finalPosition = exhausted ? await projection.ownerPosition(kind, row.partition) : snapshot.position;
+  const finalPosition = exhausted
+    ? await searchTurnCall(() => projection.ownerPosition(kind, row.partition))
+    : snapshot.position;
   if (finalPosition !== snapshot.position) {
     await restartMetadataReconciliation(pool, target, row.partition, kind);
     return false;
   }
   const last = keys.at(-1);
-  await withConnection(pool, (client) =>
+  await withSearchConnection(pool, (client) =>
     client.query(
       `UPDATE search.discovery_population SET after_route=$5,after_id=$6,indexed=$7,census=$7,
       reconcile_position=$8,certified=$9 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4
@@ -1147,7 +1376,7 @@ async function reconcileMetadataDiscoveryPage(
 
 async function retireDiscoveryCapability(pool: Pool, target: DiscoveryTarget) {
   const index = discoveryIndexName(target.prefix, target.generation);
-  await withConnection(pool, async (client) => {
+  await withSearchConnection(pool, async (client) => {
     await client.query('BEGIN');
     try {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [index]);
@@ -1194,7 +1423,7 @@ async function nativePopulationPage(
 }
 
 async function restartMetadataReconciliation(pool: Pool, target: DiscoveryTarget, partition: number, kind: string) {
-  await withConnection(pool, (client) =>
+  await withSearchConnection(pool, (client) =>
     client.query(
       `UPDATE search.discovery_population SET certified=false,native_complete=false,after_route=NULL,after_id=NULL,
      continuation=NULL,reconcile_position=NULL,indexed=0 WHERE prefix=$1 AND generation=$2 AND partition_no=$3 AND owner=$4`,
@@ -1203,8 +1432,70 @@ async function restartMetadataReconciliation(pool: Pool, target: DiscoveryTarget
   );
 }
 
-/** One bounded maintenance step; failed external work leaves its actual frontier replayable. */
-export async function advanceDiscovery(options: {
+async function discoveryAliasMatches(search: OpenSearch, target: DiscoveryTarget): Promise<boolean> {
+  let response: { status: number; body: unknown };
+  try {
+    response = await search.request('GET', `/_alias/${discoveryAlias(target.prefix)}`);
+  } catch (error) {
+    if (error instanceof OpenSearchError && error.status === 404) return false;
+    throw error;
+  }
+  if (response.status === 404) return false;
+  if (response.status !== 200 || !record(response.body))
+    throw new SearchUnavailableError('Discovery activation alias is unavailable');
+  return (
+    Object.keys(response.body).length === 1 &&
+    Object.hasOwn(response.body, discoveryIndexName(target.prefix, target.generation)) &&
+    (await discoveryPhysicalTargetMatches(search, target))
+  );
+}
+
+/** Finish only an observed activation of this durable ready target; a lost COMMIT is reread next turn. */
+async function completeDiscoveryActivation(
+  pool: Pool,
+  target: DiscoveryGeneration,
+  previous: DiscoveryGeneration | undefined,
+) {
+  if (!target.capability || !discoveryCapabilityMatches(target, target.capability, target.capability.witnesses))
+    throw new SearchUnavailableError('Discovery activation capability is unavailable');
+  await withSearchConnection(pool, async (client) => {
+    await client.query('BEGIN');
+    try {
+      if (previous)
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+          discoveryIndexName(target.prefix, previous.generation),
+        ]);
+      const ready = await client.query<{ state: string }>(
+        `SELECT state FROM search.discovery_generation
+         WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND index_uuid=$3 AND incarnation=$4::uuid
+           AND state IN ('ready','active') AND capability=$5::jsonb FOR UPDATE`,
+        [target.prefix, target.generation, target.uuid, target.incarnation, JSON.stringify(target.capability)],
+      );
+      if (ready.rows[0]?.state === 'active') {
+        await client.query('COMMIT');
+        return;
+      }
+      if (ready.rows[0]?.state !== 'ready')
+        throw new SearchUnavailableError('Discovery activation target changed');
+      await client.query(
+        "UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND state='active' AND generation<>$2",
+        [target.prefix, target.generation],
+      );
+      await client.query(
+        `UPDATE search.discovery_generation SET state='active',activated_at=clock_timestamp()
+         WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='ready'
+           AND index_uuid=$3 AND incarnation=$4::uuid`,
+        [target.prefix, target.generation, target.uuid, target.incarnation],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
+}
+
+type AdvanceDiscoveryOptions = SearchTurnContext & {
   pool: Pool;
   search: OpenSearch;
   prefix: string;
@@ -1213,9 +1504,17 @@ export async function advanceDiscovery(options: {
   requiredKinds?: readonly string[];
   metadataProducers?: DiscoveryMetadataProducers;
   capabilityWitnesses?: DiscoveryCapabilityWitnesses;
-}): Promise<void> {
+};
+
+/** One bounded maintenance step; failed external work leaves its actual frontier replayable. */
+export async function advanceDiscovery(options: AdvanceDiscoveryOptions): Promise<void> {
+  const context = options.deadline === undefined && options.signal === undefined ? undefined : options;
+  return withSearchTurn(context, (turn) => advanceDiscoveryTurn({ ...options, search: turn.search(options.search) }));
+}
+
+async function advanceDiscoveryTurn(options: AdvanceDiscoveryOptions): Promise<void> {
   const { pool, search, prefix, registry } = options;
-  const metadataProducers = options.metadataProducers ?? {};
+  const metadataProducers = searchTurnMetadataProducers(options.metadataProducers ?? {});
   const requiredKinds = options.requiredKinds ?? Object.keys(metadataProducers);
   const witnesses = options.capabilityWitnesses ?? (await discoveryCapabilityWitnesses(metadataProducers));
   const producerKinds = ['account', 'subject'];
@@ -1227,11 +1526,19 @@ export async function advanceDiscovery(options: {
   let generations = await discoveryGenerations(pool, prefix);
   const kinds = registry.entries.map(({ kind }) => kind).sort();
   const active = generations.find((row) => row.state === 'active');
+  for (const ready of generations) {
+    if (ready.state === 'ready' && (await discoveryAliasMatches(search, ready))) {
+      // The alias may have committed after the previous turn lost its response. Preserve the
+      // already published copy before evaluating whether today's registry needs a successor.
+      await completeDiscoveryActivation(pool, ready, active);
+      return;
+    }
+  }
   const activePhysicalTargetMatches = active ? await discoveryPhysicalTargetMatches(search, active) : true;
   let activeCoverageComplete =
     !active || (activePhysicalTargetMatches && discoveryCapabilityMatches(active, active.capability, witnesses));
   if (active && requiredKinds.length > 0) {
-    const coverage = await withConnection(
+    const coverage = await withSearchConnection(
       pool,
       async (client) =>
         (
@@ -1277,24 +1584,27 @@ export async function advanceDiscovery(options: {
     throw new Error('Discovery registry changed during population');
   const index = discoveryIndexName(prefix, target.generation);
   if (target.state === 'allocated') {
+    let allocationFailure: unknown;
     try {
       await createDiscoveryIndex(search, prefix, target.generation, target.incarnation);
     } catch (error) {
-      const { body } = await search.request<Record<string, { mappings?: { _meta?: { incarnation?: string } } }>>(
-        'GET',
-        `/${index}/_mapping`,
-      );
-      if (body[index]?.mappings?._meta?.incarnation !== target.incarnation) throw error;
+      allocationFailure = error;
     }
-    const uuid = await discoveryIndexUuid(search, index);
-    await withConnection(pool, (client) =>
+    // A lost allocation response is recovered from one exact physical observation. Expiry leaves
+    // the durable allocated row for a later turn; it cannot bind an unobserved UUID or incarnation.
+    const physical = await readDiscoveryPhysicalIdentity(search, index);
+    if (!physical || physical.incarnation !== target.incarnation)
+      throw allocationFailure ?? new SearchUnavailableError('Discovery allocation identity is unavailable');
+    const uuid = physical.uuid;
+    await withSearchConnection(pool, (client) =>
       client.query(
-        "UPDATE search.discovery_generation SET index_uuid=$3,capability=$4::jsonb,state='populating' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='allocated'",
+        "UPDATE search.discovery_generation SET index_uuid=$3,capability=$4::jsonb,state='populating' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='allocated' AND incarnation=$5::uuid",
         [
           prefix,
           target.generation,
           uuid,
           JSON.stringify({ physicalTarget: index, uuid, incarnation: target.incarnation, witnesses }),
+          target.incarnation,
         ],
       ),
     );
@@ -1306,7 +1616,7 @@ export async function advanceDiscovery(options: {
   }
   const projection = createDiscoveryProjection({ ...options, target, metadataProducers });
   if (target.state === 'populating' || target.state === 'reconciling') {
-    const populations = await withConnection(
+    const populations = await withSearchConnection(
       pool,
       async (client) =>
         (
@@ -1322,7 +1632,7 @@ export async function advanceDiscovery(options: {
       let retiring: Promise<void> | undefined;
       await mapBounded(
         populations,
-        DISCOVERY_POPULATION_CONCURRENCY,
+        Math.min(DISCOVERY_POPULATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
         async (population) => {
           try {
             return await (target.state === 'populating'
@@ -1341,7 +1651,7 @@ export async function advanceDiscovery(options: {
     }
   }
   if (target.state === 'populating') {
-    await withConnection(pool, (client) =>
+    await withSearchConnection(pool, (client) =>
       client.query(
         "UPDATE search.discovery_generation SET state='replaying' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='populating'",
         [prefix, target.generation],
@@ -1349,9 +1659,14 @@ export async function advanceDiscovery(options: {
     );
     return;
   }
-  if ((await readFreshness(pool, discoveryConsumer(prefix, target.generation))).behind > 0) return;
+  const replay = await withSearchConnection(pool, (client) =>
+    freshness.run(client, { consumer: discoveryConsumer(prefix, target.generation) }),
+  );
+  if (!replay || (replay.behind > 0 && replay.oldest === null))
+    throw new SearchUnavailableError('Discovery replay freshness is unavailable');
+  if (replay.behind > 0) return;
   if (target.state === 'replaying') {
-    await withConnection(pool, (client) =>
+    await withSearchConnection(pool, (client) =>
       client.query(
         "UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='replaying'",
         [prefix, target.generation],
@@ -1360,7 +1675,7 @@ export async function advanceDiscovery(options: {
     return;
   }
   // A native write after a partition was certified invalidates that partition, including empty populations.
-  const observations = await withConnection(
+  const observations = await withSearchConnection(
     pool,
     async (client) =>
       (
@@ -1392,33 +1707,36 @@ export async function advanceDiscovery(options: {
   );
   if (observations.length !== 4096) throw new Error('Discovery population partitions are incomplete');
   for (let offset = 0; offset < observations.length; offset += 100) {
-    const chunk = observations.slice(offset, offset + 100),
-      witnesses = await readAccountDiscoveryWitness(
-        pool,
-        chunk.map(({ partition }) => partition),
-      );
-    const checks = await mapBounded(chunk, DISCOVERY_CERTIFICATION_CONCURRENCY, async (row) => {
-      const witness = witnesses.get(row.partition);
-      const metadataPositions = {
-        collection: row.collection_position,
-        review: row.review_position,
-        space: row.space_position,
-      };
-      for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
-        if (!requiredKinds.includes(kind)) continue;
-        const observation = await metadataProducers[kind]!.read(row.partition, []);
-        if (kind === 'collection' && row.collection_epoch !== null && observation.epoch !== row.collection_epoch)
-          return { state: 'retire' as const };
-        if (metadataPositions[kind] !== observation.position.toString())
-          return { state: 'metadata' as const, partition: row.partition, kind };
-      }
-      return row.position === row.head &&
-        row.semantic_position === row.head &&
-        witness?.revision === BigInt(row.revision) &&
-        witness.claimRevision === BigInt(row.claim_revision)
-        ? { state: 'current' as const }
-        : { state: 'native' as const, partition: row.partition };
-    });
+    const chunk = observations.slice(offset, offset + 100);
+    const witnesses = await searchTurnCall(() =>
+      readAccountDiscoveryWitness(pool, chunk.map(({ partition }) => partition)),
+    );
+    const checks = await mapBounded(
+      chunk,
+      Math.min(DISCOVERY_CERTIFICATION_CONCURRENCY, Math.max(1, (pool.options.max ?? 10) - 1)),
+      async (row) => {
+        const witness = witnesses.get(row.partition);
+        const metadataPositions = {
+          collection: row.collection_position,
+          review: row.review_position,
+          space: row.space_position,
+        };
+        for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
+          if (!requiredKinds.includes(kind)) continue;
+          const observation = await metadataProducers[kind]!.read(row.partition, []);
+          if (kind === 'collection' && row.collection_epoch !== null && observation.epoch !== row.collection_epoch)
+            return { state: 'retire' as const };
+          if (metadataPositions[kind] !== observation.position.toString())
+            return { state: 'metadata' as const, partition: row.partition, kind };
+        }
+        return row.position === row.head &&
+          row.semantic_position === row.head &&
+          witness?.revision === BigInt(row.revision) &&
+          witness.claimRevision === BigInt(row.claim_revision)
+          ? { state: 'current' as const }
+          : { state: 'native' as const, partition: row.partition };
+      },
+    );
     for (const check of checks) {
       if (check.state === 'retire') {
         await retireDiscoveryCapability(pool, target);
@@ -1426,7 +1744,7 @@ export async function advanceDiscovery(options: {
       }
       if (check.state === 'metadata') {
         await restartMetadataReconciliation(pool, target, check.partition, check.kind);
-        await withConnection(pool, (client) =>
+        await withSearchConnection(pool, (client) =>
           client.query(
             "UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='ready'",
             [prefix, target.generation],
@@ -1435,14 +1753,14 @@ export async function advanceDiscovery(options: {
         return;
       }
       if (check.state === 'current') continue;
-      await withConnection(pool, (client) =>
+      await withSearchConnection(pool, (client) =>
         client.query(
           `UPDATE search.discovery_population SET certified=false,after_route=NULL,after_id=NULL,reconcile_position=NULL,indexed=0
         WHERE prefix=$1 AND generation=$2 AND partition_no=$3 AND owner IN ('accounts','semantic')`,
           [prefix, target.generation, check.partition],
         ),
       );
-      await withConnection(pool, (client) =>
+      await withSearchConnection(pool, (client) =>
         client.query(
           "UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='ready'",
           [prefix, target.generation],
@@ -1457,49 +1775,31 @@ export async function advanceDiscovery(options: {
   }
   await assertDiscoveryCapabilityBinding(pool, target, metadataProducers);
   const previous = generations.find((row) => row.state === 'active');
-  await withConnection(pool, (client) =>
-    client.query(
-      "UPDATE search.discovery_generation SET state='ready' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='reconciling'",
-      [prefix, target.generation],
-    ),
-  );
-  await observedWrite(
-    () =>
-      search.request('POST', '/_aliases', {
-        actions: [
-          ...(previous
-            ? [{ remove: { index: discoveryIndexName(prefix, previous.generation), alias: discoveryAlias(prefix) } }]
-            : []),
-          { add: { index, alias: discoveryAlias(prefix) } },
-        ],
-      }),
-    async () => {
-      const { body } = await search.request<Record<string, unknown>>('GET', `/_alias/${discoveryAlias(prefix)}`);
-      return Object.keys(body).length === 1 && Object.hasOwn(body, index);
-    },
-    'Discovery activation could not be established',
-  );
-  await withConnection(pool, async (client) => {
-    await client.query('BEGIN');
-    try {
-      if (previous)
-        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
-          discoveryIndexName(prefix, previous.generation),
-        ]);
-      await client.query(
-        "UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND state='active' AND generation<>$2",
-        [prefix, target.generation],
-      );
-      await client.query(
-        "UPDATE search.discovery_generation SET state='active',activated_at=clock_timestamp() WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='ready'",
-        [prefix, target.generation],
-      );
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
+  await withSearchConnection(pool, async (client) => {
+    const ready = await client.query(
+      `UPDATE search.discovery_generation SET state='ready'
+       WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('reconciling','ready')
+         AND index_uuid=$3 AND incarnation=$4::uuid RETURNING generation`,
+      [prefix, target.generation, target.uuid, target.incarnation],
+    );
+    if (ready.rowCount !== 1) throw new SearchUnavailableError('Discovery activation target changed');
   });
+  if (!(await discoveryAliasMatches(search, target))) {
+    await observedWrite(
+      () =>
+        search.request('POST', '/_aliases', {
+          actions: [
+            ...(previous
+              ? [{ remove: { index: discoveryIndexName(prefix, previous.generation), alias: discoveryAlias(prefix) } }]
+              : []),
+            { add: { index, alias: discoveryAlias(prefix) } },
+          ],
+        }),
+      () => discoveryAliasMatches(search, target),
+      'Discovery activation could not be established',
+    );
+  }
+  await completeDiscoveryActivation(pool, target, previous);
 }
 
 /** Shared native keyed observations for publication; no census or prepared output is completeness evidence. */
