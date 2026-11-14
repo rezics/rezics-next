@@ -16,6 +16,7 @@ import { POSTGRES_IMAGE, schemaDumps } from './database.ts';
 
 // Kernel's SQL analysis cache: shared by `typecheck`, `check` and every throwaway database consumer on a host.
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const sqlSourceRoots: readonly string[] = ['src', 'test', 'scripts'];
 
 type ReyloCacheManifest = { version: 1; files: Record<string, string> };
 
@@ -148,8 +149,8 @@ function cacheManifest(value: unknown): ReyloCacheManifest {
     if (
       path.startsWith('/') ||
       path.includes('\\') ||
-      !path.split('/').includes('src') ||
-      path.split('/').at(-1) === 'src' ||
+      !path.split('/').some((part) => sqlSourceRoots.includes(part)) ||
+      !path.endsWith('.sql') ||
       path.split('/').some((part) => part === '' || part === '..' || part === '.') ||
       typeof digest !== 'string' ||
       !/^[a-f0-9]{64}$/.test(digest)
@@ -377,11 +378,14 @@ export async function prepareReyloAnalysisCache(
   const sourceFiles = sourceWorkspaces.flatMap((project) => {
     const projectPrefix = project === workspace ? '' : relative(repository, project).split(sep).join('/');
     const inputPrefix = relative(workspace, project).split(sep).join('/');
-    return [...new Bun.Glob('src/**/*.sql').scanSync({ cwd: project })].sort().map((file) => ({
-      key: projectPrefix ? `${projectPrefix}/${file}` : file,
-      input: inputPrefix ? `${inputPrefix}/${file}` : file,
-      path: resolve(project, file),
-    }));
+    return sqlSourceRoots
+      .flatMap((root) => [...new Bun.Glob(`${root}/**/*.sql`).scanSync({ cwd: project })])
+      .sort()
+      .map((file) => ({
+        key: projectPrefix ? `${projectPrefix}/${file}` : file,
+        input: inputPrefix ? `${inputPrefix}/${file}` : file,
+        path: resolve(project, file),
+      }));
   });
   const hashes = await phase('sql-sources', () =>
     Object.fromEntries(sourceFiles.map(({ key, path }) => [key, sha256(readFileSync(path))])),
