@@ -1,4 +1,13 @@
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from 'react';
 import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { RichTextEditor } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -9,6 +18,7 @@ import { PostReadingBody } from '../threads/post-reading-body';
 import type { NativeDraftCreate } from './contract';
 import type { StudioController } from './controller';
 import { workspaceEditorLabels } from './workspace-language';
+import { useAuthoringSelection } from './workbench-region';
 
 type DraftForm = {
   boardId: string;
@@ -42,14 +52,18 @@ function emptyForm(): DraftForm {
 /** One unsent document. The controller owns every sent intent and its explicit replay. */
 export function NativeDraftComposer({
   controller,
+  active,
   disabled,
   onDepartureRiskChange,
   onCommandPendingChange,
+  onCreated,
 }: {
   controller: StudioController;
+  active: boolean;
   disabled: boolean;
   onDepartureRiskChange: (atRisk: boolean) => void;
   onCommandPendingChange: (pending: boolean) => void;
+  onCreated: () => void;
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [form, setForm] = useState(emptyForm);
@@ -57,6 +71,8 @@ export function NativeDraftComposer({
   const currentForm = useRef(form);
   const currentController = useRef(controller);
   currentController.current = controller;
+  const activeCanvas = useRef(active);
+  activeCanvas.current = active;
   const [submission, setSubmission] = useState<Submission | null>(null);
   const submitted = useRef<Submission | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -69,6 +85,9 @@ export function NativeDraftComposer({
   const mounted = useRef(false);
   const formElement = useRef<HTMLFormElement>(null);
   const titleElement = useRef<HTMLInputElement>(null);
+  const authoringSelection = useAuthoringSelection(formElement, String(generation));
+  const [restoreSelection, setRestoreSelection] = useState(false);
+  const previouslyActive = useRef(active);
   const id = useId();
   const locale = getLocale();
   const options = { locale };
@@ -86,13 +105,14 @@ export function NativeDraftComposer({
   // replaces it. The identity describes only this unsent visit; it makes no persisted revision claim.
   const readerIdentity = useMemo(
     () => ({}),
-    [controller, view, form.body, form.snapshotGeneration, generation, locale],
+    [controller, active, view, form.body, form.snapshotGeneration, generation, locale],
   );
   const previewVisitKey = `studio-unsent:${id}:${generation}:${form.snapshotGeneration}:${locale}`;
   const isReaderCurrent = () => {
     const live = currentForm.current;
     return (
       current() &&
+      activeCanvas.current &&
       view.mode === 'preview' &&
       currentView.current === view &&
       live.body === form.body &&
@@ -122,15 +142,25 @@ export function NativeDraftComposer({
       submitted.current = null;
       setSubmission(null);
       // An acknowledgement belongs to the submitted form version, including its snapshot lifecycle.
-      if (currentForm.current.version === attempt.version) reset();
-      else setRetained(true);
+      if (currentForm.current.version === attempt.version) {
+        reset();
+        onCreated();
+      } else setRetained(true);
     } else if (state.issue && !controller.hasUnresolvedCommand()) {
       // A replay can also finish with a definite rejection. Keep the working document editable.
       submitted.current = null;
       setSubmission(null);
       setFailed(true);
     }
-  }, [controller, state.operation, state.result, state.issue]);
+  }, [controller, state.operation, state.result, state.issue, onCreated]);
+
+  useLayoutEffect(() => {
+    const returning = active && !previouslyActive.current;
+    previouslyActive.current = active;
+    if (!active || view.mode !== 'write' || (!restoreSelection && !returning)) return;
+    authoringSelection.restore();
+    setRestoreSelection(false);
+  }, [active, view, restoreSelection, authoringSelection]);
 
   function current() {
     return (
@@ -146,6 +176,7 @@ export function NativeDraftComposer({
     const next = { mode };
     currentView.current = next;
     setView(next);
+    if (mode === 'write') setRestoreSelection(true);
   }
   function update(patch: Partial<DraftForm>) {
     if (!current()) return;
@@ -173,7 +204,7 @@ export function NativeDraftComposer({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const draft = currentForm.current;
-    if (!current() || disabled || submitted.current || draft.snapshot !== 'ready') return;
+    if (!current() || !activeCanvas.current || disabled || submitted.current || draft.snapshot !== 'ready') return;
     if (!draft.boardId.trim() || !draft.title.trim() || !draft.licence.trim() || !hasDocumentContent(draft.body))
       return;
     const command: NativeDraftCreate = {
@@ -218,6 +249,7 @@ export function NativeDraftComposer({
       }}
       aria-labelledby={`${id}-heading`}
       aria-describedby={`${id}-privacy`}
+      onBlurCapture={(event) => authoringSelection.remember(event.target)}
     >
       <h2 id={`${id}-heading`}>{m.studio_account_create({}, options)}</h2>
       <p className="studio-help">{m.studio_account_intro({}, options)}</p>
@@ -288,7 +320,7 @@ export function NativeDraftComposer({
           onSave={() => formElement.current?.requestSubmit()}
         />
       </section>
-      {view.mode === 'preview' && previewReady ? (
+      {active && view.mode === 'preview' && previewReady ? (
         <section className="studio-preview studio-stack" aria-label={m.studio_workspace_preview_region({}, options)}>
           <h3>{form.title.trim() || m.own_drafts_no_title({}, options)}</h3>
           <p className="studio-preview-notice">{m.studio_workspace_preview_unsaved({}, options)}</p>

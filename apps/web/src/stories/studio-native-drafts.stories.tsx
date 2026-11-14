@@ -295,7 +295,7 @@ export const Empty: Story = { args: { scenario: 'empty' } };
 
 async function previewWorkingDraft(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  await openDraftNavigation(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: workbenchCopy[getLocale()].newDraft, exact: true }));
   const form = within(await canvas.findByRole('form', { name: m.studio_account_create() }));
   await userEvent.type(form.getByRole('textbox', { name: m.studio_account_board() }), 'community/fiction');
   await userEvent.type(
@@ -363,7 +363,7 @@ export const CreationAndReview: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const locale = getLocale();
-    await openDraftNavigation(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: workbenchCopy[locale].newDraft, exact: true }));
     await userEvent.type(
       await canvas.findByRole('textbox', { name: m.studio_account_board({}, { locale }) }),
       'community/fiction',
@@ -422,7 +422,7 @@ export const UncertainIntent: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const locale = getLocale();
-    await openDraftNavigation(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: workbenchCopy[locale].newDraft, exact: true }));
     await userEvent.type(
       await canvas.findByRole('textbox', { name: m.studio_account_board({}, { locale }) }),
       'community/fiction',

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { workbenchCopy } from '../studio/workbench-copy';
 import { StudioWorkbenchReview } from './studio-workbench-review';
 
 const meta = {
@@ -22,6 +24,24 @@ type Story = StoryObj<typeof meta>;
 
 export const Book: Story = { args: { profile: 'book', scenario: 'populated' } };
 export const Column: Story = { args: { profile: 'column', scenario: 'populated' } };
+const newDraft: Story['play'] = async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  const copy = workbenchCopy[getLocale()];
+  const selected = await canvas.findByRole('textbox', { name: m.studio_workspace_title(), exact: true });
+  await userEvent.click(canvas.getByRole('button', { name: copy.newDraft, exact: true }));
+  const form = canvas.getByRole('form', { name: copy.newDraft });
+  const title = within(form).getByRole('textbox', { name: m.studio_workspace_new_title() });
+  await userEvent.type(title, 'An unsent opening');
+  await expect(selected).not.toBeVisible();
+  await userEvent.click(canvas.getByRole('button', { name: copy.returnToDocument }));
+  await expect(selected).toBeVisible();
+  await expect(form).not.toBeVisible();
+  await userEvent.click(canvas.getByRole('button', { name: copy.newDraft, exact: true }));
+  await expect(title).toHaveValue('An unsent opening');
+  await expect(title).toHaveFocus();
+};
+export const BookNewDraft: Story = { args: { profile: 'book', scenario: 'populated' }, play: newDraft };
+export const ColumnNewDraft: Story = { args: { profile: 'column', scenario: 'populated' }, play: newDraft };
 export const BookDirtyReview: Story = { args: { profile: 'book', scenario: 'dirty' } };
 export const ColumnDirtyReview: Story = { args: { profile: 'column', scenario: 'dirty' } };
 export const BookRevisionComparison: Story = { args: { profile: 'book', scenario: 'comparison' } };

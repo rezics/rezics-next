@@ -431,6 +431,7 @@ test.each(locales)(
     try {
       expect(empty.host.textContent).toContain(m.studio_workspace_empty_create());
       expect(empty.host.textContent).toContain(m.studio_workspace_empty_page());
+      await empty.click(workbenchCopy[locale].newDraft);
       const title = getByRole(empty.host, 'textbox', { name: m.studio_workspace_new_title() });
       await empty.change(title, 'New <原稿>');
       await empty.click(m.studio_workspace_create());
@@ -475,6 +476,7 @@ test('native composer completion clears operands even when completion wording di
   const feedback = spyOn(language, 'workspaceFeedbackMessage').mockReturnValue('Different safe receipt text');
   const v = await mount(f, { ...f.input, initialSelection: undefined, nativeDrafts: true, canCreateDraft: true });
   try {
+    await v.click(workbenchCopy.ja.newDraft);
     const field = (name: string) => getByRole(v.host, 'textbox', { name, exact: true }) as HTMLInputElement;
     await v.change(field(m.studio_account_board()), 'board');
     await v.change(field(m.studio_account_title()), 'Created <原稿>');
@@ -492,6 +494,7 @@ test('native composer completion clears operands even when completion wording di
     await v.click(m.studio_account_create());
     await waitFor(() => expect(v.title().value).toBe('Created <原稿>'));
     expect(v.host.textContent).toContain('Different safe receipt text');
+    await v.click(workbenchCopy.ja.newDraft);
     for (const name of [
       m.studio_account_board(),
       m.studio_account_title(),

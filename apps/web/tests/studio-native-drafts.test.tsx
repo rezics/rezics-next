@@ -23,6 +23,8 @@ const { createRoot } = await import('react-dom/client');
 const { getByRole, getByText, queryByRole, waitFor } = await import('@testing-library/dom');
 const { StudioWorkspace } = await import('../src/studio/workspace');
 const { m } = await import('../src/paraglide/messages.js');
+const { workbenchCopy } = await import('../src/studio/workbench-copy');
+const { getLocale } = await import('../src/paraglide/runtime.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
 afterAll(async () => {
@@ -270,12 +272,12 @@ test('Studio leaves sidebar placement and the phone drawer to Shell', () => {
 const structuredHtml =
   '<h2>First structured heading</h2><p>A <strong>formatted</strong> opening with a <a href="https://example.org/source">source</a>.</p><ul><li><p>First point</p></li><li><p>Second point</p></li></ul><table><tbody><tr><th><p>Column</p></th></tr><tr><td><p>Preserved cell</p></td></tr></tbody></table><pre><code>const draft = "unsaved";</code></pre>';
 
-async function mountComposer(fixture = port()) {
+async function mountComposer(fixture = port(), initialInput = input()) {
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
   const risks: boolean[] = [];
-  let activeInput = input();
+  let activeInput = initialInput;
   let activePort = fixture.value;
   const render = async () => {
     await act(async () =>
@@ -289,6 +291,13 @@ async function mountComposer(fixture = port()) {
     );
   };
   await render();
+  expect(queryByRole(host, 'form', { name: m.studio_account_create() })).toBeNull();
+  const enter = async () => {
+    await act(async () =>
+      getByRole(host, 'button', { name: workbenchCopy[getLocale()].newDraft, exact: true }).click(),
+    );
+  };
+  await enter();
   const form = () => getByRole(host, 'form', { name: m.studio_account_create() });
   const field = (name: string) => getByRole(form(), 'textbox', { name, exact: true });
   const button = (name: string) => getByRole(form(), 'button', { name, exact: true }) as HTMLButtonElement;
@@ -308,6 +317,7 @@ async function mountComposer(fixture = port()) {
   };
   return {
     host,
+    enter,
     form,
     field,
     button,
@@ -327,6 +337,7 @@ async function mountComposer(fixture = port()) {
       activeInput = nextInput;
       activePort = nextPort;
       await render();
+      await enter();
     },
     close: async () => {
       await act(async () => root.unmount());
@@ -334,6 +345,40 @@ async function mountComposer(fixture = port()) {
     },
   };
 }
+
+test('native unsent preview, metadata and undo survive return to the same saved document', async () => {
+  const saved = await selection();
+  const v = await mountComposer(port(), input(saved));
+  try {
+    const selectedEditor = v.host.querySelector('.studio-document .tiptap');
+    await v.fill();
+    const editor = v.field(m.studio_account_body());
+    await v.click(m.studio_workspace_preview());
+    await v.click(m.wide_document_code_inspect());
+    expect(getByRole(document.body, 'dialog')).toBeTruthy();
+    await act(async () => getByRole(v.host, 'button', { name: workbenchCopy.en.returnToDocument }).click());
+    await waitFor(() => expect(queryByRole(document.body, 'dialog')).toBeNull());
+    expect(v.host.querySelector('.studio-document .tiptap')).toBe(selectedEditor);
+    expect(getByRole(v.host, 'textbox', { name: m.studio_workspace_article_document() })).toBe(selectedEditor);
+    expect(queryByRole(v.host, 'form', { name: m.studio_account_create() })).toBeNull();
+    const departure = new dom.window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(departure);
+    expect(departure.defaultPrevented).toBe(true);
+    await v.enter();
+    expect(getByRole(v.form(), 'region', { name: m.studio_workspace_preview_region() })).toBeTruthy();
+    expect((v.field(m.studio_account_board()) as HTMLInputElement).value).toBe(boardId);
+    expect((v.field(m.studio_account_title()) as HTMLInputElement).value).toBe('Structured before save');
+    await v.click(m.studio_workspace_write());
+    expect(v.field(m.studio_account_body())).toBe(editor);
+    await v.click(m.editor_undo());
+    expect(editor.querySelector('table')).toBeNull();
+    await v.click(m.editor_redo());
+    await waitFor(() => expect(v.button(m.studio_account_create()).disabled).toBe(false));
+    expect(editor.querySelector('table')).not.toBeNull();
+  } finally {
+    await v.close();
+  }
+});
 
 test('real initial composer previews and creates one structured snapshot with all native operands, then continues the exact Post', async () => {
   const f = port();
@@ -369,7 +414,12 @@ test('real initial composer previews and creates one structured snapshot with al
     await v.click(m.studio_workspace_preview());
     await v.click(m.studio_account_create());
     await waitFor(() => expect(f.createCalls).toHaveLength(1));
-    await waitFor(() => expect((v.field(m.studio_account_title()) as HTMLInputElement).value).toBe(''));
+    await waitFor(() =>
+      expect(queryByRole(v.host, 'textbox', { name: m.studio_workspace_article_document() })).not.toBeNull(),
+    );
+    await v.enter();
+    expect((v.field(m.studio_account_title()) as HTMLInputElement).value).toBe('');
+    await act(async () => getByRole(v.host, 'button', { name: workbenchCopy.en.returnToDocument }).click());
     const command = f.createCalls[0]!;
     expect(command).toMatchObject({
       boardId,
@@ -497,6 +547,11 @@ test('unknown creation replays its original structured intent and preserves late
     await waitFor(() => expect(v.form().textContent).not.toContain(m.studio_workspace_snapshot_pending()));
     expect(v.button(m.studio_account_create()).disabled).toBe(true);
     expect(v.form().textContent).toContain(m.studio_native_later_edits());
+    const editor = v.field(m.studio_account_body());
+    await act(async () => getByRole(v.host, 'button', { name: workbenchCopy.en.returnToDocument }).click());
+    expect(queryByRole(v.host, 'form', { name: m.studio_account_create() })).toBeNull();
+    await v.enter();
+    expect(v.field(m.studio_account_body())).toBe(editor);
     await v.click(m.studio_native_retry());
     await waitFor(() => expect(v.form().textContent).toContain(m.studio_native_retained()));
     expect(f.createCalls[1]).toEqual(frozen);

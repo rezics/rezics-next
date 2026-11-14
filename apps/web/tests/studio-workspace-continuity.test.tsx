@@ -45,6 +45,128 @@ async function mount(profile: 'book' | 'column', scenario: 'populated' | 'dirty'
 
 const profiles = ['book', 'column'] as const;
 test.each(profiles)(
+  '%s: New draft resolves dirty work and retains one form beside the same selected editor',
+  async (profile) => {
+    const v = await mount(profile, 'dirty');
+    const opens = spyOn(v.props.port, 'open');
+    try {
+      const editor = v.host.querySelector('.tiptap');
+      const body = serializeDocument(v.controller.snapshot().selected!.body);
+      const navigation = v.host.querySelector('.studio-context-navigation')!;
+      expect(navigation.querySelector('.studio-new-draft, .studio-native-create, .tiptap')).toBeNull();
+      expect(v.host.querySelector('.studio-new-draft')).toBeNull();
+      await v.click(workbenchCopy.en.newDraft);
+      expect(getByRole(v.host, 'region', { name: m.studio_workspace_switch_region() })).toBeTruthy();
+      await v.click(m.studio_workspace_keep_editing());
+      expect(v.host.querySelector('.tiptap')).toBe(editor);
+      expect(serializeDocument(v.controller.snapshot().selected!.body)).toBe(body);
+      await act(async () => {
+        v.controller.snapshotPending();
+        v.controller.uploadState(true);
+      });
+      await v.click(workbenchCopy.en.newDraft);
+      expect(v.button(m.studio_workspace_save_switch()).disabled).toBe(true);
+      expect(v.button(m.studio_workspace_discard_switch()).disabled).toBe(true);
+      await v.click(m.studio_workspace_keep_editing());
+      await act(async () => {
+        v.controller.uploadState(false);
+        v.controller.changeBody(v.controller.snapshot().selected!.body);
+      });
+      await v.click(workbenchCopy.en.newDraft);
+      await v.click(m.studio_workspace_save_switch());
+      const form = getByRole(v.host, 'form', { name: workbenchCopy.en.newDraft });
+      expect(v.host.querySelectorAll('.studio-new-draft')).toHaveLength(1);
+      expect(v.host.querySelector('.studio-document')?.hasAttribute('inert')).toBe(true);
+      const title = getByRole(form, 'textbox', { name: m.studio_workspace_new_title() }) as HTMLInputElement;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(
+          title,
+          'One unsent title',
+        );
+        title.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+      await v.click(workbenchCopy.en.returnToDocument);
+      expect(v.host.querySelector('.tiptap')).toBe(editor);
+      expect(serializeDocument(v.controller.snapshot().selected!.body)).toBe(body);
+      expect(queryByRole(v.host, 'form', { name: workbenchCopy.en.newDraft })).toBeNull();
+      await v.click(m.studio_workspace_versions());
+      await waitFor(() => expect(v.controller.snapshot().versions).not.toBeNull());
+      const versions = v.controller.snapshot().versions;
+      await v.click(workbenchCopy.en.newDraft);
+      expect(getByRole(v.host, 'form', { name: workbenchCopy.en.newDraft })).toBe(form);
+      expect(title.value).toBe('One unsent title');
+      await v.click(workbenchCopy.en.returnToDocument);
+      expect(getByRole(v.host, 'region', { name: m.studio_workspace_versions() })).toBeTruthy();
+      expect(v.controller.snapshot().versions).toBe(versions);
+      expect(opens).not.toHaveBeenCalled();
+    } finally {
+      opens.mockRestore();
+      await v.close();
+    }
+  },
+);
+
+test('Keep editing cancels creation entry even when the requested save acknowledges later', async () => {
+  const v = await mount('column', 'dirty');
+  const original = v.props.port.saveDraft;
+  let finish!: () => void;
+  const response = new Promise<void>((resolve) => (finish = resolve));
+  const save = spyOn(v.props.port, 'saveDraft').mockImplementation(async (...args) => {
+    await response;
+    return original(...args);
+  });
+  try {
+    const editor = v.host.querySelector('.tiptap');
+    await v.click(workbenchCopy.en.newDraft);
+    await v.click(m.studio_workspace_save_switch());
+    await v.click(m.studio_workspace_keep_editing());
+    await act(async () => finish());
+    await waitFor(() => expect(v.controller.snapshot().operation).toBeNull());
+    expect(v.host.querySelector('.studio-new-draft')).toBeNull();
+    expect(v.host.querySelector('.tiptap')).toBe(editor);
+    expect(getByRole(v.host, 'textbox', { name: m.studio_workspace_title() })).toBeTruthy();
+  } finally {
+    finish();
+    save.mockRestore();
+    await v.close();
+  }
+});
+
+test('simple first-save replay keeps its original title and acknowledgement retains a newer unsent title', async () => {
+  const v = await mount('column');
+  const original = v.props.port.createDraft;
+  const create = spyOn(v.props.port, 'createDraft')
+    .mockResolvedValueOnce({ ok: false, error: { kind: 'uncertain', message: 'The response was lost.' } })
+    .mockImplementation(original);
+  try {
+    await v.click(workbenchCopy.en.newDraft);
+    const title = getByRole(v.host, 'textbox', { name: m.studio_workspace_new_title() }) as HTMLInputElement;
+    const change = async (value: string) =>
+      act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(title, value);
+        title.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+    await change('Submitted title');
+    await v.click(m.studio_workspace_create());
+    await waitFor(() => expect(v.controller.snapshot().issue?.kind).toBe('uncertain'));
+    await change('A newer unsent title');
+    await v.click(workbenchCopy.en.returnToDocument);
+    await v.click(workbenchCopy.en.newDraft);
+    expect(title.value).toBe('A newer unsent title');
+    await v.click(m.studio_workspace_retry());
+    await waitFor(() => expect(v.controller.snapshot().result).toBe('created'));
+    expect(create.mock.calls).toHaveLength(2);
+    expect(create.mock.calls[1]![0]).toEqual(create.mock.calls[0]![0]);
+    expect(v.controller.snapshot().selected!.title).toBe('Submitted title');
+    expect(getByRole(v.host, 'textbox', { name: m.studio_workspace_new_title() })).toBe(title);
+    expect(title.value).toBe('A newer unsent title');
+  } finally {
+    create.mockRestore();
+    await v.close();
+  }
+});
+
+test.each(profiles)(
   '%s: preview and history close preserve unsaved body, caret and real editor undo',
   async (profile) => {
     const matchMedia = window.matchMedia.bind(window);

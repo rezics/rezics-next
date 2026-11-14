@@ -1,10 +1,11 @@
+import { workbenchCopy } from '../studio/workbench-copy';
+import { getLocale } from '../paraglide/runtime.js';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { editionDocumentDigest } from '../content-editions/edition-model';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
 import { StudioWorkspace } from '../studio';
 import type { StudioInput, StudioPort, StudioResult, StudioSelection } from '../studio/contract';
 
@@ -165,6 +166,7 @@ type Story = StoryObj<typeof meta>;
 
 async function compose(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: workbenchCopy[getLocale()].newDraft, exact: true }));
   const form = await canvas.findByRole('form', { name: m.studio_account_create() });
   const fields = within(form);
   await userEvent.type(fields.getByRole('textbox', { name: m.studio_account_board() }), id(7));
@@ -241,7 +243,9 @@ export const AcknowledgedTransition: Story = {
     await expect(editor.querySelector('h2')).toHaveTextContent('Before the boats return');
     await expect(editor.querySelector('table')).toHaveTextContent('Two returning boats');
     await expect(canvas.getByRole('heading', { name: title, exact: true })).toHaveFocus();
+    await userEvent.click(canvas.getByRole('button', { name: workbenchCopy[getLocale()].newDraft, exact: true }));
     await expect(fields.getByRole('textbox', { name: m.studio_account_title() })).toHaveValue('');
+    await userEvent.click(canvas.getByRole('button', { name: workbenchCopy[getLocale()].returnToDocument }));
     await userEvent.click(editor);
     await userEvent.keyboard('{End} More private editing.');
     await waitFor(() => expect(editor).toHaveTextContent('More private editing.'));
@@ -257,6 +261,7 @@ export const VisitReplacement: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Replace account visit' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Finish old response' }));
     await expect(editor).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: workbenchCopy[getLocale()].newDraft, exact: true }));
     const destination = canvas.getByRole('textbox', { name: m.studio_account_board() });
     await userEvent.click(destination);
     await expect(destination).toHaveValue('');

@@ -441,11 +441,25 @@
   font-variant-numeric: tabular-nums;
 }
 .studio-writing-canvas,
+.studio-creation-canvas,
 .studio-history-canvas {
   padding: clamp(0.75rem, 2vw, 1.5rem);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   background: var(--background);
+}
+.studio-creation-canvas {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+.studio-creation-canvas > button {
+  align-self: start;
+}
+.studio-creation-canvas :is(.studio-native-create, .studio-new-draft) {
+  inline-size: 100%;
+  max-inline-size: none;
+  margin-block-start: 0;
+  border-block-start: 0;
 }
 .studio-writing-canvas > label {
   font-size: 0.8rem;

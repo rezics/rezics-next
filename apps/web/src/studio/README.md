@@ -115,6 +115,38 @@ Book parts retain their native nested order. The draft inventory lists only docu
 outline, avoiding repeated chapter navigation. Column series context stays distinct from independent articles.
 The original `pages-studio-workbench--book` story renders this same workspace and controller in AppShell.
 
+Decision: Book and Column use an explicit document/creation canvas choice, retaining one selected editor and one
+lazily mounted unsent form outside Shell navigation; first-save acknowledgement clears only its submitted version.
+The header's **New draft** opens the central creation canvas, including when navigation is collapsed. Idle workspaces
+show their empty canvas until that action. Native creation composes and previews its structured body there; simple
+creation retains the installed title-only blank-draft command, with body editing and preview after first save.
+Each has exactly one form owner. **Return to documents** hides creation without discarding it. Returning to the same
+selection performs no read and preserves Write/Preview/history choice, saved-version confirmation, caret and undo.
+Reopening creation restores its own form, metadata, editor and selection. Hidden owners are inert and outside the
+tab order; their reading inspectors retire on hide and reopen as fresh readers.
+
+Opening creation from a dirty selection uses Save and switch / Discard and switch / Keep editing. Pending snapshots
+and uploads retain their existing save/discard restrictions; a cancelled switch cannot resume after a late save.
+Changing the selected document uses the same controller guard and retains the independent unsent form. Both forms
+contribute to departure protection while hidden. Sending or unknown creation retains its original command and explicit
+replay; the retained form remains reachable. An acknowledgement opens the saved document only when it clears that
+form version; newer unsent edits remain in creation. Account/session, locale and visit replacement retire both owners.
+Publication, Book activation and producer authority keep their installed controllers.
+
+Sources read before this choice: this guide, [Shell current workspace navigation](../shell/README.md#current-workspace-navigation),
+[shared editor and document body](../../../../packages/ui/README.md#editor-and-document-body), `workspace.tsx`,
+`native-draft-composer.tsx`, the controller's open/discard/save/create/retry owners and `contract.ts`, focused workspace
+and native tests, native/rich-create and ordinary workbench stories, Shell's contextual navigation and Menu owner,
+and the read-only main checkout's `.reference/INDEX.md`. This is a local placement/lifetime choice.
+Focused acceptance source adds Book/Column dirty creation entry, pending snapshot/upload restrictions, retained
+simple/native forms and selected editors, history continuity and same-intent creation replay with newer edits.
+Existing language, native first-save and rich-preview assertions remain, with explicit entry and cleared-form reentry.
+The original Book/Column story IDs remain stable; named creation stories cover both simple profiles.
+Remaining exceptions: simple creation has no unsent body command; phone document-selection buttons do not yet dismiss
+Shell's Menu (its `closeOnNavigation` currently handles anchors). That Shell/UI gap is handed off to Web. Real first-save,
+dirty switch/cancel, preview/history, original native authoring, keyboard and phone/desktop acceptance at the original
+URLs remain separate verifier work, as do compiler, tests, build and browser/capture execution.
+
 The document toolbar offers Save and one action that changes between Preview and Write. Version history is a
 secondary disclosure opened only by an explicit action; it temporarily occupies the canvas and closes back to the
 same writing canvas. Opening history requests its first bounded metadata page only when none is retained. Reopening
@@ -138,7 +170,8 @@ presentation while the title input remains empty. Publication, final whole-Book 
 contracts retain their existing owners.
 
 Cost: one selected editor, no additional document store, one existing bounded organizer and history page, and no new
-fetch effect, polling, per-row body hydration or prefetch. Sidebar contributions retain their mounted form owners.
+fetch effect, polling, per-row body hydration or prefetch. Creation and editor owners stay in the central canvas;
+Shell contributions contain document choices and existing bounded organizer actions.
 
 Source-first choice: commit product and focused acceptance source; diff/format review only. Compiler, tests, build,
 browser/captures, old-editor parity, native acceptance and eight-locale phone/desktop/keyboard verification are deferred

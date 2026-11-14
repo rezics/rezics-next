@@ -3,6 +3,8 @@ import type { Locale } from '../paraglide/runtime.js';
 /** Short navigation labels; existing editing, release and failure messages retain their owners. */
 const en = {
   closeHistory: 'Close history',
+  newDraft: 'New draft',
+  returnToDocument: 'Return to documents',
   historyHelp:
     'History compares saved versions. Your working draft stays in the editor; copying a version requires a separate confirmation.',
   draftActions: 'Draft actions',
@@ -16,6 +18,8 @@ export const workbenchCopy: Record<Locale, typeof en> = {
   en,
   'zh-Hant': {
     closeHistory: '關閉歷史記錄',
+    newDraft: '新增草稿',
+    returnToDocument: '返回文件',
     historyHelp: '歷史記錄比較已儲存的版本。編輯器會保留目前的草稿；複製版本需要另外確認。',
     draftActions: '草稿操作',
     publication: '準備與發布',
@@ -26,6 +30,8 @@ export const workbenchCopy: Record<Locale, typeof en> = {
   },
   'zh-Hans': {
     closeHistory: '关闭历史记录',
+    newDraft: '新建草稿',
+    returnToDocument: '返回文稿',
     historyHelp: '历史记录比较已保存的版本。编辑器会保留当前草稿；复制版本需要另外确认。',
     draftActions: '草稿操作',
     publication: '准备与发布',
@@ -36,6 +42,8 @@ export const workbenchCopy: Record<Locale, typeof en> = {
   },
   ja: {
     closeHistory: '履歴を閉じる',
+    newDraft: '新しい下書き',
+    returnToDocument: '文書に戻る',
     historyHelp: '履歴では保存済みの版を比較します。編集中の下書きは保持され、版をコピーするには別途確認が必要です。',
     draftActions: '下書きの操作',
     publication: '公開の準備',
@@ -46,6 +54,8 @@ export const workbenchCopy: Record<Locale, typeof en> = {
   },
   ko: {
     closeHistory: '기록 닫기',
+    newDraft: '새 초안',
+    returnToDocument: '문서로 돌아가기',
     historyHelp:
       '저장된 버전을 비교합니다. 작성 중인 초안은 편집기에 유지되며 버전을 복사하려면 별도의 확인이 필요합니다.',
     draftActions: '초안 작업',
@@ -57,6 +67,8 @@ export const workbenchCopy: Record<Locale, typeof en> = {
   },
   de: {
     closeHistory: 'Verlauf schließen',
+    newDraft: 'Neuer Entwurf',
+    returnToDocument: 'Zurück zu den Dokumenten',
     historyHelp:
       'Der Verlauf vergleicht gespeicherte Versionen. Dein Entwurf bleibt im Editor; das Kopieren einer Version erfordert eine eigene Bestätigung.',
     draftActions: 'Entwurfsaktionen',
@@ -68,6 +80,8 @@ export const workbenchCopy: Record<Locale, typeof en> = {
   },
   fr: {
     closeHistory: 'Fermer l’historique',
+    newDraft: 'Nouveau brouillon',
+    returnToDocument: 'Revenir aux documents',
     historyHelp:
       'L’historique compare les versions enregistrées. Le brouillon reste dans l’éditeur ; copier une version demande une confirmation distincte.',
     draftActions: 'Actions sur le brouillon',
@@ -79,6 +93,8 @@ export const workbenchCopy: Record<Locale, typeof en> = {
   },
   es: {
     closeHistory: 'Cerrar historial',
+    newDraft: 'Nuevo borrador',
+    returnToDocument: 'Volver a los documentos',
     historyHelp:
       'El historial compara versiones guardadas. El borrador permanece en el editor; copiar una versión requiere una confirmación aparte.',
     draftActions: 'Acciones del borrador',

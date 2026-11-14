@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -106,7 +107,19 @@ export function StudioWorkbench({
   const [focusHistory, setFocusHistory] = useState(false);
   const writingCanvas = useRef<HTMLElement>(null);
   const historyHeading = useRef<HTMLHeadingElement>(null);
-  const [pendingOpen, setPendingOpen] = useState<string | null>(null);
+  const [canvas, setCanvas] = useState<'document' | 'create'>('document');
+  const [creationVisited, setCreationVisited] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState<{ kind: 'create' } | { kind: 'document'; post: string } | null>(null);
+  const pendingDestination = useRef(pendingOpen);
+  pendingDestination.current = pendingOpen;
+  const creationCanvas = useRef<HTMLElement>(null);
+  const [focusCanvas, setFocusCanvas] = useState(false);
+  const focusCreated = useRef(false);
+  const created = useCallback(() => {
+    focusCreated.current = true;
+    setCanvas('document');
+    setFocusCanvas(true);
+  }, []);
   const [discard, setDiscard] = useState(false);
   const [nativeDraftRisk, setNativeDraftRisk] = useState(false);
   const [nativeCreationPending, setNativeCreationPending] = useState(false);
@@ -171,14 +184,15 @@ export function StudioWorkbench({
     const save = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        if (!startingBook) void controller.save();
+        if (!startingBook && canvas === 'document') void controller.save();
       }
     };
     window.addEventListener('keydown', save);
     return () => window.removeEventListener('keydown', save);
-  }, [controller, startingBook]);
+  }, [controller, startingBook, canvas]);
   useEffect(() => {
     if (
+      canvas !== 'document' ||
       !selected?.dirty ||
       selected.snapshotPending ||
       selected.invalid ||
@@ -190,23 +204,23 @@ export function StudioWorkbench({
       return;
     const timer = window.setTimeout(() => void controller.save(), 1200);
     return () => window.clearTimeout(timer);
-  }, [controller, selected, blocked, state.issue]);
+  }, [controller, selected, blocked, state.issue, canvas]);
   useEffect(() => {
     if (postId && previousPost.current !== postId) {
       setView('write');
       setHistoryOpen(false);
       setHistoryVisited(false);
       setDiscard(false);
-      editorHeading.current?.focus({ preventScroll: true });
+      if (canvas === 'document') editorHeading.current?.focus({ preventScroll: true });
     }
     previousPost.current = postId;
   }, [postId]);
 
   useLayoutEffect(() => {
-    if (!returnToAuthoring || historyOpen || view !== 'write') return;
+    if (canvas !== 'document' || !returnToAuthoring || historyOpen || view !== 'write') return;
     authoringSelection.restore();
     setReturnToAuthoring(false);
-  }, [returnToAuthoring, historyOpen, view, authoringSelection]);
+  }, [returnToAuthoring, historyOpen, view, authoringSelection, canvas]);
 
   function closePreview() {
     setView('write');
@@ -230,12 +244,48 @@ export function StudioWorkbench({
     setFocusHistory(false);
   }, [focusHistory, historyOpen]);
 
-  function open(post: string) {
-    if (post === postId) return;
-    if (selected?.dirty || selected?.snapshotPending || selected?.uploading) {
-      setPendingOpen(post);
+  useLayoutEffect(() => {
+    if (!focusCanvas) return;
+    if (canvas === 'create') creationCanvas.current?.focus({ preventScroll: true });
+    else if (focusCreated.current) editorHeading.current?.focus({ preventScroll: true });
+    else if (!historyOpen && view === 'write' && selected) authoringSelection.restore();
+    else document.getElementById(`${id}-document`)?.focus({ preventScroll: true });
+    setFocusCanvas(false);
+    focusCreated.current = false;
+  }, [focusCanvas, canvas, historyOpen, view, selected, authoringSelection, id]);
+
+  function showCreation() {
+    setCreationVisited(true);
+    setCanvas('create');
+    setFocusCanvas(!creationVisited);
+  }
+  function returnToDocument() {
+    setCanvas('document');
+    setFocusCanvas(true);
+  }
+  function newDraft() {
+    if ((blocked && !nativeCreationPending) || !input.canCreateDraft) return;
+    if (nativeCreationPending) {
+      showCreation();
       return;
     }
+    if (selected?.dirty || selected?.snapshotPending || selected?.uploading) {
+      setPendingOpen({ kind: 'create' });
+      return;
+    }
+    showCreation();
+  }
+  function open(post: string) {
+    if (blocked) return;
+    if (post === postId) {
+      returnToDocument();
+      return;
+    }
+    if (selected?.dirty || selected?.snapshotPending || selected?.uploading) {
+      setPendingOpen({ kind: 'document', post });
+      return;
+    }
+    returnToDocument();
     setView('write');
     setHistoryOpen(false);
     void controller.open(post);
@@ -246,8 +296,15 @@ export function StudioWorkbench({
     if (save) {
       if (!(await controller.save()) || controller.snapshot().selected?.dirty) return;
     } else controller.discard();
-    if (await controller.open(target)) {
+    if (pendingDestination.current !== target) return;
+    const live = controller.snapshot().selected;
+    if (!controller.current() || live?.dirty || live?.snapshotPending || live?.uploading) return;
+    if (target.kind === 'create') {
       setPendingOpen(null);
+      showCreation();
+    } else if (await controller.open(target.post)) {
+      setPendingOpen(null);
+      returnToDocument();
       setView('write');
       setHistoryOpen(false);
     }
@@ -269,7 +326,18 @@ export function StudioWorkbench({
             <p className="studio-help">{input.profile.seriesTitle}</p>
           ) : null}
         </div>
-        <a className="studio-skip" href={`#${id}-document`}>
+        {input.canCreateDraft ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={blocked && !nativeCreationPending}
+            aria-pressed={canvas === 'create'}
+            onClick={newDraft}
+          >
+            {copy.newDraft}
+          </Button>
+        ) : null}
+        <a className="studio-skip" href={`#${id}-${canvas === 'create' ? 'creation' : 'document'}`}>
           {m.studio_workspace_skip({}, options)}
         </a>
       </header>
@@ -322,7 +390,15 @@ export function StudioWorkbench({
             >
               {m.studio_workspace_discard_switch({}, options)}
             </Button>
-            <Button type="button" variant="outline" onClick={() => setPendingOpen(null)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setPendingOpen(null);
+                pendingDestination.current = null;
+                setFocusCanvas(true);
+              }}
+            >
               {m.studio_workspace_keep_editing({}, options)}
             </Button>
           </div>
@@ -369,7 +445,7 @@ export function StudioWorkbench({
                   <Button
                     type="button"
                     variant="ghost"
-                    aria-current={postId === document.postId ? 'page' : undefined}
+                    aria-current={canvas === 'document' && postId === document.postId ? 'page' : undefined}
                     disabled={blocked || document.openable === false}
                     onClick={() => open(document.postId)}
                   >
@@ -404,24 +480,6 @@ export function StudioWorkbench({
                   : m.studio_workspace_next({}, options)}
               </Button>
             ) : null}
-            {input.nativeDrafts ? (
-              <NativeDraftComposer
-                key={`${input.visitKey}:${locale}`}
-                controller={controller}
-                disabled={
-                  !input.canCreateDraft ||
-                  blocked ||
-                  Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)
-                }
-                onDepartureRiskChange={setNativeDraftRisk}
-                onCommandPendingChange={setNativeCreationPending}
-              />
-            ) : input.canCreateDraft ? (
-              <NewDraft
-                controller={controller}
-                disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
-              />
-            ) : null}
           </section>
           <details className="studio-technical">
             <summary>{copy.workDetails}</summary>
@@ -430,7 +488,52 @@ export function StudioWorkbench({
         </fieldset>
       </ShellContextNavigation>
       <fieldset className="studio-layout min-w-0" disabled={startingBook}>
-        <div id={`${id}-document`} className="studio-document" tabIndex={-1}>
+        {creationVisited ? (
+          <section
+            id={`${id}-creation`}
+            ref={creationCanvas}
+            hidden={canvas !== 'create'}
+            inert={canvas !== 'create'}
+            tabIndex={-1}
+            aria-label={copy.newDraft}
+            className="studio-creation-canvas studio-stack"
+          >
+            <Button type="button" variant="outline" onClick={returnToDocument}>
+              {copy.returnToDocument}
+            </Button>
+            {input.nativeDrafts ? (
+              <NativeDraftComposer
+                key={`${input.visitKey}:${locale}`}
+                controller={controller}
+                active={canvas === 'create'}
+                disabled={
+                  !input.canCreateDraft ||
+                  blocked ||
+                  Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)
+                }
+                onDepartureRiskChange={setNativeDraftRisk}
+                onCommandPendingChange={setNativeCreationPending}
+                onCreated={created}
+              />
+            ) : (
+              <NewDraft
+                controller={controller}
+                active={canvas === 'create'}
+                disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
+                onDepartureRiskChange={setNativeDraftRisk}
+                onCommandPendingChange={setNativeCreationPending}
+                onCreated={created}
+              />
+            )}
+          </section>
+        ) : null}
+        <div
+          id={`${id}-document`}
+          className="studio-document"
+          hidden={canvas !== 'document'}
+          inert={canvas !== 'document'}
+          tabIndex={-1}
+        >
           {selected ? (
             <>
               <header className="studio-document-heading">
@@ -608,7 +711,7 @@ export function StudioWorkbench({
                   </div>
                 </WorkbenchRegion>
               </section>
-              {view === 'preview' && !historyOpen ? (
+              {canvas === 'document' && view === 'preview' && !historyOpen ? (
                 <WorkingPreview
                   controller={controller}
                   selected={selected}
@@ -636,7 +739,7 @@ export function StudioWorkbench({
                     controller={controller}
                     state={state}
                     presentation={presentation}
-                    active={historyOpen}
+                    active={canvas === 'document' && historyOpen}
                     headingRef={historyHeading}
                     workingHelp={copy.historyHelp}
                   />
@@ -651,9 +754,6 @@ export function StudioWorkbench({
                   ? m.studio_workspace_empty_create({}, options)
                   : m.studio_workspace_empty_open({}, options)}
               </p>
-              {input.canCreateDraft && !input.nativeDrafts ? (
-                <NewDraft controller={controller} disabled={blocked} />
-              ) : null}
             </section>
           )}
           <div className="studio-publication-region">
@@ -679,7 +779,7 @@ export function StudioWorkbench({
         </div>
       </fieldset>
       {starter ? (
-        <div className="studio-book-start-region">
+        <div className="studio-book-start-region" hidden={canvas !== 'document'} inert={canvas !== 'document'}>
           <HostedBookStartAction
             state={startState}
             eligible={Boolean(savedOpeningForBook(state)) && !unresolved && starter.isCurrent()}
@@ -763,19 +863,100 @@ function WorkingPreview({
   );
 }
 
-function NewDraft({ controller, disabled }: { controller: StudioController; disabled: boolean }) {
-  const [title, setTitle] = useState('');
+function NewDraft({
+  controller,
+  active,
+  disabled,
+  onDepartureRiskChange,
+  onCommandPendingChange,
+  onCreated,
+}: {
+  controller: StudioController;
+  active: boolean;
+  disabled: boolean;
+  onDepartureRiskChange: (atRisk: boolean) => void;
+  onCommandPendingChange: (pending: boolean) => void;
+  onCreated: () => void;
+}) {
+  const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  const [form, setForm] = useState({ title: '', version: 0 });
+  const currentForm = useRef(form);
+  const submitted = useRef<typeof form | null>(null);
+  const [pending, setPending] = useState(false);
+  const formElement = useRef<HTMLFormElement>(null);
+  const selection = useAuthoringSelection(formElement, String(form.version));
+  const previouslyActive = useRef(active);
   const options = { locale: getLocale() };
   const id = useId();
+  useLayoutEffect(() => {
+    if (active && !previouslyActive.current) selection.restore();
+    previouslyActive.current = active;
+  }, [active, selection]);
+  useEffect(() => {
+    onDepartureRiskChange(Boolean(form.title || pending));
+    return () => onDepartureRiskChange(false);
+  }, [form, pending, onDepartureRiskChange]);
+  useEffect(() => {
+    onCommandPendingChange(pending);
+    return () => onCommandPendingChange(false);
+  }, [pending, onCommandPendingChange]);
+  useEffect(() => {
+    const attempt = submitted.current;
+    if (!attempt || state.operation || !controller.current()) return;
+    if (state.result === 'created') {
+      submitted.current = null;
+      setPending(false);
+      if (currentForm.current.version === attempt.version) {
+        const empty = { title: '', version: attempt.version + 1 };
+        currentForm.current = empty;
+        setForm(empty);
+        onCreated();
+      }
+    } else if (state.issue && !controller.hasUnresolvedCommand()) {
+      submitted.current = null;
+      setPending(false);
+    }
+  }, [controller, state.operation, state.result, state.issue, onCreated]);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (await controller.createDraft(title)) setTitle('');
+    if (!active || disabled || submitted.current || !currentForm.current.title.trim()) return;
+    const attempt = currentForm.current;
+    submitted.current = attempt;
+    setPending(true);
+    await controller.createDraft(attempt.title);
+    if (!controller.hasUnresolvedCommand() && controller.snapshot().result !== 'created') {
+      submitted.current = null;
+      setPending(false);
+    }
   }
   return (
-    <form className="studio-new-draft studio-stack" onSubmit={(event) => void submit(event)}>
+    <form
+      ref={formElement}
+      className="studio-new-draft studio-stack"
+      aria-label={workbenchCopy[getLocale()].newDraft}
+      onBlurCapture={(event) => selection.remember(event.target)}
+      onKeyDown={(event) => {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+          event.preventDefault();
+          event.stopPropagation();
+          formElement.current?.requestSubmit();
+        }
+      }}
+      onSubmit={(event) => void submit(event)}
+    >
       <label htmlFor={id}>{m.studio_workspace_new_title({}, options)}</label>
-      <Input id={id} value={title} required disabled={disabled} onChange={(event) => setTitle(event.target.value)} />
-      <Button type="submit" disabled={disabled || !title.trim()}>
+      <Input
+        id={id}
+        value={form.title}
+        required
+        disabled={disabled && !pending}
+        onChange={(event) => {
+          const next = { title: event.target.value, version: currentForm.current.version + 1 };
+          currentForm.current = next;
+          setForm(next);
+        }}
+      />
+      <Button type="submit" disabled={disabled || pending || !form.title.trim()}>
         {m.studio_workspace_create({}, options)}
       </Button>
       {disabled ? <p className="studio-help">{m.studio_workspace_create_wait({}, options)}</p> : null}
