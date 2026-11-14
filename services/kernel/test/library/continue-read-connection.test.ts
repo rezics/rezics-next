@@ -36,8 +36,10 @@ test('a checkout that arrives after expiry issues no SQL and is released', async
     },
     () => released(),
   );
-  const visit = withContinueReadSnapshot(fakePool(() => checkout.promise), Date.now() + 50, async (client) =>
-    client.query('SELECT late'),
+  const visit = withContinueReadSnapshot(
+    fakePool(() => checkout.promise),
+    Date.now() + 50,
+    async (client) => client.query('SELECT late'),
   );
 
   await expect(visit).rejects.toBeDefined();
