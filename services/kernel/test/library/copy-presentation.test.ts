@@ -3,6 +3,8 @@ import type { LibraryProfile, Release } from '@rezics/definitions';
 import { presentCopy } from '../../src/library/copy-presentation.ts';
 import type { Copy } from '../../src/library/entry-model.ts';
 import type { LibraryProfileSource } from '../../src/library/profile-source.ts';
+import type { Pool, PoolClient } from 'pg';
+import { withCopyReadConnection } from '../../src/library/copy-read-connection.ts';
 
 const profile: LibraryProfile = {
   id: 'holdings',
@@ -58,6 +60,102 @@ const notRecordedConditions = {
   packagingCondition: { state: 'not_recorded' },
   conditionEditing: expect.objectContaining({ state: 'unavailable' }),
 } as const;
+
+function copyReadPool(connect: () => Promise<PoolClient>): Pool {
+  return { connect } as unknown as Pool;
+}
+
+function copyReadClient(
+  query: (statement: string | { text: string }) => Promise<unknown>,
+  release: (error?: Error) => void,
+): PoolClient {
+  return {
+    query: ((statement: string | { text: string }) => query(statement)) as PoolClient['query'],
+    release,
+  } as unknown as PoolClient;
+}
+
+function statementText(statement: string | { text: string }): string {
+  return typeof statement === 'string' ? statement : statement.text;
+}
+
+test('Copy read deadlines reject blocked checkout and discard an in-flight query client', async () => {
+  let resolveCheckout!: (client: PoolClient) => void;
+  const checkout = new Promise<PoolClient>((resolve) => {
+    resolveCheckout = resolve;
+  });
+  const lateStatements: string[] = [];
+  let releaseLate!: (error?: Error) => void;
+  const lateReleased = new Promise<Error | undefined>((resolve) => {
+    releaseLate = resolve;
+  });
+  const lateClient = copyReadClient(
+    (statement) => {
+      lateStatements.push(statementText(statement));
+      return Promise.resolve({ rows: [] });
+    },
+    releaseLate,
+  );
+  const lateRead = withCopyReadConnection(copyReadPool(() => checkout), Date.now() + 50, (client) =>
+    client.query('SELECT 1'),
+  );
+  await expect(lateRead).rejects.toThrow();
+  resolveCheckout(lateClient);
+  await lateReleased;
+  expect(lateStatements).toEqual([]);
+
+  const blockedStatements: string[] = [];
+  let releaseBlocked!: (error?: Error) => void;
+  const blockedReleased = new Promise<Error | undefined>((resolve) => {
+    releaseBlocked = resolve;
+  });
+  const blockedClient = copyReadClient(
+    (statement) => {
+      blockedStatements.push(statementText(statement));
+      return new Promise(() => {});
+    },
+    releaseBlocked,
+  );
+  const blockedRead = withCopyReadConnection(
+    copyReadPool(async () => blockedClient),
+    Date.now() + 50,
+    (client) => client.query('SELECT 1'),
+  );
+  await expect(blockedRead).rejects.toThrow();
+  expect(await blockedReleased).toBeInstanceOf(Error);
+  expect(blockedStatements).toEqual(['SELECT 1']);
+});
+
+test('successful Copy detail read keeps its read-only transaction', async () => {
+  const statements: string[] = [];
+  let releaseError: Error | undefined;
+  const client = copyReadClient(
+    (statement) => {
+      statements.push(statementText(statement));
+      return Promise.resolve({ rows: [] });
+    },
+    (error) => {
+      releaseError = error;
+    },
+  );
+
+  const result = await withCopyReadConnection(
+    copyReadPool(async () => client),
+    Date.now() + 500,
+    async (bounded) => {
+      await bounded.query('SELECT 1');
+      return 'read';
+    },
+    { transaction: true },
+  );
+  expect(result).toBe('read');
+  expect(statements).toEqual([
+    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+    'SELECT 1',
+    'COMMIT',
+  ]);
+  expect(releaseError).toBeUndefined();
+});
 
 test('exact accepted labels survive a current rename while current native status choices use their own actual language', () => {
   const current: LibraryProfile = {

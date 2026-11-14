@@ -142,7 +142,8 @@ The reader captures one actual copy and its private pins under current owner sco
 releases the owner snapshot, resolves the exact release and current source, then rechecks source identity/version,
 account authorization, owner partition epoch and exact copy/pin after optional summary rendering. Each foreign
 home is released before another is visited. Current subject disclosure is independent of historical labels and
-of the current profile's availability. Changes at the final fence fail closed.
+of the current profile's availability. Changes at the final fence fail closed. Every Copy-owned checkout and callback
+uses the original request deadline; late checkouts dispatch no SQL, and in-flight read clients are discarded on expiry.
 The existing Copy read action declares its actual own-account authority through the mounted action catalogue;
 this supplies native owner permission while retaining principal and denial checks. Missing credential scope is
 refused by that admission with `403`, and another owner's copy remains indistinguishable from a missing copy.

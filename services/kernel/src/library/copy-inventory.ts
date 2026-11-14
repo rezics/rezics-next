@@ -4,8 +4,8 @@ import type { NativeCopyDefinitions } from './copy-model.ts';
 import { chooseLabel } from '@rezics/definitions';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import { resolveLibraryProfilePin } from './profile.ts';
-import { deadlineClient } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { withCopyReadConnection } from './copy-read-connection.ts';
+import { remaining } from '../access/deadline.ts';
 import {
   COPY_FILTER_OPTION_QUERY_LIMIT,
   MAX_COPY_FILTER_OPTIONS_BYTES,
@@ -134,13 +134,16 @@ export async function prepareCopyInventory(
   const digests = new Set([...pins.values()].flatMap((pin) => (pin ? [pin.releaseDigest] : [])));
   for (const digest of digests) {
     try {
-      const release = await withConnection(pool, (client) =>
-        definitions.read(deadlineClient(client, deadline), digest, { composed: false }),
+      const release = await withCopyReadConnection(pool, deadline, (client) =>
+        definitions.read(client, digest, { composed: false }),
       );
       snapshots.set(digest, release ? { digest, release } : null);
     } catch {
       snapshots.set(digest, null);
+      remaining(deadline);
     }
   }
-  return presentCopyInventory(values, snapshots, languages);
+  const inventory = presentCopyInventory(values, snapshots, languages);
+  remaining(deadline);
+  return inventory;
 }

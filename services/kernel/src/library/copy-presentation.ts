@@ -10,6 +10,8 @@ import type { CopyPresentation } from './copy-model.ts';
 import type { Copy } from './entry-model.ts';
 import { hasCopyStatus, resolveLibraryProfilePin, type LibraryProfilePin } from './profile.ts';
 import type { LibraryProfileSource, LibraryProfileSourceDependencies, LibraryProfileAnchor } from './profile-source.ts';
+import { withCopyReadConnection } from './copy-read-connection.ts';
+import { remaining } from '../access/deadline.ts';
 
 export type CopyPresentationFact = {
   copy: Copy;
@@ -141,12 +143,13 @@ export async function prepareCopyPresentation(
     if (!pin || snapshots.has(pin.releaseDigest)) continue;
     let snapshot: Snapshot = null;
     try {
-      const release = await definitions.read(deps.pool, pin.releaseDigest, {
-        composed: false,
-      });
+      const release = await withCopyReadConnection(deps.pool, deps.deadline, (client) =>
+        definitions.read(client, pin.releaseDigest, { composed: false }),
+      );
       if (release) snapshot = { digest: pin.releaseDigest, release };
     } catch {
       // Optional display dependency failure cannot select another release.
+      remaining(deps.deadline);
     }
     snapshots.set(pin.releaseDigest, snapshot);
   }
@@ -155,6 +158,7 @@ export async function prepareCopyPresentation(
     source = observed?.source ?? null;
     anchor = observed?.anchor ?? null;
   } catch {
+    remaining(deps.deadline);
     // Concealed or failed current evidence cannot prove retirement.
     try {
       anchor = await profileSource.anchor(deps, fact.copy.subjectId);
@@ -162,15 +166,17 @@ export async function prepareCopyPresentation(
       // Current summaries remain independently unavailable on source failure.
     }
   }
+  const presentation = presentCopy(
+    fact,
+    fact.kindPin ? (snapshots.get(fact.kindPin.releaseDigest) ?? null) : null,
+    source,
+    languages,
+    fact.statusPin ? (snapshots.get(fact.statusPin.releaseDigest) ?? null) : null,
+    snapshots,
+  );
+  remaining(deps.deadline);
   return {
-    presentation: presentCopy(
-      fact,
-      fact.kindPin ? (snapshots.get(fact.kindPin.releaseDigest) ?? null) : null,
-      source,
-      languages,
-      fact.statusPin ? (snapshots.get(fact.statusPin.releaseDigest) ?? null) : null,
-      snapshots,
-    ),
+    presentation,
     disclosure: { subject: anchor !== null },
     async verify(at: AuthoritativeTime) {
       if (anchor && !sameCopyProfileAnchor(anchor, await profileSource.anchor({ ...deps, at }, fact.copy.subjectId)))

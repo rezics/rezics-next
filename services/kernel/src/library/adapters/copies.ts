@@ -5,7 +5,6 @@ import {
   type AuthoritativeTime,
   type CommandTransaction,
 } from '../../command/command.ts';
-import { withConnection } from '../../database/pool.ts';
 import { receiptKeysFor } from '../../command/receipt-key.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { readPartition } from '../../partition/partition.ts';
@@ -33,7 +32,8 @@ import type { LibraryProfileSource } from '../profile-source.ts';
 import { sameCopyProfileAnchor } from '../copy-model.ts';
 import type { NativeCopyConfig, NativeCopyProducers, CopySourceObservation } from '../copy-model.ts';
 export type { NativeCopyConfig, NativeCopyProducers } from '../copy-model.ts';
-import { deadlineClient, within } from '../access-port.ts';
+import { within } from '../access-port.ts';
+import { withCopyReadConnection } from '../copy-read-connection.ts';
 import type { CopyPresentation } from '../copy-model.ts';
 import { prepareCopyPresentation } from '../copy-presentation.ts';
 import { prepareCopyInventory, readCopyInventoryValues } from '../copy-inventory.ts';
@@ -140,21 +140,17 @@ export function createNativeCopyPorts(
   async function readOnly<T>(
     owner: AccountActor,
     body: (client: CommandTransaction) => Promise<T>,
-    deadline?: number,
+    deadline: number,
   ): Promise<T> {
-    return withConnection(pool, async (client) => {
-      const bounded = deadline === undefined ? client : deadlineClient(client, deadline);
-      await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        await producers.account.admit(bounded, owner);
-        const result = await body(bounded);
-        await bounded.query('COMMIT');
-        return result;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
-    });
+    return withCopyReadConnection(
+      pool,
+      deadline,
+      async (client) => {
+        await producers.account.admit(client, owner);
+        return body(client);
+      },
+      { transaction: true },
+    );
   }
 
   function preparedCurrentSource(
@@ -188,14 +184,13 @@ export function createNativeCopyPorts(
     return readOnly(
       owner,
       async (client) => {
-        const bounded = deadlineClient(client, deadline);
-        if (!(await check(bounded, at))) throw producers.account.denied();
-        const partition = await readPartition(bounded, partitionOf(route));
+        if (!(await check(client, at))) throw producers.account.denied();
+        const partition = await readPartition(client, partitionOf(route));
         const row = await copyDetailReadStatementPlan({
           route,
           copy_id: copyId,
           account_id: owner.accountId,
-        }).run(bounded);
+        }).run(client);
         if (!partition || !row) throw new LibraryNotFoundError();
         const { libraryProfilePin, kindProfilePin, statusProfilePin, mediaCondition, packagingCondition, ...value } =
           row;
@@ -231,11 +226,11 @@ export function createNativeCopyPorts(
     notFound: () => new LibraryNotFoundError(),
     problem: (code) => new ProblemError(code),
     gate: (owner, deadline) =>
-      withConnection(pool, (client) => producers.account.admit(deadlineClient(client, deadline), owner)),
+      withCopyReadConnection(pool, deadline, (client) => producers.account.admit(client, owner)),
     readOnly,
     within,
     request: withRequestDeadline,
-    time: (deadline) => withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock)),
+    time: (deadline) => withCopyReadConnection(pool, deadline, (client) => mintReadTime(client, clock)),
     releaseTime: releaseOperationalTime,
     receiptKeys: () => receiptKeysFor(pool).keys.size,
     run(owner, spec, body) {
@@ -336,8 +331,8 @@ export function createNativeCopyPorts(
     async validateRetained(owner, row, attempt, deadline) {
       const pin = decodeLibraryProfilePin(row.status_profile_pin ?? row.library_profile_pin);
       if (pin) {
-        const release = await withConnection(pool, (client) =>
-          producers.definitions.read(deadlineClient(client, deadline), pin.releaseDigest),
+        const release = await withCopyReadConnection(pool, deadline, (client) =>
+          producers.definitions.read(client, pin.releaseDigest),
         );
         const profile = release ? resolveLibraryProfilePin({ digest: pin.releaseDigest, release }, pin) : null;
         if (!profile || row.kind === null || !hasCopyStatus(profile, row.kind, row.status))
@@ -345,8 +340,8 @@ export function createNativeCopyPorts(
       }
       const kindPin = decodeLibraryProfilePin(row.kind_profile_pin);
       if (kindPin) {
-        const release = await withConnection(pool, (client) =>
-          producers.definitions.read(deadlineClient(client, deadline), kindPin.releaseDigest, { composed: false }),
+        const release = await withCopyReadConnection(pool, deadline, (client) =>
+          producers.definitions.read(client, kindPin.releaseDigest, { composed: false }),
         );
         const profile = release ? resolveLibraryProfilePin({ digest: kindPin.releaseDigest, release }, kindPin) : null;
         if (!profile?.copies?.kinds.some((kind) => kind.id === row.kind))
