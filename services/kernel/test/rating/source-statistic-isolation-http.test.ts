@@ -23,8 +23,8 @@ type SourceStatistic = {
   observation?: { kind: 'unversioned'; digest: string };
 };
 
-function envelope(value: Omit<SourceStatistic, 'source'>): SourceStatistic {
-  return { source: 'vndb', ...value };
+function envelope(subjectId: string, value: Omit<SourceStatistic, 'source'>): SourceStatistic {
+  return { source: 'vndb', ...value, observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', value).digest } };
 }
 
 async function readJson(response: Response, status = 200): Promise<unknown> {
@@ -240,14 +240,14 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     licence: 'CC BY 4.0 - independent record',
     attribution: 'Independent subject attribution.',
   };
-  const otherEnvelope = envelope(otherSubjectValue);
+  const otherEnvelope = envelope(otherSubjectId, otherSubjectValue);
 
   const otherBeforeRefresh = await fixture.request('PUT', `/v1/subjects/${otherSubjectId}/source-statistics/vndb`, {
     actor: fixture.actors.secondImporter,
     body: otherSubjectValue,
     key: randomUUID(),
   });
-  expect(await readJson(otherBeforeRefresh)).toEqual({ source: 'vndb', ...otherSubjectValue });
+  expect(await readJson(otherBeforeRefresh)).toEqual(otherEnvelope);
 
   const originalKey = randomUUID();
   const firstWrite = await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
@@ -255,7 +255,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     body: firstValue,
     key: originalKey,
   });
-  const firstEnvelope = envelope(firstValue);
+  const firstEnvelope = envelope(subjectId, firstValue);
   expect(await readJson(firstWrite)).toEqual(firstEnvelope);
   const replay = await fixture.request('PUT', `/v1/subjects/${subjectId}/source-statistics/vndb`, {
     actor: fixture.actors.importer,
@@ -281,7 +281,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     key: refreshKey,
   });
   const refreshedEnvelope: SourceStatistic = {
-    ...envelope(refreshedValue),
+    ...envelope(subjectId, refreshedValue),
     observation: { kind: 'unversioned', digest: sourceObservation(subjectId, 'vndb', refreshedValue).digest },
   };
   expectedImportedEnvelope = refreshedEnvelope;

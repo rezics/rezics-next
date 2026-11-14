@@ -65,12 +65,7 @@ function prefixPlans(value: unknown, seen: Set<string>): void {
     expect(node['Index Cond']).toContain('subject_id');
     if (relation !== 'source_statistic') expect(node['Index Cond']).toContain('source');
     if (relation === 'source_statistic_observation') {
-      const index = String(node['Index Name']);
-      if (index === 'source_statistic_observation_legacy_order_idx') {
-        expect(node['Index Cond']).toContain('source');
-      } else {
-        expect(node['Index Cond']).toMatch(/digest|local_order/);
-      }
+      expect(node['Index Cond']).toMatch(/digest|seek_order/);
     }
     expect((node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops']).toBeLessThanOrEqual(2);
   }

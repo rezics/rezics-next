@@ -10,6 +10,7 @@ WITH request AS NOT MATERIALIZED (
 SELECT observation.digest, observation.source_alias AS "sourceAlias",
        observation.source_record_id AS "sourceRecordId",
        observation.as_of::text AS "asOf", observation.payload_version AS "payloadVersion",
+       observation.seek_order::text AS "seekOrder",
        observation.local_order::text AS "nativeOrder", observation.local_order IS NULL AS legacy,
        input."subjectEpoch"
 FROM rating.source_statistic_observation AS observation

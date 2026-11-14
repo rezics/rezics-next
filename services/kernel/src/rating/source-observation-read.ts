@@ -16,7 +16,7 @@ import type { KernelClock } from '../clock.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { AccountActor } from '../request/access.ts';
-import { SourceFiguresSchema, SOURCE_OBSERVATION_MAX_BYTES, validSourceFigures } from './source-figures.ts';
+import { SourceFiguresSchema, SOURCE_OBSERVATION_MAX_BYTES } from './source-figures.ts';
 import {
   SOURCE_OBSERVATION_PAYLOAD_VERSION,
   sourceObservation,
@@ -26,15 +26,13 @@ import {
 } from './source-provider.ts';
 import headQuery from './source-observation-read-head.sql';
 import exactQuery from './source-observation-read-exact.sql';
-import nativeHistoryQuery from './source-observation-read-history-native.sql';
-import legacyHistoryQuery from './source-observation-read-history-legacy.sql';
+import historyQuery from './source-observation-read-history.sql';
 import payloadQuery from './source-observation-read-payload.sql';
-import legacyPayloadQuery from './source-observation-read-legacy-payload.sql';
 
 export const SOURCE_OBSERVATION_HISTORY_PAGE_SIZE = 1;
 export const SOURCE_OBSERVATION_READ_MAX_BYTES = 68_000;
 const HISTORY_CURSOR_OPERATION = 'rating.source-observation.history';
-const HISTORY_CURSOR_FORMAT = 'source-observation-history.v1';
+const HISTORY_CURSOR_FORMAT = 'source-observation-history.seek.v1';
 
 const closed = { additionalProperties: false } as const;
 const digestSchema = t.String({ pattern: '^[0-9a-f]{64}$' });
@@ -146,13 +144,14 @@ export type SourceObservationReadDependencies = Readonly<{
   clock?: KernelClock;
 }>;
 type MetaRow = Readonly<{
-  digest: string | null;
+  digest: string;
+  seekOrder: string;
+  projectionExists?: boolean;
   sourceAlias: string;
   sourceRecordId: string;
   asOf: string;
   payloadVersion: number;
   nativeOrder: string | null;
-  lastOrder?: string;
   legacy: boolean;
   subjectEpoch: string | null;
 }>;
@@ -166,15 +165,14 @@ type HistoryQueryRow = Readonly<{
   asOf: string | null;
   payloadVersion: number | null;
   nativeOrder: string | null;
+  seekOrder: string | null;
   legacy: boolean | null;
 }>;
 type PayloadRow = Readonly<{ digest: string; payload: unknown; payloadVersion: number }>;
 type Cursor = Readonly<{
-  kind: 'native' | 'legacy';
-  order: string | null;
+  order: string;
   digest: string;
-  nativeCeiling: string | null;
-  legacyCeiling: string | null;
+  ceiling: string;
 }>;
 export type SourceObservationReadInput = Readonly<{
   subjectId: string;
@@ -211,7 +209,7 @@ function historyCursorBinding(input: SourceObservationReadInput, route: number, 
       subjectId: input.subjectId,
       source,
       query: 'history=true',
-      order: 'native.local-order-desc+legacy.digest-desc.v1',
+      order: 'storage.seek-order-desc.v1',
       pageSize: SOURCE_OBSERVATION_HISTORY_PAGE_SIZE,
     },
   };
@@ -222,14 +220,7 @@ function validOrder(value: string): boolean {
 }
 
 function cursorAfter(cursor: Cursor): CursorKey[] {
-  return [
-    HISTORY_CURSOR_FORMAT,
-    cursor.kind,
-    cursor.order ?? '',
-    cursor.digest,
-    cursor.nativeCeiling ?? '',
-    cursor.legacyCeiling ?? '',
-  ];
+  return [HISTORY_CURSOR_FORMAT, cursor.order, cursor.digest, cursor.ceiling];
 }
 
 function readCursor(
@@ -238,44 +229,14 @@ function readCursor(
   binding: CursorBinding,
 ): DecodedCursor {
   const decoded = decodeCursor(dependencies.tokens, binding, value, ratingCapabilities(dependencies).clock().getTime());
-  if (!decoded.ok || decoded.after.length !== 6 || decoded.after.some((part) => typeof part !== 'string'))
+  if (!decoded.ok || decoded.after.length !== 4 || decoded.after.some((part) => typeof part !== 'string'))
     return invalidCursor();
-  const [format, kind, order, digest, nativeCeiling, legacyCeiling] = decoded.after as [
-    string,
-    string,
-    string,
-    string,
-    string,
-    string,
-  ];
-  const normalizedOrder = order === '' ? null : order;
-  const normalizedNativeCeiling = nativeCeiling === '' ? null : nativeCeiling;
-  const normalizedLegacyCeiling = legacyCeiling === '' ? null : legacyCeiling;
+  const [format, order, digest, ceiling] = decoded.after as [string, string, string, string];
   if (
-    format !== HISTORY_CURSOR_FORMAT ||
-    (kind !== 'native' && kind !== 'legacy') ||
-    !/^[0-9a-f]{64}$/.test(digest!) ||
-    (normalizedOrder !== null && !validOrder(normalizedOrder)) ||
-    (normalizedNativeCeiling !== null && !validOrder(normalizedNativeCeiling)) ||
-    (normalizedLegacyCeiling !== null && !/^[0-9a-f]{64}$/.test(normalizedLegacyCeiling)) ||
-    (kind === 'native' &&
-      (normalizedOrder === null ||
-        normalizedNativeCeiling === null ||
-        BigInt(normalizedOrder) > BigInt(normalizedNativeCeiling))) ||
-    (kind === 'legacy' &&
-      (normalizedOrder !== null || normalizedLegacyCeiling === null || digest! > normalizedLegacyCeiling))
-  )
-    return invalidCursor();
-  return {
-    epoch: decoded.epoch,
-    boundary: {
-      kind,
-      order: normalizedOrder,
-      digest: digest!,
-      nativeCeiling: normalizedNativeCeiling,
-      legacyCeiling: normalizedLegacyCeiling,
-    },
-  };
+    format !== HISTORY_CURSOR_FORMAT || !validOrder(order) || !validOrder(ceiling) ||
+    !/^[0-9a-f]{64}$/.test(digest) || BigInt(order) > BigInt(ceiling)
+  ) return invalidCursor();
+  return { epoch: decoded.epoch, boundary: { order, digest, ceiling } };
 }
 
 function encodeHistoryCursor(
@@ -303,6 +264,7 @@ function historyItems(rows: readonly HistoryQueryRow[]): { items: MetaRow[]; cur
       row.sourceRecordId === null ||
       row.asOf === null ||
       row.payloadVersion === null ||
+      row.seekOrder === null ||
       row.legacy === null
     )
       throw new ProblemError('partition_unavailable');
@@ -313,6 +275,7 @@ function historyItems(rows: readonly HistoryQueryRow[]): { items: MetaRow[]; cur
         sourceRecordId: row.sourceRecordId,
         asOf: row.asOf,
         payloadVersion: row.payloadVersion,
+        seekOrder: row.seekOrder,
         nativeOrder: row.nativeOrder,
         legacy: row.legacy,
         subjectEpoch: row.subjectEpoch,
@@ -415,50 +378,6 @@ function payloadOf(
   };
 }
 
-function legacyPayloadOf(
-  row: Record<string, unknown>,
-  metadata: MetaRow,
-  subjectId: string,
-  source: SourceProvider,
-): SourceObservationReadItem {
-  if (
-    row.source !== source ||
-    row.sourceAlias !== metadata.sourceAlias ||
-    row.sourceRecordId !== metadata.sourceRecordId ||
-    row.asOf !== metadata.asOf
-  )
-    throw new ProblemError('conflict');
-  const count = Number(row.count);
-  const figures = row.figures == null ? undefined : row.figures;
-  if (figures !== undefined && !validSourceFigures(source, figures, count))
-    throw new ProblemError('partition_unavailable');
-  const value = {
-    sourceAlias: metadata.sourceAlias,
-    sourceRecordId: metadata.sourceRecordId,
-    ...(figures === undefined ? {} : { figures }),
-    scale: { min: Number(row.scaleMin), max: Number(row.scaleMax) },
-    mean: Number(row.mean),
-    count,
-    asOf: metadata.asOf,
-    licence: String(row.licence),
-    attribution: String(row.attribution),
-  };
-  const observed = sourceObservation(subjectId, source, value);
-  if (!observationValidator().Check(observed.payload)) throw new ProblemError('partition_unavailable');
-  if (metadata.digest !== null && metadata.digest !== observed.digest) throw new ProblemError('partition_unavailable');
-  return {
-    digest: observed.digest,
-    payloadVersion: SOURCE_OBSERVATION_PAYLOAD_VERSION,
-    sourceAlias: metadata.sourceAlias,
-    sourceRecordId: metadata.sourceRecordId,
-    asOf: metadata.asOf,
-    nativeOrder: null,
-    legacy: true,
-    provenance: { kind: 'unversioned', digest: observed.digest },
-    payload: observed.payload as SourceObservationPayload,
-  };
-}
-
 function stateOf(observation: SourceObservationReadItem | null): 'empty' | 'published' | 'cleared' {
   if (observation === null) return 'empty';
   return observation.payload.count === 0 ? 'cleared' : 'published';
@@ -485,9 +404,12 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     route: number,
     cursor: Cursor | null,
   ) {
-    const currentRows = await query<MetaRow>(headQuery, { route, subject_id: input.subjectId, source }, input.deadline);
-    const current = currentRows[0] ?? null;
-    let subjectEpoch = subjectEpochOf(currentRows);
+    const currentRows = await query<MetaRow & { needsMaterialization: boolean; emptySubjectEpoch: string }>(
+      headQuery, { route, subject_id: input.subjectId, source }, input.deadline,
+    );
+    if (currentRows[0]?.needsMaterialization) throw new ProblemError('partition_unavailable');
+    const current = currentRows[0]?.digest ? currentRows[0] : null;
+    let subjectEpoch = subjectEpochOf(currentRows.map((row) => ({ subjectEpoch: row.subjectEpoch ?? row.emptySubjectEpoch })));
     if (input.digest !== undefined) {
       const selectedRows = await query<MetaRow>(
         exactQuery,
@@ -495,13 +417,11 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
         input.deadline,
       );
       subjectEpoch = mergeSubjectEpoch(subjectEpoch, subjectEpochOf(selectedRows));
-      let selected = selectedRows[0] ?? null;
-      const virtualLegacy = selected === null && current?.legacy && current.digest === null ? current : null;
-      if (selected === null && virtualLegacy === null) throw new ProblemError('not_found');
+      const selected = selectedRows[0] ?? null;
+      if (selected === null) throw new ProblemError('not_found');
       return {
         current,
         selected,
-        legacySelection: virtualLegacy,
         historyItems: [] as MetaRow[],
         lookahead: null,
         subjectEpoch,
@@ -511,76 +431,29 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
       return {
         current,
         selected: null,
-        legacySelection: null,
         historyItems: [] as MetaRow[],
         lookahead: null,
         subjectEpoch,
       };
 
-    let native: MetaRow[] = [];
-    let legacy: MetaRow[] = [];
-    if (cursor?.kind !== 'legacy') {
-      const nativeRows = await query<HistoryQueryRow>(
-        nativeHistoryQuery,
-        {
-          route,
-          subject_id: input.subjectId,
-          source,
-          cursor_order: cursor?.kind === 'native' ? cursor.order : null,
-          cursor_digest: cursor?.kind === 'native' ? cursor.digest : null,
-          ceiling_order: cursor?.nativeCeiling ?? null,
-        },
-        input.deadline,
-      );
-      subjectEpoch = mergeSubjectEpoch(subjectEpoch, subjectEpochOf(nativeRows));
-      const nativePage = historyItems(nativeRows);
-      if (!nativePage.cursorRetained) throw new ProblemError('conflict');
-      native = nativePage.items;
-      if (native.length < 2) {
-        const legacyRows = await query<HistoryQueryRow>(
-          legacyHistoryQuery,
-          {
-            route,
-            subject_id: input.subjectId,
-            source,
-            cursor_digest: null,
-            ceiling_digest: cursor?.legacyCeiling ?? null,
-            boundary_digest: null,
-          },
-          input.deadline,
-        );
-        subjectEpoch = mergeSubjectEpoch(subjectEpoch, subjectEpochOf(legacyRows));
-        const legacyPage = historyItems(legacyRows);
-        if (!legacyPage.cursorRetained) throw new ProblemError('conflict');
-        legacy = legacyPage.items;
-      }
-    } else {
-      const legacyRows = await query<HistoryQueryRow>(
-        legacyHistoryQuery,
-        {
-          route,
-          subject_id: input.subjectId,
-          source,
-          cursor_digest: cursor.digest,
-          ceiling_digest: cursor.legacyCeiling,
-          boundary_digest: cursor.digest,
-        },
-        input.deadline,
-      );
-      subjectEpoch = mergeSubjectEpoch(subjectEpoch, subjectEpochOf(legacyRows));
-      const legacyPage = historyItems(legacyRows);
-      if (!legacyPage.cursorRetained) throw new ProblemError('conflict');
-      legacy = legacyPage.items;
-    }
-    const page = native.length > 0 ? native : legacy;
-    const selected = page[0] ?? null;
-    const lookahead = native.length > 1 ? native[1]! : native.length === 1 ? (legacy[0] ?? null) : (legacy[1] ?? null);
+    const rows = await query<HistoryQueryRow>(
+      historyQuery,
+      {
+        route, subject_id: input.subjectId, source,
+        cursor_order: cursor?.order ?? null,
+        cursor_digest: cursor?.digest ?? null,
+        ceiling_order: cursor?.ceiling ?? null,
+      },
+      input.deadline,
+    );
+    subjectEpoch = mergeSubjectEpoch(subjectEpoch, subjectEpochOf(rows));
+    const page = historyItems(rows);
+    if (!page.cursorRetained) throw new ProblemError('conflict');
+    const selected = page.items[0] ?? null;
     return {
-      current,
-      selected,
-      legacySelection: null,
+      current, selected,
       historyItems: selected ? [selected] : [],
-      lookahead,
+      lookahead: page.items[1] ?? null,
       subjectEpoch,
     };
   }
@@ -605,7 +478,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     // consumed independently of disclosure, including an unreturned lookahead.
     const required = [
       currentMeta,
-      ...(input.digest === undefined ? [] : [initial.selected, initial.legacySelection]),
+      ...(input.digest === undefined ? [] : [initial.selected]),
     ].filter((row): row is MetaRow => row !== null);
     const allForFence = [
       ...required,
@@ -637,7 +510,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
         ? historyMeta
         : null;
     const hydrated = [...required, ...(disclosedHistory === null ? [] : [disclosedHistory])];
-    const payloadDigests = [...new Set(hydrated.flatMap((row) => (row.digest === null ? [] : [row.digest])))];
+    const payloadDigests = [...new Set(hydrated.map((row) => row.digest))];
     const storedPayloads = payloadDigests.length
       ? await query<PayloadRow>(
           payloadQuery,
@@ -646,30 +519,11 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
         )
       : [];
     const payloadByDigest = new Map(storedPayloads.map((row) => [row.digest, row]));
-    const needsLegacyPayload = hydrated.some((row) => row.digest === null && row.legacy);
-    let legacyRow: NonNullable<Awaited<ReturnType<typeof legacyPayloadQuery.run>>> | null = null;
-    if (needsLegacyPayload) {
-      legacyRow = await withSourceRatingReadConnection(dependencies.pool, input.deadline, (client) =>
-        legacyPayloadQuery.run(client, {
-          route,
-          subject_id: input.subjectId,
-          source,
-        }),
-      );
-      if (!legacyRow) throw new ProblemError('conflict');
-    }
-
     const itemCache = new Map<string, SourceObservationReadItem>();
     const itemOf = (row: MetaRow): SourceObservationReadItem => {
-      const key = row.digest ?? `legacy:${row.sourceAlias}:${row.sourceRecordId}:${row.asOf}`;
+      const key = row.digest;
       const cached = itemCache.get(key);
       if (cached) return cached;
-      if (row.digest === null) {
-        if (!row.legacy || !legacyRow) throw new ProblemError('partition_unavailable');
-        const item = legacyPayloadOf(legacyRow, row, input.subjectId, source);
-        itemCache.set(key, item);
-        return item;
-      }
       const payload = payloadByDigest.get(row.digest);
       if (!payload) throw new ProblemError('partition_unavailable');
       const item = payloadOf(payload, row, input.subjectId, source);
@@ -677,36 +531,20 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
       return item;
     };
     const currentItem = currentMeta ? itemOf(currentMeta) : null;
-    const selectedItem =
-      input.digest === undefined
-        ? null
-        : initial.selected
-          ? itemOf(initial.selected)
-          : initial.legacySelection
-            ? itemOf(initial.legacySelection)
-            : null;
+    if (currentItem && (currentItem.payload.count > 0) !== currentMeta!.projectionExists)
+      throw new ProblemError('partition_unavailable');
+    const selectedItem = input.digest !== undefined && initial.selected ? itemOf(initial.selected) : null;
     if (input.digest !== undefined && selectedItem?.digest !== input.digest) throw new ProblemError('not_found');
     const historyItem = disclosedHistory ? itemOf(disclosedHistory) : null;
 
     const currentDigest = currentItem?.digest ?? null;
     const baseEpoch = initial.subjectEpoch ?? undefined;
     const nextCursor =
-      historyMeta && initial.lookahead && historyMeta.digest !== null && historyBinding && baseEpoch !== undefined
+      historyMeta && initial.lookahead && historyBinding && baseEpoch !== undefined
         ? encodeHistoryCursor(dependencies, historyBinding, baseEpoch, {
-            kind: historyMeta.nativeOrder === null ? 'legacy' : 'native',
-            order: historyMeta.nativeOrder,
+            order: historyMeta.seekOrder,
             digest: historyMeta.digest,
-            nativeCeiling:
-              cursor?.boundary.nativeCeiling ??
-              initial.historyItems.find((item) => item.nativeOrder !== null)?.nativeOrder ??
-              null,
-            legacyCeiling:
-              cursor?.boundary.legacyCeiling ??
-              (historyMeta.nativeOrder === null
-                ? historyMeta.digest
-                : initial.lookahead.nativeOrder === null
-                  ? initial.lookahead.digest
-                  : null),
+            ceiling: cursor?.boundary.ceiling ?? historyMeta.seekOrder,
           })
         : null;
     const response: SourceObservationReadResponse = {
@@ -737,14 +575,12 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     const initialRows = [
       ...(currentMeta ? [currentMeta] : []),
       ...(initial.selected ? [initial.selected] : []),
-      ...(initial.legacySelection ? [initial.legacySelection] : []),
       ...initial.historyItems,
       ...(initial.lookahead ? [initial.lookahead] : []),
     ];
     const finalRows = [
       ...(finalMetadata.current ? [finalMetadata.current] : []),
       ...(finalMetadata.selected ? [finalMetadata.selected] : []),
-      ...(finalMetadata.legacySelection ? [finalMetadata.legacySelection] : []),
       ...finalMetadata.historyItems,
       ...(finalMetadata.lookahead ? [finalMetadata.lookahead] : []),
     ];

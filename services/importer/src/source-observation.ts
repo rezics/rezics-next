@@ -82,6 +82,7 @@ export function observationDigest(
     mean?: number;
     licence?: string;
     attribution?: string;
+    figures?: IntendedWrite['figures'];
   },
 ): string {
   return sourceObservation(subjectId, SOURCE_OBSERVATION_PROVIDER, {
@@ -93,6 +94,7 @@ export function observationDigest(
     ...(value.mean === undefined ? {} : { mean: value.mean }),
     ...(value.licence === undefined ? {} : { licence: value.licence }),
     ...(value.attribution === undefined ? {} : { attribution: value.attribution }),
+    ...(value.figures === undefined ? {} : { figures: value.figures }),
   }).digest;
 }
 
@@ -114,6 +116,7 @@ export function intendedPayload(intended: IntendedObservation): Record<string, u
     asOf: intended.asOf,
     licence: intended.licence,
     attribution: intended.attribution,
+    ...(intended.figures === undefined ? {} : { figures: intended.figures }),
   };
 }
 
@@ -225,7 +228,7 @@ export function safeObservationSummary(input: {
 }
 
 export function headFromStatistic(
-  subjectId: string,
+  _subjectId: string,
   row: {
     source: string;
     sourceAlias?: string;
@@ -238,20 +241,16 @@ export function headFromStatistic(
     attribution?: string;
     observation?: { kind: 'unversioned'; digest: string };
   },
-): RetainedObservationHead {
+): RetainedObservationHead | null {
   const sourceAlias = row.sourceAlias ?? row.source;
-  const digest =
-    row.observation?.digest ??
-    observationDigest(subjectId, {
-      ...(row.sourceAlias === undefined ? {} : { sourceAlias: row.sourceAlias }),
-      sourceRecordId: row.sourceRecordId,
-      scale: row.scale,
-      mean: row.mean,
-      count: row.count,
-      asOf: row.asOf,
-      licence: row.licence ?? 'ODbL-1.0',
-      attribution: row.attribution ?? 'VNDB',
-    });
+  const digest = row.observation?.digest;
+  if (
+    typeof digest !== 'string' ||
+    !DIGEST.test(digest) ||
+    typeof row.sourceRecordId !== 'string' ||
+    typeof row.asOf !== 'string'
+  )
+    return null;
   return {
     provider: SOURCE_OBSERVATION_PROVIDER,
     sourceAlias,
@@ -262,6 +261,27 @@ export function headFromStatistic(
     mean: row.mean,
     cleared: false,
     digest,
+  };
+}
+
+/** The transport has acknowledged this exact command payload. Never use this
+ * helper to infer an identity for an unversioned mutable statistic read.
+ */
+export function headFromAcknowledgedObservation(
+  subjectId: string,
+  intended: IntendedObservation,
+): RetainedObservationHead {
+  if (intended.kind === 'clear') return headFromClear(subjectId, intended);
+  return {
+    provider: SOURCE_OBSERVATION_PROVIDER,
+    sourceAlias: effectiveAlias(intended.sourceAlias),
+    sourceRecordId: intended.sourceRecordId,
+    asOf: intended.asOf,
+    count: intended.count,
+    scale: intended.scale,
+    mean: intended.mean,
+    cleared: false,
+    digest: observationDigest(subjectId, intended),
   };
 }
 
