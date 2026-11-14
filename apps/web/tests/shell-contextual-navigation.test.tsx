@@ -48,7 +48,11 @@ function Workspace() {
   const { label, admitted } = useContext(State);
   return (
     <ReaderLabel value={`${label} chapter`}>
-      {admitted && <ShellContextNavigation label={label}><Contents /></ShellContextNavigation>}
+      {admitted && (
+        <ShellContextNavigation label={label}>
+          <Contents />
+        </ShellContextNavigation>
+      )}
       <textarea aria-label="Editor" defaultValue="Unsaved draft" />
     </ReaderLabel>
   );
@@ -57,11 +61,19 @@ function Frame() {
   const { surface, parent } = useContext(State);
   return (
     <ShellContextNavigationProvider>
-      {surface !== 'closed' && <nav key={surface} aria-label={surface}><ShellContextNavigationOutlet /></nav>}
-      {parent && (
-        <ShellContextNavigation label="Parent workspace"><a href="#parent">Parent chapter</a></ShellContextNavigation>
+      {surface !== 'closed' && (
+        <nav key={surface} aria-label={surface}>
+          <ShellContextNavigationOutlet />
+        </nav>
       )}
-      <main><Outlet /></main>
+      {parent && (
+        <ShellContextNavigation label="Parent workspace">
+          <a href="#parent">Parent chapter</a>
+        </ShellContextNavigation>
+      )}
+      <main>
+        <Outlet />
+      </main>
     </ShellContextNavigationProvider>
   );
 }
@@ -71,9 +83,15 @@ async function mount() {
   const router = createRouter({
     routeTree: route.addChildren([
       createRoute({ getParentRoute: () => route, path: '/workspace', component: Workspace }),
-      createRoute({ getParentRoute: () => route, path: '/other', component: () => (
-        <ShellContextNavigation label="Other workspace"><a href="#other">Other chapter</a></ShellContextNavigation>
-      ) }),
+      createRoute({
+        getParentRoute: () => route,
+        path: '/other',
+        component: () => (
+          <ShellContextNavigation label="Other workspace">
+            <a href="#other">Other chapter</a>
+          </ShellContextNavigation>
+        ),
+      }),
       createRoute({ getParentRoute: () => route, path: '/plain', component: () => <p>Plain canvas</p> }),
     ]),
     history: createMemoryHistory({ initialEntries: ['/workspace'] }),
@@ -84,9 +102,15 @@ async function mount() {
   let state = initial;
   const render = async (next: Partial<State> = {}) => {
     state = { ...state, ...next };
-    await act(async () => root!.render(
-      <StrictMode><State value={state}><RouterProvider router={router} /></State></StrictMode>,
-    ));
+    await act(async () =>
+      root!.render(
+        <StrictMode>
+          <State value={state}>
+            <RouterProvider router={router} />
+          </State>
+        </StrictMode>,
+      ),
+    );
   };
   await act(async () => router.load());
   await render();

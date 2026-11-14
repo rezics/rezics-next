@@ -44,8 +44,7 @@ export function ShellContextNavigationProvider({ children }: { children: ReactNo
   // The deepest mounted route wins; the latest declaration wins within that route.
   // These are live owner identities only. Labels, elements and private data never enter shell state.
   const active = owners.reduce<Owner | null>(
-    (selected, owner) =>
-      owner.scope === scope && (!selected || owner.depth >= selected.depth) ? owner : selected,
+    (selected, owner) => (owner.scope === scope && (!selected || owner.depth >= selected.depth) ? owner : selected),
     null,
   );
   const value = useMemo(
