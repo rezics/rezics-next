@@ -353,7 +353,9 @@ test('actual authoring family keeps form operands, recovery, independent instanc
     await act(async () => update([opening, { ...reply, parent: id(99) }]));
     expect(button('reply', m.thread_write_send()).disabled).toBe(true);
     expect(
-      [...region('reply').querySelectorAll('button')].some((item) => item.textContent === m.thread_recovery_retry_original()),
+      [...region('reply').querySelectorAll('button')].some(
+        (item) => item.textContent === m.thread_recovery_retry_original(),
+      ),
     ).toBe(true);
     expect(region('reply').textContent).toContain(m.thread_write_uncertain_changed());
     await submitTwice('reply');

@@ -269,7 +269,6 @@ export const AwayBackRedactsPreview: Story = {
   },
 };
 
-
 export const LateAcknowledgementRetainsNewerWriting: Story = {
   render: () => <AuthoringRecoveryExample />,
   play: async (context) => {

@@ -346,7 +346,6 @@ export const ReplyImageUsed: Story = {
   play: reusedMediaPlay,
 };
 
-
 type RecoveryKind = 'create' | 'reply' | 'edit' | 'publish';
 type RecoveryResult = { ok: true; value: string; post: RevisedPost } | WriteFailure;
 /** Prepared transport only: real shared composer, request owner, reader, editor and departure confirmation. */
@@ -354,7 +353,9 @@ export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKi
   const [client] = useState(() => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(sessionQueryKey, {
-      state: 'signed-in', subject: 'prepared-author', csrfToken: 'prepared-authoring-credential',
+      state: 'signed-in',
+      subject: 'prepared-author',
+      csrfToken: 'prepared-authoring-credential',
     });
     return client;
   });
@@ -363,7 +364,8 @@ export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKi
   const pending = useRef<((result: RecoveryResult) => void) | null>(null);
   const [completed, setCompleted] = useState(false);
   const accepted = (): RecoveryResult => ({
-    ok: true, value: 'acknowledged',
+    ok: true,
+    value: 'acknowledged',
     post: { id: 'prepared-post', revisionId: 'acknowledged-revision' } as RevisedPost,
   });
   const submit = async (command: object): Promise<RecoveryResult> => {
@@ -371,7 +373,9 @@ export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKi
     setCommands((current) => [...current, structuredClone(command)]);
     if (count.current === 1) return { ok: false, reason: 'unavailable' };
     if (count.current > 2) return accepted();
-    return new Promise((resolve) => { pending.current = resolve; });
+    return new Promise((resolve) => {
+      pending.current = resolve;
+    });
   };
   const finish = () => {
     pending.current?.(accepted());
@@ -390,10 +394,16 @@ export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKi
         </p>
         <output aria-label="Prepared command count">{commands.length}</output>
         <div className="flex min-w-0 flex-wrap gap-2">
-          <Button className="h-auto min-h-11 whitespace-normal" onClick={finish}>Prepared acknowledge original</Button>
-          <Button className="h-auto min-h-11 whitespace-normal" onClick={refuse}>Prepared refuse original</Button>
+          <Button className="h-auto min-h-11 whitespace-normal" onClick={finish}>
+            Prepared acknowledge original
+          </Button>
+          <Button className="h-auto min-h-11 whitespace-normal" onClick={refuse}>
+            Prepared refuse original
+          </Button>
         </div>
-        {completed ? <p role="status">Prepared deliberate completion</p> : kind === 'edit' || kind === 'publish' ? (
+        {completed ? (
+          <p role="status">Prepared deliberate completion</p>
+        ) : kind === 'edit' || kind === 'publish' ? (
           <InlinePostEditor
             initialBody={fromPlainText('The original submitted correction.', 'blocks')}
             revisionId="original-revision"
@@ -430,32 +440,40 @@ export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKi
   );
 }
 
-export const originalRequestJourney = (kind: RecoveryKind): NonNullable<Story['play']> => async ({ canvasElement }) => {
-  const view = within(canvasElement);
-  const label = kind === 'create' ? m.thread_new_body_label() : kind === 'reply' ? m.thread_reply_label() : m.thread_reply_body_label();
-  const editor = await view.findByRole('textbox', { name: label });
-  if (kind === 'create') await userEvent.type(view.getByLabelText(m.thread_title_label()), 'Original title');
-  const send = kind === 'edit' ? m.thread_edit_save() : kind === 'publish' ? m.own_drafts_publish() : m.thread_write_send();
-  await userEvent.click(await view.findByRole('button', { name: send }));
-  await view.findByText(m.thread_recovery_unknown());
-  await userEvent.click(editor);
-  await userEvent.keyboard(' Newer working words.');
-  if (kind === 'create') await userEvent.type(view.getByLabelText(m.thread_title_label()), ' with a newer title');
-  await userEvent.click(view.getByText(m.thread_recovery_submitted(), { selector: 'summary' }));
-  const submitted = within(view.getByRole('region', { name: m.thread_recovery_submitted() }));
-  await expect(submitted.queryByText(/Newer working words/)).toBeNull();
-  if (kind === 'create') await expect(submitted.getByText('Original title')).toBeVisible();
-  const retry = view.getByRole('button', { name: m.thread_recovery_retry_original() });
-  await expect(retry).toBeEnabled();
-  await userEvent.click(retry);
-  await expect(view.getByLabelText('Prepared command count')).toHaveTextContent('2');
-  await userEvent.click(view.getByRole('button', { name: 'Prepared acknowledge original' }));
-  await view.findByText(m.thread_recovery_acknowledged());
-  await expect(editor).toHaveTextContent('Newer working words.');
-  await expect(retry).toBeDisabled();
-  await userEvent.click(view.getByRole('button', { name: m.thread_recovery_working() }));
-  await expect(editor).toHaveFocus();
-};
+export const originalRequestJourney =
+  (kind: RecoveryKind): NonNullable<Story['play']> =>
+  async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const label =
+      kind === 'create'
+        ? m.thread_new_body_label()
+        : kind === 'reply'
+          ? m.thread_reply_label()
+          : m.thread_reply_body_label();
+    const editor = await view.findByRole('textbox', { name: label });
+    if (kind === 'create') await userEvent.type(view.getByLabelText(m.thread_title_label()), 'Original title');
+    const send =
+      kind === 'edit' ? m.thread_edit_save() : kind === 'publish' ? m.own_drafts_publish() : m.thread_write_send();
+    await userEvent.click(await view.findByRole('button', { name: send }));
+    await view.findByText(m.thread_recovery_unknown());
+    await userEvent.click(editor);
+    await userEvent.keyboard(' Newer working words.');
+    if (kind === 'create') await userEvent.type(view.getByLabelText(m.thread_title_label()), ' with a newer title');
+    await userEvent.click(view.getByText(m.thread_recovery_submitted(), { selector: 'summary' }));
+    const submitted = within(view.getByRole('region', { name: m.thread_recovery_submitted() }));
+    await expect(submitted.queryByText(/Newer working words/)).toBeNull();
+    if (kind === 'create') await expect(submitted.getByText('Original title')).toBeVisible();
+    const retry = view.getByRole('button', { name: m.thread_recovery_retry_original() });
+    await expect(retry).toBeEnabled();
+    await userEvent.click(retry);
+    await expect(view.getByLabelText('Prepared command count')).toHaveTextContent('2');
+    await userEvent.click(view.getByRole('button', { name: 'Prepared acknowledge original' }));
+    await view.findByText(m.thread_recovery_acknowledged());
+    await expect(editor).toHaveTextContent('Newer working words.');
+    await expect(retry).toBeDisabled();
+    await userEvent.click(view.getByRole('button', { name: m.thread_recovery_working() }));
+    await expect(editor).toHaveFocus();
+  };
 export const OriginalCreateRetry: Story = {
   name: 'New thread / Edit locally and retry original',
   render: () => <AuthoringRecoveryExample kind="create" />,
@@ -494,7 +512,6 @@ export const KnownRefusalCorrection: Story = {
   },
 };
 
-
 export const OriginalReplyWithNewMedia: Story = {
   name: 'Reply / Original retry keeps newer media local',
   render: () => <AuthoringRecoveryExample />,
@@ -505,12 +522,19 @@ export const OriginalReplyWithNewMedia: Story = {
       const path = new URL(String(input), window.location.href).pathname;
       if (path !== '/media' && path !== `/media/${mediaId}`) return original(input, init);
       if (init?.method === 'PUT') return new Response(null, { status: 204 });
-      return Response.json({ media: {
-        id: mediaId, containerId: '0192f3a0-6c1e-7b2a-9d4e-000000000077',
-        state: init?.method === 'POST' ? 'reserved' : 'available', mediaType: 'image/png', byteCount: 68,
-      } });
+      return Response.json({
+        media: {
+          id: mediaId,
+          containerId: '0192f3a0-6c1e-7b2a-9d4e-000000000077',
+          state: init?.method === 'POST' ? 'reserved' : 'available',
+          mediaType: 'image/png',
+          byteCount: 68,
+        },
+      });
     }) as typeof fetch;
-    return () => { globalThis.fetch = original; };
+    return () => {
+      globalThis.fetch = original;
+    };
   },
   play: async (context) => {
     const view = within(context.canvasElement);

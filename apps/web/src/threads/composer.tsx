@@ -127,17 +127,12 @@ function WritingRequestRecovery({
         {acknowledged ? m.thread_recovery_acknowledged() : m.thread_recovery_unknown()}
       </p>
       {changed || acknowledged ? <p>{m.thread_write_uncertain_changed()}</p> : null}
-      <p className="text-sm text-muted-foreground">
-        {m.thread_recovery_target({ target: request.target })}
-      </p>
+      <p className="text-sm text-muted-foreground">{m.thread_recovery_target({ target: request.target })}</p>
       {request.revisionId ? (
         <p className="text-sm text-muted-foreground">{m.thread_recovery_revision({ revision: request.revisionId })}</p>
       ) : null}
       <details className="min-w-0 rounded-lg border border-border bg-background p-3">
-        <summary
-          className={`${authoringActionClassName} cursor-pointer rounded-md`}
-          aria-controls={reader}
-        >
+        <summary className={`${authoringActionClassName} cursor-pointer rounded-md`} aria-controls={reader}>
           {m.thread_recovery_submitted()}
         </summary>
         <section id={reader} aria-label={m.thread_recovery_submitted()} className="min-w-0 space-y-3 pt-3">
@@ -206,7 +201,12 @@ function useComposerLifetime() {
   const [lifetime] = useState(() => {
     const identity = () => {
       const session = client?.getQueryData<BrowserSession>(sessionQueryKey);
-      return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null, getLocale()]);
+      return JSON.stringify([
+        session?.state ?? 'unknown',
+        session?.subject ?? null,
+        session?.csrfToken ?? null,
+        getLocale(),
+      ]);
     };
     const owner = identity();
     const state: {
@@ -1924,12 +1924,7 @@ function InlinePostEditorContent({
     if (retryOriginal) {
       if (!editIntent.current.unresolved || !delivery || !editIntent.current.original()) return;
     } else {
-      if (
-        editIntent.current.unresolved ||
-        snapshotPhaseRef.current !== 'ready' ||
-        pendingRef.current > 0 ||
-        !ready
-      )
+      if (editIntent.current.unresolved || snapshotPhaseRef.current !== 'ready' || pendingRef.current > 0 || !ready)
         return;
       const sources = imageSources(bodyRef.current);
       if (sources.length > replyImageLimit) {

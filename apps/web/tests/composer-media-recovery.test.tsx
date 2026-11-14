@@ -67,7 +67,10 @@ async function mountComposer() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'writer', csrfToken: 'original-csrf' });
   const submitted: unknown[] = [];
-  let nextOutcome: () => Promise<{ ok: true; value: string } | WriteFailure> = async () => ({ ok: true, value: 'created' });
+  let nextOutcome: () => Promise<{ ok: true; value: string } | WriteFailure> = async () => ({
+    ok: true,
+    value: 'created',
+  });
   let rebind!: (binding: { initialKey: string; boardId: string }) => void;
   function Compose() {
     const [binding, setBinding] = useState({ initialKey: 'draft-key', boardId: 'board' });
@@ -130,7 +133,9 @@ async function mountComposer() {
     editor,
     attach,
     submitted,
-    respondWith: (response: typeof nextOutcome) => { nextOutcome = response; },
+    respondWith: (response: typeof nextOutcome) => {
+      nextOutcome = response;
+    },
     rebind: (binding: Parameters<typeof rebind>[0]) => act(async () => rebind(binding)),
     async dispose() {
       await act(async () => root.unmount());
@@ -322,7 +327,6 @@ test('board and command-key replacements retire old attachment callbacks while t
   }
 });
 
-
 // Source-only: native media authority and the mounted recovery verifier own execution.
 test('exact replay excludes newer media and acknowledgement preserves pending working attachments', async () => {
   const page = await mountComposer();
@@ -333,19 +337,29 @@ test('exact replay excludes newer media and acknowledgement preserves pending wo
     const path = String(input);
     if (init.method === 'POST') {
       reservations++;
-      return Response.json({ media: {
-        id: imageId(reservations), containerId: 'native-container', state: 'reserved',
-        mediaType: 'image/png', byteCount: 3,
-      } });
+      return Response.json({
+        media: {
+          id: imageId(reservations),
+          containerId: 'native-container',
+          state: 'reserved',
+          mediaType: 'image/png',
+          byteCount: 3,
+        },
+      });
     }
     if (init.method === 'PUT') {
       transfers.push(path);
       return new Response(null, { status: 204 });
     }
     if (path === `/media/${imageId(3)}`) return lateImage.promise;
-    return Response.json({ media: {
-      id: path.split('/').at(-1), state: 'available', mediaType: 'image/png', byteCount: 3,
-    } });
+    return Response.json({
+      media: {
+        id: path.split('/').at(-1),
+        state: 'available',
+        mediaType: 'image/png',
+        byteCount: 3,
+      },
+    });
   });
   try {
     await act(async () => {
@@ -369,9 +383,18 @@ test('exact replay excludes newer media and acknowledgement preserves pending wo
     expect(JSON.stringify(original)).not.toContain('New working image');
     expect(page.editor().textContent).toContain('Original writing');
     expect(page.host.querySelector('[role="img"][aria-label="New working image"]')).not.toBeNull();
-    await act(async () => lateImage.resolve(Response.json({ media: {
-      id: imageId(3), state: 'available', mediaType: 'image/png', byteCount: 3,
-    } })));
+    await act(async () =>
+      lateImage.resolve(
+        Response.json({
+          media: {
+            id: imageId(3),
+            state: 'available',
+            mediaType: 'image/png',
+            byteCount: 3,
+          },
+        }),
+      ),
+    );
     await page.settle(() => !!page.host.querySelector('[role="img"][aria-label="Pending working image"]'));
     expect(reservations).toBe(3);
     expect(transfers).toEqual([1, 2, 3].map((n) => `/media/${imageId(n)}`));
