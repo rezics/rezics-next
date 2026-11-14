@@ -539,12 +539,14 @@ function PrivateKnowledgeEditor({
   returnPath,
   access,
   operations,
+  notebookReturn,
 }: {
   address: KnowledgePrivatePageAddress;
   locale: string;
   returnPath: string;
   access: Extract<KnowledgePrivatePageAccess, { state: 'ready' }>;
   operations: KnowledgePrivateOperations;
+  notebookReturn?: React.ReactNode;
 }) {
   const options = localeOptions(locale);
   const copy = pageCopy(locale);
@@ -1604,7 +1606,7 @@ function PrivateKnowledgeEditor({
           operations={operations}
           admission={access.readOutline}
           current={() => active.current}
-          onRetire={retire}
+          notebookReturn={notebookReturn}
         />
       }
     >
@@ -2059,19 +2061,6 @@ export function KnowledgePrivatePage({
   };
   return (
     <AuthoringDepartureBoundary sessionBound>
-      {address.kind === 'resume' && access.state === 'ready' && (
-        <KnowledgeNavigationReturnLink
-          address={address}
-          locale={locale}
-          binding={knowledgeNavigationBinding(
-            access.viewer,
-            access.csrfToken,
-            sessionRevision,
-            exposureRevision,
-            locale,
-          )}
-        />
-      )}
       {access.state === 'ready' ? (
         <PrivateKnowledgeEditorOwner
           owner={owner}
@@ -2080,6 +2069,22 @@ export function KnowledgePrivatePage({
           returnPath={returnPath}
           access={access}
           operations={operations}
+          notebookReturn={
+            address.kind === 'resume' ? (
+              <KnowledgeNavigationReturnLink
+                address={address}
+                locale={locale}
+                embedded
+                binding={knowledgeNavigationBinding(
+                  access.viewer,
+                  access.csrfToken,
+                  sessionRevision,
+                  exposureRevision,
+                  locale,
+                )}
+              />
+            ) : null
+          }
         />
       ) : (
         <PrivatePageFrame title={m.knowledge_private_heading({}, localeOptions(locale))} locale={locale}>
@@ -2137,6 +2142,7 @@ function PrivateKnowledgeEditorOwner({
   returnPath,
   access,
   operations,
+  notebookReturn,
 }: {
   owner: string;
   address: KnowledgePrivatePageAddress;
@@ -2144,6 +2150,7 @@ function PrivateKnowledgeEditorOwner({
   returnPath: string;
   access: Extract<KnowledgePrivatePageAccess, { state: 'ready' }>;
   operations: KnowledgePrivateOperations;
+  notebookReturn?: React.ReactNode;
 }) {
   return (
     <PrivateKnowledgeEditor
@@ -2153,6 +2160,7 @@ function PrivateKnowledgeEditorOwner({
       returnPath={returnPath}
       access={access}
       operations={operations}
+      notebookReturn={notebookReturn}
     />
   );
 }

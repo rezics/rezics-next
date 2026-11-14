@@ -7,13 +7,13 @@ import type { KnowledgePrivateAddress } from './private-knowledge';
 import { knowledgeLink } from './workspace';
 import { knowledgeExactHref, knowledgeLiveHref } from './public-read';
 
-type Origin = KnowledgePrivateAddress & { locale: string; expires: number };
+type Origin = KnowledgePrivateAddress & { locale: string };
 
 /** A navigation convenience from an admitted editor, never evidence of public or private access. */
-export class KnowledgePublicationReturn {
+class KnowledgePublicationReturn {
   private origin: Origin | null = null;
+  private generation = 0;
   private listeners = new Set<() => void>();
-  constructor(private now = () => Date.now()) {}
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -21,16 +21,17 @@ export class KnowledgePublicationReturn {
     };
   };
   snapshot = () => this.origin;
+  source = () => this.generation;
   serverSnapshot = () => null;
-  remember(address: KnowledgePrivateAddress, locale: string) {
-    this.origin = { ...address, locale, expires: this.now() + 15 * 60_000 };
+  remember(address: KnowledgePrivateAddress, locale: string, generation: number) {
+    // A session/exposure retirement can arrive before React removes an old reading link.
+    if (generation !== this.generation) return;
+    this.origin = { ...address, locale };
     for (const listener of this.listeners) listener();
   }
   read(documentId: string, locale: string) {
     const origin = this.origin;
-    return origin && origin.documentId === documentId && origin.locale === locale && origin.expires > this.now()
-      ? origin
-      : null;
+    return origin && origin.documentId === documentId && origin.locale === locale ? origin : null;
   }
   leave(pathname: string) {
     const origin = this.origin;
@@ -49,6 +50,7 @@ export class KnowledgePublicationReturn {
     this.clear();
   }
   clear = () => {
+    this.generation++;
     this.origin = null;
     for (const listener of this.listeners) listener();
   };
@@ -74,9 +76,14 @@ function publicationReturn(client: QueryClient) {
   return returning;
 }
 
-function usePublicationReturn() {
+function usePublicationReturn(locale: string) {
   const returning = publicationReturn(useQueryClient());
   const router = useRouter();
+  useSyncExternalStore(returning.subscribe, returning.source, returning.source);
+  useLayoutEffect(() => {
+    const origin = returning.snapshot();
+    if (origin && origin.locale !== locale) returning.clear();
+  }, [returning, locale]);
   useLayoutEffect(
     () => router.subscribe('onBeforeNavigate', ({ toLocation }) => returning.leave(toLocation.pathname)),
     [router, returning],
@@ -96,8 +103,9 @@ export function KnowledgePublicationReaderLink({
   revisionId?: string | undefined;
   children: ReactNode;
 }) {
-  const returning = usePublicationReturn();
+  const returning = usePublicationReturn(locale);
   const router = useRouter();
+  const generation = returning.source();
   return (
     <a
       href={
@@ -117,7 +125,7 @@ export function KnowledgePublicationReaderLink({
         )
           return;
         event.preventDefault();
-        returning.remember(address, locale);
+        returning.remember(address, locale, generation);
         void router.navigate({
           to: '/knowledge/documents/$id',
           params: { id: address.documentId },
@@ -131,13 +139,13 @@ export function KnowledgePublicationReaderLink({
 }
 
 export function KnowledgePublicationReturnLink({ documentId, locale }: { documentId: string; locale: string }) {
-  const returning = usePublicationReturn();
-  useSyncExternalStore(returning.subscribe, returning.snapshot, returning.serverSnapshot);
-  const origin = returning.read(documentId, locale);
+  const returning = usePublicationReturn(locale);
+  const snapshot = useSyncExternalStore(returning.subscribe, returning.snapshot, returning.serverSnapshot);
+  const origin = snapshot ? returning.read(documentId, locale) : null;
   if (!origin) return null;
   return (
     <nav
-      className="mx-auto w-full min-w-0 max-w-3xl px-4 pt-5 sm:px-6"
+      className="mx-auto flex w-full min-w-0 max-w-3xl flex-wrap gap-x-6 gap-y-2 px-4 pt-5 sm:px-6"
       aria-label={m.knowledge_workspace_documents({}, { locale: locale as never })}
     >
       <Link
@@ -147,6 +155,14 @@ export function KnowledgePublicationReturnLink({ documentId, locale }: { documen
         className={knowledgeLink}
       >
         {m.knowledge_workspace_return_editor({}, { locale: locale as never })}
+      </Link>
+      <Link
+        to="/knowledge/notebooks/$notebookId"
+        params={{ notebookId: origin.notebookId }}
+        preload={false}
+        className={knowledgeLink}
+      >
+        {m.knowledge_navigation_return({}, { locale: locale as never })}
       </Link>
     </nav>
   );

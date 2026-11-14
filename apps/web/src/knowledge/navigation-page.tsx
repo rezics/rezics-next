@@ -1,3 +1,4 @@
+import { KnowledgeDetails, KnowledgeValue } from './workspace';
 import { BookOpen, FileText } from 'lucide-react';
 import { KnowledgeOrganizationOwner } from './organization-page';
 import type { OrganizationOperations } from './organization-read';
@@ -39,10 +40,12 @@ function NavigationFrame({
   locale,
   children,
   outline,
+  notebookId,
 }: {
   locale: string;
   children: React.ReactNode;
   outline: boolean;
+  notebookId?: string | undefined;
 }) {
   const options = { locale: locale as never };
   return (
@@ -56,6 +59,13 @@ function NavigationFrame({
         </PageHeading>
         <p className="text-sm text-muted-foreground">{m.knowledge_workspace_only_you({}, options)}</p>
       </header>
+      {notebookId && (
+        <KnowledgeDetails label={m.knowledge_workspace_notebook_details({}, options)}>
+          <dl>
+            <KnowledgeValue label={m.knowledge_private_notebook_id({}, options)} value={notebookId} exact />
+          </dl>
+        </KnowledgeDetails>
+      )}
       {children}
     </main>
   );
@@ -130,7 +140,11 @@ export function KnowledgeNavigationEntry({
   return embedded ? (
     content
   ) : (
-    <NavigationFrame locale={locale} outline={address.kind === 'outline'}>
+    <NavigationFrame
+      locale={locale}
+      outline={address.kind === 'outline'}
+      notebookId={address.kind === 'outline' ? address.notebookId : undefined}
+    >
       {content}
     </NavigationFrame>
   );
@@ -234,6 +248,7 @@ function KnowledgeNavigationRows({
   const actions = reading.actions(snapshot);
   const { page, frontier } = snapshot;
   const outline = frontier.request.kind === 'outline';
+  const RowHeading = embedded ? 'h3' : 'h2';
   const remember = (documentId: string) => {
     if (snapshot !== reading.getSnapshot() || page?.kind !== 'outline') return;
     returning?.save(binding, { notebookId: page.notebookId, documentId }, frontier);
@@ -321,7 +336,7 @@ function KnowledgeNavigationRows({
                         <FileText aria-hidden="true" className="mt-3 size-4 shrink-0 text-muted-foreground" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-base font-medium leading-snug">
+                        <RowHeading className="text-base font-medium leading-snug">
                           <Link
                             to="/knowledge/notebooks/$notebookId/documents/$documentId"
                             params={{ notebookId: page.notebookId, documentId: row.documentId }}
@@ -336,7 +351,7 @@ function KnowledgeNavigationRows({
                             <span className="sr-only">{m.knowledge_navigation_open_document({}, options)}: </span>
                             {row.title}
                           </Link>
-                        </h3>
+                        </RowHeading>
                         <Button
                           variant="ghost"
                           className={knowledgeNavigationControl}

@@ -299,6 +299,9 @@ export function KnowledgePublicationPanel({
         </div>
       ) : null}
       {head.publicationId !== null && !currentReceipt ? (
+        <p className="text-sm font-medium">{m.knowledge_workspace_publication_selected({}, options)}</p>
+      ) : null}
+      {head.publicationId !== null && !currentReceipt ? (
         <KnowledgeDetails label={m.knowledge_workspace_saved({}, options)}>
           <PublicationIdentity label={m.knowledge_publication_identity({}, options)} value={head.publicationId} />
         </KnowledgeDetails>

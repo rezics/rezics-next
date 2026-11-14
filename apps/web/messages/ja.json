@@ -12435,12 +12435,11 @@
   "knowledge_workspace_details": "ドキュメントの詳細",
   "knowledge_workspace_notebook_details": "ノートブックの詳細",
   "knowledge_workspace_only_you": "自分のみ",
-  "knowledge_workspace_writing": "執筆",
   "knowledge_workspace_saved": "保存済みの原稿",
   "knowledge_workspace_return_editor": "自分のドキュメントに戻る",
-  "knowledge_workspace_reading": "閲覧",
   "knowledge_workspace_tools": "ドキュメントの操作",
   "knowledge_workspace_navigation_open": "ドキュメントを探す",
   "knowledge_workspace_metadata": "言語・ライセンス・主題",
-  "knowledge_workspace_unsaved": "未保存の変更"
+  "knowledge_workspace_unsaved": "未保存の変更",
+  "knowledge_workspace_publication_selected": "公開する版が選択されています"
 }

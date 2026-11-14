@@ -12435,12 +12435,11 @@
   "knowledge_workspace_details": "Detalles del documento",
   "knowledge_workspace_notebook_details": "Detalles del cuaderno",
   "knowledge_workspace_only_you": "Solo tú",
-  "knowledge_workspace_writing": "Escritura",
   "knowledge_workspace_saved": "Fuente guardada",
   "knowledge_workspace_return_editor": "Volver a tu documento",
-  "knowledge_workspace_reading": "Lectura",
   "knowledge_workspace_tools": "Acciones del documento",
   "knowledge_workspace_navigation_open": "Explorar documentos",
   "knowledge_workspace_metadata": "Idioma, licencia y temas",
-  "knowledge_workspace_unsaved": "Cambios sin guardar"
+  "knowledge_workspace_unsaved": "Cambios sin guardar",
+  "knowledge_workspace_publication_selected": "Hay una revisión pública seleccionada"
 }

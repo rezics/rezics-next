@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { KnowledgePrivateOperations } from './private-page';
 import type { KnowledgePrivateAddress } from './private-knowledge';
+import type { KnowledgeNavigationRequest } from './navigation-read';
 import { KnowledgeNavigationEntry, type KnowledgeNavigationOperations } from './navigation-page';
 import { knowledgeControl, knowledgeLink } from './workspace';
 
@@ -16,8 +17,9 @@ export function KnowledgeWorkspaceNavigation({
   operations,
   admission,
   current,
-  onRetire,
+  notebookReturn,
 }: {
+  notebookReturn?: ReactNode;
   address: KnowledgePrivateAddress;
   title: string;
   locale: string;
@@ -25,30 +27,29 @@ export function KnowledgeWorkspaceNavigation({
   operations: KnowledgePrivateOperations;
   admission: 'unknown' | 'available' | 'denied' | 'unavailable';
   current: () => boolean;
-  onRetire: (state: 'retired' | 'signed-out' | 'denied') => void;
 }) {
   const [open, setOpen] = useState(false);
+  const regionId = useId();
   const options = { locale: locale as never };
-  const callbacks = useRef({ current, onRetire });
-  callbacks.current = { current, onRetire };
+  const currentVisit = useRef(current);
+  currentVisit.current = current;
   const navigation = useMemo<KnowledgeNavigationOperations>(
     () => ({
-      current: () => callbacks.current.current(),
+      current: () => currentVisit.current(),
       async read(request) {
-        if (request.kind !== 'outline') return { state: 'unavailable' };
+        // This embedded reader always starts and stays in this notebook's outline.
+        const outline = request as Extract<KnowledgeNavigationRequest, { kind: 'outline' }>;
         const result = await operations.readOutline(
           {
-            notebookId: request.notebookId,
-            parentPlacementId: request.parentPlacementId,
-            cursor: request.cursor ?? null,
+            notebookId: outline.notebookId,
+            parentPlacementId: outline.parentPlacementId,
+            cursor: outline.cursor ?? null,
           },
           binding,
         );
         if (result.state === 'ready') return { state: 'ready', page: { kind: 'outline', ...result.page } };
-        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied') {
-          callbacks.current.onRetire(result.state);
+        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
           return { state: result.state };
-        }
         return { state: result.state === 'stale' || result.state === 'not-found' ? 'changed' : 'unavailable' };
       },
     }),
@@ -59,43 +60,50 @@ export function KnowledgeWorkspaceNavigation({
       className="min-w-0 space-y-4 lg:sticky lg:top-6 lg:self-start"
       aria-label={m.knowledge_workspace_documents({}, options)}
     >
-      <div className="space-y-1">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground">
-          {m.knowledge_workspace_only_you({}, options)}
+      <h2 className="text-base font-semibold">{m.knowledge_workspace_documents({}, options)}</h2>
+      {!open && (
+        <p aria-current="page" className="border-l-2 border-primary py-2 pl-3 text-sm font-medium">
+          {title}
         </p>
-        <h2 className="text-base font-semibold">{m.knowledge_workspace_documents({}, options)}</h2>
-      </div>
-      <p aria-current="page" className="border-l-2 border-primary py-2 pl-3 text-sm font-medium">
-        {title}
-      </p>
+      )}
       <div className="flex flex-wrap gap-x-4 lg:flex-col lg:items-start">
-        <Link
-          to="/knowledge/notebooks/$notebookId"
-          params={{ notebookId: address.notebookId }}
-          preload={false}
-          className={knowledgeLink}
-        >
-          {m.knowledge_navigation_return({}, options)}
-        </Link>
+        {notebookReturn ?? (
+          <Link
+            to="/knowledge/notebooks/$notebookId"
+            params={{ notebookId: address.notebookId }}
+            preload={false}
+            className={knowledgeLink}
+          >
+            {m.knowledge_navigation_return({}, options)}
+          </Link>
+        )}
         <Link to="/knowledge" preload={false} className={knowledgeLink}>
           {m.knowledge_navigation_heading({}, options)}
         </Link>
       </div>
-      {!open ? (
-        <Button type="button" variant="outline" className={knowledgeControl} onClick={() => setOpen(true)}>
-          {m.knowledge_workspace_navigation_open({}, options)}
-        </Button>
-      ) : (
-        <KnowledgeNavigationEntry
-          address={{ kind: 'outline', notebookId: address.notebookId, parentPlacementId: null }}
-          locale={locale}
-          binding={JSON.stringify(binding)}
-          access={admission === 'unknown' ? 'preparing' : admission}
-          operations={navigation}
-          selectedDocumentId={address.documentId}
-          embedded
-        />
-      )}
+      <Button
+        type="button"
+        variant="outline"
+        className={knowledgeControl}
+        aria-expanded={open}
+        aria-controls={regionId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {m.knowledge_workspace_navigation_open({}, options)}
+      </Button>
+      <div id={regionId} hidden={!open}>
+        {open && (
+          <KnowledgeNavigationEntry
+            address={{ kind: 'outline', notebookId: address.notebookId, parentPlacementId: null }}
+            locale={locale}
+            binding={JSON.stringify(binding)}
+            access={admission === 'unknown' ? 'preparing' : admission}
+            operations={navigation}
+            selectedDocumentId={address.documentId}
+            embedded
+          />
+        )}
+      </div>
     </aside>
   );
 }

@@ -12442,12 +12442,11 @@
   "knowledge_workspace_details": "Document details",
   "knowledge_workspace_notebook_details": "Notebook details",
   "knowledge_workspace_only_you": "Only you",
-  "knowledge_workspace_writing": "Writing",
   "knowledge_workspace_saved": "Saved source",
   "knowledge_workspace_return_editor": "Return to your document",
-  "knowledge_workspace_reading": "Reading",
   "knowledge_workspace_tools": "Document actions",
   "knowledge_workspace_navigation_open": "Browse documents",
   "knowledge_workspace_metadata": "Language, licence and subjects",
-  "knowledge_workspace_unsaved": "Unsaved changes"
+  "knowledge_workspace_unsaved": "Unsaved changes",
+  "knowledge_workspace_publication_selected": "A public revision is selected"
 }

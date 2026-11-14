@@ -12435,12 +12435,11 @@
   "knowledge_workspace_details": "Détails du document",
   "knowledge_workspace_notebook_details": "Détails du carnet",
   "knowledge_workspace_only_you": "Vous uniquement",
-  "knowledge_workspace_writing": "Rédaction",
   "knowledge_workspace_saved": "Source enregistrée",
   "knowledge_workspace_return_editor": "Revenir à votre document",
-  "knowledge_workspace_reading": "Lecture",
   "knowledge_workspace_tools": "Actions du document",
   "knowledge_workspace_navigation_open": "Parcourir les documents",
   "knowledge_workspace_metadata": "Langue, licence et sujets",
-  "knowledge_workspace_unsaved": "Modifications non enregistrées"
+  "knowledge_workspace_unsaved": "Modifications non enregistrées",
+  "knowledge_workspace_publication_selected": "Une révision publique est sélectionnée"
 }

@@ -12435,12 +12435,11 @@
   "knowledge_workspace_details": "文档详情",
   "knowledge_workspace_notebook_details": "笔记本详情",
   "knowledge_workspace_only_you": "仅自己可见",
-  "knowledge_workspace_writing": "写作",
   "knowledge_workspace_saved": "已保存的原稿",
   "knowledge_workspace_return_editor": "返回自己的文档",
-  "knowledge_workspace_reading": "阅读",
   "knowledge_workspace_tools": "文档操作",
   "knowledge_workspace_navigation_open": "浏览文档",
   "knowledge_workspace_metadata": "语言、许可与主题",
-  "knowledge_workspace_unsaved": "尚未保存的更改"
+  "knowledge_workspace_unsaved": "尚未保存的更改",
+  "knowledge_workspace_publication_selected": "已选择公开修订版"
 }

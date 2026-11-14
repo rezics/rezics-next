@@ -12435,12 +12435,11 @@
   "knowledge_workspace_details": "문서 세부 정보",
   "knowledge_workspace_notebook_details": "노트북 세부 정보",
   "knowledge_workspace_only_you": "나만 보기",
-  "knowledge_workspace_writing": "작성",
   "knowledge_workspace_saved": "저장된 원본",
   "knowledge_workspace_return_editor": "내 문서로 돌아가기",
-  "knowledge_workspace_reading": "읽기",
   "knowledge_workspace_tools": "문서 작업",
   "knowledge_workspace_navigation_open": "문서 찾아보기",
   "knowledge_workspace_metadata": "언어, 라이선스 및 주제",
-  "knowledge_workspace_unsaved": "저장하지 않은 변경 사항"
+  "knowledge_workspace_unsaved": "저장하지 않은 변경 사항",
+  "knowledge_workspace_publication_selected": "공개 리비전이 선택되어 있습니다"
 }

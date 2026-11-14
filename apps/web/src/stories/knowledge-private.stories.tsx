@@ -166,6 +166,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function revealExact(canvasElement: HTMLElement, value: string) {
+  const element = within(canvasElement).getAllByText(value, { exact: true })[0]!;
+  const parents: HTMLDetailsElement[] = [];
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    if (node instanceof HTMLDetailsElement) parents.unshift(node);
+  }
+  for (const details of parents) if (!details.open) await userEvent.click(details.querySelector('summary')!);
+  return element;
+}
+
 async function tabTo(element: HTMLElement) {
   for (let step = 0; step < 40 && document.activeElement !== element; step++) await userEvent.tab();
   await expect(element).toHaveFocus();
@@ -205,7 +215,7 @@ export const Creation: Story = {
     await tabTo(notebookTitle);
     await userEvent.click(await canvas.findByRole('button', { name: m.knowledge_private_create_notebook() }));
     await expect(await canvas.findByText(m.knowledge_private_notebook_acknowledged())).toBeVisible();
-    await expect(canvas.getByText(knowledgeSubjectId)).toBeVisible();
+    await expect(await revealExact(canvasElement, knowledgeSubjectId)).toBeVisible();
     const createDocument = canvas.getByRole('button', { name: m.knowledge_private_create_document() });
     targetSize(createDocument);
     await userEvent.click(createDocument);
@@ -225,7 +235,7 @@ export const NotebookAcknowledgedDocumentFailure: Story = {
     await expect(await canvas.findByText(m.knowledge_private_notebook_acknowledged())).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.knowledge_private_create_document() }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.knowledge_private_unavailable());
-    await expect(canvas.getByText(notebookId)).toBeVisible();
+    await expect(await revealExact(canvasElement, notebookId)).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.knowledge_private_retry_exact() })).toBeEnabled();
   },
 };
@@ -236,7 +246,7 @@ export const ResumedEditor: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: head.title })).toBeVisible();
-    await expect(canvas.getByText(knowledgeRevisionId)).toBeVisible();
+    await expect(await revealExact(canvasElement, knowledgeRevisionId)).toBeVisible();
     await expect(canvas.getByText('A private note prepared for this Subject.')).toBeVisible();
   },
 };
