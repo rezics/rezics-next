@@ -2,7 +2,14 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { setLibraryFollowingStoryMode, type LibraryFollowingStoryMode } from '../kernel/fake/library-following-story';
-import { PageStory, libraryFollowingReady, libraryHeadingReady, pagePaths, pageReady } from './page';
+import {
+  PageStory,
+  libraryFollowingReady,
+  libraryFollowingKeyboardInteraction,
+  libraryHeadingReady,
+  pagePaths,
+  pageReady,
+} from './page';
 
 const meta = {
   title: 'Library/Following',
@@ -49,6 +56,13 @@ async function followMenu(canvasElement: HTMLElement, title: string) {
 export const SignedIn: Story = {
   name: 'Signed In',
   play: libraryFollowingReady,
+  render: () => FollowingStory(),
+};
+
+export const KeyboardMenuInteraction: Story = {
+  name: 'Interaction: keyboard actions menu',
+  tags: ['interaction'],
+  play: libraryFollowingKeyboardInteraction,
   render: () => FollowingStory(),
 };
 

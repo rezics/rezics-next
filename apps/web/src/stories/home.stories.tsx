@@ -70,6 +70,24 @@ export const SignedIn: Story = {
       row.getAttribute('data-feed-source'),
     );
     await expect(nativeOrder).toEqual(['discovery', 'following', 'continue']);
+  },
+};
+export const ContinuationInteraction: Story = {
+  name: 'Interaction · member continuation',
+  tags: ['interaction'],
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
+    await expect(context.canvasElement.querySelector('[data-feed-source="continue"]')).not.toBeNull();
+    await expect(canvas.getByRole('region', { name: m.nav_home() })).toBeVisible();
+    await expect(canvas.getByRole('list', { name: m.nav_home() })).toBeVisible();
+    await expect(context.canvasElement.querySelector('main main')).toBeNull();
+    const nativeOrder = [...context.canvasElement.querySelectorAll('[data-feed-id]')].map((row) =>
+      row.getAttribute('data-feed-source'),
+    );
+    await expect(nativeOrder).toEqual(['discovery', 'following', 'continue']);
     await advanceHome(context.canvasElement);
   },
 };
@@ -83,6 +101,20 @@ export const SignedOut: Story = {
   },
 };
 export const PartialSources: Story = {
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="partial" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await expect(await canvas.findByRole('link', { name: 'Letters from B-612' })).toBeVisible();
+    await expect(await canvas.findByText(m.home_presentation_partial())).toBeVisible();
+    await waitFor(() => expect(canvas.getAllByRole('status')).toHaveLength(1));
+    const retry = canvas.getByRole('button', { name: m.library_follow_retry() });
+    await expect(retry).toBeEnabled();
+  },
+};
+export const PartialSourcesRetryInteraction: Story = {
+  name: 'Interaction · partial sources retry',
+  tags: ['interaction'],
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="partial" />,
   play: async (context) => {
     await pageReady(context);

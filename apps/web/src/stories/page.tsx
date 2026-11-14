@@ -3,7 +3,13 @@ import { accountProfileHref } from '../accounts/profile-editor/address';
 import { selectHomeFeedStory, type HomeFeedStory } from '../kernel/fake/home-feed-stories';
 import { setLabelCatalogueStory } from '../kernel/fake/library-labels';
 import { resetLabelAssignmentStory } from '../kernel/fake/library-label-assignments';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+  type AnyRouter,
+} from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { StoryObj } from '@storybook/react-vite';
 import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential';
@@ -136,6 +142,9 @@ function localizedEntry(path: string): string {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+/** Prepare once before route reads; release when this source/locale/entry is retired. */
+export type PreparePageFixture = () => void | (() => void);
+
 /** Each story enters the generated application route tree at its localized public URL. */
 export function PageStory({
   visitor,
@@ -145,6 +154,7 @@ export function PageStory({
   ratingsFixture,
   labelsFixture,
   homeFeedFixture,
+  prepareFixture,
   previewNewTabs = false,
 }: {
   visitor: 'Signed In' | 'Signed Out';
@@ -154,17 +164,27 @@ export function PageStory({
   ratingsFixture?: RatingsFixtureName;
   labelsFixture?: Parameters<typeof selectLabelStory>[0];
   homeFeedFixture?: HomeFeedStory;
+  prepareFixture?: PreparePageFixture;
   previewNewTabs?: boolean;
 }) {
   const entry = localizedEntry(path);
+  const locale = getLocale();
+  const source = useMemo(
+    () => ({ entry, locale, visitor, credentialMode, ratingsFixture, labelsFixture, homeFeedFixture, prepareFixture }),
+    [entry, locale, visitor, credentialMode, ratingsFixture, labelsFixture, homeFeedFixture, prepareFixture],
+  );
+  const [visit, setVisit] = useState<{ source: typeof source; router: AnyRouter; queryClient: QueryClient }>();
   const [limitation, setLimitation] = useState<string>();
-  selectRatingsFixture(ratingsFixture);
-  const { router, queryClient } = useMemo(() => {
+
+  useLayoutEffect(() => {
+    const { entry, visitor, credentialMode, ratingsFixture, labelsFixture, homeFeedFixture, prepareFixture } = source;
     setStoryRequestContext({ visitor, url: entry });
+    selectRatingsFixture(ratingsFixture);
     selectHomeFeedStory(homeFeedFixture, deLocalizeUrl(new URL(entry, 'http://rezics.local')).pathname === '/');
     resetLabelAssignmentStory();
     if (!labelsFixture) setLabelCatalogueStory(false);
     if (labelsFixture) selectLabelStory(labelsFixture);
+    const releaseFixture = prepareFixture?.();
     const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
     const router = createRouter({
       routeTree,
@@ -177,25 +197,37 @@ export function PageStory({
       ssr: {},
       rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
     });
+    const unbind = bindPreviewNavigation({
+      router,
+      document,
+      deLocalizeUrl,
+      onLocation: (url) => setStoryRequestContext({ visitor, url }),
+      onLimitation: setLimitation,
+      previewNewTabs,
+    });
+    setVisit({ source, router, queryClient });
     void router.load();
-    return { router, queryClient };
-  }, [entry, labelsFixture, visitor, credentialMode, homeFeedFixture, ratingsFixture]);
-  useLayoutEffect(
-    () =>
-      bindPreviewNavigation({
-        router,
-        document,
-        deLocalizeUrl,
-        onLocation: (url) => setStoryRequestContext({ visitor, url }),
-        onLimitation: setLimitation,
-        previewNewTabs,
-      }),
-    [router, visitor, previewNewTabs],
-  );
+    return () => {
+      unbind();
+      for (const match of router.state.matches) match.abortController.abort();
+      router.clearCache();
+      router.history.destroy();
+      void queryClient.cancelQueries();
+      queryClient.clear();
+      releaseFixture?.();
+      selectRatingsFixture();
+      selectHomeFeedStory(undefined, false);
+      resetLabelAssignmentStory();
+      setLabelCatalogueStory(false);
+    };
+  }, [source, previewNewTabs]);
+
+  // Do not mount route consumers against a previous source's fixture or query cache.
+  if (visit?.source !== source) return null;
   return (
     <RatingsPreviewContext.Provider value={ratings}>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+      <QueryClientProvider client={visit.queryClient}>
+        <RouterProvider router={visit.router} />
         {limitation && <aside role="note">{limitation}</aside>}
       </QueryClientProvider>
     </RatingsPreviewContext.Provider>
@@ -536,6 +568,14 @@ export async function libraryFollowingReady(context: { canvasElement: HTMLElemen
   if (!title) throw new Error('The recorded Following page has no available target.');
   await view.findAllByText(title, { exact: false });
   const trigger = await view.findByRole('button', { name: m.library_follow_more_actions({ title }) });
+  await expect(trigger).toBeEnabled();
+}
+
+/** Explicit keyboard exercise; ordinary Following review keeps its initial focus and closed menu. */
+export async function libraryFollowingKeyboardInteraction(context: { canvasElement: HTMLElement }) {
+  await libraryFollowingReady(context);
+  const title = libraryFollowsRecording.follows[0]!.target.label;
+  const trigger = await viewOf(context).findByRole('button', { name: m.library_follow_more_actions({ title }) });
   await followingActionReady(trigger);
 }
 export async function libraryProgressReady(context: { canvasElement: HTMLElement }) {
@@ -544,8 +584,7 @@ export async function libraryProgressReady(context: { canvasElement: HTMLElement
   const seeded = libraryProgressSessionsRecording.progressSessions[0]?.subject.label;
   await view.findByRole('heading', { level: 1, name: m.library_progress_heading() });
   if (seeded) await view.findAllByText(seeded, { exact: false });
-  const [first] = await view.findAllByRole('listitem');
-  if (first) await userEvent.hover(first);
+  await view.findAllByRole('listitem');
 }
 export async function libraryProgressSessionReady(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
