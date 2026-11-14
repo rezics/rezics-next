@@ -170,6 +170,9 @@ Semantic snapshots finish before the observer returns and before Library can ope
 Decision: Semantic publishes one native, ID-independent home-position basis and exact one-hop title batches; Content
 continues to own viewer disclosure and composes its own current source evidence.
 
+Import boundary: the adapter and native reader use title contracts through `contract/index.ts` and partition reads
+through `database/pool.ts`; the existing focused acceptance stays unchanged because this repair changes no behavior.
+
 ## Canonical identity boundary
 
 Subject IDs are permanent and never reused. Global subject:create creates revision 1 with its self mapping in the source transaction; import also needs batch authority. Creation is independent of Search, and compact facts do not create another revision target. subject:merge asserts duplicate identity only, with the optional atomic [reviewed Person evidence](identity-epoch-contract.md#reviewed-person-identity-precondition) precondition. Editions, translations and formats remain distinct subjects linked by relations. Durable completion requires mapping and both fixed participants.

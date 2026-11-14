@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { partitionReadClients } from '../database/read-snapshot.ts';
+import { partitionReadClients } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartitions, type Partition } from '../partition/partition.ts';
 import { activeRelease } from './definition-release-read.ts';
@@ -12,7 +12,7 @@ import {
   SEMANTIC_TITLE_INPUT_MAX_ORIGINALS,
   type SemanticTitleInputEntry,
   type SemanticTitleInputs,
-} from './contract/title-inputs.ts';
+} from './contract/index.ts';
 import { readIdentityMappings } from './identity-adapters/read.ts';
 import { withReadTransaction } from './read.ts';
 import { slotId } from './slots.ts';

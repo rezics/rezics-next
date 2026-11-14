@@ -110,3 +110,10 @@ export type {
   PublicSummaryRead,
 } from './summaries.ts';
 export type { SummarySources, SummaryCoverState, SubjectSummaryObservation } from './summaries.ts';
+export {
+  SEMANTIC_TITLE_INPUT_MAX_BYTES,
+  SEMANTIC_TITLE_INPUT_MAX_ORIGINALS,
+  type SemanticTitleInputEntry,
+  type SemanticTitleInputs,
+  type SemanticTitleInputsObservation,
+} from './title-inputs.ts';
