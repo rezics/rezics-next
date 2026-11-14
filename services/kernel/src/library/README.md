@@ -906,6 +906,12 @@ query implementation. Preserve real Pool/client identities and method replacemen
 `connect` and `query` in place. A forwarding proxy that dispatches through the mutable target method recursively
 reenters the installed wrapper. The focused HTTP suite checks the process lifetime RSS peak against 1.5 GB.
 
+Decision: Continue owner snapshots use a local deadline-bound checkout and query client for the same repeatable-read
+owner proof and result. The original deadline covers checkout, `BEGIN`, every statement, `COMMIT` and cleanup; a late
+checkout starts no SQL, and unresolved or uncertain native I/O discards its client without queuing rollback behind it.
+Snapshot failures retain their original error, and owner connections are released before native Source or other foreign
+preparation begins.
+
 The existing Continue GET also accepts optional `view=BASIC|FULL`. An omitted view and `BASIC` preserve the original
 closed response exactly. `FULL` adds nullable `subject` using the native `SubjectSummarySchema`; `continue-query.ts`
 calls the existing `readSubjectSummaries` once with only the shown canonical IDs (at most 100), the request Actor,

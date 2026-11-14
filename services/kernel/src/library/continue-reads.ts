@@ -1,5 +1,5 @@
-import { readAccount, deadlineClient } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { readAccount } from './access-port.ts';
+import type { deadlineClient } from './access-port.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Actor } from '../request/access.ts';
@@ -9,6 +9,7 @@ import { systemClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
 import { readContinueOwnerPage } from './continue-query.ts';
+import { withContinueReadSnapshot } from './continue-read-connection.ts';
 import type { ContinueActiveSession } from './continue-source.ts';
 import type { SubjectSummary } from '../semantic/summaries.ts';
 import { openSpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
@@ -76,28 +77,19 @@ export function createContinueReads(
         );
       }
       async function snapshot<T>(read: (client: ReturnType<typeof deadlineClient>) => Promise<T>) {
-        return withConnection(deps.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          try {
-            const owner = await readAccount(client, route!, accountActor.accountId);
-            if (
-              !owner ||
-              owner.kind !== 'actor' ||
-              owner.state !== 'active' ||
-              owner.fenced ||
-              !Number.isSafeInteger(accountActor.authnEpoch) ||
-              accountActor.authnEpoch < 1 ||
-              owner.minimumAuthnEpoch > BigInt(accountActor.authnEpoch)
-            )
-              throw new ProblemError('forbidden');
-            const result = await read(client);
-            await client.query('COMMIT');
-            return result;
-          } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-          }
+        return withContinueReadSnapshot(deps.pool, deadline, async (client) => {
+          const owner = await readAccount(client, route!, accountActor.accountId);
+          if (
+            !owner ||
+            owner.kind !== 'actor' ||
+            owner.state !== 'active' ||
+            owner.fenced ||
+            !Number.isSafeInteger(accountActor.authnEpoch) ||
+            accountActor.authnEpoch < 1 ||
+            owner.minimumAuthnEpoch > BigInt(accountActor.authnEpoch)
+          )
+            throw new ProblemError('forbidden');
+          return read(client);
         });
       }
       const presence = await snapshot(
