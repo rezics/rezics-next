@@ -348,7 +348,7 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     const pending = await mount('opening', true);
     await click(button(host, m.thread_write_send()));
     await settle(() => pending.commands.length === 1);
-    const command = structuredClone(pending.commands[0]);
+    const originalWritingCommand = structuredClone(pending.commands[0]);
     const pendingDialog = await openDialog(pending.origin, m.thread_authoring_leave_pending());
     await stayAndRestore(pendingDialog.stay, pending.origin);
     expect(host.querySelector<HTMLInputElement>('#thread-title')?.value).toBe(localTitle);
@@ -356,10 +356,10 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     await settle(() => host.textContent?.includes(m.thread_write_unavailable()) === true);
     const unknown = await openDialog(pending.origin, m.thread_authoring_leave_pending());
     await stayAndRestore(unknown.stay, pending.origin);
-    expect(pending.commands).toEqual([command]);
+    expect(pending.commands).toEqual([originalWritingCommand]);
     await click(button(host, m.thread_recovery_retry_original()));
     await settle(() => pending.commands.length === 2);
-    expect(pending.commands).toEqual([command, command]);
+    expect(pending.commands).toEqual([originalWritingCommand, originalWritingCommand]);
     const confirmed = await openDialog(pending.origin, m.thread_authoring_leave_pending());
     expect(pending.counts()).toEqual({ arrivals: 0, successes: 0 });
     await click(confirmed.leave);
@@ -454,14 +454,14 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
       events.push('retire');
       retire();
     };
-    const command = fixture.api.command;
+    const sendPublicationCommand = fixture.api.command;
     let resolvePublish!: (result: Awaited<ReturnType<typeof fixture.api.command>>) => void;
     const pendingPublish = new Promise<Awaited<ReturnType<typeof fixture.api.command>>>((resolve) => {
       resolvePublish = resolve;
     });
     fixture.api.command = (intent) => {
       if (intent.kind === 'publish') return pendingPublish;
-      return command(intent);
+      return sendPublicationCommand(intent);
     };
     const page = await mount('edition', false, { controller: fixture.controller, events });
     const controller = fixture.controller;
