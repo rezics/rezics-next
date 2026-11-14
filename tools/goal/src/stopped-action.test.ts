@@ -499,7 +499,11 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
       taskId: 'typing-only',
       owner: 'typing',
       actionable: true,
-      missingPredicate: 'the structured current compiler command or check identity is unavailable',
+      missingPredicate: 'authenticated owner authorization to receive compiler evidence',
+      receivingActions: [
+        { kind: 'authorization', receiver: 'task-owner', command: 'typing-recover' },
+        { kind: 'input', receiver: 'task-owner', commandCoverage: 'unknown', inputMatch: 'unknown' },
+      ],
     });
     expect(width.deliveredGoals).toEqual(['ordinary', 'stale-successor', 'typing', 'unreviewed']);
     const cancelled: string[] = [];
@@ -523,9 +527,9 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     expect(cancelled).toEqual(['ordinary-stop', 'superseded-source']);
     const typingEvents = inbox.pending('typing');
     const typingNotice = typingEvents.find(({ event: delivered }) => delivered.summary.includes('evidence receiver'));
-    expect(typingNotice?.event.summary).toContain(
-      'the structured current compiler command or check identity is unavailable',
-    );
+    expect(typingNotice?.event.summary).toContain('provide or renew authenticated compiler recovery authorization');
+    expect(typingNotice?.event.summary).toContain('pending command coverage is unknown');
+    expect(typingNotice?.event.summary).toContain('input identity is unknown');
     expect(typingNotice?.event.summary).toContain('typing-recover typing-only --expected-attempt 1');
     const row = db
       .query<{ body: string }, [string]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1')
