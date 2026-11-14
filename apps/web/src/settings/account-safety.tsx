@@ -260,7 +260,7 @@ function AccountSignOut({
     target?.focus();
   }, [recovering, phase, isCurrent]);
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-4">
       <p id={`${id}-sign-out`} className="text-sm text-muted-foreground">
         {m.settings_account_sign_out_text()}
       </p>
@@ -354,7 +354,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
     renameReload.current?.focus();
   }, [read?.loading, isCurrent]);
   const actionClass =
-    'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal py-2 text-center [overflow-wrap:anywhere]';
+    'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal py-2 text-center [overflow-wrap:anywhere] sm:max-w-sm';
   return (
     <ContentSection className="min-w-0 max-w-full">
       <ContentSectionHeader>
@@ -363,7 +363,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
         </ContentSectionTitle>
       </ContentSectionHeader>
       <ContentSectionBody
-        className="min-w-0 max-w-full space-y-6 [overflow-wrap:anywhere]"
+        className="min-w-0 max-w-full space-y-4 [overflow-wrap:anywhere] sm:space-y-5"
         onClickCapture={navigationGuard}
         onAuxClickCapture={navigationGuard}
       >
@@ -374,36 +374,40 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
           </div>
         ) : (
           <>
-            <AccountRenameLink
-              context={isCurrent() ? (props.renameAccount ?? null) : null}
-              loading={read?.loading ?? false}
-              failure={isCurrent() ? failure : undefined}
-            />
-            {props.renameRead ? (
-              <div aria-busy={props.renameRead.loading} className="space-y-2">
-                <Button
-                  ref={renameReload}
-                  type="button"
-                  variant="outline"
-                  className={actionClass}
-                  disabled={props.renameRead.loading || waiting}
-                  aria-describedby={waiting ? `${id}-rename-wait` : undefined}
-                  onClick={(event) => {
-                    restoreRenameFocus.current = event.detail === 0;
-                    if (isCurrent() && (read?.isCurrent?.() ?? true)) props.renameRead?.reload();
-                  }}
-                  aria-label={`${m.settings_reload()}: ${m.settings_account_rename_heading()}`}
-                >
-                  {m.settings_reload()}
-                </Button>
-                {waiting ? (
-                  <p id={`${id}-rename-wait`} role="status" className="text-sm text-muted-foreground">
-                    {m.settings_retry_wait()}
-                  </p>
+            <div className="min-w-0 rounded-md border p-4 sm:p-5">
+              <div className="min-w-0 space-y-4 sm:max-w-sm">
+                <AccountRenameLink
+                  context={isCurrent() ? (props.renameAccount ?? null) : null}
+                  loading={read?.loading ?? false}
+                  failure={isCurrent() ? failure : undefined}
+                />
+                {props.renameRead ? (
+                  <div aria-busy={props.renameRead.loading} className="space-y-2">
+                    <Button
+                      ref={renameReload}
+                      type="button"
+                      variant="outline"
+                      className={actionClass}
+                      disabled={props.renameRead.loading || waiting}
+                      aria-describedby={waiting ? `${id}-rename-wait` : undefined}
+                      onClick={(event) => {
+                        restoreRenameFocus.current = event.detail === 0;
+                        if (isCurrent() && (read?.isCurrent?.() ?? true)) props.renameRead?.reload();
+                      }}
+                      aria-label={`${m.settings_reload()}: ${m.settings_account_rename_heading()}`}
+                    >
+                      {m.settings_reload()}
+                    </Button>
+                    {waiting ? (
+                      <p id={`${id}-rename-wait`} role="status" className="text-sm text-muted-foreground">
+                        {m.settings_retry_wait()}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
-            ) : null}
-            <div className="space-y-3">
+            </div>
+            <div className="min-w-0 space-y-3 rounded-md border p-4 sm:p-5">
               <p id={`${id}-security`} className="text-sm text-muted-foreground">
                 {m.settings_account_safety_text()}
               </p>
@@ -422,9 +426,11 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
                 </p>
               )}
             </div>
-            <AccountSignOut props={props} id={id} actionClass={actionClass} />
+            <div className="min-w-0 rounded-md border p-4 sm:p-5">
+              <AccountSignOut props={props} id={id} actionClass={actionClass} />
+            </div>
             <Separator />
-            <div className="space-y-3">
+            <div className="min-w-0 space-y-3 rounded-md border border-destructive/40 bg-destructive/5 p-4 sm:p-5">
               <h3 className="font-medium">{m.settings_account_delete_heading()}</h3>
               <p id={`${id}-deletion`} className="text-sm text-muted-foreground">
                 {m.settings_account_delete_text()}
