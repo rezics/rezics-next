@@ -43,14 +43,17 @@ function healthyQuery(sql: string) {
     : { rows: [] };
 }
 
-function builtinRuntime(pool: Pool, readAccount = async (_client: unknown, route: number, id: string) => ({
-  route,
-  accountId: id,
-  kind: 'actor',
-  state: 'active',
-  fenced: false,
-  minimumAuthnEpoch: 1n,
-})) {
+function builtinRuntime(
+  pool: Pool,
+  readAccount = async (_client: unknown, route: number, id: string) => ({
+    route,
+    accountId: id,
+    kind: 'actor',
+    state: 'active',
+    fenced: false,
+    minimumAuthnEpoch: 1n,
+  }),
+) {
   const ports = {
     accountEligibility: { routeOf, readAccount },
   } as unknown as NativeLibraryPresentationPorts;
@@ -101,9 +104,7 @@ test('an expired member-source rollback retires its client and preserves the nex
       checkouts += 1;
       return client(
         (sql) =>
-          checkouts === 2 && sql === 'ROLLBACK'
-            ? new Promise<{ rows: unknown[] }>(() => {})
-            : healthyQuery(sql),
+          checkouts === 2 && sql === 'ROLLBACK' ? new Promise<{ rows: unknown[] }>(() => {}) : healthyQuery(sql),
         checkouts === 2 ? (error) => released.resolve(error) : () => {},
       );
     },
