@@ -237,7 +237,11 @@ export function MusicReleaseReader(props: Props) {
           }}
         />
       ) : (
-        <div className="space-y-3" aria-busy={recovery?.status === 'pending'}>
+        <div
+          className="min-w-0 space-y-3 rounded-lg border border-border p-4 [overflow-wrap:anywhere]"
+          data-slot="music-release-recovery"
+          aria-busy={recovery?.status === 'pending'}
+        >
           <p role="status">
             {admission.reason === 'changed'
               ? m.music_release_changed({}, o)
@@ -450,27 +454,6 @@ export function MusicReleaseWindow({
 
   return (
     <div className="min-w-0 space-y-4" aria-busy={busy}>
-      <p className="text-sm text-muted-foreground">{m.music_release_scope({}, o)}</p>
-      <p className="text-sm text-muted-foreground">{m.music_release_return({}, o)}</p>
-      {busy ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
-      {failure ? (
-        <div role="alert" className="space-y-2">
-          <p>{page ? m.music_release_window_unavailable({}, o) : m.music_release_unavailable({}, o)}</p>
-          <MusicReleasePendingWindow pending={navigation.current.pending} page={page} locale={locale} />
-          <button
-            type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-            disabled={busy}
-            onClick={(event) => {
-              const pending = navigation.current.pending;
-              if (pending) void read(pending.address, pending.intent, event.currentTarget, event.detail === 0);
-              else void read(base, 'start', event.currentTarget, event.detail === 0);
-            }}
-          >
-            {m.album_tracks_retry({}, o)}
-          </button>
-        </div>
-      ) : null}
       {page ? (
         <MusicReleaseFacts
           page={page}
@@ -483,7 +466,7 @@ export function MusicReleaseWindow({
       ) : null}
       {page && page.admitted && !page.stream ? <p role="status">{m.music_release_unconfigured({}, o)}</p> : null}
       {page?.stream ? (
-        <>
+        <section className="min-w-0 space-y-4" data-slot="music-release-current-window">
           <nav className="flex min-w-0 flex-wrap gap-2" aria-label={m.work_parts_relation({}, o)}>
             {page.streams.map((stream) => (
               <button
@@ -529,131 +512,162 @@ export function MusicReleaseWindow({
                       {m.music_release_withheld({}, o)}
                     </p>
                   ) : (
-                    <details
-                      open={disclosureKey === key}
-                      onToggle={(event) => {
-                        const open = event.currentTarget.open;
-                        setDisclosureKey((currentKey) => (open ? key : currentKey === key ? null : currentKey));
-                        if (!open && selectedKey === key) clearSelection();
-                      }}
-                      className="min-w-0 rounded-lg border border-border p-3"
-                    >
-                      <summary className={`${action} cursor-pointer`}>{m.album_tracks_inspect({}, o)}</summary>
-                      <ContentItemFrame as="div" className="min-w-0 space-y-3 py-4">
-                        <div className="min-w-0 space-y-1">
-                          <p className="font-medium [overflow-wrap:anywhere]" lang={summary.label?.language}>
-                            {summary.label?.value || m.work_parts_unresolved({}, o)}
-                          </p>
-                          <p className="text-sm text-muted-foreground" lang={type?.lang ?? undefined}>
-                            {type?.text || m.work_parts_unresolved({}, o)}
-                          </p>
-                          <MusicReleaseSlot row={row} page={page} locale={locale} />
-                        </div>
-                        <button
-                          type="button"
-                          className={`${buttonVariants({ variant: chosen ? 'secondary' : 'outline' })} ${action}`}
-                          disabled={busy}
-                          aria-pressed={chosen}
-                          aria-expanded={chosen}
-                          aria-controls={chosen ? inspectionId : undefined}
-                          onClick={(event) => {
-                            if (!current() || busy) return;
-                            selectionOpener.current = event.currentTarget;
-                            keyboardSelection.current = event.detail === 0;
-                            setDisclosureKey(key);
-                            setSelectedKey(key);
-                            if (chosen && event.detail === 0) inspectionHeading.current?.focus();
-                          }}
-                        >
-                          {m.music_release_inspect({}, o)}
-                          <span className="sr-only">
-                            {' · '}
-                            {summary.label?.value || m.work_parts_unresolved({}, o)}
-                          </span>
-                        </button>
-                        {chosen && selected ? (
-                          <section
-                            id={inspectionId}
-                            role="region"
-                            aria-labelledby={`${inspectionId}-heading`}
-                            data-slot="music-release-inspection"
-                            className="min-w-0 space-y-4 rounded-lg border border-border p-4 [overflow-wrap:anywhere]"
+                    <ContentItemFrame as="div" className="min-w-0 space-y-3 py-4">
+                      <div className="min-w-0 space-y-1 [overflow-wrap:anywhere]">
+                        <p className="font-medium" lang={summary.label?.language}>
+                          {summary.label?.value || m.work_parts_unresolved({}, o)}
+                        </p>
+                        <p className="text-sm text-muted-foreground" lang={type?.lang ?? undefined}>
+                          {type?.text || m.work_parts_unresolved({}, o)}
+                        </p>
+                        <MusicReleaseSlot row={row} page={page} locale={locale} />
+                      </div>
+                      <details
+                        open={disclosureKey === key}
+                        onToggle={(event) => {
+                          const open = event.currentTarget.open;
+                          setDisclosureKey((currentKey) => (open ? key : currentKey === key ? null : currentKey));
+                          if (!open && selectedKey === key) clearSelection();
+                        }}
+                        className="min-w-0 rounded-lg border border-border p-3"
+                      >
+                        <summary className={`${action} cursor-pointer`}>{m.album_tracks_inspect({}, o)}</summary>
+                        <div className="min-w-0 space-y-3 pt-4">
+                          <button
+                            type="button"
+                            className={`${buttonVariants({ variant: chosen ? 'secondary' : 'outline' })} ${action}`}
+                            disabled={busy}
+                            aria-pressed={chosen}
+                            aria-expanded={chosen}
+                            aria-controls={chosen ? inspectionId : undefined}
+                            onClick={(event) => {
+                              if (!current() || busy) return;
+                              selectionOpener.current = event.currentTarget;
+                              keyboardSelection.current = event.detail === 0;
+                              setDisclosureKey(key);
+                              setSelectedKey(key);
+                              if (chosen && event.detail === 0) inspectionHeading.current?.focus();
+                            }}
                           >
-                            <header className="flex min-w-0 items-start justify-between gap-3">
-                              <h3
-                                id={`${inspectionId}-heading`}
-                                ref={inspectionHeading}
-                                tabIndex={-1}
-                                data-holder={selected.holder}
-                                data-statement-id={selected.statementId}
-                                className="font-semibold"
-                              >
-                                {m.music_release_occurrence({}, o)}
-                                {' · '}
-                                <span lang={selected.summary?.label?.language}>
-                                  {selected.summary?.label?.value || m.work_parts_unresolved({}, o)}
-                                </span>
-                              </h3>
-                              <button
-                                type="button"
-                                className={`${buttonVariants({ variant: 'outline' })} ${action} shrink-0`}
-                                onClick={closeInspection}
-                              >
-                                {m.candidate_close({}, o)}
-                              </button>
-                            </header>
-                            <MusicReleaseOccurrenceFacts
-                              row={selected}
-                              page={page}
-                              locale={locale}
-                              realm={realm}
-                              current={currentReturn(page, {
-                                holder: selected.holder,
-                                statementId: selected.statementId,
-                              })}
-                              correction={correction}
-                              onNavigate={returnFocus}
-                            />
-                          </section>
-                        ) : null}
-                      </ContentItemFrame>
-                    </details>
+                            {m.music_release_inspect({}, o)}
+                            <span className="sr-only">
+                              {' · '}
+                              {summary.label?.value || m.work_parts_unresolved({}, o)}
+                            </span>
+                          </button>
+                          {chosen && selected ? (
+                            <section
+                              id={inspectionId}
+                              role="region"
+                              aria-labelledby={`${inspectionId}-heading`}
+                              data-slot="music-release-inspection"
+                              className="min-w-0 space-y-4 rounded-lg border border-border p-4 [overflow-wrap:anywhere]"
+                            >
+                              <header className="flex min-w-0 items-start justify-between gap-3">
+                                <h3
+                                  id={`${inspectionId}-heading`}
+                                  ref={inspectionHeading}
+                                  tabIndex={-1}
+                                  data-holder={selected.holder}
+                                  data-statement-id={selected.statementId}
+                                  className="font-semibold"
+                                >
+                                  {m.music_release_occurrence({}, o)}
+                                  {' · '}
+                                  <span lang={selected.summary?.label?.language}>
+                                    {selected.summary?.label?.value || m.work_parts_unresolved({}, o)}
+                                  </span>
+                                </h3>
+                                <button
+                                  type="button"
+                                  className={`${buttonVariants({ variant: 'outline' })} ${action} shrink-0`}
+                                  onClick={closeInspection}
+                                >
+                                  {m.candidate_close({}, o)}
+                                </button>
+                              </header>
+                              <MusicReleaseOccurrenceFacts
+                                row={selected}
+                                page={page}
+                                locale={locale}
+                                realm={realm}
+                                current={currentReturn(page, {
+                                  holder: selected.holder,
+                                  statementId: selected.statementId,
+                                })}
+                                correction={correction}
+                                onNavigate={returnFocus}
+                              />
+                            </section>
+                          ) : null}
+                        </div>
+                      </details>
+                    </ContentItemFrame>
                   )}
                 </li>
               );
             })}
           </ul>
           {!page.next ? <p role="status">{m.album_tracks_complete({}, o)}</p> : null}
-          <nav className="flex flex-wrap gap-3" aria-label={m.music_release_navigation({}, o)}>
-            <button
-              type="button"
-              disabled={busy || !previous}
-              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-              onClick={request(previous ?? base, 'previous')}
-            >
-              {m.album_tracks_previous({}, o)}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-              onClick={request(musicReleaseFirstAddress(base, page.stream.key), 'start')}
-            >
-              {m.work_parts_restart({}, o)}
-            </button>
-            {next && !failure ? (
+        </section>
+      ) : null}
+      {busy || failure || page?.stream ? (
+        <section className="min-w-0 space-y-3" data-slot="music-release-continuation">
+          {busy ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
+          {failure ? (
+            <div role="alert" className="space-y-2">
+              <p>{page ? m.music_release_window_unavailable({}, o) : m.music_release_unavailable({}, o)}</p>
+              <MusicReleasePendingWindow pending={navigation.current.pending} page={page} locale={locale} />
+              <button
+                type="button"
+                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                disabled={busy}
+                onClick={(event) => {
+                  const pending = navigation.current.pending;
+                  if (pending) void read(pending.address, pending.intent, event.currentTarget, event.detail === 0);
+                  else void read(base, 'start', event.currentTarget, event.detail === 0);
+                }}
+              >
+                {m.album_tracks_retry({}, o)}
+              </button>
+            </div>
+          ) : null}
+          {page?.stream ? (
+            <nav className="flex flex-wrap gap-3" aria-label={m.music_release_navigation({}, o)}>
+              <button
+                type="button"
+                disabled={busy || !previous}
+                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                onClick={request(previous ?? base, 'previous')}
+              >
+                {m.album_tracks_previous({}, o)}
+              </button>
               <button
                 type="button"
                 disabled={busy}
                 className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-                onClick={request(next, 'next')}
+                onClick={request(musicReleaseFirstAddress(base, page.stream.key), 'start')}
               >
-                {m.work_parts_more({}, o)}
+                {m.work_parts_restart({}, o)}
               </button>
-            ) : null}
-          </nav>
-        </>
+              {next && !failure ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                  onClick={request(next, 'next')}
+                >
+                  {m.work_parts_more({}, o)}
+                </button>
+              ) : null}
+            </nav>
+          ) : null}
+        </section>
       ) : null}
+      <div className="space-y-2 text-sm text-muted-foreground">
+        <p>{m.music_release_scope({}, o)}</p>
+        <p>{m.music_release_return({}, o)}</p>
+      </div>
     </div>
   );
 }
