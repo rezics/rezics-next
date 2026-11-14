@@ -70,12 +70,19 @@ than assumed. Check:
 - declared risk areas cover the paths;
 - the target is recorded in parsed metadata;
 - dependencies are real code dependencies;
-- overlap is not encoded as a dependency; use `after:` only when code needs another task's API, schema or component;
+- Use `after` with `afterSource` only for an indispensable unlanded implementation, and link its existing Goal
+  contract;
 - a requirement that refuses, rejects, stops or fails work carries its price line ([agent conduct](agent-conduct.md#briefs)).
 
+Prepare the next briefs while workers write. A held outcome's brief names the outcome, first writable boundary, what is
+missing, its owner and the observable release condition, and identifies which part actually needs that condition.
+When an installed or adopted contract supports independent work, dispatch that coherent slice now and defer only the
+dependent binding, activation or check. Shared files, review and test scheduling are not source dependencies. Make
+and record reversible assumptions when justified; preserve authorization, money, data integrity and present
+acceptance obligations. Do not represent a temporary adapter or mock as installed behavior.
+
 Declared paths never hold a task. Overlapping tasks run side by side; the controller's rebase process resolves
-conflicts with agent assistance. Shared READMEs, fake data, messages, `package.json` and routes are not dependencies
-merely because multiple tasks edit them. See [integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing).
+conflicts with agent assistance. See [integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing).
 
 Prefer the oldest ready dependency. Do not restart a live attempt for an unchanged contract. Check actual task state
 immediately before changing it.
@@ -151,8 +158,7 @@ state, owner links, blockers and next actions. Resume only when authorized.
 Each manager independently finds runnable release work from actual source gaps, owner contracts and worker proposals.
 Size complete writable outcomes and refill eligible capacity before workers exit or park. Keep a ready queue, verify
 actual process starts and first-source checkpoints, and continue dispatch without waiting for a fixed batch or a list
-from the supermanager. A verification dependency holds only its dependent change; it does not block unrelated
-implementation.
+from the supermanager. Follow [Brief preflight](#brief-preflight) for verification dependencies.
 
 Workers may choose repair order within their scope and propose adjacent work. Managers coordinate ownership and write
 boundaries, and own priority, assignment, start recovery and integration follow-through. When first source stalls,
