@@ -450,6 +450,9 @@ async function readingEntrance(canvasElement: HTMLElement, commandsUnavailable =
   await expect(summary).toHaveFocus();
   await expect(actions.open).toBe(true);
   await expect(scope).toBeVisible();
+  await expect(
+    within(actions).getByText(`${m.library_filtered_status_source()}: Compare this Collection`),
+  ).toBeVisible();
   await expect(within(actions).getByText(m.library_filtered_status_help())).toBeVisible();
   const draft = within(actions).getByRole('textbox', { name: m.library_filtered_status_state() });
   await userEvent.type(draft, 'completed');

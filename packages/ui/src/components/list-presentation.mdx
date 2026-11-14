@@ -7,10 +7,10 @@ import * as Stories from './list-presentation.stories';
 
 List rows and cards keep each member's real Type. A released `listPresentation` may choose its image aspect and up to
 four ordered fact properties for that Type. The nearest annotation replaces the whole inherited value. Without an
-annotation, known current Types use explicit defaults: books portrait, film and series landscape, music square, and
-recipes landscape. Unknown Types use the list's composition ratio or the existing `Cover` fallback.
+annotation, known current Types share the portrait default. Unknown Types use the list's composition ratio or the
+existing `Cover` fallback.
 
-The aspect values map to 3:4, 16:9 and 1:1. A card's actual Type chooses its own image frame, even when its grid has a
+The aspect values map to 5:7, 16:9 and 1:1. A card's actual Type chooses its own image frame, even when its grid has a
 shared composition ratio. Suitability withholding, placeholders, crop fitting, focal points, alt text, attribution and
 language remain part of the shared `Cover` renderer. Only facts already supplied with the bounded member data appear.
 
