@@ -328,6 +328,38 @@ profile. The quiet, neutral chip sits in the caption after the title and byline 
 foreground or muted-foreground token. A long label wraps within the tile. When `href` is present, the chip is a separate link above the stretched subject link, with a 44 px target, so pointer
 and keyboard users can reach it; keyboard order is subject, status, then the menu.
 
+## Navigation, selection and working context
+
+Navigation, disclosure and command selection are separate interactions. A document row opens its destination or
+current canvas through an ordinary link or button; the active row communicates location. A separate chevron expands
+children without opening or selecting them. Use nested lists and labelled disclosure buttons for ordinary navigation,
+not menu or tree roles without their complete keyboard contract. Contextual actions belong to a separate ellipsis
+button. Do not use radio buttons or checkboxes to navigate.
+
+Checkboxes select explicit command operands, such as publication inclusion or a batch operation. Radio groups choose
+one form value. Neither changes because a person opens a document. Preserve each domain's existing selection,
+permission and confirmation owner. Reuse ContentItem/ListRow, Menu and disclosure controls; do not create a parallel
+row implementation merely to change spacing.
+
+Present current identity, available primary work and its result before optional provenance or technical detail.
+Secondary disclosure must not hide unsaved work, actionable failure, uncertain command recovery, availability,
+required consent or a currently applied scope. Moving presentation never authorizes more data or changes a command.
+Keep a single editor/form owner mounted when switching supporting views. Phone layouts preserve the same task and
+controls, with wrapping content and actions available without hover.
+
+Close or cancel returns to the current connected, visible opener or an appropriate current heading. Accepted
+navigation follows its destination's focus owner instead of bouncing to the old opener. Delayed work cannot focus a
+retired view or override a person's subsequent focus. [Shell](../../apps/web/src/shell/README.md#current-workspace-navigation)
+owns navigation placement and phone dismissal; [Studio](../../apps/web/src/studio/README.md#writing-workbench) owns
+its retained canvases and publication selection.
+
+The interaction basis is [Notion's sidebar](https://www.notion.com/help/navigate-with-the-sidebar) and
+[mobile workspace guidance](https://www.notion.com/help/workspaces-on-mobile),
+[Outline's collection organization](https://docs.getoutline.com/s/guide/doc/collections-l9o3LD22sV),
+[AppFlowy's read-only disclosure and navigation repairs](https://github.com/AppFlowy-IO/AppFlowy/releases/tag/0.15.0),
+and [WAI-ARIA disclosure navigation](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/examples/disclosure-navigation/).
+These inform the distinctions above; REZICS keeps its existing authority, disclosure and command contracts.
+
 ## Choice controls
 
 Checkboxes and radio buttons use the shadcn `Checkbox` and `RadioGroup` inside a `Field`. A control that must work before hydration uses `NativeCheckbox`. Callers never render a bare checkbox or radio input.

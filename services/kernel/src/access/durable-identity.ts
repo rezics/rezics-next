@@ -4,16 +4,16 @@ import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { DurableInitiatorUnavailableError } from './durable-initiator.ts';
 import { accessEvidence } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import canonicalize from 'canonicalize';
 import { durableInitiatorCommitment } from './durable-initiator-capture.ts';
 import type { Access, AccessContext, AccountActor } from '../request/access.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import delegationRead from './durable-initiator-delegation.sql';
 import receiptRead from '../command/read-receipt.sql';
-import { deadlineClient, within } from './deadline.ts';
+import { within } from './deadline.ts';
 import { readAccount, type Account } from './account-data.ts';
 import type { DurableInitiatorRecord, InitiatorRestoreInput, InitiatorRestorerConfig } from './durable-initiator.ts';
 import { accessRoot } from './derived-access.ts';
@@ -114,17 +114,29 @@ export async function restoreOperationIdentity(
   )
     throw new Error('Durable identity unavailable');
   const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
+  // Every native phase spends the original evidence window, including checkout.
+  const readOptions = {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      throwAccessUnavailable(error);
+      return error;
+    },
+    isUncertainSettledQueryError: () => true,
+  };
   // Copy the allowlisted result before releasing the module's reader. Subsequent
   // callback/JSON mutations can never change the verified receipt binding.
-  const record: DurableInitiatorRecord | null = await within(deadline, () =>
-    withConnection(pool, async (client) => {
+  const record: DurableInitiatorRecord | null = await withBoundedReadConnection(
+    pool,
+    deadline,
+    async (client) => {
       const row = await accessEvidence(
-        () => readOperation(deadlineClient(client, deadline), Object.freeze({ ...operation }), time),
+        () => readOperation(client, Object.freeze({ ...operation }), time),
         () => new DurableInitiatorUnavailableError(),
         deadline,
       );
       return row === null ? null : structuredClone(row);
-    }),
+    },
+    readOptions,
   );
   if (
     !record ||
@@ -184,13 +196,19 @@ export async function restoreOperationIdentity(
         originalDelegation.issuedValid.length > 256
   )
     throw new Error('Invalid original delegation');
-  const receipt = await receiptRead.run(deadlineClient(pool, deadline), {
-    partition_no: partitionOf(operation.route),
-    principal_kind: 'account',
-    principal_id: actor.accountId,
-    command_kind: creation.commandKind,
-    idempotency_keys: nativeReceiptKeyCandidates(pool, creation.commandKind, actor.accountId, creation.idempotencyKey),
-  });
+  const receipt = await withBoundedReadConnection(
+    pool,
+    deadline,
+    (client) =>
+      receiptRead.run(client, {
+        partition_no: partitionOf(operation.route),
+        principal_kind: 'account',
+        principal_id: actor.accountId,
+        command_kind: creation.commandKind,
+        idempotency_keys: nativeReceiptKeyCandidates(pool, creation.commandKind, actor.accountId, creation.idempotencyKey),
+      }),
+    readOptions,
+  );
   const binding = durableInitiatorCommitment(record);
   const response = receipt?.response as { durableInitiator?: unknown } | undefined;
   if (
@@ -212,7 +230,12 @@ export async function restoreOperationIdentity(
     !scopes(consent.scopes)
   )
     throw new Error('Current consent unavailable');
-  const account = await readAccount(deadlineClient(pool, deadline), routeOf(actor.accountId)!, actor.accountId);
+  const account = await withBoundedReadConnection(
+    pool,
+    deadline,
+    (client) => readAccount(client, routeOf(actor.accountId)!, actor.accountId),
+    readOptions,
+  );
   if (
     !account ||
     account.accountId !== actor.accountId ||
@@ -226,13 +249,19 @@ export async function restoreOperationIdentity(
   )
     throw new Error('Current identity unavailable');
   if (delegation && originalDelegation) {
-    const current = await delegationRead.run(deadlineClient(pool, deadline), {
-      route: routeOf(delegation[1]!)!,
-      principal_id: delegation[1]!,
-      request_id: delegation[2]!,
-      actor_id: actor.accountId,
-      at: authoritativeTimeValue(time),
-    });
+    const current = await withBoundedReadConnection(
+      pool,
+      deadline,
+      (client) =>
+        delegationRead.run(client, {
+          route: routeOf(delegation[1]!)!,
+          principal_id: delegation[1]!,
+          request_id: delegation[2]!,
+          actor_id: actor.accountId,
+          at: authoritativeTimeValue(time),
+        }),
+      readOptions,
+    );
     if (
       !current ||
       current.transactionId !== originalDelegation.transactionId ||

@@ -90,7 +90,7 @@ export function LiteraryAssertionView({
       id={focusId ? literaryFocusId(focusId) : undefined}
       tabIndex={focusId ? -1 : undefined}
       data-statement-id={statement.id}
-      className="min-w-0 space-y-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+      className="min-w-0 space-y-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
     >
       {showValue && <DisclosedValue snak={statement} related={related} locale={locale} link={link} />}
       {statement.qualifiers.length > 0 && (
@@ -101,9 +101,9 @@ export function LiteraryAssertionView({
           <p className="text-sm text-muted-foreground">{m.literary_grain_position_unknown({}, o)}</p>
         )}
       {statement.references.length > 0 && (
-        <details className="text-sm">
+        <details className="min-w-0 text-sm">
           <summary className={literaryStyle.disclosure}>{m.subject_sources({}, o)}</summary>
-          <ol className="space-y-3">
+          <ol className="space-y-3 border-l border-border pl-3">
             {statement.references.map((reference, index) => (
               <li key={index}>
                 <ul className="space-y-1">{reference.parts.map(part)}</ul>
@@ -162,24 +162,28 @@ export function LiteraryNativeWindow({
       data-slot="literary-window"
       data-node={native.node}
       data-direction={native.direction}
-      className="min-w-0 space-y-3"
+      className="min-w-0 space-y-4"
     >
       <h3 lang={title.lang} className="font-medium [overflow-wrap:anywhere]">
         {title.text || m.subject_relations({}, o)}
       </h3>
-      {state !== 'ready' && <LiteraryStatus state={state} locale={locale} />}
-      {continued && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.literary_grain_stream_continued({}, o)}
-        </p>
-      )}
-      {native.next && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.literary_grain_stream_truncated({}, o)}
-        </p>
+      {(state !== 'ready' || continued || native.next) && (
+        <div className="min-w-0 space-y-1 border-l border-border pl-3">
+          {state !== 'ready' && <LiteraryStatus state={state} locale={locale} />}
+          {continued && (
+            <p role="status" className="text-sm leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+              {m.literary_grain_stream_continued({}, o)}
+            </p>
+          )}
+          {native.next && (
+            <p role="status" className="text-sm leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+              {m.literary_grain_stream_truncated({}, o)}
+            </p>
+          )}
+        </div>
       )}
       {(state === 'ready' || state === 'preparing') && window.rows.length > 0 && (
-        <ul className="divide-y divide-border">
+        <ul className="space-y-3">
           {window.rows.map((row) => {
             const type = pageText(definitions.types[row.type]?.labels, locale);
             const rowFocus = `${native.node}:${row.statement.id}`;
@@ -190,7 +194,11 @@ export function LiteraryNativeWindow({
             const holder = native.direction === 'inverse' ? row.label.text : rootLabel;
             const candidate = native.direction === 'inverse' ? rootLabel : row.label.text;
             return (
-              <li key={row.key} data-statement-id={row.statement.id} className="min-w-0 space-y-2 py-5 first:pt-1">
+              <li
+                key={row.key}
+                data-statement-id={row.statement.id}
+                className="min-w-0 space-y-3 rounded-lg border border-border p-4 sm:p-5"
+              >
                 <a
                   id={literaryFocusId(rowFocus)}
                   href={literaryDestination(row.id, row.label.text, locale, rowReturn, realm, context)}
@@ -201,12 +209,12 @@ export function LiteraryNativeWindow({
                 >
                   {row.label.text || m.subject_value_unlabelled({}, o)}
                 </a>
-                {type.text && (
-                  <p lang={type.lang} className="text-sm text-muted-foreground">
-                    {type.text}
-                  </p>
+                {(type.text || row.label.lang) && (
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                    {type.text && <span lang={type.lang}>{type.text}</span>}
+                    {row.label.lang && <LanguageTag lang={row.label.lang} locale={locale} />}
+                  </div>
                 )}
-                {row.label.lang && <LanguageTag lang={row.label.lang} locale={locale} />}
                 <LiteraryAssertionView
                   assertion={row}
                   showValue={false}
@@ -221,10 +229,14 @@ export function LiteraryNativeWindow({
           })}
         </ul>
       )}
-      {state === 'ready' && window.withheld && <LiteraryStatus state="withheld" locale={locale} />}
+      {state === 'ready' && window.withheld && (
+        <div className="border-l border-border pl-3">
+          <LiteraryStatus state="withheld" locale={locale} />
+        </div>
+      )}
       <nav
         aria-label={title.text || m.subject_relations({}, o)}
-        className="flex flex-wrap gap-x-6 border-t border-border pt-3"
+        className="flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-border pt-3"
       >
         {previousHref && (
           <a href={previousHref} className={action}>

@@ -33,6 +33,7 @@ export function AniListLabelAdoption({
   onSearch: (query: string, cursor?: string) => Promise<AniListLabelTargetsResult>;
 }) {
   const id = useId();
+  const headingId = `${id}-heading`;
   const [query, setQuery] = useState('');
   const [targets, setTargets] = useState<Extract<AniListLabelTargetsResult, { kind: 'label-targets' }> | null>(null);
   const [searching, setSearching] = useState(false);
@@ -77,9 +78,17 @@ export function AniListLabelAdoption({
     setTargets(response.kind === 'label-targets' ? response : null);
   }
   return (
-    <article className="min-w-0 space-y-4 border-t pt-4 [overflow-wrap:anywhere]" data-anilist-label-row={row.ordinal}>
-      <h4 className="font-semibold">{m.library_import_labels()}</h4>
-      <p>{m.library_anilist_labels_independent()}</p>
+    <section
+      aria-labelledby={headingId}
+      className="min-w-0 space-y-4 rounded-xl border bg-muted/20 p-4 [overflow-wrap:anywhere] sm:p-5"
+      data-anilist-label-row={row.ordinal}
+    >
+      <header className="space-y-1">
+        <h4 id={headingId} className="font-semibold">
+          {m.library_import_labels()}
+        </h4>
+        <p>{m.library_anilist_labels_independent()}</p>
+      </header>
       <ImportDetails>
         <dl className="space-y-1 text-sm" data-anilist-label-evidence>
           <dt>{m.library_anilist_labels_membership()}</dt>
@@ -93,132 +102,151 @@ export function AniListLabelAdoption({
         </dl>
         <p className="text-sm">{evidence.reason}</p>
       </ImportDetails>
-      <AniListTargetSearch
-        disabled={locked}
-        value={labels.subjectId}
-        onChange={(subjectId) => onChoose(subjectId, selections)}
-      />
-      <div className="space-y-2">
-        <label htmlFor={`${id}-search`}>{m.library_anilist_labels_search()}</label>
-        <input
-          id={`${id}-search`}
-          className="min-h-11 w-full rounded border px-3"
-          disabled={locked}
-          value={query}
-          onChange={(event) => {
-            searchEpoch.current++;
-            setSearching(false);
-            setQuery(event.target.value);
-            setTargets(null);
-          }}
-        />
-        <div className="flex flex-wrap gap-3">
-          <AniListAction type="button" variant="outline" disabled={locked || searching} onClick={() => void search()}>
-            {m.library_anilist_labels_search()}
-          </AniListAction>
-          {targets?.next ? (
-            <AniListAction
-              type="button"
-              variant="outline"
-              disabled={locked || searching}
-              onClick={() => void search(targets.next!)}
-            >
-              {m.library_anilist_labels_more()}
-            </AniListAction>
-          ) : null}
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+        <div className="min-w-0 space-y-4">
+          <section className="min-w-0 space-y-2" data-anilist-label-subject>
+            <h5 className="font-medium">{m.library_import_target()}</h5>
+            <AniListTargetSearch
+              disabled={locked}
+              value={labels.subjectId}
+              onChange={(subjectId) => onChoose(subjectId, selections)}
+            />
+          </section>
+          <section className="min-w-0 space-y-2" data-anilist-label-target-search>
+            <label htmlFor={`${id}-search`}>{m.library_anilist_labels_search()}</label>
+            <input
+              id={`${id}-search`}
+              className="min-h-11 w-full rounded border px-3"
+              disabled={locked}
+              value={query}
+              onChange={(event) => {
+                searchEpoch.current++;
+                setSearching(false);
+                setQuery(event.target.value);
+                setTargets(null);
+              }}
+            />
+            <div className="flex flex-wrap gap-2">
+              <AniListAction type="button" variant="outline" disabled={locked || searching} onClick={() => void search()}>
+                {m.library_anilist_labels_search()}
+              </AniListAction>
+              {targets?.next ? (
+                <AniListAction
+                  type="button"
+                  variant="outline"
+                  disabled={locked || searching}
+                  onClick={() => void search(targets.next!)}
+                >
+                  {m.library_anilist_labels_more()}
+                </AniListAction>
+              ) : null}
+            </div>
+            {searchFailed ? <p role="status">{m.library_anilist_labels_search_failed()}</p> : null}
+            {targets ? (
+              <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]" data-anilist-label-search-provenance>
+                {m.library_anilist_labels_search()} · {query}
+              </p>
+            ) : null}
+          </section>
         </div>
-        {searchFailed ? <p role="status">{m.library_anilist_labels_search_failed()}</p> : null}
-      </div>
-      <ul className="space-y-3">
-        {evidence.values.map((value) => {
-          const selection = selections.find((item) => item.key === value.key);
-          const targetLabelId = selection && 'labelId' in selection.target ? selection.target.labelId : null;
-          const selectable = evidence.selectable.some((item) => item.key === value.key);
-          const labelTargetOptions = [
-            { value: 'new', label: m.library_anilist_labels_new() },
-            ...(targetLabelId && !targets?.labels.some((item) => item.id === targetLabelId)
-              ? [{ value: targetLabelId, label: targetLabelId }]
-              : []),
-            ...(targets?.labels ?? []).map((label) => ({
-              value: label.id,
-              label: `${label.name} · ${label.id}`,
-            })),
-          ];
-          return (
-            <li key={value.key} className="space-y-2 rounded border p-3" data-anilist-label-key={value.key}>
-              <p>{value.value}</p>
-              <ImportDetails>
-                <p>
-                  {value.key} · {value.origin} · {String(value.member)}
-                </p>
-              </ImportDetails>
-              {selectable ? (
-                <>
-                  <AniListCheck
-                    id={`${id}-${value.key}`}
-                    checked={!!selection}
-                    disabled={locked || (!selection && selections.length >= 8)}
-                    label={m.library_anilist_labels_select()}
-                    onToggle={(checked) => select(value.key, value.value, checked)}
-                  />
-                  {selection ? (
+        <section className="min-w-0 space-y-3" data-anilist-label-selections>
+          <h5 className="font-medium">{m.library_anilist_labels_mapping()}</h5>
+          <ul className="grid min-w-0 gap-3 sm:grid-cols-2">
+            {evidence.values.map((value) => {
+              const selection = selections.find((item) => item.key === value.key);
+              const targetLabelId = selection && 'labelId' in selection.target ? selection.target.labelId : null;
+              const selectable = evidence.selectable.some((item) => item.key === value.key);
+              const labelTargetOptions = [
+                { value: 'new', label: m.library_anilist_labels_new() },
+                ...(targetLabelId && !targets?.labels.some((item) => item.id === targetLabelId)
+                  ? [{ value: targetLabelId, label: targetLabelId }]
+                  : []),
+                ...(targets?.labels ?? []).map((label) => ({
+                  value: label.id,
+                  label: `${label.name} · ${label.id}`,
+                })),
+              ];
+              return (
+                <li
+                  key={value.key}
+                  className="min-w-0 space-y-2 rounded-lg border bg-card p-3"
+                  data-anilist-label-key={value.key}
+                >
+                  <p>{value.value}</p>
+                  <ImportDetails>
+                    <p>
+                      {value.key} · {value.origin} · {String(value.member)}
+                    </p>
+                  </ImportDetails>
+                  {selectable ? (
                     <>
-                      <Field>
-                        <FieldLabel id={`${id}-${value.key}-target-label`} htmlFor={`${id}-${value.key}-target`}>
-                          {m.library_anilist_labels_mapping()}
-                        </FieldLabel>
-                        <Select<string, false>
-                          items={labelTargetOptions}
-                          disabled={locked}
-                          value={'name' in selection.target ? 'new' : selection.target.labelId}
-                          onValueChange={(next) => {
-                            if (next !== null)
-                              target(value.key, next === 'new' ? { name: value.value } : { labelId: next });
-                          }}
-                        >
-                          <SelectTrigger
-                            id={`${id}-${value.key}-target`}
-                            aria-labelledby={`${id}-${value.key}-target-label`}
-                            className="min-h-11 w-full rounded border px-3"
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent alignItemWithTrigger={false}>
-                            <SelectGroup>
-                              {labelTargetOptions.map(({ value, label, ...itemProps }) => (
-                                <SelectItem key={value ?? ''} value={value} {...itemProps}>
-                                  {label}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                      {'name' in selection.target ? (
+                      <AniListCheck
+                        id={`${id}-${value.key}`}
+                        checked={!!selection}
+                        disabled={locked || (!selection && selections.length >= 8)}
+                        label={m.library_anilist_labels_select()}
+                        onToggle={(checked) => select(value.key, value.value, checked)}
+                      />
+                      {selection ? (
                         <>
-                          <label htmlFor={`${id}-${value.key}-name`}>{m.library_anilist_labels_new()}</label>
-                          <input
-                            id={`${id}-${value.key}-name`}
-                            className="min-h-11 w-full rounded border px-3"
-                            disabled={locked}
-                            value={selection.target.name}
-                            onChange={(event) => target(value.key, { name: event.target.value })}
-                          />
+                          <Field>
+                            <FieldLabel id={`${id}-${value.key}-target-label`} htmlFor={`${id}-${value.key}-target`}>
+                              {m.library_anilist_labels_mapping()}
+                            </FieldLabel>
+                            <Select<string, false>
+                              items={labelTargetOptions}
+                              disabled={locked}
+                              value={'name' in selection.target ? 'new' : selection.target.labelId}
+                              onValueChange={(next) => {
+                                if (next !== null)
+                                  target(value.key, next === 'new' ? { name: value.value } : { labelId: next });
+                              }}
+                            >
+                              <SelectTrigger
+                                id={`${id}-${value.key}-target`}
+                                aria-labelledby={`${id}-${value.key}-target-label`}
+                                className="min-h-11 w-full rounded border px-3"
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent alignItemWithTrigger={false}>
+                                <SelectGroup>
+                                  {labelTargetOptions.map(({ value, label, ...itemProps }) => (
+                                    <SelectItem key={value ?? ''} value={value} {...itemProps}>
+                                      {label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          {'name' in selection.target ? (
+                            <>
+                              <label htmlFor={`${id}-${value.key}-name`}>{m.library_anilist_labels_new()}</label>
+                              <input
+                                id={`${id}-${value.key}-name`}
+                                className="min-h-11 w-full rounded border px-3"
+                                disabled={locked}
+                                value={selection.target.name}
+                                onChange={(event) => target(value.key, { name: event.target.value })}
+                              />
+                            </>
+                          ) : null}
                         </>
                       ) : null}
                     </>
                   ) : null}
-                </>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </div>
       <AniListAction type="button" disabled={locked || !labels.subjectId || selections.length === 0} onClick={onReview}>
         {m.library_anilist_labels_review()}
       </AniListAction>
       {reviewed ? (
-        <section className="space-y-3 rounded border p-3" data-anilist-label-review={reviewed.id}>
+        <section className="min-w-0 space-y-3 rounded-lg border bg-card p-4" data-anilist-label-review={reviewed.id}>
           <h4 className="font-medium">{m.library_anilist_labels_reviewed()}</h4>
           <p>
             {reviewed.subjectId} · {reviewed.id}
@@ -246,7 +274,10 @@ export function AniListLabelAdoption({
           </AniListAction>
         </section>
       ) : null}
-      <AniListLabelResult row={row} labels={labels} />
-    </article>
+      <section className="min-w-0 space-y-3 border-t pt-4" data-anilist-label-result>
+        <h5 className="font-medium">{m.library_import_results()}</h5>
+        <AniListLabelResult row={row} labels={labels} />
+      </section>
+    </section>
   );
 }

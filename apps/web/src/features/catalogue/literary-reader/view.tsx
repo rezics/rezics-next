@@ -133,13 +133,13 @@ export function LiteraryReader({
   }, [sourceRetired, departed]);
   const o = { locale: locale as never };
   const title = identity.title.text || m.subject_value_unlabelled({}, o);
+  const viewLabel =
+    view === 'contents' ? m.subject_contents({}, o) : view === 'editions' ? m.subject_editions({}, o) : undefined;
   const headingText = retired
     ? m.literary_reader_title({}, o)
-    : view === 'contents'
-      ? m.subject_contents({}, o)
-      : view === 'editions'
-        ? m.subject_editions({}, o)
-        : title;
+    : composed
+      ? viewLabel ?? m.literary_reader_title({}, o)
+      : title;
   return (
     <section
       id="literary-reader"
@@ -152,18 +152,18 @@ export function LiteraryReader({
         if (link instanceof HTMLElement) opener.current = link;
       }}
     >
-      <header className="space-y-3">
+      <header className="min-w-0 space-y-3" data-view={view}>
         <h2
           ref={heading}
           id="literary-reader-title"
           tabIndex={-1}
-          lang={view === 'overview' && !retired ? identity.title.lang : undefined}
+          lang={!composed && !retired ? identity.title.lang : undefined}
           className={style.heading}
         >
           {headingText}
         </h2>
         {retired ? (
-          <p role="status" className={style.muted}>
+          <p role="status" className={`${style.muted} flex flex-wrap items-center gap-x-3 gap-y-1`}>
             {m.literary_reader_stale({}, o)}
             {recoveryHref && (
               <a className={style.link} href={recoveryHref}>
@@ -173,12 +173,12 @@ export function LiteraryReader({
           </p>
         ) : (
           <>
-            {!composed && view !== 'overview' && (
-              <p lang={identity.title.lang} className="[overflow-wrap:anywhere]">
-                {title}
-              </p>
+            {!composed && viewLabel && (
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm font-medium text-primary [overflow-wrap:anywhere]">{viewLabel}</p>
+                {grainLabel}
+              </div>
             )}
-            {!composed && grainLabel}
             {view === 'overview' && !composed && (
               <>
                 <LiteraryDescription identity={identity} locale={locale} />
@@ -191,14 +191,19 @@ export function LiteraryReader({
       </header>
       {!retired && (
         <>
-          {identity.limited && (
-            <p role="status" className={style.muted}>
-              {m.literary_grain_terms_more({}, o)}
-            </p>
-          )}
-          {children}
-          <footer className={style.separator}>
-            <nav aria-label={m.literary_reader_title({}, o)} className="flex flex-wrap gap-x-6 gap-y-1">
+          <div
+            data-slot="literary-reader-body"
+            className="min-w-0 space-y-6 border-t border-border pt-5 sm:space-y-8 sm:pt-6"
+          >
+            {identity.limited && (
+              <p role="status" className={style.muted}>
+                {m.literary_grain_terms_more({}, o)}
+              </p>
+            )}
+            {children}
+          </div>
+          <footer className="min-w-0 space-y-4 border-t border-border pt-5 sm:pt-6">
+            <nav aria-label={m.literary_reader_title({}, o)} className="flex flex-wrap items-center gap-x-6 gap-y-2">
               <HostedBookSubjectReaderLink subjectId={identity.id} locale={locale} />
               {shelfType && <BookShelfLink locale={locale} type={shelfType} />}
               {editionHref && view !== 'editions' && (
@@ -217,10 +222,12 @@ export function LiteraryReader({
                 </a>
               )}
             </nav>
-            <details>
+            <details className="space-y-2">
               <summary className={style.disclosure}>{m.literary_reader_about_reading({}, o)}</summary>
-              <p className={style.muted}>{scopeText ?? m.literary_reader_scope({}, o)}</p>
-              <p className={style.muted}>{m.literary_reader_return({}, o)}</p>
+              <div className="max-w-prose space-y-2">
+                <p className={style.muted}>{scopeText ?? m.literary_reader_scope({}, o)}</p>
+                <p className={style.muted}>{m.literary_reader_return({}, o)}</p>
+              </div>
             </details>
           </footer>
         </>

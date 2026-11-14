@@ -2,6 +2,7 @@ import { ImportDetails } from './presentation';
 import { m } from '../../paraglide/messages.js';
 import type { VndbJourneySnapshot } from './controller';
 import { VndbAction } from './controls';
+import { VndbStage } from './vndb-workspace';
 
 function selectionLabel(status: string, state: string | null, replace: boolean): string {
   if (status === 'skipped') return m.library_vndb_action_skip();
@@ -28,7 +29,20 @@ export function VndbConfirmPage({
     effectsByOrdinal.set(effect.ordinal, effects);
   }
   return (
-    <section className="min-w-0 space-y-4" data-vndb-stage="confirm" tabIndex={-1}>
+    <VndbStage
+      stage="confirm"
+      actions={
+        <div className="min-w-0 space-y-3">
+          <p className="text-sm text-muted-foreground">{m.library_vndb_no_rollback()}</p>
+          <VndbAction type="button" variant="outline" disabled={busy} onClick={onBack}>
+            {m.library_bangumi_return_review()}
+          </VndbAction>
+          <VndbAction type="button" disabled={busy || snap.selectedEffects === 0} onClick={onConfirm} aria-busy={busy}>
+            {m.library_vndb_apply_selection({ count: snap.selectedEffects })}
+          </VndbAction>
+        </div>
+      }
+    >
       <h2 className="text-xl font-semibold">{m.library_vndb_confirm_title()}</h2>
       <p>{m.library_vndb_effect_count({ count: snap.selectedEffects })}</p>
       <ul className="space-y-3">
@@ -93,15 +107,6 @@ export function VndbConfirmPage({
           );
         })}
       </ul>
-      <p className="text-sm text-muted-foreground">{m.library_vndb_no_rollback()}</p>
-      <div className="flex flex-wrap gap-3">
-        <VndbAction type="button" variant="outline" disabled={busy} onClick={onBack}>
-          {m.library_bangumi_return_review()}
-        </VndbAction>
-        <VndbAction type="button" disabled={busy || snap.selectedEffects === 0} onClick={onConfirm} aria-busy={busy}>
-          {m.library_vndb_apply_selection({ count: snap.selectedEffects })}
-        </VndbAction>
-      </div>
-    </section>
+    </VndbStage>
   );
 }

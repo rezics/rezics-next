@@ -11,6 +11,7 @@ import {
   SESSION_HEADER,
   type Kernel,
   type KernelClient,
+  type HostedPublicationActivationProgress,
   type AccountAvatar,
   type AccountProfile,
   type AccountProfileResponse,
@@ -254,6 +255,29 @@ test('hosted publication preparation exposes all mounted commands with typed ope
     await stage.$cancel.post({}, options);
     await stage.$seal.post({}, options);
 
+    const activation = [
+      await stage.$startActivation.post({}, options),
+      await stage.$advanceActivation.post({}, options),
+      await stage.$activate.post({}, options),
+    ];
+    for (const result of activation) {
+      if (result.error) {
+        expectTypeOf(result.error.status).toEqualTypeOf<400 | 401 | 403 | 404 | 412 | 413 | 422 | 429 | 500 | 503>();
+      } else {
+        expectTypeOf(result.data).toEqualTypeOf<HostedPublicationActivationProgress>();
+        expectTypeOf(result.data.state).toEqualTypeOf<'checking' | 'ready' | 'restart' | 'activated'>();
+        expectTypeOf(result.data.checkedTargetCount).toEqualTypeOf<string>();
+        expectTypeOf(result.data.totalTargetCount).toEqualTypeOf<string>();
+        expectTypeOf(result.data.publicationId).toEqualTypeOf<string | null>();
+      }
+    }
+
+    // @ts-expect-error startActivation requires an idempotency key
+    await stage.$startActivation.post({});
+    // @ts-expect-error advanceActivation requires an idempotency key
+    await stage.$advanceActivation.post({});
+    // @ts-expect-error activate requires an idempotency key
+    await stage.$activate.post({});
     // @ts-expect-error start requires the expected source and publication heads
     await book.$prepareRelease.post({ stageId: ID, mode: 'whole' }, options);
     // @ts-expect-error selection batches require an array of occurrence IDs
@@ -262,6 +286,81 @@ test('hosted publication preparation exposes all mounted commands with typed ope
     await stage.$advance.post({}, options);
   };
   expect(typeof typed).toBe('function');
+});
+
+test('activation transport preserves progress and retries an unknown intent with its original operands and key', async () => {
+  const progress: HostedPublicationActivationProgress = {
+    catalogueId: ID,
+    stageId: '019a1b2c-3d4e-7f00-8a00-000000000002',
+    state: 'checking',
+    passId: '019a1b2c-3d4e-7f00-8a00-000000000003',
+    checkedTargetCount: '9007199254740993',
+    totalTargetCount: '9007199254740994',
+    candidateGenerationId: '019a1b2c-3d4e-7f00-8a00-000000000004',
+    publicationId: null,
+    restartRequired: false,
+  };
+  const cases = [
+    ['$startActivation', progress],
+    ['$advanceActivation', { ...progress, state: 'ready', checkedTargetCount: progress.totalTargetCount }],
+    ['$advanceActivation', { ...progress, state: 'restart', restartRequired: true }],
+    ['$activate', { ...progress, state: 'activated', publicationId: ID, checkedTargetCount: progress.totalTargetCount }],
+  ] as const;
+  const problem = {
+    type: 'https://rezics.com/problems/dependency_unavailable',
+    title: 'Dependency Unavailable',
+    status: 503,
+    code: 'dependency_unavailable',
+    retryable: true,
+    effect_status: 'unknown',
+    request_id: ID,
+  };
+  const privateHeaders = { 'cache-control': 'private, no-store' };
+  const { fetch, sent } = kernel(
+    cases.flatMap(([, body], index) => [
+      () => json(503, problem, { ...privateHeaders, [SESSION_HEADER]: `retry-${index}` }),
+      () => json(200, body, privateHeaders),
+    ]),
+  );
+  const tokens: string[] = [];
+  const client = createKernelClient(ORIGIN, {
+    fetch,
+    headers: { authorization: 'Bearer author' },
+    session: 'initial',
+    onSession: (token) => tokens.push(token),
+  });
+  const stage = client.hostedCatalogues({ id: ID }).publicationPreparations({ stageId: progress.stageId });
+  for (const [index, [method, expected]] of cases.entries()) {
+    const body = {};
+    const key = `"activation-${index}"`;
+    const options = { headers: { 'idempotency-key': key } };
+    const unknown = await stage[method].post(body, options);
+    expect(unknown.status).toBe(503);
+    expect(unknown.data).toBeNull();
+    expect(unknown.error).toMatchObject({ status: 503, value: problem });
+    expect(unknown.response.headers.get('cache-control')).toBe('private, no-store');
+    expect(sent).toHaveLength(index * 2 + 1);
+    const retry = await stage[method].post(body, options);
+    expect(retry.status).toBe(200);
+    expect(retry.error).toBeNull();
+    expect(retry.data).toEqual(expected);
+    expect(retry.response.headers.get('cache-control')).toBe('private, no-store');
+    const requests = sent.slice(-2);
+    for (const request of requests) {
+      expect(request).toMatchObject({
+        url: `${ORIGIN}/v1/hostedCatalogues/${ID}/publicationPreparations/${progress.stageId}:${method.slice(1)}`,
+        method: 'POST',
+        body: '{}',
+      });
+      expect(request.headers.get('authorization')).toBe('Bearer author');
+      expect(request.headers.get('idempotency-key')).toBe(key);
+    }
+    expect(requests.map(({ headers }) => headers.get(SESSION_HEADER))).toEqual([
+      index === 0 ? 'initial' : `retry-${index - 1}`,
+      `retry-${index}`,
+    ]);
+  }
+  expect(tokens).toEqual(cases.map((_, index) => `retry-${index}`));
 });
 
 test('the derived subjects group keeps native counts and routes contributed by other modules', async () => {

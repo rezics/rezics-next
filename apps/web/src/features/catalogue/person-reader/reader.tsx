@@ -91,9 +91,12 @@ function Evidence({ statement, reading }: { statement: PersonStatement; reading:
   return (
     <>
       {!!statement.qualifiers.length && (
-        <section className="space-y-2" aria-label={m.correction_qualifiers({}, o)}>
+        <section
+          className="min-w-0 space-y-2 border-l-2 border-border pl-3 text-sm leading-6 sm:pl-4"
+          aria-label={m.correction_qualifiers({}, o)}
+        >
           <h5 className="font-medium">{m.correction_qualifiers({}, o)}</h5>
-          <dl className="space-y-2">
+          <dl className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
             {statement.qualifiers.map((part, index) => (
               <div key={index}>
                 <dt lang={label(part.property.id).lang ?? undefined} className="text-sm text-muted-foreground">
@@ -108,9 +111,9 @@ function Evidence({ statement, reading }: { statement: PersonStatement; reading:
         </section>
       )}
       {!!statement.references.length && (
-        <details>
+        <details className="min-w-0">
           <summary className={control}>{m.correction_references({}, o)}</summary>
-          <ol className="space-y-3">
+          <ol className="mt-2 min-w-0 space-y-3 border-l-2 border-border pl-5 text-sm leading-6 [overflow-wrap:anywhere]">
             {statement.references.map((reference, index) => (
               <li key={index}>
                 <dl className="space-y-2">
@@ -144,13 +147,22 @@ export function ProfileFact({ statement, reading }: { statement: PersonStatement
       ? content.language
       : undefined;
   const fact = (
-    <div className="space-y-2">
-      <div data-fact-text className="space-y-2">
+    <div className="min-w-0 space-y-3">
+      <div
+        data-fact-text
+        className="min-w-0 max-w-prose space-y-3 text-base leading-7 [overflow-wrap:anywhere]"
+      >
         <Value part={statement} reading={reading} />
-        {language && <LanguageTag lang={language} locale={reading.locale} />}
+        {language && (
+          <div className="text-sm leading-6">
+            <LanguageTag lang={language} locale={reading.locale} />
+          </div>
+        )}
         <Evidence statement={statement} reading={reading} />
       </div>
-      <FactInspectionEntry statement={statement} reading={reading} />
+      <div className="min-w-0 space-y-1 border-t border-border/70 pt-2 text-sm text-muted-foreground">
+        <FactInspectionEntry statement={statement} reading={reading} />
+      </div>
     </div>
   );
   return spoilerLevel(statement) > (reading.reader ?? defaultReader).spoilerLevel ? (
@@ -211,8 +223,25 @@ function PersonFacts(reading: Reading) {
     .filter((group) => group.fields.length > 0);
   const scalars = profileFields(release, read, personScalarFields(release, read), locale);
   const essential = new Set(['schema:birthDate', 'schema:deathDate', 'schema:gender']);
+  const essentialFields = scalars.filter((field) => field.facts.length > 0 && essential.has(field.id));
+  const secondaryFields = scalars.filter((field) => field.facts.length > 0 && !essential.has(field.id));
+  const renderScalars = (fields: typeof scalars) => (
+    <div className="grid min-w-0 grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+      {fields.map((field) => (
+        <div key={field.id} className="min-w-0">
+          <PeopleFactField field={field} reading={reading} />
+        </div>
+      ))}
+    </div>
+  );
   const renderGroup = (group: PersonGroup) => (
-    <section key={group.kind} className="min-w-0 space-y-3" data-slot={`person-reader-${group.kind}`}>
+    <section
+      key={group.kind}
+      className={`min-w-0 space-y-4 [overflow-wrap:anywhere] ${
+        group.kind === 'biography' ? 'max-w-prose' : 'border-t border-border pt-4'
+      }`}
+      data-slot={`person-reader-${group.kind}`}
+    >
       <h3 className="text-xl font-semibold">{title(group.kind, locale)}</h3>
       {!group.fields.length && <p role="status">{m.people_biography_unsupported({}, o)}</p>}
       {group.fields.map((field) =>
@@ -233,7 +262,7 @@ function PersonFacts(reading: Reading) {
     </section>
   );
   return (
-    <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]" data-slot="person-reader-facts">
+    <div className="min-w-0 space-y-8 [overflow-wrap:anywhere]" data-slot="person-reader-facts">
       {personCrossSourceIdentity(read) !== 'current' && (
         <p role="status">
           {personCrossSourceIdentity(read) === 'conflicting'
@@ -241,20 +270,22 @@ function PersonFacts(reading: Reading) {
             : m.person_identity_unconfirmed({}, o)}
         </p>
       )}
-      {primary.map(renderGroup)}
-      <ProfileFields
-        reading={reading}
-        fields={scalars.filter((field) => field.facts.length > 0 && essential.has(field.id))}
-      />
-      <Link className={control} href="#connections">
-        {m.showcase_people_credits({}, o)}
-      </Link>
+      <div className="min-w-0 space-y-7">{primary.map(renderGroup)}</div>
+      {essentialFields.length > 0 && (
+        <div className="min-w-0 rounded-lg border border-border bg-muted/20 p-4 sm:p-5">
+          {renderScalars(essentialFields)}
+        </div>
+      )}
+      <div className="border-t border-border pt-4">
+        <Link className={control} href="#connections">
+          {m.showcase_people_credits({}, o)}
+        </Link>
+      </div>
       <ProfileDetails locale={locale} reveal={namesReveal}>
         {secondary.map(renderGroup)}
-        <ProfileFields
-          reading={reading}
-          fields={scalars.filter((field) => field.facts.length > 0 && !essential.has(field.id))}
-        />
+        {secondaryFields.length > 0 && (
+          <div className="min-w-0 border-t border-border pt-4">{renderScalars(secondaryFields)}</div>
+        )}
         <SuppliedNames reading={reading} onReturnReveal={revealNames} />
         <Link className={control} href={catalogueEntries.people({ id: read.subject.id, label, locale }).href}>
           {m.person_reader_correct({}, o)}
@@ -302,8 +333,8 @@ export function ProfileDefinitions({
   return release || result?.release ? (
     children((release ?? result!.release)!)
   ) : (
-    <div className="space-y-3">
-      <p role="status">
+    <div className="flex max-w-prose flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <p role="status" className="min-w-0 text-sm leading-6 text-muted-foreground">
         {result ? m.candidate_value_unavailable({}, options(locale)) : m.candidate_loading({}, options(locale))}
       </p>
       <button

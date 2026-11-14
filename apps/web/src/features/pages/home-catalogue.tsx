@@ -18,8 +18,8 @@ export function HomeCatalogue({ result, locale }: { result?: RoutePageLoad | und
   const failure =
     result?.kind === 'rejected' || result?.kind === 'unavailable' || result?.kind === 'preparing' ? result : undefined;
   return (
-    <section aria-labelledby="home-catalogue" className="min-w-0 space-y-6">
-      <h2 id="home-catalogue" className="text-2xl font-semibold">
+    <section aria-labelledby="home-catalogue" className="min-w-0 space-y-5 border-t border-border pt-6">
+      <h2 id="home-catalogue" className="text-xl font-semibold sm:text-2xl">
         {m.home_catalogue({}, o)}
       </h2>
       {page && lists.length ? (

@@ -1,8 +1,8 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { AuthSessionPort, SessionProof } from '@rezics/auth-contract';
 import { AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES } from '@rezics/auth-contract';
 import { accessCheck, type Access, type Actor } from './check.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { mintReadTime, authoritativeTimeValue, releaseOperationalTime } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import { accessClock } from './access-clock.ts';
@@ -43,11 +43,17 @@ export async function readOrganizationMembershipCommandState(
   const memberRoute = routeOf(memberAccountId);
   if (route === null || memberRoute === null) throw new AuthBindingDeniedError();
   const selected = { organizationId, memberAccountId };
+  const boundedRead = <T>(work: (client: PoolClient) => Promise<T>) =>
+    withBoundedReadConnection(pool, context.deadline, work, {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+    });
   async function current() {
     requireAccessDeadline(context.deadline);
-    const time = await withConnection(pool, (client) => mintReadTime(client, deps.clock ?? accessClock(access)));
+    const time = await boundedRead((client) => mintReadTime(client, deps.clock ?? accessClock(access)));
     try {
-      const human = await actorSource.run(pool, { route: routeOf(accountId)!, account_id: accountId });
+      const human = await boundedRead((client) =>
+        actorSource.run(client, { route: routeOf(accountId)!, account_id: accountId }),
+      );
       if (
         !human ||
         human.kind !== 'actor' ||
@@ -69,12 +75,14 @@ export async function readOrganizationMembershipCommandState(
         },
       );
       // Member-anchor evidence is read independently, before organization checkout.
-      const member = await accountSource.run(pool, {
-        route: memberRoute!,
-        member_id: memberAccountId,
-        organization_id: organizationId,
-      });
-      const source = await withConnection(pool, async (client) => {
+      const member = await boundedRead((client) =>
+        accountSource.run(client, {
+          route: memberRoute!,
+          member_id: memberAccountId,
+          organization_id: organizationId,
+        }),
+      );
+      const source = await boundedRead(async (client) => {
         if (!(await check(client, time))) throw new AuthBindingDeniedError();
         const org = await organizationSource.run(client, {
           route: route!,
@@ -107,10 +115,12 @@ export async function readOrganizationMembershipCommandState(
       });
       // Re-read the human anchor after releasing organization checkout: an Access
       // preparation must not conceal a concurrent session-floor/fencing change.
-      const finalHuman = await actorSource.run(pool, {
-        route: routeOf(accountId)!,
-        account_id: accountId,
-      });
+      const finalHuman = await boundedRead((client) =>
+        actorSource.run(client, {
+          route: routeOf(accountId)!,
+          account_id: accountId,
+        }),
+      );
       if (JSON.stringify(human) !== JSON.stringify(finalHuman)) throw new AccessUnavailableError('contention');
       requireAccessDeadline(context.deadline);
       return source;

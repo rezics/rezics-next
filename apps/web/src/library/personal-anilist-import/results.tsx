@@ -1,9 +1,7 @@
 import { ImportEmpty, ImportTarget } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
-import { getLocale } from '../../paraglide/runtime.js';
 import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
 import type { AniListOutcome, AniListRow, AniListRowMeta } from './contract';
-import { AniListAction } from './controls';
 import { aniListOutcomeLabel, aniListValidityLabel } from './meaning';
 
 function Outcome({ outcome, row }: { outcome: AniListOutcome; row: AniListRowMeta | undefined }) {
@@ -16,19 +14,49 @@ function Outcome({ outcome, row }: { outcome: AniListOutcome; row: AniListRowMet
   const scoreReason = score && typeof score.reason === 'string' ? score.reason : null;
   const readback = currentScoreReadback(row?.currentScore);
   return (
-    <li className="rounded-md border p-3" data-anilist-outcome={outcome.status} data-anilist-row={outcome.ordinal}>
-      <p className="font-medium [overflow-wrap:anywhere]">{row?.title ?? `#${outcome.ordinal + 1}`}</p>
-      <ImportTarget target={row?.target} />
-      <section className="space-y-1" data-anilist-state-effect>
-        <h4 className="font-medium">{m.library_anilist_state_effect()}</h4>
-        <p>{aniListOutcomeLabel(outcome.status)}</p>
-        {applied.length ? (
-          <p className="text-sm">{m.library_anilist_applied_fields({ fields: applied.join(', ') })}</p>
-        ) : (
-          <p className="text-sm">{m.library_anilist_applied_summary()}</p>
-        )}
-      </section>
-      <section className="space-y-1" data-anilist-source-retention>
+    <li className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5" data-anilist-outcome={outcome.status} data-anilist-row={outcome.ordinal}>
+      <header className="min-w-0 space-y-1">
+        <h3 className="font-semibold [overflow-wrap:anywhere]">{row?.title ?? `#${outcome.ordinal + 1}`}</h3>
+        <ImportTarget target={row?.target} />
+      </header>
+      <div className="grid min-w-0 gap-3 md:grid-cols-2">
+        <section className="min-w-0 space-y-1 rounded-lg border p-3" data-anilist-state-effect>
+          <h4 className="font-medium">{m.library_anilist_state_effect()}</h4>
+          <p>{aniListOutcomeLabel(outcome.status)}</p>
+          {applied.length ? (
+            <p className="text-sm">{m.library_anilist_applied_fields({ fields: applied.join(', ') })}</p>
+          ) : (
+            <p className="text-sm">{m.library_anilist_applied_summary()}</p>
+          )}
+        </section>
+        <section className="min-w-0 space-y-1 rounded-lg border p-3" data-anilist-score-effect>
+          <h4 className="font-medium">{m.library_anilist_score_effect()}</h4>
+          {scoreStatus ? (
+            <p>{scoreOutcomeLabel(scoreStatus)}</p>
+          ) : row?.scoreAction === 'keep' ? (
+            <p>{m.library_anilist_score_no_effect()}</p>
+          ) : (
+            <p>{m.library_anilist_score_effect_not_reported()}</p>
+          )}
+          {scoreReason ? <p className="text-sm text-muted-foreground">{scoreReason}</p> : null}
+          {readback ? (
+            <p role="status" data-anilist-current-score>
+              {readback.status === 'unavailable'
+                ? m.library_anilist_score_readback_unavailable({ reason: readback.reason ?? '' })
+                : readback.units === null
+                  ? m.library_anilist_score_readback_absent()
+                  : m.library_anilist_score_readback_vote({ units: readback.units })}
+              {readback.questionLabel ? ` · ${readback.questionLabel}` : ''}
+              {readback.questionRevision !== undefined
+                ? ` · ${m.library_anilist_question_revision({ revision: readback.questionRevision })}`
+                : ''}
+            </p>
+          ) : row?.scoreReview ? (
+            <p>{m.library_anilist_score_readback_pending()}</p>
+          ) : null}
+        </section>
+      </div>
+      <section className="min-w-0 space-y-1 rounded-lg border p-3" data-anilist-source-retention>
         <h4 className="font-medium">{m.library_anilist_source_retention()}</h4>
         {row?.scoreSource ? (
           <>
@@ -45,32 +73,6 @@ function Outcome({ outcome, row }: { outcome: AniListOutcome; row: AniListRowMet
           <p className="text-sm">{m.library_anilist_source_score_absent()}</p>
         )}
       </section>
-      <section className="space-y-1" data-anilist-score-effect>
-        <h4 className="font-medium">{m.library_anilist_score_effect()}</h4>
-        {scoreStatus ? (
-          <p>{scoreOutcomeLabel(scoreStatus)}</p>
-        ) : row?.scoreAction === 'keep' ? (
-          <p>{m.library_anilist_score_no_effect()}</p>
-        ) : (
-          <p>{m.library_anilist_score_effect_not_reported()}</p>
-        )}
-        {scoreReason ? <p className="text-sm text-muted-foreground">{scoreReason}</p> : null}
-        {readback ? (
-          <p role="status" data-anilist-current-score>
-            {readback.status === 'unavailable'
-              ? m.library_anilist_score_readback_unavailable({ reason: readback.reason ?? '' })
-              : readback.units === null
-                ? m.library_anilist_score_readback_absent()
-                : m.library_anilist_score_readback_vote({ units: readback.units })}
-            {readback.questionLabel ? ` · ${readback.questionLabel}` : ''}
-            {readback.questionRevision !== undefined
-              ? ` · ${m.library_anilist_question_revision({ revision: readback.questionRevision })}`
-              : ''}
-          </p>
-        ) : row?.scoreReview ? (
-          <p>{m.library_anilist_score_readback_pending()}</p>
-        ) : null}
-      </section>
       {outcome.retained.length ? (
         <details>
           <summary className="min-h-11 cursor-pointer py-2">{m.library_anilist_retained_summary()}</summary>
@@ -82,7 +84,11 @@ function Outcome({ outcome, row }: { outcome: AniListOutcome; row: AniListRowMet
       {outcome.status === 'stale' ? (
         <p className="text-sm text-muted-foreground">{m.library_anilist_stale_help()}</p>
       ) : null}
-      <ImportSourceOutcome outcome={row?.sourceAdmission ?? null} />
+      {row?.sourceAdmission ? (
+        <section className="min-w-0 rounded-lg border p-3" data-anilist-source-effect>
+          <ImportSourceOutcome outcome={row.sourceAdmission} />
+        </section>
+      ) : null}
     </li>
   );
 }
@@ -146,27 +152,16 @@ export function AniListResultPage({
   outcomes,
   remaining,
   meta,
-  busy,
   cancelled,
-  canRetry,
-  onRetry,
-  onReview,
-  onRefresh,
   page = [],
 }: {
   page?: AniListRow[];
   outcomes: AniListOutcome[];
   remaining: number[];
   meta: AniListRowMeta[];
-  busy: boolean;
   cancelled: boolean;
-  canRetry: boolean;
-  onRetry: () => void;
-  onReview: () => void;
-  onRefresh: () => void;
 }) {
   const rows = new Map(meta.map((row) => [row.ordinal, row]));
-  const locale = getLocale();
   return (
     <section className="space-y-4" data-anilist-stage="results">
       <h2 className="text-xl font-semibold">{m.library_import_results()}</h2>
@@ -177,53 +172,40 @@ export function AniListResultPage({
         <p role="status">{m.library_anilist_partial()}</p>
       )}
       <p className="text-sm text-muted-foreground">{m.library_anilist_erasure_limit()}</p>
-      <ul className="space-y-3">
+      <ul className="grid min-w-0 gap-4 xl:grid-cols-2">
         {outcomes.map((outcome) => (
           <Outcome key={outcome.ordinal} outcome={outcome} row={rows.get(outcome.ordinal)} />
         ))}
         {remaining.map((ordinal) => (
           <li
             key={`remaining-${ordinal}`}
-            className="rounded-md border p-3"
+            className="min-w-0 space-y-2 rounded-xl border border-dashed p-4 sm:p-5"
             data-anilist-outcome="unattempted"
             data-anilist-row={ordinal}
           >
-            <p className="font-medium [overflow-wrap:anywhere]">{rows.get(ordinal)?.title ?? `#${ordinal + 1}`}</p>
+            <h3 className="font-semibold [overflow-wrap:anywhere]">{rows.get(ordinal)?.title ?? `#${ordinal + 1}`}</h3>
             <p>{m.library_anilist_result_unattempted()}</p>
           </li>
         ))}
       </ul>
-      {page
-        .filter((row) => rows.get(row.ordinal)?.labels)
-        .map((row) => (
-          <section
-            key={row.ordinal}
-            className="space-y-3 rounded-md border p-4"
-            data-anilist-label-result-row={row.ordinal}
-          >
-            <h3 className="font-medium">
-              {rows.get(row.ordinal)?.title} · {m.library_import_labels()}
-            </h3>
-            <ImportTarget target={rows.get(row.ordinal)!.labels!.subjectId} />
-            <AniListLabelResult row={row} labels={rows.get(row.ordinal)!.labels!} />
-          </section>
-        ))}
-      <div className="flex flex-wrap gap-3">
-        <AniListAction type="button" variant="outline" disabled={busy} onClick={onReview}>
-          {m.library_anilist_return_review()}
-        </AniListAction>
-        <AniListAction type="button" variant="outline" disabled={busy} onClick={onRefresh}>
-          {m.library_anilist_fresh_read()}
-        </AniListAction>
-        {canRetry ? (
-          <AniListAction type="button" disabled={busy} onClick={onRetry}>
-            {m.library_anilist_retry_command()}
-          </AniListAction>
-        ) : null}
-        <a href={`/${locale}/library`} className="inline-flex min-h-11 items-center px-3 py-2 underline">
-          {m.library_anilist_return_library()}
-        </a>
-      </div>
+      {page.some((row) => rows.get(row.ordinal)?.labels) ? (
+        <section className="min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4 sm:p-5" data-anilist-label-results>
+          <h3 className="text-lg font-semibold">{m.library_import_labels()}</h3>
+          {page
+            .filter((row) => rows.get(row.ordinal)?.labels)
+            .map((row) => (
+              <section
+                key={row.ordinal}
+                className="min-w-0 space-y-3 rounded-lg border bg-card p-3 sm:p-4"
+                data-anilist-label-result-row={row.ordinal}
+              >
+                <h4 className="font-medium [overflow-wrap:anywhere]">{rows.get(row.ordinal)?.title}</h4>
+                <ImportTarget target={rows.get(row.ordinal)!.labels!.subjectId} />
+                <AniListLabelResult row={row} labels={rows.get(row.ordinal)!.labels!} />
+              </section>
+            ))}
+        </section>
+      ) : null}
     </section>
   );
 }

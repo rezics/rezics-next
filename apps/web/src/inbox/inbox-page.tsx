@@ -2,7 +2,6 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { useRouter, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ContentItem, type ContentItemProps } from '@rezics/ui/content-item';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { Bell, Flag, Gavel, MessageCircleReply } from 'lucide-react';
 import {
@@ -135,7 +134,7 @@ export function InboxRows({
     <>
       <ol
         aria-label={m.inbox_heading()}
-        className="mt-6 space-y-1"
+        className="mt-6 space-y-3"
         onClickCapture={(event: MouseEvent<HTMLOListElement>) => {
           const native = event.nativeEvent;
           if (
@@ -222,14 +221,9 @@ export function InboxRows({
                 </Button>
               )
             ) : null;
-          const destinationProps = href ? { href } : {};
-          const primaryLinkLabelProps = href
-            ? ({
-                primaryLinkLabel: [text, context, actor.label, kind, explanation, readState, date]
-                  .filter(Boolean)
-                  .join('. '),
-              } satisfies Pick<ContentItemProps, 'primaryLinkLabel'>)
-            : {};
+          const primaryLinkLabel = [text, context, actor.label, kind, explanation, readState, date]
+            .filter(Boolean)
+            .join('. ');
           const fallbackVisual =
             item.watch || item.kind === 'thread_watch' || item.kind === 'board_activity' ? (
               <Bell aria-hidden="true" size={18} />
@@ -251,46 +245,111 @@ export function InboxRows({
             />
           );
           return (
-            <ContentItem
+            <li
               key={item.id}
-              title={text}
-              {...(explanation ? { preview: <p>{explanation}</p> } : {})}
-              {...destinationProps}
-              {...primaryLinkLabelProps}
-              headingLevel={2}
-              visual={visual}
-              context={context ? <p>{context}</p> : undefined}
-              metadata={
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <span data-notice-byline="true" aria-hidden={href ? true : undefined}>
-                    {actor.label}
-                    <span aria-hidden="true"> · </span>
-                    {kind}
-                  </span>
-                  <span aria-hidden="true"> · </span>
-                  <span aria-hidden="true">
-                    <RelativeTime value={item.createdAt} locale={locale} timeZone="UTC" />
-                  </span>
-                  {!href ? (
-                    <time className="sr-only" dateTime={new Date(item.createdAt).toISOString()}>
-                      {date}
-                    </time>
-                  ) : null}
-                </div>
-              }
-              state={
-                <span aria-hidden={href ? true : undefined}>
-                  {confirmedNoticeId === item.id ? m.inbox_notice_marked_seen() : readState}
-                </span>
-              }
-              actions={chosenAction}
               data-notice-id={item.id}
               tabIndex={item.id === returnNoticeId ? -1 : undefined}
               data-unread={item.unread}
               data-kind={item.reportId ? 'report_outcome' : item.kind}
               data-actor-id={actor.actorId ?? undefined}
-              className={`py-4 ${item.unread ? 'bg-muted/50' : ''}`}
-            />
+              className="min-w-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <article
+                className={`grid min-w-0 gap-4 rounded-xl border p-4 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,15rem)] sm:gap-6 sm:p-5 ${
+                  item.unread ? 'border-s-4 border-s-primary bg-muted/30' : 'border-border bg-card'
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <div data-content-item-slot="visual" className="shrink-0">
+                      {visual}
+                    </div>
+                    <div
+                      data-content-item-slot="metadata"
+                      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                    >
+                      <span
+                        data-notice-byline="true"
+                        aria-hidden={href ? true : undefined}
+                        className="min-w-0 max-w-full break-words text-sm font-medium"
+                      >
+                        {actor.label}
+                        <span aria-hidden="true"> · </span>
+                        {kind}
+                      </span>
+                      <span aria-hidden="true"> · </span>
+                      <span aria-hidden="true" className="text-sm text-muted-foreground">
+                        <RelativeTime value={item.createdAt} locale={locale} timeZone="UTC" />
+                      </span>
+                      {!href ? (
+                        <time className="sr-only" dateTime={new Date(item.createdAt).toISOString()}>
+                          {date}
+                        </time>
+                      ) : null}
+                    </div>
+                  </div>
+                  <h2
+                    data-content-item-slot="title"
+                    className="mt-3 max-w-prose break-words text-lg leading-snug font-semibold sm:text-xl"
+                  >
+                    {href ? (
+                      <a
+                        href={href}
+                        aria-label={primaryLinkLabel}
+                        className="rounded-sm underline decoration-border underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        {text}
+                      </a>
+                    ) : (
+                      text
+                    )}
+                  </h2>
+                  {explanation ? (
+                    <div data-content-item-slot="preview" className="mt-2 max-w-prose text-sm leading-relaxed">
+                      <p>{explanation}</p>
+                    </div>
+                  ) : null}
+                  {context ? (
+                    <div
+                      data-content-item-slot="context"
+                      className="mt-4 max-w-prose border-s-2 border-border ps-3"
+                    >
+                      <p className="text-xs font-medium text-muted-foreground">{m.inbox_notice_context()}</p>
+                      <p className="mt-1 break-words text-sm leading-relaxed">{context}</p>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex min-w-0 flex-col items-start gap-3 border-t border-border pt-3 sm:items-end sm:border-t-0 sm:pt-0">
+                  <div data-content-item-slot="state">
+                    <span
+                      aria-hidden={href ? true : undefined}
+                      className={`inline-flex min-h-8 max-w-full items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium ${
+                        item.unread
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'border-border bg-background text-muted-foreground'
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                          item.unread
+                            ? 'bg-current ring-2 ring-current ring-offset-2 ring-offset-background'
+                            : 'border border-current'
+                        }`}
+                      />
+                      <span className="min-w-0 break-words">
+                        {confirmedNoticeId === item.id ? m.inbox_notice_marked_seen() : readState}
+                      </span>
+                    </span>
+                  </div>
+                  {chosenAction ? (
+                    <div data-content-item-slot="actions" className="flex min-w-0 max-w-full items-start">
+                      {chosenAction}
+                    </div>
+                  ) : null}
+                </div>
+              </article>
+            </li>
           );
         })}
       </ol>
@@ -1127,7 +1186,7 @@ export function ViewerInboxPage({
       data-response-status={operationState?.failure.status ?? ''}
       data-response-code={operationState?.failure.code ?? ''}
       data-retry-after={operationState?.failure.retryAfter}
-      className="mt-6 rounded-lg border border-border p-5"
+      className="rounded-lg border border-border p-5"
     >
       <p className="text-muted-foreground">
         {operationState?.state === 'closed'
@@ -1158,35 +1217,8 @@ export function ViewerInboxPage({
       </div>
     </section>
   ) : null;
-
-  return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-      <h1 id={boundaryId} ref={boundary} tabIndex={-1} className="font-display text-3xl font-semibold tracking-tight">
-        {m.inbox_heading()}
-      </h1>
-      <InboxPreferencesLink />
-      <InboxUnreadSummary />
-      <p role="status" aria-atomic="true" className="sr-only">
-        {continuationMessage}
-      </p>
-      {returnNoticeState === 'found' ? (
-        <p role="status" className="mt-4 text-sm text-muted-foreground">
-          {m.inbox_return_notice_restored()}
-        </p>
-      ) : returnNoticeState === 'missing' ? (
-        <section role="status" className="mt-4 flex min-w-0 flex-wrap items-center gap-3">
-          <p className="min-w-0 text-sm text-muted-foreground">{m.inbox_return_notice_missing()}</p>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-            disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting || !episodeOwnerCurrent()}
-            onClick={() => startAtFirstPage(true)}
-          >
-            {m.inbox_start_first_page()}
-          </Button>
-        </section>
-      ) : null}
+  const acknowledgementRecovery = (
+    <>
       {noticeAttemptView && !noticeAttemptRowVisible ? (
         <section
           role="status"
@@ -1302,100 +1334,162 @@ export function ViewerInboxPage({
           ) : null}
         </section>
       ) : null}
+    </>
+  );
+
+  return (
+    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+      <header className="min-w-0 border-b border-border pb-5">
+        <h1 id={boundaryId} ref={boundary} tabIndex={-1} className="font-display text-3xl font-semibold tracking-tight">
+          {m.inbox_heading()}
+        </h1>
+        <InboxUnreadSummary />
+        <InboxPreferencesLink />
+      </header>
+      <p role="status" aria-atomic="true" className="sr-only">
+        {continuationMessage}
+      </p>
+      {returnNoticeState === 'found' ? (
+        <p role="status" className="mt-4 text-sm text-muted-foreground">
+          {m.inbox_return_notice_restored()}
+        </p>
+      ) : returnNoticeState === 'missing' ? (
+        <section role="status" className="mt-4 flex min-w-0 flex-wrap items-center gap-3">
+          <p className="min-w-0 text-sm text-muted-foreground">{m.inbox_return_notice_missing()}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+            disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting || !episodeOwnerCurrent()}
+            onClick={() => startAtFirstPage(true)}
+          >
+            {m.inbox_start_first_page()}
+          </Button>
+        </section>
+      ) : null}
       {pageSignedOut ? (
-        <div className="mt-6 space-y-3">
-          <p className="text-muted-foreground">{m.inbox_read_denied()}</p>
-          {!seenFailure ? (
-            <Button
-              variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-              disabled={checkingAccess || waiting}
-              onClick={() => void checkAccess()}
-            >
-              {m.inbox_check_access()}
-            </Button>
-          ) : null}
-        </div>
+        <>
+          {acknowledgementRecovery}
+          <div className="mt-6 space-y-3">
+            <p className="text-muted-foreground">{m.inbox_read_denied()}</p>
+            {!seenFailure ? (
+              <Button
+                variant="outline"
+                className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                disabled={checkingAccess || waiting}
+                onClick={() => void checkAccess()}
+              >
+                {m.inbox_check_access()}
+              </Button>
+            ) : null}
+          </div>
+        </>
       ) : pageQuery.isPending && !readable ? (
-        <p className="mt-6 text-muted-foreground">{m.inbox_loading()}</p>
+        <>
+          {acknowledgementRecovery}
+          <p className="mt-6 text-muted-foreground">{m.inbox_loading()}</p>
+        </>
       ) : (
         <>
           {readable ? (
-            <section className="mt-5 space-y-3">
-              <div role="group" aria-label={m.inbox_triage_filter_group()} className="flex min-w-0 flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-pressed={selection === 'all'}
-                  className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
-                  onClick={() => chooseSelection('all')}
-                >
-                  {m.inbox_triage_filter_all()}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-pressed={selection === 'unread'}
-                  className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
-                  onClick={() => chooseSelection('unread')}
-                >
-                  {m.inbox_triage_filter_unread()}
-                </Button>
-              </div>
-              {received.history.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-                  aria-busy={continuing && received.direction === 'previous'}
-                  aria-disabled={
-                    continuing ||
-                    failed ||
-                    pageQueryFetching(pageIntent) ||
-                    checkingAccess ||
-                    pageWaitActive(pageIntent)
-                  }
-                  onClick={loadPrevious}
-                >
-                  {m.inbox_previous_page()}
-                </Button>
-              ) : null}
-              {cursor !== undefined && !failed && page ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-                  onClick={() => startAtFirstPage()}
-                  disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting}
-                >
-                  {m.inbox_start_first_page()}
-                </Button>
-              ) : null}
-              <p className="text-sm text-muted-foreground">{m.inbox_triage_scope()}</p>
-              {admittedMarkSeen && !seenFailure && admittedMarkSeen.through !== markedThrough.current ? (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">{m.inbox_triage_mark_help()}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-                    disabled={
-                      markingPending ||
-                      noticeAttempt.current !== null ||
-                      checkingAccess ||
-                      pageQueryFetching(pageIntent) ||
-                      !csrfToken ||
-                      !episodeOwnerCurrent() ||
-                      page === null ||
-                      seenIntent.current !== null
-                    }
-                    onClick={markLoadedThroughLatest}
-                  >
-                    {m.inbox_triage_mark()}
-                  </Button>
+            <section
+              aria-label={m.inbox_triage_scope()}
+              className="mt-5 rounded-xl border border-border p-3 sm:p-4"
+            >
+              <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 space-y-2">
+                  <div role="group" aria-label={m.inbox_triage_filter_group()} className="flex min-w-0 flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-pressed={selection === 'all'}
+                      className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
+                      onClick={() => chooseSelection('all')}
+                    >
+                      {m.inbox_triage_filter_all()}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-pressed={selection === 'unread'}
+                      className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
+                      onClick={() => chooseSelection('unread')}
+                    >
+                      {m.inbox_triage_filter_unread()}
+                    </Button>
+                  </div>
+                  <p className="max-w-prose text-sm text-muted-foreground">{m.inbox_triage_scope()}</p>
                 </div>
-              ) : null}
-              {seenConfirmed ? <p role="status">{m.inbox_triage_marked()}</p> : null}
+                <div className="flex min-w-0 flex-col gap-4 sm:items-end">
+                  {admittedMarkSeen && !seenFailure && admittedMarkSeen.through !== markedThrough.current ? (
+                    <div role="group" aria-label={m.inbox_triage_mark_help()} className="min-w-0 space-y-2">
+                      <p className="max-w-prose text-sm text-muted-foreground">{m.inbox_triage_mark_help()}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                        disabled={
+                          markingPending ||
+                          noticeAttempt.current !== null ||
+                          checkingAccess ||
+                          pageQueryFetching(pageIntent) ||
+                          !csrfToken ||
+                          !episodeOwnerCurrent() ||
+                          page === null ||
+                          seenIntent.current !== null
+                        }
+                        onClick={markLoadedThroughLatest}
+                      >
+                        {m.inbox_triage_mark()}
+                      </Button>
+                    </div>
+                  ) : null}
+                  {seenConfirmed ? <p role="status">{m.inbox_triage_marked()}</p> : null}
+                  {received.history.length > 0 || (cursor !== undefined && !failed && page) ? (
+                    <div
+                      role="group"
+                      aria-label={
+                        received.history.length > 0 && cursor !== undefined
+                          ? `${m.inbox_previous_page()}. ${m.inbox_start_first_page()}`
+                          : received.history.length > 0
+                            ? m.inbox_previous_page()
+                            : m.inbox_start_first_page()
+                      }
+                      className="flex min-w-0 flex-wrap gap-2 sm:justify-end"
+                    >
+                      {received.history.length > 0 ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                          aria-busy={continuing && received.direction === 'previous'}
+                          aria-disabled={
+                            continuing ||
+                            failed ||
+                            pageQueryFetching(pageIntent) ||
+                            checkingAccess ||
+                            pageWaitActive(pageIntent)
+                          }
+                          onClick={loadPrevious}
+                        >
+                          {m.inbox_previous_page()}
+                        </Button>
+                      ) : null}
+                      {cursor !== undefined && !failed && page ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                          onClick={() => startAtFirstPage()}
+                          disabled={pageQueryFetching(pageIntent) || checkingAccess || waiting}
+                        >
+                          {m.inbox_start_first_page()}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </section>
           ) : null}
           {readable ? (
@@ -1443,38 +1537,47 @@ export function ViewerInboxPage({
               />
             )
           ) : null}
-          {pageQuery.isFetching && readable && !continuing ? (
-            <p role="status" className="mt-4 text-muted-foreground">
-              {m.inbox_loading()}
-            </p>
-          ) : null}
-          {failure}
-          {(failed ? !seenNeedsAccess : readable?.next) ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-5 h-auto min-h-11 max-w-full whitespace-normal py-2"
-              aria-controls={boundaryId}
-              aria-describedby={failed ? `${boundaryId}-failure` : undefined}
-              aria-busy={continuing}
-              aria-disabled={
-                continuing ||
-                pageQueryFetching(pageIntent) ||
-                checkingAccess ||
-                (failed && pageWaitActive(pageIntent)) ||
-                observationWaiting
-              }
-              onClick={failed ? retryPage : loadMore}
-            >
-              {continuing
-                ? m.inbox_page_loading()
-                : failed
-                  ? m.inbox_retry()
-                  : visibleItems.length === 0
-                    ? m.inbox_next_page()
-                    : m.inbox_load_more()}
-            </Button>
-          ) : null}
+          {acknowledgementRecovery}
+          {
+            (pageQuery.isFetching && readable && !continuing) ||
+            failure ||
+            (failed ? !seenNeedsAccess : readable?.next) ? (
+            <div data-inbox-continuation className="mt-5 space-y-3 border-t border-border pt-4">
+              {pageQuery.isFetching && readable && !continuing ? (
+                <p role="status" className="text-muted-foreground">
+                  {m.inbox_loading()}
+                </p>
+              ) : null}
+              {failure}
+              {(failed ? !seenNeedsAccess : readable?.next) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal py-2"
+                  aria-controls={boundaryId}
+                  aria-describedby={failed ? `${boundaryId}-failure` : undefined}
+                  aria-busy={continuing}
+                  aria-disabled={
+                    continuing ||
+                    pageQueryFetching(pageIntent) ||
+                    checkingAccess ||
+                    (failed && pageWaitActive(pageIntent)) ||
+                    observationWaiting
+                  }
+                  onClick={failed ? retryPage : loadMore}
+                >
+                  {continuing
+                    ? m.inbox_page_loading()
+                    : failed
+                      ? m.inbox_retry()
+                      : visibleItems.length === 0
+                        ? m.inbox_next_page()
+                        : m.inbox_load_more()}
+                </Button>
+              ) : null}
+            </div>
+            ) : null
+          }
         </>
       )}
     </div>

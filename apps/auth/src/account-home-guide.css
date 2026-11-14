@@ -1,22 +1,190 @@
-.auth-home-guide {
+.auth-account-home,
+.auth-home-next-actions {
   display: grid;
-  gap: 1.75rem;
+  gap: 1.5rem;
   min-width: 0;
 }
 
-.auth-home-guide p {
+.auth-home-next-actions {
+  gap: 1rem;
+}
+
+.auth-account-identity {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+}
+
+.auth-account-identity h2,
+.auth-home-entries h2,
+.auth-home-guide-group h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.35;
+}
+
+.auth-home-identity-copy {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.auth-account-home-status {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.auth-home-identity-note {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.auth-home-identity-copy > button {
+  justify-self: start;
+  margin-block-start: 0.25rem;
+}
+
+.auth-home-identity-private {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  min-width: 0;
+  padding-block-start: 0.75rem;
+  border-block-start: 1px solid var(--border);
+}
+
+.auth-account-home-email {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.auth-account-home-email dt {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.auth-account-home-email dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.auth-home-identity-private summary {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  cursor: pointer;
+  text-underline-offset: 0.2em;
+}
+
+.auth-home-identity-private details p {
+  margin-block: 0.25rem 0;
+  overflow-wrap: anywhere;
+}
+
+.auth-home-identity-private code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.auth-home-next-actions-intro {
+  max-width: 68ch;
   margin: 0;
   line-height: 1.65;
 }
 
-.auth-home-guide .auth-home-delete {
+.auth-home-entries,
+.auth-home-guide-group {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+}
+
+.auth-home-entries > p,
+.auth-home-guide-group > p {
+  margin: 0;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+
+.auth-home-entries nav,
+.auth-home-guide-group nav {
+  display: grid;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.auth-home-entry-link,
+.auth-home-link {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  color: var(--foreground);
+  line-height: 1.45;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+}
+
+.auth-home-entry-link:first-child {
+  background: var(--muted);
+  font-weight: 600;
+}
+
+.auth-home-link span {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.auth-home-link strong {
+  line-height: 1.4;
+}
+
+.auth-home-link small {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.auth-home-guide {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.auth-home-guide-group {
+  gap: 0.875rem;
+}
+
+.auth-home-guide-group .auth-home-delete {
+  margin-block-start: 0.25rem;
   border-inline-start: 4px solid var(--foreground);
   background: var(--muted);
 }
 
 .auth-home-selection {
   display: grid;
-  gap: 1rem;
+  gap: 0.75rem;
   min-width: 0;
 }
 
@@ -34,12 +202,14 @@
 .auth-home-selection h3 {
   margin: 0;
   font-size: 1rem;
+  line-height: 1.4;
 }
 
-.auth-home-selection p,
-.auth-home-identity-note {
+.auth-home-selection p {
+  margin: 0;
   color: var(--muted-foreground);
   font-size: 0.875rem;
+  line-height: 1.55;
 }
 
 .auth-home-selection a,
@@ -47,19 +217,53 @@
   display: inline-flex;
   align-items: center;
   min-height: 2.75rem;
-  padding-block: 0.5rem;
   color: var(--foreground);
   text-underline-offset: 0.2em;
 }
 
 .auth-home-selection a:focus-visible,
-.auth-home-location a:focus-visible {
+.auth-home-entry-link:focus-visible,
+.auth-home-link:focus-visible,
+.auth-home-location a:focus-visible,
+.auth-home-identity-private summary:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
 }
 
+.auth-home-location {
+  padding-block-start: 0.5rem;
+  border-block-start: 1px solid var(--border);
+}
+
 @media (min-width: 640px) {
+  .auth-account-identity {
+    grid-template-columns: minmax(0, 1.25fr) minmax(12rem, 0.75fr);
+    align-items: start;
+  }
+
+  .auth-home-identity-private {
+    padding-block-start: 0;
+    padding-inline-start: 1rem;
+    border-block-start: 0;
+    border-inline-start: 1px solid var(--border);
+  }
+
+  .auth-home-entries nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .auth-home-selection {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 960px) {
+  .auth-home-guide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .auth-home-guide-group:last-child {
+    grid-column: 1 / -1;
   }
 }

@@ -17,7 +17,12 @@ import {
 } from './boards.ts';
 import type { DocumentImagePresentation } from './media-presentation.ts';
 import { readDocumentMediaPresentations } from './media-presentation.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import {
   readBoardPageActionEvidence,
   withReactionCountsAndCoverage,
@@ -124,8 +129,23 @@ async function readAuthors(
   if (ids.length === 0) return new Map();
   const routes = ids.map((id) => routeOf(id));
   if (routes.some((route) => route === null)) throw new TypeError('Invalid Board opening author identity');
-  const identities = await within(deadline, () =>
-    withConnection(dependencies.pool, (client) => readPublicIdentities(client, routes as number[], ids)),
+  const identities = await withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    (client) => readPublicIdentities(client, routes as number[], ids),
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error) {
+        try {
+          throwAccessUnavailable(error);
+        } catch (mapped) {
+          return mapped;
+        }
+        return error;
+      },
+      isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+      isUncertainSettledQueryError: () => true,
+    },
   );
   const found = new Map<string, ActiveIdentity>(
     identities

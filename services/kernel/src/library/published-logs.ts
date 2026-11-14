@@ -10,7 +10,7 @@ import {
   type AuthoritativeTime,
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -360,18 +360,11 @@ export function createPublishedLogCommands(config: Dependencies) {
       runLibraryBoundedOperation(operation.kind, operation.total, () =>
         withPublishedLogNativeWork(deadline, async () => {
           // Release the owner checkout before native original and terminal subject checkouts.
-          const result = await withConnection(pool, async (client) => {
-            await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-            try {
-              const row = await readStoredLog(client, route, logId);
-              if (!row) throw new LibraryNotFoundError();
-              const owner = row.accountId ? await readAccountCommandState(client, route, row.accountId) : null;
-              await client.query('COMMIT');
-              return { row, owner };
-            } catch (error) {
-              await client.query('ROLLBACK');
-              throw error;
-            }
+          const result = await withBoundedReadOnlyTransaction(pool, deadline, async (client) => {
+            const row = await readStoredLog(client, route, logId);
+            if (!row) throw new LibraryNotFoundError();
+            const owner = row.accountId ? await readAccountCommandState(client, route, row.accountId) : null;
+            return { row, owner };
           });
           const { row, owner } = result;
           if (row.deleted || !owner || owner.state !== 'active' || owner.fenced) {
@@ -416,38 +409,31 @@ export function createPublishedLogCommands(config: Dependencies) {
       runLibraryBoundedOperation(operation.kind, operation.total, () =>
         withPublishedLogNativeWork(deadline, async () => {
           const binding: CursorBinding = { operation: LIST, parameters: { accountId: page.accountId } };
-          const result = await withConnection(pool, async (client) => {
-            await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-            try {
-              const partition = await readPartition(client, partitionOf(route));
-              const owner = await readAccountCommandState(client, route, page.accountId);
-              let after: { publishedAt: string; logId: string } | null = null;
-              if (page.cursor !== undefined) {
-                const cursor = decodeCursor(tokens, binding, page.cursor);
-                const publishedAt = cursor.ok ? cursor.after[0] : undefined,
-                  logId = cursor.ok ? cursor.after[1] : undefined;
-                if (
-                  !cursor.ok ||
-                  cursor.after.length !== 2 ||
-                  typeof publishedAt !== 'string' ||
-                  !Number.isFinite(Date.parse(publishedAt)) ||
-                  typeof logId !== 'string' ||
-                  routeOf(logId) !== route
-                )
-                  throw new ProblemError('invalid_cursor');
-                if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-                after = { publishedAt, logId };
-              }
-              const rows =
-                owner?.state === 'active' && !owner.fenced
-                  ? await pagePublishedLogs(client, route, page.accountId, { after, limit: size + 1 })
-                  : [];
-              await client.query('COMMIT');
-              return { partition, rows };
-            } catch (error) {
-              await client.query('ROLLBACK');
-              throw error;
+          const result = await withBoundedReadOnlyTransaction(pool, deadline, async (client) => {
+            const partition = await readPartition(client, partitionOf(route));
+            const owner = await readAccountCommandState(client, route, page.accountId);
+            let after: { publishedAt: string; logId: string } | null = null;
+            if (page.cursor !== undefined) {
+              const cursor = decodeCursor(tokens, binding, page.cursor);
+              const publishedAt = cursor.ok ? cursor.after[0] : undefined,
+                logId = cursor.ok ? cursor.after[1] : undefined;
+              if (
+                !cursor.ok ||
+                cursor.after.length !== 2 ||
+                typeof publishedAt !== 'string' ||
+                !Number.isFinite(Date.parse(publishedAt)) ||
+                typeof logId !== 'string' ||
+                routeOf(logId) !== route
+              )
+                throw new ProblemError('invalid_cursor');
+              if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+              after = { publishedAt, logId };
             }
+            const rows =
+              owner?.state === 'active' && !owner.fenced
+                ? await pagePublishedLogs(client, route, page.accountId, { after, limit: size + 1 })
+                : [];
+            return { partition, rows };
           });
           const shown = result.rows.slice(0, size),
             publishedLogs: PublishedLog[] = [];

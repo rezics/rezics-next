@@ -14,7 +14,7 @@ function label(sort: BoardSort): string {
 }
 
 const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-lg px-4 py-2 text-start whitespace-normal font-medium text-primary underline-offset-4 [overflow-wrap:anywhere] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring';
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-lg px-3 py-2 text-start whitespace-normal font-medium text-primary underline-offset-4 [overflow-wrap:anywhere] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring';
 const currentClass = 'bg-muted text-foreground';
 
 // Plain links, one address per sort, so the control works without JavaScript. Changing the sort drops the cursor.
@@ -28,7 +28,10 @@ export function BoardSortNav({
   returnTo?: string | undefined;
 }) {
   return (
-    <nav aria-label={m.board_sort_label()} className="flex min-w-0 max-w-full flex-wrap gap-1">
+    <nav
+      aria-label={m.board_sort_label()}
+      className="flex min-w-0 max-w-full flex-wrap gap-1 rounded-xl bg-muted/50 p-1"
+    >
       {boardSorts.map((option) => (
         <Link
           key={option}

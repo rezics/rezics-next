@@ -14,6 +14,7 @@ export function MyRealmsLeaveReview({
   onDismiss?: (() => void) | undefined;
 }) {
   const headingId = useId();
+  const promptId = useId();
   const dismiss = (action: () => void) => {
     action();
     onDismiss?.();
@@ -51,16 +52,19 @@ export function MyRealmsLeaveReview({
     <section
       id={id}
       aria-labelledby={headingId}
+      aria-describedby={promptId}
       aria-busy={review.phase === 'submitting' || review.standing === 'loading'}
-      className="mb-6 min-w-0 space-y-4 border-s-2 border-border ps-4 [overflow-wrap:anywhere] sm:mb-8 sm:ps-6 [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"
+      className="min-w-0 space-y-3 ps-3 [overflow-wrap:anywhere] [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"
       data-slot="my-realms-leave-review"
       data-phase={review.phase}
       data-workflow-id={review.workflowId}
     >
-      <h3 id={headingId} className="text-lg font-semibold">
+      <h3 id={headingId} className="text-base font-semibold leading-snug">
         {m.my_realms_leave_review()}
       </h3>
-      <p className="max-w-prose leading-relaxed">{m.my_realms_leave_confirm({ realm: review.row.name })}</p>
+      <p id={promptId} className="max-w-prose leading-relaxed">
+        {m.my_realms_leave_confirm({ realm: review.row.name })}
+      </p>
       <p role="status">{status}</p>
       {review.phase === 'pending' || review.phase === 'submitting' ? (
         <p className="text-sm text-muted-foreground">

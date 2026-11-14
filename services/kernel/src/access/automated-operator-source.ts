@@ -6,7 +6,7 @@ import {
   type SessionProof,
 } from '@rezics/auth-contract';
 import { accessCheck, type Access, type Actor } from './check.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -17,6 +17,7 @@ import { AuthBindingDeniedError } from './auth-bindings.ts';
 import {
   AccessUnavailableError,
   CommandUnavailableError,
+  classifyUnavailability,
   requireAccessDeadline,
   throwAccessUnavailable,
 } from './unavailable.ts';
@@ -48,6 +49,22 @@ export interface AutomatedOperatorAccess {
     operatorAccountId: string | null;
     deadline: number;
   }): Promise<AutomatedCreationPage>;
+}
+
+function boundedReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      try {
+        throwAccessUnavailable(error, deadline);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  };
 }
 
 /** Two current passes of the installed account:manage formula at live native T.
@@ -91,7 +108,7 @@ export async function readAutomatedCreationOperator(
       // Position advances for unrelated commands in the partition. Only the
       // actual home/epoch and selected account revision bind this observation.
       return { home: { node: partition.node, epoch: partition.epoch }, row: await read(bounded, route) };
-    });
+    }, deadline);
   }
   const human = () => point(humanId, (client, route) => humanSource.run(client, { route, account_id: humanId }));
   const operator = () =>
@@ -105,8 +122,11 @@ export async function readAutomatedCreationOperator(
   };
   async function current() {
     requireAccessDeadline(deadline);
-    const time = await withConnection(pool, (client) =>
-      mintReadTime(deadlineClient(client, deadline), deps.clock ?? accessClock(access)),
+    const time = await withBoundedReadConnection(
+      pool,
+      deadline,
+      (client) => mintReadTime(deadlineClient(client, deadline), deps.clock ?? accessClock(access)),
+      boundedReadOptions(deadline),
     );
     try {
       const caller = await human();
@@ -134,12 +154,12 @@ export async function readAutomatedCreationOperator(
         row.operatorAccountId === null;
       if (eligible && target) {
         const check = await accessCheck(access, actor, 'account:manage', target, { pool, deadline, time });
-        await withConnection(pool, async (client) => {
+        await withBoundedReadConnection(pool, deadline, async (client) => {
           if (!(await check(deadlineClient(client, deadline), time))) {
             if (!selection.genericRefusal) throw new AuthBindingDeniedError();
             eligible = false;
           }
-        });
+        }, boundedReadOptions(deadline));
       }
       equal(before, await operator());
       equal(caller, await human());

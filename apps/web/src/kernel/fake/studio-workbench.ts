@@ -165,7 +165,7 @@ export async function studioWorkbenchFixture(
       `Earlier saved draft.\n\n${text.replace('before dawn', 'at sunrise').replace('small signs of return', 'signs of a homecoming')}`,
       '2026-11-12T16:20:00.000Z',
     );
-    saved.set(postId, { revision: current, visibility: 'draft', permissions: { edit: true, publish: true } });
+    saved.set(postId, { revision: current, visibility: 'draft', permissions: { edit: true, publish: false } });
     revisions.set(postId, [current, historical]);
   }
   let structure: BookStructure = {
@@ -218,10 +218,8 @@ export async function studioWorkbenchFixture(
     initialSelection: saved.get(id(101))!,
     publications: { items: [], nextCursor: null },
     canCreateDraft: true,
-    canPublish: scenario !== 'preparation-unavailable',
-    ...(scenario === 'preparation-unavailable'
-      ? { publicationUnavailableReason: m.studio_release_unavailable({}, { locale }) }
-      : {}),
+    canPublish: false,
+    publicationUnavailableReason: m.studio_release_unavailable({}, { locale }),
   };
   const port: StudioPort = {
     isCurrent: () => active,
@@ -234,7 +232,7 @@ export async function studioWorkbenchFixture(
       const created: StudioSelection = {
         revision: await revision(id(sequence++), title, ''),
         visibility: 'draft',
-        permissions: { edit: true, publish: true },
+        permissions: { edit: true, publish: false },
       };
       saved.set(created.revision.exact.postId, created);
       revisions.set(created.revision.exact.postId, [created.revision]);
@@ -260,11 +258,19 @@ export async function studioWorkbenchFixture(
       revisions.get(command.postId)!.unshift(next.revision);
       return ok(next);
     },
-    versions: async ({ postId }) =>
-      ok({
-        items: revisions.get(postId)!.map(({ exact, savedAt }) => ({ exact, savedAt })),
-        nextCursor: null,
-      }),
+    versions: async ({ postId, cursor }) => {
+      const history = revisions.get(postId)!;
+      const previous = cursor?.startsWith('after:')
+        ? history.findIndex((item) => item.exact.revisionId === cursor.slice(6))
+        : -1;
+      if (cursor !== null && previous < 0) return failure('unavailable');
+      const start = previous + 1;
+      const page = history.slice(start, start + 20);
+      return ok({
+        items: page.map(({ exact, savedAt }) => ({ exact, savedAt })),
+        nextCursor: start + page.length < history.length ? `after:${page[page.length - 1]!.exact.revisionId}` : null,
+      });
+    },
     revision: async ({ document }) =>
       ok(revisions.get(document.postId)!.find((item) => item.exact.revisionId === document.revisionId)!),
     // This fixture never fabricates publication success, activation or public readback.

@@ -25,24 +25,26 @@ export function ManualModerationScope({
     directoryCursor: search.directoryCursor,
     directoryRealm: search.realm,
   };
-  const control = 'min-h-11 min-w-11 max-w-full whitespace-normal break-words';
+  const control = 'min-h-11 min-w-11 w-full max-w-full whitespace-normal break-words';
   return (
-    <section aria-labelledby={`${id}-heading`} className="min-w-0 space-y-3">
-      <h2 id={`${id}-heading`} className="text-xl font-semibold">
-        {m.moderation_manual_heading()}
-      </h2>
-      <p id={`${id}-hint`} className="text-sm text-muted-foreground">
-        {m.moderation_manual_hint()}
-      </p>
+    <section aria-labelledby={`${id}-heading`} className="min-w-0 space-y-4">
+      <div className="space-y-2">
+        <h2 id={`${id}-heading`} className="text-lg font-semibold">
+          {m.moderation_manual_heading()}
+        </h2>
+        <p id={`${id}-hint`} className="text-sm leading-relaxed text-muted-foreground">
+          {m.moderation_manual_hint()}
+        </p>
+      </div>
       <form
-        className="flex min-w-0 flex-wrap items-end gap-3"
+        className="grid min-w-0 gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           const boardId = board.trim();
           if (current() && boardId) onSearch(workbenchSearch({ ...discovery, board: boardId, queue }));
         }}
       >
-        <div className="min-w-0 flex-1 basis-64 space-y-1">
+        <div className="min-w-0 space-y-1">
           <label htmlFor={`${id}-board`} className="block text-sm">
             {m.moderation_manual_board()}
           </label>
@@ -54,13 +56,13 @@ export function ManualModerationScope({
             value={board}
             onChange={(event) => setBoard(event.target.value)}
             aria-describedby={`${id}-hint`}
-            className="min-h-11 min-w-0 w-full"
+            className="min-h-11 min-w-0 w-full max-w-full"
             autoCapitalize="none"
             autoComplete="off"
             spellCheck={false}
           />
         </div>
-        <Field className="min-w-0 flex-1 basis-48 space-y-1">
+        <Field className="min-w-0 space-y-1">
           <FieldLabel htmlFor={`${id}-queue`} className="block text-sm">
             {m.moderation_workbench_heading()}
           </FieldLabel>
@@ -90,16 +92,18 @@ export function ManualModerationScope({
           {m.moderation_manual_open()}
         </Button>
       </form>
-      <Button
-        type="button"
-        variant="outline"
-        className={control}
-        onClick={() => {
-          if (current()) onSearch(workbenchSearch({ ...discovery, scope: 'catalogue', queue: 'reports' }));
-        }}
-      >
-        {m.moderation_manual_catalogue()}
-      </Button>
+      <div className="border-t pt-3">
+        <Button
+          type="button"
+          variant="outline"
+          className={control}
+          onClick={() => {
+            if (current()) onSearch(workbenchSearch({ ...discovery, scope: 'catalogue', queue: 'reports' }));
+          }}
+        >
+          {m.moderation_manual_catalogue()}
+        </Button>
+      </div>
     </section>
   );
 }

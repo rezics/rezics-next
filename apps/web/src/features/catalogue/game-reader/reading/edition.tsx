@@ -54,7 +54,7 @@ export function EditionInspection({
       ref={panel}
       aria-labelledby={id}
       data-slot="game-edition-inspection"
-      className="space-y-4 rounded-lg border-2 border-primary p-4"
+      className="min-w-0 space-y-4 rounded-lg border-2 border-primary bg-card p-4 sm:p-5"
     >
       <h4
         ref={heading}
@@ -64,14 +64,18 @@ export function EditionInspection({
       >
         {m.game_reader_inspection({}, o)}
       </h4>
-      <p>{statement ? m.game_reader_association_meaning({}, o) : m.game_reader_assertion_unavailable({}, o)}</p>
+      <p className="rounded-md border-l-2 border-primary bg-muted/40 px-3 py-2">
+        {statement ? m.game_reader_association_meaning({}, o) : m.game_reader_assertion_unavailable({}, o)}
+      </p>
       {row.summary?.label?.value ? (
-        <p lang={row.summary.label.language}>{row.summary.label.value}</p>
+        <p lang={row.summary.label.language} className="break-words text-lg font-semibold">
+          {row.summary.label.value}
+        </p>
       ) : (
         <p>{m.work_parts_unresolved({}, o)}</p>
       )}
       {statement && row.summary?.label?.value && page.editionTypes.includes(row.summary.type) ? (
-        <nav className="flex flex-wrap gap-x-4" aria-label={m.game_reader_open({}, o)}>
+        <nav className="flex min-w-0 flex-wrap gap-x-4 gap-y-2" aria-label={m.game_reader_open({}, o)}>
           <Link href={subjectHref({ id: row.summary.id, label: row.summary.label.value }, locale).href}>
             {m.game_reader_open({}, o)}
           </Link>
@@ -85,45 +89,45 @@ export function EditionInspection({
           </Link>
         </nav>
       ) : null}
-      <dl className="space-y-3">
-        <div>
+      <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <div className="min-w-0 rounded-md bg-muted/30 p-3">
           <dt className="font-medium">{m.game_reader_holder({}, o)}</dt>
-          <dd>
-            <code>{row.subject}</code>
+          <dd className="min-w-0">
+            <code className="break-all font-mono text-xs">{row.subject}</code>
           </dd>
         </div>
-        <div>
+        <div className="min-w-0 rounded-md bg-muted/30 p-3">
           <dt className="font-medium">{m.game_reader_statement({}, o)}</dt>
-          <dd>
-            <code>{row.statement}</code>
+          <dd className="min-w-0">
+            <code className="break-all font-mono text-xs">{row.statement}</code>
           </dd>
         </div>
-        <div>
+        <div className="min-w-0 rounded-md bg-muted/30 p-3">
           <dt className="font-medium">{m.statement_consent_relationship({}, o)}</dt>
-          <dd>
-            <code>{row.property}</code>
+          <dd className="min-w-0">
+            <code className="break-all font-mono text-xs">{row.property}</code>
           </dd>
         </div>
-        <div>
+        <div className="min-w-0 rounded-md bg-muted/30 p-3">
           <dt className="font-medium">{m.relation_target({}, o)}</dt>
-          <dd>
+          <dd className="min-w-0">
             {statement?.value.type === 'value' && typeof statement.value.content === 'string' ? (
-              <code>{statement.value.content}</code>
+              <code className="break-all font-mono text-xs">{statement.value.content}</code>
             ) : (
               m.game_reader_assertion_unavailable({}, o)
             )}
           </dd>
         </div>
-        <div>
+        <div className="min-w-0 rounded-md bg-muted/30 p-3">
           <dt className="font-medium">{m.game_reader_released_type({}, o)}</dt>
-          <dd>
-            <code>{row.summary?.type ?? row.type}</code>
+          <dd className="min-w-0">
+            <code className="break-all font-mono text-xs">{row.summary?.type ?? row.type}</code>
           </dd>
         </div>
       </dl>
       {statement ? (
         <>
-          <p>
+          <p className="border-t border-border pt-3">
             {m.candidate_rank({}, o)}: <code>{statement.rank}</code>
           </p>
           <h5 className="font-semibold">{m.subject_qualifiers({}, o)}</h5>

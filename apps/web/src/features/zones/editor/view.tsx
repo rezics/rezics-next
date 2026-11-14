@@ -25,6 +25,8 @@ export { EditorFailure } from './error-guidance';
 
 const CompositionEditor = lazy(() => import('./composition'));
 const SavedPreview = lazy(() => import('./preview'));
+const actionButtonClass =
+  'h-auto min-h-11 max-w-full whitespace-normal break-words py-2 text-start pointer-coarse:min-h-12';
 
 export function EditorLoading() {
   return (
@@ -330,7 +332,7 @@ export function ZoneConfigurationEditor({
             />
           ) : null}
           <Button
-            className="h-auto max-w-full whitespace-normal py-2 text-start"
+            className={actionButtonClass}
             disabled={!enabled || state.busy}
             onClick={readCurrent}
           >
@@ -370,47 +372,6 @@ export function ZoneConfigurationEditor({
           {state.notice ? (
             <p role="status">{state.notice === 'saved' ? m.zone_editor_saved() : m.zone_editor_published()}</p>
           ) : null}
-          {state.conflict ? (
-            <section className="space-y-3 border-t border-border pt-4" aria-label={m.zone_editor_conflict()}>
-              <p role="alert">{m.zone_editor_conflict()}</p>
-              {state.conflict.resource.kind === 'failure' ? (
-                <EditorFailure failure={state.conflict.resource} locale={locale} />
-              ) : (
-                <p>{m.zone_editor_saved_head({ revision: state.conflict.resource.value.zone.revision })}</p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  className="h-auto max-w-full whitespace-normal py-2 text-start"
-                  disabled={state.busy || state.conflict.resource.kind !== 'ready'}
-                  onClick={() => {
-                    if (current()) session.resolve('reload');
-                  }}
-                >
-                  {m.zone_editor_reload()}
-                </Button>
-                <Button
-                  className="h-auto max-w-full whitespace-normal py-2 text-start"
-                  variant="outline"
-                  disabled={
-                    state.busy || state.conflict.resource.kind !== 'ready' || !state.conflict.permissions.configure
-                  }
-                  onClick={() => {
-                    if (current()) session.resolve('reapply');
-                  }}
-                >
-                  {m.zone_editor_reapply()}
-                </Button>
-                <Button
-                  className="h-auto max-w-full whitespace-normal py-2 text-start"
-                  variant="outline"
-                  disabled={state.busy}
-                  onClick={readCurrent}
-                >
-                  {m.zone_editor_retry()}
-                </Button>
-              </div>
-            </section>
-          ) : null}
           {state.violations.length ? (
             <Alert id="zone-validation" tabIndex={-1} aria-describedby="zone-validation-guidance">
               <AlertTitle>{m.zone_editor_validation()}</AlertTitle>
@@ -426,24 +387,25 @@ export function ZoneConfigurationEditor({
               <TechnicalDetails issues={state.violations} locale={locale} />
             </Alert>
           ) : null}
-          <ZoneNameFields
-            locale={locale}
-            labels={draft.configuration.labels}
-            primaryLanguage={draft.configuration.primaryLanguage}
-            disabled={editDisabled}
-            descriptions={descriptions}
-            errors={issues.flatMap(({ issue }) => {
-              const target = fieldGuidance(issue, draft, locale).target;
-              return target?.language ? [`/configuration/labels/${target.language}`] : [];
-            })}
-            onChange={(names) => {
-              if (canEdit()) session.edit({ ...draft, configuration: { ...draft.configuration, ...names } });
-            }}
-          />
+          <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.85fr)] xl:items-start">
+            <ZoneNameFields
+              locale={locale}
+              labels={draft.configuration.labels}
+              primaryLanguage={draft.configuration.primaryLanguage}
+              disabled={editDisabled}
+              descriptions={descriptions}
+              errors={issues.flatMap(({ issue }) => {
+                const target = fieldGuidance(issue, draft, locale).target;
+                return target?.language ? [`/configuration/labels/${target.language}`] : [];
+              })}
+              onChange={(names) => {
+                if (canEdit()) session.edit({ ...draft, configuration: { ...draft.configuration, ...names } });
+              }}
+            />
           <section
             tabIndex={-1}
             data-correction-section=""
-            className="min-w-0 space-y-4"
+            className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6 xl:col-start-1 xl:row-start-2"
             aria-labelledby="zone-pages-heading"
             aria-describedby={descriptions['zone-pages-heading']}
           >
@@ -489,6 +451,17 @@ export function ZoneConfigurationEditor({
               </SharedSelect.Select>
             </Field>
             {page ? (
+              <div
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className="min-w-0 rounded-lg border border-primary/20 bg-muted/30 p-4"
+              >
+                <p className="text-sm text-muted-foreground">{m.zone_editor_page()}</p>
+                <p className="break-all text-lg font-semibold">{route || m.zone_home()}</p>
+              </div>
+            ) : null}
+            {page ? (
               <div className="flex flex-wrap items-end gap-3">
                 <Field className="min-w-0 flex-1" data-invalid={invalid('zone-route')}>
                   <FieldLabel htmlFor="zone-route">{m.zone_editor_route()}</FieldLabel>
@@ -504,7 +477,7 @@ export function ZoneConfigurationEditor({
                   <FieldDescription id="zone-route-help">{m.zone_editor_route_help()}</FieldDescription>
                 </Field>
                 <Button
-                  className="h-auto max-w-full whitespace-normal py-2 text-start"
+                  className={actionButtonClass}
                   variant="outline"
                   disabled={editDisabled || route === ''}
                   onClick={() => {
@@ -538,7 +511,7 @@ export function ZoneConfigurationEditor({
                 />
               </Field>
               <Button
-                className="h-auto max-w-full whitespace-normal py-2 text-start"
+                className={actionButtonClass}
                 variant="outline"
                 disabled={
                   editDisabled ||
@@ -563,7 +536,7 @@ export function ZoneConfigurationEditor({
             </div>
             <p className="text-sm text-muted-foreground">{m.zone_editor_composition_note()}</p>
             <Button
-              className="h-auto max-w-full whitespace-normal py-2 text-start"
+              className={actionButtonClass}
               variant="outline"
               disabled={editDisabled}
               onClick={() => {
@@ -577,20 +550,22 @@ export function ZoneConfigurationEditor({
               {m.zone_editor_compose()}
             </Button>
             {composing && page && !editDisabled ? (
-              <Suspense fallback={<EditorLoading />}>
-                <CompositionEditor
-                  key={`${state.generation}:${selected}:${route}:${locale}`}
-                  document={page.document}
-                  locale={locale}
-                  onChange={changeDocument}
-                />
-              </Suspense>
+              <div className="min-w-0 rounded-lg border border-border bg-background p-3 sm:p-4">
+                <Suspense fallback={<EditorLoading />}>
+                  <CompositionEditor
+                    key={`${state.generation}:${selected}:${route}:${locale}`}
+                    document={page.document}
+                    locale={locale}
+                    onChange={changeDocument}
+                  />
+                </Suspense>
+              </div>
             ) : null}
           </section>
           <section
             tabIndex={-1}
             data-correction-section=""
-            className="space-y-4"
+            className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6 xl:col-start-2 xl:row-span-2 xl:row-start-1"
             aria-labelledby="zone-sources-heading"
             aria-describedby={
               [descriptions['zone-scopes'], descriptions['zone-mounts']].filter(Boolean).join(' ') || undefined
@@ -684,7 +659,7 @@ export function ZoneConfigurationEditor({
             </fieldset>
             {mountOptions.kind === 'ready' && mountOptions.value.next ? (
               <Button
-                className="h-auto max-w-full whitespace-normal py-2 text-start"
+                className={actionButtonClass}
                 variant="outline"
                 disabled={disabled}
                 onClick={() => void readMore()}
@@ -693,7 +668,7 @@ export function ZoneConfigurationEditor({
               </Button>
             ) : null}
             <Button
-              className="h-auto max-w-full whitespace-normal py-2 text-start"
+              className={actionButtonClass}
               variant="outline"
               disabled={disabled}
               onClick={readCurrent}
@@ -701,85 +676,159 @@ export function ZoneConfigurationEditor({
               {m.zone_editor_refresh()}
             </Button>
           </section>
-          <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
-            <Button
-              className="h-auto max-w-full whitespace-normal py-2 text-start"
-              disabled={editDisabled || !writeEnabled || !dirty}
-              onClick={() => {
-                if (currentDraft()) {
-                  setOperation('save');
-                  void session.save();
-                }
-              }}
-            >
-              {m.zone_editor_save()}
-            </Button>
-            <Field
-              className="w-auto min-w-0"
-              data-invalid={invalid('zone-visibility')}
-              tabIndex={-1}
-              data-correction-section=""
-            >
-              <FieldLabel htmlFor="zone-visibility">{m.zone_editor_visibility()}</FieldLabel>
-              <SharedSelect.Select
-                value={visibility}
-                disabled={disabled || !writeEnabled || !loaded.permissions.publish}
-                items={[
-                  { value: 'private', label: m.library_visibility_private() },
-                  { value: 'unlisted', label: m.library_visibility_unlisted() },
-                  { value: 'public', label: m.library_visibility_public() },
-                ]}
-                onValueChange={(value) => {
-                  if (value !== null && current()) setVisibility(value as Visibility);
-                }}
-              >
-                <SharedSelect.SelectTrigger
-                  id="zone-visibility"
-                  aria-invalid={invalid('zone-visibility')}
-                  aria-describedby={descriptions['zone-visibility']}
-                  className="max-md:min-h-11 pointer-coarse:min-h-11"
-                >
-                  <SharedSelect.SelectValue />
-                </SharedSelect.SelectTrigger>
-                <SharedSelect.SelectContent>
-                  <SharedSelect.SelectGroup>
-                    <SharedSelect.SelectItem value="private">{m.library_visibility_private()}</SharedSelect.SelectItem>
-                    <SharedSelect.SelectItem value="unlisted">
-                      {m.library_visibility_unlisted()}
-                    </SharedSelect.SelectItem>
-                    <SharedSelect.SelectItem value="public">{m.library_visibility_public()}</SharedSelect.SelectItem>
-                  </SharedSelect.SelectGroup>
-                </SharedSelect.SelectContent>
-              </SharedSelect.Select>
-            </Field>
-            <Button
-              className="h-auto max-w-full whitespace-normal py-2 text-start"
-              variant="outline"
-              disabled={
-                disabled ||
-                !writeEnabled ||
-                dirty ||
-                !loaded.permissions.publish ||
-                visibility === saved.zone.visibility
-              }
-              onClick={() => {
-                if (current()) {
-                  setOperation('publish');
-                  void session.publish(visibility);
-                }
-              }}
-            >
-              {m.zone_editor_publish()}
-            </Button>
           </div>
-          <section className="space-y-4" aria-labelledby="zone-preview-heading">
+          <section
+            className="space-y-5 rounded-xl border-2 border-primary/20 bg-card p-4 shadow-sm sm:p-6"
+            aria-labelledby="zone-head-actions-heading"
+          >
+            <div className="space-y-4">
+              <h2 id="zone-head-actions-heading" className="text-xl font-semibold">
+                {m.zone_editor_saved_head({ revision: saved.zone.revision })}
+              </h2>
+              {state.conflict ? (
+                <section
+                  className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4"
+                  aria-label={m.zone_editor_conflict()}
+                >
+                  <p role="alert" className="font-semibold">
+                    {m.zone_editor_conflict()}
+                  </p>
+                  {state.conflict.resource.kind === 'failure' ? (
+                    <EditorFailure failure={state.conflict.resource} locale={locale} />
+                  ) : (
+                    <p>{m.zone_editor_saved_head({ revision: state.conflict.resource.value.zone.revision })}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      className={actionButtonClass}
+                      disabled={state.busy || state.conflict.resource.kind !== 'ready'}
+                      onClick={() => {
+                        if (current()) session.resolve('reload');
+                      }}
+                    >
+                      {m.zone_editor_reload()}
+                    </Button>
+                    <Button
+                      className={actionButtonClass}
+                      variant="outline"
+                      disabled={
+                        state.busy || state.conflict.resource.kind !== 'ready' || !state.conflict.permissions.configure
+                      }
+                      onClick={() => {
+                        if (current()) session.resolve('reapply');
+                      }}
+                    >
+                      {m.zone_editor_reapply()}
+                    </Button>
+                    <Button
+                      className={actionButtonClass}
+                      variant="outline"
+                      disabled={state.busy}
+                      onClick={readCurrent}
+                    >
+                      {m.zone_editor_retry()}
+                    </Button>
+                  </div>
+                </section>
+              ) : null}
+              <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                <div
+                  role="group"
+                  aria-label={m.zone_editor_save()}
+                  className="flex min-w-0 flex-col items-start gap-3 rounded-lg border border-border p-4"
+                >
+                  <Button
+                    className={actionButtonClass}
+                    disabled={editDisabled || !writeEnabled || !dirty}
+                    onClick={() => {
+                      if (currentDraft()) {
+                        setOperation('save');
+                        void session.save();
+                      }
+                    }}
+                  >
+                    {m.zone_editor_save()}
+                  </Button>
+                </div>
+                <div
+                  role="group"
+                  aria-label={m.zone_editor_visibility()}
+                  className="flex min-w-0 flex-col items-start gap-3 rounded-lg border border-border p-4"
+                >
+                  <Field
+                    className="w-full min-w-0 sm:w-auto"
+                    data-invalid={invalid('zone-visibility')}
+                    tabIndex={-1}
+                    data-correction-section=""
+                  >
+                    <FieldLabel htmlFor="zone-visibility">{m.zone_editor_visibility()}</FieldLabel>
+                    <SharedSelect.Select
+                      value={visibility}
+                      disabled={disabled || !writeEnabled || !loaded.permissions.publish}
+                      items={[
+                        { value: 'private', label: m.library_visibility_private() },
+                        { value: 'unlisted', label: m.library_visibility_unlisted() },
+                        { value: 'public', label: m.library_visibility_public() },
+                      ]}
+                      onValueChange={(value) => {
+                        if (value !== null && current()) setVisibility(value as Visibility);
+                      }}
+                    >
+                      <SharedSelect.SelectTrigger
+                        id="zone-visibility"
+                        aria-invalid={invalid('zone-visibility')}
+                        aria-describedby={descriptions['zone-visibility']}
+                        className="max-md:min-h-11 pointer-coarse:min-h-11"
+                      >
+                        <SharedSelect.SelectValue />
+                      </SharedSelect.SelectTrigger>
+                      <SharedSelect.SelectContent>
+                        <SharedSelect.SelectGroup>
+                          <SharedSelect.SelectItem value="private">{m.library_visibility_private()}</SharedSelect.SelectItem>
+                          <SharedSelect.SelectItem value="unlisted">
+                            {m.library_visibility_unlisted()}
+                          </SharedSelect.SelectItem>
+                          <SharedSelect.SelectItem value="public">{m.library_visibility_public()}</SharedSelect.SelectItem>
+                        </SharedSelect.SelectGroup>
+                      </SharedSelect.SelectContent>
+                    </SharedSelect.Select>
+                  </Field>
+                  <Button
+                    className={actionButtonClass}
+                    variant="outline"
+                    disabled={
+                      disabled ||
+                      !writeEnabled ||
+                      dirty ||
+                      !loaded.permissions.publish ||
+                      visibility === saved.zone.visibility
+                    }
+                    onClick={() => {
+                      if (current()) {
+                        setOperation('publish');
+                        void session.publish(visibility);
+                      }
+                    }}
+                  >
+                    {m.zone_editor_publish()}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section
+            className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6"
+            aria-labelledby="zone-preview-heading"
+          >
             <h2 id="zone-preview-heading" className="text-xl font-semibold">
               {m.zone_editor_preview()}
             </h2>
-            <p className="max-w-3xl text-sm text-muted-foreground">{m.zone_editor_preview_note()}</p>
+            <p className="max-w-3xl text-sm text-muted-foreground">
+              {m.zone_editor_saved_head({ revision: saved.zone.revision })} · {m.zone_editor_preview_note()}
+            </p>
             <div className="flex flex-wrap items-center gap-3">
               <Button
-                className="h-auto max-w-full whitespace-normal py-2 text-start"
+                className={actionButtonClass}
                 variant="outline"
                 disabled={disabled || dirty}
                 onClick={() => {
@@ -792,7 +841,7 @@ export function ZoneConfigurationEditor({
                 {m.zone_editor_open()}
               </a>
               <Button
-                className="h-auto max-w-full whitespace-normal py-2 text-start"
+                className={actionButtonClass}
                 variant="outline"
                 disabled={!enabled}
                 onClick={() => void copy()}
@@ -807,7 +856,7 @@ export function ZoneConfigurationEditor({
               <>
                 <EditorFailure failure={state.preview} locale={locale} context="preview" />
                 <Button
-                  className="h-auto max-w-full whitespace-normal py-2 text-start"
+                  className={actionButtonClass}
                   variant="outline"
                   disabled={disabled || dirty}
                   onClick={() => {
@@ -823,7 +872,7 @@ export function ZoneConfigurationEditor({
                 <p>{m.zone_preparing_message()}</p>
                 <p>{m.zone_editor_retry_after({ seconds: state.preview.retryAfter })}</p>
                 <Button
-                  className="h-auto max-w-full whitespace-normal py-2 text-start"
+                  className={actionButtonClass}
                   variant="outline"
                   disabled={disabled || dirty}
                   onClick={() => {
@@ -836,7 +885,9 @@ export function ZoneConfigurationEditor({
             ) : null}
             {state.preview?.kind === 'ready' ? (
               <Suspense fallback={<EditorLoading />}>
-                <SavedPreview page={state.preview.value} route={route} locale={locale} />
+                <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+                  <SavedPreview page={state.preview.value} route={route} locale={locale} />
+                </div>
               </Suspense>
             ) : null}
           </section>

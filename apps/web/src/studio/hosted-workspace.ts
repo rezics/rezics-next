@@ -221,7 +221,18 @@ export async function openHostedStudio(
       if (!freshOwner.ok) return freshOwner;
       if (freshOwner.value.item.headRevisionId !== structure.revision)
         return hostedFailure('stale', 'The book changed. Reload the structure before reviewing publication.');
-      publicationId = freshOwner.value.item.publicationId;
+      const nextPublicationId = freshOwner.value.item.publicationId;
+      // Publication can advance independently of the structure being reviewed.
+      // Confirm the fresh pointer with its own manifest, never the previous release.
+      if (nextPublicationId && currentPublication?.revision !== nextPublicationId) {
+        const publication = await book.readPublication(options.catalogueId, requestSignal, nextPublicationId);
+        if (!current() || requestSignal.aborted) return ended();
+        if (!publication.ok) return publication;
+        currentPublication = publicationRecord(nextPublicationId, publication.value);
+      } else if (!nextPublicationId) {
+        currentPublication = null;
+      }
+      publicationId = nextPublicationId;
       await releaseReader.confirm(freshOwner.value.item, currentPublication, requestSignal);
       if (!current() || requestSignal.aborted) return ended();
       const review = reviewFor(structure, request.target, publicationId);
@@ -252,7 +263,8 @@ export async function openHostedStudio(
       if (release.value.placements.length === 0)
         return hostedFailure('stale', 'This book is already withdrawn. Reopen it to read its current release.');
       publicationId = item.publicationId;
-      await releaseReader.confirm(item, publicationRecord(publicationId, release.value), requestSignal);
+      currentPublication = publicationRecord(publicationId, release.value);
+      await releaseReader.confirm(item, currentPublication, requestSignal);
       if (!current() || requestSignal.aborted) return ended();
       return {
         ok: true,

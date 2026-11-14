@@ -95,18 +95,25 @@ export function RealmClaimStatusView({
             </ContentItemHeading>
             <p className="text-sm leading-7">
               {receipt.state === 'approved'
-                ? m.realm_claim_status_approved_help()
+                ? receipt.currentEpisode
+                  ? m.realm_claim_status_approved_help()
+                  : m.realm_claim_status_old_episode()
                 : receipt.currentEpisode
                   ? m.realm_claim_review_help()
                   : m.realm_claim_status_old_pending()}
             </p>
-            {!receipt.currentEpisode ? (
+            {!receipt.currentEpisode && receipt.state === 'pending' ? (
               <p className="text-sm text-muted-foreground">{m.realm_claim_status_old_episode()}</p>
             ) : null}
             <dl className="grid min-w-0 gap-5 border-t pt-5 text-sm sm:grid-cols-2">
               <ManagementField label={m.realm_claim_orphaned_at()}>
                 <NativeDate value={receipt.orphanedAt} />
               </ManagementField>
+              {receipt.currentEpisode && state.read.kind === 'ready' && state.read.source.claimEligibleAt ? (
+                <ManagementField label={m.realm_claim_eligible_at()}>
+                  <NativeDate value={state.read.source.claimEligibleAt} />
+                </ManagementField>
+              ) : null}
               <ManagementField label={m.realm_claim_requested_at()}>
                 <NativeDate value={receipt.requestedAt} />
               </ManagementField>
@@ -116,7 +123,7 @@ export function RealmClaimStatusView({
                 </ManagementField>
               ) : null}
             </dl>
-            <ManagementReferences label={m.realm_status_details_reference()}>
+            <ManagementReferences label={m.community_management_details_claim_summary()}>
               <ManagementField label={m.realm_claim_reference()}>
                 <ManagementReference>{receipt.requestId}</ManagementReference>
               </ManagementField>

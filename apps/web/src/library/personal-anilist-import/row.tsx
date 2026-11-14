@@ -121,25 +121,21 @@ export function AniListRowReview({
   }
   return (
     <article
-      className="space-y-4 rounded-lg border p-4"
+      className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5"
       data-anilist-row={row.ordinal}
       data-anilist-match={match ?? 'pending'}
       data-anilist-started={started ? 'true' : 'false'}
     >
-      <header className="space-y-1">
-        <h3 className="text-lg font-medium [overflow-wrap:anywhere]">{title}</h3>
-        <p className="text-sm text-muted-foreground">
-          {aniListMediaLabel(mediaType)} · {aniListMatchLabel(match, draft.skip)}
-        </p>
-        {meta?.groupLabel ? (
-          <p className="text-sm [overflow-wrap:anywhere]">
-            {m.library_anilist_group()}: {meta.groupLabel}
+      <header className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,0.65fr)] sm:items-start">
+        <div className="min-w-0 space-y-1">
+          <h3 className="text-lg font-semibold [overflow-wrap:anywhere]">{title}</h3>
+          <p className="text-sm text-muted-foreground">
+            {aniListMediaLabel(mediaType)} · {aniListMatchLabel(match, draft.skip)}
           </p>
-        ) : null}
-        <p className="text-sm [overflow-wrap:anywhere]">
-          {row.source.identifiers.map((item) => `${item.source}: ${item.externalId}`).join(' · ')}
-        </p>
-        <ImportTarget target={draft.target} />
+        </div>
+        <div className="min-w-0 rounded-md bg-muted/40 p-3">
+          <ImportTarget target={draft.target} />
+        </div>
       </header>
       <ImportChoice title={m.library_import_state()}>
         {row.proposal?.current || meta?.current ? (
@@ -214,6 +210,7 @@ export function AniListRowReview({
           </p>
           {meta.scoreSource.value === 0 ? <p>{m.library_anilist_source_zero_unrated()}</p> : null}
           <p className="text-sm text-muted-foreground">{meta.scoreSource.reason}</p>
+          <p className="text-sm text-muted-foreground">{m.library_anilist_not_vote()}</p>
           {question ? (
             <div className="space-y-1">
               <p className="font-medium">{question.label}</p>
@@ -247,10 +244,12 @@ export function AniListRowReview({
                       })}
               </p>
               {meta.scoreReview.targetId ? (
-                <p className="text-sm [overflow-wrap:anywhere]">
-                  {m.library_anilist_score_target({ target: meta.scoreReview.targetId })}
-                  {meta.scoreReview.identityEpoch ? ` · ${meta.scoreReview.identityEpoch}` : ''}
-                </p>
+                <ImportDetails>
+                  <p className="text-sm [overflow-wrap:anywhere]">
+                    {m.library_anilist_score_target({ target: meta.scoreReview.targetId })}
+                    {meta.scoreReview.identityEpoch ? ` · ${meta.scoreReview.identityEpoch}` : ''}
+                  </p>
+                </ImportDetails>
               ) : null}
             </div>
           ) : null}
@@ -336,8 +335,18 @@ export function AniListRowReview({
       </AniListAction>
       {children}
       <ImportDetails>
+        {meta?.groupLabel ? (
+          <p className="[overflow-wrap:anywhere]">
+            {m.library_anilist_group()}: {meta.groupLabel}
+          </p>
+        ) : null}
         <AniListEvidencePanel row={row} scoreFormat={scoreFormat} />
       </ImportDetails>
+      <div className="space-y-1 border-t pt-3 text-sm text-muted-foreground" data-anilist-source-limitations>
+        <p>{m.library_anilist_not_session()}</p>
+        <p>{m.library_anilist_not_clock()}</p>
+        <p>{m.library_anilist_not_public()}</p>
+      </div>
     </article>
   );
 }

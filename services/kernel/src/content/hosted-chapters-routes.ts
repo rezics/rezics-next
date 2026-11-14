@@ -55,7 +55,10 @@ import {
   hostedSubjectCataloguePageSchema,
   hostedSubjectCatalogueQuerySchema,
 } from './hosted-catalogue-subject-schemas.ts';
-import { hostedPublicationPreparationRoutes } from './hosted-publication-preparation-routes.ts';
+import {
+  hostedPublicationActivationRoutes,
+  hostedPublicationPreparationRoutes,
+} from './hosted-publication-preparation-routes.ts';
 import {
   HostedIdSchema,
   HostedCreateSchema,
@@ -185,7 +188,8 @@ export function hostedChapterRoutes(app: ReturnType<typeof contentRoutes>, deps:
       response.headers.set('cache-control', 'private, no-store');
     return response;
   });
-  return preparationRoutes
+  const activationRoutes = hostedPublicationActivationRoutes(preparationRoutes, deps);
+  return activationRoutes
     .get(
       '/v1/accounts/:accountId/hostedCatalogues',
       {

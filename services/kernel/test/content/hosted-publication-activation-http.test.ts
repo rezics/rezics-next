@@ -1,8 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
-import { hostedPublicationActivationRoutes } from '../../src/content/hosted-publication-preparation-routes.ts';
-import type { HostedPublicationPreparationDependencies } from '../../src/content/hosted-publication-preparation.ts';
 import { createKernel, type Kernel } from '../../src/http/kernel.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -14,13 +12,6 @@ let candidate: Kernel;
 
 beforeAll(async () => {
   f = await hostedChaptersFixture();
-  const deps: HostedPublicationPreparationDependencies = {
-    pool: f.native.pool,
-    access: f.native.system.access,
-    tokens: f.native.system.tokenKeys,
-    clock: () => new Date(),
-    routeKey: f.native.system.routeKey,
-  };
   candidate = createKernel({
     receiptKeys: testReceiptKeys(),
     requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
@@ -28,11 +19,6 @@ beforeAll(async () => {
     routeKey: f.native.system.routeKey,
     tokens: f.native.system.tokenKeys,
     access: () => f.native.system.access,
-    modules: [
-      (app) => {
-        hostedPublicationActivationRoutes(app as Parameters<typeof hostedPublicationActivationRoutes>[0], deps);
-      },
-    ],
   });
 });
 
@@ -172,11 +158,9 @@ async function advanceUntil(
   throw new Error(`Activation did not reach ${expected}`);
 }
 
-test('createKernel omits activation while the unmounted factory selects, replays and keeps A after stale authority', async () => {
+test('ordinary Kernel activation selects, replays and keeps A after stale authority', async () => {
   const book = await newBook();
   const sealed = await sealedCandidate(book);
-  const served = await f.native.call('POST', `${sealed.path}:startActivation`, {});
-  expect(served.status).toBe(404);
 
   const startKey = crypto.randomUUID();
   const started = await activationCall('POST', `${sealed.path}:startActivation`, {}, { key: startKey });
@@ -275,7 +259,7 @@ test('createKernel omits activation while the unmounted factory selects, replays
   expect(published.value.items?.length).toBeGreaterThan(0);
 });
 
-test('unmounted activation maps author denial, missing locators, extra fields and unsealed conflict', async () => {
+test('activation maps author denial, missing locators, extra fields and unsealed conflict', async () => {
   const book = await newBook();
   const collecting = await f.native.call('POST', `${book.path}:prepareRelease`, {
     stageId: book.newId(),

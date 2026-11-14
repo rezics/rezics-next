@@ -46,7 +46,7 @@ export function VndbUploadForm({
 
   return (
     <form
-      className="space-y-4"
+      className="min-w-0 max-w-3xl space-y-4 [overflow-wrap:anywhere]"
       data-vndb-stage="upload"
       tabIndex={-1}
       onSubmit={(event) => {

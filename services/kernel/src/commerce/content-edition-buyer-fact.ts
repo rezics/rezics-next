@@ -5,12 +5,11 @@ import {
   contentEditionBenefitBinding,
   type ContentEditionBuyerFactReader,
 } from '../access/authenticated-benefit.ts';
-import { deadlineClient } from '../access/authenticate.ts';
 import { readAccount } from '../access/account-data.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -37,10 +36,10 @@ export function createContentEditionBuyerFactReader(config: {
     if (routeOf(benefit.version.revisionId) !== benefit.resource.route)
       throw new TypeError('Invalid Content edition revision route');
     try {
-      const entitlement = await withConnection(config.pool, async (client) => {
-        const bounded = deadlineClient(client, deadline);
-        try {
-          await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const entitlement = await withBoundedReadOnlyTransaction(
+        config.pool,
+        deadline,
+        async (bounded) => {
           await bounded.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
           const partition = await readPartition(bounded, partitionOf(route));
           if (!partition || partition.writeState !== 'active') throw new ProblemError('partition_unavailable');
@@ -93,13 +92,20 @@ export function createContentEditionBuyerFactReader(config: {
           }
           authoritativeTimeValue(time);
           requireAccessDeadline(deadline);
-          await bounded.query('COMMIT');
           return row ?? null;
-        } catch (error) {
-          await client.query('ROLLBACK').catch((failure: Error) => discardConnection(client, failure));
-          throw error;
-        }
-      });
+        },
+        {
+          deadlineError: () => new AccessUnavailableError('deadline'),
+          mapError(error) {
+            // Classify the causal failure before cleanup can consume the budget.
+            throwAccessUnavailable(error);
+            return error;
+          },
+          // A rejected native query without a settled PostgreSQL ERROR has
+          // uncertain transport state; the lifetime owner must retire it.
+          isUncertainSettledQueryError: () => true,
+        },
+      );
       // Issue only after COMMIT and release: no native checkout spans the
       // Accounts issuer, permission evaluation or Content's independent guards.
       authoritativeTimeValue(time);
@@ -114,7 +120,8 @@ export function createContentEditionBuyerFactReader(config: {
         deadline,
       });
     } catch (error) {
-      throwAccessUnavailable(error, deadline);
+      // The lifetime owner preserves the primary error across bounded cleanup.
+      throwAccessUnavailable(error);
       if (error instanceof ProblemError) throw error;
       // Missing capture schema/issuer and malformed current dependencies are
       // unavailable, never a successful empty lookup or structural grant.

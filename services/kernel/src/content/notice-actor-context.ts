@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { Static } from 'typebox';
 import { readPublicIdentityObservations, deadlineClient, within } from './access-port.ts';
 import type { PublicIdentityObservation } from '../access/content-adapter.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { readAvatarSummaries, type AvatarSummary } from './avatar.ts';
 import type { AvatarSummarySchema } from './schemas.ts';
@@ -64,7 +64,7 @@ export async function readNoticeActors(
   const unique = [...new Set(ids.filter((id) => routeOf(id) !== null))];
   if (!unique.length) return new Map();
   return within(deadline, () =>
-    withConnection(pool, async (connection) => {
+    withBoundedReadConnection(pool, deadline, async (connection) => {
       const client = deadlineClient(connection, deadline);
       const read = () => readPublicIdentityObservations(client, unique);
       const before = new Map((await read()).map((row) => [row.id, row]));
@@ -105,6 +105,6 @@ export async function readNoticeActors(
         });
       }
       return result;
-    }),
+    }, { isUncertainError: () => true }),
   );
 }

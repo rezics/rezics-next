@@ -310,24 +310,24 @@ function AdvancedScope({
             required
             pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
             autoComplete="off"
+            aria-invalid={(id.length > 0 && !selected) || undefined}
+            aria-describedby={id.length > 0 && !selected ? `${resourceId}-error` : undefined}
             onChange={(event) => setId(event.currentTarget.value)}
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
+          {id.length > 0 && !selected && (
+            <p id={`${resourceId}-error`} className="text-sm text-destructive">
+              {m.search_reader_condition_format({ field: m.access_identity_resource_id({}, options) }, options)}
+            </p>
+          )}
         </Field>
       )}
       <input type="hidden" name="filter" value={nextFilter ?? ''} />
-      <div className="flex flex-wrap gap-2">
-        {kind && (
-          <Button type="submit" variant="outline">
-            {m.search_submit({}, options)}
-          </Button>
-        )}
-        {scope && (
-          <Button type="button" variant="ghost" onClick={onRemove}>
-            {m.header_search_remove_scope({ scope: `${scope.kind} ${scope.id}` }, options)}
-          </Button>
-        )}
-      </div>
+      {scope && (
+        <Button type="button" variant="ghost" onClick={onRemove} className="max-w-full whitespace-normal wrap-anywhere">
+          {m.header_search_remove_scope({ scope: `${scope.kind} ${scope.id}` }, options)}
+        </Button>
+      )}
       {scope && <p className="text-xs text-muted-foreground">{`${scope.kind} ${scope.id}`}</p>}
     </fieldset>
   );
@@ -428,6 +428,7 @@ export function SearchPage({
         filter: searchFilterWithScope(committedInput.filter, fixedResourceScope),
       }
     : committedInput;
+  const currentScope = committedState.resourceScope ?? parseSearchResourceScope(committedState.filter).scope;
   const hrefFor = (state: SearchLoaderDeps) => {
     const fixed = fixedResourceScope
       ? {
@@ -471,6 +472,10 @@ export function SearchPage({
     ...(data?.problem?.errors ?? []),
     ...(draft.attempted || draft.condition !== data?.condition ? localIssues : []),
   ];
+  const advancedDetails = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (issues.length > 0 && advancedDetails.current) advancedDetails.current.open = true;
+  }, [issues.length, data?.problem, filterSurface]);
   const editedState = {
     ...conditionSearchState(committedState, draft.condition, draft.languages),
     filter: committedState.filter,
@@ -748,7 +753,11 @@ export function SearchPage({
     if (!isCurrent()) return;
     setDraft((previous) => ({ ...previous, attempted: true }));
     if (!removingCondition && localIssues.length) {
-      requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
+      if (advancedDetails.current) advancedDetails.current.open = true;
+      requestAnimationFrame(() =>
+        (document.querySelector<HTMLElement>('[data-condition-errors]') ??
+          document.querySelector<HTMLElement>('[data-search-composition-errors]'))?.focus(),
+      );
       return;
     }
     void router?.navigate({ href });
@@ -777,6 +786,7 @@ export function SearchPage({
     if (localIssues.length || router) event.preventDefault();
     if (localIssues.length) {
       const form = event.currentTarget;
+      if (advancedDetails.current) advancedDetails.current.open = true;
       requestAnimationFrame(() => form.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
       return;
     }
@@ -822,20 +832,45 @@ export function SearchPage({
     navigate(anchor.getAttribute('href')!, anchor.dataset.removeCondition === 'true');
   };
   const filterEntrance = (
-    <div className="space-y-3" onClick={follow}>
-      <Button
-        id="search-filter-entry"
-        type="button"
-        variant="outline"
-        aria-controls="search-filters"
-        aria-expanded={!hydrated || filterSurface !== undefined}
-        onClick={openFilters}
-      >
-        <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
-        {m.search_filters({}, options)} ({number.format(activeFilterCount)})
-      </Button>
+    <div className="min-w-0 space-y-4 rounded-xl border border-border/60 p-4" onClick={follow}>
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">{m.search_heading({}, options)}</p>
+          {query && <p className="text-base font-medium wrap-anywhere"><bdi>{query}</bdi></p>}
+          <p className="text-sm text-muted-foreground wrap-anywhere">
+            {m.access_resource({}, options)}:{' '}
+            {currentScope ? (
+              <bdi>{`${currentScope.kind} ${currentScope.id}`}</bdi>
+            ) : (
+              m.header_search_global({}, options)
+            )}
+          </p>
+        </div>
+        <Button
+          id="search-filter-entry"
+          type="button"
+          variant="outline"
+          className="min-h-11 shrink-0 self-start"
+          aria-controls="search-filters"
+          aria-expanded={!hydrated || filterSurface !== undefined}
+          onClick={openFilters}
+        >
+          <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+          {m.search_filters({}, options)} ({number.format(activeFilterCount)})
+        </Button>
+      </div>
+      {draft.attempted && localIssues.length > 0 && !filterSurface && (
+        <p
+          role="alert"
+          tabIndex={-1}
+          data-search-composition-errors
+          className="rounded-sm text-sm text-destructive focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.search_reader_condition_filter_review({}, options)}
+        </p>
+      )}
       {constraints.length > 0 && (
-        <ul aria-label={m.refinement_selected({}, options)} data-search-constraints className="flex flex-wrap gap-2">
+        <ul aria-label={m.refinement_selected({}, options)} data-search-constraints className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
           {constraints.map(({ key, text, state, lang, description, descriptionLang }, index) => (
             <li key={key} className="min-w-0 max-w-full">
               <a
@@ -968,27 +1003,50 @@ export function SearchPage({
     );
 
   const filterContents = (surface: 'desktop' | 'mobile') => (
-    <div className="space-y-5 pt-3 lg:pt-0">
+    <div className="min-w-0 space-y-5 pt-4">
       <input type="hidden" name="q" value={query} />
       {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       {committedState.ratingPopulation && (
         <input type="hidden" name={RATING_POPULATION_FIELD} value={committedState.ratingPopulation} />
       )}
-      {fixedResourceScope ? (
-        <input
-          type="hidden"
-          name="filter"
-          value={searchFilterWithScope(data?.queryState?.filter ?? committedState.filter, fixedResourceScope) ?? ''}
-        />
-      ) : (
-        <AdvancedScope
-          key={`${surface}-${JSON.stringify(data?.queryState?.resourceScope ?? null)}`}
-          filter={data?.queryState?.filter}
-          scope={data?.queryState?.resourceScope}
-          locale={locale}
-          onRemove={removeScope}
-        />
+      <div className="space-y-1 rounded-lg bg-muted/40 p-3 lg:hidden">
+        <p className="text-xs font-medium text-muted-foreground">{m.search_heading({}, options)}</p>
+        {query && <p className="font-medium wrap-anywhere"><bdi>{query}</bdi></p>}
+      </div>
+      {constraints.length > 0 && (
+        <details className="min-w-0 rounded-lg border border-border/60 p-3 lg:hidden">
+          <summary className="min-h-10 cursor-pointer content-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {m.refinement_selected({}, options)} ({number.format(activeFilterCount)})
+          </summary>
+          <ul className="space-y-2 pt-2 text-sm text-muted-foreground">
+            {constraints.map(({ key, text, lang }) => (
+              <li key={key} lang={lang} className="wrap-anywhere">{text}</li>
+            ))}
+          </ul>
+        </details>
       )}
+      <section aria-label={m.access_resource({}, options)} className="min-w-0 space-y-4">
+        {fixedResourceScope ? (
+          <input
+            type="hidden"
+            name="filter"
+            value={searchFilterWithScope(data?.queryState?.filter ?? committedState.filter, fixedResourceScope) ?? ''}
+          />
+        ) : (
+          <AdvancedScope
+            key={`${surface}-${JSON.stringify(data?.queryState?.resourceScope ?? null)}`}
+            filter={data?.queryState?.filter}
+            scope={data?.queryState?.resourceScope}
+            locale={locale}
+            onRemove={removeScope}
+          />
+        )}
+        {fixedResourceScope && (
+          <p className="text-sm text-muted-foreground wrap-anywhere">
+            {m.access_resource({}, options)}: <bdi>{`${fixedResourceScope.kind} ${fixedResourceScope.id}`}</bdi>
+          </p>
+        )}
+      </section>
       {resourceLanguage?.applicability === 'not-applicable' && (type || resourceLanguage.selected.length > 0) && (
         <p role="status" className="text-sm text-muted-foreground">
           {m.search_resource_language_not_applicable({}, options)}
@@ -1049,167 +1107,197 @@ export function SearchPage({
             : [],
         )}
       {!typeRefinementAvailable && type && <input type="hidden" name="type" value={type} />}
-      {kindDirectory && data?.queryState && (
-        <DiscoveryKinds
-          key={JSON.stringify([data.queryState, locale, session, readerOwner, kindDirectory])}
-          initial={kindDirectory.initial}
-          checkpoint={kindDirectory.checkpoint}
-          locale={locale}
-          selected={data.queryState.kinds ?? []}
-          hydrated={hydrated}
-          onRefresh={onRetry ? () => void onRetry() : undefined}
-          onRefreshFocus={retryFocus.captureRetryFocus}
-          onRefusalFocus={(source) => retryFocus.captureRetryFocus(source, true)}
-          onRefusal={(state) => {
-            if (sourceData && currentData.current === sourceData) setInvalidation({ owner: sourceData, state });
-          }}
-          load={async (kindCursor, signal) => {
-            const response = await readKindsWithLocale({
-              data: {
-                ...data.queryState!,
-                facetValues: selectedFacets,
-                locale,
-                kindCursor,
-                ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
-              },
-              signal,
-              ...(searchRequiresCurrentReader(data.queryState!)
-                ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
-                : {}),
-            });
-            return response;
-          }}
-        />
+      {(kindDirectory || typeRefinementAvailable) && (
+        <section aria-label={m.home_kind_label({}, options)} className="min-w-0 space-y-4 border-t border-border/60 pt-5">
+          {kindDirectory && data?.queryState && (
+            <DiscoveryKinds
+              key={JSON.stringify([data.queryState, locale, session, readerOwner, kindDirectory])}
+              initial={kindDirectory.initial}
+              checkpoint={kindDirectory.checkpoint}
+              locale={locale}
+              selected={data.queryState.kinds ?? []}
+              hydrated={hydrated}
+              onRefresh={onRetry ? () => void onRetry() : undefined}
+              onRefreshFocus={retryFocus.captureRetryFocus}
+              onRefusalFocus={(source) => retryFocus.captureRetryFocus(source, true)}
+              onRefusal={(state) => {
+                if (sourceData && currentData.current === sourceData) setInvalidation({ owner: sourceData, state });
+              }}
+              load={async (kindCursor, signal) => {
+                const response = await readKindsWithLocale({
+                  data: {
+                    ...data.queryState!,
+                    facetValues: selectedFacets,
+                    locale,
+                    kindCursor,
+                    ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
+                  },
+                  signal,
+                  ...(searchRequiresCurrentReader(data.queryState!)
+                    ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
+                    : {}),
+                });
+                return response;
+              }}
+            />
+          )}
+          {typeRefinementAvailable && (
+            <Field>
+              <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type({}, options)}</FieldLabel>
+              <p className="text-sm text-muted-foreground">{m.search_subject_type_help({}, options)}</p>
+              <Select
+                name="type"
+                value={(type ?? '') === '' ? null : (type ?? '')}
+                onValueChange={(nextSelectValue) => {
+                  if (hydrated) document.getElementById(`${typeControlId}-${surface}`)?.closest('form')?.requestSubmit();
+                }}
+              >
+                <SelectTrigger id={`${typeControlId}-${surface}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={null}>{m.search_all_subject_types({}, options)}</SelectItem>
+                    {type && !data?.conditionMetadata?.types[type] && (
+                      <SelectItem value={type}>
+                        {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}
+                      </SelectItem>
+                    )}
+                    {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
+                      <SelectItem key={id} value={id}>
+                        {label(definition.labels, m.search_constraint_identity_kind_unavailable({}, options))}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+        </section>
       )}
-      {typeRefinementAvailable ? (
-        <Field>
-          <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type({}, options)}</FieldLabel>
-          <p className="text-sm text-muted-foreground">{m.search_subject_type_help({}, options)}</p>
-          <Select
-            name="type"
-            value={(type ?? '') === '' ? null : (type ?? '')}
-            onValueChange={(nextSelectValue) => {
-              if (hydrated) document.getElementById(`${typeControlId}-${surface}`)?.closest('form')?.requestSubmit();
-            }}
-          >
-            <SelectTrigger id={`${typeControlId}-${surface}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value={null}>{m.search_all_subject_types({}, options)}</SelectItem>
-                {type && !data?.conditionMetadata?.types[type] && (
-                  <SelectItem value={type}>
-                    {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}
-                  </SelectItem>
-                )}
-                {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
-                  <SelectItem key={id} value={id}>
-                    {label(definition.labels, m.search_constraint_identity_kind_unavailable({}, options))}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </Field>
-      ) : null}
       {data?.refinement && filterRefinementProperties.length > 0 && (
-        <Refinement
-          key={`${surface}-${data.refinement.key}`}
-          rangeDraftKey={stateKey}
-          rangeDraftState={rangeDraftState}
-          onRangeDraftChange={(property: string, draft: RangeDraft) =>
-            setRangeDraftState((previous) => updateRangeDraft(previous, stateKey, property, draft))
-          }
-          data={{ ...data.refinement, properties: filterRefinementProperties }}
-          showSummary={false}
-          onNavigate={navigate}
-          hrefForConditions={
-            hrefForState
-              ? (next) =>
-                  hrefFor({
-                    ...committedState,
-                    ...next,
-                    facets: next.facetValues,
-                    cursor: undefined,
-                  })
-              : undefined
-          }
-          clearActions={
-            resourceLanguage?.actions.clear
-              ? { [RESOURCE_LANGUAGE_PROPERTY]: m.search_resource_language_clear({}, options) }
-              : {}
-          }
-          preserveSelectedWhenUnavailable={[RESOURCE_LANGUAGE_PROPERTY]}
-          selectedValueFallbacks={[RESOURCE_LANGUAGE_PROPERTY]}
-          selectionLimits={{ [RESOURCE_LANGUAGE_PROPERTY]: RESOURCE_LANGUAGE_SELECTION_LIMIT }}
-          conditions={{
-            ...(type ? { type } : {}),
-            facetValues: selectedFacets,
-            ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
-            ...(draft.languages ? { languages: draft.languages } : {}),
-            ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
-            ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
-            ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
-            ...(data.ranges ? { ranges: data.ranges } : {}),
-            ...(draft.condition ? { condition: draft.condition } : {}),
-          }}
-          query={query}
-          locale={locale}
-          load={async (facets, signal) => {
-            const response = await readRefinement({
-              data: {
-                query,
-                locale,
-                ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
-                conditions: {
-                  ...(type ? { type } : {}),
-                  facetValues: withoutResourceLanguageSelection({
-                    ...committedState,
-                    facets: selectedFacets,
-                  }).facets,
-                  ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
-                  ...(data.queryState?.languages ? { languages: data.queryState.languages } : {}),
-                  ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
-                  ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
-                  ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
-                  ...(data.ranges ? { ranges: data.ranges } : {}),
-                  ...(data.condition ? { condition: data.condition } : {}),
+        <section
+          aria-label={m.refinement_property({}, options)}
+          className="min-w-0 border-t border-border/60 pt-5"
+        >
+          <h2 className="mb-3 text-sm font-medium">{m.refinement_property({}, options)}</h2>
+          <Refinement
+            key={`${surface}-${data.refinement.key}`}
+            rangeDraftKey={stateKey}
+            rangeDraftState={rangeDraftState}
+            onRangeDraftChange={(property: string, draft: RangeDraft) =>
+              setRangeDraftState((previous) => updateRangeDraft(previous, stateKey, property, draft))
+            }
+            data={{ ...data.refinement, properties: filterRefinementProperties }}
+            showSummary={false}
+            onNavigate={navigate}
+            hrefForConditions={
+              hrefForState
+                ? (next) =>
+                    hrefFor({
+                      ...committedState,
+                      ...next,
+                      facets: next.facetValues,
+                      cursor: undefined,
+                    })
+                : undefined
+            }
+            clearActions={
+              resourceLanguage?.actions.clear
+                ? { [RESOURCE_LANGUAGE_PROPERTY]: m.search_resource_language_clear({}, options) }
+                : {}
+            }
+            preserveSelectedWhenUnavailable={[RESOURCE_LANGUAGE_PROPERTY]}
+            selectedValueFallbacks={[RESOURCE_LANGUAGE_PROPERTY]}
+            selectionLimits={{ [RESOURCE_LANGUAGE_PROPERTY]: RESOURCE_LANGUAGE_SELECTION_LIMIT }}
+            conditions={{
+              ...(type ? { type } : {}),
+              facetValues: selectedFacets,
+              ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
+              ...(draft.languages ? { languages: draft.languages } : {}),
+              ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
+              ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
+              ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
+              ...(data.ranges ? { ranges: data.ranges } : {}),
+              ...(draft.condition ? { condition: draft.condition } : {}),
+            }}
+            query={query}
+            locale={locale}
+            load={async (facets, signal) => {
+              const response = await readRefinement({
+                data: {
+                  query,
+                  locale,
+                  ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
+                  conditions: {
+                    ...(type ? { type } : {}),
+                    facetValues: withoutResourceLanguageSelection({
+                      ...committedState,
+                      facets: selectedFacets,
+                    }).facets,
+                    ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
+                    ...(data.queryState?.languages ? { languages: data.queryState.languages } : {}),
+                    ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
+                    ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
+                    ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
+                    ...(data.ranges ? { ranges: data.ranges } : {}),
+                    ...(data.condition ? { condition: data.condition } : {}),
+                  },
+                  facets,
                 },
-                facets,
-              },
-              signal,
-              ...(searchRequiresCurrentReader(data.queryState!)
-                ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
-                : {}),
-            });
-            const state = facetSearchInvalidation(response);
-            if (!signal.aborted && sourceData && currentData.current === sourceData && state)
-              setInvalidation({ owner: sourceData, state });
-            return response;
-          }}
-          {...(data.sort === 'rating' ? { sort: 'rating' as const } : {})}
-        />
+                signal,
+                ...(searchRequiresCurrentReader(data.queryState!)
+                  ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
+                  : {}),
+              });
+              const state = facetSearchInvalidation(response);
+              if (!signal.aborted && sourceData && currentData.current === sourceData && state)
+                setInvalidation({ owner: sourceData, state });
+              return response;
+            }}
+            {...(data.sort === 'rating' ? { sort: 'rating' as const } : {})}
+          />
+        </section>
       )}
       {statementRefinementAvailable ? (
-        <ConditionEditor
-          requestIdentity={JSON.stringify([stateKey, session])}
-          value={draft.condition}
-          onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
-          metadata={data?.conditionMetadata}
-          conceptLookup={conceptLookup}
-          preventImplicitSubmit={composition.preventImplicitSubmit}
-          locale={locale}
-          entityLookup={conditionEntityLookupContext(data, locale, session)}
-          issues={issues}
-          values={Object.fromEntries(
-            data?.refinement?.initial?.status === 'ready'
-              ? data.refinement.initial.page.facets.map(({ property, values }) => [property, values])
-              : [],
-          )}
-          languages={draft.languages}
-          onLanguages={(languages) => setDraft((previous) => ({ ...previous, languages }))}
-        />
+        <details
+          ref={advancedDetails}
+          open={
+            surface === 'desktop' ||
+            Boolean(draft.condition) ||
+            Boolean(draft.languages?.length) ||
+            issues.length > 0 ||
+            !data?.conditionMetadata
+          }
+          className="min-w-0 border-t border-border/60 pt-5"
+        >
+          <summary className="min-h-11 cursor-pointer content-center rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {m.condition_heading({}, options)}
+          </summary>
+          <div className="pt-3">
+            <ConditionEditor
+              requestIdentity={JSON.stringify([stateKey, session])}
+              value={draft.condition}
+              onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
+              metadata={data?.conditionMetadata}
+              conceptLookup={conceptLookup}
+              preventImplicitSubmit={composition.preventImplicitSubmit}
+              locale={locale}
+              entityLookup={conditionEntityLookupContext(data, locale, session)}
+              issues={issues}
+              values={Object.fromEntries(
+                data?.refinement?.initial?.status === 'ready'
+                  ? data.refinement.initial.page.facets.map(({ property, values }) => [property, values])
+                  : [],
+              )}
+              languages={draft.languages}
+              onLanguages={(languages) => setDraft((previous) => ({ ...previous, languages }))}
+              showApply={false}
+              framed={false}
+              showHeading={false}
+            />
+          </div>
+        </details>
       ) : draft.condition ? (
         <input type="hidden" name="condition" value={JSON.stringify(draft.condition)} />
       ) : null}
@@ -1222,13 +1310,18 @@ export function SearchPage({
       {Object.entries(data?.ranges ?? {}).map(([property, range]) => (
         <input key={property} type="hidden" name={`r.${property}`} value={JSON.stringify(range)} />
       ))}
-      {editing && (
-        <div className="flex items-center gap-2">
+      <div
+        role="group"
+        aria-label={m.search_apply({}, options)}
+        className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur lg:static lg:mx-0 lg:px-0"
+      >
+        <Button type="submit">{m.search_apply({}, options)}</Button>
+        {editing && (
           <Button type="button" variant="outline" onClick={revertDraft}>
             {m.search_filter_revert_action({}, options)}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
       <p
         ref={revertStatus}
         role="status"
@@ -1342,41 +1435,43 @@ export function SearchPage({
     );
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6">
+    <section className="mx-auto max-w-7xl space-y-6">
       {heading ?? <PageHeading>{m.search_heading({}, options)}</PageHeading>}
-      {!embedded && data?.recovery?.status === 'ready' && data.queryState && (
-        <QuerySharePreview
-          key={JSON.stringify([stateKey, locale, session])}
-          locale={locale}
-          changed={editing || Object.keys(rangeDraftState.properties).length > 0}
-          prepare={(signal) =>
-            prepareShareWithLocale({
-              signal,
-              data: {
-                query: committedState.query,
-                locale,
-                facetValues: committedState.facets,
-                type: committedState.type,
-                kinds: committedState.kinds,
-                languages: committedState.languages,
-                condition: committedState.condition,
-                ranges: committedState.ranges,
-                filter: committedState.filter,
-                sort: committedState.sort,
-                resourceScope: committedState.resourceScope,
-                ratingPopulation: committedState.ratingPopulation,
-                reader: session ?? undefined,
-              },
-            })
-          }
-        />
-      )}
       {hasFilterPanel ? (
         <>
           {filterEntrance}
-          <div className={cn('grid items-start gap-6', desktopOpen && 'lg:grid-cols-[16rem_minmax(0,1fr)]')}>
+          <div className={cn('grid min-w-0 items-start gap-6', desktopOpen && 'lg:grid-cols-[minmax(20rem,24rem)_minmax(0,1fr)]')}>
             {filterControls}
-            <div className="min-w-0 space-y-4">{content}</div>
+            <div className="min-w-0 space-y-4">
+              {!embedded && data?.recovery?.status === 'ready' && data.queryState && (
+                <QuerySharePreview
+                  key={JSON.stringify([stateKey, locale, session])}
+                  locale={locale}
+                  changed={editing || Object.keys(rangeDraftState.properties).length > 0}
+                  prepare={(signal) =>
+                    prepareShareWithLocale({
+                      signal,
+                      data: {
+                        query: committedState.query,
+                        locale,
+                        facetValues: committedState.facets,
+                        type: committedState.type,
+                        kinds: committedState.kinds,
+                        languages: committedState.languages,
+                        condition: committedState.condition,
+                        ranges: committedState.ranges,
+                        filter: committedState.filter,
+                        sort: committedState.sort,
+                        resourceScope: committedState.resourceScope,
+                        ratingPopulation: committedState.ratingPopulation,
+                        reader: session ?? undefined,
+                      },
+                    })
+                  }
+                />
+              )}
+              {content}
+            </div>
           </div>
         </>
       ) : (

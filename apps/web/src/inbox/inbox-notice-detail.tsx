@@ -53,64 +53,70 @@ export function InboxNoticeDetailView({
 
   return (
     <main aria-labelledby="inbox-notice-heading" className="min-h-screen w-full bg-background">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
         <a
           href={inboxNoticeBackHref(selection, cursor)}
-          className="inline-flex min-h-11 w-fit max-w-full items-center gap-2 underline underline-offset-4"
+          className="inline-flex min-h-11 w-fit max-w-full items-center gap-2 rounded-sm underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          <ArrowLeft aria-hidden="true" size={18} />
+          <ArrowLeft aria-hidden="true" size={18} className="shrink-0" />
           {m.inbox_notice_back()}
         </a>
-        <h1 id="inbox-notice-heading" className="font-display text-3xl font-semibold tracking-tight">
-          {m.inbox_notice_detail_heading()}
-        </h1>
-        <article className="grid gap-6 rounded-xl border border-border p-5 sm:p-7">
-          <div className="flex min-w-0 items-start gap-3">
-            <InboxNoticeActorVisual
-              presentation={actorPresentation}
-              size="default"
-              avatarClassName="shrink-0"
-              fallbackClassName="mt-1 shrink-0 text-muted-foreground"
-              fallback={eventKind(notice)}
-            />
-            <div className="min-w-0">
-              <p className="font-medium">{actorPresentation.label}</p>
-              {actorPresentation.handle ? (
-                <p className="break-words text-sm text-muted-foreground">@{actorPresentation.handle}</p>
-              ) : actorPresentation.unavailable ? (
-                <p className="text-sm text-muted-foreground">{m.inbox_notice_actor_unavailable()}</p>
-              ) : null}
-            </div>
+        <article className="grid min-w-0 gap-6 rounded-xl border border-border p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)] lg:gap-10">
+          <div className="min-w-0">
+            <header className="max-w-prose">
+              <p className="text-sm font-medium text-muted-foreground">{m.inbox_notice_detail_heading()}</p>
+              <h1 id="inbox-notice-heading" className="mt-2 break-words font-display text-3xl font-semibold tracking-tight">
+                {notice.summary}
+              </h1>
+              <div className="mt-5 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <InboxNoticeActorVisual
+                    presentation={actorPresentation}
+                    size="default"
+                    avatarClassName="shrink-0"
+                    fallbackClassName="mt-1 shrink-0 text-muted-foreground"
+                    fallback={eventKind(notice)}
+                  />
+                  <div className="min-w-0">
+                    <p className="break-words font-medium">{actorPresentation.label}</p>
+                    {actorPresentation.handle ? (
+                      <p className="break-all text-sm text-muted-foreground">@{actorPresentation.handle}</p>
+                    ) : actorPresentation.unavailable ? (
+                      <p className="text-sm text-muted-foreground">{m.inbox_notice_actor_unavailable()}</p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">{m.inbox_notice_event_time()}</p>
+                  <time className="text-sm text-muted-foreground" dateTime={notice.createdAt}>
+                    {eventDate(notice.createdAt)}
+                  </time>
+                </div>
+              </div>
+            </header>
+
+            <section className="mt-7 max-w-prose border-s-2 border-border ps-4">
+              <h2 className="text-sm font-semibold text-muted-foreground">{m.inbox_notice_context()}</h2>
+              {notice.target.state === 'available' && context ? (
+                <p className="mt-2 break-words leading-relaxed">{context}</p>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">{m.inbox_notice_target_unavailable()}</p>
+              )}
+            </section>
           </div>
 
-          <section aria-label={m.inbox_notice_event_time()} className="grid gap-2">
-            <h2 className="text-sm font-medium text-muted-foreground">{m.inbox_notice_event_time()}</h2>
-            <time className="text-sm" dateTime={notice.createdAt}>
-              {eventDate(notice.createdAt)}
-            </time>
-          </section>
-
-          <section className="grid gap-3">
-            <h2 className="text-xl font-medium">{notice.summary}</h2>
-            <div className="grid gap-2 rounded-lg bg-muted/40 p-4">
-              <h3 className="text-sm font-medium text-muted-foreground">{m.inbox_notice_context()}</h3>
-              {notice.target.state === 'available' && context ? (
-                <p>{context}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">{m.inbox_notice_target_unavailable()}</p>
-              )}
-            </div>
-          </section>
-
-          <section aria-label={m.inbox_notice_destination()} className="grid gap-3">
-            <h2 className="text-sm font-medium text-muted-foreground">{m.inbox_notice_destination()}</h2>
+          <section
+            aria-label={m.inbox_notice_destination()}
+            className="grid min-w-0 content-start gap-3 rounded-xl border-2 border-primary/30 bg-muted/30 p-4 sm:p-5"
+          >
+            <h2 className="text-base font-semibold">{m.inbox_notice_destination()}</h2>
             {destination ? (
               <a
                 href={destination}
-                className="inline-flex min-h-11 w-fit max-w-full items-center gap-2 whitespace-normal underline underline-offset-4"
+                className="inline-flex min-h-11 w-full max-w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-center font-medium text-primary-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <ExternalLink aria-hidden="true" size={17} />
-                {m.inbox_notice_open_destination()}
+                <ExternalLink aria-hidden="true" size={17} className="shrink-0" />
+                <span className="break-words">{m.inbox_notice_open_destination()}</span>
               </a>
             ) : (
               <p role="status" className="text-sm text-muted-foreground">

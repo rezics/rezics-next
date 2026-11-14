@@ -49,7 +49,11 @@ export function RetiredReading(props: Address & { refresh?: (() => Promise<void>
   const [failed, setFailed] = useState(false);
   const flight = useRef(false);
   return (
-    <div className="space-y-3" aria-busy={busy}>
+    <section
+      aria-label={m.game_reader_retired({}, o)}
+      className="min-w-0 space-y-3 rounded-lg border border-border bg-muted/20 p-4"
+      aria-busy={busy}
+    >
       <p role="status">{m.game_reader_retired({}, o)}</p>
       <p className="text-sm text-muted-foreground">{m.game_reader_return({}, o)}</p>
       {props.refresh ? (
@@ -77,6 +81,6 @@ export function RetiredReading(props: Address & { refresh?: (() => Promise<void>
       ) : null}
       {failed ? <p role="alert">{m.game_reader_recovery_failed({}, o)}</p> : null}
       <SafeNavigation {...props} />
-    </div>
+    </section>
   );
 }

@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { MediaImage } from '@rezics/ui/media-image';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -74,11 +74,13 @@ export function MyRealmsCurrentRowView({
   controller,
   onLeaveSelect,
   reviewId,
+  review,
 }: {
   row: MyRealmsCurrentRow;
   reviewId?: string | undefined;
   controller?: MyRealmsCurrentController | undefined;
   onLeaveSelect?: ((trigger: HTMLButtonElement) => void) | undefined;
+  review?: ReactNode | undefined;
 }) {
   const headingId = useId();
   const actions = row.current.actions;
@@ -87,73 +89,75 @@ export function MyRealmsCurrentRowView({
   return (
     <article
       aria-labelledby={headingId}
-      className="min-w-0 py-6 [overflow-wrap:anywhere] sm:py-8"
+      className="min-w-0 space-y-4 py-5 [overflow-wrap:anywhere] sm:py-6"
       data-slot="my-realms-item"
       data-selected-leave={selected || undefined}
     >
-      {banner.state === 'available' ? (
-        <MediaImage
-          media={banner.value.id}
-          width={banner.value.width}
-          height={banner.value.height}
-          placeholder={banner.value.placeholder}
-          variants={banner.value.variants}
-          src={({ media, format, width }) => coverSrc(media, format, width)}
-          alt=""
-          sizes="(min-width: 768px) 48rem, 100vw"
-          frame={6}
-          className="mb-5 max-h-28 overflow-hidden rounded-xl"
-        />
-      ) : null}
       <div className="flex min-w-0 items-start gap-4">
         <Avatar row={row} />
-        <div className="min-w-0 flex-1 space-y-4">
-          <header className="min-w-0 space-y-2">
-            <h2 id={headingId} className="text-xl leading-snug font-semibold sm:text-2xl">
-              {row.name}
-            </h2>
-            <p className="max-w-prose text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
-              {row.current.description}
-            </p>
-          </header>
-          <div className="space-y-3">
-            {actions.enter.state === 'available' || actions.manage.state === 'available' ? (
-              <nav
-                aria-label={row.name}
-                className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+        <header className="min-w-0 flex-1 space-y-1.5">
+          <h2 id={headingId} className="text-xl leading-snug font-semibold sm:text-2xl">
+            {row.name}
+          </h2>
+          <p className="max-w-prose text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
+            {row.current.description}
+          </p>
+        </header>
+      </div>
+      <div className="min-w-0 space-y-1 sm:ms-20">
+        {actions.enter.state === 'available' || actions.manage.state === 'available' ? (
+          <nav
+            aria-label={row.name}
+            className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+          >
+            {actions.enter.state === 'available' ? (
+              <Link
+                to="/realms/$id"
+                params={{ id: row.realmId }}
+                className={`${entryClass} bg-primary text-primary-foreground hover:bg-primary/90`}
               >
-                {actions.enter.state === 'available' ? (
-                  <Link
-                    to="/realms/$id"
-                    params={{ id: row.realmId }}
-                    className={`${entryClass} bg-primary text-primary-foreground hover:bg-primary/90`}
-                  >
-                    {m.my_realms_open()}
-                  </Link>
-                ) : null}
-                {actions.manage.state === 'available' ? (
-                  <Link
-                    to="/realms/$id/members"
-                    params={{ id: row.realmId }}
-                    className={`${entryClass} border border-border text-primary hover:bg-muted`}
-                  >
-                    {m.my_realms_manage()}
-                  </Link>
-                ) : null}
-              </nav>
+                {m.my_realms_open()}
+              </Link>
             ) : null}
-            <div className="space-y-1">
-              <AdviceStatus action="enter" advice={actions.enter} />
-              <AdviceStatus action="manage" advice={actions.manage} />
-            </div>
-          </div>
+            {actions.manage.state === 'available' ? (
+              <Link
+                to="/realms/$id/members"
+                params={{ id: row.realmId }}
+                className={`${entryClass} border border-border text-primary hover:bg-muted`}
+              >
+                {m.my_realms_manage()}
+              </Link>
+            ) : null}
+          </nav>
+        ) : null}
+        <div className="space-y-1">
+          <AdviceStatus action="enter" advice={actions.enter} />
+          <AdviceStatus action="manage" advice={actions.manage} />
+        </div>
+      </div>
+      <div className="min-w-0 space-y-2 sm:ms-20">
+        {banner.state === 'available' ? (
+          <MediaImage
+            media={banner.value.id}
+            width={banner.value.width}
+            height={banner.value.height}
+            placeholder={banner.value.placeholder}
+            variants={banner.value.variants}
+            src={({ media, format, width }) => coverSrc(media, format, width)}
+            alt=""
+            sizes="(min-width: 768px) 48rem, 100vw"
+            frame={6}
+            className="max-h-28 overflow-hidden rounded-lg"
+          />
+        ) : null}
+        {row.current.avatar.state !== 'available' || banner.state !== 'available' ? (
           <dl className="flex min-w-0 flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
             <ImageState slot="avatar" state={row.current.avatar.state} />
             <ImageState slot="banner" state={banner.state} />
           </dl>
-        </div>
+        ) : null}
       </div>
-      <footer className="mt-5 flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-sm sm:ms-20">
+      <footer className="min-w-0 space-y-3 border-t border-border pt-3 text-sm sm:ms-20">
         {actions.leave.state === 'available' && controller?.ready ? (
           <Button
             type="button"
@@ -173,6 +177,7 @@ export function MyRealmsCurrentRowView({
         ) : (
           <AdviceStatus action="leave" advice={actions.leave} />
         )}
+        {review}
       </footer>
     </article>
   );

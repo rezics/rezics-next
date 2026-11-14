@@ -5,12 +5,11 @@ import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '@rezic
 import { Toggle } from '@rezics/ui/shadcn/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@rezics/ui/shadcn/tooltip';
 import type { Editor } from '@tiptap/core';
-import { Blocks, Bold, ChevronDown, Code, Italic, Link, Redo2, Undo2 } from 'lucide-react';
+import { Blocks, Bold, ChevronDown, Code, Eraser, Italic, Link, Redo2, Strikethrough, Undo2 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '../utils.ts';
 import {
   availableInsertCommands,
-  touchBarFormatCommands,
   undoCommand,
   redoCommand,
   useCommandState,
@@ -24,6 +23,8 @@ const icons = {
   italic: Italic,
   link: Link,
   code: Code,
+  strike: Strikethrough,
+  clearFormatting: Eraser,
   blocks: Blocks,
   undo: Undo2,
   redo: Redo2,
@@ -89,13 +90,12 @@ function scrollSelectionAboveBar(editor: Editor, bar: HTMLElement | null) {
   window.scrollBy({ top: overflow, behavior: 'auto' });
 }
 
-/** Every bar control is a square that fills a thumb. */
-const barButton = 'size-11 min-h-11 min-w-11 shrink-0 focus-visible:text-primary [&_svg:not([class*=size-])]:size-5';
+/** Controls keep a thumb-sized target even when a visible label follows the icon. */
+const barButton = 'min-h-11 min-w-11 shrink-0 focus-visible:text-primary [&_svg:not([class*=size-])]:size-5';
 
 /**
- * A keyboard resting row that preserves the editor selection while pointer controls are used. shadcn has no toolbar,
- * so the row is a `toolbar` role over `toggle` and `button`, each named by a tooltip; the block picker is a bottom
- * `sheet`.
+ * Formatting at the document entry point, docked above the keyboard on coarse pointers. Pointer controls preserve
+ * the editor selection; the block picker is a bottom sheet.
  */
 export function EditorTouchBar({
   editor,
@@ -104,6 +104,9 @@ export function EditorTouchBar({
   onImage,
   upload,
   visible,
+  docked,
+  persistent,
+  onFocusChange,
   onSheetOpenChange,
   isCurrent,
 }: {
@@ -113,36 +116,41 @@ export function EditorTouchBar({
   onImage: () => void;
   upload: boolean;
   visible: boolean;
+  docked: boolean;
+  persistent: boolean;
+  onFocusChange: (focused: boolean) => void;
   onSheetOpenChange: (open: boolean) => void;
   isCurrent: () => boolean;
 }) {
   const state = useCommandState(editor);
   const [blocksOpen, setBlocksOpen] = useState(false);
-  const [tabStop, setTabStop] = useState('bold');
+  const [tabStop, setTabStop] = useState('blocks');
   const bar = useRef<HTMLDivElement>(null);
-  const inset = useKeyboardInset(visible);
+  const showBar = visible && (persistent || docked || state.empty || blocksOpen);
+  const inset = useKeyboardInset(showBar && docked);
   const blockCommands = useMemo(() => availableInsertCommands(editor, upload), [editor, upload]);
-  const formatCommands = touchBarFormatCommands.filter((command) =>
-    state.marks.some((item) => item.command.id === command.id),
-  );
+  const formatOrder = ['bold', 'italic', 'link', 'strike', 'code', 'clearFormatting'];
+  const formatCommands = state.marks
+    .map(({ command }) => command)
+    .sort((left, right) => formatOrder.indexOf(left.id) - formatOrder.indexOf(right.id));
   const availableTabStops = [
+    ...(blockCommands.length ? ['blocks'] : []),
     ...formatCommands.map((command) => command.id),
-    'blocks',
     ...(state.canUndo ? ['undo'] : []),
     ...(state.canRedo ? ['redo'] : []),
-    'hideKeyboard',
+    ...(docked ? ['hideKeyboard'] : []),
   ];
-  const activeTabStop = availableTabStops.includes(tabStop) ? tabStop : (availableTabStops[0] ?? 'blocks');
+  const activeTabStop = availableTabStops.includes(tabStop) ? tabStop : availableTabStops[0];
   const selectionRevision = useRef(0);
   const [renderedSelectionRevision, setRenderedSelectionRevision] = useState(0);
   const menuIsCurrent = () => isCurrent() && selectionRevision.current === renderedSelectionRevision;
 
   const scrollCaret = useCallback(() => {
-    if (!visible || !isCurrent()) return;
+    if (!showBar || !docked || !isCurrent()) return;
     requestAnimationFrame(() => {
       if (isCurrent()) scrollSelectionAboveBar(editor, bar.current);
     });
-  }, [editor, isCurrent, visible]);
+  }, [docked, editor, isCurrent, showBar]);
 
   useLayoutEffect(scrollCaret, [scrollCaret, inset]);
 
@@ -158,7 +166,7 @@ export function EditorTouchBar({
     editor.on('selectionUpdate', selectionUpdate);
     editor.on('transaction', update);
     const viewport = window.visualViewport;
-    if (visible) {
+    if (showBar && docked) {
       viewport?.addEventListener('resize', update);
       viewport?.addEventListener('scroll', update);
     }
@@ -169,10 +177,16 @@ export function EditorTouchBar({
       viewport?.removeEventListener('resize', update);
       viewport?.removeEventListener('scroll', update);
     };
-  }, [editor, isCurrent, scrollCaret, visible]);
+  }, [docked, editor, isCurrent, scrollCaret, showBar]);
 
   function moveFocus(event: KeyboardEvent<HTMLDivElement>) {
     if (!menuIsCurrent()) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      if (isCurrent() && !editor.isDestroyed && editor.isEditable) editor.view.focus();
+      return;
+    }
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
     if (!step && event.key !== 'Home' && event.key !== 'End') return;
     const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')];
@@ -204,7 +218,11 @@ export function EditorTouchBar({
     const active = command.active?.(editor) ?? false;
     const common = {
       type: 'button' as const,
-      className: cn(barButton, command.active && pressedTone),
+      className: cn(
+        barButton,
+        command.id === 'undo' || command.id === 'redo' ? 'size-11' : 'gap-1.5 px-2.5',
+        command.active && pressedTone,
+      ),
       'aria-label': labels[command.label],
       disabled,
       tabIndex: activeTabStop === command.id ? 0 : -1,
@@ -220,6 +238,7 @@ export function EditorTouchBar({
       command.active ? (
         <Toggle pressed={active} onPressedChange={() => runCommand(command)} {...common}>
           {icon}
+          <span className="text-xs sm:text-sm">{labels[command.label]}</span>
         </Toggle>
       ) : (
         <Button variant="ghost" onClick={() => runCommand(command)} {...common}>
@@ -249,69 +268,87 @@ export function EditorTouchBar({
 
   return (
     <TooltipProvider delay={600}>
-      {visible ? (
+      {showBar ? (
         <div
           ref={bar}
           role="toolbar"
           aria-label={labels.toolbar}
           aria-orientation="horizontal"
           data-slot="editor-touch-bar"
-          style={{ bottom: inset }}
+          style={docked ? { bottom: inset } : undefined}
           onKeyDown={moveFocus}
+          onFocusCapture={() => onFocusChange(true)}
+          onBlurCapture={(event) => {
+            if (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget as Node))
+              onFocusChange(false);
+          }}
           className={cn(
-            'fixed inset-x-0 z-40 flex min-h-[3.25rem] items-center gap-1 border-t border-border/60 bg-popover px-2 text-popover-foreground',
-            inset === 0 && 'pb-[env(safe-area-inset-bottom)]',
+            'flex min-h-[3.25rem] items-center gap-1 bg-popover px-2 text-popover-foreground',
+            docked
+              ? 'fixed inset-x-0 z-40 border-t border-border/60'
+              : 'relative mb-2 min-w-0 rounded-xl border border-border/60',
+            docked && inset === 0 && 'pb-[env(safe-area-inset-bottom)]',
           )}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto overscroll-x-contain py-1">
-            {formatCommands.map((command) => commandButton(command))}
-            {barControl(
-              'blocks',
-              labels.blocks,
-              <Button
-                type="button"
-                variant="ghost"
-                className={cn(barButton, blocksOpen && 'bg-primary/10 text-primary')}
-                aria-label={labels.blocks}
-                aria-haspopup="dialog"
-                aria-expanded={blocksOpen}
-                tabIndex={activeTabStop === 'blocks' ? 0 : -1}
-                onFocus={() => {
-                  if (isCurrent()) setTabStop('blocks');
-                }}
-                {...focusPreservingPointer}
-                onClick={() => {
-                  if (!menuIsCurrent()) return;
-                  setBlocksOpen(true);
-                  onSheetOpenChange(true);
-                }}
-              >
-                <Blocks aria-hidden="true" />
-              </Button>,
+          <div
+            className={cn(
+              'flex min-w-0 flex-1 items-center gap-0.5 py-1',
+              docked ? 'overflow-x-auto overscroll-x-contain' : 'flex-wrap',
             )}
+          >
+            {blockCommands.length
+              ? barControl(
+                  'blocks',
+                  labels.blocks,
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={cn(barButton, 'gap-1.5 px-2.5', blocksOpen && 'bg-primary/10 text-primary')}
+                    aria-label={labels.blocks}
+                    aria-haspopup="dialog"
+                    aria-expanded={blocksOpen}
+                    tabIndex={activeTabStop === 'blocks' ? 0 : -1}
+                    onFocus={() => {
+                      if (isCurrent()) setTabStop('blocks');
+                    }}
+                    {...focusPreservingPointer}
+                    onClick={() => {
+                      if (!menuIsCurrent()) return;
+                      setBlocksOpen(true);
+                      onSheetOpenChange(true);
+                    }}
+                  >
+                    <Blocks aria-hidden="true" />
+                    <span className="text-xs sm:text-sm">{labels.blocks}</span>
+                  </Button>,
+                )
+              : null}
+            {formatCommands.map((command) => commandButton(command))}
             {commandButton(undoCommand, !state.canUndo)}
             {commandButton(redoCommand, !state.canRedo)}
           </div>
-          {barControl(
-            'hideKeyboard',
-            labels.hideKeyboard,
-            <Button
-              type="button"
-              variant="ghost"
-              className={barButton}
-              aria-label={labels.hideKeyboard}
-              tabIndex={activeTabStop === 'hideKeyboard' ? 0 : -1}
-              onFocus={() => {
-                if (isCurrent()) setTabStop('hideKeyboard');
-              }}
-              {...focusPreservingPointer}
-              onClick={() => {
-                if (menuIsCurrent() && isCurrent() && !editor.isDestroyed) editor.commands.blur();
-              }}
-            >
-              <ChevronDown aria-hidden="true" />
-            </Button>,
-          )}
+          {docked
+            ? barControl(
+                'hideKeyboard',
+                labels.hideKeyboard,
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(barButton, 'size-11')}
+                  aria-label={labels.hideKeyboard}
+                  tabIndex={activeTabStop === 'hideKeyboard' ? 0 : -1}
+                  onFocus={() => {
+                    if (isCurrent()) setTabStop('hideKeyboard');
+                  }}
+                  {...focusPreservingPointer}
+                  onClick={() => {
+                    if (menuIsCurrent() && isCurrent() && !editor.isDestroyed) editor.commands.blur();
+                  }}
+                >
+                  <ChevronDown aria-hidden="true" />
+                </Button>,
+              )
+            : null}
         </div>
       ) : null}
       <Sheet

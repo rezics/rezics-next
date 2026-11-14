@@ -1363,17 +1363,25 @@ function PostComposerContent<T, Context = undefined>({
   const bodyLabel = titleRequired ? m.thread_new_body_label() : m.thread_reply_label();
   const editorSize = titleRequired ? 'thread-opening-editor' : 'thread-reply-editor';
   const fallbackSize = titleRequired ? 'thread-opening-fallback' : 'thread-reply-fallback';
+  const composerTarget = replyTargetId ?? containerId ?? boardId;
   return (
     <div
       data-slot="conversation-composer"
       className="min-w-0 rounded-xl border border-border/70 bg-card p-4 sm:p-6 [container-type:inline-size] [overflow-wrap:anywhere]"
     >
-      {!titleRequired ? (
-        <header className="mb-4 space-y-1">
-          <h2 className="text-lg font-semibold">{m.conversation_write_reply()}</h2>
-          <p className="max-w-[60ch] text-sm leading-relaxed text-muted-foreground">{m.conversation_write_help()}</p>
-        </header>
-      ) : null}
+      <header className="mb-4 min-w-0 rounded-lg border border-border/60 bg-muted/20 p-3 sm:p-4 [overflow-wrap:anywhere]">
+        {!titleRequired ? (
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold">{m.conversation_write_reply()}</h2>
+            <p className="max-w-[60ch] text-sm leading-relaxed text-muted-foreground">{m.conversation_write_help()}</p>
+          </div>
+        ) : null}
+        {composerTarget ? (
+          <p className={`${titleRequired ? '' : 'mt-3 '}min-w-0 text-sm font-medium text-muted-foreground`}>
+            {m.thread_inspection_target({ target: composerTarget })}
+          </p>
+        ) : null}
+      </header>
       {replyContext}
       {boardId ? (
         <SlowModeEligibility
@@ -1386,7 +1394,15 @@ function PostComposerContent<T, Context = undefined>({
           advice={slowModeAdvice}
         />
       ) : null}
-      <form id={formId} className="min-w-0 [overflow-wrap:anywhere]" onSubmit={submit}>
+      <form
+        id={formId}
+        className={
+          titleRequired
+            ? 'mb-3 min-w-0 rounded-xl border border-border/60 bg-background/40 p-3 sm:p-4 [overflow-wrap:anywhere]'
+            : 'min-w-0 [overflow-wrap:anywhere]'
+        }
+        onSubmit={submit}
+      >
         {titleRequired ? (
           <div className="mb-5 min-w-0 space-y-2 [overflow-wrap:anywhere]">
             <Label htmlFor="thread-title" className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
@@ -1407,7 +1423,10 @@ function PostComposerContent<T, Context = undefined>({
         ) : null}
         <input type="hidden" name="idempotency_key" value={idempotencyKey} />
       </form>
-      <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]" onInputCapture={captureEditorInput}>
+      <div
+        className="min-w-0 space-y-2 rounded-xl border border-border/60 bg-background/40 p-3 sm:p-4 [overflow-wrap:anywhere]"
+        onInputCapture={captureEditorInput}
+      >
         <p className={titleRequired ? 'text-sm font-medium' : 'sr-only'}>{bodyLabel}</p>
         <div ref={editorHost} className="min-w-0">
           {plainEditorVisible ? (
@@ -1437,40 +1456,22 @@ function PostComposerContent<T, Context = undefined>({
             lookupMention={lookupPostMention}
             className={`thread-post-editor ${editorSize}${plainEditorVisible ? ' thread-editor-pending' : ''}`}
             actions={
-              <>
-                {writing ? <PortableWritingToolbar transfer={writing} /> : null}
-                {inspection ? <WritingInspectionToolbar inspection={inspection} /> : null}
-                <Button
-                  type="submit"
-                  form={formId}
-                  className={`${authoringActionClassName} max-w-[min(24rem,50cqi)] disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100`}
-                  disabled={!ready || submitting || pendingUploads > 0}
-                >
-                  {m.thread_write_send()}
-                </Button>
-              </>
+              <Button
+                type="submit"
+                form={formId}
+                className={`${authoringActionClassName} w-full max-w-full sm:w-auto disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100`}
+                disabled={!ready || submitting || pendingUploads > 0}
+              >
+                {m.thread_write_send()}
+              </Button>
             }
             {...(upload ? { upload, renderUpload: mediaUpload.renderUpload, onUploadState: handleUploadState } : {})}
           />
         </div>
       </div>
-      {inspection ? (
-        <WritingInspectionControls
-          inspection={inspection}
-          context={<p>{m.thread_inspection_target({ target: replyTargetId ?? containerId ?? boardId ?? '' })}</p>}
-        />
-      ) : null}
-      {writing ? (
-        <PortableWritingControls
-          transfer={writing}
-          signal={lifetime.controller.signal}
-          disabled={submitting || pendingUploads > 0 || snapshotPhase === 'pending'}
-          phase={snapshotPhase}
-        />
-      ) : null}
       {foreignPendingRef.current > 0 ? (
         <p
-          className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+          className="mt-4 min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]"
           role="status"
           aria-label={m.editor_uploading()}
         >
@@ -1545,6 +1546,33 @@ function PostComposerContent<T, Context = undefined>({
             editorHost.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
           }}
         />
+      ) : null}
+      {writing || inspection ? (
+        <details className="mt-4 min-w-0 rounded-xl border border-border/60 bg-muted/20 p-3 sm:p-4 [overflow-wrap:anywhere]">
+          <summary className={`${authoringActionClassName} cursor-pointer rounded-md`}>
+            {m.thread_write_help()}
+          </summary>
+          <div className="mt-3 min-w-0 space-y-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {writing ? <PortableWritingToolbar transfer={writing} /> : null}
+              {inspection ? <WritingInspectionToolbar inspection={inspection} /> : null}
+            </div>
+            {inspection ? (
+              <WritingInspectionControls
+                inspection={inspection}
+                context={<p>{m.thread_inspection_target({ target: composerTarget ?? '' })}</p>}
+              />
+            ) : null}
+            {writing ? (
+              <PortableWritingControls
+                transfer={writing}
+                signal={lifetime.controller.signal}
+                disabled={submitting || pendingUploads > 0 || snapshotPhase === 'pending'}
+                phase={snapshotPhase}
+              />
+            ) : null}
+          </div>
+        </details>
       ) : null}
     </div>
   );
@@ -2112,31 +2140,10 @@ function InlinePostEditorContent({
           {m.editor_uploading()}
         </p>
       ) : null}
-      {ownDraftContext ? (
-        <section aria-label={m.own_drafts_edit_context()} className="space-y-1 text-sm text-muted-foreground">
-          <h2 className="font-medium text-foreground">{m.own_drafts_edit_context()}</h2>
-          <p>
-            {m.own_drafts_post()}: {ownDraftContext.postId}
-          </p>
-          <p>
-            {m.own_drafts_thread()}: {ownDraftContext.threadId}
-          </p>
-          <p>
-            {m.own_drafts_revision()}: {initialRevisionId}
-          </p>
-          <p>
-            {m.own_drafts_language()}: {ownDraftContext.language ?? m.own_drafts_language_unknown()}
-          </p>
-          <p>
-            {m.own_drafts_licence()}: {ownDraftContext.licence}
-          </p>
-          <p>
-            {m.own_drafts_subjects()}:{' '}
-            {ownDraftContext.subjectIds.length ? ownDraftContext.subjectIds.join(', ') : m.own_drafts_no_references()}
-          </p>
-        </section>
-      ) : null}
-      <form className="min-w-0 space-y-4 [overflow-wrap:anywhere]" onSubmit={submit}>
+      <form
+        className="min-w-0 space-y-4 rounded-xl border border-border/60 bg-background/40 p-3 sm:p-4 [overflow-wrap:anywhere]"
+        onSubmit={submit}
+      >
         <p className="text-sm font-medium">{m.thread_reply_body_label()}</p>
         <RichTextEditor
           key={JSON.stringify([revisionId, editorGeneration])}
@@ -2151,6 +2158,43 @@ function InlinePostEditorContent({
           upload={upload}
           renderUpload={mediaUpload.renderUpload}
           onUploadState={handleUploadState}
+          actions={
+            <div className="flex min-w-0 flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
+              <Button
+                type="submit"
+                name="own-draft-action"
+                value="save"
+                className={`${authoringActionClassName} w-full max-w-full sm:w-auto`}
+                disabled={!ready || submitting || pendingUploads > 0}
+              >
+                {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
+                {m.thread_edit_save()}
+              </Button>
+              {allowPublish ? (
+                <Button
+                  type="submit"
+                  name="own-draft-action"
+                  value="publish"
+                  className={`${authoringActionClassName} w-full max-w-full sm:w-auto`}
+                  disabled={!ready || submitting || pendingUploads > 0}
+                >
+                  {m.own_drafts_publish()}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className={`${authoringActionClassName} w-full max-w-full sm:w-auto`}
+                disabled={submitting}
+                onClick={() => {
+                  discardAction.current = onCancel;
+                  departure.requestDiscard(onCancel);
+                }}
+              >
+                {m.thread_edit_cancel()}
+              </Button>
+            </div>
+          }
         />
         {failure ? (
           <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]" role="alert">
@@ -2207,48 +2251,50 @@ function InlinePostEditorContent({
             }}
           />
         ) : null}
-        <div className="flex min-w-0 flex-wrap gap-2 [overflow-wrap:anywhere]">
-          {inspection ? <WritingInspectionToolbar inspection={inspection} /> : null}
-          <Button
-            type="submit"
-            name="own-draft-action"
-            value="save"
-            className={authoringActionClassName}
-            disabled={!ready || submitting || pendingUploads > 0}
-          >
-            {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
-            {m.thread_edit_save()}
-          </Button>
-          {allowPublish ? (
-            <Button
-              type="submit"
-              name="own-draft-action"
-              value="publish"
-              className={authoringActionClassName}
-              disabled={!ready || submitting || pendingUploads > 0}
-            >
-              {m.own_drafts_publish()}
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            className={authoringActionClassName}
-            disabled={submitting}
-            onClick={() => {
-              discardAction.current = onCancel;
-              departure.requestDiscard(onCancel);
-            }}
-          >
-            {m.thread_edit_cancel()}
-          </Button>
-        </div>
       </form>
       {inspection ? (
-        <WritingInspectionControls
-          inspection={inspection}
-          context={<p>{m.thread_inspection_edit_target({ target: containerId, revision: revisionId })}</p>}
-        />
+        <details className="min-w-0 rounded-xl border border-border/60 bg-muted/20 p-3 sm:p-4 [overflow-wrap:anywhere]">
+          <summary className={`${authoringActionClassName} cursor-pointer rounded-md`}>
+            {m.thread_inspection_edit_target({ target: containerId, revision: revisionId })}
+          </summary>
+          <div className="mt-3 min-w-0 space-y-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <WritingInspectionToolbar inspection={inspection} />
+            </div>
+            <WritingInspectionControls
+              inspection={inspection}
+              context={<p>{m.thread_inspection_edit_target({ target: containerId, revision: revisionId })}</p>}
+            />
+          </div>
+        </details>
+      ) : null}
+      {ownDraftContext ? (
+        <details className="min-w-0 rounded-xl border border-border/60 bg-muted/20 p-3 sm:p-4 [overflow-wrap:anywhere]">
+          <summary className={`${authoringActionClassName} cursor-pointer rounded-md`}>
+            {m.own_drafts_edit_context()}
+          </summary>
+          <div className="mt-3 min-w-0 space-y-1 text-sm text-muted-foreground">
+            <p>
+              {m.own_drafts_post()}: {ownDraftContext.postId}
+            </p>
+            <p>
+              {m.own_drafts_thread()}: {ownDraftContext.threadId}
+            </p>
+            <p>
+              {m.own_drafts_revision()}: {initialRevisionId}
+            </p>
+            <p>
+              {m.own_drafts_language()}: {ownDraftContext.language ?? m.own_drafts_language_unknown()}
+            </p>
+            <p>
+              {m.own_drafts_licence()}: {ownDraftContext.licence}
+            </p>
+            <p>
+              {m.own_drafts_subjects()}:{' '}
+              {ownDraftContext.subjectIds.length ? ownDraftContext.subjectIds.join(', ') : m.own_drafts_no_references()}
+            </p>
+          </div>
+        </details>
       ) : null}
     </div>
   );

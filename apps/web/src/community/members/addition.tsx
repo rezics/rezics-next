@@ -160,12 +160,85 @@ export function MemberAddition({
 
   const intent = 'intent' in state ? state.intent : null;
   return (
-    <section aria-labelledby={`${id}-add`} className="space-y-3 rounded-lg border p-4">
-      <h3 id={`${id}-add`} className="font-semibold">
+    <ManagementReview
+      title={m.realm_members_add_member()}
+      aria-labelledby={`${id}-add`}
+      actions={
+        <>
+          {state.kind === 'review' && intent ? (
+            <>
+              <Button
+                ref={confirm}
+                type="button"
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                disabled={!current()}
+                onClick={() => {
+                  focusResult.current = true;
+                  void submit(intent);
+                }}
+              >
+                {m.realm_bans_confirm()}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                disabled={!current()}
+                onClick={() => {
+                  if (!current()) return;
+                  intentNow.current = null;
+                  setState({ kind: 'idle' });
+                  queueMicrotask(() => {
+                    if (current() && trigger.current?.isConnected) trigger.current.focus();
+                  });
+                }}
+              >
+                {m.realm_bans_cancel()}
+              </Button>
+            </>
+          ) : null}
+          {state.kind === 'idle' || state.kind === 'rejected' ? (
+            <Button
+              ref={trigger}
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+              disabled={!current()}
+              onClick={startReview}
+            >
+              {m.realm_members_add_member()}
+            </Button>
+          ) : null}
+          {state.kind === 'uncertain' && intent ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+              disabled={!current()}
+              onClick={() => void submit(intent)}
+            >
+              {m.realm_members_retry_command()}
+            </Button>
+          ) : null}
+          {(state.kind === 'pending' || state.kind === 'checking') && intent ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+              disabled={state.kind === 'checking' || !current()}
+              onClick={() => void checkStatus(intent)}
+            >
+              {m.realm_members_check_status()}
+            </Button>
+          ) : null}
+        </>
+      }
+    >
+      <h3 id={`${id}-add`} className="text-base font-semibold leading-6">
         {m.realm_members_add_member()}
       </h3>
       {state.kind === 'review' && intent ? (
-        <ManagementReview title={m.realm_members_add_member()}>
+        <>
           <p>{m.realm_members_add_review({ account: selected.identity.label, realm: realmLabel })}</p>
           <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
             <ManagementField label={m.realm_bans_details_account()}>
@@ -177,85 +250,21 @@ export function MemberAddition({
               <ManagementReference>{intent.realmId}</ManagementReference>
             </ManagementField>
           </dl>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              ref={confirm}
-              type="button"
-              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-              disabled={!current()}
-              onClick={() => {
-                focusResult.current = true;
-                void submit(intent);
-              }}
-            >
-              {m.realm_bans_confirm()}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-              disabled={!current()}
-              onClick={() => {
-                if (!current()) return;
-                intentNow.current = null;
-                setState({ kind: 'idle' });
-                queueMicrotask(() => {
-                  if (current() && trigger.current?.isConnected) trigger.current.focus();
-                });
-              }}
-            >
-              {m.realm_bans_cancel()}
-            </Button>
-          </div>
-        </ManagementReview>
-      ) : null}
-      {state.kind === 'idle' || state.kind === 'rejected' ? (
-        <Button
-          ref={trigger}
-          type="button"
-          variant="outline"
-          className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-          disabled={!current()}
-          onClick={startReview}
-        >
-          {m.realm_members_add_member()}
-        </Button>
+        </>
       ) : null}
       {state.kind === 'submitting' ? <p role="status">{m.realm_members_loading()}</p> : null}
       {state.kind === 'uncertain' && intent ? (
-        <div className="space-y-3">
-          <p ref={status} role="status" tabIndex={-1}>
-            {m.realm_members_unknown_command()}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-            disabled={!current()}
-            onClick={() => void submit(intent)}
-          >
-            {m.realm_members_retry_command()}
-          </Button>
-        </div>
+        <p ref={status} role="status" tabIndex={-1} className="font-medium">
+          {m.realm_members_unknown_command()}
+        </p>
       ) : null}
       {(state.kind === 'pending' || state.kind === 'checking') && intent ? (
-        <div className="space-y-3">
-          <p ref={status} role="status" tabIndex={-1}>
-            {state.kind === 'checking' ? m.realm_members_loading() : m.realm_members_add_pending()}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
-            disabled={state.kind === 'checking' || !current()}
-            onClick={() => void checkStatus(intent)}
-          >
-            {m.realm_members_check_status()}
-          </Button>
-        </div>
+        <p ref={status} role="status" tabIndex={-1} className="font-medium">
+          {state.kind === 'checking' ? m.realm_members_loading() : m.realm_members_add_pending()}
+        </p>
       ) : null}
       {state.kind === 'rejected' ? (
-        <p ref={status} role="alert" tabIndex={-1}>
+        <p ref={status} role="alert" tabIndex={-1} className="font-medium">
           {m.realm_members_add_rejected()}
         </p>
       ) : null}
@@ -264,6 +273,6 @@ export function MemberAddition({
           {m.realm_members_add_complete()}
         </p>
       ) : null}
-    </section>
+    </ManagementReview>
   );
 }

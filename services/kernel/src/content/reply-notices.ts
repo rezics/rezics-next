@@ -1,9 +1,10 @@
 import { accessClock } from '../access/access-clock.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
 import type { Access } from '../request/access.ts';
 import type { Effect } from '../events/effects.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
@@ -13,6 +14,22 @@ import { postReadableByAccount } from './reads.ts';
 import readRecipient from './read-reply-notice-recipient.sql';
 
 const postPublished = 'com.rezics.content.post.published.v1';
+
+function boundedReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      try {
+        throwAccessUnavailable(error, deadline);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  };
+}
 
 /** registerEffects records this entire outcome in its single effect.run DBOS step.
  * A denied send returns successfully, so workflow replay never reevaluates it. */
@@ -27,20 +44,25 @@ export function createReplyNoticeEffect(pool: Pool, access: Access): Effect {
       const route = routeOf(data.threadId);
       if (route === null || routeOf(data.itemId) !== route || routeOf(data.revisionId) !== route)
         throw new TypeError('Invalid reply notice content route');
-      const recipient = await withConnection(pool, async (client) => {
-        const anchor = await readPartition(client, partitionOf(route));
-        if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
-        return readRecipient.run(client, {
-          route,
-          thread_id: data.threadId,
-          post_id: data.itemId,
-          revision_id: data.revisionId,
-          actor_id: data.actorId,
-        });
-      });
+      const deadline = deadlineFor(5000);
+      const recipient = await withBoundedReadConnection(
+        pool,
+        deadline,
+        async (client) => {
+          const anchor = await readPartition(client, partitionOf(route));
+          if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
+          return readRecipient.run(client, {
+            route,
+            thread_id: data.threadId,
+            post_id: data.itemId,
+            revision_id: data.revisionId,
+            actor_id: data.actorId,
+          });
+        },
+        boundedReadOptions(deadline),
+      );
       if (!recipient || recipient.author_account_id === data.actorId) return;
       const accountId = recipient.author_account_id;
-      const deadline = deadlineFor(5000);
       const readable = await postReadableByAccount({ pool, access }, accountId, data.threadId, data.itemId, {
         deadline,
       });

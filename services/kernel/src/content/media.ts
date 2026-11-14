@@ -19,12 +19,10 @@ import {
   parentCreationAuthorization,
   commandAccessContext,
   readAccount as readAccountHome,
-  deadlineClient,
-  within,
 } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
-import { withConnection, discardConnection } from '../database/pool.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck, accessCommandAuthorization } from './access-port.ts';
 import { AuthenticationError } from '../access/contract/authentication.ts';
@@ -517,38 +515,35 @@ export async function readAvatarUploadAdvice(
     constraints: { mediaTypes: AVATAR_UPLOAD_MEDIA_TYPES, maxByteCount: AVATAR_UPLOAD_MAX_BYTES },
   };
   try {
-    return await within(deadline, () =>
-      withConnection(dependencies.pool, async (client) => {
-        const bounded = deadlineClient(client, deadline);
-        try {
-          await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          const home = await readPartition(bounded, partitionOf(r));
-          if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
-          const time = await mintReadTime(bounded, dependencies.clock);
-          const current = await readAccountHome(bounded, r, actor.accountId);
-          if (
-            !current ||
-            current.fenced ||
-            !Number.isSafeInteger(actor.authnEpoch) ||
-            actor.authnEpoch < 1 ||
-            BigInt(actor.authnEpoch) < current.minimumAuthnEpoch
-          )
-            throw new ProblemError('not_found');
-          const allowed =
-            actor.clientId === 'rezics-website' && current.state === 'active' && (await check(bounded, time));
-          await bounded.query('COMMIT');
-          const allowedActions: AvatarUploadAdvice['allowedActions'] = allowed ? ['upload'] : [];
-          return { ...observation, allowedActions };
-        } catch (error) {
-          try {
-            await bounded.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(client, rollbackError as Error);
-          }
-          throw error;
-        }
-      }),
+    const allowed = await withBoundedReadOnlyTransaction(
+      dependencies.pool,
+      deadline,
+      async (client) => {
+        const home = await readPartition(client, partitionOf(r));
+        if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+        const time = await mintReadTime(client, dependencies.clock);
+        const current = await readAccountHome(client, r, actor.accountId);
+        if (
+          !current ||
+          current.fenced ||
+          !Number.isSafeInteger(actor.authnEpoch) ||
+          actor.authnEpoch < 1 ||
+          BigInt(actor.authnEpoch) < current.minimumAuthnEpoch
+        )
+          throw new ProblemError('not_found');
+        return actor.clientId === 'rezics-website' && current.state === 'active' && (await check(client, time));
+      },
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError(error) {
+          throwAccessUnavailable(error);
+          return error;
+        },
+        isUncertainSettledQueryError: () => true,
+      },
     );
+    const allowedActions: AvatarUploadAdvice['allowedActions'] = allowed ? ['upload'] : [];
+    return { ...observation, allowedActions };
   } catch (error) {
     if (error instanceof AccessUnavailableError) throw new ProblemError('dependency_unavailable');
     throw error;

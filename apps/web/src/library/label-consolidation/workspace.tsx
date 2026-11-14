@@ -1,25 +1,21 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
-import { Input } from '@rezics/ui/shadcn/input';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { SelectionBar } from '@rezics/ui/selection-bar';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { m } from '../../paraglide/messages.js';
 import { readSubjectLabelPage } from '../labels-actions';
 import type { LabelShelfEntry, LabelShelfPageData } from '../label-shelf-read';
 import type { LibraryLabelSummary } from '../subject-labels.ts';
 import { useLibraryWorkspaceAdmission } from '../library-workspace-admission';
 import { displayLibraryTitle } from '../title';
-import { SelectionReviewList } from '../selection-review-view';
-import { SelectionResultView } from '../selection-result-view';
-import { shelfHref } from '../shelf-params';
-import type { SelectedAssignment, ConsolidationTransport } from './client';
+import type { ConsolidationResult, ConsolidationTransport } from './client';
 import { ConsolidationReview } from './review';
 import { ConsolidationVisit, type ConsolidationEnvelope, type VisitOutcome } from './visit';
 import { ConsolidationSelection } from './selection';
+import { ConsolidationPanel, type ConsolidationPicked } from './consolidation-panel';
 
 const catalogueOperations = ['library_label.list'] as const;
 type Loaded = Extract<LabelShelfPageData, { state: 'loaded' }>;
-type Picked = { selected: SelectedAssignment; title: string };
+type Picked = ConsolidationPicked;
+type ResultItem = ConsolidationResult['items'][number];
 type Catalogue = Awaited<ReturnType<typeof readSubjectLabelPage>>;
 export type ConsolidationWorkspaceProps = {
   page: Loaded;
@@ -183,11 +179,15 @@ export function ConsolidationWorkspace({
     setVisit(next);
     void perform(() => next.nextPage());
   }
-  const result = visit?.result;
-  const confirmation = visit?.confirmation;
-  const reviewItems = visit?.review.evidence.flatMap((page) => page.items) ?? [];
-  const reviewTitle = (id: string) => picked.find((item) => item.selected.subjectId === id)?.title ?? id;
-  const ready = !!visit?.review.confirmation();
+  function undoKey(item: ResultItem) {
+    const key = `${item.item}:${item.sourceUnassignRevision}`;
+    if (!undoKeys.current.has(key)) undoKeys.current.set(key, crypto.randomUUID());
+    return undoKeys.current.get(key)!;
+  }
+  function moreTargets() {
+    if (cataloguePage?.state === 'loaded' && cataloguePage.next && catalogueRequest)
+      void loadTargets({ query: catalogueRequest.query, cursor: cataloguePage.next });
+  }
   const selected = (entry: LabelShelfEntry) =>
     picked.some(
       (item) =>
@@ -240,287 +240,67 @@ export function ConsolidationWorkspace({
         />
       ) : null}
       {open && controls ? (
-        <Dialog
-          open
+        <ConsolidationPanel
+          source={{ id: page.label.id, name: page.label.name }}
+          target={target}
+          picked={picked}
+          query={query}
+          cataloguePage={cataloguePage}
+          catalogueRequest={catalogueRequest}
+          visit={visit}
+          outcome={outcome}
+          busy={busy}
+          locale={locale}
+          canUndo={canUndo}
+          csrfToken={csrfToken}
+          isCurrent={current}
+          finalFocus={() => (current() ? launcher.current : false)}
+          stateLabel={consolidationState}
+          undoKey={undoKey}
           onOpenChange={(value) => {
             if (!locking.current && current()) setOpen(value);
           }}
-        >
-          <DialogContent
-            showCloseButton={false}
-            finalFocus={() => (current() ? launcher.current : false)}
-            className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-xl"
-          >
-            <DialogTitle>{m.library_consolidation_heading()}</DialogTitle>
-            <DialogDescription>{m.library_consolidation_meaning()}</DialogDescription>
-            <SelectionReviewList
-              labelledBy={m.library_selection_heading()}
-              items={picked.map((item) => ({
-                subjectId: item.selected.subjectId,
-                title: item.title,
-                stateLabel: `${item.selected.assignmentId} · ${item.selected.revision}`,
-              }))}
-            />
-            {!visit ? (
-              <>
-                <form
-                  className="flex flex-wrap items-end gap-2"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void loadTargets({ query });
-                  }}
-                >
-                  <label className="min-w-0 flex-1 space-y-1">
-                    {m.library_consolidation_target()}
-                    <Input
-                      value={query}
-                      maxLength={4096}
-                      disabled={busy}
-                      onChange={(event) => {
-                        sequence.current++;
-                        setQuery(event.target.value);
-                        setCataloguePage(null);
-                      }}
-                    />
-                  </label>
-                  <Button type="submit" disabled={busy}>
-                    {m.library_consolidation_search()}
-                  </Button>
-                </form>
-                {cataloguePage?.state === 'loaded' ? (
-                  <>
-                    <fieldset className="max-h-56 space-y-2 overflow-y-auto rounded-md border p-3">
-                      <legend>{m.library_consolidation_target()}</legend>
-                      {cataloguePage.labels
-                        .filter((label) => label.id !== page.label.id)
-                        .map((label) => (
-                          <label key={label.id} className="flex min-h-11 min-w-0 items-center gap-2 break-all">
-                            <input
-                              type="radio"
-                              name="consolidation-target"
-                              checked={target?.id === label.id}
-                              onChange={() => {
-                                if (current() && !busy) setTarget(label);
-                              }}
-                            />
-                            <span>
-                              {label.name}
-                              <code className="block text-xs">{label.id}</code>
-                            </span>
-                          </label>
-                        ))}
-                    </fieldset>
-                    {!cataloguePage.labels.some((label) => label.id !== page.label.id) ? (
-                      <p role="status">{m.library_consolidation_no_targets()}</p>
-                    ) : null}
-                    {cataloguePage.next ? (
-                      <Button
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => {
-                          if (catalogueRequest)
-                            void loadTargets({ query: catalogueRequest.query, cursor: cataloguePage.next! });
-                        }}
-                      >
-                        {m.library_more()}
-                      </Button>
-                    ) : null}
-                  </>
-                ) : cataloguePage ? (
-                  <div role="alert">
-                    <p>
-                      {cataloguePage.state === 'closed'
-                        ? m.library_subject_label_closed()
-                        : m.library_labels_unavailable()}
-                    </p>
-                    <Button
-                      disabled={busy}
-                      onClick={() => {
-                        if (catalogueRequest) void loadTargets(catalogueRequest);
-                      }}
-                    >
-                      {m.subject_view_retry()}
-                    </Button>
-                    <Button disabled={busy} onClick={() => void loadTargets({ query })}>
-                      {m.library_consolidation_restart_prefix()}
-                    </Button>
-                  </div>
-                ) : null}
-                {target ? (
-                  <p>
-                    {m.library_consolidation_destination({ name: target.name })}
-                    <code className="block break-all text-xs">{target.id}</code>
-                  </p>
-                ) : null}
-                <Button disabled={!target || !picked.length || busy} onClick={start}>
-                  {m.library_consolidation_review()}
-                </Button>
-              </>
-            ) : (
-              <>
-                <p role="status">
-                  {m.library_consolidation_reviewed({ count: visit.review.reviewed, total: visit.review.total })}
-                </p>
-                {visit.review.evidence[0] ? (
-                  <p className="break-words">
-                    {visit.review.evidence[0].sourceLabel.name} → {visit.review.evidence[0].targetLabel.name}
-                    <code className="block break-all text-xs">
-                      {visit.review.evidence[0].sourceLabel.id} · {visit.review.evidence[0].sourceLabel.revision}
-                      {' → '}
-                      {visit.review.evidence[0].targetLabel.id} · {visit.review.evidence[0].targetLabel.revision}
-                    </code>
-                  </p>
-                ) : null}
-                <SelectionReviewList
-                  labelledBy={m.library_consolidation_review()}
-                  items={reviewItems.map((item) => ({
-                    subjectId: item.selected.subjectId,
-                    title: reviewTitle(item.selected.subjectId),
-                    stateLabel: consolidationState(item.outcome),
-                  }))}
-                />
-                {!visit.review.complete && !confirmation ? (
-                  <Button disabled={busy} onClick={() => void perform(() => visit.nextPage())}>
-                    {m.library_consolidation_next_review()}
-                  </Button>
-                ) : null}
-                {!confirmation ? (
-                  <Button
-                    disabled={!ready || busy || visit.hasRetainedCommand}
-                    onClick={() => void perform(() => visit.confirm())}
-                  >
-                    {m.library_consolidation_confirm()}
-                  </Button>
-                ) : (
-                  <>
-                    <p role="status">{m.library_consolidation_expiry({ time: confirmation.expiresAt })}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        disabled={
-                          busy ||
-                          visit.hasRetainedCommand ||
-                          (result?.status !== undefined && result.status !== 'active')
-                        }
-                        onClick={() => void perform(() => visit.apply())}
-                      >
-                        {m.library_consolidation_apply()}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        disabled={
-                          busy ||
-                          visit.hasRetainedCommand ||
-                          (result?.status !== undefined && result.status !== 'active')
-                        }
-                        onClick={() => void perform(() => visit.cancel())}
-                      >
-                        {m.library_consolidation_cancel()}
-                      </Button>
-                      <Button variant="outline" disabled={busy} onClick={() => void perform(() => visit.readResult())}>
-                        {m.library_consolidation_result()}
-                      </Button>
-                    </div>
-                  </>
-                )}
-                {outcome === 'unknown' ? <p role="alert">{m.library_consolidation_unknown()}</p> : null}
-                {outcome === 'rejected' ? (
-                  <p role="alert">
-                    {m.library_consolidation_rejected()}{' '}
-                    {visit.rejection?.code ? <code>{visit.rejection.code}</code> : null}
-                  </p>
-                ) : null}
-                {visit.hasRetainedCommand ? (
-                  <Button disabled={busy} onClick={() => void perform(() => visit.recover())}>
-                    {m.library_consolidation_replay()}
-                  </Button>
-                ) : null}
-                {result ? (
-                  <>
-                    <p role="status">{consolidationState(result.status)}</p>
-                    <SelectionResultView
-                      results={result.items.map((item) => ({
-                        key: String(item.item),
-                        subjectId: item.selected?.subjectId ?? '',
-                        title: item.selected ? reviewTitle(item.selected.subjectId) : m.library_subject_unavailable(),
-                        state:
-                          item.status === 'moved'
-                            ? 'applied'
-                            : item.status === 'processing'
-                              ? 'uncertain'
-                              : item.status === 'pending'
-                                ? 'pending'
-                                : item.status === 'inaccessible'
-                                  ? 'denied'
-                                  : 'conflict',
-                        source: 'label',
-                        sourceState: item.status,
-                        detail: consolidationState(item.status),
-                      }))}
-                    />
-                    <ol className="space-y-3">
-                      {result.items.map((item) => {
-                        const key = `${item.item}:${item.sourceUnassignRevision}`;
-                        if (!undoKeys.current.has(key)) undoKeys.current.set(key, crypto.randomUUID());
-                        return (
-                          <li key={item.item} data-consolidation-result={item.status} className="break-all">
-                            <p>
-                              {item.item + 1}: {consolidationState(item.status)}
-                            </p>
-                            {item.targetAssignment ? (
-                              <p>
-                                {m.library_consolidation_target()}:{' '}
-                                <code>
-                                  {item.targetAssignment.id} · {item.targetAssignment.revision}
-                                </code>
-                              </p>
-                            ) : null}
-                            {item.targetUnchanged ? <p>{m.library_consolidation_target_unchanged()}</p> : null}
-                            {item.status === 'processing' ? (
-                              <Button
-                                disabled={busy || visit.hasRetainedCommand}
-                                onClick={() => void perform(() => visit.retry(item.item))}
-                              >
-                                {m.library_consolidation_retry()}
-                              </Button>
-                            ) : null}
-                            {item.selected && item.sourceUnassignRevision !== undefined ? (
-                              <form
-                                method="post"
-                                action={shelfHref(locale, { label: page.label.id })}
-                                onSubmit={(event) => {
-                                  if (!current() || !canUndo() || busy) event.preventDefault();
-                                }}
-                              >
-                                <p>{m.library_consolidation_undo_hint()}</p>
-                                <input type="hidden" name="intent" value="restore" />
-                                <input type="hidden" name="subjectId" value={item.selected.subjectId} />
-                                <input type="hidden" name="labelId" value={result.sourceLabelId} />
-                                <input type="hidden" name="assignmentId" value={item.selected.assignmentId} />
-                                <input type="hidden" name="revision" value={item.sourceUnassignRevision} />
-                                <input type="hidden" name="idempotencyKey" value={undoKeys.current.get(key)} />
-                                <input type="hidden" name="csrf_token" value={csrfToken()} />
-                                <Button type="submit" variant="outline" disabled={busy || !canUndo()}>
-                                  {m.library_subject_label_undo()}
-                                </Button>
-                              </form>
-                            ) : null}
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  </>
-                ) : null}
-                <Button variant="outline" disabled={busy} onClick={reset}>
-                  {m.library_consolidation_new_review()}
-                </Button>
-              </>
-            )}
-            {busy ? <p role="status">{m.library_consolidation_working()}</p> : null}
-            <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>
-              {m.library_selection_review_close()}
-            </Button>
-          </DialogContent>
-        </Dialog>
+          onQueryChange={(value) => {
+            sequence.current++;
+            setQuery(value);
+            setCataloguePage(null);
+          }}
+          onSearch={() => void loadTargets({ query })}
+          onMoreTargets={moreTargets}
+          onRetryTargets={() => {
+            if (catalogueRequest) void loadTargets(catalogueRequest);
+          }}
+          onRestartPrefix={() => void loadTargets({ query })}
+          onTargetSelect={(label) => {
+            if (current() && !busy) setTarget(label);
+          }}
+          onStart={start}
+          onNextReview={() => {
+            if (visit) void perform(() => visit.nextPage());
+          }}
+          onConfirm={() => {
+            if (visit) void perform(() => visit.confirm());
+          }}
+          onApply={() => {
+            if (visit) void perform(() => visit.apply());
+          }}
+          onCancel={() => {
+            if (visit) void perform(() => visit.cancel());
+          }}
+          onReadResult={() => {
+            if (visit) void perform(() => visit.readResult());
+          }}
+          onReplay={() => {
+            if (visit) void perform(() => visit.recover());
+          }}
+          onRetryItem={(item) => {
+            if (visit) void perform(() => visit.retry(item));
+          }}
+          onReset={reset}
+          onUndoSubmit={(event: FormEvent<HTMLFormElement>) => {
+            if (!current() || !canUndo() || busy) event.preventDefault();
+          }}
+        />
       ) : null}
     </ConsolidationSelection.Provider>
   );

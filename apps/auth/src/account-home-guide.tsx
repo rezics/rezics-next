@@ -5,7 +5,7 @@ import './account-home-guide.css';
 export function AccountHomeGuide() {
   return (
     <div className="auth-home-guide">
-      <section className="auth-home-settings" aria-labelledby="auth-home-settings-heading">
+      <section className="auth-home-guide-group" aria-labelledby="auth-home-settings-heading">
         <h2 id="auth-home-settings-heading">{m.auth_home_settings_heading()}</h2>
         <p>{m.auth_home_settings_description()}</p>
         <nav aria-label={m.auth_home_navigation_label()}>
@@ -24,7 +24,7 @@ export function AccountHomeGuide() {
         </nav>
       </section>
 
-      <section className="auth-home-settings" aria-labelledby="auth-home-security-heading">
+      <section className="auth-home-guide-group" aria-labelledby="auth-home-security-heading">
         <h2 id="auth-home-security-heading">{m.auth_home_security_group()}</h2>
         <nav aria-labelledby="auth-home-security-heading">
           <a className="auth-home-link" href="/security">
@@ -36,7 +36,7 @@ export function AccountHomeGuide() {
         </nav>
       </section>
 
-      <section className="auth-home-settings" aria-labelledby="auth-home-accounts-heading">
+      <section className="auth-home-guide-group" aria-labelledby="auth-home-accounts-heading">
         <h2 id="auth-home-accounts-heading">{m.auth_home_accounts_group()}</h2>
         <p>{m.auth_home_accounts_description()}</p>
         <nav aria-labelledby="auth-home-accounts-heading">
@@ -55,7 +55,7 @@ export function AccountHomeGuide() {
         </nav>
       </section>
 
-      <section className="auth-home-settings" aria-labelledby="auth-home-selection-heading">
+      <section className="auth-home-guide-group" aria-labelledby="auth-home-selection-heading">
         <h2 id="auth-home-selection-heading">{m.auth_home_selection_heading()}</h2>
         <p>{m.auth_home_selection_description()}</p>
         <div className="auth-home-selection">

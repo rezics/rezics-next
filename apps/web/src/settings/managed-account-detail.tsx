@@ -28,6 +28,8 @@ import {
 // These controls grow with localized labels instead of clipping at the shared button height.
 const recoveryButtonClassName =
   'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal wrap-anywhere py-2 text-center';
+const statusCardClassName =
+  'min-w-0 max-w-full rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground wrap-anywhere';
 
 function identityName(account: ManagementIdentity | null) {
   return account
@@ -76,9 +78,9 @@ function Identity({
     <div className="flex min-w-0 gap-3">
       <IdentityAvatar account={account} initials={initials} />
       <div className="min-w-0 flex-1 wrap-anywhere">
-        <p className="text-lg font-semibold">{identityName(account)}</p>
+        <p className="min-w-0 text-lg font-semibold wrap-anywhere">{identityName(account)}</p>
         {account.displayName && account.handle ? (
-          <p className="text-sm text-muted-foreground">@{account.handle}</p>
+          <p className="min-w-0 text-sm text-muted-foreground wrap-anywhere">@{account.handle}</p>
         ) : null}
         <AccountDetails accountId={accountId} />
       </div>
@@ -104,7 +106,9 @@ function IdentityRow({
       title={identityName(account)}
       visual={<IdentityAvatar account={account} initials={initials} />}
       metadata={
-        account?.displayName && account.handle ? <p className="min-w-0 wrap-anywhere">@{account.handle}</p> : null
+        account?.displayName && account.handle ? (
+          <p className="min-w-0 wrap-anywhere">@{account.handle}</p>
+        ) : null
       }
       preview={<AccountDetails accountId={accountId} />}
       state={state}
@@ -253,10 +257,16 @@ export function ManagedAccountDetailCard({
         </ContentSectionTitle>
         <ContentSectionDescription>{m.settings_managed_read_only()}</ContentSectionDescription>
       </ContentSectionHeader>
-      <ContentSectionBody className="min-w-0 space-y-6">
-        {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+      <ContentSectionBody className="min-w-0 space-y-5 sm:space-y-6">
+        {waiting ? (
+          <p className={statusCardClassName} role="status">
+            {m.settings_retry_wait()}
+          </p>
+        ) : null}
         {state.pending || (reader && !detail && !state.failure) ? (
-          <p role="status">{m.settings_managed_detail_loading()}</p>
+          <p className={statusCardClassName} role="status">
+            {m.settings_managed_detail_loading()}
+          </p>
         ) : null}
         {state.failure ? (
           <Failure
@@ -268,152 +278,189 @@ export function ManagedAccountDetailCard({
         ) : null}
         {detail && reader ? (
           <>
-            <section className="min-w-0 space-y-3" aria-label={m.managed_target_title()}>
-              <Identity account={detail.account} accountId={detail.account.id} initials={initials} />
-              <p className="text-sm text-muted-foreground">
-                {detail.account.kind === 'organization'
-                  ? m.managed_organization_identity()
-                  : detail.self
-                    ? m.managed_human_identity()
-                    : m.managed_automated_identity()}
-              </p>
-              {!detail.account.handle ? <p className="text-sm">{m.managed_handleless()}</p> : null}
-              {detail.role ? (
-                <p>
-                  {m.managed_your_role()} {detail.role === 'owner' ? m.managed_owner() : m.managed_member()}
+            <div className={`grid min-w-0 gap-4 ${detail.operator ? 'md:grid-cols-2' : ''}`}>
+              <section
+                className="min-w-0 space-y-3 rounded-xl border bg-card p-4 sm:p-5"
+                aria-label={m.managed_target_title()}
+              >
+                <h3 className="text-base font-semibold">{m.managed_target_title()}</h3>
+                <Identity account={detail.account} accountId={detail.account.id} initials={initials} />
+                <p className="text-sm text-muted-foreground">
+                  {detail.account.kind === 'organization'
+                    ? m.managed_organization_identity()
+                    : detail.self
+                      ? m.managed_human_identity()
+                      : m.managed_automated_identity()}
                 </p>
-              ) : null}
+                {!detail.account.handle ? (
+                  <p className="text-sm text-muted-foreground">{m.managed_handleless()}</p>
+                ) : null}
+                {detail.role ? (
+                  <p className="text-sm">
+                    {m.managed_your_role()} {detail.role === 'owner' ? m.managed_owner() : m.managed_member()}
+                  </p>
+                ) : null}
+              </section>
               {detail.operator ? (
-                <div className="space-y-2">
-                  <h3 className="font-medium">{m.managed_operator_title()}</h3>
+                <section
+                  className="min-w-0 space-y-3 rounded-xl border bg-card p-4 sm:p-5"
+                  aria-label={m.managed_operator_title()}
+                >
+                  <h3 className="text-base font-semibold">{m.managed_operator_title()}</h3>
                   <Identity account={detail.operator} accountId={detail.operator.id} initials={initials} />
                   <p className="text-sm text-muted-foreground">{m.managed_operator_text()}</p>
+                </section>
+              ) : null}
+            </div>
+            <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+              <section
+                className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+                aria-label={m.managed_holders_title()}
+                aria-busy={members.pending}
+              >
+                <div className="space-y-1">
+                  <h3 className="text-base font-semibold">{m.managed_holders_title()}</h3>
+                  <p className="text-sm text-muted-foreground">{m.managed_holders_text()}</p>
+                </div>
+                {members.pending ? (
+                  <p className={statusCardClassName} role="status">
+                    {m.settings_managed_detail_loading()}
+                  </p>
+                ) : null}
+                {members.failure ? (
+                  <Failure
+                    failure={members.failure}
+                    pending={state.pending || members.pending}
+                    waiting={waiting}
+                    section="members"
+                    retry={() => void reader.load('members', members.cursor)}
+                    restart={members.cursor ? () => void reader.load('members') : undefined}
+                  />
+                ) : null}
+                {members.page?.state === 'denied' ? (
+                  <p className={statusCardClassName} role="status">
+                    {m.managed_holders_denied()}
+                  </p>
+                ) : members.page ? (
+                  <>
+                    {members.page.items.length ? (
+                      <ul>
+                        {members.page.items.map((item) => (
+                          <IdentityRow
+                            key={item.accountId}
+                            account={item.account}
+                            accountId={item.accountId}
+                            state={
+                              <span className="text-sm">
+                                {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
+                              </span>
+                            }
+                            initials={initials}
+                          />
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={statusCardClassName}>{m.managed_no_holders()}</p>
+                    )}
+                    {!members.failure ? (
+                      <Paging
+                        reader={reader}
+                        section="members"
+                        next={members.page.next}
+                        cursor={members.cursor}
+                        pending={state.pending || members.pending || waiting}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
+              </section>
+              <section
+                className="min-w-0 space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+                aria-label={m.managed_operated_title()}
+                aria-busy={responsibilities.pending}
+              >
+                <div className="space-y-1">
+                  <h3 className="text-base font-semibold">{m.managed_operated_title()}</h3>
+                  <p className="text-sm text-muted-foreground">{m.managed_responsibility_text()}</p>
+                </div>
+                {responsibilities.pending ? (
+                  <p className={statusCardClassName} role="status">
+                    {m.settings_managed_detail_loading()}
+                  </p>
+                ) : null}
+                {responsibilities.failure ? (
+                  <Failure
+                    failure={responsibilities.failure}
+                    pending={state.pending || responsibilities.pending}
+                    waiting={waiting}
+                    section="responsibilities"
+                    retry={() => void reader.load('responsibilities', responsibilities.cursor)}
+                    restart={responsibilities.cursor ? () => void reader.load('responsibilities') : undefined}
+                  />
+                ) : null}
+                {responsibilities.page === null ? (
+                  <p className={statusCardClassName} role="status">
+                    {m.settings_managed_responsibilities_unavailable()}
+                  </p>
+                ) : responsibilities.page ? (
+                  <>
+                    {responsibilities.page.items.length ? (
+                      <ul>
+                        {responsibilities.page.items.map((item) => (
+                          <IdentityRow
+                            key={item.reservationId}
+                            account={item.account}
+                            accountId={item.accountId}
+                            state={
+                              <p className="text-sm">
+                                {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
+                              </p>
+                            }
+                            initials={initials}
+                          />
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={statusCardClassName}>{m.managed_no_responsibilities()}</p>
+                    )}
+                    {!responsibilities.failure ? (
+                      <Paging
+                        reader={reader}
+                        section="responsibilities"
+                        next={responsibilities.page.next}
+                        cursor={responsibilities.cursor}
+                        pending={state.pending || responsibilities.pending || waiting}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
+                <p className="border-t pt-3 text-sm text-muted-foreground">{m.settings_managed_observation()}</p>
+              </section>
+            </div>
+            <div className="min-w-0 space-y-4 rounded-xl border bg-muted/20 p-4 sm:p-5">
+              <ManagedAccountActions
+                accountId={detail.account.id}
+                nativeAccountKind={detail.account.kind}
+                operated={detail.operated}
+                self={detail.self}
+                authNavigation={state.authNavigation}
+                authCsrfToken={reader.csrfToken}
+                mediaFailure={mediaFailure}
+              />
+              {!state.failure ? (
+                <div className="flex min-w-0 justify-end border-t pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={recoveryButtonClassName}
+                    disabled={busy || waiting}
+                    onClick={() => void reader.load()}
+                  >
+                    {m.managed_refresh()}
+                  </Button>
                 </div>
               ) : null}
-            </section>
-            <section className="min-w-0 space-y-3" aria-label={m.managed_holders_title()} aria-busy={members.pending}>
-              <h3 className="font-medium">{m.managed_holders_title()}</h3>
-              <p className="text-sm text-muted-foreground">{m.managed_holders_text()}</p>
-              {members.pending ? <p role="status">{m.settings_managed_detail_loading()}</p> : null}
-              {members.failure ? (
-                <Failure
-                  failure={members.failure}
-                  pending={state.pending || members.pending}
-                  waiting={waiting}
-                  section="members"
-                  retry={() => void reader.load('members', members.cursor)}
-                  restart={members.cursor ? () => void reader.load('members') : undefined}
-                />
-              ) : null}
-              {members.page?.state === 'denied' ? (
-                <p role="status">{m.managed_holders_denied()}</p>
-              ) : members.page ? (
-                <>
-                  {members.page.items.length ? (
-                    <ul>
-                      {members.page.items.map((item) => (
-                        <IdentityRow
-                          key={item.accountId}
-                          account={item.account}
-                          accountId={item.accountId}
-                          state={
-                            <span className="text-sm">
-                              {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
-                            </span>
-                          }
-                          initials={initials}
-                        />
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>{m.managed_no_holders()}</p>
-                  )}
-                  {!members.failure ? (
-                    <Paging
-                      reader={reader}
-                      section="members"
-                      next={members.page.next}
-                      cursor={members.cursor}
-                      pending={state.pending || members.pending || waiting}
-                    />
-                  ) : null}
-                </>
-              ) : null}
-            </section>
-            <section
-              className="min-w-0 space-y-3"
-              aria-label={m.managed_operated_title()}
-              aria-busy={responsibilities.pending}
-            >
-              <h3 className="font-medium">{m.managed_operated_title()}</h3>
-              <p className="text-sm text-muted-foreground">{m.managed_responsibility_text()}</p>
-              {responsibilities.pending ? <p role="status">{m.settings_managed_detail_loading()}</p> : null}
-              {responsibilities.failure ? (
-                <Failure
-                  failure={responsibilities.failure}
-                  pending={state.pending || responsibilities.pending}
-                  waiting={waiting}
-                  section="responsibilities"
-                  retry={() => void reader.load('responsibilities', responsibilities.cursor)}
-                  restart={responsibilities.cursor ? () => void reader.load('responsibilities') : undefined}
-                />
-              ) : null}
-              {responsibilities.page === null ? (
-                <p role="status">{m.settings_managed_responsibilities_unavailable()}</p>
-              ) : responsibilities.page ? (
-                <>
-                  {responsibilities.page.items.length ? (
-                    <ul>
-                      {responsibilities.page.items.map((item) => (
-                        <IdentityRow
-                          key={item.reservationId}
-                          account={item.account}
-                          accountId={item.accountId}
-                          state={
-                            <p className="text-sm">
-                              {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
-                            </p>
-                          }
-                          initials={initials}
-                        />
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>{m.managed_no_responsibilities()}</p>
-                  )}
-                  {!responsibilities.failure ? (
-                    <Paging
-                      reader={reader}
-                      section="responsibilities"
-                      next={responsibilities.page.next}
-                      cursor={responsibilities.cursor}
-                      pending={state.pending || responsibilities.pending || waiting}
-                    />
-                  ) : null}
-                </>
-              ) : null}
-              <p className="text-sm text-muted-foreground">{m.settings_managed_observation()}</p>
-            </section>
-            <ManagedAccountActions
-              accountId={detail.account.id}
-              nativeAccountKind={detail.account.kind}
-              operated={detail.operated}
-              self={detail.self}
-              authNavigation={state.authNavigation}
-              authCsrfToken={reader.csrfToken}
-              mediaFailure={mediaFailure}
-            />
-            {!state.failure ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={recoveryButtonClassName}
-                disabled={busy || waiting}
-                onClick={() => void reader.load()}
-              >
-                {m.managed_refresh()}
-              </Button>
-            ) : null}
+            </div>
           </>
         ) : null}
       </ContentSectionBody>

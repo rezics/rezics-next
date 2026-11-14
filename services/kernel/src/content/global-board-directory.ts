@@ -1,5 +1,9 @@
-import { deadlineClient, within } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { ContentBoardDependencies } from './boards.ts';
@@ -81,16 +85,30 @@ export async function listGlobalBoards(
   const scope = binding(input.purpose, limit);
   const start = await position(dependencies, scope, now, input.cursor);
   const budget = CANDIDATES_PER_ITEM * limit;
-  const candidates = await within(context.deadline, () =>
-    withConnection(dependencies.pool, (connection) => {
-      const client = deadlineClient(connection, context.deadline);
+  const candidates = await withBoundedReadConnection(
+    dependencies.pool,
+    context.deadline,
+    (connection) => {
       const parameters = { after_route: start?.route ?? -1, after_board: start?.boardId ?? ZERO_ID, limit: budget };
       // Separate exact statements let the purpose-leading index seek directly,
       // without filtering another purpose's unbounded source range.
       return input.purpose === undefined
-        ? pageGlobalBoards.run(client, parameters)
-        : pageGlobalBoardsByPurpose.run(client, { ...parameters, purpose: input.purpose });
-    }),
+        ? pageGlobalBoards.run(connection, parameters)
+        : pageGlobalBoardsByPurpose.run(connection, { ...parameters, purpose: input.purpose });
+    },
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error) {
+        try {
+          throwAccessUnavailable(error);
+        } catch (mapped) {
+          return mapped;
+        }
+        return error;
+      },
+      isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+      isUncertainSettledQueryError: () => true,
+    },
   );
 
   const reader: ReadContext = { actor: { kind: 'anonymous' }, deadline: context.deadline };

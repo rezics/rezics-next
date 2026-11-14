@@ -29,6 +29,7 @@ import type { ManagementGuard } from './management-current-origin';
 import type { GatedOperation } from '../kernel/exposure';
 import { hasUnsentLabelName, useLabelDraftNavigation } from './label-draft-navigation';
 import { LabelNameReader } from './label-name-reader';
+import { LabelDirectoryWorkspace } from './label-directory-workspace';
 import { libraryLabelNameIssue, type LibraryLabelNameIssue } from './subject-label-name';
 import { LABELS_CURSOR_MAX_LENGTH } from './labels-address';
 import type { LabelsWindowDirection } from './labels-window-navigation';
@@ -694,109 +695,178 @@ export function LabelsPageView({
       </form>
     </LabelExposure>
   ) : null;
+  const pageHeading = (
+    <PageHeading
+      ref={headingRef}
+      tabIndex={-1}
+      className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      {m.library_labels_heading()}
+    </PageHeading>
+  );
   if (page.state && page.state !== 'loaded')
     return (
-      <article className="max-w-3xl space-y-6">
-        <PageHeading
-          ref={headingRef}
-          tabIndex={-1}
-          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {m.library_labels_heading()}
-        </PageHeading>
-        <p role={page.state === 'unavailable' ? 'alert' : 'status'}>
-          {cursorRecovery
-            ? staleCursor
-              ? m.library_labels_stale_cursor()
-              : m.library_labels_invalid_cursor()
-            : page.state === 'preparing'
-              ? m.library_labels_preparing()
-              : page.state === 'denied'
-                ? m.library_labels_denied()
-                : page.state === 'closed'
-                  ? m.library_subject_label_closed()
-                  : m.library_labels_unavailable()}
-        </p>
-        {feedback && !feedback.ok && feedback.operation ? error('label-error') : null}
-        {undoForm}
-        <nav aria-label={m.library_labels_heading()} className="flex flex-wrap gap-2">
-          {!cursorRecovery && retryCurrent ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={actionClass}
-              disabled={!alive() || windowBusy}
-              onClick={() => {
-                if (alive() && !windowBusy) retryCurrent();
-              }}
-            >
-              {m.subject_view_retry()}
-            </Button>
-          ) : !cursorRecovery ? (
-            <a
-              onClick={(event) => {
-                if (!alive()) event.preventDefault();
-              }}
-              href={mutationPath}
-              className={buttonVariants({ variant: 'outline', className: actionClass })}
-            >
-              {m.subject_view_retry()}
-            </a>
-          ) : null}
-          {cursorRecovery && cursor !== undefined
-            ? movementControl('first', m.library_collections_first_page(), () => firstPagePath)
-            : null}
-        </nav>
-      </article>
+      <LabelDirectoryWorkspace
+        heading={pageHeading}
+        state={
+          <>
+            <p role={page.state === 'unavailable' ? 'alert' : 'status'}>
+              {cursorRecovery
+                ? staleCursor
+                  ? m.library_labels_stale_cursor()
+                  : m.library_labels_invalid_cursor()
+                : page.state === 'preparing'
+                  ? m.library_labels_preparing()
+                  : page.state === 'denied'
+                    ? m.library_labels_denied()
+                    : page.state === 'closed'
+                      ? m.library_subject_label_closed()
+                      : m.library_labels_unavailable()}
+            </p>
+            {feedback && !feedback.ok && feedback.operation ? error('label-error') : null}
+            {undoForm}
+            <nav aria-label={m.library_labels_heading()} className="flex flex-wrap gap-2">
+              {!cursorRecovery && retryCurrent ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={actionClass}
+                  disabled={!alive() || windowBusy}
+                  onClick={() => {
+                    if (alive() && !windowBusy) retryCurrent();
+                  }}
+                >
+                  {m.subject_view_retry()}
+                </Button>
+              ) : !cursorRecovery ? (
+                <a
+                  onClick={(event) => {
+                    if (!alive()) event.preventDefault();
+                  }}
+                  href={mutationPath}
+                  className={buttonVariants({ variant: 'outline', className: actionClass })}
+                >
+                  {m.subject_view_retry()}
+                </a>
+              ) : null}
+              {cursorRecovery && cursor !== undefined
+                ? movementControl('first', m.library_collections_first_page(), () => firstPagePath)
+                : null}
+            </nav>
+          </>
+        }
+      />
     );
   if (!page.signedIn)
     return (
-      <article className="space-y-6">
-        <PageHeading
-          ref={headingRef}
-          tabIndex={-1}
-          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {m.library_labels_heading()}
-        </PageHeading>
-        <a
-          href={`/auth/sign-in?return_to=${encodeURIComponent(path)}`}
-          className={buttonVariants({ className: actionClass })}
-        >
-          {m.library_sign_in()}
-        </a>
-      </article>
+      <LabelDirectoryWorkspace
+        heading={pageHeading}
+        state={
+          <a
+            href={`/auth/sign-in?return_to=${encodeURIComponent(path)}`}
+            className={buttonVariants({ className: actionClass })}
+          >
+            {m.library_sign_in()}
+          </a>
+        }
+      />
     );
   if (!page.operations.includes('library_label.list'))
     return (
-      <article className="space-y-6">
-        <PageHeading
-          ref={headingRef}
-          tabIndex={-1}
-          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {m.library_labels_heading()}
-        </PageHeading>
-        <p>{m.library_labels_unavailable()}</p>
-      </article>
+      <LabelDirectoryWorkspace heading={pageHeading} state={<p>{m.library_labels_unavailable()}</p>} />
     );
-  return (
-    <article ref={pageRef} tabIndex={-1} className="min-w-0 max-w-3xl space-y-8 text-foreground" aria-busy={busy}>
-      {navigation.boundary}
-      <header className="space-y-3 border-b pb-6">
-        <PageHeading
-          ref={headingRef}
-          tabIndex={-1}
-          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+  const description = <p className="max-w-xl text-muted-foreground">{m.library_labels_directory_description()}</p>;
+  const privacy = (
+    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+      <LockKeyholeIcon aria-hidden="true" className="size-4 shrink-0" />
+      {m.library_labels_private()}
+    </p>
+  );
+  const directoryTools = (
+    <form
+      method="get"
+      action={path}
+      onSubmit={(event) => {
+        if (!alive()) event.preventDefault();
+      }}
+      className="flex flex-wrap items-end gap-2"
+    >
+      <Field className="min-w-0 flex-1 basis-48">
+        <FieldLabel htmlFor="label-prefix">{m.library_labels_prefix()}</FieldLabel>
+        <Input id="label-prefix" name="q" className={fieldClass} defaultValue={page.query ?? ''} />
+      </Field>
+      <Button type="submit" variant="outline" className={actionClass}>
+        {m.library_labels_filter()}
+      </Button>
+      {page.query ? (
+        <a
+          onClick={(event) => {
+            if (!alive()) event.preventDefault();
+          }}
+          href={path}
+          className={buttonVariants({ variant: 'ghost', className: actionClass })}
         >
-          {m.library_labels_heading()}
-        </PageHeading>
-        <p className="max-w-xl text-muted-foreground">{m.library_labels_directory_description()}</p>
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <LockKeyholeIcon aria-hidden="true" className="size-4 shrink-0" />
-          {m.library_labels_private()}
-        </p>
-      </header>
+          {m.library_clear_state()}
+        </a>
+      ) : null}
+    </form>
+  );
+  const createForm = (
+    <LabelExposure current={hydrated ? originating?.isCurrent : undefined} page={page} operation="create">
+      <form
+        key={page.createKey}
+        method="post"
+        action={mutationPath}
+        onSubmit={onSubmit}
+        noValidate
+        className="space-y-3 rounded-xl border bg-muted/20 p-4 sm:p-5"
+        aria-label={m.library_label_create()}
+        data-label-create
+      >
+        <div className="space-y-1">
+          <h2 className="font-semibold">{m.library_label_create()}</h2>
+          <p className="text-sm text-muted-foreground">{m.library_labels_create_hint()}</p>
+        </div>
+        {hidden('create', page.createKey)}
+        <Field>
+          <FieldLabel htmlFor="new-label">{m.library_label_name()}</FieldLabel>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              ref={createField}
+              id="new-label"
+              name="name"
+              required
+              maxLength={1000}
+              className={`${fieldClass} flex-1 basis-48`}
+              value={createName}
+              onChange={(event) => {
+                if (alive() && (!originating || originating.isCurrent('library_label.create'))) {
+                  setNameError((error) => (error?.operation === 'create' ? null : error));
+                  setCreateName(event.target.value);
+                }
+              }}
+              aria-invalid={fieldError('create') || undefined}
+              aria-describedby={`create-name-help${fieldError('create') ? ' create-error' : ''}`}
+            />
+            <Button type="submit" variant="default" size="lg" className={actionClass} disabled={busy}>
+              {m.library_label_create()}
+            </Button>
+          </div>
+          <details className="text-sm text-muted-foreground">
+            <summary className={`${actionClass} w-fit cursor-pointer text-start`}>
+              {m.library_labels_name_guidance()}
+            </summary>
+            <p id="create-name-help" className="pt-2">
+              {m.library_label_name_input_help()}
+            </p>
+          </details>
+          {fieldError('create') ? error('create-error', fieldIssue('create')) : null}
+        </Field>
+      </form>
+    </LabelExposure>
+  );
+  const feedbackContent = (
+    <>
       {feedback &&
       !feedback.ok &&
       !fieldError('create') &&
@@ -804,91 +874,16 @@ export function LabelsPageView({
       !fieldError('delete', feedback.id)
         ? error('label-error')
         : null}
-      <form
-        method="get"
-        action={path}
-        onSubmit={(event) => {
-          if (!alive()) event.preventDefault();
-        }}
-        className="flex flex-wrap items-end gap-2"
-      >
-        <Field className="min-w-0 flex-1 basis-48">
-          <FieldLabel htmlFor="label-prefix">{m.library_labels_prefix()}</FieldLabel>
-          <Input id="label-prefix" name="q" className={fieldClass} defaultValue={page.query ?? ''} />
-        </Field>
-        <Button type="submit" variant="outline" className={actionClass}>
-          {m.library_labels_filter()}
-        </Button>
-        {page.query ? (
-          <a
-            onClick={(event) => {
-              if (!alive()) event.preventDefault();
-            }}
-            href={path}
-            className={buttonVariants({ variant: 'ghost', className: actionClass })}
-          >
-            {m.library_clear_state()}
-          </a>
-        ) : null}
-      </form>
-      <LabelExposure current={hydrated ? originating?.isCurrent : undefined} page={page} operation="create">
-        <form
-          key={page.createKey}
-          method="post"
-          action={mutationPath}
-          onSubmit={onSubmit}
-          noValidate
-          className="space-y-3 rounded-xl border bg-muted/20 p-4 sm:p-5"
-          aria-label={m.library_label_create()}
-          data-label-create
-        >
-          <div className="space-y-1">
-            <h2 className="font-semibold">{m.library_label_create()}</h2>
-            <p className="text-sm text-muted-foreground">{m.library_labels_create_hint()}</p>
-          </div>
-          {hidden('create', page.createKey)}
-          <Field>
-            <FieldLabel htmlFor="new-label">{m.library_label_name()}</FieldLabel>
-            <div className="flex flex-wrap gap-2">
-              <Input
-                ref={createField}
-                id="new-label"
-                name="name"
-                required
-                maxLength={1000}
-                className={`${fieldClass} flex-1 basis-48`}
-                value={createName}
-                onChange={(event) => {
-                  if (alive() && (!originating || originating.isCurrent('library_label.create'))) {
-                    setNameError((error) => (error?.operation === 'create' ? null : error));
-                    setCreateName(event.target.value);
-                  }
-                }}
-                aria-invalid={fieldError('create') || undefined}
-                aria-describedby={`create-name-help${fieldError('create') ? ' create-error' : ''}`}
-              />
-              <Button type="submit" variant="default" size="lg" className={actionClass} disabled={busy}>
-                {m.library_label_create()}
-              </Button>
-            </div>
-            <details className="text-sm text-muted-foreground">
-              <summary className={`${actionClass} w-fit cursor-pointer text-start`}>
-                {m.library_labels_name_guidance()}
-              </summary>
-              <p id="create-name-help" className="pt-2">
-                {m.library_label_name_input_help()}
-              </p>
-            </details>
-            {fieldError('create') ? error('create-error', fieldIssue('create')) : null}
-          </Field>
-        </form>
-      </LabelExposure>
       {undoForm}
       {!hydrated && failedAction(page) && !page.labels.some((label) => label.id === feedback?.id) ? (
         <LabelExposure page={page} operation={failedAction(page)!.operation}>
           {actionForm(failedAction(page)!, true)}
         </LabelExposure>
       ) : null}
+    </>
+  );
+  const catalogue = (
+    <>
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-2 border-b pb-3">
         <h2 className="text-sm font-medium text-muted-foreground" data-label-directory-count>
           {m.library_labels_directory_count({ count: page.labels.length })}
@@ -932,7 +927,7 @@ export function LabelsPageView({
                   >
                     <TagIcon className="size-4" />
                   </span>
-                  <div className="min-w-0 flex-1 space-y-1">
+                  <div className="min-w-0 flex-1 space-y-1 [overflow-wrap:anywhere]">
                     <LabelShelfLink label={label} locale={locale} />
                     <span className="flex items-center gap-1 text-sm text-muted-foreground" aria-hidden="true">
                       {m.library_labels_view_members()}
@@ -940,7 +935,7 @@ export function LabelsPageView({
                     </span>
                   </div>
                   {hydrated && entries.length ? (
-                    <ListRowControl className="shrink-0">
+                    <ListRowControl className="shrink-0 self-start">
                       <Menu
                         title={m.library_labels_heading()}
                         trigger={
@@ -1084,7 +1079,21 @@ export function LabelsPageView({
             : null}
         </nav>
       ) : null}
-    </article>
+    </>
+  );
+  return (
+    <LabelDirectoryWorkspace
+      articleRef={pageRef}
+      busy={busy}
+      prelude={navigation.boundary}
+      heading={pageHeading}
+      description={description}
+      privacy={privacy}
+      directoryTools={directoryTools}
+      createForm={createForm}
+      feedback={feedbackContent}
+      catalogue={catalogue}
+    />
   );
 }
 function labelNameError(issue: LibraryLabelNameIssue): string {

@@ -25,11 +25,15 @@ import {
   type RealmImageSlot,
   type RealmPresentationImage,
   type RealmPresentationOptional,
+  type RealmRulesSummary,
 } from './realm-presentation';
 import { realmAppearanceReference, type RealmAppearanceReference } from './realm-appearance-reference';
 import type { RealmAppearanceCallerLifetime } from './realm-appearance-caller-lifetime';
 import { RealmAppearanceDeparture } from './realm-appearance-departure';
 import { RealmRulesAuthoringPanel } from './realm-rules-authoring/panel';
+
+const appearanceButtonClass =
+  'h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-2 text-center leading-snug whitespace-normal [overflow-wrap:anywhere]';
 
 function ImagePreview({
   image,
@@ -114,11 +118,31 @@ function ImagePreview({
         <p className="text-sm text-muted-foreground">{m.realm_appearance_no_image()}</p>
       ) : null}
       {src && attempt.state === 'failed' && !pending ? (
-        <Button variant="outline" onClick={retry}>
+        <Button type="button" variant="outline" className={appearanceButtonClass} onClick={retry}>
           {m.realm_appearance_retry_image_preview()}
         </Button>
       ) : null}
       {value ? <ImageCredit image={value} loaded={loaded} /> : null}
+    </div>
+  );
+}
+
+function RulesPreview({ rules }: { rules: RealmPresentationOptional<RealmRulesSummary> }) {
+  if (rules.state !== 'available') {
+    return (
+      <p className="text-sm text-muted-foreground" data-rules-preview-state={rules.state}>
+        {rules.state === 'none' ? m.realm_appearance_no_rules() : m.realm_appearance_rules_unavailable()}
+      </p>
+    );
+  }
+  const href = rulesHref(rules.value.postId, rules.value.revisionId);
+  return (
+    <div className="space-y-2 rounded-xl bg-muted p-4" data-rules-preview-state="available">
+      <p className="font-medium">{rules.value.title}</p>
+      <p className="whitespace-pre-wrap text-sm">{rules.value.summary}</p>
+      <a className="break-all text-sm text-primary underline [overflow-wrap:anywhere]" href={href}>
+        {m.realm_appearance_open_revision()} <span className="select-text">{href}</span>
+      </a>
     </div>
   );
 }
@@ -466,7 +490,13 @@ export function RealmAppearanceSettings({
         <section aria-labelledby={`${ids}-heading`} className="space-y-4 rounded-2xl border p-4 sm:p-6">
           {heading}
           <p role="alert">{m.community_management_denied()}</p>
-          <Button variant="outline" disabled={state.busy} onClick={() => void control.refresh()}>
+          <Button
+            type="button"
+            variant="outline"
+            className={appearanceButtonClass}
+            disabled={state.busy}
+            onClick={() => void control.refresh()}
+          >
             {m.realm_appearance_refresh()}
           </Button>
         </section>
@@ -480,7 +510,13 @@ export function RealmAppearanceSettings({
       <section aria-labelledby={`${ids}-heading`} className="space-y-4 rounded-2xl border p-4 sm:p-6">
         {heading}
         <p role="status">{m.realm_appearance_unavailable()}</p>
-        <Button variant="outline" disabled={state.busy} onClick={() => void control.refresh()}>
+        <Button
+          type="button"
+          variant="outline"
+          className={appearanceButtonClass}
+          disabled={state.busy}
+          onClick={() => void control.refresh()}
+        >
           {m.realm_appearance_refresh()}
         </Button>
       </section>,
@@ -503,12 +539,6 @@ export function RealmAppearanceSettings({
   const selection = visibleSelection;
   const editable = control.editable() && !selection && !rulesAuthoringActive;
   const selectable = control.selectable() && !selection && !clear && !rulesAuthoringActive;
-  const label = (slot: RealmImageSlot | 'rules') =>
-    slot === 'avatar'
-      ? m.realm_appearance_icon()
-      : slot === 'banner'
-        ? m.realm_appearance_banner()
-        : m.realm_appearance_rules();
   async function resolve() {
     if (!selection || selectionRef.current?.busy || !currentSelection(selection)) return;
     const reference = realmAppearanceReference(selection.link, window.location.origin, realmId, selection.slot);
@@ -550,355 +580,523 @@ export function RealmAppearanceSettings({
       ? used.reference
       : null;
   }
-  const rules = draft.rules.state === 'available' ? draft.rules.value : null;
-  return withDeparture(
-    <section aria-labelledby={`${ids}-heading`} className="space-y-6 rounded-2xl border p-4 sm:p-6">
-      {heading}
-      <p className="text-sm text-muted-foreground">
-        {snapshot.canManage ? m.realm_appearance_intro() : m.realm_appearance_readonly()}
-      </p>
-      <div className="grid min-w-0 gap-6 lg:grid-cols-2">
-        {(['avatar', 'banner'] as const).map((slot) => (
-          <div key={slot} className="min-w-0 space-y-3">
-            <h3 className="font-medium">{label(slot)}</h3>
-            <ImagePreview
-              key={imagePreviewKey(draft[slot])}
-              image={draft[slot]}
-              title={snapshot.title}
-              banner={slot === 'banner'}
-              pending={
-                draft[slot].state === 'unavailable' &&
-                draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] !== null &&
-                draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] !==
-                  snapshot.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId']
-                  ? usedReference(slot)
-                    ? m.realm_appearance_reference_pending()
-                    : m.realm_appearance_preview_after_save()
-                  : undefined
-              }
-            />
-            {usedReference(slot) ? (
-              <p className="text-sm text-muted-foreground">
-                {m.realm_appearance_selection_for({ slot: label(slot), realm: snapshot.title })}{' '}
-                <a className="text-primary underline" href={usedReference(slot)!.href}>
-                  {m.realm_appearance_source_link()}
-                </a>
-              </p>
-            ) : null}
-            {snapshot.canManage ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  ref={(element) => {
-                    selectionTriggers.current[slot] = element;
-                  }}
-                  variant="outline"
-                  disabled={!selectable}
-                  onClick={() => openSelection(slot)}
-                >
-                  {m.realm_appearance_choose()}
-                </Button>
-                <Field className="w-full min-w-0 max-w-64">
-                  <FieldLabel htmlFor={`${ids}-${slot}-upload`} className="text-sm">
-                    {m.realm_appearance_upload()}
-                  </FieldLabel>
-                  <Input
-                    id={`${ids}-${slot}-upload`}
-                    type="file"
-                    className="w-full min-w-0"
-                    disabled={!selectable}
-                    accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
-                    aria-label={`${label(slot)}: ${m.realm_appearance_upload()}`}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      event.target.value = '';
-                      if (file) void control.upload(slot, file);
-                    }}
-                  />
-                </Field>
-                <Button
-                  ref={(element) => {
-                    clearTriggers.current[slot] = element;
-                  }}
-                  variant="ghost"
-                  disabled={
-                    !selectable ||
-                    (draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] === null &&
-                      state.pendingUpload?.slot !== slot &&
-                      state.uploadSlot !== slot)
-                  }
-                  onClick={() => setClear(slot)}
-                >
-                  {m.realm_appearance_clear()}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
-      <div className="space-y-3">
-        <h3 className="font-medium">{m.realm_appearance_rules()}</h3>
-        {rules ? (
-          <div className="space-y-2 rounded-xl bg-muted p-4">
-            <p className="font-medium">{rules.title}</p>
-            <p className="whitespace-pre-wrap text-sm">{rules.summary}</p>
-            <a className="text-sm text-primary underline" href={rulesHref(rules.postId, rules.revisionId)}>
-              {m.realm_appearance_open_revision()}
-            </a>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {draft.rules.state === 'unavailable'
-              ? m.realm_appearance_rules_unavailable()
-              : m.realm_appearance_no_rules()}
+  function imagePreviewPending(slot: RealmImageSlot) {
+    const key = slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId';
+    if (
+      draft[slot].state !== 'unavailable' ||
+      draft.presentation[key] === null ||
+      draft.presentation[key] === snapshot.presentation[key]
+    )
+      return undefined;
+    return usedReference(slot) ? m.realm_appearance_reference_pending() : m.realm_appearance_preview_after_save();
+  }
+  function appearanceLabel(slot: RealmImageSlot | 'rules') {
+    return slot === 'avatar'
+      ? m.realm_appearance_icon()
+      : slot === 'banner'
+        ? m.realm_appearance_banner()
+        : m.realm_appearance_rules();
+  }
+  function referenceEditor(slot: RealmImageSlot | 'rules') {
+    if (!selection || selection.slot !== slot) return null;
+    return (
+      <fieldset
+        className="min-w-0 space-y-4 rounded-xl border p-4"
+        aria-busy={selection.busy}
+        data-appearance-selection={slot}
+      >
+        <legend className="max-w-full px-2 font-medium [overflow-wrap:anywhere]">{appearanceLabel(slot)}</legend>
+        <p className="text-sm text-muted-foreground">
+          {m.realm_appearance_selection_for({ slot: appearanceLabel(slot), realm: snapshot.title })}
+        </p>
+        <Field className="min-w-0">
+          <FieldLabel htmlFor={ids + '-reference'}>
+            {slot === 'rules' ? m.realm_appearance_rules_link() : m.realm_appearance_image_link()}
+          </FieldLabel>
+          <Input
+            ref={referenceInput}
+            id={ids + '-reference'}
+            className="min-h-11 w-full min-w-0"
+            value={selection.link}
+            maxLength={2048}
+            aria-invalid={selection.invalid || selection.unavailable}
+            aria-describedby={
+              ids +
+              '-reference-help' +
+              (selection.invalid || selection.unavailable ? ' ' + ids + '-reference-error' : '')
+            }
+            onChange={(event) =>
+              setSelection({
+                ...selection,
+                generation: ++selectionGeneration.current,
+                link: event.target.value,
+                reference: null,
+                candidate: null,
+                busy: false,
+                invalid: false,
+                unavailable: false,
+              })
+            }
+          />
+          <p id={ids + '-reference-help'} className="text-sm text-muted-foreground">
+            {slot === 'rules' ? m.realm_appearance_rules_link_help() : m.realm_appearance_image_link_help()}
           </p>
-        )}
-        <RealmRulesAuthoringPanel
-          realmId={realmId}
-          snapshot={snapshot}
-          state={state}
-          adapter={adapter}
-          control={control}
-          {...(lifetime ? { lifetime } : {})}
-          onModeChange={(active) => setRulesAuthoringActive(active)}
+          {selection.link ? (
+            <p className="break-all text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              <span className="select-text">{selection.link}</span>
+            </p>
+          ) : null}
+        </Field>
+        {selection.candidate?.kind === 'image' ? (
+          <ImagePreview
+            key={imagePreviewKey({ state: 'available', value: selection.candidate.image })}
+            image={{ state: 'available', value: selection.candidate.image }}
+            title={snapshot.title}
+            banner={slot === 'banner'}
+          />
+        ) : null}
+        {selection.candidate?.kind === 'image-reference' ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.realm_appearance_reference_pending()}
+          </p>
+        ) : null}
+        {selection.candidate?.kind === 'rules' ? (
+          <RulesPreview rules={{ state: 'available', value: selection.candidate.rules }} />
+        ) : null}
+        {selection.candidate && selection.reference ? (
+          <a
+            className="break-all text-sm text-primary underline [overflow-wrap:anywhere]"
+            href={selection.reference.href}
+          >
+            {m.realm_appearance_source_link()} <span className="select-text">{selection.reference.href}</span>
+          </a>
+        ) : null}
+        {selection.invalid || selection.unavailable ? (
+          <p id={ids + '-reference-error'} role="alert">
+            {selection.unavailable
+              ? m.realm_appearance_link_unavailable()
+              : slot === 'rules'
+                ? m.realm_appearance_invalid_rules_link()
+                : m.realm_appearance_invalid_image_link()}
+          </p>
+        ) : null}
+        <div className="flex min-w-0 flex-wrap items-start gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={appearanceButtonClass}
+            disabled={selection.busy || !selection.link.trim()}
+            onClick={() => void resolve()}
+          >
+            {m.realm_appearance_preview()}
+          </Button>
+          <Button
+            type="button"
+            className={appearanceButtonClass}
+            disabled={!selection.candidate}
+            onClick={() => {
+              if (!selection.candidate || !currentSelection(selection)) return;
+              control.choose(selection.slot, selection.candidate);
+              if (selection.slot !== 'rules' && selection.reference)
+                setUsedReferences((previous) => ({
+                  ...previous,
+                  [selection.slot]: { owner: control, callerId, reference: selection.reference! },
+                }));
+              closeSelection(selection);
+            }}
+          >
+            {m.realm_appearance_use_selection()}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className={appearanceButtonClass}
+            onClick={() => closeSelection(selection)}
+          >
+            {m.editor_cancel()}
+          </Button>
+        </div>
+      </fieldset>
+    );
+  }
+  function clearConfirmation(slot: RealmImageSlot | 'rules') {
+    if (clear !== slot) return null;
+    return (
+      <div
+        ref={clearBoundary}
+        role="group"
+        aria-label={m.realm_appearance_clear_confirm()}
+        tabIndex={-1}
+        className="min-w-0 space-y-3 rounded-xl border border-destructive p-4"
+        data-clear-target={slot}
+      >
+        <p className="[overflow-wrap:anywhere]">
+          {m.realm_appearance_clear_confirm()} ({appearanceLabel(slot)})
+        </p>
+        <p className="text-sm text-muted-foreground">{m.realm_appearance_clear_help()}</p>
+        <div className="flex min-w-0 flex-wrap items-start gap-2">
+          <Button
+            type="button"
+            variant="destructive"
+            className={appearanceButtonClass}
+            disabled={!editable}
+            onClick={() => {
+              const current = control.getSnapshot().read;
+              if (
+                clearState?.source !== incoming.current ||
+                current.kind !== 'ready' ||
+                clearState.head !== current.snapshot.head
+              )
+                return;
+              control.clear(slot);
+              if (clearState) closeClear(clearState, 'selector');
+            }}
+          >
+            {m.realm_appearance_clear()}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={appearanceButtonClass}
+            onClick={() => clearState && closeClear(clearState, 'opener')}
+          >
+            {m.editor_cancel()}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  function uploadStatus(slot: RealmImageSlot) {
+    return (
+      <>
+        {state.phase === 'uploading' && state.uploadSlot === slot ? (
+          <div role="status" className="flex min-w-0 flex-wrap items-center gap-3" data-upload-target={slot}>
+            <p>{m.realm_appearance_uploading()}</p>
+            <Button
+              type="button"
+              variant="outline"
+              className={appearanceButtonClass}
+              onClick={control.cancelUpload}
+            >
+              {m.editor_cancel()}
+            </Button>
+          </div>
+        ) : null}
+        {state.pendingUpload?.slot === slot && state.phase !== 'uploading' ? (
+          <div role="status" className="min-w-0 space-y-2" data-upload-target={slot}>
+            <p>{m.realm_appearance_upload_pending()}</p>
+            <div className="flex min-w-0 flex-wrap items-start gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className={appearanceButtonClass}
+                disabled={state.busy}
+                onClick={() => void control.upload(slot)}
+              >
+                {m.realm_appearance_retry_upload()}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className={appearanceButtonClass}
+                onClick={control.cancelUpload}
+              >
+                {m.editor_cancel()}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+  function renderImageSlot(slot: RealmImageSlot) {
+    const reference = usedReference(slot);
+    const presentationKey = slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId';
+    const isDraft = draft.presentation[presentationKey] !== snapshot.presentation[presentationKey];
+    return (
+      <div
+        key={slot}
+        role="group"
+        aria-labelledby={ids + '-' + slot + '-heading'}
+        className="min-w-0 space-y-4 rounded-xl border p-4"
+        data-appearance-slot={slot}
+      >
+        <h3 id={ids + '-' + slot + '-heading'} className="font-medium">
+          {appearanceLabel(slot)}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          {isDraft ? m.realm_appearance_preview() : m.realm_appearance_current()}
+        </p>
+        <ImagePreview
+          key={imagePreviewKey(draft[slot])}
+          image={draft[slot]}
+          title={snapshot.title}
+          banner={slot === 'banner'}
+          pending={imagePreviewPending(slot)}
         />
+        {reference ? (
+          <p className="break-words text-sm text-muted-foreground">
+            {m.realm_appearance_selection_for({ slot: appearanceLabel(slot), realm: snapshot.title })}{' '}
+            <a className="break-all text-primary underline [overflow-wrap:anywhere]" href={reference.href}>
+              {m.realm_appearance_source_link()} <span className="select-text">{reference.href}</span>
+            </a>
+          </p>
+        ) : null}
+        {snapshot.canManage ? (
+          <div className="flex min-w-0 flex-wrap items-start gap-3">
+            <Button
+              type="button"
+              ref={(element) => {
+                selectionTriggers.current[slot] = element;
+              }}
+              variant="outline"
+              className={appearanceButtonClass}
+              disabled={!selectable}
+              onClick={() => openSelection(slot)}
+            >
+              {m.realm_appearance_choose()}
+            </Button>
+            <Field className="w-full min-w-0 max-w-72">
+              <FieldLabel htmlFor={ids + '-' + slot + '-upload'} className="text-sm">
+                {m.realm_appearance_upload()}
+              </FieldLabel>
+              <Input
+                id={ids + '-' + slot + '-upload'}
+                type="file"
+                className="min-h-11 w-full min-w-0"
+                disabled={!selectable}
+                accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
+                aria-label={appearanceLabel(slot) + ': ' + m.realm_appearance_upload()}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file) void control.upload(slot, file);
+                }}
+              />
+            </Field>
+            <Button
+              type="button"
+              ref={(element) => {
+                clearTriggers.current[slot] = element;
+              }}
+              variant="ghost"
+              className={appearanceButtonClass}
+              disabled={
+                !selectable ||
+                (draft.presentation[presentationKey] === null &&
+                  state.pendingUpload?.slot !== slot &&
+                  state.uploadSlot !== slot)
+              }
+              onClick={() => setClear(slot)}
+            >
+              {m.realm_appearance_clear()}
+            </Button>
+          </div>
+        ) : null}
+        {referenceEditor(slot)}
+        {clearConfirmation(slot)}
+        {uploadStatus(slot)}
+      </div>
+    );
+  }
+  const rulesChanged =
+    draft.presentation.rules?.postId !== snapshot.presentation.rules?.postId ||
+    draft.presentation.rules?.revisionId !== snapshot.presentation.rules?.revisionId;
+  function renderRulesSlot() {
+    return (
+      <div
+        role="group"
+        aria-labelledby={ids + '-rules-heading'}
+        className="min-w-0 space-y-4 rounded-xl border p-4 sm:col-span-2"
+        data-appearance-slot="rules"
+      >
+        <h3 id={ids + '-rules-heading'} className="font-medium">
+          {appearanceLabel('rules')}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          {rulesChanged ? m.realm_appearance_preview() : m.realm_appearance_current()}
+        </p>
+        <RulesPreview rules={draft.rules} />
         {snapshot.canManage ? (
           <>
             <p className="text-sm text-muted-foreground">{m.realm_appearance_rules_help()}</p>
-            <div className="flex gap-2">
+            <div className="flex min-w-0 flex-wrap items-start gap-2">
               <Button
+                type="button"
                 ref={(element) => {
                   selectionTriggers.current.rules = element;
                 }}
                 variant="outline"
+                className={appearanceButtonClass}
                 disabled={!selectable}
                 onClick={() => openSelection('rules')}
               >
                 {m.realm_appearance_select_rules()}
               </Button>
               <Button
+                type="button"
                 ref={(element) => {
                   clearTriggers.current.rules = element;
                 }}
                 variant="ghost"
+                className={appearanceButtonClass}
                 disabled={!selectable || draft.presentation.rules === null}
                 onClick={() => setClear('rules')}
               >
                 {m.realm_appearance_clear()}
               </Button>
             </div>
+            {referenceEditor('rules')}
+            {clearConfirmation('rules')}
           </>
         ) : null}
+        <div className="min-w-0" data-rules-authoring-owner>
+          <RealmRulesAuthoringPanel
+            realmId={realmId}
+            snapshot={snapshot}
+            state={state}
+            adapter={adapter}
+            control={control}
+            {...(lifetime ? { lifetime } : {})}
+            onModeChange={(active) => setRulesAuthoringActive(active)}
+          />
+        </div>
       </div>
-      {selection ? (
-        <fieldset className="space-y-4 rounded-xl border p-4" aria-busy={selection.busy}>
-          <legend className="px-2 font-medium">{label(selection.slot)}</legend>
-          <p className="text-sm text-muted-foreground">
-            {m.realm_appearance_selection_for({ slot: label(selection.slot), realm: snapshot.title })}
-          </p>
-          <Field>
-            <FieldLabel htmlFor={`${ids}-reference`}>
-              {selection.slot === 'rules' ? m.realm_appearance_rules_link() : m.realm_appearance_image_link()}
-            </FieldLabel>
-            <Input
-              ref={referenceInput}
-              id={`${ids}-reference`}
-              value={selection.link}
-              maxLength={2048}
-              aria-invalid={selection.invalid || selection.unavailable}
-              aria-describedby={`${ids}-reference-help${selection.invalid || selection.unavailable ? ` ${ids}-reference-error` : ''}`}
-              onChange={(event) =>
-                setSelection({
-                  ...selection,
-                  generation: ++selectionGeneration.current,
-                  link: event.target.value,
-                  reference: null,
-                  candidate: null,
-                  busy: false,
-                  invalid: false,
-                  unavailable: false,
-                })
-              }
-            />
-            <p id={`${ids}-reference-help`} className="text-sm text-muted-foreground">
-              {selection.slot === 'rules' ? m.realm_appearance_rules_link_help() : m.realm_appearance_image_link_help()}
-            </p>
-          </Field>
-          {selection.candidate?.kind === 'image' ? (
-            <ImagePreview
-              key={imagePreviewKey({ state: 'available', value: selection.candidate.image })}
-              image={{ state: 'available', value: selection.candidate.image }}
-              title={snapshot.title}
-              banner={selection.slot === 'banner'}
-            />
-          ) : null}
-          {selection.candidate?.kind === 'image-reference' ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.realm_appearance_reference_pending()}
-            </p>
-          ) : null}
-          {selection.candidate?.kind === 'rules' ? (
-            <div>
-              <p className="font-medium">{selection.candidate.rules.title}</p>
-              <p className="whitespace-pre-wrap text-sm">{selection.candidate.rules.summary}</p>
-              <a
-                className="text-sm text-primary underline"
-                href={rulesHref(selection.candidate.rules.postId, selection.candidate.rules.revisionId)}
-              >
-                {m.realm_appearance_open_revision()}
-              </a>
-            </div>
-          ) : null}
-          {selection.candidate && selection.reference ? (
-            <a className="text-sm text-primary underline" href={selection.reference.href}>
-              {m.realm_appearance_source_link()}
-            </a>
-          ) : null}
-          {selection.invalid || selection.unavailable ? (
-            <p id={`${ids}-reference-error`} role="alert">
-              {selection.unavailable
-                ? m.realm_appearance_link_unavailable()
-                : selection.slot === 'rules'
-                  ? m.realm_appearance_invalid_rules_link()
-                  : m.realm_appearance_invalid_image_link()}
-            </p>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
+    );
+  }
+  const hasDraftWork = realmAppearanceHasUnsavedChanges(state, departureBaseline);
+  return withDeparture(
+    <section
+      aria-labelledby={ids + '-heading'}
+      className="space-y-6 rounded-2xl border p-4 sm:p-6"
+      data-appearance-workspace
+    >
+      {heading}
+      <p className="text-sm text-muted-foreground">
+        {snapshot.canManage ? m.realm_appearance_intro() : m.realm_appearance_readonly()}
+      </p>
+      <div className="grid min-w-0 items-start gap-4 sm:grid-cols-2 lg:gap-6">
+        {renderImageSlot('avatar')}
+        {renderImageSlot('banner')}
+        {renderRulesSlot()}
+      </div>
+      <section
+        aria-labelledby={ids + '-save-heading'}
+        className={
+          'min-w-0 space-y-4 rounded-xl border p-4 sm:p-5 ' +
+          (hasDraftWork ? 'border-primary/50 bg-primary/5' : 'bg-muted/20')
+        }
+        data-appearance-save
+        data-dirty={hasDraftWork}
+      >
+        <h3 id={ids + '-save-heading'} className="font-medium">
+          {m.realm_appearance_save()}
+        </h3>
+        {state.phase === 'uncertain' ? (
+          <div role="alert" className="min-w-0 space-y-2">
+            <p>{m.realm_appearance_uncertain()}</p>
             <Button
-              variant="outline"
-              disabled={selection.busy || !selection.link.trim()}
-              onClick={() => void resolve()}
+              type="button"
+              className={appearanceButtonClass}
+              disabled={state.busy}
+              onClick={() => void control.save()}
             >
-              {m.realm_appearance_preview()}
-            </Button>
-            <Button
-              disabled={!selection.candidate}
-              onClick={() => {
-                if (!selection.candidate || !currentSelection(selection)) return;
-                control.choose(selection.slot, selection.candidate);
-                if (selection.slot !== 'rules' && selection.reference)
-                  setUsedReferences((previous) => ({
-                    ...previous,
-                    [selection.slot]: { owner: control, callerId, reference: selection.reference! },
-                  }));
-                closeSelection(selection);
-              }}
-            >
-              {m.realm_appearance_use_selection()}
-            </Button>
-            <Button variant="ghost" onClick={() => closeSelection(selection)}>
-              {m.editor_cancel()}
+              {m.realm_appearance_retry()}
             </Button>
           </div>
-        </fieldset>
-      ) : null}
-      {clear ? (
-        <div
-          ref={clearBoundary}
-          role="group"
-          aria-label={m.realm_appearance_clear_confirm()}
-          tabIndex={-1}
-          className="space-y-3 rounded-xl border border-destructive p-4"
-        >
-          <p>
-            {m.realm_appearance_clear_confirm()} ({label(clear)})
-          </p>
-          <p className="text-sm text-muted-foreground">{m.realm_appearance_clear_help()}</p>
-          <div className="flex gap-2">
-            <Button
-              variant="destructive"
-              disabled={!editable}
-              onClick={() => {
-                const current = control.getSnapshot().read;
-                if (
-                  clearState?.source !== incoming.current ||
-                  current.kind !== 'ready' ||
-                  clearState.head !== current.snapshot.head
-                )
-                  return;
-                control.clear(clear);
-                if (clearState) closeClear(clearState, 'selector');
-              }}
-            >
-              {m.realm_appearance_clear()}
-            </Button>
-            <Button variant="outline" onClick={() => clearState && closeClear(clearState, 'opener')}>
-              {m.editor_cancel()}
-            </Button>
-          </div>
-        </div>
-      ) : null}
-      {state.phase === 'uploading' ? (
-        <div role="status" className="flex flex-wrap items-center gap-3">
-          <p>{m.realm_appearance_uploading()}</p>
-          <Button variant="outline" onClick={control.cancelUpload}>
-            {m.editor_cancel()}
-          </Button>
-        </div>
-      ) : null}
-      {state.pendingUpload && state.phase !== 'uploading' ? (
-        <div role="status" className="space-y-2">
-          <p>{m.realm_appearance_upload_pending()}</p>
-          <Button
-            variant="outline"
-            disabled={state.busy}
-            onClick={() => void control.upload(state.pendingUpload!.slot)}
+        ) : null}
+        {state.phase === 'conflict' ? (
+          <section
+            role="alert"
+            aria-labelledby={ids + '-conflict-heading'}
+            className="min-w-0 space-y-3 rounded-xl border border-destructive p-4"
+            data-conflict-review
           >
-            {m.realm_appearance_retry_upload()}
-          </Button>
-          <Button variant="ghost" onClick={control.cancelUpload}>
-            {m.editor_cancel()}
-          </Button>
-        </div>
-      ) : null}
-      {state.phase === 'uncertain' ? (
-        <div role="alert" className="space-y-2">
-          <p>{m.realm_appearance_uncertain()}</p>
-          <Button disabled={state.busy} onClick={() => void control.save()}>
-            {m.realm_appearance_retry()}
-          </Button>
-        </div>
-      ) : null}
-      {state.phase === 'conflict' ? (
-        <div role="alert" className="space-y-2">
-          <p>{m.realm_appearance_conflict()}</p>
-          <Button variant="outline" disabled={state.busy} onClick={() => void control.refresh()}>
-            {m.realm_appearance_refresh()}
-          </Button>
-          {state.reviewed ? (
-            <>
-              <details className="space-y-3">
-                <summary>{m.realm_appearance_current()}</summary>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <ImagePreview key={imagePreviewKey(snapshot.avatar)} image={snapshot.avatar} title={snapshot.title} />
-                  <ImagePreview
-                    key={imagePreviewKey(snapshot.banner)}
-                    image={snapshot.banner}
-                    title={snapshot.title}
-                    banner
-                  />
+            <h4 id={ids + '-conflict-heading'} className="font-medium">
+              {m.realm_appearance_conflict()}
+            </h4>
+            <Button
+              type="button"
+              variant="outline"
+              className={appearanceButtonClass}
+              disabled={state.busy}
+              onClick={() => void control.refresh()}
+            >
+              {m.realm_appearance_refresh()}
+            </Button>
+            {state.reviewed ? (
+              <>
+                <div className="grid min-w-0 gap-4 md:grid-cols-2">
+                  <section
+                    aria-labelledby={ids + '-conflict-current'}
+                    className="min-w-0 space-y-3 rounded-lg border p-3"
+                    data-conflict-current
+                  >
+                    <h5 id={ids + '-conflict-current'} className="font-medium">
+                      {m.realm_appearance_current()}
+                    </h5>
+                    <ImagePreview
+                      key={imagePreviewKey(snapshot.avatar)}
+                      image={snapshot.avatar}
+                      title={snapshot.title}
+                    />
+                    <ImagePreview
+                      key={imagePreviewKey(snapshot.banner)}
+                      image={snapshot.banner}
+                      title={snapshot.title}
+                      banner
+                    />
+                    <RulesPreview rules={snapshot.rules} />
+                  </section>
+                  <section
+                    aria-labelledby={ids + '-conflict-draft'}
+                    className="min-w-0 space-y-3 rounded-lg border p-3"
+                    data-conflict-draft
+                  >
+                    <h5 id={ids + '-conflict-draft'} className="font-medium">
+                      {m.realm_appearance_preview()}
+                    </h5>
+                    <ImagePreview
+                      key={imagePreviewKey(draft.avatar)}
+                      image={draft.avatar}
+                      title={snapshot.title}
+                      pending={imagePreviewPending('avatar')}
+                    />
+                    <ImagePreview
+                      key={imagePreviewKey(draft.banner)}
+                      image={draft.banner}
+                      title={snapshot.title}
+                      banner
+                      pending={imagePreviewPending('banner')}
+                    />
+                    <RulesPreview rules={draft.rules} />
+                  </section>
                 </div>
-                <p>
-                  {snapshot.rules.state === 'available'
-                    ? snapshot.rules.value.title
-                    : snapshot.rules.state === 'none'
-                      ? m.realm_appearance_no_rules()
-                      : m.realm_appearance_rules_unavailable()}
-                </p>
-              </details>
-              <Button variant="outline" onClick={() => control.reviewConflict()}>
-                {m.realm_appearance_review()}
-              </Button>
-            </>
-          ) : null}
-        </div>
-      ) : null}
-      {state.notice !== 'none' ? <p role="alert">{m.realm_appearance_selection_unavailable()}</p> : null}
-      {state.phase === 'saved' ? <p role="status">{m.realm_appearance_saved()}</p> : null}
-      {snapshot.canManage ? (
-        <Button disabled={!editable || Boolean(clear)} onClick={() => void control.save()}>
-          {state.phase === 'saving' ? m.realm_appearance_saving() : m.realm_appearance_save()}
-        </Button>
-      ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={appearanceButtonClass}
+                  onClick={() => control.reviewConflict()}
+                >
+                  {m.realm_appearance_review()}
+                </Button>
+              </>
+            ) : null}
+          </section>
+        ) : null}
+        {state.notice !== 'none' ? <p role="alert">{m.realm_appearance_selection_unavailable()}</p> : null}
+        {state.phase === 'saved' ? <p role="status">{m.realm_appearance_saved()}</p> : null}
+        {snapshot.canManage ? (
+          <Button
+            type="button"
+            className={appearanceButtonClass}
+            disabled={!editable || Boolean(clear)}
+            onClick={() => void control.save()}
+          >
+            {state.phase === 'saving' ? m.realm_appearance_saving() : m.realm_appearance_save()}
+          </Button>
+        ) : null}
+      </section>
     </section>,
   );
 }

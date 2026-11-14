@@ -25,7 +25,7 @@ export function GameFact(props: FactProps & { date: boolean; compact?: boolean }
   return (
     <div className="space-y-2">
       {date ? (
-        <p data-date-kind={date.kind}>
+        <p data-date-kind={date.kind} className="min-w-0 break-words">
           {date.structuredDate ? (
             <time dateTime={date.structuredDate} title={date.text}>
               {gameDateLabel(date, locale)}
@@ -58,13 +58,15 @@ export function GameEvidence({
   const value = (snak: GameStatement | GameStatement['qualifiers'][number]) =>
     reading.renderValue({ snak, related, locale, link: Link });
   const qualifiers = statement.qualifiers.length ? (
-    <dl className="space-y-2 text-sm">
+    <dl className="min-w-0 space-y-2 text-sm">
       {statement.qualifiers.map((part, index) => (
-        <div key={index}>
-          <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
-            {page.labels[part.property.id]?.text || <code className="font-mono text-xs">{part.property.id}</code>}
+        <div key={index} className="min-w-0">
+          <dt className="break-words font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
+            {page.labels[part.property.id]?.text || (
+              <code className="break-all font-mono text-xs">{part.property.id}</code>
+            )}
           </dt>
-          <dd>{value(part)}</dd>
+          <dd className="min-w-0 break-words">{value(part)}</dd>
         </div>
       ))}
     </dl>
@@ -72,33 +74,44 @@ export function GameEvidence({
   return (
     <div className="space-y-2">
       {historicalStatement(statement, page.digest) ? (
-        <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+        <p className="border-l-2 border-muted-foreground/50 pl-2 text-sm text-muted-foreground">
+          {m.release_fidelity_historical({}, o)}
+        </p>
       ) : null}
-      <details data-slot="game-fact-evidence" className="min-w-0 text-sm">
-        <summary className={`${action} cursor-pointer text-primary`}>{m.game_reader_evidence({}, o)}</summary>
-        <div className="min-w-0 space-y-3 pt-2">
+      <details
+        data-slot="game-fact-evidence"
+        className="min-w-0 overflow-hidden rounded-md border border-border text-sm"
+      >
+        <summary className={`${action} cursor-pointer px-2 py-1 text-primary`}>
+          {m.game_reader_evidence({}, o)}
+        </summary>
+        <div className="min-w-0 space-y-3 border-t border-border bg-muted/20 p-3">
           {qualifiers}
           {statement.property.data_type === 'time' ? (
-            <dl>
+            <dl className="min-w-0 rounded-md bg-muted/30 p-3">
               <dt className="font-medium">{m.game_reader_native_value({}, o)}</dt>
-              <dd className="break-words font-mono text-xs">{JSON.stringify(statement.value)}</dd>
+              <dd className="break-all font-mono text-xs">{JSON.stringify(statement.value)}</dd>
             </dl>
           ) : null}
           {statement.references.map((reference, index) => (
-            <dl key={index} data-reference={reference.hash} className="space-y-1">
+            <dl
+              key={index}
+              data-reference={reference.hash}
+              className="min-w-0 space-y-2 rounded-md border border-border bg-muted/30 p-3"
+            >
               {reference.parts.map((part, n) => (
-                <div key={n}>
-                  <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
+                <div key={n} className="min-w-0">
+                  <dt className="break-words font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
                     {page.labels[part.property.id]?.text || (
-                      <code className="font-mono text-xs">{part.property.id}</code>
+                      <code className="break-all font-mono text-xs">{part.property.id}</code>
                     )}
                   </dt>
-                  <dd>{value(part)}</dd>
+                  <dd className="min-w-0 break-words">{value(part)}</dd>
                 </div>
               ))}
             </dl>
           ))}
-          <p className="break-words text-xs text-muted-foreground">
+          <p className="break-all rounded-md bg-muted/30 p-2 font-mono text-xs text-muted-foreground">
             {statement.id} · {statement.rank} · {statement.rezics.release}
           </p>
         </div>

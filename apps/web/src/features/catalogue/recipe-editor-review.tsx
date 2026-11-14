@@ -14,7 +14,7 @@ import { StatementSummary } from './statement-summary';
 type ReviewStatement = Omit<StatementInput, 'rank'> & { rank?: StatementInput['rank'] | 'deprecated' };
 
 const wrap =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'relative z-10 inline-flex h-auto min-h-11 min-w-11 max-w-full items-center whitespace-normal break-words py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 type RecipeReviewRow = {
   id: string;
@@ -70,19 +70,19 @@ function RecipeAuthoredPreview({ statement, locale }: { statement: ReviewStateme
   const document = authored?.document;
   if (!authored) return <p className="text-sm text-muted-foreground">{m.correction_error_required({}, o)}</p>;
   return (
-    <div className="min-w-0 space-y-2">
-      <dl className="min-w-0 space-y-2 text-sm">
-        <div>
+    <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
+      <dl className="min-w-0 space-y-3 text-sm">
+        <div className="min-w-0 space-y-1">
           <dt className="text-muted-foreground">{m.catalogue_create_language({}, o)}</dt>
-          <dd>
+          <dd className="min-w-0">
             {typeof authored.language === 'string' && authored.language
               ? authored.language
               : m.correction_error_required({}, o)}
           </dd>
         </div>
-        <div>
+        <div className="min-w-0 space-y-1">
           <dt className="text-muted-foreground">{m.subject_source_licence({}, o)}</dt>
-          <dd>
+          <dd className="min-w-0">
             {typeof authored.licence === 'string' && authored.licence
               ? authored.licence
               : m.correction_error_required({}, o)}
@@ -114,16 +114,27 @@ function RecipeAssertionPreview({
   original?: boolean | undefined;
 }) {
   const o = { locale: locale as never };
-  if (definition.datatype !== 'document') return <StatementSummary statement={statement} read={read} locale={locale} />;
+  if (definition.datatype !== 'document')
+    return (
+      <div className="min-w-0 [overflow-wrap:anywhere]">
+        <StatementSummary statement={statement} read={read} locale={locale} />
+      </div>
+    );
   const label = pickText(definition.labels, locale);
   return (
-    <div className="min-w-0 space-y-3 text-sm">
-      <p lang={label.lang ?? undefined} className="text-muted-foreground">
-        {label.text || statement.property.id}
-      </p>
-      <code className="break-all">{statement.property.id}</code>
+    <div className="min-w-0 space-y-4 text-sm [overflow-wrap:anywhere]">
+      <div className="min-w-0 space-y-1 rounded-lg border border-border bg-background/70 p-3">
+        <p lang={label.lang ?? undefined} className="font-medium">
+          {label.text || statement.property.id}
+        </p>
+        <code className="break-all text-xs text-muted-foreground">{statement.property.id}</code>
+      </div>
       <RecipeAuthoredPreview statement={statement} locale={locale} />
-      {original !== undefined && <p>{original ? m.recipe_original({}, o) : m.correction_error_required({}, o)}</p>}
+      {original !== undefined && (
+        <p className="min-w-0 rounded-lg border border-border bg-background/70 p-3 font-medium">
+          {original ? m.recipe_original({}, o) : m.correction_error_required({}, o)}
+        </p>
+      )}
       {(statement.qualifiers ?? []).length > 0 && (
         <div className="min-w-0 space-y-2">
           <p className="font-medium">{m.correction_qualifiers({}, o)}</p>
@@ -141,17 +152,22 @@ function RecipeAssertionPreview({
           </ol>
         </div>
       )}
-      <ol className="min-w-0 space-y-3">
-        {statement.references.map((group, index) => (
-          <li key={index} className="min-w-0 space-y-1 border-s-2 border-border ps-3">
-            <p className="text-muted-foreground">
-              {m.correction_references({}, o)} {index + 1}
-            </p>
-            <RecipeReferenceGroup group={group} read={read} locale={locale} />
-          </li>
-        ))}
-      </ol>
-      <p>
+      {statement.references.length > 0 && (
+        <div className="min-w-0 space-y-2">
+          <p className="font-medium">{m.correction_references({}, o)}</p>
+          <ol className="min-w-0 space-y-3">
+            {statement.references.map((group, index) => (
+              <li key={index} className="min-w-0 space-y-1 border-s-2 border-border ps-3">
+                <p className="text-muted-foreground">
+                  {m.correction_references({}, o)} {index + 1}
+                </p>
+                <RecipeReferenceGroup group={group} read={read} locale={locale} />
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+      <p className="rounded-lg bg-muted/50 p-3">
         {statement.rank === 'preferred'
           ? m.candidate_rank_preferred({}, o)
           : statement.rank === 'deprecated'
@@ -179,67 +195,80 @@ export function RecipeCreateReview({
 }) {
   const o = { locale: locale as never };
   return (
-    <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]" aria-label={m.recipe_review_title({}, o)}>
+    <section className="min-w-0 space-y-5 [overflow-wrap:anywhere]" aria-label={m.recipe_review_title({}, o)}>
       <ContentItemHeading level={2} className="text-lg font-semibold">
         {m.recipe_review_title({}, o)}
       </ContentItemHeading>
-      <p className="text-sm text-muted-foreground">{m.recipe_review_intro({}, o)}</p>
+      <p className="max-w-prose text-sm text-muted-foreground">{m.recipe_review_intro({}, o)}</p>
       {stale && (
         <p role="status" className="text-sm">
           {m.recipe_review_stale({}, o)}
         </p>
       )}
-      <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4">
+      <ContentItemFrame as="div" className="min-w-0 space-y-4 rounded-xl border border-border bg-muted/30 p-4 sm:p-5">
         <ContentItemHeading level={3} className="text-base font-semibold">
           {m.catalogue_create_terms({}, o)}
         </ContentItemHeading>
-        <dl className="min-w-0 space-y-3 text-sm">
+        <div className="min-w-0 space-y-4 text-sm">
           {terms.map((term, index) => (
-            <div key={term.id} className="min-w-0 space-y-1">
-              <dt className="font-medium">
-                {m.catalogue_create_terms({}, o)} {index + 1} · {term.language}
-              </dt>
-              <dd lang={term.language || undefined} className="min-w-0 space-y-1">
-                <p>
-                  {m.catalogue_create_label({}, o)}: {term.label}
-                </p>
-                <p>
-                  {m.catalogue_create_description({}, o)}: {term.description}
-                </p>
-                <p>
-                  {m.catalogue_create_aliases({}, o)}: {term.aliases}
-                </p>
-                <Button type="button" variant="outline" className={wrap} onClick={() => onJump(`term-${term.id}`)}>
-                  {m.facts_review_open_field({}, o)}
-                </Button>
-              </dd>
+            <div key={term.id} className="min-w-0 space-y-3 border-b border-border pb-4 last:border-b-0 last:pb-0">
+              <h4 className="font-medium">
+                {m.catalogue_create_terms({}, o)} {index + 1}
+              </h4>
+              <dl lang={term.language || undefined} className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-2">
+                <div className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{m.catalogue_create_language({}, o)}</dt>
+                  <dd className="min-w-0">{term.language}</dd>
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{m.catalogue_create_label({}, o)}</dt>
+                  <dd className="min-w-0">{term.label}</dd>
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{m.catalogue_create_description({}, o)}</dt>
+                  <dd className="min-w-0">{term.description}</dd>
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{m.catalogue_create_aliases({}, o)}</dt>
+                  <dd className="min-w-0 whitespace-pre-wrap">{term.aliases}</dd>
+                </div>
+              </dl>
+              <Button type="button" variant="outline" className={wrap} onClick={() => onJump(`term-${term.id}`)}>
+                {m.facts_review_open_field({}, o)}
+              </Button>
             </div>
           ))}
-        </dl>
+        </div>
       </ContentItemFrame>
-      {rows.map((row) => {
-        const label = pickText(row.definition.labels, locale);
-        return (
-          <ContentItemFrame key={row.id} as="div" className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4">
-            <ContentItemHeading level={3} className="text-base font-semibold" lang={label.lang ?? undefined}>
-              {label.text || row.statement.property.id}
-            </ContentItemHeading>
-            <p className="text-sm text-muted-foreground">
-              <DefinitionMeaning values={row.definition.descriptions} locale={locale} />
-            </p>
-            <RecipeAssertionPreview
-              statement={row.statement}
-              definition={row.definition}
-              read={read}
-              locale={locale}
-              original={row.original}
-            />
-            <Button type="button" variant="outline" className={wrap} onClick={() => onJump(row.id)}>
-              {m.facts_review_open_field({}, o)}
-            </Button>
-          </ContentItemFrame>
-        );
-      })}
+      <div className="min-w-0 space-y-4">
+        {rows.map((row) => {
+          const label = pickText(row.definition.labels, locale);
+          return (
+            <ContentItemFrame
+              key={row.id}
+              as="div"
+              className="min-w-0 space-y-3 rounded-xl border border-border bg-muted/30 p-4 sm:p-5"
+            >
+              <ContentItemHeading level={3} className="text-base font-semibold" lang={label.lang ?? undefined}>
+                {label.text || row.statement.property.id}
+              </ContentItemHeading>
+              <p className="max-w-prose text-sm text-muted-foreground">
+                <DefinitionMeaning values={row.definition.descriptions} locale={locale} />
+              </p>
+              <RecipeAssertionPreview
+                statement={row.statement}
+                definition={row.definition}
+                read={read}
+                locale={locale}
+                original={row.original}
+              />
+              <Button type="button" variant="outline" className={wrap} onClick={() => onJump(row.id)}>
+                {m.facts_review_open_field({}, o)}
+              </Button>
+            </ContentItemFrame>
+          );
+        })}
+      </div>
     </section>
   );
 }
@@ -272,17 +301,17 @@ export function RecipeCorrectionReview({
       <ContentItemHeading level={3} className="text-base font-semibold" lang={label.lang ?? undefined}>
         {label.text || row.statement.property.id}
       </ContentItemHeading>
-      <p className="text-sm text-muted-foreground">
+      <p className="max-w-prose text-sm text-muted-foreground">
         <DefinitionMeaning values={row.definition.descriptions} locale={locale} />
       </p>
-      <p className="text-sm text-muted-foreground">{m.recipe_review_intro({}, o)}</p>
+      <p className="max-w-prose text-sm text-muted-foreground">{m.recipe_review_intro({}, o)}</p>
       {stale && (
         <p role="status" className="text-sm">
           {m.recipe_review_stale({}, o)}
         </p>
       )}
-      <div className="grid min-w-0 gap-4 md:grid-cols-2">
-        <ContentItemFrame as="div" className="min-w-0 space-y-2 rounded-xl bg-muted/30 p-4">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl border border-border bg-muted/30 p-4 sm:p-5">
           <h4 className="text-sm font-semibold text-muted-foreground">{m.recipe_review_current({}, o)}</h4>
           {current ? (
             <RecipeAssertionPreview statement={current} definition={row.definition} read={read} locale={locale} />
@@ -290,7 +319,7 @@ export function RecipeCorrectionReview({
             <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>
           )}
         </ContentItemFrame>
-        <ContentItemFrame as="div" className="min-w-0 space-y-2 rounded-xl bg-card p-4">
+        <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl border border-primary/30 bg-card p-4 sm:p-5">
           <h4 className="text-sm font-semibold">{m.recipe_review_statement({}, o)}</h4>
           <RecipeAssertionPreview
             statement={row.statement}
@@ -307,7 +336,7 @@ export function RecipeCorrectionReview({
             <p className="font-medium">
               {m.correction_references({}, o)} {index + 1} · {changeLabel[group.change]}
             </p>
-            <div className="grid min-w-0 gap-3 md:grid-cols-2">
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
               {group.current && (
                 <div className="min-w-0 space-y-2">
                   <p className="font-medium text-muted-foreground">{m.recipe_review_current({}, o)}</p>

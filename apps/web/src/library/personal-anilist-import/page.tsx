@@ -5,7 +5,6 @@ import { useOperation } from '../../kernel/exposure';
 import { getLocale } from '../../paraglide/runtime.js';
 import { AniListLabelAdoption } from './labels';
 import { m } from '../../paraglide/messages.js';
-import { PageHeading } from '../../shell/page-heading';
 import { createAniListJourney, type AniListJourney, type AniListJourneySnapshot } from './controller';
 import { AniListConfirmPage } from './confirm';
 import { AniListAction } from './controls';
@@ -15,10 +14,11 @@ import { useAniListImportPort } from './port';
 import { AniListResultPage } from './results';
 import { AniListReviewPage } from './review';
 import type { RowDraft } from './row';
-import { ImportDetails, ImportJourney, ImportReturn } from '../personal-list-import/presentation';
+import { ImportDetails, ImportReturn } from '../personal-list-import/presentation';
 import { AniListApplying, AniListCancelledNotice, AniListRemovedNotice, AniListSignedOut } from './states';
 import { AniListUploadForm } from './upload';
 import { useAniListVisit, type AniListVisit } from './visit';
+import { AniListWorkspace } from './anilist-workspace';
 
 function noticeText(notice: AniListJourneySnapshot['notice']): string | null {
   if (!notice) return null;
@@ -84,12 +84,131 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
     if (snap.stage !== 'cleanup') stageFocus.current?.focus({ preventScroll: true });
   }, [snap.stage]);
   const locked = snap.busy || snap.notice?.kind === 'unknown' || snap.cleanupPending;
+  const reviewedRows = snap.meta.filter((row) => row.reviewId);
+  const reviewedCount = reviewedRows.length;
+  const canRetry = snap.outcomes.some((item) => item.status === 'failed');
+
+  const primaryAction =
+    snap.stage === 'review' ? (
+      <AniListAction
+        type="button"
+        disabled={locked || snap.cancelled || reviewedCount === 0}
+        onClick={() => void act((current) => current.openConfirm())}
+      >
+        {m.library_anilist_continue_confirm()}
+      </AniListAction>
+    ) : snap.stage === 'confirm' ? (
+      <AniListAction
+        type="button"
+        disabled={locked || reviewedRows.length === 0 || !snap.confirmPrivacy || !snap.confirmTimestamps}
+        onClick={() => void act((current) => current.confirm())}
+        aria-busy={locked}
+      >
+        {snap.busy ? m.library_anilist_confirming() : m.library_anilist_confirm()}
+      </AniListAction>
+    ) : snap.stage === 'results' ? (
+      canRetry ? (
+        <AniListAction type="button" disabled={locked} onClick={() => void act((current) => current.retryFailed())}>
+          {m.library_anilist_retry_command()}
+        </AniListAction>
+      ) : (
+        <AniListAction type="button" disabled={locked} onClick={() => void act((current) => current.backToReview())}>
+          {m.library_anilist_return_review()}
+        </AniListAction>
+      )
+    ) : null;
+
+  const secondaryActions = (
+    <>
+      {snap.stage === 'confirm' ? (
+        <AniListAction
+          type="button"
+          variant="outline"
+          disabled={locked}
+          onClick={() => void act((current) => current.backToReview())}
+        >
+          {m.library_anilist_return_review()}
+        </AniListAction>
+      ) : null}
+      {snap.stage === 'results' ? (
+        <>
+          {canRetry ? (
+            <AniListAction
+              type="button"
+              variant="outline"
+              disabled={locked}
+              onClick={() => void act((current) => current.backToReview())}
+            >
+              {m.library_anilist_return_review()}
+            </AniListAction>
+          ) : null}
+          <AniListAction
+            type="button"
+            variant="outline"
+            disabled={locked}
+            onClick={() => void act((current) => current.refresh())}
+          >
+            {m.library_anilist_fresh_read()}
+          </AniListAction>
+          <a href={`/${getLocale()}/library`} className="inline-flex min-h-11 items-center px-3 py-2 underline">
+            {m.library_anilist_return_library()}
+          </a>
+        </>
+      ) : null}
+      {snap.importId && !snap.cleanupPending && snap.stage !== 'upload' && snap.stage !== 'removed' ? (
+        <>
+          {snap.stage !== 'applying' ? (
+            <AniListAction
+              type="button"
+              variant="outline"
+              disabled={locked}
+              onClick={() => void act((current) => current.replaceSource())}
+            >
+              {m.library_import_replace()}
+            </AniListAction>
+          ) : null}
+          {snap.stage === 'applying' || snap.stage === 'review' || snap.stage === 'confirm' ? (
+            <AniListAction
+              type="button"
+              variant="outline"
+              disabled={locked && snap.stage !== 'applying'}
+              onClick={() => void act((current) => current.cancelAdmission())}
+            >
+              {snap.busy ? m.library_anilist_cancelling() : m.library_anilist_cancel()}
+            </AniListAction>
+          ) : null}
+          <AniListAction
+            type="button"
+            variant="outline"
+            disabled={locked}
+            onClick={() => void act((current) => current.discard())}
+          >
+            {m.library_anilist_discard()}
+          </AniListAction>
+        </>
+      ) : null}
+      {snap.importId && snap.stage === 'upload' ? (
+        <AniListAction
+          type="button"
+          variant="outline"
+          disabled={locked}
+          onClick={() => void act((current) => current.discard())}
+        >
+          {m.library_anilist_discard()}
+        </AniListAction>
+      ) : null}
+      {snap.stage !== 'results' && snap.stage !== 'cancelled' && snap.stage !== 'removed' ? <ImportReturn /> : null}
+    </>
+  );
+
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
-      <PageHeading>{m.library_anilist_title()}</PageHeading>
-      <div ref={stageFocus} tabIndex={-1}>
-        <ImportJourney stage={snap.stage} />
-      </div>
+    <AniListWorkspace
+      stage={snap.stage}
+      focusRef={stageFocus}
+      completeness={snap.completeness}
+      primaryAction={primaryAction}
+      secondaryActions={snap.stage === 'removed' || (snap.stage === 'cancelled' && !snap.importId) ? null : secondaryActions}
+    >
       {noticeText(snap.notice) ? (
         <p role="status" aria-live="polite">
           {noticeText(snap.notice)}
@@ -113,17 +232,19 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
         />
       ) : null}
       {snap.stage === 'upload' || snap.stage === 'cleanup' ? (
-        <AniListUploadForm
-          busy={snap.cleanupPending ? false : snap.busy}
-          disabled={!snap.cleanupPending && locked}
-          onEdit={() => void act((current) => current.editReplacement())}
-          onUpload={(upload, scoreFormat) => void act((current) => current.preview(upload, scoreFormat))}
-          onReopen={
-            snap.cleanupPending || snap.importId
-              ? undefined
-              : (importId) => void act((current) => current.loadPage(importId, -1))
-          }
-        />
+        <section className="min-w-0 rounded-xl border bg-card p-4 sm:p-6" data-anilist-upload-stage>
+          <AniListUploadForm
+            busy={snap.cleanupPending ? false : snap.busy}
+            disabled={!snap.cleanupPending && locked}
+            onEdit={() => void act((current) => current.editReplacement())}
+            onUpload={(upload, scoreFormat) => void act((current) => current.preview(upload, scoreFormat))}
+            onReopen={
+              snap.cleanupPending || snap.importId
+                ? undefined
+                : (importId) => void act((current) => current.loadPage(importId, -1))
+            }
+          />
+        </section>
       ) : null}
       {snap.importId && snap.stage !== 'upload' && !snap.cleanupPending ? (
         <ImportDetails title={m.library_import_retained()}>
@@ -155,7 +276,6 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
             onNext={() => void act((current) => current.nextPage())}
             onPrevious={() => void act((current) => current.previousPage())}
             onFirst={() => void act((current) => current.firstPage())}
-            onConfirm={() => act((current) => current.openConfirm())}
             renderLabels={(row, meta) =>
               row.labelEvidence && meta?.labels ? (
                 <AniListLabelAdoption
@@ -183,8 +303,6 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           busy={locked}
           confirmPrivacy={snap.confirmPrivacy}
           confirmTimestamps={snap.confirmTimestamps}
-          onBack={() => act((current) => current.backToReview())}
-          onConfirm={() => void act((current) => current.confirm())}
           onConfirmSource={(choice) => act((current) => current.confirmSource(choice))}
           onVoteConsent={(ordinal, consent) => act((current) => current.confirmVoteEffect(ordinal, consent))}
         />
@@ -195,65 +313,17 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           outcomes={snap.outcomes}
           remaining={snap.remaining}
           meta={snap.meta}
-          page={snap.page}
-          busy={locked}
           cancelled={snap.cancelled}
-          canRetry={snap.outcomes.some((item) => item.status === 'failed')}
-          onRetry={() => void act((current) => current.retryFailed())}
-          onReview={() => act((current) => current.backToReview())}
-          onRefresh={() => void act((current) => current.refresh())}
+          page={snap.page}
         />
       ) : null}
       {snap.stage === 'cancelled' ? <AniListCancelledNotice onReturn={() => setInspectCancelled(true)} /> : null}
       {snap.stage === 'removed' ? <AniListRemovedNotice /> : null}
-      {snap.importId && !snap.cleanupPending && snap.stage !== 'upload' && snap.stage !== 'removed' ? (
-        <div className="flex flex-wrap gap-3">
-          {snap.stage !== 'applying' ? (
-            <AniListAction
-              type="button"
-              variant="outline"
-              disabled={locked}
-              onClick={() => void act((current) => current.replaceSource())}
-            >
-              {m.library_import_replace()}
-            </AniListAction>
-          ) : null}
-          {snap.stage === 'applying' || snap.stage === 'review' || snap.stage === 'confirm' ? (
-            <AniListAction
-              type="button"
-              variant="outline"
-              disabled={locked && snap.stage !== 'applying'}
-              onClick={() => void act((current) => current.cancelAdmission())}
-            >
-              {snap.busy ? m.library_anilist_cancelling() : m.library_anilist_cancel()}
-            </AniListAction>
-          ) : null}
-          <AniListAction
-            type="button"
-            variant="outline"
-            disabled={locked}
-            onClick={() => void act((current) => current.discard())}
-          >
-            {m.library_anilist_discard()}
-          </AniListAction>
-        </div>
-      ) : null}
-      {snap.importId && snap.stage === 'upload' ? (
-        <AniListAction
-          type="button"
-          variant="outline"
-          disabled={locked}
-          onClick={() => void act((current) => current.discard())}
-        >
-          {m.library_anilist_discard()}
-        </AniListAction>
-      ) : null}
-      {snap.stage !== 'results' ? <ImportReturn /> : null}
       <AniListDeparture
         active={!!snap.importId && snap.stage !== 'removed'}
         locked={locked}
         onDiscard={() => void act((current) => current.discard())}
       />
-    </main>
+    </AniListWorkspace>
   );
 }

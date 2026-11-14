@@ -69,6 +69,8 @@ type VersionProps = {
   active?: boolean;
   headingRef?: RefObject<HTMLHeadingElement | null>;
   workingHelp?: string;
+  /** The workspace owns its Write/History mode and supplies its localized return action. */
+  returnToEditing?: { label: string; onClick: () => void };
 };
 
 /** Replacement retires local disclosures and focus as well as the controller's version coordinates. */
@@ -156,7 +158,15 @@ function useVersionMovement(controller: StudioController, root: RefObject<HTMLEl
   };
 }
 
-function VersionVisit({ controller, state, presentation, active = true, headingRef, workingHelp }: VersionProps) {
+function VersionVisit({
+  controller,
+  state,
+  presentation,
+  active = true,
+  headingRef,
+  workingHelp,
+  returnToEditing,
+}: VersionProps) {
   const root = useRef<HTMLElement>(null);
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const comparisonHeading = useRef<HTMLHeadingElement>(null);
@@ -199,177 +209,222 @@ function VersionVisit({ controller, state, presentation, active = true, headingR
         >
           {m.studio_revision_heading({}, options)}
         </h2>
-        <Button
-          type="button"
-          variant="outline"
-          className={control}
-          disabled={blocked}
-          onClick={(event) => move(event, () => controller.loadVersions(), pageHeading)}
-        >
-          {m.studio_revision_first({}, options)}
-        </Button>
+        {returnToEditing ? (
+          <Button type="button" variant="outline" className={control} onClick={returnToEditing.onClick}>
+            {returnToEditing.label}
+          </Button>
+        ) : null}
       </div>
       <p className="studio-help">{workingHelp ?? m.studio_revision_intro({}, options)}</p>
-      {failed ? (
-        <div role="status" className="studio-stack">
-          <p>{m.studio_revision_navigation_failed({}, options)}</p>
-          <Button
-            type="button"
-            variant="outline"
-            className={control}
-            disabled={blocked}
-            onClick={(event) => move(event, () => controller.navigateVersions('retry'), pageHeading)}
-          >
-            {m.studio_revision_retry({}, options)}
-          </Button>
-        </div>
+      {selected.dirty ? (
+        <p role="status" className="studio-help rounded-lg border border-border p-3">
+          {m.studio_revision_unsaved({}, options)}
+        </p>
       ) : null}
-      {state.versions ? (
-        <>
-          <ol className="studio-version-list">
-            {state.versions.items.map((version) => (
-              <li key={`${version.exact.revisionId}:${version.exact.sha256}`}>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={control}
-                  disabled={blocked}
-                  aria-pressed={Boolean(historical && sameExact(historical.exact, version.exact))}
-                  onClick={(event) => move(event, () => controller.inspectVersion(version.exact), comparisonHeading)}
-                >
-                  <time dateTime={version.savedAt} title={version.savedAt}>
-                    {m.studio_revision_compare({ savedAt: fullDateTime(version.savedAt, locale) }, options)}
-                  </time>
-                </Button>
-                <ExactVersionDetails exact={version.exact} />
-              </li>
-            ))}
-          </ol>
-          {!state.versions.items.length ? (
-            <p>
-              {state.versions.nextCursor !== null
-                ? m.thread_history_page_empty({}, options)
-                : m.thread_history_empty({}, options)}
-            </p>
-          ) : null}
-          <nav className="studio-action-row" aria-label={m.studio_revision_region({}, options)}>
-            <Button
-              type="button"
-              variant="outline"
-              className={control}
-              disabled={blocked || !state.versionNavigation.predecessors.length}
-              onClick={(event) => move(event, () => controller.navigateVersions('previous'), pageHeading)}
-            >
-              {m.studio_revision_previous({}, options)}
-            </Button>
-            {state.versions.nextCursor !== null ? (
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(15rem,19rem)_minmax(0,1fr)] lg:items-start">
+        <div className="studio-stack min-w-0 rounded-lg border border-border bg-card p-4">
+          <h3>{m.studio_revision_region({}, options)}</h3>
+          {failed ? (
+            <div role="status" className="studio-stack">
+              <p>{m.studio_revision_navigation_failed({}, options)}</p>
               <Button
                 type="button"
                 variant="outline"
                 className={control}
                 disabled={blocked}
-                onClick={(event) => move(event, () => controller.loadVersions(true), pageHeading)}
+                onClick={(event) => move(event, () => controller.navigateVersions('retry'), pageHeading)}
               >
-                {m.studio_revision_next({}, options)}
+                {m.studio_revision_retry({}, options)}
               </Button>
-            ) : null}
-          </nav>
-        </>
-      ) : !failed ? (
-        <Button
-          type="button"
-          variant="outline"
-          className={control}
-          disabled={blocked}
-          onClick={(event) => move(event, () => controller.loadVersions(), pageHeading)}
-        >
-          {m.studio_revision_load({}, options)}
-        </Button>
-      ) : null}
-      {state.inspectedVersion && active ? (
-        <div className="studio-comparison">
-          <div>
-            <h3 ref={comparisonHeading} tabIndex={-1}>
-              {m.studio_revision_selected({}, options)}
-            </h3>
-            {historical ? (
-              <RevisionBody
-                key={`${historical.exact.revisionId}:${historical.exact.sha256}`}
-                revision={historical}
-                presentation={presentation}
-                isCurrent={historicalCurrent}
-              />
-            ) : (
-              <p role="status">
-                {state.operation === 'revision'
-                  ? m.studio_workspace_reading_version({}, options)
-                  : m.studio_workspace_failure_unavailable({}, options)}
-              </p>
-            )}
-          </div>
-          <div>
-            <h3>{m.studio_revision_current({}, options)}</h3>
-            <RevisionBody
-              key={`${selected.source.revision.exact.revisionId}:${selected.source.revision.exact.sha256}`}
-              revision={selected.source.revision}
-              presentation={presentation}
-              isCurrent={savedCurrent}
-            />
-          </div>
-        </div>
-      ) : null}
-      {historical ? (
-        <>
-          {selected.dirty ? <p className="studio-help">{m.studio_revision_unsaved({}, options)}</p> : null}
-          {selected.source.permissions.edit ? (
-            copyReview ? (
-              <div role="group" aria-label={m.studio_revision_copy_review({}, options)} className="studio-stack">
-                {!copyReviewed ? <p role="status">{m.studio_revision_review_changed({}, options)}</p> : null}
-                <p>
-                  {selected.dirty
-                    ? m.studio_revision_replace_dirty({ title: historical.title, savedAt: compareTime }, options)
-                    : m.studio_revision_replace_clean({ title: historical.title, savedAt: compareTime }, options)}
-                </p>
-                <div className="studio-action-row">
-                  {copyReviewed ? (
-                    <Button
-                      type="button"
-                      className={control}
-                      disabled={copyBlocked}
-                      onClick={() => controller.restoreVersion(copyReview)}
-                    >
-                      {m.studio_revision_copy({}, options)}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={control}
-                      disabled={copyBlocked}
-                      onClick={() => controller.reviewVersionCopy()}
-                    >
-                      {m.studio_revision_use({}, options)}
-                    </Button>
-                  )}
-                  <Button type="button" variant="outline" className={control} onClick={controller.cancelVersionCopy}>
-                    {m.action_cancel({}, options)}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className={control}
-                disabled={copyBlocked}
-                onClick={() => controller.reviewVersionCopy()}
-              >
-                {m.studio_revision_use({}, options)}
-              </Button>
-            )
+            </div>
           ) : null}
-        </>
-      ) : null}
+          {state.versions ? (
+            <>
+              <ol className="studio-version-list">
+                {state.versions.items.map((version) => {
+                  const isSelected = Boolean(
+                    state.inspectedVersion && sameExact(state.inspectedVersion, version.exact),
+                  );
+                  const isCurrentSaved = sameExact(selected.source.revision.exact, version.exact);
+                  return (
+                    <li key={`${version.exact.revisionId}:${version.exact.sha256}`} className="min-w-0">
+                      {isCurrentSaved ? (
+                        <p className="studio-help">{m.studio_revision_current({}, options)}</p>
+                      ) : null}
+                      {isSelected ? (
+                        <p className="studio-help">{m.studio_revision_selected({}, options)}</p>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant={isSelected ? 'secondary' : 'outline'}
+                        className={control}
+                        disabled={blocked}
+                        aria-pressed={isSelected}
+                        onClick={(event) =>
+                          move(event, () => controller.inspectVersion(version.exact), comparisonHeading)
+                        }
+                      >
+                        <time dateTime={version.savedAt} title={version.savedAt}>
+                          {m.studio_revision_compare({ savedAt: fullDateTime(version.savedAt, locale) }, options)}
+                        </time>
+                      </Button>
+                      <ExactVersionDetails exact={version.exact} />
+                    </li>
+                  );
+                })}
+              </ol>
+              {!state.versions.items.length ? (
+                <p>
+                  {state.versions.nextCursor !== null
+                    ? m.thread_history_page_empty({}, options)
+                    : m.thread_history_empty({}, options)}
+                </p>
+              ) : null}
+              <nav className="studio-action-row" aria-label={m.studio_revision_region({}, options)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={control}
+                  disabled={blocked}
+                  onClick={(event) => move(event, () => controller.loadVersions(), pageHeading)}
+                >
+                  {m.studio_revision_first({}, options)}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={control}
+                  disabled={blocked || !state.versionNavigation.predecessors.length}
+                  onClick={(event) => move(event, () => controller.navigateVersions('previous'), pageHeading)}
+                >
+                  {m.studio_revision_previous({}, options)}
+                </Button>
+                {state.versions.nextCursor !== null ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={control}
+                    disabled={blocked}
+                    onClick={(event) => move(event, () => controller.loadVersions(true), pageHeading)}
+                  >
+                    {m.studio_revision_next({}, options)}
+                  </Button>
+                ) : null}
+              </nav>
+            </>
+          ) : !failed ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={control}
+              disabled={blocked}
+              onClick={(event) => move(event, () => controller.loadVersions(), pageHeading)}
+            >
+              {m.studio_revision_load({}, options)}
+            </Button>
+          ) : null}
+        </div>
+        {active ? (
+          <div className={`grid min-w-0 gap-5 ${state.inspectedVersion ? 'studio-comparison xl:grid-cols-2' : ''}`}>
+            {state.inspectedVersion ? (
+              <div className="studio-stack min-w-0 rounded-lg border border-border bg-card p-4">
+                <h3 ref={comparisonHeading} tabIndex={-1}>
+                  {m.studio_revision_selected({}, options)}
+                </h3>
+                {historical ? (
+                  <>
+                    <RevisionBody
+                      key={`${historical.exact.revisionId}:${historical.exact.sha256}`}
+                      revision={historical}
+                      presentation={presentation}
+                      isCurrent={historicalCurrent}
+                    />
+                    {selected.source.permissions.edit ? (
+                      copyReview ? (
+                        <div
+                          role="group"
+                          aria-label={m.studio_revision_copy_review({}, options)}
+                          className="studio-stack rounded-lg border border-border p-4"
+                        >
+                          {!copyReviewed ? (
+                            <p role="status">{m.studio_revision_review_changed({}, options)}</p>
+                          ) : null}
+                          <p>
+                            {selected.dirty
+                              ? m.studio_revision_replace_dirty(
+                                  { title: historical.title, savedAt: compareTime },
+                                  options,
+                                )
+                              : m.studio_revision_replace_clean(
+                                  { title: historical.title, savedAt: compareTime },
+                                  options,
+                                )}
+                          </p>
+                          <div className="studio-action-row">
+                            {copyReviewed ? (
+                              <Button
+                                type="button"
+                                className={control}
+                                disabled={copyBlocked}
+                                onClick={() => controller.restoreVersion(copyReview)}
+                              >
+                                {m.studio_revision_copy({}, options)}
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={control}
+                                disabled={copyBlocked}
+                                onClick={() => controller.reviewVersionCopy()}
+                              >
+                                {m.studio_revision_use({}, options)}
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={control}
+                              onClick={controller.cancelVersionCopy}
+                            >
+                              {m.action_cancel({}, options)}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={control}
+                          disabled={copyBlocked}
+                          onClick={() => controller.reviewVersionCopy()}
+                        >
+                          {m.studio_revision_use({}, options)}
+                        </Button>
+                      )
+                    ) : null}
+                  </>
+                ) : (
+                  <p role="status">
+                    {state.operation === 'revision'
+                      ? m.studio_workspace_reading_version({}, options)
+                      : m.studio_workspace_failure_unavailable({}, options)}
+                  </p>
+                )}
+              </div>
+            ) : null}
+            <div className="studio-stack min-w-0 rounded-lg border border-border bg-card p-4">
+              <h3>{m.studio_revision_current({}, options)}</h3>
+              <RevisionBody
+                key={`${selected.source.revision.exact.revisionId}:${selected.source.revision.exact.sha256}`}
+                revision={selected.source.revision}
+                presentation={presentation}
+                isCurrent={savedCurrent}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

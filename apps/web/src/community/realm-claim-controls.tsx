@@ -275,45 +275,130 @@ function RealmClaimControlsContent({
           <ContentItemHeading level={2} id={`${id}-heading`} className="text-lg font-semibold">
             {m.realm_claim_heading()}
           </ContentItemHeading>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {owned ? m.realm_claim_owned() : orphan ? m.realm_claim_orphaned() : m.realm_claim_unavailable()}
-          </p>
+          {owned || !orphan ? (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {owned ? m.realm_claim_owned() : m.realm_claim_unavailable()}
+            </p>
+          ) : null}
         </header>
-        {orphan?.orphanedAt && orphan.claimEligibleAt ? (
-          <dl className="grid gap-4 rounded-xl bg-muted/50 p-4 text-sm sm:grid-cols-2">
-            <div className="space-y-1">
-              <dt className="text-muted-foreground">{m.realm_claim_orphaned_at()}</dt>
-              <dd>
-                <OriginalDate value={orphan.orphanedAt} />
-              </dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-muted-foreground">{m.realm_claim_eligible_at()}</dt>
-              <dd>
-                <OriginalDate value={orphan.claimEligibleAt} />
-              </dd>
-            </div>
-          </dl>
+        {orphan ? (
+          <section
+            aria-labelledby={`${id}-episode`}
+            className="min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4"
+          >
+            <ContentItemHeading level={3} id={`${id}-episode`} className="text-base font-semibold">
+              {m.realm_claim_orphaned()}
+            </ContentItemHeading>
+            <p className="text-sm leading-relaxed text-muted-foreground">{m.realm_claim_eligibility()}</p>
+            {orphan.orphanedAt && orphan.claimEligibleAt ? (
+              <dl className="grid min-w-0 gap-4 text-sm sm:grid-cols-2">
+                <div className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{m.realm_claim_orphaned_at()}</dt>
+                  <dd>
+                    <OriginalDate value={orphan.orphanedAt} />
+                  </dd>
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{m.realm_claim_eligible_at()}</dt>
+                  <dd>
+                    <OriginalDate value={orphan.claimEligibleAt} />
+                  </dd>
+                </div>
+              </dl>
+            ) : null}
+          </section>
         ) : null}
-        {orphan ? <p className="text-sm text-muted-foreground">{m.realm_claim_eligibility()}</p> : null}
-        {current?.admission === 'unavailable' ? (
-          <p role="status" className="text-sm">
-            {m.realm_claim_admission_unavailable()}
-          </p>
-        ) : null}
-        {orphan && current?.admission === 'allowed' && ['unchecked', 'unavailable'].includes(state.recovery) ? (
-          <p role="status" className="text-sm">
-            {m.realm_claim_status_recovery_unknown()}
-          </p>
-        ) : null}
+        <section aria-label={m.realm_claim_request()} className="min-w-0 space-y-4 rounded-xl border p-4">
+          {current?.admission === 'unavailable' ? (
+            <p role="status" className="text-sm">
+              {m.realm_claim_admission_unavailable()}
+            </p>
+          ) : null}
+          {orphan && current?.admission === 'allowed' && ['unchecked', 'unavailable'].includes(state.recovery) ? (
+            <p role="status" className="text-sm">
+              {m.realm_claim_status_recovery_unknown()}
+            </p>
+          ) : null}
+          {active && state.outcome === 'uncertain' ? (
+            <p role="alert" className="text-sm">
+              {m.realm_claim_uncertain()}
+            </p>
+          ) : null}
+          {active && state.outcome === 'conflict' ? (
+            <p role="alert" className="text-sm">
+              {m.realm_claim_conflict()}
+            </p>
+          ) : null}
+          {(active && state.outcome === 'refused') || current?.admission === 'denied' ? (
+            <p role="alert" className="text-sm">
+              {m.realm_claim_refused()}
+            </p>
+          ) : null}
+          {orphan && current?.admission === 'signed-out' ? (
+            <Button
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+              nativeButton={false}
+              render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
+            >
+              {m.realm_claim_sign_in()}
+            </Button>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {current?.admission === 'allowed' && mayRequestRealmClaim(state) ? (
+              <Button
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                disabled={!ready}
+                onClick={(event) => activateClaim(event, control.submit)}
+              >
+                {m.realm_claim_request()}
+              </Button>
+            ) : null}
+            {current?.admission === 'allowed' && mayRetryRealmClaim(state) ? (
+              <Button
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                disabled={!ready}
+                onClick={(event) => activateClaim(event, control.retry)}
+              >
+                {m.realm_claim_retry()}
+              </Button>
+            ) : null}
+            {state.reviewed && (state.outcome === 'conflict' || state.outcome === 'refused') ? (
+              <Button
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                disabled={state.busy}
+                onClick={() => control.review()}
+              >
+                {m.realm_claim_review_current()}
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+              disabled={!ready || state.busy}
+              onClick={() => void control.refresh()}
+            >
+              {state.busy ? m.realm_claim_working() : m.realm_claim_refresh()}
+            </Button>
+          </div>
+        </section>
         {request ? (
           <div role="status" className="space-y-3 rounded-xl bg-muted p-4 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {state.request === request ? m.realm_claim_request() : m.realm_claim_status_heading()}
+            </p>
             <h3 ref={receiptHeading} tabIndex={-1} className="font-semibold">
               {request.state === 'approved' ? m.realm_claim_status_approved() : m.realm_claim_pending()}
             </h3>
             <p>{request.state === 'approved' ? m.realm_claim_status_approved_help() : m.realm_claim_review_help()}</p>
-            <dl className="space-y-2">
-              <div>
+            <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.realm_claim_orphaned_at()}</dt>
+                <dd>
+                  <OriginalDate value={request.orphanedAt} />
+                </dd>
+              </div>
+              <div className="min-w-0">
                 <dt className="text-muted-foreground">{m.realm_claim_requested_at()}</dt>
                 <dd>
                   <OriginalDate value={request.requestedAt} />
@@ -342,6 +427,7 @@ function RealmClaimControlsContent({
                 <Button
                   ref={copyButton}
                   variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
                   onClick={async (event) => {
                     copyFocus.current?.cancel();
                     const read = state.read;
@@ -398,6 +484,7 @@ function RealmClaimControlsContent({
                     />
                     <Button
                       variant="outline"
+                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
                       onClick={() => {
                         copyFocus.current?.cancel();
                         setCopy(null);
@@ -413,6 +500,7 @@ function RealmClaimControlsContent({
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
                 nativeButton={false}
                 render={<a href={localizeHref(`/realms/${realmId}/claim-requests/${request.requestId}`)} />}
               >
@@ -425,6 +513,7 @@ function RealmClaimControlsContent({
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
               nativeButton={false}
               render={<a href={localizeHref(`/realms/${realmId}/claim-requests/${receipt.requestId}`)} />}
             >
@@ -432,46 +521,6 @@ function RealmClaimControlsContent({
             </Button>
           </div>
         ) : null}
-        {active && state.outcome === 'uncertain' ? (
-          <p role="alert" className="text-sm">
-            {m.realm_claim_uncertain()}
-          </p>
-        ) : null}
-        {active && state.outcome === 'conflict' ? (
-          <p role="alert" className="text-sm">
-            {m.realm_claim_conflict()}
-          </p>
-        ) : null}
-        {(active && state.outcome === 'refused') || current?.admission === 'denied' ? (
-          <p role="alert" className="text-sm">
-            {m.realm_claim_refused()}
-          </p>
-        ) : null}
-        {orphan && current?.admission === 'signed-out' ? (
-          <Button nativeButton={false} render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}>
-            {m.realm_claim_sign_in()}
-          </Button>
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          {current?.admission === 'allowed' && mayRequestRealmClaim(state) ? (
-            <Button disabled={!ready} onClick={(event) => activateClaim(event, control.submit)}>
-              {m.realm_claim_request()}
-            </Button>
-          ) : null}
-          {current?.admission === 'allowed' && mayRetryRealmClaim(state) ? (
-            <Button disabled={!ready} onClick={(event) => activateClaim(event, control.retry)}>
-              {m.realm_claim_retry()}
-            </Button>
-          ) : null}
-          {state.reviewed && (state.outcome === 'conflict' || state.outcome === 'refused') ? (
-            <Button variant="outline" disabled={state.busy} onClick={() => control.review()}>
-              {m.realm_claim_review_current()}
-            </Button>
-          ) : null}
-          <Button variant="outline" disabled={!ready || state.busy} onClick={() => void control.refresh()}>
-            {state.busy ? m.realm_claim_working() : m.realm_claim_refresh()}
-          </Button>
-        </div>
       </ContentItemFrame>
     </section>
   );

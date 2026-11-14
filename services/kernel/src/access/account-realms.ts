@@ -1,8 +1,9 @@
 import type { Pool } from 'pg';
 import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck, type Access, type AccessRealmRoleReader, type Actor } from './check.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import { routeOf } from '../route/route.ts';
 import { realmReadEligibility } from '../community/access-capabilities.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
@@ -12,6 +13,46 @@ import pageRead from './account-realms-page.sql';
 
 const ROUTE = 'GET /v1/accounts/:accountId/realms';
 const START_AFTER = '00000000-0000-0000-0000-000000000000';
+const UNCERTAIN_READ_CODES = new Set([
+  '57P01',
+  '57P02',
+  '57P03',
+  'ECONNABORTED',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'ETIMEDOUT',
+]);
+
+function uncertainReadIO(error: unknown): boolean {
+  const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+  return (
+    (typeof code === 'string' && (code.startsWith('08') || UNCERTAIN_READ_CODES.has(code))) ||
+    (error instanceof Error &&
+      /connection (?:acquisition )?timeout|timeout exceeded when trying to connect|connection (?:terminated|reset)|socket hang up|write after end/i.test(
+        error.message,
+      ))
+  );
+}
+
+function boundedReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError: (error: unknown) => {
+      try {
+        throwAccessUnavailable(error, deadline);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: uncertainReadIO,
+    isUncertainSettledQueryError: uncertainReadIO,
+    isUncertainWorkError: uncertainReadIO,
+  };
+}
 
 export type AccountRealmsPage = {
   realms: { id: string; role: 'owner' | 'member' }[];
@@ -66,7 +107,11 @@ export async function readAccountRealms(
   const limit = input.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
 
-  const view = await publicRealmsRead.run(dependencies.pool, { route: accountRoute, account_id: accountId });
+  const readOptions = boundedReadOptions(deadline);
+  const view = await withBoundedReadConnection(dependencies.pool, deadline, (client) =>
+    publicRealmsRead.run(client, { route: accountRoute, account_id: accountId }),
+    readOptions,
+  );
   if (!view?.enabled) return empty;
 
   const binding = cursorBinding(accountId, actor, limit);
@@ -84,14 +129,25 @@ export async function readAccountRealms(
     after = decoded.after[0];
   }
 
-  const atTime = await withConnection(dependencies.pool, (client) => mintReadTime(client, () => at));
+  const atTime = await withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    (client) => mintReadTime(client, () => at),
+    readOptions,
+  );
   const authoritativeAt = authoritativeTimeValue(atTime);
-  const rows = await pageRead.run(dependencies.pool, {
-    route: accountRoute,
-    account_id: accountId,
-    after,
-    limit: limit + 1,
-  });
+  const rows = await withBoundedReadConnection(
+    dependencies.pool,
+    deadline,
+    (client) =>
+      pageRead.run(client, {
+        route: accountRoute,
+        account_id: accountId,
+        after,
+        limit: limit + 1,
+      }),
+    readOptions,
+  );
   const realms: AccountRealmsPage['realms'] = [];
   let scanned = 0;
   let lastScanned: string | undefined;
@@ -104,8 +160,11 @@ export async function readAccountRealms(
     if (realmRoute === null) continue;
 
     const role = confirmedRole(
-      await withConnection(dependencies.pool, (client) =>
-        dependencies.realmRoleReader(client, { realmId: row.id, accountId, at: authoritativeAt }),
+      await withBoundedReadConnection(
+        dependencies.pool,
+        deadline,
+        (client) => dependencies.realmRoleReader(client, { realmId: row.id, accountId, at: authoritativeAt }),
+        readOptions,
       ),
     );
     if (role === null) continue;
@@ -119,7 +178,12 @@ export async function readAccountRealms(
       pool: dependencies.pool,
       deadline,
     });
-    const allowed = await withConnection(dependencies.pool, (client) => check(client, atTime));
+    const allowed = await withBoundedReadConnection(
+      dependencies.pool,
+      deadline,
+      (client) => check(client, atTime),
+      readOptions,
+    );
     if (allowed) realms.push({ id: row.id, role });
   }
 

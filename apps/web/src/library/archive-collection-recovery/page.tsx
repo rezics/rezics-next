@@ -13,6 +13,7 @@ import { RECOVERY_APPLY_COMMANDS } from './contract';
 import { useArchiveCollectionRecoveryPort } from './port';
 import { ArchiveCollectionChooser, ArchiveOccurrenceChooser, ArchiveRecoveryReview } from './review';
 import { ArchiveRecoveryConflict, ArchiveRecoveryResults, ArchiveRecoveryUnknown } from './results';
+import { ArchiveCollectionWorkspace } from './collection-workspace';
 import { actionClass } from '../private-export/controls';
 import { toggleOccurrence, togglePage } from './selection';
 import { ArchiveCollectionRecoveryUpload } from './upload';
@@ -193,43 +194,55 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
       <ArchiveRecoveryDestinations current="collections" />
     </div>
   );
+  const primaryAction =
+    snapshot.stage === 'occurrences' ? (
+      <button
+        type="button"
+        className={actionClass}
+        disabled={snapshot.busy || locked || !snapshot.selected.size}
+        onClick={() => touch(journey.prepareReview())}
+      >
+        {m.library_archive_recovery_open_review()}
+      </button>
+    ) : snapshot.stage === 'conflict' ? (
+      <button
+        className={actionClass}
+        type="button"
+        disabled={snapshot.busy || locked}
+        onClick={() => touch(journey.refreshConflict())}
+      >
+        {m.library_archive_recovery_refresh()}
+      </button>
+    ) : snapshot.stage === 'results' && snapshot.status ? (
+      <>
+        {snapshot.status.state === 'applying' ? (
+          <button
+            type="button"
+            className={actionClass}
+            disabled={snapshot.busy || locked}
+            onClick={() => touch(journey.continueApply())}
+          >
+            {m.library_archive_recovery_apply_next({ commands: RECOVERY_APPLY_COMMANDS })}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={actionClass}
+          disabled={snapshot.busy || locked || Boolean(snapshot.readRetry)}
+          onClick={() => touch(journey.loadOutcomes())}
+        >
+          {m.library_archive_recovery_read_outcomes()}
+        </button>
+      </>
+    ) : null;
 
   return (
-    <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
-      {heading}
-      <nav aria-label={m.library_archive_recovery_steps()}>
-        <ol className="flex flex-wrap gap-2 text-sm">
-          {(['upload', 'collections', 'occurrences', 'review', 'results'] as const).map((step, index) => {
-            const current =
-              (snapshot.stage === 'upload' && step === 'upload') ||
-              (snapshot.stage === 'collections' && step === 'collections') ||
-              (snapshot.stage === 'occurrences' && step === 'occurrences') ||
-              (snapshot.stage === 'review' && step === 'review') ||
-              (['results', 'conflict', 'expired', 'denied', 'unavailable'].includes(snapshot.stage) &&
-                step === 'results');
-            const label =
-              step === 'upload'
-                ? m.library_archive_recovery_step_upload()
-                : step === 'collections'
-                  ? m.library_archive_recovery_step_collection()
-                  : step === 'occurrences'
-                    ? m.library_archive_recovery_step_occurrences()
-                    : step === 'review'
-                      ? m.library_archive_recovery_step_review()
-                      : m.library_archive_recovery_step_results();
-            return (
-              <li key={step} aria-current={current ? 'step' : undefined}>
-                <span
-                  className={`inline-flex min-h-11 items-center rounded-full border px-3 ${current ? 'border-primary bg-primary/10 font-semibold' : ''}`}
-                >
-                  {index + 1}. {label}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
-
+    <ArchiveCollectionWorkspace
+      routeHeading={heading}
+      stage={snapshot.stage}
+      collection={snapshot.selectedCollection}
+      primaryAction={primaryAction}
+    >
       {text && snapshot.notice?.kind !== 'unknown' ? (
         <p tabIndex={-1} role="status" aria-live="polite" className="rounded-md border p-3">
           {text}
@@ -294,7 +307,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           canPrevious={snapshot.occurrencesWindow.canPrevious}
           onToggle={(row) => journey.setSelection(toggleOccurrence(snapshot.selected, row))}
           onTogglePage={(rows) => journey.setSelection(togglePage(snapshot.selected, rows))}
-          onReview={() => journey.prepareReview()}
+          showReviewAction={false}
           onPage={(cursor, event) =>
             moveReader(event, 'occurrences', snapshot.occurrencesWindow.revision, 'recovery-occurrences-title', () =>
               journey.loadOccurrences(cursor),
@@ -341,31 +354,25 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
       ) : null}
 
       {snapshot.stage === 'conflict' ? (
-        <ArchiveRecoveryConflict busy={snapshot.busy || locked} onRefresh={() => touch(journey.refreshConflict())} />
+        <ArchiveRecoveryConflict
+          busy={snapshot.busy || locked}
+          showRefreshAction={false}
+          onRefresh={() => touch(journey.refreshConflict())}
+        />
       ) : null}
 
       {snapshot.stage === 'results' && snapshot.status ? (
         <div className="grid gap-4">
-          {snapshot.status.state === 'applying' ? (
-            <button
-              type="button"
-              className={`${actionClass} justify-self-start rounded-md border`}
-              disabled={snapshot.busy || locked}
-              onClick={() => touch(journey.continueApply())}
-            >
-              {m.library_archive_recovery_apply_next({ commands: RECOVERY_APPLY_COMMANDS })}
-            </button>
-          ) : null}
           <ArchiveRecoveryResults
             status={snapshot.status}
             targets={snapshot.targets}
-            sourceTitle={snapshot.selectedCollection?.title}
             page={snapshot.outcomesPage}
             receiving={snapshot.receiving}
             busy={snapshot.busy || locked || Boolean(snapshot.readRetry)}
             canPrevious={snapshot.outcomesWindow.canPrevious}
             receivingWindow={snapshot.receivingWindow}
             receivingBusy={snapshot.busy}
+            showReadAction={false}
             receivingActions={{
               onFirst: (event) =>
                 moveReader(event, 'receiving', snapshot.receivingWindow.revision, 'recovery-receiving-title', () =>
@@ -475,6 +482,6 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
         onLeave={() => journey.retire()}
         onCancel={() => touch(journey.cancel())}
       />
-    </main>
+    </ArchiveCollectionWorkspace>
   );
 }

@@ -8,9 +8,9 @@ import type {
 import { Value } from 'typebox/value';
 import type { Pool } from 'pg';
 import type { AccessClient } from '../request/access.ts';
-import { deadlineClient, within } from './access-port.ts';
 import { CommandUnavailableError, runCommand } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { AccessUnavailableError, classifyUnavailability } from '../access/unavailable.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -163,6 +163,29 @@ function activitySelection(
   };
 }
 
+function activityReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown): unknown {
+      if (error instanceof AccessUnavailableError || error instanceof CommandUnavailableError) return error;
+      const classified = classifyUnavailability(error);
+      const reason =
+        classified === 'deadline' || classified === 'overloaded' || classified === 'contention'
+          ? classified
+          : Date.now() >= deadline
+            ? 'deadline'
+            : undefined;
+      if (!reason) return error;
+      const mapped = new AccessUnavailableError(reason);
+      mapped.cause = error;
+      return mapped;
+    },
+    isUncertainError(error: unknown): boolean {
+      return classifyUnavailability(error) === 'overloaded';
+    },
+  };
+}
+
 /** Factory bound at the consumer's selected native key set, before labels/actions are hydrated. */
 export function createConversationActivityBatch(pool: Pool): ConversationActivityBatch {
   async function select(
@@ -182,34 +205,25 @@ export function createConversationActivityBatch(pool: Pool): ConversationActivit
     }
     const result = new Map<string, ConversationActivitySelection>();
     for (const [partitionNo, keys] of groups) {
-      const current = await within(deadline, () =>
-        withConnection(pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          try {
-            const partition = await readPartition(client, partitionNo);
-            if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-            if (partition.writeState === 'moved')
-              throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-            const parameters = { keys: JSON.stringify(keys) };
-            const { rows } = await client.query<ConversationActivityBatchRow>(
-              batchPage.sql,
-              batchPage.params.map((name) => parameters[name as keyof typeof parameters]),
-            );
-            await client.query('COMMIT');
-            return {
-              rows,
-              anchor: { partition, epoch: partition.epoch, position: partition.position },
-            };
-          } catch (error) {
-            try {
-              await connection.query('ROLLBACK');
-            } catch (rollbackError) {
-              discardConnection(connection, rollbackError as Error);
-            }
-            throw error;
-          }
-        }),
+      const current = await withBoundedReadOnlyTransaction(
+        pool,
+        deadline,
+        async (client) => {
+          const partition = await readPartition(client, partitionNo);
+          if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+          if (partition.writeState === 'moved')
+            throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+          const parameters = { keys: JSON.stringify(keys) };
+          const { rows } = await client.query<ConversationActivityBatchRow>(
+            batchPage.sql,
+            batchPage.params.map((name) => parameters[name as keyof typeof parameters]),
+          );
+          return {
+            rows,
+            anchor: { partition, epoch: partition.epoch, position: partition.position },
+          };
+        },
+        activityReadOptions(deadline),
       );
       const byThread = new Map(current.rows.map((row) => [row.thread_id, row]));
       for (const key of keys)
@@ -818,30 +832,21 @@ export async function readConversationActivitySources(
   }
   const result = new Map<string, ConversationActivitySource>();
   for (const [partitionNo, keys] of groups) {
-    const selected = await within(deadline, () =>
-      withConnection(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const partition = await readPartition(client, partitionNo);
-          if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-          if (partition.writeState === 'moved')
-            throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-          const rows = await page.run(client, {
-            keys: JSON.stringify(keys),
-            limit: CONVERSATION_ACTIVITY_SOURCE_LIMIT,
-          });
-          await client.query('COMMIT');
-          return { rows, anchor: { partition, epoch: partition.epoch, position: partition.position } };
-        } catch (error) {
-          try {
-            await connection.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(connection, rollbackError as Error);
-          }
-          throw error;
-        }
-      }),
+    const selected = await withBoundedReadOnlyTransaction(
+      pool,
+      deadline,
+      async (client) => {
+        const partition = await readPartition(client, partitionNo);
+        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+        if (partition.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+        const rows = await page.run(client, {
+          keys: JSON.stringify(keys),
+          limit: CONVERSATION_ACTIVITY_SOURCE_LIMIT,
+        });
+        return { rows, anchor: { partition, epoch: partition.epoch, position: partition.position } };
+      },
+      activityReadOptions(deadline),
     );
     const contributions = new Map<string, ConversationContributionSource[]>();
     for (const row of selected.rows) {

@@ -114,7 +114,16 @@ responsive disclosure or navigation column inside the content width. The center 
 creation and Book organization canvases.
 Book parts retain their native nested order. The draft inventory lists only documents not already placed in that
 outline, avoiding repeated chapter navigation. Column series context stays distinct from independent articles.
+Both inventories use `studio-draft-navigation.tsx` for document rows, current-document highlighting and compact
+visibility descriptions; their existing opening guard remains with the workspace.
 The original `pages-studio-workbench--book` story renders this same workspace and controller in AppShell.
+
+Apply the shared [navigation and working-context rules](../../../../packages/ui/README.md#navigation-selection-and-working-context).
+The central canvas leads with current document or organization context and its available primary task. Version
+inspection provides an explicit return to the same editor; technical revision evidence stays secondary. Publication
+inclusion, review and confirmation remain a separate central task, never navigation controls. An unavailable native
+publication or history capability stays visible and truthful in both mounted workspaces and fixtures; layout does
+not grant it. Phone return follows the existing current canvas/departure owner rather than remounting writing.
 
 Decision: Book and Column use an explicit document/creation canvas choice, retaining one selected editor and one
 lazily mounted unsent form outside Shell navigation; first-save acknowledgement clears only its submitted version.
@@ -127,7 +136,10 @@ Reopening creation restores its own form, metadata, editor and selection. Hidden
 tab order; their reading inspectors retire on hide and reopen as fresh readers.
 
 Decision: Book add, rename, move and removal share one central organization form owner in `workspace.tsx` through
-`book-organization-canvas.tsx`; the sidebar contains the native nested outline, release choices and concise actions.
+`book-organization-canvas.tsx`; the sidebar contains document rows, part disclosure chevrons, active-row highlighting
+and ellipsis menus for native organization actions. Publication inclusion belongs beside the central publication
+review in `book-publication-selection.tsx`, retaining explicit chapter, part and whole-Book choices. Opening a document
+never changes its publication inclusion. Structure identifiers and placement capacity remain in collapsed details.
 Opening an action uses Shell's admitted-selection handoff, so phone Menu dismissal cannot destroy its fields. The
 selected document editor remains mounted and inert while hidden. **Return to documents** deliberately restores that
 same editor, selection and Write/Preview/history choice without a read; it retains the organization draft. Hidden

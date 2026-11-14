@@ -54,34 +54,36 @@ export function MyRealmsPageView({
           <p className="max-w-prose leading-relaxed text-muted-foreground">{m.my_realms_page_description()}</p>
         </header>
         {page.realms.length ? (
-          <ul aria-labelledby={headingId} className="divide-y divide-border border-y border-border">
+          <ul aria-labelledby={headingId} className="divide-y divide-border">
             {page.realms.map((realm) => (
               <li key={realm.realmId}>
                 <MyRealmsCurrentRowView
                   row={realm}
                   controller={currentController}
                   reviewId={`${headingId}-leave-review`}
+                  review={
+                    currentController && review?.row.realmId === realm.realmId ? (
+                      <MyRealmsLeaveReview
+                        controller={currentController}
+                        id={`${headingId}-leave-review`}
+                        onDismiss={() => {
+                          const opener = leaveTrigger.current;
+                          leaveTrigger.current = null;
+                          if (
+                            currentController.ready &&
+                            opener?.page === page &&
+                            opener.row === review.row &&
+                            opener.element.isConnected
+                          )
+                            opener.element.focus({ preventScroll: true });
+                        }}
+                      />
+                    ) : undefined
+                  }
                   onLeaveSelect={(trigger) => {
                     leaveTrigger.current = { element: trigger, page, row: realm };
                   }}
                 />
-                {currentController && review?.row.realmId === realm.realmId ? (
-                  <MyRealmsLeaveReview
-                    controller={currentController}
-                    id={`${headingId}-leave-review`}
-                    onDismiss={() => {
-                      const opener = leaveTrigger.current;
-                      leaveTrigger.current = null;
-                      if (
-                        currentController.ready &&
-                        opener?.page === page &&
-                        opener.row === review.row &&
-                        opener.element.isConnected
-                      )
-                        opener.element.focus({ preventScroll: true });
-                    }}
-                  />
-                ) : null}
               </li>
             ))}
           </ul>

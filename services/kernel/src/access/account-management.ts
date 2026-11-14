@@ -1,8 +1,8 @@
 import { readManagedAuthActions } from './account-management-auth-actions.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
-import type { Pool } from 'pg';
-import { withConnection } from '../database/pool.ts';
+import type { Pool, PoolClient } from 'pg';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
 import { accessCheck, type Access, type Actor } from './check.ts';
 import { routeOf } from '../route/route.ts';
@@ -11,7 +11,7 @@ import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { readAccount, readOrganizationRole, readPublicIdentities } from './account-data.ts';
 import { readMembershipInverse, MembershipInverseIncompleteError } from './membership-inverse.ts';
-import { classifyUnavailability } from './unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability } from './unavailable.ts';
 import operatorPage from './operator-page.sql';
 import membersPage from './management-members.sql';
 import relationRead from './management-relation.sql';
@@ -122,6 +122,14 @@ export type ManagementQuery = { organizationsCursor?: string; membersCursor?: st
 const limit = 20;
 const start = '00000000-0000-0000-0000-000000000000';
 
+function boundedRead<T>(pool: Pool, deadline: number, read: (client: PoolClient) => Promise<T>) {
+  return withBoundedReadConnection(pool, deadline, read, {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  });
+}
+
 function presentation(account: {
   accountId: string;
   kind: string;
@@ -135,12 +143,14 @@ function presentation(account: {
     displayName: account.displayName,
   };
 }
-async function identities(pool: Pool, ids: string[]): Promise<Map<string, Identity>> {
+async function identities(pool: Pool, deadline: number, ids: string[]): Promise<Map<string, Identity>> {
   if (!ids.length) return new Map();
-  const rows = await readPublicIdentities(
-    pool,
-    ids.map((id) => routeOf(id)!),
-    ids,
+  const rows = await boundedRead(pool, deadline, (client) =>
+    readPublicIdentities(
+      client,
+      ids.map((id) => routeOf(id)!),
+      ids,
+    ),
   );
   return new Map(
     rows.flatMap((row) =>
@@ -172,9 +182,9 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
   if (actor.kind !== 'account') throw new ProblemError('forbidden');
   const actorId = actor.accountId;
   const context = { pool: deps.pool, deadline };
-  const time = await withConnection(deps.pool, (client) => mintReadTime(client, deps.clock));
+  const time = await boundedRead(deps.pool, deadline, (client) => mintReadTime(client, deps.clock));
   const at = new Date(authoritativeTimeValue(time));
-  const human = await readAccount(deps.pool, routeOf(actorId)!, actorId);
+  const human = await boundedRead(deps.pool, deadline, (client) => readAccount(client, routeOf(actorId)!, actorId));
   if (!human || human.kind !== 'actor' || human.state !== 'active' || human.fenced || human.operatorAccountId !== null)
     throw new ProblemError('forbidden');
   async function allowed(accountId: string, action: string) {
@@ -185,14 +195,18 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
       { route: routeOf(accountId)!, id: accountId },
       context,
     );
-    return withConnection(deps.pool, (client) => check(client, time));
+    return boundedRead(deps.pool, deadline, (client) => check(client, time));
   }
   if (!(await allowed(actorId, 'account:read'))) throw new ProblemError('forbidden');
   async function currentRole(organizationId: string) {
-    return readOrganizationRole(deps.pool, routeOf(organizationId)!, organizationId, actorId, at);
+    return boundedRead(deps.pool, deadline, (client) =>
+      readOrganizationRole(client, routeOf(organizationId)!, organizationId, actorId, at),
+    );
   }
   async function manager(operatorId: string) {
-    const operator = await readAccount(deps.pool, routeOf(operatorId)!, operatorId);
+    const operator = await boundedRead(deps.pool, deadline, (client) =>
+      readAccount(client, routeOf(operatorId)!, operatorId),
+    );
     if (!operator || operator.state !== 'active' || operator.fenced || operator.operatorAccountId !== null)
       return false;
     if (operator.kind === 'actor' && operatorId !== actorId) return false;
@@ -235,28 +249,32 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
     admitted = false,
   ): Promise<Static<typeof responsibilityPageSchema>> {
     const feed = 'account.management.responsibilities';
-    const rows = await operatorPage.run(deps.pool, {
-      route: routeOf(operatorId)!,
-      operator_id: operatorId,
-      after: await after(feed, operatorId, cursor),
-      limit: limit + 1,
-    });
-    const page = rows.slice(0, limit);
-    const publicAccounts = await identities(
-      deps.pool,
-      page.map((item) => item.subjectAccountId),
+    const afterId = await after(feed, operatorId, cursor);
+    const rows = await boundedRead(deps.pool, deadline, (client) =>
+      operatorPage.run(client, {
+        route: routeOf(operatorId)!,
+        operator_id: operatorId,
+        after: afterId,
+        limit: limit + 1,
+      }),
     );
+    const page = rows.slice(0, limit);
+    const publicAccounts = await identities(deps.pool, deadline, page.map((item) => item.subjectAccountId));
     const items: Static<typeof responsibility>[] = [];
     for (const row of page) {
-      const relation = await relationRead.run(deps.pool, {
-        route: routeOf(row.subjectAccountId)!,
-        account_id: row.subjectAccountId,
-      });
+      const relation = await boundedRead(deps.pool, deadline, (client) =>
+        relationRead.run(client, {
+          route: routeOf(row.subjectAccountId)!,
+          account_id: row.subjectAccountId,
+        }),
+      );
       const account = publicAccounts.get(row.subjectAccountId) ?? null;
       const current = relation?.operatorAccountId === operatorId && relation.reservationId === row.reservationId;
       const target =
         account && admitted && current
-          ? await readAccount(deps.pool, routeOf(row.subjectAccountId)!, row.subjectAccountId)
+          ? await boundedRead(deps.pool, deadline, (client) =>
+              readAccount(client, routeOf(row.subjectAccountId)!, row.subjectAccountId),
+            )
           : null;
       items.push({
         reservationId: row.reservationId,
@@ -289,7 +307,7 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
       let candidates: string[];
       try {
         candidates = (
-          await withConnection(deps.pool, (client) => readMembershipInverse(client, { accountId: actorId }))
+          await boundedRead(deps.pool, deadline, (client) => readMembershipInverse(client, { accountId: actorId }))
         )
           .filter((item) => item.kind === 'organization')
           .map((item) => item.id)
@@ -307,7 +325,7 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
       const cursor = await after(feed, actorId, query.organizationsCursor);
       const remaining = candidates.filter((id) => id > cursor);
       const page = remaining.slice(0, limit);
-      const publicAccounts = await identities(deps.pool, page);
+      const publicAccounts = await identities(deps.pool, deadline, page);
       const items: ManagedAccountsPage['organizations']['items'] = [];
       for (const organizationId of page) {
         const role = await currentRole(organizationId);
@@ -327,11 +345,15 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
       };
     },
     async detail(accountId: string, query: ManagementQuery): Promise<AccountManagementPage> {
-      const target = await readAccount(deps.pool, routeOf(accountId)!, accountId);
+      const target = await boundedRead(deps.pool, deadline, (client) =>
+        readAccount(client, routeOf(accountId)!, accountId),
+      );
       if (!target || target.state !== 'active' || target.fenced) throw new ProblemError('not_found');
       const self = accountId === actorId;
       const role = target.kind === 'organization' ? await currentRole(accountId) : null;
-      const relation = await relationRead.run(deps.pool, { route: routeOf(accountId)!, account_id: accountId });
+      const relation = await boundedRead(deps.pool, deadline, (client) =>
+        relationRead.run(client, { route: routeOf(accountId)!, account_id: accountId }),
+      );
       if (
         !self &&
         !(target.kind === 'organization' ? role : target.operatorAccountId && (await manager(target.operatorAccountId)))
@@ -345,26 +367,28 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
       };
       if (target.kind === 'organization' && canManage) {
         const feed = 'account.management.members';
-        const rows = await membersPage.run(deps.pool, {
-          route: routeOf(accountId)!,
-          organization_id: accountId,
-          after: await after(feed, accountId, query.membersCursor),
-          limit: limit + 1,
-        });
-        const page = rows.slice(0, limit);
-        const accounts = await identities(
-          deps.pool,
-          page.map((item) => item.accountId),
+        const afterId = await after(feed, accountId, query.membersCursor);
+        const rows = await boundedRead(deps.pool, deadline, (client) =>
+          membersPage.run(client, {
+            route: routeOf(accountId)!,
+            organization_id: accountId,
+            after: afterId,
+            limit: limit + 1,
+          }),
         );
+        const page = rows.slice(0, limit);
+        const accounts = await identities(deps.pool, deadline, page.map((item) => item.accountId));
         for (const row of page) {
-          const held = await readOrganizationRole(deps.pool, routeOf(accountId)!, accountId, row.accountId, at);
+          const held = await boundedRead(deps.pool, deadline, (client) =>
+            readOrganizationRole(client, routeOf(accountId)!, accountId, row.accountId, at),
+          );
           if (held)
             members.items.push({ accountId: row.accountId, account: accounts.get(row.accountId) ?? null, role: held });
         }
         members.next = rows.length > limit ? await continuation(feed, accountId, page.at(-1)!.accountId) : null;
       }
       const operator = target.operatorAccountId
-        ? ((await identities(deps.pool, [target.operatorAccountId])).get(target.operatorAccountId) ?? null)
+        ? ((await identities(deps.pool, deadline, [target.operatorAccountId])).get(target.operatorAccountId) ?? null)
         : null;
       return {
         account: presentation(target),

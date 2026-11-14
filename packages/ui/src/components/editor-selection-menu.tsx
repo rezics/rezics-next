@@ -71,12 +71,18 @@ export function SelectionMenu({
   const selectionRevision = useRef(0);
   const [renderedSelectionRevision, setRenderedSelectionRevision] = useState(0);
   const menuIsCurrent = () => isCurrent() && selectionRevision.current === renderedSelectionRevision;
+  const availableTabStops = [
+    ...state.marks.map(({ command }) => command.id),
+    ...(state.blocks.length ? ['turnInto'] : []),
+  ];
+  const activeTabStop = availableTabStops.includes(tabStop) ? tabStop : availableTabStops[0];
   useLayoutEffect(() => {
     const close = () => {
       if (!isCurrent()) return;
       selectionRevision.current += 1;
       setRenderedSelectionRevision(selectionRevision.current);
       setBlocksOpen(false);
+      holdsFocus.current = false;
     };
     editor.on('selectionUpdate', close);
     return () => {
@@ -92,7 +98,10 @@ export function SelectionMenu({
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      focusEditor();
+      if (blocksOpen) {
+        holdsFocus.current = false;
+        setBlocksOpen(false);
+      } else focusEditor();
       return;
     }
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
@@ -156,11 +165,12 @@ export function SelectionMenu({
           <>
             {state.marks.map(({ command, active }) => {
               const common = {
-                tabIndex: tabStop === command.id ? 0 : -1,
+                tabIndex: activeTabStop === command.id ? 0 : -1,
                 onFocus: () => {
                   if (menuIsCurrent()) setTabStop(command.id);
                 },
                 onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
+                onPointerDown: (event: React.PointerEvent) => event.preventDefault(),
               };
               return command.active ? (
                 <Toggle
@@ -195,7 +205,7 @@ export function SelectionMenu({
                   render={
                     <Button
                       variant="ghost"
-                      tabIndex={tabStop === 'turnInto' ? 0 : -1}
+                      tabIndex={activeTabStop === 'turnInto' ? 0 : -1}
                       onFocus={() => {
                         if (menuIsCurrent()) setTabStop('turnInto');
                       }}

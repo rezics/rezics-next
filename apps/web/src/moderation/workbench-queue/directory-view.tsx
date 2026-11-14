@@ -53,8 +53,8 @@ export function ModerationDirectory({
               ? m.moderation_directory_continuation_failed()
               : m.moderation_directory_unavailable();
     return (
-      <section aria-label={m.moderation_directory_heading()} className="space-y-3">
-        <h2 className="text-xl font-semibold">{m.moderation_directory_heading()}</h2>
+      <section aria-label={m.moderation_directory_heading()} className="min-w-0 space-y-4">
+        <h2 className="text-lg font-semibold">{m.moderation_directory_heading()}</h2>
         <p role={observation.state === 'unavailable' ? 'alert' : 'status'}>{message}</p>
         {onRetry && observation.state !== 'denied' && observation.state !== 'stale' ? (
           <Button
@@ -82,21 +82,23 @@ export function ModerationDirectory({
   }
   const next = observation.next;
   return (
-    <section aria-label={m.moderation_directory_heading()} className="space-y-3">
-      <h2 className="text-xl font-semibold">{m.moderation_directory_heading()}</h2>
+    <section aria-label={m.moderation_directory_heading()} className="min-w-0 space-y-4">
+      <h2 className="text-lg font-semibold">{m.moderation_directory_heading()}</h2>
       {observation.items.length > 0 ? <p role="status">{m.moderation_directory_ready()}</p> : null}
       {observation.items.length === 0 ? (
         <p role="status">{next ? m.moderation_directory_empty_next() : m.moderation_directory_empty()}</p>
       ) : null}
-      <ul className="min-w-0 divide-y">
+      <ul className="grid min-w-0 gap-3 md:grid-cols-2">
         {observation.items.map((entry) => {
           const scope = entry.scope;
           const allowed = entry.viewer.open === 'permitted';
           const key = scope.kind === 'board' ? `board:${scope.id}` : 'catalogue';
           return (
-            <li key={key} className="min-w-0 space-y-2 py-3">
-              <h3 className="break-words font-semibold">{entry.label}</h3>
-              {entry.parent ? <p className="break-words text-sm text-muted-foreground">{entry.parent.label}</p> : null}
+            <li key={key} className="min-w-0 space-y-3 rounded-lg border bg-background p-4">
+              <div className="min-w-0 space-y-1">
+                <h3 className="break-words font-semibold">{entry.label}</h3>
+                {entry.parent ? <p className="break-words text-sm text-muted-foreground">{entry.parent.label}</p> : null}
+              </div>
               <div className="flex min-w-0 flex-wrap gap-2">
                 {entry.queues.map((queue) => (
                   <Button
@@ -104,7 +106,7 @@ export function ModerationDirectory({
                     data-moderation-scope
                     type="button"
                     variant="outline"
-                    className={control}
+                    className={`${control} flex-1 justify-start`}
                     disabled={!allowed}
                     aria-describedby={!allowed ? `${key}-advice` : undefined}
                     aria-label={`${entry.label}: ${
@@ -147,7 +149,7 @@ export function ModerationDirectory({
               ) : null}
               {allowed ? (
                 <a
-                  className="inline-flex min-h-11 items-center break-words underline"
+                  className="inline-flex min-h-11 min-w-11 max-w-full items-center break-words rounded-md px-2 underline underline-offset-4"
                   href={localizeHref(
                     scope.kind === 'board' ? `/boards/${encodeURIComponent(scope.id)}` : '/moderation/catalogue',
                   )}
@@ -163,15 +165,17 @@ export function ModerationDirectory({
         })}
       </ul>
       {next ? (
-        <Button
-          type="button"
-          className={control}
-          onClick={() => {
-            if (live()) onSearch(workbenchSearch({ ...search, directoryCursor: next }));
-          }}
-        >
-          {m.threads_next_page()}
-        </Button>
+        <div className="border-t pt-4">
+          <Button
+            type="button"
+            className={control}
+            onClick={() => {
+              if (live()) onSearch(workbenchSearch({ ...search, directoryCursor: next }));
+            }}
+          >
+            {m.threads_next_page()}
+          </Button>
+        </div>
       ) : null}
     </section>
   );

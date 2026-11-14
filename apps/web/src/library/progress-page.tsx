@@ -88,6 +88,7 @@ import {
 } from './progress-server';
 import { rowRatio, SubjectCover } from './subject-row';
 import { displayLibraryTitle, LibraryTitle } from './title';
+import { ProgressIndexWorkspace } from './progress-index-workspace';
 
 const modeChoices: { value: ProgressMode; label: () => string }[] = [
   { value: 'scalar_amount', label: () => m.library_progress_mode_amount() },
@@ -1170,49 +1171,48 @@ function ProgressIndexPageContent({
   ];
   const progressUnitOptions = units.map((choice) => ({ value: choice.id, label: choice.label }));
   return (
-    <article className="max-w-4xl space-y-8 text-foreground" onClickCapture={protectNavigation}>
-      <PageHeading>{m.library_progress_heading()}</PageHeading>
-      {missingReturnRow && returnSelection ? (
-        <ProgressReturnRecovery
-          selection={returnSelection}
-          search={currentFilterAddress}
-          currentWorkId={returnSelection.subjectId}
-          current={authority?.isCurrent}
-        />
-      ) : null}
-      {page.selectedSubject ? (
-        <nav aria-label={m.library_progress_return_to_subject()}>
-          <a
-            className={buttonClass}
-            href={
-              sourceReturnTo ??
-              subjectHref(
-                {
-                  id: page.selectedSubject.id,
-                  label: displayLibraryTitle(page.selectedSubject.label, getLocale()).text,
-                },
-                getLocale(),
-              ).href
-            }
-          >
-            {m.library_progress_return_to_subject()}
-          </a>
-        </nav>
-      ) : null}
-      {loading ? (
-        <p role="status" aria-live="polite">
-          {m.library_progress_discovery_loading()}
-        </p>
-      ) : null}
-
-      <>
-        <section
-          aria-labelledby="progress-discovery-heading"
-          className="space-y-4 rounded-xl border border-border p-4 sm:p-5"
-        >
-          <h2 id="progress-discovery-heading" className="font-semibold">
-            {m.library_progress_discovery_search()}
-          </h2>
+    <ProgressIndexWorkspace
+      currentWork={
+        page.selectedSubject ? (
+          <nav aria-label={m.library_progress_return_to_subject()}>
+            <a
+              className={buttonClass}
+              href={
+                sourceReturnTo ??
+                subjectHref(
+                  {
+                    id: page.selectedSubject.id,
+                    label: displayLibraryTitle(page.selectedSubject.label, getLocale()).text,
+                  },
+                  getLocale(),
+                ).href
+              }
+            >
+              {m.library_progress_return_to_subject()}
+            </a>
+          </nav>
+        ) : null
+      }
+      loadingStatus={
+        loading ? (
+          <p role="status" aria-live="polite">
+            {m.library_progress_discovery_loading()}
+          </p>
+        ) : null
+      }
+      returnRecovery={
+        missingReturnRow && returnSelection ? (
+          <ProgressReturnRecovery
+            selection={returnSelection}
+            search={currentFilterAddress}
+            currentWorkId={returnSelection.subjectId}
+            current={authority?.isCurrent}
+          />
+        ) : null
+      }
+      sessionsHeading={sessionsHeading}
+      discovery={
+        <>
           <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <ProgressPicker
               value={filterSubject}
@@ -1284,48 +1284,46 @@ function ProgressIndexPageContent({
               {m.library_progress_discovery_reset()}
             </Link>
           ) : null}
-        </section>
-        <h2
-          id="progress-index-sessions-heading"
-          ref={sessionsHeading}
-          tabIndex={-1}
-          className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {m.library_progress_index_list_heading()}
-        </h2>
-        {viewerState === 'unavailable' ? (
-          <div className="space-y-3 rounded-xl border border-border p-4">
-            <p role="status">{m.library_progress_unavailable()}</p>
-            {retry ? (
-              <Button variant="outline" className="min-h-11" disabled={loading} onClick={retry}>
-                {m.library_progress_retry()}
-              </Button>
-            ) : null}
-          </div>
-        ) : sessions.length ? (
-          <ol className="divide-y divide-border">
-            {sessions.map((session) => (
-              <SessionRow
-                key={authority ? session.id : `${session.id}:${session.revision}`}
-                session={session}
-                ratio={ratio}
-                sourcePage={page}
-                authority={authority}
-                reviewRow={reviewRow}
-                returnFocus={session === selectedReturnRow}
-              />
-            ))}
-          </ol>
-        ) : (
-          <p className="text-muted-foreground">
-            {cursor || page.next
-              ? m.library_progress_page_empty()
-              : page.emptyKind === 'filtered-empty' || page.subjectId || page.state || page.mode || page.profileId
-                ? m.library_progress_discovery_empty_filtered()
-                : m.library_progress_discovery_empty_owner()}
-          </p>
-        )}
-        {cursor || page.next || windowActions?.previous || windowActions?.refresh ? (
+        </>
+      }
+      sessionContent={
+        <>
+          {viewerState === 'unavailable' ? (
+            <div className="space-y-3 rounded-xl border border-border p-4">
+              <p role="status">{m.library_progress_unavailable()}</p>
+              {retry ? (
+                <Button variant="outline" className="min-h-11" disabled={loading} onClick={retry}>
+                  {m.library_progress_retry()}
+                </Button>
+              ) : null}
+            </div>
+          ) : sessions.length ? (
+            <ol className="divide-y divide-border">
+              {sessions.map((session) => (
+                <SessionRow
+                  key={authority ? session.id : `${session.id}:${session.revision}`}
+                  session={session}
+                  ratio={ratio}
+                  sourcePage={page}
+                  authority={authority}
+                  reviewRow={reviewRow}
+                  returnFocus={session === selectedReturnRow}
+                />
+              ))}
+            </ol>
+          ) : (
+            <p className="text-muted-foreground">
+              {cursor || page.next
+                ? m.library_progress_page_empty()
+                : page.emptyKind === 'filtered-empty' || page.subjectId || page.state || page.mode || page.profileId
+                  ? m.library_progress_discovery_empty_filtered()
+                  : m.library_progress_discovery_empty_owner()}
+            </p>
+          )}
+        </>
+      }
+      windowControls={
+        cursor || page.next || windowActions?.previous || windowActions?.refresh ? (
           <Exposure operation="progress_session.list">
             <nav aria-label={m.library_progress_index_reader_pagination()} className="flex flex-wrap gap-2">
               {windowActions?.previous ? (
@@ -1399,155 +1397,145 @@ function ProgressIndexPageContent({
             </nav>
           </Exposure>
         ) : null}
+      }
+      startOpen={!sessions.length}
+      startContent={
         <Exposure operation="progress_session.create">
-          <details
-            data-progress-start=""
-            open={!sessions.length || undefined}
-            className="rounded-xl border border-border p-4 sm:p-5"
-          >
-            <summary
-              id="start-progress-heading"
-              className="min-h-11 cursor-pointer content-center font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {m.library_progress_start_heading()}
-            </summary>
-            <div className="space-y-5 pt-4">
+          <Field>
+            <ProgressPicker
+              key={episode.generation}
+              isCurrent={draftCurrent}
+              disabled={draftLocked}
+              value={chosen}
+              onValueChange={async (value) => {
+                if (!draftCurrent() || episode.pending || (!!authority && intent.current !== null)) return;
+                draftRef.current = { scope: draftScope, token: {} };
+                renderDraft((value) => value + 1);
+                const request = ++choiceRequest.current;
+                const latest = () => current() && request === choiceRequest.current;
+                setChosen(value);
+                setVersion([]);
+                setTotal('');
+                setChoices(undefined);
+                setChoicesUnavailable(false);
+                setChoosing(true);
+                setAlert(null);
+                try {
+                  if (!latest()) return;
+                  const next = value[0]
+                    ? await readProgressChoices({ data: value[0].type ?? value[0].types[0] ?? '' })
+                    : undefined;
+                  if (!latest()) return;
+                  setChoices(next);
+                  setMode(next?.[0]?.mode);
+                  setUnit('');
+                  setTotal('');
+                } catch {
+                  if (latest()) {
+                    setChoicesUnavailable(true);
+                    setAlert(m.library_progress_unavailable());
+                  }
+                } finally {
+                  if (latest()) setChoosing(false);
+                }
+              }}
+            />
+          </Field>
+          {alert && !choices?.length ? <p role="alert">{alert}</p> : null}
+          {choicesUnavailable ? <p role="status">{m.library_progress_unavailable()}</p> : null}
+          {chosen.length > 0 && !choosing && !choices?.length && !alert && !choicesUnavailable ? (
+            <p role="status" className="text-muted-foreground">
+              {m.library_progress_unsupported()}
+            </p>
+          ) : null}
+          {choices?.length && !choosing ? (
+            <form className="max-w-xl space-y-5" noValidate onSubmit={onStart}>
+              <input type="hidden" name="idempotencyKey" value={key} />
+              <input type="hidden" name="subjectId" value={subject} />
               <Field>
                 <ProgressPicker
                   key={episode.generation}
                   isCurrent={draftCurrent}
                   disabled={draftLocked}
-                  value={chosen}
-                  onValueChange={async (value) => {
-                    if (!draftCurrent() || episode.pending || (!!authority && intent.current !== null)) return;
-                    draftRef.current = { scope: draftScope, token: {} };
-                    renderDraft((value) => value + 1);
-                    const request = ++choiceRequest.current;
-                    const latest = () => current() && request === choiceRequest.current;
-                    setChosen(value);
-                    setVersion([]);
-                    setTotal('');
-                    setChoices(undefined);
-                    setChoicesUnavailable(false);
-                    setChoosing(true);
-                    setAlert(null);
-                    try {
-                      if (!latest()) return;
-                      const next = value[0]
-                        ? await readProgressChoices({ data: value[0].type ?? value[0].types[0] ?? '' })
-                        : undefined;
-                      if (!latest()) return;
-                      setChoices(next);
-                      setMode(next?.[0]?.mode);
-                      setUnit('');
-                      setTotal('');
-                    } catch {
-                      if (latest()) {
-                        setChoicesUnavailable(true);
-                        setAlert(m.library_progress_unavailable());
-                      }
-                    } finally {
-                      if (latest()) setChoosing(false);
-                    }
+                  label={m.library_progress_version()}
+                  value={version}
+                  onValueChange={(value) => {
+                    changeDraft(() => setVersion(value));
                   }}
                 />
+                <p className="text-sm text-muted-foreground">{m.library_progress_version_scope()}</p>
+                {!version[0] ? (
+                  <p className="text-sm text-muted-foreground">{m.library_progress_no_version()}</p>
+                ) : null}
               </Field>
-              {alert && !choices?.length ? <p role="alert">{alert}</p> : null}
-              {choicesUnavailable ? <p role="status">{m.library_progress_unavailable()}</p> : null}
-              {chosen.length > 0 && !choosing && !choices?.length && !alert && !choicesUnavailable ? (
-                <p role="status" className="text-muted-foreground">
-                  {m.library_progress_unsupported()}
+              <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>
+              <fieldset className="space-y-3">
+                <FieldLegend variant="label">{m.library_progress_mode()}</FieldLegend>
+                <RadioGroup
+                  name="progress-mode"
+                  disabled={draftLocked}
+                  value={mode}
+                  onValueChange={(value) => {
+                    changeDraft(() => setMode(value as ProgressMode));
+                  }}
+                  className="flex flex-wrap gap-x-6 gap-y-3"
+                >
+                  {choices
+                    ?.map((allowed) => modeChoices.find((choice) => choice.value === allowed.mode)!)
+                    .map((choice) => (
+                      <label key={choice.value} className="flex items-center gap-2 text-sm">
+                        <RadioGroupItem value={choice.value} />
+                        {choice.label()}
+                      </label>
+                    ))}
+                </RadioGroup>
+              </fieldset>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ProgressChoice
+                  id="progress-unit"
+                  name="unit"
+                  label={m.library_progress_unit()}
+                  value={unit}
+                  options={progressUnitOptions}
+                  disabled={draftLocked}
+                  onValueChange={(value) => changeDraft(() => setUnit(value))}
+                />
+                {acceptsTotal ? (
+                  <Field className="gap-2">
+                    <FieldLabel htmlFor="progress-total">{m.library_progress_total()}</FieldLabel>
+                    <ProgressDecimalInput
+                      id="progress-total"
+                      name="total"
+                      disabled={draftLocked}
+                      rules={pair}
+                      issue={validateTotal ? progressDecimalIssue(total, pair, pair?.total === 'required') : null}
+                      required={pair?.total === 'required'}
+                      value={total}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        changeDraft(() => setTotal(value));
+                      }}
+                    />
+                  </Field>
+                ) : null}
+              </div>
+              {alert ? (
+                <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                  {alert}
                 </p>
               ) : null}
-              {choices?.length && !choosing ? (
-                <form className="max-w-xl space-y-5" noValidate onSubmit={onStart}>
-                  <input type="hidden" name="idempotencyKey" value={key} />
-                  <input type="hidden" name="subjectId" value={subject} />
-                  <Field>
-                    <ProgressPicker
-                      key={episode.generation}
-                      isCurrent={draftCurrent}
-                      disabled={draftLocked}
-                      label={m.library_progress_version()}
-                      value={version}
-                      onValueChange={(value) => {
-                        changeDraft(() => setVersion(value));
-                      }}
-                    />
-                    <p className="text-sm text-muted-foreground">{m.library_progress_version_scope()}</p>
-                    {!version[0] ? (
-                      <p className="text-sm text-muted-foreground">{m.library_progress_no_version()}</p>
-                    ) : null}
-                  </Field>
-                  <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>
-                  <fieldset className="space-y-3">
-                    <FieldLegend variant="label">{m.library_progress_mode()}</FieldLegend>
-                    <RadioGroup
-                      name="progress-mode"
-                      disabled={draftLocked}
-                      value={mode}
-                      onValueChange={(value) => {
-                        changeDraft(() => setMode(value as ProgressMode));
-                      }}
-                      className="flex flex-wrap gap-x-6 gap-y-3"
-                    >
-                      {choices
-                        ?.map((allowed) => modeChoices.find((choice) => choice.value === allowed.mode)!)
-                        .map((choice) => (
-                          <label key={choice.value} className="flex items-center gap-2 text-sm">
-                            <RadioGroupItem value={choice.value} />
-                            {choice.label()}
-                          </label>
-                        ))}
-                    </RadioGroup>
-                  </fieldset>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <ProgressChoice
-                      id="progress-unit"
-                      name="unit"
-                      label={m.library_progress_unit()}
-                      value={unit}
-                      options={progressUnitOptions}
-                      disabled={draftLocked}
-                      onValueChange={(value) => changeDraft(() => setUnit(value))}
-                    />
-                    {acceptsTotal ? (
-                      <Field className="gap-2">
-                        <FieldLabel htmlFor="progress-total">{m.library_progress_total()}</FieldLabel>
-                        <ProgressDecimalInput
-                          id="progress-total"
-                          name="total"
-                          disabled={draftLocked}
-                          rules={pair}
-                          issue={validateTotal ? progressDecimalIssue(total, pair, pair?.total === 'required') : null}
-                          required={pair?.total === 'required'}
-                          value={total}
-                          onChange={(event) => {
-                            const value = event.currentTarget.value;
-                            changeDraft(() => setTotal(value));
-                          }}
-                        />
-                      </Field>
-                    ) : null}
-                  </div>
-                  {alert ? (
-                    <p role="alert" className="rounded-lg border border-border bg-card p-3">
-                      {alert}
-                    </p>
-                  ) : null}
-                  <Button
-                    type="submit"
-                    disabled={pending || (!!authority && !authority.permits('progress_session.create', creatable))}
-                  >
-                    {m.library_progress_start()}
-                  </Button>
-                </form>
-              ) : null}
-            </div>
-          </details>
+              <Button
+                type="submit"
+                disabled={pending || (!!authority && !authority.permits('progress_session.create', creatable))}
+              >
+                {m.library_progress_start()}
+              </Button>
+            </form>
+          ) : null}
         </Exposure>
-      </>
-    </article>
+      }
+      onClickCapture={protectNavigation}
+    />
   );
 }
 

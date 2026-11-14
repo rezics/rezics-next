@@ -62,6 +62,9 @@ export function FollowingReadingRow({
           {kind !== targetKind ? <span>{kind}</span> : null}
         </>
       }
+      state={
+        selected ? <span className="text-sm text-muted-foreground">{m.following_reading_inspection()}</span> : undefined
+      }
       preview={
         admission ? (
           <p data-following-admission="" className="text-muted-foreground">

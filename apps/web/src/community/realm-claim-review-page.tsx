@@ -45,24 +45,29 @@ function sameRequest(a: RealmClaimReviewRequest, b: RealmClaimReviewRequest) {
 
 function OriginalDate({ value }: { value: string }) {
   return (
-    <time dateTime={value}>
-      {new Intl.DateTimeFormat(getLocale(), {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'UTC',
-      }).format(new Date(value))}{' '}
-      UTC
+    <time dateTime={value} className="block min-w-0 select-text [overflow-wrap:anywhere]">
+      <span className="block">
+        {new Intl.DateTimeFormat(getLocale(), {
+          dateStyle: 'long',
+          timeStyle: 'short',
+          timeZone: 'UTC',
+        }).format(new Date(value))}{' '}
+        UTC
+      </span>
+      <span dir="ltr" className="mt-1 block select-all font-mono text-xs text-muted-foreground">
+        {value}
+      </span>
     </time>
   );
 }
 function ReferenceDetails({ realmId, requestId }: { realmId: string; requestId?: string }) {
   return (
-    <ManagementReferences>
+    <ManagementReferences label={m.community_management_details_claim_summary()}>
       <ManagementField label={m.realm_review_realm()}>
         <Reference>{realmId}</Reference>
       </ManagementField>
       {requestId ? (
-        <ManagementField label={m.realm_review_request_reference()}>
+        <ManagementField label={m.realm_claim_reference()}>
           <Reference>{requestId}</Reference>
         </ManagementField>
       ) : null}
@@ -97,14 +102,14 @@ function RequestDetails({ request, compact = false }: { request: RealmClaimRevie
         <ManagementField label={m.realm_review_claimant()} className="sm:col-span-2 xl:col-span-3">
           <Reference>{request.claimantAccountId}</Reference>
         </ManagementField>
-        <ManagementField label={m.realm_claim_requested_at()}>
-          <OriginalDate value={request.requestedAt} />
-        </ManagementField>
         <ManagementField label={m.realm_claim_orphaned_at()}>
           <OriginalDate value={request.orphanedAt} />
         </ManagementField>
         <ManagementField label={m.realm_claim_eligible_at()}>
           <OriginalDate value={request.claimEligibleAt} />
+        </ManagementField>
+        <ManagementField label={m.realm_claim_requested_at()}>
+          <OriginalDate value={request.requestedAt} />
         </ManagementField>
       </dl>
     </div>
@@ -278,6 +283,12 @@ function RealmClaimReviewContent({
   const canRestart = ['unavailable', 'invalid-cursor', 'stale-cursor'].includes(state.read.kind);
   const receipt = !denied && state.outcome === 'approved' ? state.receipt : null;
   const editable = active && !state.busy && state.outcome === 'idle';
+  const approvalActive =
+    !!state.intent &&
+    (state.outcome === 'confirming' ||
+      state.outcome === 'sending' ||
+      state.outcome === 'uncertain' ||
+      state.outcome === 'conflict');
   return (
     <article className="min-w-0 space-y-8 text-foreground [overflow-wrap:anywhere]" aria-busy={state.busy}>
       <header className="flex flex-wrap items-start justify-between gap-5 border-b pb-6">
@@ -353,114 +364,7 @@ function RealmClaimReviewContent({
             </h2>
           </div>
           <div aria-live="polite" aria-atomic="true" className="space-y-4">
-            {state.outcome === 'conflict' ? (
-              <p
-                ref={setRecoveryBoundary}
-                tabIndex={-1}
-                role="alert"
-                className="rounded-xl border p-4 text-sm leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              >
-                {m.realm_review_conflict()}
-              </p>
-            ) : null}
-            {state.outcome === 'uncertain' && !denied ? (
-              <div ref={setRecoveryBoundary} role="alert" className="space-y-3 rounded-xl border p-4 text-sm leading-6">
-                <p>{m.realm_review_uncertain()}</p>
-                <Button
-                  ref={inspectionButton}
-                  variant="outline"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
-                  disabled={!active || state.busy}
-                  onClick={(event) => {
-                    pendingFocus.current =
-                      event.detail === 0 && state.intent
-                        ? {
-                            kind: 'approval',
-                            ticket: lifetime.ticket(),
-                            request: state.intent.source,
-                            action: 'inspect',
-                          }
-                        : null;
-                    void control.inspectOriginal();
-                  }}
-                >
-                  {m.realm_review_inspect_original()}
-                </Button>
-                {state.inspection ? (
-                  <p role="status">
-                    {state.inspection.state === 'approved'
-                      ? m.realm_review_inspected_approved()
-                      : m.realm_review_inspected_pending()}
-                  </p>
-                ) : state.recoveryReady ? (
-                  <p role="status">{m.realm_review_inspected_missing()}</p>
-                ) : null}
-                {state.recoveryReady ? (
-                  <Button
-                    ref={approvalRetryButton}
-                    variant="outline"
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
-                    disabled={!active || state.busy}
-                    onClick={(event) => {
-                      pendingFocus.current =
-                        event.detail === 0 && state.intent
-                          ? {
-                              kind: 'approval',
-                              ticket: lifetime.ticket(),
-                              request: state.intent.source,
-                              action: 'retry',
-                            }
-                          : null;
-                      void control.retry();
-                    }}
-                  >
-                    {m.realm_review_retry()}
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {receipt ? (
-              <ContentItemFrame
-                as="article"
-                role="status"
-                aria-labelledby={`${id}-receipt`}
-                className="space-y-3 p-5 text-sm leading-6"
-              >
-                <div
-                  ref={receiptBoundary}
-                  tabIndex={-1}
-                  className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  <ContentItemHeading level={3} id={`${id}-receipt`} className="flex items-center gap-2 font-semibold">
-                    <Check className="size-4" aria-hidden="true" />
-                    {m.realm_review_success()}
-                  </ContentItemHeading>
-                </div>
-                <dl className="space-y-2">
-                  <div>
-                    <dt className="text-muted-foreground">{m.realm_review_claimant()}</dt>
-                    <dd>
-                      <Reference>{receipt.claimantAccountId}</Reference>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">{m.realm_claim_orphaned_at()}</dt>
-                    <dd>
-                      <OriginalDate value={receipt.orphanedAt} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">{m.realm_review_approved_at()}</dt>
-                    <dd>
-                      <OriginalDate value={receipt.approvedAt} />
-                    </dd>
-                  </div>
-                </dl>
-                <p>{m.realm_review_success_help()}</p>
-                <ReferenceDetails realmId={receipt.realmId} requestId={receipt.requestId} />
-              </ContentItemFrame>
-            ) : null}
-            {!page ? (
+            {!page && !receipt && !approvalActive ? (
               <div
                 ref={state.outcome === 'conflict' ? undefined : setRecoveryBoundary}
                 tabIndex={-1}
@@ -481,60 +385,7 @@ function RealmClaimReviewContent({
               </div>
             ) : null}
           </div>
-          {confirming ? (
-            <section
-              ref={confirmationBoundary}
-              aria-labelledby={`${id}-confirm`}
-              tabIndex={-1}
-              className="min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              <ManagementReview title={m.realm_review_confirm_heading()} aria-labelledby={`${id}-confirm`}>
-                <div className="space-y-2">
-                  <ContentItemHeading level={3} id={`${id}-confirm`} className="text-lg font-semibold">
-                    {m.realm_review_confirm_heading()}
-                  </ContentItemHeading>
-                  <p className="text-sm leading-6">{m.realm_review_confirm_help()}</p>
-                </div>
-                <RequestDetails request={confirming.source} />
-                <ReferenceDetails realmId={confirming.source.realmId} requestId={confirming.source.requestId} />
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
-                    disabled={!active || state.busy}
-                    onClick={(event) => {
-                      pendingFocus.current =
-                        event.detail === 0
-                          ? {
-                              kind: 'approval',
-                              ticket: lifetime.ticket(),
-                              request: confirming.source,
-                              action: 'confirm',
-                            }
-                          : null;
-                      void control.confirm();
-                    }}
-                  >
-                    {m.realm_review_confirm()}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
-                    disabled={state.busy}
-                    onClick={(event) => {
-                      pendingFocus.current =
-                        event.detail === 0
-                          ? { kind: 'cancel', ticket: lifetime.ticket(), request: confirming.source, read: state.read }
-                          : null;
-                      control.cancel();
-                    }}
-                  >
-                    {m.realm_review_cancel()}
-                  </Button>
-                </div>
-              </ManagementReview>
-            </section>
-          ) : null}
-          {page && !confirming ? (
+          {page ? (
             <>
               {page.claimRequests.length ? (
                 <ul aria-labelledby={`${id}-queue`} className="min-w-0 rounded-xl border px-3 sm:px-1">
@@ -598,19 +449,6 @@ function RealmClaimReviewContent({
               ) : null}
             </>
           ) : null}
-          {page && ['approved', 'conflict', 'refused'].includes(state.outcome) ? (
-            <Button
-              variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
-              disabled={state.busy}
-              onClick={() => {
-                pendingFocus.current = null;
-                control.reviewCurrent();
-              }}
-            >
-              {m.realm_review_review_current()}
-            </Button>
-          ) : null}
         </section>
         <aside className="space-y-5 border-t pt-6 text-sm leading-7 text-muted-foreground xl:border-t-0 xl:border-s xl:ps-6 xl:pt-0">
           <h2 className="flex items-center gap-2 font-semibold text-foreground">
@@ -622,6 +460,242 @@ function RealmClaimReviewContent({
           <p>{m.realm_review_guidance_privacy()}</p>
         </aside>
       </div>
+      {confirming ||
+      state.outcome === 'conflict' ||
+      (state.outcome === 'uncertain' && !denied) ||
+      (state.outcome === 'sending' && !!state.intent) ? (
+        <section aria-label={m.realm_review_eyebrow()} className="space-y-5 border-t pt-6">
+          {confirming ? (
+            <section
+              ref={confirmationBoundary}
+              aria-labelledby={`${id}-confirm`}
+              tabIndex={-1}
+              className="min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <ManagementReview title={m.realm_review_confirm_heading()} aria-labelledby={`${id}-confirm`}>
+                <div className="space-y-2">
+                  <ContentItemHeading level={3} id={`${id}-confirm`} className="text-lg font-semibold">
+                    {m.realm_review_confirm_heading()}
+                  </ContentItemHeading>
+                  <p className="text-sm leading-6">{m.realm_review_confirm_help()}</p>
+                </div>
+                <RequestDetails request={confirming.source} />
+                <ReferenceDetails realmId={confirming.source.realmId} requestId={confirming.source.requestId} />
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                    disabled={!active || state.busy}
+                    onClick={(event) => {
+                      pendingFocus.current =
+                        event.detail === 0
+                          ? {
+                              kind: 'approval',
+                              ticket: lifetime.ticket(),
+                              request: confirming.source,
+                              action: 'confirm',
+                            }
+                          : null;
+                      void control.confirm();
+                    }}
+                  >
+                    {m.realm_review_confirm()}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                    disabled={state.busy}
+                    onClick={(event) => {
+                      pendingFocus.current =
+                        event.detail === 0
+                          ? { kind: 'cancel', ticket: lifetime.ticket(), request: confirming.source, read: state.read }
+                          : null;
+                      control.cancel();
+                    }}
+                  >
+                    {m.realm_review_cancel()}
+                  </Button>
+                </div>
+              </ManagementReview>
+            </section>
+          ) : null}
+          {state.outcome === 'sending' ? (
+            <p role="status" className="text-sm leading-6">
+              {m.realm_review_working()}
+            </p>
+          ) : null}
+          {state.outcome === 'conflict' ? (
+            <p
+              ref={setRecoveryBoundary}
+              tabIndex={-1}
+              role="alert"
+              className="rounded-xl border p-4 text-sm leading-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {m.realm_review_conflict()}
+            </p>
+          ) : null}
+          {state.outcome === 'uncertain' && !denied ? (
+            <div ref={setRecoveryBoundary} role="alert" className="space-y-3 rounded-xl border p-4 text-sm leading-6">
+              <p>{m.realm_review_uncertain()}</p>
+              {state.busy ? <p role="status">{m.realm_review_working()}</p> : null}
+              <Button
+                ref={inspectionButton}
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                disabled={!active || state.busy}
+                onClick={(event) => {
+                  pendingFocus.current =
+                    event.detail === 0 && state.intent
+                      ? {
+                          kind: 'approval',
+                          ticket: lifetime.ticket(),
+                          request: state.intent.source,
+                          action: 'inspect',
+                        }
+                      : null;
+                  void control.inspectOriginal();
+                }}
+              >
+                {m.realm_review_inspect_original()}
+              </Button>
+              {state.inspection && state.intent ? (
+                <section aria-label={m.realm_review_inspect_original()} className="space-y-3 border-t pt-3">
+                  <p role="status">
+                    {state.inspection.state === 'approved'
+                      ? m.realm_review_inspected_approved()
+                      : m.realm_review_inspected_pending()}
+                  </p>
+                  <RequestDetails request={state.intent.source} />
+                  {state.inspection.state === 'approved' ? (
+                    <ManagementField label={m.realm_claim_status_approved_at()}>
+                      <OriginalDate value={state.inspection.approvedAt} />
+                    </ManagementField>
+                  ) : null}
+                  <ReferenceDetails realmId={state.intent.realmId} requestId={state.intent.requestId} />
+                </section>
+              ) : state.recoveryReady ? (
+                <p role="status">{m.realm_review_inspected_missing()}</p>
+              ) : null}
+              {state.recoveryReady ? (
+                <Button
+                  ref={approvalRetryButton}
+                  variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                  disabled={!active || state.busy}
+                  onClick={(event) => {
+                    pendingFocus.current =
+                      event.detail === 0 && state.intent
+                        ? {
+                            kind: 'approval',
+                            ticket: lifetime.ticket(),
+                            request: state.intent.source,
+                            action: 'retry',
+                          }
+                        : null;
+                    void control.retry();
+                  }}
+                >
+                  {m.realm_review_retry()}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      {receipt ? (
+        <section aria-label={m.realm_review_success()} className="space-y-4 border-t pt-6">
+          <ContentItemFrame
+            as="article"
+            role="status"
+            aria-labelledby={`${id}-receipt`}
+            className="space-y-3 p-5 text-sm leading-6"
+          >
+            <div
+              ref={receiptBoundary}
+              tabIndex={-1}
+              className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <ContentItemHeading level={3} id={`${id}-receipt`} className="flex items-center gap-2 font-semibold">
+                <Check className="size-4" aria-hidden="true" />
+                {m.realm_review_success()}
+              </ContentItemHeading>
+            </div>
+            <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.realm_review_claimant()}</dt>
+                <dd>
+                  {state.intent ? <ClaimantName request={state.intent.source} /> : null}
+                  <Reference>{receipt.claimantAccountId}</Reference>
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.realm_claim_orphaned_at()}</dt>
+                <dd>
+                  <OriginalDate value={receipt.orphanedAt} />
+                </dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">{m.realm_claim_status_approved_at()}</dt>
+                <dd>
+                  <OriginalDate value={receipt.approvedAt} />
+                </dd>
+              </div>
+            </dl>
+            <p>{m.realm_review_success_help()}</p>
+            <ReferenceDetails realmId={receipt.realmId} requestId={receipt.requestId} />
+          </ContentItemFrame>
+          {state.intent ? (
+            <section aria-labelledby={`${id}-original-request`} className="space-y-3 rounded-xl border bg-muted/20 p-4">
+              <ContentItemHeading level={3} id={`${id}-original-request`} className="text-base font-semibold">
+                {m.realm_claim_request()}
+              </ContentItemHeading>
+              <dl className="grid min-w-0 gap-4 text-sm sm:grid-cols-2">
+                <ManagementField label={m.realm_claim_eligible_at()}>
+                  <OriginalDate value={state.intent.source.claimEligibleAt} />
+                </ManagementField>
+                <ManagementField label={m.realm_claim_requested_at()}>
+                  <OriginalDate value={state.intent.source.requestedAt} />
+                </ManagementField>
+              </dl>
+            </section>
+          ) : null}
+          {!page ? (
+            <div
+              ref={state.outcome === 'conflict' ? undefined : setRecoveryBoundary}
+              tabIndex={-1}
+              role="status"
+              className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm leading-7 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <p>
+                {state.busy
+                  ? m.realm_review_working()
+                  : state.read.kind === 'signed-out'
+                    ? m.realm_review_signed_out()
+                    : state.read.kind === 'closed'
+                      ? m.realm_review_closed()
+                      : denied
+                        ? m.realm_review_denied()
+                        : m.realm_review_unavailable()}
+              </p>
+              {!state.busy ? <p>{m.realm_review_refresh_after_approval()}</p> : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      {page && ['approved', 'conflict', 'refused'].includes(state.outcome) ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+            disabled={state.busy}
+            onClick={() => {
+              pendingFocus.current = null;
+              control.reviewCurrent();
+            }}
+          >
+            {m.realm_review_review_current()}
+          </Button>
+        </div>
+      ) : null}
     </article>
   );
 }

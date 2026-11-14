@@ -1,15 +1,20 @@
 import { contentRequestId } from './adapters/bind.ts';
 import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
-import { deadlineClient, within } from './access-port.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { accessCheck } from './access-port.ts';
+import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ANONYMOUS_PRINCIPAL_ID } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
-import { accessCheck } from './access-port.ts';
-import type { Actor } from '../request/access.ts';
+import type { AccessClient, Actor } from '../request/access.ts';
 import type { ReportDependencies, ReportRequestContext } from './reports.ts';
 
 /** The shared request stage has already charged report/1 before this runs.
@@ -90,28 +95,46 @@ export async function requireReportInspection(
   );
   const nativeTarget = nativeKind ? { kind: nativeKind, id: targetId } : undefined;
   const readable = nativeTarget ? await communityReportReadCheck(dependencies, nativeTarget, context) : null;
-  await within(context.deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, context.deadline);
+  let readFailed = false;
+  let readFailure: unknown;
+  const snapshot = withBoundedReadOnlyTransaction(
+    dependencies.pool,
+    context.deadline,
+    async (client) => {
       try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const accessClient = client as AccessClient;
         const partition = await readPartition(client, partitionOf(route));
         if (
           !partition ||
           partition.writeState === 'moved' ||
-          !(await check(client)) ||
-          (nativeTarget && (!(await communityReportTargetFacts(client, nativeTarget)) || !(await readable!(client))))
+          !(await check(accessClient)) ||
+          (nativeTarget &&
+            (!(await communityReportTargetFacts(accessClient, nativeTarget)) || !(await readable!(accessClient))))
         )
           throw new ProblemError('not_found');
-        await client.query('COMMIT');
       } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
+        readFailed = true;
+        readFailure = error;
         throw error;
       }
-    }),
+    },
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error: unknown) {
+        if (error instanceof CommandUnavailableError) return error;
+        try {
+          throwAccessUnavailable(error);
+        } catch (mapped) {
+          return mapped;
+        }
+        return error;
+      },
+      isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+      isUncertainSettledQueryError: () => true,
+    },
   );
+  await snapshot.catch((error: unknown) => {
+    if (readFailed) throw readFailure;
+    throw error;
+  });
 }

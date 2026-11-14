@@ -3,6 +3,12 @@ import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { readAccount, deadlineClient, within } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
+import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
@@ -11,7 +17,7 @@ import {
   releaseOperationalTime,
   type CommandTransaction,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -75,6 +81,24 @@ import { requireLibraryDomain } from './domain-binding.ts';
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Page = { limit?: number; cursor?: string; origin?: string; language?: string };
 type Client = CommandTransaction;
+
+function boundedSessionReadOptions() {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      if (error instanceof CommandUnavailableError) return error;
+      try {
+        throwAccessUnavailable(error);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  };
+}
+
 export type ProgressSessionJournalAdmission = {
   identity: unknown;
   prepare?: () => Promise<void>;
@@ -528,21 +552,17 @@ export function createSessionCommands(config: Dependencies) {
     body: (client: Client, owner: AccountActor) => Promise<T>,
   ): Promise<T> {
     const owner = account(actor, action);
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     return consumeSessionWork('snapshot', sessionSnapshotWork(owner.accountId), () =>
-      withConnection(pool, async (raw) => {
-        const client = deadlineClient(raw, deadlineFor(WORK_STEP_DEADLINE_MS));
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
+      withBoundedReadOnlyTransaction(
+        pool,
+        deadline,
+        async (client) => {
           await admit(client, owner);
-          const result = await body(client, owner);
-          await client.query('COMMIT');
-          return result;
-        } catch (error) {
-          // Cleanup must drain the original connection even after its operation deadline.
-          await raw.query('ROLLBACK');
-          throw error;
-        }
-      }),
+          return body(client, owner);
+        },
+        boundedSessionReadOptions(),
+      ),
     );
   }
 
@@ -671,7 +691,12 @@ export function createSessionCommands(config: Dependencies) {
         within(deadline, async () => {
           async function time() {
             return consumeSessionWork('read-time', sessionReadTimeWork(), () =>
-              withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock)),
+              withBoundedReadConnection(
+                pool,
+                deadline,
+                (client) => mintReadTime(client, clock),
+                boundedSessionReadOptions(),
+              ),
             );
           }
           async function observed() {

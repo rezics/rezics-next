@@ -415,30 +415,55 @@ function ReadingPreview({ ids, draft, confirmed }: { ids: string; draft: Reading
   const draftPreview = !sameReading(draft, confirmed);
   const values = draftPreview ? draft : confirmed;
   return (
-    <figure className="min-w-0 max-w-full rounded-lg border border-border p-3" aria-labelledby={`${ids}-preview`}>
-      <figcaption id={`${ids}-preview`} className="text-sm font-medium">
+    <figure
+      className="min-w-0 max-w-full rounded-xl border border-border bg-card p-4 sm:p-5"
+      aria-labelledby={`${ids}-preview`}
+    >
+      <figcaption id={`${ids}-preview`} className="min-w-0 max-w-full text-base font-semibold wrap-anywhere">
         {m.settings_reading_preview_legend()}
       </figcaption>
-      <p className="text-sm text-muted-foreground">
+      <p
+        className={`mt-2 inline-flex max-w-full rounded-full px-2.5 py-1 text-sm font-medium wrap-anywhere ${
+          draftPreview ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+        }`}
+      >
         {draftPreview ? m.settings_reading_preview_draft() : m.settings_reading_preview_confirmed()}
       </p>
-      <p className="mt-2 font-medium">{m.settings_reading_preview_title()}</p>
-      <p className="text-sm">{m.settings_reading_preview_summary()}</p>
-      <p className="text-sm" data-spoiler="minor">
-        {values.spoilerLevel >= 1 ? m.settings_reading_preview_minor() : m.settings_reading_preview_hidden()}
-      </p>
-      <p className="text-sm" data-spoiler="major">
-        {values.spoilerLevel >= 2 ? m.settings_reading_preview_major() : m.settings_reading_preview_hidden()}
-      </p>
-      <div
-        className={`mt-2 max-w-40 rounded-md bg-muted p-6 text-center text-sm ${values.suitability === 'blur' ? 'blur-sm' : ''}`}
-        aria-hidden="true"
-      >
-        {m.settings_reading_preview_cover()}
+      <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_7rem] sm:items-start">
+        <article className="min-w-0 rounded-lg border border-border/70 bg-background p-3 sm:p-4">
+          <p className="min-w-0 max-w-full font-medium wrap-anywhere">{m.settings_reading_preview_title()}</p>
+          <p className="mt-1 min-w-0 max-w-full text-sm text-muted-foreground wrap-anywhere">
+            {m.settings_reading_preview_summary()}
+          </p>
+          <div className="mt-3 space-y-2">
+            <p
+              className="min-w-0 max-w-full rounded-md bg-muted/70 px-3 py-2 text-sm wrap-anywhere"
+              data-spoiler="minor"
+            >
+              {values.spoilerLevel >= 1 ? m.settings_reading_preview_minor() : m.settings_reading_preview_hidden()}
+            </p>
+            <p
+              className="min-w-0 max-w-full rounded-md bg-muted/70 px-3 py-2 text-sm wrap-anywhere"
+              data-spoiler="major"
+            >
+              {values.spoilerLevel >= 2 ? m.settings_reading_preview_major() : m.settings_reading_preview_hidden()}
+            </p>
+          </div>
+        </article>
+        <div className="flex min-w-0 flex-col items-start gap-2">
+          <div
+            className={`min-h-28 w-full max-w-full rounded-md bg-muted p-3 text-center text-sm wrap-anywhere ${
+              values.suitability === 'blur' ? 'blur-sm' : ''
+            }`}
+            aria-hidden="true"
+          >
+            {m.settings_reading_preview_cover()}
+          </div>
+          <p className="sr-only">
+            {values.suitability === 'blur' ? m.settings_reading_preview_cover_blur() : m.settings_reading_preview_cover()}
+          </p>
+        </div>
       </div>
-      <p className="sr-only">
-        {values.suitability === 'blur' ? m.settings_reading_preview_cover_blur() : m.settings_reading_preview_cover()}
-      </p>
     </figure>
   );
 }
@@ -596,112 +621,165 @@ export function ReadingCard({
         <ContentSectionTitle>
           <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
         </ContentSectionTitle>
-        <ContentSectionDescription>{m.settings_reading_text()}</ContentSectionDescription>
+        <ContentSectionDescription className="min-w-0 max-w-full wrap-anywhere">
+          {m.settings_reading_text()}
+        </ContentSectionDescription>
         {choicesReady ? (
-          <ContentSectionDescription>
+          <ContentSectionDescription className="min-w-0 max-w-full wrap-anywhere">
             {ownerMayChange ? m.settings_automatic_save_help() : m.settings_reading_read_only_text()}
           </ContentSectionDescription>
         ) : null}
       </ContentSectionHeader>
-      <ContentSectionBody className="flex min-w-0 flex-col gap-4">
+      <ContentSectionBody className="min-w-0 space-y-5 sm:space-y-6">
         {choicesReady ? (
-          <>
-            <FieldGroup>
-              <FieldSet>
-                <FieldLegend id={`${ids}-spoilers`}>{m.settings_spoiler_legend()}</FieldLegend>
-                <FieldDescription>{m.settings_spoiler_text()}</FieldDescription>
-                <RadioGroup
-                  value={String(state.draft.spoilerLevel)}
-                  disabled={!mayWrite}
-                  onValueChange={(value) =>
-                    void editor.edit({
-                      spoilerLevel: Number(value) as SpoilerLevel,
-                    })
-                  }
-                  aria-labelledby={`${ids}-spoilers`}
-                >
-                  {levels
-                    .filter((level) => offered.includes(level.value))
-                    .map((level) => (
-                      <FieldLabel key={level.value} htmlFor={`${ids}-level-${level.value}`}>
-                        <Field orientation="horizontal">
-                          <FieldContent>
-                            <FieldTitle id={`${ids}-level-${level.value}-title`}>{level.title()}</FieldTitle>
-                            <FieldDescription id={`${ids}-level-${level.value}-text`}>{level.text()}</FieldDescription>
-                          </FieldContent>
-                          <RadioGroupItem
-                            id={`${ids}-level-${level.value}`}
-                            value={String(level.value)}
-                            aria-labelledby={`${ids}-level-${level.value}-title`}
-                            aria-describedby={`${ids}-level-${level.value}-text`}
-                          />
-                        </Field>
-                      </FieldLabel>
-                    ))}
-                </RadioGroup>
-              </FieldSet>
-              {suitabilityToggleOffered ? (
-                <FieldLabel htmlFor={`${ids}-suitability`}>
-                  <Field orientation="horizontal">
-                    <FieldContent>
-                      <FieldTitle id={`${ids}-suitability-title`}>{m.settings_suitability_title()}</FieldTitle>
-                      <FieldDescription id={`${ids}-suitability-text`}>
+          <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(18rem,0.92fr)] lg:items-start lg:gap-6">
+            <div className="min-w-0 space-y-4">
+              <div className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-5">
+                <FieldGroup className="min-w-0 gap-6">
+                  <FieldSet className="min-w-0">
+                    <FieldLegend id={`${ids}-spoilers`} className="max-w-full wrap-anywhere">
+                      {m.settings_spoiler_legend()}
+                    </FieldLegend>
+                    <FieldDescription className="min-w-0 max-w-full wrap-anywhere">
+                      {m.settings_spoiler_text()}
+                    </FieldDescription>
+                    <RadioGroup
+                      className="mt-3 grid min-w-0 gap-2"
+                      value={String(state.draft.spoilerLevel)}
+                      disabled={!mayWrite}
+                      onValueChange={(value) =>
+                        void editor.edit({
+                          spoilerLevel: Number(value) as SpoilerLevel,
+                        })
+                      }
+                      aria-labelledby={`${ids}-spoilers`}
+                    >
+                      {levels
+                        .filter((level) => offered.includes(level.value))
+                        .map((level) => (
+                          <FieldLabel
+                            key={level.value}
+                            htmlFor={`${ids}-level-${level.value}`}
+                            className="min-w-0 max-w-full rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted/50 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+                          >
+                            <Field orientation="horizontal" className="min-w-0 items-start gap-3">
+                              <FieldContent className="min-w-0">
+                                <FieldTitle
+                                  id={`${ids}-level-${level.value}-title`}
+                                  className="max-w-full wrap-anywhere"
+                                >
+                                  {level.title()}
+                                </FieldTitle>
+                                <FieldDescription
+                                  id={`${ids}-level-${level.value}-text`}
+                                  className="min-w-0 max-w-full wrap-anywhere"
+                                >
+                                  {level.text()}
+                                </FieldDescription>
+                              </FieldContent>
+                              <RadioGroupItem
+                                className="mt-1 shrink-0"
+                                id={`${ids}-level-${level.value}`}
+                                value={String(level.value)}
+                                aria-labelledby={`${ids}-level-${level.value}-title`}
+                                aria-describedby={`${ids}-level-${level.value}-text`}
+                              />
+                            </Field>
+                          </FieldLabel>
+                        ))}
+                    </RadioGroup>
+                  </FieldSet>
+                  {suitabilityToggleOffered ? (
+                    <FieldLabel
+                      htmlFor={`${ids}-suitability`}
+                      className="min-w-0 max-w-full rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted/50 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+                    >
+                      <Field orientation="horizontal" className="min-w-0 items-start gap-3">
+                        <FieldContent className="min-w-0">
+                          <FieldTitle id={`${ids}-suitability-title`} className="max-w-full wrap-anywhere">
+                            {m.settings_suitability_title()}
+                          </FieldTitle>
+                          <FieldDescription
+                            id={`${ids}-suitability-text`}
+                            className="min-w-0 max-w-full wrap-anywhere"
+                          >
+                            {m.settings_suitability_text()}
+                          </FieldDescription>
+                        </FieldContent>
+                        <Switch
+                          className="mt-1 shrink-0"
+                          id={`${ids}-suitability`}
+                          checked={state.draft.suitability === 'show'}
+                          disabled={!mayWrite}
+                          onCheckedChange={(checked) => void editor.edit({ suitability: checked ? 'show' : 'blur' })}
+                          aria-labelledby={`${ids}-suitability-title`}
+                          aria-describedby={`${ids}-suitability-text`}
+                        />
+                      </Field>
+                    </FieldLabel>
+                  ) : (
+                    <FieldSet
+                      className="min-w-0 rounded-lg border border-border bg-background p-3"
+                      aria-describedby={`${ids}-suitability-text ${ids}-suitability-availability`}
+                    >
+                      <FieldLegend id={`${ids}-suitability-title`} className="max-w-full wrap-anywhere">
+                        {m.settings_suitability_title()}
+                      </FieldLegend>
+                      <FieldDescription
+                        id={`${ids}-suitability-text`}
+                        className="min-w-0 max-w-full wrap-anywhere"
+                      >
                         {m.settings_suitability_text()}
                       </FieldDescription>
-                    </FieldContent>
-                    <Switch
-                      id={`${ids}-suitability`}
-                      checked={state.draft.suitability === 'show'}
-                      disabled={!mayWrite}
-                      onCheckedChange={(checked) => void editor.edit({ suitability: checked ? 'show' : 'blur' })}
-                      aria-labelledby={`${ids}-suitability-title`}
-                      aria-describedby={`${ids}-suitability-text`}
-                    />
-                  </Field>
-                </FieldLabel>
-              ) : (
-                <FieldSet aria-describedby={`${ids}-suitability-text ${ids}-suitability-availability`}>
-                  <FieldLegend id={`${ids}-suitability-title`}>{m.settings_suitability_title()}</FieldLegend>
-                  <FieldDescription id={`${ids}-suitability-text`}>{m.settings_suitability_text()}</FieldDescription>
-                  <p id={`${ids}-suitability-availability`} className="text-sm text-muted-foreground">
-                    {m.settings_reading_suitability_single({ choice: suitabilityLabel(offeredImages[0]!) })}
+                      <p
+                        id={`${ids}-suitability-availability`}
+                        className="min-w-0 max-w-full text-sm text-muted-foreground wrap-anywhere"
+                      >
+                        {m.settings_reading_suitability_single({ choice: suitabilityLabel(offeredImages[0]!) })}
+                      </p>
+                    </FieldSet>
+                  )}
+                </FieldGroup>
+              </div>
+              <div className="min-w-0 space-y-2">
+                {retainedChoices.map((choice, index) => (
+                  <p
+                    key={`${index}:${choice}`}
+                    className="min-w-0 max-w-full text-sm text-muted-foreground wrap-anywhere"
+                  >
+                    {m.settings_reading_retained_choice({ choice })}
                   </p>
-                </FieldSet>
-              )}
-            </FieldGroup>
-            {retainedChoices.map((choice, index) => (
-              <p key={`${index}:${choice}`} className="text-sm text-muted-foreground">
-                {m.settings_reading_retained_choice({ choice })}
-              </p>
-            ))}
-            {state.knownCurrent && defaults ? (
-              <p className="text-sm text-muted-foreground">
-                {m.settings_reading_effective({
-                  ...readingLabel(state.advice!.reading.effective),
-                  defaultSpoilers: levels[defaults.spoilerLevel]!.title(),
-                  defaultImages:
-                    defaults.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
-                })}
-              </p>
-            ) : null}
+                ))}
+                {state.knownCurrent && defaults ? (
+                  <p className="min-w-0 max-w-full text-sm text-muted-foreground wrap-anywhere">
+                    {m.settings_reading_effective({
+                      ...readingLabel(state.advice!.reading.effective),
+                      defaultSpoilers: levels[defaults.spoilerLevel]!.title(),
+                      defaultImages:
+                        defaults.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
+                    })}
+                  </p>
+                ) : null}
+              </div>
+              {ownerMayChange && reset && !recovery ? (
+                <Button
+                  className={`${preferenceActionClassName} w-full sm:w-auto`}
+                  type="button"
+                  variant="outline"
+                  disabled={busy || !mayWrite || commandWaiting}
+                  onClick={() => void editor.resetToNativeDefaults()}
+                >
+                  {m.settings_reading_reset()}
+                </Button>
+              ) : null}
+            </div>
             <ReadingPreview ids={ids} draft={state.draft} confirmed={state.known} />
-            {ownerMayChange && reset && !recovery ? (
-              <Button
-                className={preferenceActionClassName}
-                type="button"
-                variant="outline"
-                disabled={busy || !mayWrite || commandWaiting}
-                onClick={() => void editor.resetToNativeDefaults()}
-              >
-                {m.settings_reading_reset()}
-              </Button>
-            ) : null}
-          </>
+          </div>
         ) : !recovery ? (
-          <Alert>
+          <Alert className="min-w-0 max-w-full">
             <AlertTitle>{m.settings_reading_choices_unavailable_title()}</AlertTitle>
-            <AlertDescription className="flex flex-col gap-3">
-              <p>{m.settings_reading_choices_unavailable_text()}</p>
+            <AlertDescription className="flex min-w-0 flex-col gap-3 wrap-anywhere">
+              <p className="min-w-0 max-w-full">{m.settings_reading_choices_unavailable_text()}</p>
               <Button
                 className={preferenceActionClassName}
                 type="button"
@@ -715,105 +793,130 @@ export function ReadingCard({
           </Alert>
         ) : null}
         {choicesReady && !ownerMayChange && state.advice ? (
-          <Alert>
-            <AlertTitle>{m.settings_reading_read_only_title()}</AlertTitle>
-            <AlertDescription>{m.settings_reading_read_only_text()}</AlertDescription>
+          <Alert className="min-w-0 max-w-full">
+            <AlertTitle className="min-w-0 max-w-full wrap-anywhere">
+              {m.settings_reading_read_only_title()}
+            </AlertTitle>
+            <AlertDescription className="min-w-0 max-w-full wrap-anywhere">
+              {m.settings_reading_read_only_text()}
+            </AlertDescription>
           </Alert>
         ) : null}
-        <div aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
-          {state.phase === 'saving' ? m.settings_saving() : null}
-          {state.phase === 'saved' ? m.settings_saved() : null}
-        </div>
-        {waiting && !recovery ? <p role="status">{m.settings_retry_wait()}</p> : null}
-        {recovery ? (
-          <Alert
-            role={readLoading ? 'status' : 'alert'}
-            data-response-status={state.failure?.status ?? ''}
-            data-response-code={state.failure?.code ?? ''}
-            data-retry-after={state.failure?.retryAfter}
+        <div className="min-w-0 space-y-3 border-t border-border pt-4 sm:pt-5">
+          <div
+            aria-live="polite"
+            className={`min-h-5 min-w-0 max-w-full text-sm text-muted-foreground wrap-anywhere ${
+              state.phase === 'saving' || state.phase === 'saved'
+                ? 'rounded-md border border-border bg-muted/40 px-3 py-2'
+                : ''
+            }`}
           >
-            <AlertTitle>{title}</AlertTitle>
-            <AlertDescription className="flex flex-col gap-3">
-              <p>
-                {readLoading
-                  ? m.settings_reading_loading_text()
-                  : readFailed
-                    ? readText
-                    : writeDenied
-                      ? m.settings_reading_read_only_text()
-                      : uncertain
-                        ? m.settings_reading_uncertain_text()
-                        : state.phase === 'review'
-                          ? m.settings_reading_review_text()
-                          : state.reason === 'closed'
-                            ? m.settings_closed_text()
-                            : state.reason === 'preparing'
-                              ? m.settings_preparing_text()
-                              : state.reason === 'unavailable'
-                                ? m.settings_unavailable_text()
-                                : state.phase === 'failed'
-                                  ? m.settings_failed_text()
-                                  : m.settings_conflict_text()}
-              </p>
-              {state.confirmedReceipt ? <p>{m.settings_saved()}</p> : null}
-              {uncertain && (readLoading || readFailed) ? <p>{m.settings_reading_uncertain_text()}</p> : null}
-              {uncertain && !readFailed && state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
-              {uncertain && !readFailed && state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
-              {uncertain && !readFailed && state.reason === 'unavailable' ? (
-                <p>{m.settings_unavailable_text()}</p>
-              ) : null}
-              {waiting ? <p>{m.settings_retry_wait()}</p> : null}
-              <p>
-                {(state.knownCurrent ? m.settings_reading_current : m.settings_reading_known)({
-                  spoilers: levels[state.known.spoilerLevel]!.title(),
-                  images: state.known.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
-                })}
-              </p>
-              <div className="flex min-w-0 flex-wrap gap-2">
-                {uncertain ? (
-                  <Button
-                    className={preferenceActionClassName}
-                    type="button"
-                    variant="outline"
-                    disabled={commandWaiting || busy || !mayWrite}
-                    onClick={() => void editor.retry()}
-                  >
-                    {m.settings_reading_retry_original()}
-                  </Button>
+            {state.phase === 'saving' ? m.settings_saving() : null}
+            {state.phase === 'saved' ? m.settings_saved() : null}
+          </div>
+          {waiting && !recovery ? (
+            <p role="status" className="min-w-0 max-w-full text-sm wrap-anywhere">
+              {m.settings_retry_wait()}
+            </p>
+          ) : null}
+          {recovery ? (
+            <Alert
+              className="min-w-0 max-w-full"
+              role={readLoading ? 'status' : 'alert'}
+              data-response-status={state.failure?.status ?? ''}
+              data-response-code={state.failure?.code ?? ''}
+              data-retry-after={state.failure?.retryAfter}
+            >
+              <AlertTitle className="min-w-0 max-w-full wrap-anywhere">{title}</AlertTitle>
+              <AlertDescription className="flex min-w-0 flex-col gap-3 wrap-anywhere">
+                <p className="min-w-0 max-w-full">
+                  {readLoading
+                    ? m.settings_reading_loading_text()
+                    : readFailed
+                      ? readText
+                      : writeDenied
+                        ? m.settings_reading_read_only_text()
+                        : uncertain
+                          ? m.settings_reading_uncertain_text()
+                          : state.phase === 'review'
+                            ? m.settings_reading_review_text()
+                            : state.reason === 'closed'
+                              ? m.settings_closed_text()
+                              : state.reason === 'preparing'
+                                ? m.settings_preparing_text()
+                                : state.reason === 'unavailable'
+                                  ? m.settings_unavailable_text()
+                                  : state.phase === 'failed'
+                                    ? m.settings_failed_text()
+                                    : m.settings_conflict_text()}
+                </p>
+                {state.confirmedReceipt ? <p className="min-w-0 max-w-full">{m.settings_saved()}</p> : null}
+                {uncertain && (readLoading || readFailed) ? (
+                  <p className="min-w-0 max-w-full">{m.settings_reading_uncertain_text()}</p>
                 ) : null}
-                <Button
-                  className={preferenceActionClassName}
-                  type="button"
-                  variant="outline"
-                  disabled={readWaiting || busy}
-                  onClick={() => void editor.reload()}
-                >
-                  {m.settings_reload()}
-                </Button>
-                {state.phase === 'review' ? (
-                  <>
-                    <Button
-                      className={preferenceActionClassName}
-                      type="button"
-                      disabled={!mayWrite || commandWaiting || sameReading(state.known, state.draft) || !draftAdmitted}
-                      onClick={() => void editor.submit()}
-                    >
-                      {m.settings_reading_save_draft()}
-                    </Button>
+                {uncertain && !readFailed && state.reason === 'closed' ? (
+                  <p className="min-w-0 max-w-full">{m.settings_closed_text()}</p>
+                ) : null}
+                {uncertain && !readFailed && state.reason === 'preparing' ? (
+                  <p className="min-w-0 max-w-full">{m.settings_preparing_text()}</p>
+                ) : null}
+                {uncertain && !readFailed && state.reason === 'unavailable' ? (
+                  <p className="min-w-0 max-w-full">{m.settings_unavailable_text()}</p>
+                ) : null}
+                {waiting ? <p className="min-w-0 max-w-full">{m.settings_retry_wait()}</p> : null}
+                <p className="min-w-0 max-w-full wrap-anywhere">
+                  {(state.knownCurrent ? m.settings_reading_current : m.settings_reading_known)({
+                    spoilers: levels[state.known.spoilerLevel]!.title(),
+                    images:
+                      state.known.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
+                  })}
+                </p>
+                <div className="flex min-w-0 flex-wrap items-start gap-2">
+                  {uncertain ? (
                     <Button
                       className={preferenceActionClassName}
                       type="button"
                       variant="outline"
-                      onClick={() => editor.useCurrent()}
+                      disabled={commandWaiting || busy || !mayWrite}
+                      onClick={() => void editor.retry()}
                     >
-                      {m.settings_reading_use_current()}
+                      {m.settings_reading_retry_original()}
                     </Button>
-                  </>
-                ) : null}
-              </div>
-            </AlertDescription>
-          </Alert>
-        ) : null}
+                  ) : null}
+                  <Button
+                    className={preferenceActionClassName}
+                    type="button"
+                    variant="outline"
+                    disabled={readWaiting || busy}
+                    onClick={() => void editor.reload()}
+                  >
+                    {m.settings_reload()}
+                  </Button>
+                  {state.phase === 'review' ? (
+                    <>
+                      <Button
+                        className={preferenceActionClassName}
+                        type="button"
+                        disabled={!mayWrite || commandWaiting || sameReading(state.known, state.draft) || !draftAdmitted}
+                        onClick={() => void editor.submit()}
+                      >
+                        {m.settings_reading_save_draft()}
+                      </Button>
+                      <Button
+                        className={preferenceActionClassName}
+                        type="button"
+                        variant="outline"
+                        onClick={() => editor.useCurrent()}
+                      >
+                        {m.settings_reading_use_current()}
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
       </ContentSectionBody>
     </ContentSection>
   );

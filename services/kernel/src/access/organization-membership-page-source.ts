@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import {
   AUTH_MANAGEMENT_CLIENT_ID,
   AUTH_MANAGEMENT_SCOPES,
@@ -6,7 +6,7 @@ import {
   type SessionProof,
 } from '@rezics/auth-contract';
 import { accessCheck, type Access, type Actor } from './check.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
@@ -80,11 +80,15 @@ export async function readOrganizationMembershipPage(
   if (organizationRoute === null || viewerRoute === null) throw new AuthBindingDeniedError();
   requireAccessDeadline(context.deadline);
 
-  const time = await withConnection(pool, (client) => mintReadTime(client, deps.clock ?? accessClock(access)));
+  const boundedRead = <T>(work: (client: PoolClient) => Promise<T>) =>
+    withBoundedReadConnection(pool, context.deadline, work, {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+    });
+  const time = await boundedRead((client) => mintReadTime(client, deps.clock ?? accessClock(access)));
   try {
     const at = new Date(authoritativeTimeValue(time));
-    const human = await readAccount(pool, viewerRoute, actor.accountId);
-    const organization = await readAccount(pool, organizationRoute, organizationId);
+    const human = await boundedRead((client) => readAccount(client, viewerRoute, actor.accountId));
+    const organization = await boundedRead((client) => readAccount(client, organizationRoute, organizationId));
     if (
       !human ||
       human.kind !== 'actor' ||
@@ -99,7 +103,9 @@ export async function readOrganizationMembershipPage(
     if (!organization || organization.kind !== 'organization' || organization.state !== 'active' || organization.fenced)
       throw new AuthBindingDeniedError();
 
-    const viewerRole = await readOrganizationRole(pool, organizationRoute, organizationId, actor.accountId, at);
+    const viewerRole = await boundedRead((client) =>
+      readOrganizationRole(client, organizationRoute, organizationId, actor.accountId, at),
+    );
     if (!viewerRole) throw new AuthBindingDeniedError();
 
     const actionResource = { route: organizationRoute, id: organizationId };
@@ -110,7 +116,7 @@ export async function readOrganizationMembershipPage(
         deadline: context.deadline,
         time,
       });
-      return withConnection(pool, (client) => check(client, time));
+      return boundedRead((client) => check(client, time));
     }
 
     // This read admission is separate from the action observations below. A
@@ -140,24 +146,30 @@ export async function readOrganizationMembershipPage(
           throw new ProblemError('invalid_cursor');
         after = decoded.after[0];
       }
-      const candidates = await membersPage.run(pool, {
-        route: organizationRoute,
-        organization_id: organizationId,
-        after,
-        limit: PAGE_LIMIT + 1,
-      });
+      const candidates = await boundedRead((client) =>
+        membersPage.run(client, {
+          route: organizationRoute,
+          organization_id: organizationId,
+          after,
+          limit: PAGE_LIMIT + 1,
+        }),
+      );
       const page = candidates.slice(0, PAGE_LIMIT);
       const current: { accountId: string; role: 'owner' | 'member' }[] = [];
       for (const candidate of page) {
         requireAccessDeadline(context.deadline);
-        const role = await readOrganizationRole(pool, organizationRoute, organizationId, candidate.accountId, at);
+        const role = await boundedRead((client) =>
+          readOrganizationRole(client, organizationRoute, organizationId, candidate.accountId, at),
+        );
         if (role) current.push({ accountId: candidate.accountId, role });
       }
       const identities = current.length
-        ? await readPublicIdentities(
-            pool,
-            current.map(({ accountId }) => routeOf(accountId)!),
-            current.map(({ accountId }) => accountId),
+        ? await boundedRead((client) =>
+            readPublicIdentities(
+              client,
+              current.map(({ accountId }) => routeOf(accountId)!),
+              current.map(({ accountId }) => accountId),
+            ),
           )
         : [];
       const identityById = new Map(
@@ -183,12 +195,14 @@ export async function readOrganizationMembershipPage(
       const items: Extract<OrganizationMembershipPage['members'], { state: 'ready' }>['items'] = [];
       for (const row of current) {
         requireAccessDeadline(context.deadline);
-        const owners = await ownersRead.run(pool, {
-          route: organizationRoute,
-          organization_id: organizationId,
-          member_id: row.accountId,
-          at: at.toISOString(),
-        });
+        const owners = await boundedRead((client) =>
+          ownersRead.run(client, {
+            route: organizationRoute,
+            organization_id: organizationId,
+            member_id: row.accountId,
+            at: at.toISOString(),
+          }),
+        );
         const ownerEvidenceCurrent = !!owners && owners.owners > 0 && owners.target === (row.role === 'owner' ? 1 : 0);
         const lastOwner = ownerEvidenceCurrent && row.role === 'owner' && owners.owners === 1;
         const changeRole: MembershipActionAdvice =
@@ -221,12 +235,14 @@ export async function readOrganizationMembershipPage(
     let leave: MembershipActionAdvice = 'unavailable';
     if (viewerRole === 'member') {
       const leaveAllowed = await allowed();
-      const owners = await ownersRead.run(pool, {
-        route: organizationRoute,
-        organization_id: organizationId,
-        member_id: actor.accountId,
-        at: at.toISOString(),
-      });
+      const owners = await boundedRead((client) =>
+        ownersRead.run(client, {
+          route: organizationRoute,
+          organization_id: organizationId,
+          member_id: actor.accountId,
+          at: at.toISOString(),
+        }),
+      );
       if (owners && owners.owners > 0 && owners.target === 0 && leaveAllowed) leave = 'allowed';
     }
     requireAccessDeadline(context.deadline);

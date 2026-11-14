@@ -1,13 +1,18 @@
 import type { Pool } from 'pg';
 import { managementOperationProfile, type AuthSessionPort, type SessionProof } from '@rezics/auth-contract';
 import type { Access } from '../request/access.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { readAccount } from './account-data.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import { deadlineClient, within } from './deadline.ts';
 import { readOperatorTransferState, ManagementSourceRefusedError } from './management-source.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  requireAccessDeadline,
+  throwAccessUnavailable,
+} from './unavailable.ts';
 
 export type OperatorOpeningPage = {
   stage: 'current';
@@ -25,6 +30,22 @@ export interface OperatorOpeningPageAccess {
     operatorAccountId: string;
     deadline: number;
   }): Promise<OperatorOpeningPage | null>;
+}
+
+function boundedReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      try {
+        throwAccessUnavailable(error, deadline);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  };
 }
 
 /** Advice only. Two unchanged native management observations surround one exact
@@ -64,8 +85,11 @@ export function createOperatorOpeningPageAccess(deps: {
         if (!before || before.previous.operatorAccountId !== operatorAccountId) return null;
         const route = routeOf(operatorAccountId);
         if (route === null) throw new AuthBindingDeniedError();
-        const operator = await withConnection(deps.pool, (client) =>
-          readAccount(deadlineClient(client, deadline), route, operatorAccountId),
+        const operator = await withBoundedReadConnection(
+          deps.pool,
+          deadline,
+          (client) => readAccount(deadlineClient(client, deadline), route, operatorAccountId),
+          boundedReadOptions(deadline),
         );
         const current = await readOperatorTransferState(deps, actor, { subjectAccountId }, context);
         if (JSON.stringify(before) !== JSON.stringify(current)) throw new ManagementSourceRefusedError('stale');

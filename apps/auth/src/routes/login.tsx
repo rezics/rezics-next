@@ -495,7 +495,7 @@ function LoginForm({ query, attempt, restored }: { query: string; attempt: Login
   return (
     <>
       <LoginDeparture unfinished={unfinished} leave={leave} focus={() => emailInput.current?.focus()} />
-      <AuthTaskSection>
+      <AuthTaskSection className="gap-6">
         <LoginAccountChoiceView
           choice={choice}
           pending={pending}
@@ -505,89 +505,114 @@ function LoginForm({ query, attempt, restored }: { query: string; attempt: Login
           onSwitch={switchAccount}
           onReview={reviewSession}
         />
-        {pageData && !pageData.methods.passkey ? (
-          <p role="status">{m.auth_login_passkey_method_unavailable()}</p>
-        ) : null}
-        {pageData && pageData.methods.passkey && passkeySupport === 'none' ? (
-          <p role="status">{m.auth_login_passkey_browser_unsupported()}</p>
-        ) : null}
         {showCredentials && pageData ? (
-          <form className="grid min-w-0 gap-5" method="post" action="/signin" noValidate onSubmit={submit}>
-            <Field data-invalid={Boolean(emailError)}>
-              <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
-              <Input
-                ref={emailInput}
-                id={emailId}
-                name="email"
-                type="email"
-                autoComplete={passkeySupport === 'autofill' ? 'username webauthn' : 'username'}
-                value={email}
-                onChange={(event) => {
-                  setEmail(event.target.value);
-                  setEmailError('');
-                }}
-                aria-invalid={emailError ? true : undefined}
-                aria-describedby={emailError ? emailErrorId : undefined}
-                readOnly={pending}
-                required
-              />
-              {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
-            </Field>
-            <Field data-invalid={Boolean(passwordError)}>
-              <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
-              <PasswordInput
-                name="password"
-                autoComplete="current-password"
-                required
-                readOnly={pending}
-                id={passwordId}
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value);
-                  setPasswordError('');
-                }}
-                aria-invalid={passwordError ? true : undefined}
-                aria-describedby={passwordError ? passwordErrorId : undefined}
-              />
-              {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
-            </Field>
-            {message ? (
-              <ErrorAlert tabIndex={-1} ref={alert}>
-                {message}
-              </ErrorAlert>
-            ) : null}
-            <AuthActions>
-              <Button type="submit" disabled={pending} aria-busy={pending && !passkeyPending}>
-                {m.auth_login_heading()}
-              </Button>
-              {!pageData.methods.passkey || passkeySupport === 'none' || passkeySupport === 'checking' ? null : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={pending}
-                  aria-busy={passkeyPending}
-                  onClick={() => void submitPasskey()}
+          <AuthTaskSection
+            aria-label={m.auth_login_heading()}
+            className="rounded-lg border border-border p-4 sm:p-6"
+          >
+            <h2>{m.auth_login_heading()}</h2>
+            <form className="grid min-w-0 gap-5" method="post" action="/signin" noValidate onSubmit={submit}>
+              {message ? (
+                <ErrorAlert tabIndex={-1} ref={alert}>
+                  {message}
+                </ErrorAlert>
+              ) : null}
+              <Field data-invalid={Boolean(emailError)}>
+                <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
+                <Input
+                  ref={emailInput}
+                  id={emailId}
+                  name="email"
+                  type="email"
+                  autoComplete={passkeySupport === 'autofill' ? 'username webauthn' : 'username'}
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setEmailError('');
+                  }}
+                  aria-invalid={emailError ? true : undefined}
+                  aria-describedby={emailError ? emailErrorId : undefined}
+                  readOnly={pending}
+                  required
+                />
+                {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
+              </Field>
+              <Field data-invalid={Boolean(passwordError)}>
+                <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
+                <PasswordInput
+                  name="password"
+                  autoComplete="current-password"
+                  required
+                  readOnly={pending}
+                  id={passwordId}
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    setPasswordError('');
+                  }}
+                  aria-invalid={passwordError ? true : undefined}
+                  aria-describedby={passwordError ? passwordErrorId : undefined}
+                />
+                {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
+              </Field>
+              <div className="grid min-w-0 gap-5 border-t border-border pt-4 sm:grid-cols-2">
+                <section aria-label={m.auth_login_password()} className="grid min-w-0 content-start gap-3">
+                  <h3 className="text-base font-medium">{m.auth_login_password()}</h3>
+                  <AuthActions>
+                    <Button type="submit" disabled={pending} aria-busy={pending && !passkeyPending}>
+                      {m.auth_login_heading()}
+                    </Button>
+                  </AuthActions>
+                </section>
+                <section
+                  aria-label={m.auth_login_passkey()}
+                  aria-busy={passkeySupport === 'checking' || (pending && passkeyPending)}
+                  className="grid min-w-0 content-start gap-3"
                 >
-                  <KeyRound aria-hidden="true" />
-                  {m.auth_login_passkey()}
-                </Button>
-              )}
-            </AuthActions>
-          </form>
+                  <h3 className="text-base font-medium">{m.auth_login_passkey()}</h3>
+                  {pageData.methods.passkey && ['prompt', 'autofill'].includes(passkeySupport) ? (
+                    <AuthActions>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={pending}
+                        aria-busy={passkeyPending}
+                        onClick={() => void submitPasskey()}
+                      >
+                        <KeyRound aria-hidden="true" />
+                        {m.auth_login_passkey()}
+                      </Button>
+                    </AuthActions>
+                  ) : null}
+                  {!pageData.methods.passkey ? (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      {m.auth_login_passkey_method_unavailable()}
+                    </p>
+                  ) : passkeySupport === 'none' ? (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      {m.auth_login_passkey_browser_unsupported()}
+                    </p>
+                  ) : null}
+                </section>
+              </div>
+            </form>
+          </AuthTaskSection>
         ) : null}
-        {recoveryComplete ? (
-          <div className="auth-login-alert" role="status">
-            {m.auth_login_recovery_success()}
-          </div>
-        ) : null}
-        <AuthHelp aria-label={m.auth_login_help()}>
-          <a href="/recovery" onClick={navigate}>
-            {m.auth_login_recovery()}
-          </a>
-          <a href={`/signup${query}`} onClick={navigate}>
-            {m.auth_login_signup()}
-          </a>
-        </AuthHelp>
+        <div className="grid min-w-0 gap-3">
+          {recoveryComplete ? (
+            <div className="auth-login-alert" role="status">
+              {m.auth_login_recovery_success()}
+            </div>
+          ) : null}
+          <AuthHelp aria-label={m.auth_login_help()}>
+            <a href="/recovery" onClick={navigate}>
+              {m.auth_login_recovery()}
+            </a>
+            <a href={`/signup${query}`} onClick={navigate}>
+              {m.auth_login_signup()}
+            </a>
+          </AuthHelp>
+        </div>
       </AuthTaskSection>
     </>
   );

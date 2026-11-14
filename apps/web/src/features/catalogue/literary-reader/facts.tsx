@@ -80,7 +80,7 @@ export function LiteraryFacts({
     const remainder = view === 'overview' ? statements.slice(3) : [];
     return [
       <div key={property} className="min-w-0 space-y-1" data-property={property}>
-        <dt lang={label.lang} className="text-sm text-muted-foreground">
+        <dt lang={label.lang} className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">
           {label.text || m.subject_value_unlabelled({}, o)}
         </dt>
         <dd className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
@@ -115,7 +115,7 @@ export function LiteraryFacts({
   });
   if (!facts.length) return null;
   return (
-    <section className={style.separator} aria-label={m.literary_reader_facts({}, o)}>
+    <section data-slot="literary-facts" className="min-w-0" aria-label={m.literary_reader_facts({}, o)}>
       <dl className="grid min-w-0 gap-x-10 gap-y-6 sm:grid-cols-2">{facts}</dl>
     </section>
   );

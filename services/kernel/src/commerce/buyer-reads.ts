@@ -1,7 +1,11 @@
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { withConnection } from '../database/pool.ts';
+import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  requireAccessDeadline,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, AccessCheck, AccessClient, AccountActor } from '../request/access.ts';
@@ -32,6 +36,16 @@ type BuyerPointInput = BuyerReadContext & { id: string };
 
 type Snapshot<T> = { value: T; epoch: number };
 
+const buyerReadLifetime = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  mapError(error: unknown) {
+    throwAccessUnavailable(error);
+    return error;
+  },
+  // A non-server rejection can leave native IO running after its promise settles.
+  isUncertainSettledQueryError: () => true,
+};
+
 /** Run the existing native owner formula and active-home/session fences around a bounded read. */
 async function buyerSnapshot<T>(
   input: BuyerReadContext,
@@ -42,45 +56,47 @@ async function buyerSnapshot<T>(
   const route = routeOf(input.actor.accountId)!;
   const home = partitionOf(route);
   requireAccessDeadline(input.deadline);
-  return withConnection(input.pool, async (connection) => {
-    const client = deadlineClient(connection, input.deadline);
-    const currentHome = async () => {
-      const partition = await readPartition(client, home);
-      if (!partition || partition.writeState !== 'active')
-        throw new CommandUnavailableError(
-          partition?.writeState === 'moved' ? 'moved' : 'fenced',
-          home,
-          partition?.movedTo,
-        );
-      if (cursorEpoch !== undefined && cursorEpoch !== partition.epoch) throw new ProblemError('stale_cursor');
-      const seen = input.seen.find((entry) => entry.partition === home);
-      if (
-        seen &&
-        (seen.epoch > partition.epoch || (seen.epoch === partition.epoch && seen.position > partition.position))
-      )
-        throw new CommandUnavailableError('fenced', home);
-      return partition;
-    };
+  const currentHome = async (client: AccessClient) => {
+    const partition = await readPartition(client, home);
+    if (!partition || partition.writeState !== 'active')
+      throw new CommandUnavailableError(
+        partition?.writeState === 'moved' ? 'moved' : 'fenced',
+        home,
+        partition?.movedTo,
+      );
+    if (cursorEpoch !== undefined && cursorEpoch !== partition.epoch) throw new ProblemError('stale_cursor');
+    const seen = input.seen.find((entry) => entry.partition === home);
+    if (
+      seen &&
+      (seen.epoch > partition.epoch || (seen.epoch === partition.epoch && seen.position > partition.position))
+    )
+      throw new CommandUnavailableError('fenced', home);
+    return partition;
+  };
 
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    let committed = false;
-    try {
+  const value = await withBoundedReadOnlyTransaction(
+    input.pool,
+    input.deadline,
+    async (client) => {
       if (!(await input.check(client))) throw new ProblemError(denied);
-      await currentHome();
-      const value = await read(client);
-      await client.query('COMMIT');
-      committed = true;
+      await currentHome(client);
+      return read(client);
+    },
+    buyerReadLifetime,
+  );
 
-      // Authorization and the source fence are repeated outside the source snapshot.
+  // Recheck outside the committed snapshot on a separately bounded checkout.
+  return withBoundedReadConnection(
+    input.pool,
+    input.deadline,
+    async (client) => {
       if (!(await input.check(client))) throw new ProblemError(denied);
-      const partition = await currentHome();
+      const partition = await currentHome(client);
       requireAccessDeadline(input.deadline);
       return { value, epoch: partition.epoch };
-    } catch (error) {
-      if (!committed) await connection.query('ROLLBACK');
-      throw error;
-    }
-  });
+    },
+    buyerReadLifetime,
+  );
 }
 
 function listCursor(input: BuyerListInput, operation: 'order.list' | 'entitlement.list') {

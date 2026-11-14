@@ -1,8 +1,9 @@
 import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { Pool } from 'pg';
-import { deadlineClient, within } from './access-port.ts';
+import { deadlineClient } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from './access-port.ts';
 import type { Access, AccessClient } from '../request/access.ts';
@@ -53,25 +54,17 @@ async function snapshot<T>(
   context: ReadContext,
   work: (client: AccessClient) => Promise<T>,
 ): Promise<Anchored<T>> {
-  return within(context.deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
+  return withBoundedReadOnlyTransaction(
+    dependencies.pool,
+    context.deadline,
+    async (connection) => {
       const client = deadlineClient(connection, context.deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition || partition.writeState === 'moved') throw new GrantDeniedError();
-        const value = await work(client);
-        await client.query('COMMIT');
-        return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition || partition.writeState === 'moved') throw new GrantDeniedError();
+      const value = await work(client);
+      return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
+    },
+    { deadlineError: () => new AccessUnavailableError('deadline') },
   );
 }
 

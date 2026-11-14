@@ -14,6 +14,8 @@ import type {
 import type { Extension } from '@rezics/definitions/extension';
 import type { PublicationPreparationSchema } from './kernel/community/publication-preparation.ts';
 import type { DecisionPageSchema } from './kernel/content/decision-page.ts';
+import type { hostedPublicationActivationRoutes } from './kernel/content/hosted-publication-preparation-routes.ts';
+import type { HostedPublicationActivationProgressSchema } from './kernel/content/hosted-publication-preparation-schemas.ts';
 import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
@@ -105,6 +107,8 @@ export type {
 } from './kernel/community/realm-claim-review';
 export type RealmPublicationPreparation = Static<typeof PublicationPreparationSchema>;
 export type PublicationCommand = RealmPublicationPreparation['commands']['publish'];
+/** Exact activation progress from Content's emitted schema; ready still requires the activate command. */
+export type HostedPublicationActivationProgress = Static<ReturnType<typeof HostedPublicationActivationProgressSchema>>;
 type AnnotationCorrectionRoute = Routes['libraryEntryAnnotationCorrections'];
 export type EntryAnnotationCorrectionInput = AnnotationCorrectionRoute['post']['body'];
 export type EntryAnnotationCorrectionCancelResult =
@@ -174,6 +178,12 @@ type SharedRoutes<Mounted, Original> = Original extends { body: unknown; respons
 // Many modules inherit subjectRoutes. Intersecting their repeated anonymous 422 unions grows exponentially.
 type SubjectRoutes = SharedRoutes<Routes['subjects'], ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']>;
 type InstalledZoneRoutes = SharedRoutes<Routes['zones'] & ZoneSubjectListRoutes, Routes['zones']>;
+// Fill only missing hosted methods from the emitted owner factory; mounted declarations always take precedence.
+type HostedActivationRoutes = ReturnType<typeof hostedPublicationActivationRoutes>['~Routes']['v1']['hostedCatalogues'];
+type InstalledHostedCatalogueRoutes = SharedRoutes<
+  Routes['hostedCatalogues'] & HostedActivationRoutes,
+  Routes['hostedCatalogues']
+>;
 /** Producer `ImportedPreview` from kernel definition-import; SharedRoutes yields to generated emission. */
 export type ImportedPreview = {
   kind: PublicationDocumentKind;
@@ -222,11 +232,12 @@ type ClientApp = Elysia<
   DefaultMetadata,
   {
     [Prefix in keyof KernelType['~Routes']]: Prefix extends 'v1'
-      ? Omit<Routes, 'subjects' | 'zones' | 'definitions' | 'feedItems'> & {
+      ? Omit<Routes, 'subjects' | 'zones' | 'definitions' | 'feedItems' | 'hostedCatalogues'> & {
           subjects: SubjectRoutes;
           zones: InstalledZoneRoutes;
           definitions: InstalledDefinitionRoutes;
           feedItems: InstalledFeedRoutes;
+          hostedCatalogues: InstalledHostedCatalogueRoutes;
         }
       : KernelType['~Routes'][Prefix];
   }

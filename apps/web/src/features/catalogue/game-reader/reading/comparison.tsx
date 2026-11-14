@@ -47,11 +47,14 @@ export function WorkReleaseComparison({
     { id: 'developer', label: m.game_reader_compare_developer_label({}, o), properties: ['wdt:P178'] },
   ];
   return (
-    <details className="mt-3 min-w-0 space-y-2" data-slot="work-release-comparison">
+    <details
+      className="mt-4 min-w-0 space-y-3 border-t border-border pt-3"
+      data-slot="work-release-comparison"
+    >
       <summary className={`${action} cursor-pointer font-medium text-primary`}>
         {m.game_reader_compare_title({}, o)}
       </summary>
-      <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
+      <dl className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => {
           const fields = group.properties.map((property) => card.fields[property]);
           const available = fields.filter((field) => field.state === 'available');
@@ -67,9 +70,9 @@ export function WorkReleaseComparison({
             ),
           ];
           return (
-            <div key={group.id} className="min-w-0 rounded-md bg-muted/40 p-2">
+            <div key={group.id} className="min-w-0 rounded-md border border-border bg-muted/30 p-3">
               <dt className="font-medium">{group.label}</dt>
-              <dd className="mt-1 space-y-2">
+              <dd className="mt-2 min-w-0 space-y-3">
                 {available.flatMap((field) =>
                   field.statements.map((statement) => (
                     <GameFact

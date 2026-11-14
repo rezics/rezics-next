@@ -2,12 +2,11 @@ import { DurableInitiatorUnavailableError } from './contract/index.ts';
 export { DurableInitiatorUnavailableError } from './contract/index.ts';
 import { finishDurableRateIdentity } from './write-rate-identity.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import type { Pool } from 'pg';
 import { commandAccessContext } from './command-admission.ts';
 import { discardDurableIdentity, restoreOperationIdentity } from './durable-identity.ts';
-import { deadlineClient, within } from './deadline.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { partitionOf } from '../route/route.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import type { CurrentConsentReader } from './auth-consent.ts';
@@ -219,21 +218,32 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
         });
         const context = commandAccessContext(step.context, attempt);
         const evidence = await access.prepare?.(actor, step.action, resource, context);
-        const deadline = Math.min(context.deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+        const evidenceDeadline = permissionEvidenceDeadline(evidence);
+        if (evidenceDeadline === undefined) throw new DurableInitiatorUnavailableError();
+        const deadline = Math.min(context.deadline, evidenceDeadline);
         const restored = actor;
-        await within(deadline, () =>
-          withConnection(pool, async (client) => {
-            const bounded = deadlineClient(client, deadline);
+        await withBoundedReadConnection(
+          pool,
+          deadline,
+          async (client) => {
             if (
               !(await accessEvidence(
-                () => step.anchor.validate(bounded, time),
+                () => step.anchor.validate(client, time),
                 () => new DurableInitiatorUnavailableError(),
                 deadline,
               )) ||
-              !(await access.authorize(bounded, restored, step.action, resource, evidence, time))
+              !(await access.authorize(client, restored, step.action, resource, evidence, time))
             )
               throw new DurableInitiatorUnavailableError();
-          }),
+          },
+          {
+            deadlineError: () => new AccessUnavailableError('deadline'),
+            mapError(error: unknown) {
+              throwAccessUnavailable(error);
+              return error;
+            },
+            isUncertainSettledQueryError: () => true,
+          },
         );
         finishDurableRateIdentity(actor, true);
         return actor;

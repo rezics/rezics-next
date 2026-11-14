@@ -1,9 +1,9 @@
 import { accessClock } from '../access/access-clock.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { deadlineClient, within } from './access-port.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -18,6 +18,22 @@ import { postReadableByAccount } from './reads.ts';
 
 const postPublished = 'com.rezics.content.post.published.v1';
 const MAX_MENTIONS = 10;
+
+function boundedReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      try {
+        throwAccessUnavailable(error, deadline);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  };
+}
 
 type MentionRow = {
   post_id: string;
@@ -77,31 +93,22 @@ async function readSource(client: PoolClient, route: number, postId: string, rev
 async function readBoardMetadata(pool: Pool, boardId: string, deadline: number): Promise<BoardRow | null> {
   const boardRoute = routeOf(boardId);
   if (boardRoute === null) return null;
-  return within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partitionNo = partitionOf(boardRoute);
-        const partition = await readPartition(client, partitionNo);
-        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        const row = await readBoard.run(client, {
-          route: boardRoute,
-          id: boardId,
-        });
-        await client.query('COMMIT');
-        return (row as BoardRow | null) ?? null;
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
+      const partitionNo = partitionOf(boardRoute);
+      const partition = await readPartition(client, partitionNo);
+      if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+      if (partition.writeState === 'moved')
+        throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+      const row = await readBoard.run(client, {
+        route: boardRoute,
+        id: boardId,
+      });
+      return (row as BoardRow | null) ?? null;
+    },
+    boundedReadOptions(deadline),
   );
 }
 
@@ -122,21 +129,12 @@ export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
       const route = routeOf(data.itemId);
       if (route === null || routeOf(data.threadId) !== route || routeOf(data.revisionId) !== route) return;
       const deadline = deadlineFor(30_000);
-      const row = await withConnection(pool, async (client) => {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const rows = await readSource(client, route, data.itemId, data.revisionId);
-          await client.query('COMMIT');
-          return rows as MentionRow | null;
-        } catch (error) {
-          try {
-            await client.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(client, rollbackError as Error);
-          }
-          throw error;
-        }
-      });
+      const row = await withBoundedReadOnlyTransaction(
+        pool,
+        deadline,
+        async (client) => (await readSource(client, route, data.itemId, data.revisionId)) as MentionRow | null,
+        boundedReadOptions(deadline),
+      );
       if (
         !row ||
         row.actor_id !== data.actorId ||

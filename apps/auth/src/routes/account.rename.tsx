@@ -469,71 +469,99 @@ function RenameReview({
   if (renamed)
     return (
       <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
-        <Alert role="status">
-          <AlertDescription>{m.auth_rename_success({ handle: renamed })}</AlertDescription>
-        </Alert>
+        <div className="min-w-0 space-y-6">
+          <section className="min-w-0 max-w-prose rounded-lg border border-border p-4 sm:p-6">
+            <Alert role="status">
+              <AlertDescription>{m.auth_rename_success({ handle: renamed })}</AlertDescription>
+            </Alert>
+          </section>
+          <div className="min-w-0 space-y-4 border-t border-border pt-5">
+            <RenameRecoveryNotice history={outcome} />
+          </div>
+        </div>
       </AuthPage>
     );
   return (
     <>
       <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
-        <div className="auth-account-operation-copy">
+        <div className="auth-account-operation-copy max-w-prose break-words [overflow-wrap:anywhere]">
           <p>{m.auth_rename_description()}</p>
           <p>{m.auth_rename_forwarding()}</p>
         </div>
-        <div ref={reviewFocus} tabIndex={-1} aria-label={m.auth_rename_heading()}>
-          <RenameRecoveryNotice history={outcome} observed={current?.kind === 'ready'} />
-          {pending ? <p role="status">{m.auth_inventory_loading()}</p> : null}
-          {!current ? null : current.kind === 'signed-out' ? (
-            <p>
-              {m.auth_rename_signed_out()}{' '}
-              <a href="/login" className="underline">
-                {m.auth_security_sign_in()}
-              </a>
-            </p>
-          ) : current.kind === 'management-auth-required' ? (
-            <>
-              <p>{m.auth_rename_management_auth_required()}</p>
-              {message ? (
+        <div ref={reviewFocus} tabIndex={-1} aria-label={m.auth_rename_heading()} className="min-w-0 space-y-6">
+          {pending || current ? (
+            <section className="min-w-0 max-w-prose space-y-4 rounded-lg border border-border p-4 sm:p-6">
+              {pending ? <p role="status">{m.auth_inventory_loading()}</p> : null}
+              {!current ? null : current.kind === 'ready' ? (
+                <div className="min-w-0 space-y-2">
+                  <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                    {m.auth_rename_actor({ accountId: current.target.accountId })}
+                  </p>
+                  <p className="break-words font-medium [overflow-wrap:anywhere]">
+                    {m.auth_rename_current({ handle: current.target.handle ?? m.auth_rename_no_handle() })}
+                  </p>
+                </div>
+              ) : current.kind === 'signed-out' ? (
+                <p className="break-words [overflow-wrap:anywhere]">
+                  {m.auth_rename_signed_out()}{' '}
+                  <a href="/login" className="underline">
+                    {m.auth_security_sign_in()}
+                  </a>
+                </p>
+              ) : current.kind === 'management-auth-required' ? (
+                <div className="min-w-0 space-y-4">
+                  <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                    {m.auth_rename_actor({ accountId: current.accountId })}
+                  </p>
+                  <p className="break-words [overflow-wrap:anywhere]">{m.auth_rename_management_auth_required()}</p>
+                  {message ? (
+                    <ErrorAlert ref={alert} tabIndex={-1}>
+                      {message}
+                    </ErrorAlert>
+                  ) : null}
+                  <div className="border-t border-border pt-4">
+                    <Button
+                      type="button"
+                      className="min-h-11 w-full"
+                      disabled={pending}
+                      aria-busy={pending}
+                      onClick={() => void continueWithManagementAuthentication()}
+                    >
+                      {m.auth_rename_management_authenticate()}
+                    </Button>
+                  </div>
+                </div>
+              ) : current.kind === 'refused' ? (
                 <ErrorAlert ref={alert} tabIndex={-1}>
-                  {message}
+                  {m.auth_rename_denied()}
                 </ErrorAlert>
-              ) : null}
-              <Button
-                type="button"
-                disabled={pending}
-                aria-busy={pending}
-                onClick={() => void continueWithManagementAuthentication()}
-              >
-                {m.auth_rename_management_authenticate()}
-              </Button>
-            </>
-          ) : current.kind === 'refused' ? (
-            <ErrorAlert ref={alert} tabIndex={-1}>
-              {m.auth_rename_denied()}
-            </ErrorAlert>
-          ) : current.kind === 'unavailable' ? (
-            <>
-              {current.target && outcome !== 'unknown' ? (
-                <>
-                  <p>{m.auth_rename_actor({ accountId: current.target.accountId })}</p>
-                  <p>{m.auth_rename_current({ handle: current.target.handle ?? m.auth_rename_no_handle() })}</p>
-                </>
-              ) : null}
-              <ErrorAlert ref={alert} tabIndex={-1}>
-                {m.auth_rename_unavailable()}
-              </ErrorAlert>
-            </>
-          ) : outcome === 'unknown' && !attempt.current ? null : (
+              ) : (
+                <div className="min-w-0 space-y-4">
+                  {current.target && outcome !== 'unknown' ? (
+                    <div className="min-w-0 space-y-2">
+                      <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                        {m.auth_rename_actor({ accountId: current.target.accountId })}
+                      </p>
+                      <p className="break-words font-medium [overflow-wrap:anywhere]">
+                        {m.auth_rename_current({ handle: current.target.handle ?? m.auth_rename_no_handle() })}
+                      </p>
+                    </div>
+                  ) : null}
+                  <ErrorAlert ref={alert} tabIndex={-1}>
+                    {m.auth_rename_unavailable()}
+                  </ErrorAlert>
+                </div>
+              )}
+            </section>
+          ) : null}
+          {current?.kind === 'ready' && !(outcome === 'unknown' && !attempt.current) ? (
             <form
-              className="auth-login-form"
+              className="auth-login-form min-w-0 max-w-prose"
               method="post"
               action="/account-operations/approve"
               noValidate
               onSubmit={submit}
             >
-              <p>{m.auth_rename_current({ handle: current.target.handle ?? m.auth_rename_no_handle() })}</p>
-              <p>{m.auth_rename_actor({ accountId: current.target.accountId })}</p>
               {managementReturned ? (
                 <Alert role="status">
                   <AlertDescription>{m.auth_rename_management_returned()}</AlertDescription>
@@ -544,72 +572,87 @@ function RenameReview({
                   <AlertDescription>{m.auth_rename_reconfirm()}</AlertDescription>
                 </Alert>
               ) : null}
-              <Field data-invalid={Boolean(inputError)}>
-                <FieldLabel htmlFor="rename-handle">{m.auth_rename_handle()}</FieldLabel>
-                <p id="rename-handle-help">{m.auth_organization_handle_invalid()}</p>
-                <Input
-                  ref={input}
-                  id="rename-handle"
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  value={handle}
-                  disabled={pending || locked || outcome === 'unknown'}
-                  aria-invalid={Boolean(inputError)}
-                  aria-describedby={inputError ? 'rename-handle-help rename-handle-error' : 'rename-handle-help'}
-                  onChange={(event) => {
-                    if (!permitsCommand() || attempt.current?.submitted || outcome === 'unknown') return;
-                    setHandle(event.target.value);
-                    setConfirmed(false);
-                    setReturned(false);
-                    setInputError('');
-                    if (attempt.current) clearRenameContinuation(attempt.current);
-                    attempt.current = null;
-                    retainedCommand.current = null;
-                  }}
-                />
-                {inputError ? <FieldError id="rename-handle-error">{inputError}</FieldError> : null}
-              </Field>
-              {candidate ? (
-                <Field>
-                  <FieldLabel className="items-start gap-3" htmlFor="rename-confirm">
-                    <input
-                      id="rename-confirm"
-                      type="checkbox"
-                      checked={confirmed}
-                      disabled={pending}
-                      onChange={(event) => setConfirmed(event.target.checked)}
-                    />
-                    {m.auth_rename_confirm({ handle: candidate })}
-                  </FieldLabel>
+              <section className="min-w-0 space-y-5 rounded-lg border border-border p-4 sm:p-6">
+                <Field data-invalid={Boolean(inputError)}>
+                  <FieldLabel htmlFor="rename-handle">{m.auth_rename_handle()}</FieldLabel>
+                  <p id="rename-handle-help" className="max-w-prose break-words text-sm text-muted-foreground">
+                    {m.auth_organization_handle_invalid()}
+                  </p>
+                  <Input
+                    ref={input}
+                    id="rename-handle"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={handle}
+                    disabled={pending || locked || outcome === 'unknown'}
+                    aria-invalid={Boolean(inputError)}
+                    aria-describedby={inputError ? 'rename-handle-help rename-handle-error' : 'rename-handle-help'}
+                    onChange={(event) => {
+                      if (!permitsCommand() || attempt.current?.submitted || outcome === 'unknown') return;
+                      setHandle(event.target.value);
+                      setConfirmed(false);
+                      setReturned(false);
+                      setInputError('');
+                      if (attempt.current) clearRenameContinuation(attempt.current);
+                      attempt.current = null;
+                      retainedCommand.current = null;
+                    }}
+                  />
+                  {inputError ? <FieldError id="rename-handle-error">{inputError}</FieldError> : null}
                 </Field>
-              ) : null}
-              {message ? (
-                <ErrorAlert tabIndex={-1} ref={alert}>
-                  {message}
-                </ErrorAlert>
-              ) : null}
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={pending || !confirmed || !candidate}
-                aria-busy={pending}
-              >
-                {locked ? m.auth_rename_retry() : m.auth_rename_submit()}
-              </Button>
+                {candidate ? (
+                  <div className="min-w-0 rounded-md border border-border p-4 sm:p-5">
+                    <Field>
+                      <FieldLabel
+                        className="min-w-0 items-start gap-3 break-words [overflow-wrap:anywhere]"
+                        htmlFor="rename-confirm"
+                      >
+                        <input
+                          id="rename-confirm"
+                          type="checkbox"
+                          checked={confirmed}
+                          disabled={pending}
+                          onChange={(event) => setConfirmed(event.target.checked)}
+                        />
+                        {m.auth_rename_confirm({ handle: candidate })}
+                      </FieldLabel>
+                    </Field>
+                  </div>
+                ) : null}
+              </section>
+              <div className="space-y-4 border-t border-border pt-5">
+                {message ? (
+                  <ErrorAlert tabIndex={-1} ref={alert}>
+                    {message}
+                  </ErrorAlert>
+                ) : null}
+                <Button
+                  type="submit"
+                  className="min-h-11 w-full"
+                  disabled={pending || !confirmed || !candidate}
+                  aria-busy={pending}
+                >
+                  {locked ? m.auth_rename_retry() : m.auth_rename_submit()}
+                </Button>
+              </div>
             </form>
-          )}
-          <Button
-            type="button"
-            disabled={pending}
-            aria-busy={pending}
-            onClick={() => {
-              focusAfterRead.current = true;
-              void reload();
-            }}
-          >
-            {m.auth_rename_reload()}
-          </Button>
+          ) : null}
+          <div className="min-w-0 space-y-4 border-t border-border pt-5">
+            <RenameRecoveryNotice history={outcome} observed={current?.kind === 'ready'} />
+            <Button
+              type="button"
+              className="min-h-11 w-full"
+              disabled={pending}
+              aria-busy={pending}
+              onClick={() => {
+                focusAfterRead.current = true;
+                void reload();
+              }}
+            >
+              {m.auth_rename_reload()}
+            </Button>
+          </div>
         </div>
       </AuthPage>
       <AlertDialog

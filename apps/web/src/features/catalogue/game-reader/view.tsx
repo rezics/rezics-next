@@ -273,7 +273,7 @@ function GameWindow({
   }, [page, failure, returnKey, returnState?.kind, returnState?.kind === 'current' ? returnState.statement.id : '']);
   const failureNotice =
     failure && !failure.ok ? (
-      <div role="alert">
+      <div role="alert" className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
         <p>
           {failure.reason === 'restart'
             ? m.game_reader_window_restart({}, o)
@@ -305,16 +305,21 @@ function GameWindow({
       {!page ? failureNotice : null}
       {page ? (
         <div className="space-y-5">
-          {!compact && (
-            <p>
-              <span lang={page.grain.lang ?? undefined}>{page.grain.text}</span> ·{' '}
-              <span lang={label?.lang ?? undefined}>{label?.text}</span>
-            </p>
-          )}
-          {!compact && pickText(page.public.subject.descriptions, locale).text ? (
-            <p lang={pickText(page.public.subject.descriptions, locale).lang ?? undefined}>
-              {pickText(page.public.subject.descriptions, locale).text}
-            </p>
+          {!compact ? (
+            <div className="min-w-0 space-y-2 rounded-xl border border-border bg-muted/20 p-4 sm:p-5">
+              <p className="break-words text-lg font-semibold">
+                <span lang={page.grain.lang ?? undefined}>{page.grain.text}</span> ·{' '}
+                <span lang={label?.lang ?? undefined}>{label?.text}</span>
+              </p>
+              {pickText(page.public.subject.descriptions, locale).text ? (
+                <p
+                  lang={pickText(page.public.subject.descriptions, locale).lang ?? undefined}
+                  className="break-words text-muted-foreground"
+                >
+                  {pickText(page.public.subject.descriptions, locale).text}
+                </p>
+              ) : null}
+            </div>
           ) : null}
           {page.public.viewerActions?.state === 'unavailable' ? (
             <p role="status">{m.game_reader_advice_unavailable({}, o)}</p>
@@ -323,87 +328,105 @@ function GameWindow({
             <p role="status">{m.game_reader_unsupported({}, o)}</p>
           ) : (
             <>
-              {page.unsupported.length ? (
-                <p role="status">
-                  {m.game_reader_missing({ fields: page.unsupported.map((kind) => unsupported[kind]).join(', ') }, o)}
-                </p>
-              ) : null}
-              {!page.groups.length ? <p>{m.game_reader_empty({}, o)}</p> : null}
-              {page.groups.map((group) => {
-                const content = (
-                  <section key={`${group.id}:${window.revision}`} className="space-y-3" data-game-fact-group={group.id}>
-                    <h3 className="font-semibold">{groups[group.id]}</h3>
-                    <dl className="grid min-w-0 gap-x-8 gap-y-5 sm:grid-cols-2">
-                      {group.fields.map((field) => (
-                        <div key={field.property}>
-                          <dt className="font-medium" lang={field.label.lang ?? undefined}>
-                            {field.label.text || m.subject_value_unlabelled({}, o)}
-                          </dt>
-                          <dd className="mt-1 space-y-3">
-                            {!field.statements.length ? <p>{m.release_fidelity_date_absent({}, o)}</p> : null}
-                            {field.statements.map((statement) => (
-                              <div key={statement.id}>
-                                {gate(
-                                  statement,
-                                  <div
-                                    tabIndex={-1}
-                                    data-game-current-assertion={statement.id}
-                                    data-current-return-selection={
-                                      returnState?.kind === 'current' && returnState.statement.id === statement.id
-                                        ? ''
-                                        : undefined
-                                    }
-                                    className={
-                                      returnState?.kind === 'current' && returnState.statement.id === statement.id
-                                        ? 'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
-                                        : undefined
-                                    }
-                                  >
-                                    <GameFact
-                                      statement={statement}
-                                      page={page}
-                                      related={page.public.related}
-                                      locale={locale}
-                                      date={field.date}
-                                      link={Link}
-                                    />
-                                  </div>,
-                                )}
-                              </div>
-                            ))}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </section>
-                );
-                return group.id === 'credits' || group.id === 'relations' ? (
-                  <details
-                    key={group.id}
-                    data-game-extra-group={group.id}
-                    open={
-                      (returnState?.kind === 'current' &&
-                        group.fields.some((field) =>
-                          field.statements.some((statement) => statement.id === returnState.statement.id),
-                        )) ||
-                      undefined
-                    }
-                    className="min-w-0 border-t border-border pt-3"
-                  >
-                    <summary className={`${action} cursor-pointer font-medium text-primary`}>
-                      {groups[group.id]}
-                    </summary>
-                    <div className="pt-3">{content}</div>
-                  </details>
-                ) : (
-                  content
-                );
-              })}
-              <details data-slot="game-release-destination" className="min-w-0 border-t border-border pt-3">
-                <summary className={`${action} cursor-pointer font-medium text-primary`}>
+              <section
+                aria-label={m.game_profile_facts({}, o)}
+                data-slot="game-work-facts"
+                className="min-w-0 space-y-5 rounded-xl border border-border bg-card p-4 sm:p-5"
+              >
+                {page.unsupported.length ? (
+                  <p role="status">
+                    {m.game_reader_missing({ fields: page.unsupported.map((kind) => unsupported[kind]).join(', ') }, o)}
+                  </p>
+                ) : null}
+                {!page.groups.length ? <p>{m.game_reader_empty({}, o)}</p> : null}
+                {page.groups.map((group) => {
+                  const content = (
+                    <section
+                      key={`${group.id}:${window.revision}`}
+                      className="min-w-0 space-y-3"
+                      data-game-fact-group={group.id}
+                    >
+                      <h3 className="font-semibold">{groups[group.id]}</h3>
+                      <dl className="grid min-w-0 gap-x-6 gap-y-4 sm:grid-cols-2">
+                        {group.fields.map((field) => (
+                          <div key={field.property} className="min-w-0 rounded-md bg-muted/40 p-3">
+                            <dt className="font-medium" lang={field.label.lang ?? undefined}>
+                              {field.label.text || m.subject_value_unlabelled({}, o)}
+                            </dt>
+                            <dd className="mt-1 min-w-0 space-y-3">
+                              {!field.statements.length ? <p>{m.release_fidelity_date_absent({}, o)}</p> : null}
+                              {field.statements.map((statement) => (
+                                <div key={statement.id} className="min-w-0">
+                                  {gate(
+                                    statement,
+                                    <div
+                                      tabIndex={-1}
+                                      data-game-current-assertion={statement.id}
+                                      data-current-return-selection={
+                                        returnState?.kind === 'current' && returnState.statement.id === statement.id
+                                          ? ''
+                                          : undefined
+                                      }
+                                      className={
+                                        returnState?.kind === 'current' && returnState.statement.id === statement.id
+                                          ? 'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                                          : undefined
+                                      }
+                                    >
+                                      <GameFact
+                                        statement={statement}
+                                        page={page}
+                                        related={page.public.related}
+                                        locale={locale}
+                                        date={field.date}
+                                        link={Link}
+                                      />
+                                    </div>,
+                                  )}
+                                </div>
+                              ))}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </section>
+                  );
+                  return group.id === 'credits' || group.id === 'relations' ? (
+                    <details
+                      key={group.id}
+                      data-game-extra-group={group.id}
+                      open={
+                        (returnState?.kind === 'current' &&
+                          group.fields.some((field) =>
+                            field.statements.some((statement) => statement.id === returnState.statement.id),
+                          )) ||
+                        undefined
+                      }
+                      className="min-w-0 border-t border-border pt-3"
+                    >
+                      <summary className={`${action} cursor-pointer font-medium text-primary`}>
+                        {groups[group.id]}
+                      </summary>
+                      <div className="pt-3">{content}</div>
+                    </details>
+                  ) : (
+                    content
+                  );
+                })}
+              </section>
+              <details
+                data-slot="game-release-destination"
+                className="min-w-0 overflow-hidden rounded-xl border border-border bg-card"
+              >
+                <summary className={`${action} cursor-pointer px-4 py-3 font-semibold text-primary`}>
                   {m.subject_editions({}, o)}
                 </summary>
-                <section key={window.revision} className="space-y-4 pt-3" data-slot="game-editions">
+                <section
+                  key={window.revision}
+                  aria-label={m.subject_editions({}, o)}
+                  className="min-w-0 space-y-4 border-t border-border bg-muted/10 p-4 sm:p-5"
+                  data-slot="game-editions"
+                >
                   <h3 className="font-semibold">{m.subject_editions({}, o)}</h3>
                   <p>{m.game_reader_editions_scope({}, o)}</p>
                   {busy ? (
@@ -415,7 +438,7 @@ function GameWindow({
                   ) : (
                     <>
                       {page.workReleaseCards?.state !== 'available' ? (
-                        <div role="status">
+                        <div role="status" className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
                           <p>{m.game_reader_compare_unavailable({}, o)}</p>
                           <button
                             type="button"
@@ -428,7 +451,7 @@ function GameWindow({
                         </div>
                       ) : null}
                       {!page.editions.length ? <p>{m.game_reader_editions_empty({}, o)}</p> : null}
-                      <ul className="space-y-4">
+                      <ul className="min-w-0 space-y-5">
                         {page.editions.map((row) => {
                           const summary = row.summary;
                           const title = summary?.label;
@@ -453,8 +476,13 @@ function GameWindow({
                             <>
                               {summary && title?.value && statement && page.editionTypes.includes(summary.type) ? (
                                 <>
-                                  <p lang={title.language}>{title.value}</p>
-                                  <div className="flex flex-wrap gap-x-4">
+                                  <p
+                                    lang={title.language}
+                                    className="break-words rounded-md bg-muted/40 p-3 font-semibold"
+                                  >
+                                    {title.value}
+                                  </p>
+                                  <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2">
                                     <Link href={subjectHref({ id: summary.id, label: title.value }, locale).href}>
                                       {m.game_reader_open({}, o)}
                                     </Link>
@@ -469,7 +497,7 @@ function GameWindow({
                                   </div>
                                 </>
                               ) : (
-                                <p>{m.work_parts_unresolved({}, o)}</p>
+                                <p className="rounded-md bg-muted/30 p-3">{m.work_parts_unresolved({}, o)}</p>
                               )}
                               <button
                                 type="button"
@@ -515,7 +543,8 @@ function GameWindow({
                           return (
                             <li
                               key={`${row.subject}:${row.statement}`}
-                              className="min-w-0 rounded-lg border border-border p-3"
+                              data-slot="game-release-membership"
+                              className="min-w-0 space-y-3 rounded-lg border border-border bg-background p-4"
                             >
                               {statement ? gate(statement, body) : body}
                             </li>

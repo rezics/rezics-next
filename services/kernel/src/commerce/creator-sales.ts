@@ -1,7 +1,11 @@
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { withConnection } from '../database/pool.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  CommandUnavailableError,
+  requireAccessDeadline,
+} from '../access/unavailable.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, Actor } from '../request/access.ts';
@@ -31,6 +35,13 @@ export type CreatorSalesPage = {
   projectionState: 'ready' | 'preparing';
 };
 export const CREATOR_SALES_PAGE_BYTES = 256 * 1024;
+
+function mapCreatorSalesReadError(error: unknown): unknown {
+  const reason = classifyUnavailability(error);
+  if (reason === 'deadline' || reason === 'contention' || reason === 'overloaded')
+    return error instanceof AccessUnavailableError ? error : new AccessUnavailableError(reason);
+  return error;
+}
 
 export async function listCreatorSales(
   pool: Pool,
@@ -65,69 +76,113 @@ export async function listCreatorSales(
     epoch = cursor.epoch;
   }
   requireAccessDeadline(input.deadline);
-  return withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, input.deadline);
-    const source = async () => {
-      const partition = await readPartition(client, home);
-      if (!partition || partition.writeState !== 'active')
-        throw new CommandUnavailableError(
-          partition?.writeState === 'moved' ? 'moved' : 'fenced',
-          home,
-          partition?.movedTo,
-        );
-      if (epoch !== undefined && epoch !== partition.epoch) throw new ProblemError('stale_cursor');
-      const seen = input.seen.find((entry) => entry.partition === home);
-      if (
-        seen &&
-        (seen.epoch > partition.epoch || (seen.epoch === partition.epoch && seen.position > partition.position))
-      )
-        throw new CommandUnavailableError('fenced', home);
-      return partition;
-    };
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    let committed = false;
-    try {
-      if (!(await check(client))) throw new ProblemError('forbidden');
-      const partition = await source();
-      const rows = await pageRead.run(client, { route, creator_account_id: actor.accountId, after, limit: size + 1 });
-      const sales = rows.slice(0, size).map((row): CreatorSaleView => {
-        const amount = Number(row.unitAmountMinor);
-        if (!Number.isSafeInteger(amount)) throw new ProblemError('dependency_unavailable');
-        return {
-          orderId: row.orderId,
-          offerId: row.offerId,
-          title: row.title,
-          targetSubjectId: row.targetSubjectId,
-          currency: row.currency,
-          unitAmountMinor: amount,
-          moneyUnit: row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
-          taxBehavior: row.taxBehavior as 'exclusive' | null,
-          settlement: row.settlement as CreatorSaleView['settlement'],
-          createdAt: new Date(row.createdAt).toISOString(),
-        };
-      });
-      if (Buffer.byteLength(JSON.stringify(sales)) > CREATOR_SALES_PAGE_BYTES)
-        throw new ProblemError('dependency_unavailable');
-      await client.query('COMMIT');
-      committed = true;
-      if (!(await check(client))) throw new ProblemError('forbidden');
-      epoch = partition.epoch;
-      await source();
-      requireAccessDeadline(input.deadline);
-      const last = sales.at(-1);
-      return {
-        sales,
-        next:
-          rows.length > size && last
-            ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.orderId] })
-            : null,
-        // No shared producer currently certifies full live-order coverage/copy custody.
-        // Exhausting local rows or a backfill frontier cannot manufacture that proof.
-        projectionState: 'preparing',
+  let transaction:
+    | 'none'
+    | 'beginning'
+    | 'open'
+    | 'committing'
+    | 'committed'
+    | 'rolling-back'
+    | 'rolled-back' = 'none';
+  return withBoundedReadConnection(
+    pool,
+    input.deadline,
+    async (client) => {
+      const source = async () => {
+        const partition = await readPartition(client, home);
+        if (!partition || partition.writeState !== 'active')
+          throw new CommandUnavailableError(
+            partition?.writeState === 'moved' ? 'moved' : 'fenced',
+            home,
+            partition?.movedTo,
+          );
+        if (epoch !== undefined && epoch !== partition.epoch) throw new ProblemError('stale_cursor');
+        const seen = input.seen.find((entry) => entry.partition === home);
+        if (
+          seen &&
+          (seen.epoch > partition.epoch || (seen.epoch === partition.epoch && seen.position > partition.position))
+        )
+          throw new CommandUnavailableError('fenced', home);
+        return partition;
       };
-    } catch (error) {
-      if (!committed) await connection.query('ROLLBACK');
-      throw error;
-    }
-  });
+      try {
+        transaction = 'beginning';
+        try {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        } catch (error) {
+          // A dispatched BEGIN failure is retired by the bounded query wrapper.
+          transaction = 'none';
+          throw error;
+        }
+        transaction = 'open';
+        if (!(await check(client))) throw new ProblemError('forbidden');
+        const partition = await source();
+        const rows = await pageRead.run(client, { route, creator_account_id: actor.accountId, after, limit: size + 1 });
+        const sales = rows.slice(0, size).map((row): CreatorSaleView => {
+          const amount = Number(row.unitAmountMinor);
+          if (!Number.isSafeInteger(amount)) throw new ProblemError('dependency_unavailable');
+          return {
+            orderId: row.orderId,
+            offerId: row.offerId,
+            title: row.title,
+            targetSubjectId: row.targetSubjectId,
+            currency: row.currency,
+            unitAmountMinor: amount,
+            moneyUnit: row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
+            taxBehavior: row.taxBehavior as 'exclusive' | null,
+            settlement: row.settlement as CreatorSaleView['settlement'],
+            createdAt: new Date(row.createdAt).toISOString(),
+          };
+        });
+        if (Buffer.byteLength(JSON.stringify(sales)) > CREATOR_SALES_PAGE_BYTES)
+          throw new ProblemError('dependency_unavailable');
+        transaction = 'committing';
+        await client.query('COMMIT');
+        transaction = 'committed';
+        if (!(await check(client))) throw new ProblemError('forbidden');
+        epoch = partition.epoch;
+        await source();
+        requireAccessDeadline(input.deadline);
+        const last = sales.at(-1);
+        return {
+          sales,
+          next:
+            rows.length > size && last
+              ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.orderId] })
+              : null,
+          // No shared producer currently certifies full live-order coverage/copy custody.
+          // Exhausting local rows or a backfill frontier cannot manufacture that proof.
+          projectionState: 'preparing',
+        };
+      } catch (error) {
+        if (transaction === 'open') {
+          transaction = 'rolling-back';
+          try {
+            await client.query('ROLLBACK');
+            transaction = 'rolled-back';
+          } catch {
+            // Keep the primary failure; the bounded wrapper retires failed cleanup IO.
+          }
+        }
+        throw error;
+      }
+    },
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError: mapCreatorSalesReadError,
+      isUncertainError: (error) => {
+        const reason = classifyUnavailability(error);
+        if (reason === 'deadline' || reason === 'overloaded') return true;
+        if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+        return ['ECONNABORTED', 'ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT'].includes(
+          String(error.code),
+        );
+      },
+      isUncertainWorkError: () =>
+        transaction === 'beginning' ||
+        transaction === 'open' ||
+        transaction === 'committing' ||
+        transaction === 'rolling-back',
+    },
+  );
 }

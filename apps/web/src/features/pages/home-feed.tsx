@@ -113,17 +113,11 @@ export function HomeFeed({
   }, [busy, result, requestKey]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterPanel = useRef<HTMLDivElement>(null);
-  const focusFilters = useRef(false);
   const focusFirstFilter = () =>
     filterPanel.current
       ?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], select:not(:disabled)')
       ?.focus();
   useEffect(() => setMounted(true), []);
-  useEffect(() => {
-    if (!filtersOpen || !focusFilters.current) return;
-    focusFilters.current = false;
-    focusFirstFilter();
-  }, [filtersOpen]);
   const page = result.state === 'ready' ? result.page : undefined;
   const reactions = useHomeReactionCurrentness(result, input, stream, signedIn, busy);
   const recovery = useHomeReactionRecovery(onRetry);
@@ -151,9 +145,10 @@ export function HomeFeed({
         ? 'following'
         : 'discovery';
   const resultMessages = homeFeedRecoveryMessages(locale, emptyContext);
+  const feedHeading = stream === 'following' ? m.home_feed_following({}, options) : m.home_feed_discovery({}, options);
   return (
     <main
-      className="mx-auto w-full max-w-3xl space-y-4 text-foreground"
+      className="mx-auto w-full max-w-6xl space-y-6 text-foreground"
       aria-busy={busy || result.state === 'loading'}
       data-home-feed-mounted={mounted ? 'true' : 'false'}
       data-home-feed-state={result.state}
@@ -166,8 +161,15 @@ export function HomeFeed({
           : undefined
       }
     >
-      <h1 className="sr-only">{m.nav_home({}, options)}</h1>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <header className="space-y-4 border-b border-border pb-5">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">{m.nav_home({}, options)}</h1>
+          {stream === 'home' ? (
+            <p role="note" className="text-sm text-muted-foreground">
+              {m.home_feed_public_discovery_unavailable({}, options)}
+            </p>
+          ) : null}
+        </div>
         <nav aria-label={m.nav_home({}, options)} className="flex flex-wrap items-center gap-2">
           <Button
             className="min-h-11"
@@ -190,6 +192,8 @@ export function HomeFeed({
             </Button>
           ) : null}
         </nav>
+      </header>
+      <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
         <HomeFeedControls
           locale={locale}
           stream={stream}
@@ -207,119 +211,115 @@ export function HomeFeed({
         </HomeFeedControls>
       </div>
       {catalogue}
-      {stream === 'home' ? (
-        <p role="note" className="text-sm text-muted-foreground">
-          {m.home_feed_public_discovery_unavailable({}, options)}
-        </p>
-      ) : null}
-      <HomeReactionRecovery scope={recovery} locale={locale} onRefresh={onRetry} />
-      <FeedResults
-        boundaryRef={boundary}
-        regionLabel={m.nav_home({}, options)}
-        itemHeadingLevel={2}
-        listAs="ol"
-        result={results}
-        busy={busy}
-        messages={resultMessages}
-        emptyContext={emptyContext}
-        failureActions={{
-          auth: (
-            <a
-              href={`/${locale}/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/`)}`}
-              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {m.account_sign_in({}, options)}
-            </a>
-          ),
-        }}
-        getItemKey={(item) => item.id}
-        itemPresentation={(item) => {
-          const presentation = homeFeedItemPresentation(item, locale, reactions.origin);
-          return {
-            ...presentation,
-            actions: (
-              <HomeFeedActions
-                key={item.id}
-                item={item}
-                commandRecovery={{
-                  ...recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`),
-                  start(command) {
-                    recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`).start(command);
-                    reactions.retire();
-                  },
-                }}
-                reactionPending={recovery.recovery.pending(item.id)}
-                locale={locale}
-                signedIn={signedIn}
-                verification={verification}
-                origin={reactions.origin}
-                onRetry={onRetry}
-                busy={busy}
-                reactionsAsOf={page?.reactionsAsOf}
-                hasReactionFreshness={page !== undefined && Object.hasOwn(page, 'reactionsAsOf')}
+      <div className="min-w-0 max-w-3xl space-y-4">
+        <HomeReactionRecovery scope={recovery} locale={locale} onRefresh={onRetry} />
+        <h2 className="text-xl font-semibold">{feedHeading}</h2>
+        <FeedResults
+          boundaryRef={boundary}
+          regionLabel={feedHeading}
+          itemHeadingLevel={3}
+          emptyHeadingLevel={3}
+          listAs="ol"
+          result={results}
+          busy={busy}
+          messages={resultMessages}
+          emptyContext={emptyContext}
+          failureActions={{
+            auth: (
+              <a
+                href={`/${locale}/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/`)}`}
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
-                {presentation.actions}
-              </HomeFeedActions>
+                {m.account_sign_in({}, options)}
+              </a>
             ),
-          };
-        }}
-        onRetry={onRetry}
-        onRestart={onRestart}
-        suppressResultMessage={suppressResultMessage}
-        nextControl={
-          page?.next && onNext ? (
-            <Button
-              variant="outline"
-              className="min-h-11"
-              disabled={busy || !page.next}
-              onClick={() => {
-                if (busy || advancing.current || !page.next) return;
-                advancing.current = { request: input ? requestIdentity({ ...input, cursor: page.next }) : null };
-                onNext(page.next);
-              }}
-            >
-              {busy && advancing.current ? m.home_feed_loading({}, options) : m.library_next_page({}, options)}
-            </Button>
-          ) : undefined
-        }
-        emptyActions={
-          <>
-            {emptyContext === 'continuation' && !page?.next && onRestart ? (
-              <Button className="min-h-11" variant="outline" disabled={busy} onClick={onRestart}>
-                {m.home_feed_restart({}, options)}
-              </Button>
-            ) : null}
-            {emptyContext === 'filtered' ? (
+          }}
+          getItemKey={(item) => item.id}
+          itemPresentation={(item) => {
+            const presentation = homeFeedItemPresentation(item, locale, reactions.origin);
+            return {
+              ...presentation,
+              actions: (
+                <HomeFeedActions
+                  key={item.id}
+                  item={item}
+                  commandRecovery={{
+                    ...recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`),
+                    start(command) {
+                      recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`).start(command);
+                      reactions.retire();
+                    },
+                  }}
+                  reactionPending={recovery.recovery.pending(item.id)}
+                  locale={locale}
+                  signedIn={signedIn}
+                  verification={verification}
+                  origin={reactions.origin}
+                  onRetry={onRetry}
+                  busy={busy}
+                  reactionsAsOf={page?.reactionsAsOf}
+                  hasReactionFreshness={page !== undefined && Object.hasOwn(page, 'reactionsAsOf')}
+                >
+                  {presentation.actions}
+                </HomeFeedActions>
+              ),
+            };
+          }}
+          onRetry={onRetry}
+          onRestart={onRestart}
+          suppressResultMessage={suppressResultMessage}
+          nextControl={
+            page?.next && onNext ? (
               <Button
-                className="min-h-11"
                 variant="outline"
-                aria-controls={filterId}
-                aria-expanded={filtersOpen}
+                className="min-h-11"
+                disabled={busy || !page.next}
                 onClick={() => {
-                  if (filtersOpen) focusFirstFilter();
-                  else {
-                    focusFilters.current = true;
-                    setFiltersOpen(true);
-                  }
+                  if (busy || advancing.current || !page.next) return;
+                  advancing.current = { request: input ? requestIdentity({ ...input, cursor: page.next }) : null };
+                  onNext(page.next);
                 }}
               >
-                {m.search_filters({}, options)}
+                {busy && advancing.current ? m.home_feed_loading({}, options) : m.library_next_page({}, options)}
               </Button>
-            ) : null}
-            <a
-              href={`/${locale}/search`}
-              className="inline-flex min-h-11 items-center justify-center rounded-lg px-4 py-2 text-sm text-primary underline underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {m.search_heading({}, options)}
-            </a>
-            {stream === 'following' && onSelect ? (
-              <Button className="min-h-11" variant="outline" disabled={busy} onClick={() => onSelect('home')}>
-                {m.home_feed_discovery({}, options)}
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+            ) : undefined
+          }
+          emptyActions={
+            <>
+              {emptyContext === 'continuation' && !page?.next && onRestart ? (
+                <Button className="min-h-11" variant="outline" disabled={busy} onClick={onRestart}>
+                  {m.home_feed_restart({}, options)}
+                </Button>
+              ) : null}
+              {emptyContext === 'filtered' ? (
+                <Button
+                  className="min-h-11"
+                  variant="outline"
+                  aria-controls={filterId}
+                  aria-expanded={filtersOpen}
+                  onClick={() => {
+                    if (filtersOpen) focusFirstFilter();
+                    else setFiltersOpen(true);
+                  }}
+                >
+                  {m.search_filters({}, options)}
+                </Button>
+              ) : null}
+              <a
+                href={`/${locale}/search`}
+                className="inline-flex min-h-11 items-center justify-center rounded-lg px-4 py-2 text-sm text-primary underline underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {m.search_heading({}, options)}
+              </a>
+              {stream === 'following' && onSelect ? (
+                <Button className="min-h-11" variant="outline" disabled={busy} onClick={() => onSelect('home')}>
+                  {m.home_feed_discovery({}, options)}
+                </Button>
+              ) : null}
+            </>
+          }
+        />
+      </div>
     </main>
   );
 }

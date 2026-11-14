@@ -134,18 +134,18 @@ export function AnnotationEditor({
           <p className="text-xs text-muted-foreground">{m.library_annotation_clear_priority_help()}</p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <button
           ref={refs.review}
           type="submit"
-          className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
+          className="min-h-11 w-full rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50 sm:w-auto"
           disabled={disabled || reviewDisabled}
         >
           {m.library_annotation_review()}
         </button>
         <button
           type="button"
-          className="min-h-11 rounded-md border px-3 disabled:opacity-50"
+          className="min-h-11 w-full rounded-md border px-3 disabled:opacity-50 sm:w-auto"
           disabled={disabled}
           aria-disabled={!canDiscard}
           onClick={(event) => {

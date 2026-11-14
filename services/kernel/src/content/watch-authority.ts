@@ -1,8 +1,14 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { resourceAuthorization, deadlineClient, within } from './access-port.ts';
-import { principalCommandIdentity, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { resourceAuthorization } from './access-port.ts';
+import {
+  CommandUnavailableError,
+  principalCommandIdentity,
+  type CommandAuthorization,
+  type CommandTransaction,
+} from '../command/command.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck } from './access-port.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -13,6 +19,22 @@ import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
 
 export type WatchDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }>;
 export type WatchKind = 'thread' | 'board';
+
+/** Keep native failure mapping inside the shared lifetime, after it observes query settlement. */
+export const watchReadOptions = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  mapError(error: unknown) {
+    if (error instanceof CommandUnavailableError) return error;
+    try {
+      throwAccessUnavailable(error);
+    } catch (mapped) {
+      return mapped;
+    }
+    return error;
+  },
+  // The shared lifetime already excludes settled PostgreSQL ERROR responses.
+  isUncertainSettledQueryError: (error: unknown) => !(error instanceof CommandUnavailableError),
+};
 
 /** The acting account owns the range, including when an operator opened the session. */
 export function watchOwner(actor: Actor, accountId?: string) {
@@ -37,10 +59,13 @@ export async function requireWatchOwner(deps: WatchDependencies, actor: Actor, d
       deadline,
     },
   );
-  await within(deadline, () =>
-    withConnection(deps.pool, async (connection) => {
-      if (!(await check(deadlineClient(connection, deadline)))) throw new ProblemError('not_found');
-    }),
+  await withBoundedReadConnection(
+    deps.pool,
+    deadline,
+    async (connection) => {
+      if (!(await check(connection))) throw new ProblemError('not_found');
+    },
+    watchReadOptions,
   );
   return owner;
 }
@@ -72,10 +97,11 @@ export async function watchRemoveAdvice(
     { route: owner.route, id: owner.id },
     { pool: deps.pool, deadline },
   );
-  return within(deadline, () =>
-    withConnection(deps.pool, async (connection) =>
-      (await update(deadlineClient(connection, deadline))) ? 'available' : 'denied',
-    ),
+  return withBoundedReadConnection(
+    deps.pool,
+    deadline,
+    async (connection) => ((await update(connection)) ? 'available' : 'denied'),
+    watchReadOptions,
   );
 }
 

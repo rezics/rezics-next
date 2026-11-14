@@ -6,7 +6,6 @@ import {
   type SessionProof,
 } from '@rezics/auth-contract';
 import type { Access } from '../request/access.ts';
-import { withConnection } from '../database/pool.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -14,7 +13,8 @@ import { withReadTransaction } from '../semantic/read.ts';
 import { accessClock } from './access-clock.ts';
 import { readAccount, readOrganizationRole } from './account-data.ts';
 import { readManagedAuthActions } from './account-management-auth-actions.ts';
-import { deadlineClient, within } from './deadline.ts';
+import { within } from './deadline.ts';
+import { withManagedAdviceReadConnection } from './managed-advice-read-connection.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import { CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
 
@@ -89,8 +89,8 @@ export function createOrganizationDeletionAccess(deps: {
           organizationId === actor.accountId
         )
           throw new AuthBindingDeniedError();
-        const time = await withConnection(deps.pool, (client) =>
-          mintReadTime(deadlineClient(client, deadline), accessClock(deps.access)),
+        const time = await withManagedAdviceReadConnection(deps.pool, deadline, (client) =>
+          mintReadTime(client, accessClock(deps.access)),
         );
         try {
           const snapshot = () =>

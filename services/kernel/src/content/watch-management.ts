@@ -1,6 +1,5 @@
-import { deadlineClient, within } from './access-port.ts';
 import { noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Actor } from '../request/access.ts';
@@ -14,6 +13,7 @@ import {
   requireWatchOwner,
   watchAuthorization,
   watchOwner,
+  watchReadOptions,
   watchReceipt,
   watchRemoveAdvice,
   type WatchDependencies,
@@ -89,8 +89,10 @@ export async function listWatches(
     after = [cursor.after[0], cursor.after[1]];
   }
   // Only the actor-home indexed range is selected. Its checkout ends before disclosure.
-  const rows = await within(deadline, () =>
-    withConnection(deps.pool, async (connection) => {
+  const rows = await withBoundedReadConnection(
+    deps.pool,
+    deadline,
+    async (connection) => {
       const statement =
         after === null
           ? `SELECT watch_id::text,${source.resource}::text AS resource_id,created_at::text,${source.revision} AS revision
@@ -106,9 +108,10 @@ export async function listWatches(
         after === null
           ? [owner.route, owner.id, WATCH_MANAGEMENT_RAW_BUDGET]
           : [owner.route, owner.id, after[0], after[1], WATCH_MANAGEMENT_RAW_BUDGET];
-      const result = await deadlineClient(connection, deadline).query<WatchRow>(statement, values);
+      const result = await connection.query<WatchRow>(statement, values);
       return result.rows;
-    }),
+    },
+    watchReadOptions,
   );
   const retained: { row: WatchRow; initial: TargetObservation }[] = [];
   let scanned = 0;
@@ -190,9 +193,11 @@ async function requireCurrentWatchSession(
   deadline: number,
 ): Promise<void> {
   if (actor.kind !== 'account') throw new ProblemError('not_found');
-  const current = await within(deadline, () =>
-    withConnection(deps.pool, async (connection) => {
-      const result = await deadlineClient(connection, deadline).query<{
+  const current = await withBoundedReadConnection(
+    deps.pool,
+    deadline,
+    async (connection) => {
+      const result = await connection.query<{
         state: string;
         fenced: boolean;
         minimum_authn_epoch: string;
@@ -202,7 +207,8 @@ async function requireCurrentWatchSession(
         [route, accountId],
       );
       return result.rows[0];
-    }),
+    },
+    watchReadOptions,
   );
   if (
     !current ||
@@ -214,12 +220,15 @@ async function requireCurrentWatchSession(
 }
 
 async function watchGeneration(deps: WatchDependencies, route: number, deadline: number): Promise<number> {
-  return within(deadline, () =>
-    withConnection(deps.pool, async (connection) => {
-      const state = await readPartition(deadlineClient(connection, deadline), partitionOf(route));
+  return withBoundedReadConnection(
+    deps.pool,
+    deadline,
+    async (connection) => {
+      const state = await readPartition(connection, partitionOf(route));
       if (!state || state.writeState === 'moved') throw new ProblemError('partition_unavailable');
       return state.epoch;
-    }),
+    },
+    watchReadOptions,
   );
 }
 
@@ -276,16 +285,19 @@ async function readActiveWatch(
   watchId: string,
   deadline: number,
 ): Promise<WatchRow | null> {
-  return within(deadline, () =>
-    withConnection(deps.pool, async (connection) => {
-      const result = await deadlineClient(connection, deadline).query<WatchRow>(
+  return withBoundedReadConnection(
+    deps.pool,
+    deadline,
+    async (connection) => {
+      const result = await connection.query<WatchRow>(
         `SELECT watch_id::text,${source.resource}::text AS resource_id,created_at::text,${source.revision} AS revision
          FROM ${source.table}
          WHERE route=$1 AND watcher_account_id=$2 AND watch_id=$3${source.active}`,
         [route, accountId, watchId],
       );
       return result.rows[0] ?? null;
-    }),
+    },
+    watchReadOptions,
   );
 }
 

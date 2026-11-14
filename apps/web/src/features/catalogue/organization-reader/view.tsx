@@ -57,8 +57,8 @@ function Evidence({ fact, presentation }: { fact: OrganizationFact; presentation
   const o = { locale: locale as never };
   const label = (id: string) => pickText(read.release.properties[id]?.labels ?? {}, locale);
   return (
-    <div className="min-w-0 space-y-3">
-      <p>
+    <div className="min-w-0 space-y-4 rounded-lg bg-muted/20 p-3 sm:p-4">
+      <p className="font-medium">
         {m.candidate_rank({}, o)}:{' '}
         {fact.rank === 'preferred'
           ? m.candidate_rank_preferred({}, o)
@@ -67,15 +67,21 @@ function Evidence({ fact, presentation }: { fact: OrganizationFact; presentation
             : m.changes_rank_deprecated({}, o)}
       </p>
       {!!fact.qualifiers.length && (
-        <section className="space-y-2" aria-label={m.correction_qualifiers({}, o)}>
-          <h5 className="font-semibold">{m.correction_qualifiers({}, o)}</h5>
+        <section
+          className="min-w-0 space-y-2 rounded-lg border bg-background p-3"
+          aria-label={m.correction_qualifiers({}, o)}
+        >
+          <h5 className="text-sm font-semibold">{m.correction_qualifiers({}, o)}</h5>
           <dl className="space-y-2">
             {fact.qualifiers.map((part, index) => (
-              <div key={index}>
+              <div
+                key={index}
+                className="grid min-w-0 gap-1 border-t pt-2 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(7rem,0.35fr)_minmax(0,1fr)] sm:gap-4"
+              >
                 <dt lang={label(part.property.id).lang ?? undefined} className="text-sm text-muted-foreground">
                   {label(part.property.id).text || m.candidate_value_unavailable({}, o)}
                 </dt>
-                <dd>
+                <dd className="min-w-0">
                   <OrganizationValue part={part} {...presentation} />
                 </dd>
               </div>
@@ -83,27 +89,34 @@ function Evidence({ fact, presentation }: { fact: OrganizationFact; presentation
           </dl>
         </section>
       )}
-      <h5 className="font-semibold">{m.correction_references({}, o)}</h5>
-      {!fact.references.length && <p>{m.organization_reader_no_citation({}, o)}</p>}
-      <ol className="space-y-3">
-        {fact.references.map((reference, index) => (
-          <li key={reference.hash || index} className="space-y-1">
-            <dl>
-              {reference.parts.map((part, at) => (
-                <div key={at}>
-                  <dt className="text-sm text-muted-foreground" lang={label(part.property.id).lang ?? undefined}>
-                    {label(part.property.id).text || m.candidate_value_unavailable({}, o)}
-                  </dt>
-                  <dd>
-                    <OrganizationValue part={part} {...presentation} />
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </li>
-        ))}
-      </ol>
-      <details>
+      <section className="min-w-0 space-y-2 rounded-lg border bg-background p-3">
+        <h5 className="text-sm font-semibold">{m.correction_references({}, o)}</h5>
+        {!fact.references.length && (
+          <p className="text-sm text-muted-foreground">{m.organization_reader_no_citation({}, o)}</p>
+        )}
+        <ol className="space-y-3">
+          {fact.references.map((reference, index) => (
+            <li key={reference.hash || index} className="min-w-0 rounded-lg border p-3">
+              <dl className="space-y-2">
+                {reference.parts.map((part, at) => (
+                  <div
+                    key={at}
+                    className="grid min-w-0 gap-1 border-t pt-2 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(7rem,0.35fr)_minmax(0,1fr)] sm:gap-4"
+                  >
+                    <dt className="text-sm text-muted-foreground" lang={label(part.property.id).lang ?? undefined}>
+                      {label(part.property.id).text || m.candidate_value_unavailable({}, o)}
+                    </dt>
+                    <dd className="min-w-0">
+                      <OrganizationValue part={part} {...presentation} />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ol>
+      </section>
+      <details className="rounded-lg border bg-background px-3">
         <summary className={control}>{m.organization_reader_identity({}, o)}</summary>
         <code className="block break-all">{fact.id}</code>
         <p>{m.changes_revision({ revision: fact.rezics.revision }, o)}</p>
@@ -247,23 +260,23 @@ export function OrganizationReader({
   return (
     <section
       data-slot="organization-reader"
-      className="min-w-0 space-y-5 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center"
+      className="min-w-0 space-y-6 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center"
     >
       <h2
         ref={heading}
         tabIndex={-1}
-        className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+        className="text-2xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-ring"
       >
         {m.organization_reader_title({}, o)}
       </h2>
       {available ? (
         <ReadingDisclosureScope.Provider value={`organization:${episode.key}`}>
           {changed && (
-            <div className="space-y-2" role="status">
-              <p>{m.organization_reader_changed({}, o)}</p>
+            <div className="space-y-3 rounded-lg border border-dashed bg-muted/20 p-4" role="status">
+              <p className="leading-relaxed">{m.organization_reader_changed({}, o)}</p>
               <button
                 type="button"
-                className={control}
+                className={control + ' rounded-md border border-border bg-background px-3'}
                 onClick={() => {
                   if (!episode.current()) return;
                   setChanged(false);
@@ -309,9 +322,11 @@ export function OrganizationReader({
           />
         </ReadingDisclosureScope.Provider>
       ) : (
-        <div className="space-y-2">
-          <p role="status">{m.organization_reader_unavailable({}, o)}</p>
-          <a href={href} className={control}>
+        <div className="min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4 sm:p-5">
+          <p role="status" className="leading-relaxed text-muted-foreground">
+            {m.organization_reader_unavailable({}, o)}
+          </p>
+          <a href={href} className={control + ' rounded-md border border-border bg-background px-3'}>
             {m.organization_reader_refresh({}, o)}
           </a>
         </div>
@@ -380,16 +395,24 @@ function Inspection({
       tabIndex={-1}
       role="region"
       aria-label={m.organization_reader_inspect({}, o)}
-      className="min-w-0 space-y-3 rounded border p-4 focus-visible:outline-2 focus-visible:outline-ring"
+      className="min-w-0 space-y-4 rounded-xl border bg-card p-4 shadow-sm focus-visible:outline-2 focus-visible:outline-ring sm:p-5"
     >
       <Evidence fact={fact} presentation={presentation} />
-      <p className="text-sm text-muted-foreground">{m.organization_reader_navigation({}, o)}</p>
-      <Link href={correction} className={control}>
-        {m.facts_title({}, o)}
-      </Link>
-      <button type="button" className={control} onClick={close}>
-        {m.organization_reader_return({}, o)}
-      </button>
+      <div className="space-y-3 border-t pt-3">
+        <p className="text-sm leading-relaxed text-muted-foreground">{m.organization_reader_navigation({}, o)}</p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Link href={correction} className={control + ' rounded-md border border-border bg-background px-3'}>
+            {m.facts_title({}, o)}
+          </Link>
+          <button
+            type="button"
+            className={control + ' rounded-md border border-border bg-background px-3'}
+            onClick={close}
+          >
+            {m.organization_reader_return({}, o)}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -536,7 +559,15 @@ function OrganizationFacts({
     focusHeader,
     finishNavigation,
   ]);
-  if (!model) return <p role="status">{m.organization_reader_unavailable({}, o)}</p>;
+  if (!model)
+    return (
+      <p
+        role="status"
+        className="rounded-lg border border-dashed bg-muted/20 p-4 leading-relaxed text-muted-foreground"
+      >
+        {m.organization_reader_unavailable({}, o)}
+      </p>
+    );
   const open = (fact: OrganizationFact, event: MouseEvent<HTMLButtonElement>) => {
     if (episode.current()) {
       const keyboard = event.detail === 0;
@@ -558,7 +589,16 @@ function OrganizationFacts({
   );
   const secondary = model.fields.filter((field) => !primary.includes(field));
   const renderField = (field: (typeof model.fields)[number]) => (
-    <section key={field.id} className="min-w-0 space-y-2">
+    <section
+      key={field.id}
+      className={`min-w-0 space-y-3 rounded-xl border bg-card p-4 shadow-sm sm:p-5 ${
+        field.kind === 'dates'
+          ? 'border-t-4 border-t-primary/70'
+          : field.kind === 'relations'
+            ? 'border-t-4 border-t-muted-foreground/50'
+            : ''
+      }`}
+    >
       <h3
         ref={(node) => {
           if (node) fieldHeadings.current.set(field.id, node);
@@ -567,15 +607,17 @@ function OrganizationFacts({
         data-organization-field={field.id}
         tabIndex={-1}
         lang={field.label.lang ?? undefined}
-        className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+        className="text-base font-semibold leading-snug focus-visible:outline-2 focus-visible:outline-ring sm:text-lg"
       >
         {field.label.text || m.candidate_value_unavailable({}, o)}
       </h3>
       {field.kind === 'relations' && (
-        <p className="text-sm text-muted-foreground">{m.organization_reader_direction({}, o)}</p>
+        <p className="border-l-2 border-border pl-3 text-sm leading-relaxed text-muted-foreground">
+          {m.organization_reader_direction({}, o)}
+        </p>
       )}
       {!field.facts.length && (
-        <p>
+        <p className="rounded-lg border border-dashed bg-muted/20 p-3 text-sm leading-relaxed text-muted-foreground">
           {field.unavailable
             ? m.candidate_value_unavailable({}, o)
             : subject.resolution[field.id] === 'suppressed'
@@ -585,16 +627,18 @@ function OrganizationFacts({
                 : m.people_biography_absent({}, o)}
         </p>
       )}
-      <ul className="space-y-3">
+      <ul className="grid min-w-0 gap-3 lg:grid-cols-2">
         {field.facts.map((fact) => {
           const inspecting =
             selected?.episode === episode.key && selected.id === fact.id && selected.property === field.id;
           const content = (
-            <div className="min-w-0 space-y-2">
-              <OrganizationValue part={fact} {...presentation} />
+            <div className="min-w-0 space-y-3">
+              <div className="min-w-0 text-base leading-relaxed">
+                <OrganizationValue part={fact} {...presentation} />
+              </div>
               <button
                 type="button"
-                className={control + ' block text-sm'}
+                className={control + ' block border-t border-border pt-2 text-sm'}
                 onClick={(event) => open(fact, event)}
                 aria-expanded={inspecting}
                 data-organization-property={field.id}
@@ -629,7 +673,10 @@ function OrganizationFacts({
             </div>
           );
           return (
-            <li key={fact.id} className="min-w-0 space-y-1">
+            <li
+              key={fact.id}
+              className="min-w-0 rounded-lg border bg-background p-3 [overflow-wrap:anywhere] sm:p-4"
+            >
               {spoilerLevel(fact) > preferences.spoilerLevel ? (
                 <OrganizationFactDisclosure
                   key={`${preferences.spoilerLevel}:${preferences.suitability}`}
@@ -654,26 +701,42 @@ function OrganizationFacts({
     </section>
   );
   const sources = profileSourceRecords(subject);
+  const descriptions = Object.entries(subject.descriptions);
   return (
     <>
-      {primary.map(renderField)}
-      {!model.fields.length && <p>{m.organization_reader_no_fields({}, o)}</p>}
-      {model.limited && <p role="status">{m.organization_reader_bounded({}, o)}</p>}
-      <p className="text-sm text-muted-foreground">{m.organization_reader_navigation({}, o)}</p>
-      <nav className="flex flex-wrap gap-4" aria-label={m.facts_title({}, o)}>
-        <CurrentLink
-          href={`${currentHref.split('?')[0]}/relations${realm ? `?${new URLSearchParams({ realm })}` : ''}`}
-          className={control}
+      {!!primary.length && <div className="grid min-w-0 gap-4 md:grid-cols-2">{primary.map(renderField)}</div>}
+      {!model.fields.length && (
+        <p
+          className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm leading-relaxed text-muted-foreground"
         >
-          {m.subject_relations({}, o)}
-        </CurrentLink>
-        <CurrentLink
-          href={`${currentHref.split('?')[0]}/works${realm ? `?${new URLSearchParams({ realm })}` : ''}`}
-          className={control}
+          {m.organization_reader_no_fields({}, o)}
+        </p>
+      )}
+      {model.limited && (
+        <p
+          role="status"
+          className="rounded-lg border border-dashed p-3 text-sm leading-relaxed text-muted-foreground"
         >
-          {m.subject_works({}, o)}
-        </CurrentLink>
-      </nav>
+          {m.organization_reader_bounded({}, o)}
+        </p>
+      )}
+      <section className="min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4 sm:p-5">
+        <p className="text-sm leading-relaxed text-muted-foreground">{m.organization_reader_navigation({}, o)}</p>
+        <nav className="flex flex-col gap-2 sm:flex-row sm:flex-wrap" aria-label={m.facts_title({}, o)}>
+          <CurrentLink
+            href={`${currentHref.split('?')[0]}/relations${realm ? `?${new URLSearchParams({ realm })}` : ''}`}
+            className={control + ' w-full justify-start rounded-md border border-border bg-background px-3 sm:w-auto'}
+          >
+            {m.subject_relations({}, o)}
+          </CurrentLink>
+          <CurrentLink
+            href={`${currentHref.split('?')[0]}/works${realm ? `?${new URLSearchParams({ realm })}` : ''}`}
+            className={control + ' w-full justify-start rounded-md border border-border bg-background px-3 sm:w-auto'}
+          >
+            {m.subject_works({}, o)}
+          </CurrentLink>
+        </nav>
+      </section>
       <ProfileDetails
         locale={locale}
         reveal={
@@ -682,28 +745,34 @@ function OrganizationFacts({
             : undefined
         }
       >
-        {Object.entries(subject.descriptions).map(([language, description]) => (
-          <p key={language} lang={language}>
-            {description}
+        {!!descriptions.length && (
+          <div className="min-w-0 space-y-3 border-l-2 border-primary/30 pl-4">
+            {descriptions.map(([language, description]) => (
+              <p key={language} lang={language} className="leading-relaxed">
+                {description}
+              </p>
+            ))}
+          </div>
+        )}
+        {!!secondary.length && <div className="grid min-w-0 gap-4 md:grid-cols-2">{secondary.map(renderField)}</div>}
+        <div className="min-w-0 space-y-2 rounded-lg border border-dashed bg-muted/20 p-4">
+          <p lang={model.grain.lang ?? undefined} className="font-medium">
+            {model.grain.text}
           </p>
-        ))}
-        {secondary.map(renderField)}
-        <p lang={model.grain.lang ?? undefined} className="font-medium">
-          {model.grain.text}
-        </p>
-        <p className="text-muted-foreground">{m.organization_reader_intro({}, o)}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{m.organization_reader_intro({}, o)}</p>
+        </div>
         {model.authoredUnsupported && (
-          <p role="status">
+          <p role="status" className="rounded-lg border border-dashed p-3 text-sm leading-relaxed">
             {m.people_biography_title({}, o)}: {m.people_biography_unsupported({}, o)}
           </p>
         )}
         {!model.fields.some((field) => field.kind === 'dates') && (
-          <p role="status">
+          <p role="status" className="rounded-lg border border-dashed p-3 text-sm leading-relaxed">
             {m.producer_history_dates({}, o)}: {m.people_biography_unsupported({}, o)}
           </p>
         )}
         {!!model.unreleased.length && (
-          <p role="status">
+          <p role="status" className="rounded-lg border border-dashed p-3 text-sm leading-relaxed">
             {m.producer_history_unreleased({}, o)}{' '}
             {model.unreleased
               .map((field) =>
@@ -716,20 +785,31 @@ function OrganizationFacts({
               .join(' · ')}
           </p>
         )}
-        <CurrentLink
-          href={catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}
-          className={control}
-        >
-          {m.facts_title({}, o)}
-        </CurrentLink>
-        <ProfileSourceList sources={sources} locale={locale} />
-        {sources
-          .filter((record) => record.licence)
-          .map((record) => (
-            <p key={`${record.name}:${record.url}`} className="text-sm">
-              {record.name}: {record.licence!.id} {record.licence!.url && <ExternalValue value={record.licence!.url} />}
-            </p>
-          ))}
+        <div className="min-w-0 space-y-4 border-t pt-4">
+          <CurrentLink
+            href={catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}
+            className={control + ' rounded-md border border-border bg-background px-3'}
+          >
+            {m.facts_title({}, o)}
+          </CurrentLink>
+          <div
+            className={
+              sources.length
+                ? 'min-w-0 space-y-3 rounded-xl border bg-muted/20 p-4'
+                : 'min-w-0 space-y-3'
+            }
+          >
+            <ProfileSourceList sources={sources} locale={locale} />
+            {sources
+              .filter((record) => record.licence)
+              .map((record) => (
+                <p key={`${record.name}:${record.url}`} className="text-sm leading-relaxed">
+                  {record.name}: {record.licence!.id}{' '}
+                  {record.licence!.url && <ExternalValue value={record.licence!.url} />}
+                </p>
+              ))}
+          </div>
+        </div>
       </ProfileDetails>
     </>
   );
