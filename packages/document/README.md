@@ -116,6 +116,9 @@ Mention nodes store only account IDs; resolving a current handle belongs to the 
 
 ## Components and exchange
 
+The [footnote integration contract](FOOTNOTES.md) names the implementation revisions, public representation,
+editor/import preservation, shared controls, messages, visit retirement and consumer story states.
+
 Decision: Text and Blocks snapshots store inline `footnoteReference` nodes keyed by case-sensitive labels and
 top-level `footnoteDefinition` blocks with ordinary profile content; definitions keep normal unique block IDs,
 imports accept `[^label]` and `[^label]:` with indented continuations, and the `DocumentBody` export from

@@ -77,10 +77,12 @@ at the actual implementation revision. Prerequisite-only or unrelated integrated
 delivery. The integration brief must identify the public snapshot representation, runtime profiles and schema artifacts,
 editor and Markdown preservation, shared accessible disclosure controls and required messages, document and reading-visit
 retirement including equal bytes, and named story states before consumer fixtures and stories are written.
-Own drafts does not invent footnote payloads or controls.
-Until that implementation arrives, preserve the existing consumer source, assertions, messages and named stories.
-The next independent outcome is the producer in `packages/document` and `packages/ui`; dispatch the consumer
-continuation after that implementation and its integration brief, rather than after prerequisite documentation.
+The [producer integration contract](../../../../../packages/document/FOOTNOTES.md) identifies the delivered Document
+and UI implementation revisions, the public controls and messages, and the existing story states to extend.
+Decision: retain those delivered producer APIs and dispatch the independent consumer integration against that contract;
+the base already includes the implementation, and the linked brief completes its integration contract.
+Own drafts does not invent footnote payloads or controls. Consumer changes cover the page/body preview, existing resume,
+command and native suites, shared Web messages/wrapper, and producer-named stories together.
 
 The integration preserves separate server, browser and current-readback source and visit identities:
 

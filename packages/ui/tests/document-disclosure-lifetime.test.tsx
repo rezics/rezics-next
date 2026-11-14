@@ -124,14 +124,29 @@ test('footnote disclosures belong to their reader and retire on document or visi
     expect(details[1]!.open).toBe(false);
     expect(host.textContent).toContain('First supplied source');
 
-    await act(async () => root.render(view(documentWithNote('Changed supplied source'), 'visit-a')));
+    const equalFirst = parseDocument(JSON.parse(serializeDocument(first)));
+    await act(async () => root.render(view(equalFirst, 'visit-a')));
+    details = [...host.querySelectorAll('details')] as HTMLDetailsElement[];
+    expect(details[0]!.open).toBe(true);
+    expect(details[1]!.open).toBe(false);
+
+    const changed = documentWithNote('Changed supplied source');
+    await act(async () => root.render(view(changed, 'visit-a')));
     details = [...host.querySelectorAll('details')] as HTMLDetailsElement[];
     expect(details.every((item) => !item.open)).toBe(true);
     expect(host.textContent).not.toContain('Changed supplied source');
 
     await open(details[0]!);
-    const equalBytes = parseDocument(JSON.parse(serializeDocument(first)));
+    const equalBytes = parseDocument(JSON.parse(serializeDocument(changed)));
+    expect(serializeDocument(equalBytes)).toBe(serializeDocument(changed));
     await act(async () => root.render(view(equalBytes, 'visit-b')));
+    details = [...host.querySelectorAll('details')] as HTMLDetailsElement[];
+    expect(details.every((item) => !item.open)).toBe(true);
+    expect(host.textContent).not.toContain('Changed supplied source');
+    expect(host.textContent).not.toContain('First supplied source');
+
+    await open(details[1]!);
+    await act(async () => root.render(view(first, 'visit-a')));
     details = [...host.querySelectorAll('details')] as HTMLDetailsElement[];
     expect(details.every((item) => !item.open)).toBe(true);
     expect(host.textContent).not.toContain('First supplied source');
