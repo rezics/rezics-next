@@ -160,6 +160,6 @@ export function nativeUnitReportLines(db: Database, bucket: UtcHour): string[] {
   return [
     `Native execution units: ${nativeStates.join('; ')}. ${sessions.size} distinct parent/subagent sessions observed; ${measured} measured; ${unknown} unknown or incomplete. Native Goal status is execution state, not release acceptance.`,
     `Native unit usage in UTC bucket: ${input} input, ${cached} cached input, ${output} output raw session-ledger tokens; ${overlaps} managed sessions excluded; ${duplicateResponses} copied response records deduplicated${unknown ? '; totals are partial' : ''}. These observed tokens are separate from completed managed attempts; do not add cumulative Goal totals.`,
-    `Native unit checks started in UTC bucket: ${startedChecks}; captured exit zero ${passedChecks}; nonzero ${failedChecks}; unfinished or unknown ${unknownChecks}; source checkpoint unknown ${unknownCheckSource}. Check exits are observations, not accepted-journey counts or verification of a newer local candidate.`,
+    `Native unit checks started in UTC bucket: ${startedChecks}; command exit zero ${passedChecks}; nonzero ${failedChecks}; unfinished or unknown ${unknownChecks}; immutable capture source unknown ${unknownCheckSource}. Command exits do not prove source; observed source belongs only to matched immutable capture receipts, not accepted journeys or a newer local candidate.`,
   ];
 }

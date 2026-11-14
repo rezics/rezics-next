@@ -2498,11 +2498,13 @@ bun tools/goal/src/cli.ts unit run <unit> [-- <focused-check-argv>]
 The Goal file's front matter names explicit `acceptance.command` arguments and `acceptance.requires` as the applicable
 subset of `native`, `browser` and `root`. `unit context` returns `{cwd,environment,command}`; `unit run` executes the
 registered acceptance by default, or a focused check chosen within the adopted Goal, in that context. Named checks
-do not require another Goal registration. Each run records its actual argv and committed source checkpoint.
-Native acceptance receives `REZICS_NATIVE_UNIT_CONTEXT` without a fabricated worker task identity. The source driver
-freezes that committed checkpoint while the unit's subagents continue writing. Its native pass or failure belongs to
-the captured revision and source hash; a newer local candidate remains unverified. Generated compiler outputs retain
-their source-matching restoration rules.
+do not require another Goal registration. Each run records its actual argv and requested committed checkpoint.
+Native acceptance receives `REZICS_NATIVE_UNIT_CONTEXT` without a fabricated worker task identity; its
+`sourceRevision` is a request, not evidence of executed source. `unit run` carries its own correlation identity through
+the existing check context. Only a matched committed check-run settlement and physical receipt records an immutable
+capture observation with revision, source hash, invocation and physical run. Direct local or remote-overlay commands
+remain allowed with observed source unknown. An observation describes its captured checks, not every command in a
+composed wrapper. Newer local source remains unverified, and generated outputs retain source-matching restoration.
 
 #### Resident event delivery
 
@@ -3649,8 +3651,9 @@ most 256 distinct sessions in one report and marks missing or incomplete evidenc
 records are deduplicated by response identity across copied parent/subagent history; an indexed managed-session lookup
 excludes overlap with managed attempt accounting. Cumulative native Goal token totals are never added.
 
-Native run observations retain their actual argv, source checkpoint and native exit, separate from current local
-source and accepted journeys. A missing old source measurement stays unknown. Product additions remain the existing
+Native run records separate actual argv and command exit, requested checkpoint, and receipt-backed capture
+observations. Requested source never populates observed source by itself. Missing source evidence stays unknown,
+including when the command exits zero. Product additions remain the existing
 integrated-source measure; an exit-zero check or active native Goal does not create an accepted-journey count.
 
 Records contain task/class/profile/pool, routing version and experiment, timing, steps, critical-path flag, input,

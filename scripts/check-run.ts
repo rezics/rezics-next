@@ -64,6 +64,7 @@ import {
 import { environmentCommandIsSafe, performanceHosts } from './check-placement.ts';
 import { nativeUnitContext } from '../tools/goal/src/native-unit-context.ts';
 import { observeNativeUnitContext } from '../tools/goal/src/native-units.ts';
+import { recordNativeUnitSourceObservation } from '../tools/goal/src/native-unit-provenance.ts';
 import {
   acceptCheckRunPhysicalCleanup,
   allocateCheckRunPhysical,
@@ -2633,6 +2634,12 @@ async function runCheckWithFinalSettlement(
         deliverySha256,
         writer ? 'delivered' : 'not-required',
         stateOptions,
+      );
+      recordNativeUnitSourceObservation(
+        prepared.originalEnvironment,
+        finalRecord,
+        receivedReceipt,
+        prepared.requestedPriority,
       );
     } catch (error) {
       runFailure ??= error;

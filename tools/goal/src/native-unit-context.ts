@@ -1,4 +1,5 @@
 export const NATIVE_UNIT_CONTEXT_VARIABLE = 'REZICS_NATIVE_UNIT_CONTEXT';
+export const NATIVE_UNIT_RUN_VARIABLE = 'REZICS_NATIVE_UNIT_RUN_ID';
 
 /** Original launcher context carried unchanged into an admitted remote check. */
 export type NativeUnitContext = {
@@ -8,6 +9,7 @@ export type NativeUnitContext = {
   goalId: string;
   worktree: string;
   registry: string;
+  /** Requested checkpoint; observation requires a matched immutable check receipt. */
   sourceRevision: string;
   briefHash: string;
   registeredAt: string;
