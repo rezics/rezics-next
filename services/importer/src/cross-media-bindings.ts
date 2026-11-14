@@ -255,7 +255,24 @@ export function graphEdgeCommandKey(draft: GraphEdgeDraft): string {
 
 export class CrossMediaGraph {
   constructor(private readonly database: Database) {
-    database.exec(`CREATE TABLE IF NOT EXISTS cross_media_graph (
+    const retained = database
+      .query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cross_media_graph'")
+      .get();
+    if (retained) {
+      try {
+        database
+          .query(`SELECT edge_key,alias,table_name,holder,target,property,payload,status,command_key,
+            command_payload,native_candidate,retraction_key,retraction_payload FROM cross_media_graph LIMIT 0`)
+          .all();
+      } catch (cause) {
+        throw new TypeError(
+          'Cross-media graph requires the canonical schema; explicit state maintenance is required',
+          { cause },
+        );
+      }
+      return;
+    }
+    database.exec(`CREATE TABLE cross_media_graph (
       edge_key TEXT PRIMARY KEY,
       alias TEXT NOT NULL,
       table_name TEXT NOT NULL,
@@ -270,15 +287,6 @@ export class CrossMediaGraph {
       retraction_key TEXT,
       retraction_payload TEXT
     ) WITHOUT ROWID`);
-    const columns = new Set(
-      (database.query('PRAGMA table_info(cross_media_graph)').all() as { name: string }[]).map((row) => row.name),
-    );
-    if (!columns.has('command_payload')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN command_payload TEXT');
-    if (!columns.has('native_candidate'))
-      database.exec('ALTER TABLE cross_media_graph ADD COLUMN native_candidate TEXT');
-    if (!columns.has('retraction_key')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN retraction_key TEXT');
-    if (!columns.has('retraction_payload'))
-      database.exec('ALTER TABLE cross_media_graph ADD COLUMN retraction_payload TEXT');
   }
 
   remember(drafts: readonly GraphEdgeDraft[]): void {
