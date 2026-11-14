@@ -31,12 +31,7 @@ export function withErasureStatusReadConnection<T>(
   deadline: number,
   read: (client: AccessClient, connection: PoolClient) => Promise<T>,
 ): Promise<T> {
-  return withBoundedReadConnection(
-    pool,
-    deadline,
-    (client) => read(client as AccessClient, client),
-    boundedOptions(),
-  );
+  return withBoundedReadConnection(pool, deadline, (client) => read(client as AccessClient, client), boundedOptions());
 }
 
 /** Read-only snapshot with bounded BEGIN, COMMIT, and rollback cleanup. */

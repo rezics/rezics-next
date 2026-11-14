@@ -1,9 +1,5 @@
 import type { Pool } from 'pg';
-import {
-  AccessUnavailableError,
-  classifyUnavailability,
-  throwAccessUnavailable,
-} from '../access/unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';

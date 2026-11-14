@@ -10,10 +10,7 @@ import {
   withManagedAdviceReadConnection,
   withManagedAdviceReadSnapshot,
 } from '../src/access/managed-advice-read-connection.ts';
-import {
-  withManagementReadConnection,
-  withManagementReadSnapshot,
-} from '../src/access/management-read-connection.ts';
+import { withManagementReadConnection, withManagementReadSnapshot } from '../src/access/management-read-connection.ts';
 import { withViewerActionsReadSnapshot } from '../src/access/viewer-actions-read-connection.ts';
 import { withAuthorReadConnection } from '../src/content/author-read-connection.ts';
 import { withFeedReadConnection } from '../src/content/feed-read-connection.ts';
@@ -24,10 +21,7 @@ import { withOwnMediaReadSnapshot } from '../src/content/own-media-read-connecti
 import { withSubjectDiscussionReadSnapshot } from '../src/content/subject-discussion-read-connection.ts';
 import { withOwnRealmsReadSnapshot } from '../src/community/own-realms-read-connection.ts';
 import { withSourceRatingReadConnection } from '../src/rating/source-rating-read-connection.ts';
-import {
-  withCollectionReadConnection,
-  withCollectionReadSnapshot,
-} from '../src/library/collection-read-connection.ts';
+import { withCollectionReadConnection, withCollectionReadSnapshot } from '../src/library/collection-read-connection.ts';
 import { withCopyReadConnection } from '../src/library/copy-read-connection.ts';
 import { withEntryPersonalReadSnapshot } from '../src/library/entry-personal-read-connection.ts';
 import { withFollowDiscoveryReadConnection } from '../src/library/follow-discovery-read-connection.ts';
@@ -49,8 +43,7 @@ function connection(partitionState: 'active' | 'moved' = 'active') {
   let checkouts = 0;
   const client = {
     query(input: QueryConfig | string, values?: unknown[]) {
-      const config =
-        typeof input === 'string' ? { text: input, ...(values === undefined ? {} : { values }) } : input;
+      const config = typeof input === 'string' ? { text: input, ...(values === undefined ? {} : { values }) } : input;
       queries.push(config);
       const text = config.text ?? '';
       if (text.includes('FROM core.partition'))
@@ -334,7 +327,9 @@ test('settled read adapters preserve plain and snapshot modes with one accountin
 
       expect(current.checkouts()).toBe(1);
       expect(current.releases).toEqual([undefined]);
-      expect(current.queries.every((query) => typeof query.query_timeout === 'number' && query.query_timeout > 0)).toBe(true);
+      expect(current.queries.every((query) => typeof query.query_timeout === 'number' && query.query_timeout > 0)).toBe(
+        true,
+      );
       if (adapter.snapshot) {
         expect(statements[0]).toBe(begin);
         expect(statements.at(-1)).toBe('COMMIT');
@@ -405,7 +400,7 @@ test('adapter options preserve owner deadline and settled PostgreSQL errors', as
     async connect() {
       return {
         async query(input: QueryConfig | string) {
-          const sql = typeof input === 'string' ? input : input.text ?? '';
+          const sql = typeof input === 'string' ? input : (input.text ?? '');
           statements.push(sql);
           if (sql === 'SELECT rejected') throw serverFailure;
           return { rows: [] };
