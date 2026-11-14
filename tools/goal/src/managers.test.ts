@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync 
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { StdioAppServer, type CodexPool, type Notification } from './app-server.ts';
+import { userMessageTurn } from './manager-session-transport.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, readManagerOperationalStatus, resolveGoalManager, type ManagerSpec } from './managers.ts';
@@ -1249,6 +1250,85 @@ test('a parked manager accepts a same-thread operator UserMessage after turn/sta
       goalState: { status: 'paused' },
     });
   } finally {
+    await s.close();
+  }
+});
+
+test('reload preserves a native Goal harness continuation without classifying it as operator input', async () => {
+  const s = await setup();
+  const closeTransport = s.client.close.bind(s.client);
+  let recovered: ManagerSessions | undefined;
+  try {
+    const manager = await s.managers.start(s.spec);
+    const threadId = manager.threadId!;
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    const goalContinuation = {
+      turn_trigger: 'goal',
+      goal: { internal_context: { provenance: 'harness' } },
+    };
+    expect(
+      userMessageTurn({
+        method: 'item/completed',
+        params: {
+          ...goalContinuation,
+          threadId,
+          turnId: 'harness-turn',
+          item: { type: 'userMessage', id: 'harness-message', clientId: null, content: [] },
+        },
+      }),
+    ).toBeNull();
+    await s.notify({
+      method: 'turn/started',
+      params: {
+        threadId,
+        turn: { ...goalContinuation, id: 'harness-turn', status: 'inProgress' },
+      },
+    });
+    await s.notify({
+      method: 'item/completed',
+      params: {
+        ...goalContinuation,
+        threadId,
+        turnId: 'harness-turn',
+        item: { type: 'userMessage', id: 'harness-message', clientId: null, content: [] },
+      },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      threadId,
+      activeTurnId: 'harness-turn',
+      waitingForInbox: false,
+      turns: 2,
+      turnDisposition: { threadId, turnId: 'harness-turn', status: 'inProgress', intent: 'work' },
+    });
+    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
+
+    s.client.close = () => {};
+    await s.managers.close();
+    recovered = new ManagerSessions(s.db, s.inbox, s.services);
+    await recovered.recover();
+    await recovered.flush();
+    expect(recovered.get(manager.id)).toMatchObject({
+      threadId,
+      activeTurnId: 'harness-turn',
+      waitingForInbox: false,
+      turnDisposition: { threadId, turnId: 'harness-turn', status: 'inProgress', intent: 'work' },
+    });
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(s.requests().filter((request) => request.method === 'turn/start')).toHaveLength(1);
+    expect(s.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(0);
+    expect(
+      s
+        .requests()
+        .filter((request) => request.method === 'thread/resume')
+        .map((request) => request.params.threadId),
+    ).toContain(threadId);
+    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
+  } finally {
+    await recovered?.close();
+    s.client.close = closeTransport;
     await s.close();
   }
 });

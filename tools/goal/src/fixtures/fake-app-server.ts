@@ -141,6 +141,7 @@ function respond(message: any): void {
     }
     case 'test/notify':
       if (p.method === 'turn/completed') turns.delete(p.params.threadId);
+      if (p.method === 'turn/started') turns.set(p.params.threadId, p.params.turn);
       if (p.method === 'item/started' || p.method === 'item/completed')
         persistItem(p.params.threadId, p.params.turnId, p.params.item);
       emit(p);

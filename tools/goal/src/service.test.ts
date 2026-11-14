@@ -236,6 +236,7 @@ test('maintenance reaps recorded groups in deleted worktrees and spares workers 
         bootstrapMaintenanceTasks: () => ({ examined: 0, complete: true }),
         worktreeMaintenanceCandidates: () => [],
         maintenanceTasksBootstrapped: () => false,
+        worktreePruneProgress: () => ({ generation: 0, completed: 0 }),
       },
     } as unknown as Runtime;
     expect(await runMaintenance('reap', runtime)).toBe(0);

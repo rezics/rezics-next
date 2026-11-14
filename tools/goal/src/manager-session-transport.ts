@@ -50,6 +50,22 @@ function activeTurnId(resumed: { thread: { turns?: { id: string; status: string 
 export type SessionTurnDelivery = { kind: 'steered' } | { kind: 'started'; turnId: string };
 export type GoalMutationOrigin = 'user' | 'automatic';
 
+/** Codex marks a harness-owned Goal continuation separately from operator input. */
+export function isHarnessGoalContinuation(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, any>;
+  const turn = record.turn && typeof record.turn === 'object' && !Array.isArray(record.turn) ? record.turn : {};
+  const trigger = turn.turn_trigger ?? record.turn_trigger;
+  const goal = turn.goal ?? record.goal;
+  return (
+    trigger === 'goal' &&
+    goal &&
+    typeof goal === 'object' &&
+    !Array.isArray(goal) &&
+    goal.internal_context?.provenance === 'harness'
+  );
+}
+
 /** The 0.169 protocol carries item origin as a ThreadItem discriminant, not its text. */
 export function userMessageTurn(notification: Notification): { threadId: string; turnId: string } | null {
   if (notification.method !== 'item/started' && notification.method !== 'item/completed') return null;
@@ -60,7 +76,9 @@ export function userMessageTurn(notification: Notification): { threadId: string;
     !params.threadId ||
     typeof params.turnId !== 'string' ||
     !params.turnId ||
-    params.item?.type !== 'userMessage'
+    params.item?.type !== 'userMessage' ||
+    isHarnessGoalContinuation(params) ||
+    isHarnessGoalContinuation(params.item)
   )
     return null;
   return { threadId: params.threadId, turnId: params.turnId };
@@ -203,16 +221,18 @@ export class ManagerSessionTransport {
     threadId: string,
   ): Promise<{
     activeTurnId: string | null;
-    latestTurn?: { id: string; status: ManagerTurnDisposition['status'] };
+    latestTurn?: { id: string; status: ManagerTurnDisposition['status']; origin?: 'goal-harness' };
   }> {
     const resumed = await client.request('thread/resume', threadAccess(spec, threadId, this.model(spec)));
     this.observeThread(client, spec.id, threadId);
     const latest = resumed.thread.turns?.at(-1);
     const status = latest?.status;
-    const latestTurn =
+    const latestTurn: { id: string; status: ManagerTurnDisposition['status']; origin?: 'goal-harness' } | undefined =
       latest && (status === 'inProgress' || status === 'completed' || status === 'interrupted' || status === 'failed')
         ? { id: latest.id as string, status: status as ManagerTurnDisposition['status'] }
         : undefined;
+    if (latestTurn && isHarnessGoalContinuation({ ...resumed.thread, turn: latest }))
+      latestTurn.origin = 'goal-harness';
     return {
       activeTurnId: activeTurnId(resumed),
       ...(latestTurn ? { latestTurn } : {}),
@@ -247,7 +267,12 @@ export class ManagerSessionTransport {
           item && typeof item === 'object' && !Array.isArray(item) ? (item as { type?: unknown }).type : null;
         if (typeof type !== 'string' || !THREAD_ITEM_TYPES.has(type))
           throw new Error('Invalid thread/items/list item type for manager turn');
-        if (userMessageItem(item)) return true;
+        if (
+          userMessageItem(item) &&
+          !isHarnessGoalContinuation(itemEntry) &&
+          !isHarnessGoalContinuation(item)
+        )
+          return true;
       }
       if (page.nextCursor === null) return false;
       if (typeof page.nextCursor !== 'string' || !page.nextCursor || seenCursors.has(page.nextCursor))

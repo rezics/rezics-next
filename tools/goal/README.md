@@ -3396,12 +3396,17 @@ this timing window alone never authorizes an interrupt. Same-thread, same-turn `
 notifications with protocol `ThreadItem.type` `userMessage`, or an authoritative `thread/items/list` read for that
 exact turn, promote the operator turn to counted work and the controller reparks after completion. The live
 pre-interrupt read paginates the complete result and recognizes only the 0.169 `ThreadItem` discriminants. A
-successful complete list without a `userMessage` permits an interrupt of only that exact turn. On host recovery,
-the same list promotes and rejoins persisted operator input; a complete negative result starts a fresh 250 ms
-ordering window and a second authoritative read before interrupting. Unavailable, busy or ambiguous reads never
-prove automation: the active turn stays untouched until its terminal event or an explicit stop, with no polling or
-automatic retry. A UserMessage not yet persisted in the final complete read cannot be distinguished; if it is
-emitted only after that read, the exact-turn interrupt may still race it.
+successful complete list without a `userMessage` permits an interrupt of only that exact turn when the manager already
+has a persisted idle handoff; absence of new input never creates idle state. On host recovery, the same list promotes
+and rejoins persisted operator input; a complete negative result starts a fresh 250 ms ordering window and a second
+authoritative read before interrupting. Unavailable, busy or ambiguous reads never prove automation: the active turn
+stays untouched until its terminal event or an explicit stop, with no polling or automatic retry. A UserMessage not
+yet persisted in the final complete read cannot be distinguished; if it is emitted only after that read, the exact-turn
+interrupt may still race it.
+
+Decision: Preserve `turn_trigger=goal` with `goal.internal_context.provenance=harness` as a native continuation, not
+operator input or mail. Keep its exact in-progress thread turn through host reload as work; a confirmed idle handoff
+with no active turn remains parked. Focus lifecycle verification on pending-work reload and explicit idle behavior.
 
 Decision: Send Goal mutation provenance explicitly. The initial user-requested Goal and an explicit manager stop use
 `origin: user`; controller parking, inbox reactivation, completion, limits and recovery use `origin: automatic`.
