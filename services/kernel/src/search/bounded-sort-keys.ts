@@ -2,15 +2,8 @@ import { MAX_NAME_SORT_CHARACTERS } from './document.ts';
 import { analyzeInstalledMany, ENGINE_ANALYSIS_LIMITS, NAME_KEY_NORMALIZER } from './engine-analysis.ts';
 import type { OpenSearch } from './opensearch.ts';
 
-const MAX_ANALYSIS_BATCH_VALUES = Math.max(
-  1,
-  Math.floor(ENGINE_ANALYSIS_LIMITS.tokens / ENGINE_ANALYSIS_LIMITS.concurrency),
-);
 const MAX_ANALYSIS_BATCH_BYTES = 64 * 1024;
 const encoder = new TextEncoder();
-const EMPTY_ANALYSIS_REQUEST_BYTES = encoder.encode(
-  JSON.stringify({ normalizer: NAME_KEY_NORMALIZER, text: [] }),
-).byteLength;
 
 function isScalarString(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -24,18 +17,22 @@ function isScalarString(value: string): boolean {
   return true;
 }
 
-function analysisBatches(names: readonly string[]): string[][] {
+function analysisBatches(
+  names: readonly string[],
+  maximumValues: number,
+  emptyRequestBytes: number,
+): string[][] {
   const batches: string[][] = [];
   let current: string[] = [];
-  let requestBytes = EMPTY_ANALYSIS_REQUEST_BYTES;
+  let requestBytes = emptyRequestBytes;
 
   for (const name of names) {
     const encodedNameBytes = encoder.encode(JSON.stringify(name)).byteLength;
     const nextBytes = requestBytes + encodedNameBytes + (current.length === 0 ? 0 : 1);
-    if (current.length > 0 && (current.length >= MAX_ANALYSIS_BATCH_VALUES || nextBytes > MAX_ANALYSIS_BATCH_BYTES)) {
+    if (current.length > 0 && (current.length >= maximumValues || nextBytes > MAX_ANALYSIS_BATCH_BYTES)) {
       batches.push(current);
       current = [];
-      requestBytes = EMPTY_ANALYSIS_REQUEST_BYTES;
+      requestBytes = emptyRequestBytes;
     }
 
     // A single name may exceed the batch byte limit. Keep it whole and alone, matching the old writer's
@@ -78,8 +75,16 @@ export async function prepareBoundedSortKeys<
   }
 
   const names = [...distinctNames];
-  // One normalized key yields one token. Dividing the token ceiling by maximum concurrency caps in-flight values too.
-  const batches = analysisBatches(names);
+  if (names.length === 0) return actions.map((action) => action);
+
+  // Read the owner limits only when native normalization is needed. One key yields one token, so the value count
+  // keeps all concurrently analyzed batches within the engine's token ceiling.
+  const maximumValues = Math.max(
+    1,
+    Math.floor(ENGINE_ANALYSIS_LIMITS.tokens / ENGINE_ANALYSIS_LIMITS.concurrency),
+  );
+  const emptyRequestBytes = encoder.encode(JSON.stringify({ normalizer: NAME_KEY_NORMALIZER, text: [] })).byteLength;
+  const batches = analysisBatches(names, maximumValues, emptyRequestBytes);
   const normalized = new Map<string, string>();
   let next = 0;
   let failed = false;
