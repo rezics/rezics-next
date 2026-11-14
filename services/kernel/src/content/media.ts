@@ -21,8 +21,8 @@ import {
   readAccount as readAccountHome,
 } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
-import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
-import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
+import { partitionReadClient, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck, accessCommandAuthorization } from './access-port.ts';
 import { AuthenticationError } from '../access/contract/authentication.ts';
@@ -664,20 +664,55 @@ export async function readReservation(
   mediaId: MediaId,
   context: ReadContext,
 ): Promise<MediaMetadata | null> {
-  if (context.actor.kind !== 'account' || routeOf(mediaId) === null || Date.now() >= context.deadline) return null;
+  const actor = context.actor;
+  const r = routeOf(mediaId);
+  if (actor.kind !== 'account' || r === null) return null;
+  if (!Number.isFinite(context.deadline)) throw new AccessUnavailableError('deadline');
+  requireAccessDeadline(context.deadline);
+  // Access preparation may read other homes; it must finish before either checkout.
   const check = await accessCheck(
     dependencies.access,
-    context.actor,
+    actor,
     'media:read_reservation',
-    { route: route(mediaId), id: mediaId },
+    { route: r, id: mediaId },
     { pool: dependencies.pool, deadline: context.deadline },
   );
-  if (!(await check(dependencies.pool))) return null;
-  const row = await read(dependencies.pool, mediaId);
+  const observe = (expected?: Row) =>
+    withBoundedReadOnlyTransaction(
+      dependencies.pool,
+      context.deadline,
+      async (client) => {
+        await partitionReadClient(client, partitionOf(r));
+        const current = await read(client, mediaId);
+        if (
+          !current ||
+          current.uploader_id !== actor.accountId ||
+          (expected !== undefined && JSON.stringify(current) !== JSON.stringify(expected))
+        )
+          return null;
+        return (await check(client)) ? current : null;
+      },
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError(error) {
+          throwAccessUnavailable(error);
+          return error;
+        },
+        isUncertainSettledQueryError: () => true,
+      },
+    );
+  const initial = await observe();
+  if (!initial) return null;
+  // A fresh snapshot must admit the same reservation; a changed row is never substituted.
+  const current = await observe(initial);
+  const metadata = current ? reservationMetadata(mediaId, current) : null;
+  requireAccessDeadline(context.deadline);
+  return metadata;
+}
+function reservationMetadata(mediaId: MediaId, row: Row): MediaMetadata | null {
   if (
-    !row ||
-    row.uploader_id !== context.actor.accountId ||
     row.container_id === null ||
+    row.uploader_id === null ||
     row.key === null ||
     row.reservation_request_id === null ||
     row.state === null ||
@@ -685,8 +720,7 @@ export async function readReservation(
     row.taken_down === null ||
     row.media_security_revision === null ||
     row.collection_pending === null ||
-    row.created_at === null ||
-    Date.now() >= context.deadline
+    row.created_at === null
   )
     return null;
   const variants: unknown = JSON.parse(row.variants_json);
