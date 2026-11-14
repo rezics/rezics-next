@@ -136,6 +136,7 @@ function viewerFixture(dead = '0') {
     }
     if (argv.includes('select-pane')) activePane = argv.at(-1)!;
     if (argv.includes('kill-pane')) panes.delete(argv.at(-1)!);
+    if (argv.includes('capture-pane') && argv.at(-1) !== '%3' && !menuReady) return '› Ask Codex to do anything';
     if (argv.includes('capture-pane') && argv.at(-1) !== '%3' && menuReady) return 'Resume paused goal?\n› 1. Resume goal   Mark it active and continue when idle\n2. Leave paused  Keep it paused; use /goal resume later\nenter select · esc back';
     return '';
   }, (_delayMs, probe) => { probes.push(probe); });
