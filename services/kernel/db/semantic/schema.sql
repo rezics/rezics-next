@@ -2325,6 +2325,164 @@ $$;
 
 
 --
+-- Name: bump_title_input_home_revision(integer); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_home_revision(home integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF home IS NULL OR home < 0 OR home > 4095 THEN
+    RAISE EXCEPTION 'Invalid Semantic title-input home %', home USING ERRCODE = '23514';
+  END IF;
+  INSERT INTO semantic.title_input_home_revision(partition_no,revision)
+  VALUES(home,1)
+  ON CONFLICT(partition_no) DO UPDATE
+    SET revision=semantic.title_input_home_revision.revision+1;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_all_homes(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_all_homes() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE semantic.title_input_home_revision SET revision=revision+1;
+  RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_identity_mapping(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_identity_mapping() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  old_source integer;
+  old_control integer;
+  new_source integer;
+  new_control integer;
+  home integer;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    old_source := (to_jsonb(OLD)->>'route')::integer / 16;
+    old_control := (to_jsonb(OLD)->>'control_partition')::integer;
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    new_source := (to_jsonb(NEW)->>'route')::integer / 16;
+    new_control := (to_jsonb(NEW)->>'control_partition')::integer;
+  END IF;
+  FOR home IN
+    SELECT DISTINCT affected.home
+    FROM unnest(ARRAY[old_source,old_control,new_source,new_control]) AS affected(home)
+    WHERE affected.home IS NOT NULL
+    ORDER BY affected.home
+  LOOP
+    PERFORM semantic.bump_title_input_home_revision(home);
+  END LOOP;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_native_commit(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_native_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  affected_home integer;
+  affected_transaction uuid;
+  referenced boolean;
+BEGIN
+  IF TG_WHEN = 'BEFORE' THEN
+    affected_home := OLD.partition_no;
+    affected_transaction := OLD.transaction_id;
+  ELSE
+    affected_home := NEW.partition_no;
+    affected_transaction := NEW.transaction_id;
+  END IF;
+  SELECT EXISTS (
+    SELECT 1
+    FROM semantic.identity_epoch_original original
+    JOIN semantic.identity_epoch_native_commit native
+      ON native.partition_no=original.partition_no
+     AND native.transaction_id=original.closure_registration_transaction
+     AND native.xmin::text=original.closure_registration_xid
+    WHERE native.partition_no=affected_home AND native.transaction_id=affected_transaction
+  ) INTO referenced;
+  IF referenced THEN PERFORM semantic.bump_title_input_home_revision(affected_home); END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_partition(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_partition() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  old_home integer;
+  new_home integer;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    old_home := (to_jsonb(OLD)->>TG_ARGV[0])::integer;
+    PERFORM semantic.bump_title_input_home_revision(old_home);
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    new_home := (to_jsonb(NEW)->>TG_ARGV[0])::integer;
+    IF new_home IS DISTINCT FROM old_home THEN
+      PERFORM semantic.bump_title_input_home_revision(new_home);
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: bump_title_input_revision_route(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_title_input_revision_route() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  old_home integer;
+  new_home integer;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    old_home := (to_jsonb(OLD)->>TG_ARGV[0])::integer / 16;
+    PERFORM semantic.bump_title_input_home_revision(old_home);
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    new_home := (to_jsonb(NEW)->>TG_ARGV[0])::integer / 16;
+    IF new_home IS DISTINCT FROM old_home THEN
+      PERFORM semantic.bump_title_input_home_revision(new_home);
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: identity_epoch_bootstrap_remaining(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -4553,6 +4711,19 @@ CREATE TABLE semantic.contribution_lifecycle (
     CONSTRAINT contribution_lifecycle_check2 CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
     CONSTRAINT contribution_lifecycle_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT contribution_lifecycle_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text, 'purged'::text])))
+);
+
+
+--
+-- Name: title_input_home_revision; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.title_input_home_revision (
+    partition_no integer NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT title_input_home_revision_check CHECK ((partition_no >= 0) AND (partition_no <= 4095)),
+    CONSTRAINT title_input_home_revision_check1 CHECK ((revision >= 0)),
+    CONSTRAINT title_input_home_revision_pkey PRIMARY KEY (partition_no)
 );
 
 
@@ -14945,6 +15116,237 @@ CREATE TRIGGER subject_search_canonical_generation AFTER INSERT OR DELETE OR UPD
 --
 
 CREATE TRIGGER subject_security_revision BEFORE UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.guard_subject_security();
+
+
+--
+-- Name: adoption title_input_revision_adoption; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_adoption AFTER INSERT OR DELETE OR UPDATE ON semantic.adoption FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: adoption title_input_revision_adoption_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_adoption_truncate AFTER TRUNCATE ON semantic.adoption FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: candidate title_input_revision_candidate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_candidate AFTER INSERT OR DELETE OR UPDATE ON semantic.candidate FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: candidate title_input_revision_candidate_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_candidate_truncate AFTER TRUNCATE ON semantic.candidate FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: fact title_input_revision_fact; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_fact AFTER INSERT OR DELETE OR UPDATE ON semantic.fact FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: fact title_input_revision_fact_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_fact_truncate AFTER TRUNCATE ON semantic.fact FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: hidden_candidate title_input_revision_hidden_candidate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_hidden_candidate AFTER INSERT OR DELETE OR UPDATE ON semantic.hidden_candidate FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: hidden_candidate title_input_revision_hidden_candidate_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_hidden_candidate_truncate AFTER TRUNCATE ON semantic.hidden_candidate FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: identity_epoch_dirty title_input_revision_identity_dirty; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_dirty AFTER INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_dirty FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: identity_epoch_dirty title_input_revision_identity_dirty_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_dirty_truncate AFTER TRUNCATE ON semantic.identity_epoch_dirty FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: identity_epoch_group title_input_revision_identity_group; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_group AFTER INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_group FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_partition('partition_no');
+
+
+--
+-- Name: identity_epoch_group title_input_revision_identity_group_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_group_truncate AFTER TRUNCATE ON semantic.identity_epoch_group FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: identity_epoch_mapping title_input_revision_identity_mapping; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_mapping AFTER INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_mapping FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_identity_mapping();
+
+
+--
+-- Name: identity_epoch_mapping title_input_revision_identity_mapping_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_mapping_truncate AFTER TRUNCATE ON semantic.identity_epoch_mapping FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: identity_epoch_native_commit title_input_revision_identity_native_commit_after; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_native_commit_after AFTER INSERT OR UPDATE ON semantic.identity_epoch_native_commit FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_native_commit();
+
+
+--
+-- Name: identity_epoch_native_commit title_input_revision_identity_native_commit_before; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_native_commit_before BEFORE DELETE OR UPDATE ON semantic.identity_epoch_native_commit FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_native_commit();
+
+
+--
+-- Name: identity_epoch_native_commit title_input_revision_identity_native_commit_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_native_commit_truncate AFTER TRUNCATE ON semantic.identity_epoch_native_commit FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: identity_epoch_original title_input_revision_identity_original; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_original AFTER INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_original FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_partition('partition_no');
+
+
+--
+-- Name: identity_epoch_original title_input_revision_identity_original_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_identity_original_truncate AFTER TRUNCATE ON semantic.identity_epoch_original FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: record_lifecycle title_input_revision_record_lifecycle; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_record_lifecycle AFTER INSERT OR DELETE OR UPDATE ON semantic.record_lifecycle FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: record_lifecycle title_input_revision_record_lifecycle_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_record_lifecycle_truncate AFTER TRUNCATE ON semantic.record_lifecycle FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: redirect title_input_revision_redirect; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_redirect AFTER INSERT OR DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: redirect title_input_revision_redirect_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_redirect_truncate AFTER TRUNCATE ON semantic.redirect FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: retraction title_input_revision_retraction; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_retraction AFTER INSERT OR DELETE OR UPDATE ON semantic.retraction FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: retraction title_input_revision_retraction_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_retraction_truncate AFTER TRUNCATE ON semantic.retraction FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: revision title_input_revision_revision; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_revision AFTER INSERT OR DELETE OR UPDATE ON semantic.revision FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: revision title_input_revision_revision_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_revision_truncate AFTER TRUNCATE ON semantic.revision FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: statement_disclosure title_input_revision_statement_disclosure; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_statement_disclosure AFTER INSERT OR DELETE OR UPDATE ON semantic.statement_disclosure FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: statement_disclosure title_input_revision_statement_disclosure_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_statement_disclosure_truncate AFTER TRUNCATE ON semantic.statement_disclosure FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: subject title_input_revision_subject; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_subject AFTER INSERT OR DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: subject title_input_revision_subject_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_subject_truncate AFTER TRUNCATE ON semantic.subject FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
+
+
+--
+-- Name: term_head title_input_revision_term_head; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_term_head AFTER INSERT OR DELETE OR UPDATE ON semantic.term_head FOR EACH ROW EXECUTE FUNCTION semantic.bump_title_input_revision_route('route');
+
+
+--
+-- Name: term_head title_input_revision_term_head_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER title_input_revision_term_head_truncate AFTER TRUNCATE ON semantic.term_head FOR EACH STATEMENT EXECUTE FUNCTION semantic.bump_title_input_revision_all_homes();
 
 
 --
