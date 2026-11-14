@@ -6606,6 +6606,8 @@
   "library_rule_review_unknown_reference": "当前已发布选项无法命名此标识。确切引用会保留。",
   "library_rule_revision": "已保存的规则修订版",
   "library_rule_save_and_view_results": "保存并查看结果",
+  "library_rule_retry_create_original": "重试同一次创建",
+  "library_rule_retry_save_original": "重试同一次保存",
   "library_rule_saved": "规则已保存。",
   "library_rule_session": "进度会话",
   "library_rule_sort": "成员按条目 ID 排序。",

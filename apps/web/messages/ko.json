@@ -6606,6 +6606,8 @@
   "library_rule_review_unknown_reference": "현재 공개 선택 항목에서 이 식별자를 찾을 수 없습니다. 정확한 참조를 유지합니다.",
   "library_rule_revision": "저장된 규칙 리비전",
   "library_rule_save_and_view_results": "저장하고 결과 보기",
+  "library_rule_retry_create_original": "동일한 생성 요청 다시 보내기",
+  "library_rule_retry_save_original": "동일한 저장 요청 다시 보내기",
   "library_rule_saved": "규칙이 저장되었습니다.",
   "library_rule_session": "진행 세션",
   "library_rule_sort": "구성원은 대상 ID순으로 정렬됩니다.",

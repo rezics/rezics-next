@@ -6606,6 +6606,8 @@
   "library_rule_review_unknown_reference": "Las opciones publicadas actuales no reconocen este identificador. Se conserva la referencia exacta.",
   "library_rule_revision": "Revisión de regla guardada",
   "library_rule_save_and_view_results": "Guardar y ver resultados",
+  "library_rule_retry_create_original": "Reintentar la misma creación",
+  "library_rule_retry_save_original": "Reintentar el mismo guardado",
   "library_rule_saved": "Regla guardada.",
   "library_rule_session": "Sesión de progreso",
   "library_rule_sort": "Los miembros se ordenan por ID de tema.",

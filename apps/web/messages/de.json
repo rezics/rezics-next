@@ -6606,6 +6606,8 @@
   "library_rule_review_unknown_reference": "Die aktuellen veröffentlichten Auswahlmöglichkeiten kennen diese ID nicht. Die genaue Referenz bleibt erhalten.",
   "library_rule_revision": "Gespeicherte Regelrevision",
   "library_rule_save_and_view_results": "Speichern und Ergebnisse ansehen",
+  "library_rule_retry_create_original": "Dieselbe Erstellung erneut senden",
+  "library_rule_retry_save_original": "Dieselbe Speicherung erneut senden",
   "library_rule_saved": "Regel gespeichert.",
   "library_rule_session": "Fortschrittssitzung",
   "library_rule_sort": "Einträge werden nach Themen-ID sortiert.",

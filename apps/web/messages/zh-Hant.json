@@ -6606,6 +6606,8 @@
   "library_rule_review_unknown_reference": "目前已發布的選項無法命名此識別碼。確切參照會保留。",
   "library_rule_revision": "已儲存的規則修訂版",
   "library_rule_save_and_view_results": "儲存並檢視結果",
+  "library_rule_retry_create_original": "重試同一次建立",
+  "library_rule_retry_save_original": "重試同一次儲存",
   "library_rule_saved": "規則已儲存。",
   "library_rule_session": "進度工作階段",
   "library_rule_sort": "成員依條目 ID 排序。",

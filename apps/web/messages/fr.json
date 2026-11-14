@@ -6606,6 +6606,8 @@
   "library_rule_review_unknown_reference": "Les choix de la version publiée actuelle ne connaissent pas cet identifiant. La référence exacte est conservée.",
   "library_rule_revision": "Révision de règle enregistrée",
   "library_rule_save_and_view_results": "Enregistrer et afficher les résultats",
+  "library_rule_retry_create_original": "Réessayer la même création",
+  "library_rule_retry_save_original": "Réessayer le même enregistrement",
   "library_rule_saved": "Règle enregistrée.",
   "library_rule_session": "Session de progression",
   "library_rule_sort": "Les membres sont triés par identifiant du sujet.",

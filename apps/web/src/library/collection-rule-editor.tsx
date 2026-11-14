@@ -898,50 +898,6 @@ function RuleForm({
               metadata={choices.release.metadata ?? { types: {}, properties: {} }}
               extension={extension}
             />
-            <DynamicRuleReview
-              filter={reviewFilter}
-              stage={reviewStage}
-              current={currentMeaning}
-              accepted={reviewMeaning}
-              choices={visibleChoices}
-              profiles={reviewProfiles}
-              profileState={reviewProfileState}
-              basis={base.state === 'ready' && reviewStage !== 'confirmed' ? base.rule : undefined}
-              basisKind={intent ? 'original' : 'loaded'}
-              collectionId={base.state === 'ready' ? base.id : (savedId ?? undefined)}
-              returnedId={savedId ?? undefined}
-              locale={locale}
-              ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
-            />
-            {currentRuleRead && base.state === 'ready' ? (
-              <section className="min-w-0 space-y-3 rounded-lg border border-primary/30 p-4">
-                <p className="text-sm text-muted-foreground">{m.library_rule_review_current_prompt()}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-expanded={reviewCurrentRule}
-                  onClick={() => setReviewCurrentRule((value) => !value)}
-                >
-                  {reviewCurrentRule ? m.library_rule_review_current_close() : m.library_rule_review_current_button()}
-                </Button>
-                {reviewCurrentRule ? (
-                  <DynamicRuleReview
-                    filter={base.rule.filter}
-                    stage="current"
-                    current={currentMeaning}
-                    accepted={savedMeaning}
-                    choices={visibleChoices}
-                    profiles={base.accepted?.profiles ?? choices.release.profiles}
-                    profileState={base.accepted?.state ?? choices.release.state}
-                    basis={base.rule}
-                    basisKind="loaded"
-                    collectionId={base.id}
-                    locale={locale}
-                    ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
-                  />
-                ) : null}
-              </section>
-            ) : null}
             <details className="text-sm">
               <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {m.search_reader_condition_limits_title()}
@@ -950,6 +906,50 @@ function RuleForm({
             </details>
           </FieldGroup>
         </fieldset>
+        <DynamicRuleReview
+          filter={reviewFilter}
+          stage={reviewStage}
+          current={currentMeaning}
+          accepted={reviewMeaning}
+          choices={visibleChoices}
+          profiles={reviewProfiles}
+          profileState={reviewProfileState}
+          basis={base.state === 'ready' && reviewStage !== 'confirmed' ? base.rule : undefined}
+          basisKind={intent ? 'original' : 'loaded'}
+          collectionId={base.state === 'ready' ? base.id : (savedId ?? undefined)}
+          returnedId={savedId ?? undefined}
+          locale={locale}
+          ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
+        />
+        {currentRuleRead && base.state === 'ready' ? (
+          <section className="min-w-0 space-y-3 rounded-lg border border-primary/30 p-4">
+            <p className="text-sm text-muted-foreground">{m.library_rule_review_current_prompt()}</p>
+            <Button
+              type="button"
+              variant="outline"
+              aria-expanded={reviewCurrentRule}
+              onClick={() => setReviewCurrentRule((value) => !value)}
+            >
+              {reviewCurrentRule ? m.library_rule_review_current_close() : m.library_rule_review_current_button()}
+            </Button>
+            {reviewCurrentRule ? (
+              <DynamicRuleReview
+                filter={base.rule.filter}
+                stage="current"
+                current={currentMeaning}
+                accepted={savedMeaning}
+                choices={visibleChoices}
+                profiles={base.accepted?.profiles ?? choices.release.profiles}
+                profileState={base.accepted?.state ?? choices.release.state}
+                basis={base.rule}
+                basisKind="loaded"
+                collectionId={base.id}
+                locale={locale}
+                ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
+              />
+            ) : null}
+          </section>
+        ) : null}
         {feedback && <p role="alert">{feedback}</p>}
         {intent && !pending && <p role="status">{m.library_rule_uncertain()}</p>}
         {savedId && <p role="status">{m.library_rule_saved()}</p>}
@@ -958,6 +958,7 @@ function RuleForm({
           creating={base.state === 'new'}
           pending={pending}
           conflict={conflict}
+          uncertain={!!intent}
           hasFilter={!!filter && !!(currentCsrf ? currentCsrf() : csrfToken)}
           savedId={savedId}
           collectionId={base.state === 'ready' ? base.id : null}

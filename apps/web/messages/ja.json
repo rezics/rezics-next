@@ -6606,6 +6606,8 @@
   "library_rule_review_unknown_reference": "現在の公開済み選択肢にこの識別子はありません。正確な参照を保持します。",
   "library_rule_revision": "保存済みのルールリビジョン",
   "library_rule_save_and_view_results": "保存して結果を見る",
+  "library_rule_retry_create_original": "同じ作成リクエストを再送",
+  "library_rule_retry_save_original": "同じ保存リクエストを再送",
   "library_rule_saved": "ルールを保存しました。",
   "library_rule_session": "進捗セッション",
   "library_rule_sort": "メンバーは対象のID順に並びます。",

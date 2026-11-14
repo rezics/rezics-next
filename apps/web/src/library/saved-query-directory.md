@@ -41,6 +41,12 @@ its own encoded cursor, three characters per nested directory-address character 
 filter/path budget. Every layer still admits the decoded cursor independently; the encoded envelope cannot enlarge
 it. External destinations, other locales, duplicate operands and overlong decoded cursors return to the directory.
 
+Decision: uncertain rule saves expose a same-request retry beside the original submitted review; readback keeps
+the captured sender, credential, key, revision and operands. Profile choices use localized numbered descriptions
+with exact identity in the existing disclosure. Management restores focus only from its initiating control when
+the reader has not moved elsewhere; closing returns to its own surviving opener. Required acceptance is authored
+as source, with execution deferred to the verifier.
+
 Decision: manager UI callbacks are bound to their originating controller, preserving its draft, ports, command recovery and retirement.
 
 Decision: Saved-query support follows current-viewer native operation admission; an admitted empty inventory remains empty, and row presence is never capability evidence.

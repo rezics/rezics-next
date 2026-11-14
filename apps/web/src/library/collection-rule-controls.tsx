@@ -8,6 +8,7 @@ export function CollectionRuleControls({
   creating,
   pending,
   conflict,
+  uncertain = false,
   hasFilter,
   savedId,
   collectionId,
@@ -18,6 +19,7 @@ export function CollectionRuleControls({
   creating: boolean;
   pending: boolean;
   conflict: boolean;
+  uncertain?: boolean;
   hasFilter: boolean;
   savedId: string | null;
   collectionId: string | null;
@@ -29,11 +31,17 @@ export function CollectionRuleControls({
   const href = id ? savedQueryRuleReturn(resultsHref, id, getLocale(), !!savedId) : null;
   return (
     <>
-      <div className="flex flex-wrap gap-3">
-        <Button type="submit" disabled={pending || conflict || !hasFilter || !!savedId}>
+      <div className="flex flex-wrap gap-3 [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal">
+        <Button type="submit" aria-busy={pending} disabled={pending || conflict || !hasFilter || !!savedId}>
           {pending
             ? m.library_collection_save_pending()
-            : creating
+            : savedId
+              ? m.library_rule_saved()
+              : uncertain
+                ? creating
+                  ? m.library_rule_retry_create_original()
+                  : m.library_rule_retry_save_original()
+                : creating
               ? navigateAfterSave
                 ? m.library_rule_create_and_view_results()
                 : m.library_collection_create()

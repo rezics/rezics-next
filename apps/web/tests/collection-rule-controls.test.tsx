@@ -36,8 +36,32 @@ test('a refused draft or saved revision still offers explicit recovery without e
         refresh={() => {}}
       />,
     );
-    expect(html).toContain(m.library_collection_reload());
+    expect(html).toContain(m.library_rule_review_current_read());
     expect(html).toMatch(/<button\b[^>]*type="submit"[^>]*\sdisabled=""/);
     expect(html).not.toContain(m.library_rule_edit());
+  }
+});
+
+test('uncertain creation and update name the original request even when save normally returns to results', () => {
+  for (const creating of [true, false]) {
+    const html = renderToStaticMarkup(
+      <CollectionRuleControls
+        creating={creating}
+        pending={false}
+        conflict={false}
+        uncertain
+        hasFilter
+        savedId={null}
+        collectionId={creating ? null : 'existing'}
+        navigateAfterSave
+        refresh={() => {}}
+      />,
+    );
+    expect(html).toContain(
+      creating ? m.library_rule_retry_create_original() : m.library_rule_retry_save_original(),
+    );
+    expect(html).not.toContain('disabled=""');
+    expect(html).not.toContain(m.library_rule_save_and_view_results());
+    expect(html).not.toContain(m.library_rule_create_and_view_results());
   }
 });

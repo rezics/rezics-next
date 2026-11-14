@@ -391,10 +391,12 @@ test('an uncertain save keeps its original binding, key and all operands through
   try {
     await ui.submit();
     expect(ui.host.textContent).toContain(m.library_rule_uncertain());
+    expect(ui.host.querySelector('button[type="submit"]')!.textContent).toBe(m.library_rule_retry_save_original());
     await ui.click(m.library_collection_reload());
     await ui.render({ csrfToken: 'csrf-rotated' });
     expect(writes).toHaveLength(1);
     expect(ui.host.querySelector('fieldset')!.disabled).toBe(true);
+    expect(ui.host.querySelector('button[type="submit"]')!.textContent).toBe(m.library_rule_retry_save_original());
     expect(ui.host.textContent).toContain(original.rule.releaseDigest);
     expect(ui.host.textContent).not.toContain(fresh.rule.releaseDigest);
     expect(ui.select(m.library_rule_state()).textContent).toBe(stateLabels[getLocale()]);

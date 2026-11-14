@@ -6606,6 +6606,8 @@
   "library_rule_review_unknown_reference": "The current released choices do not name this identifier. The exact reference is kept.",
   "library_rule_revision": "Saved rule revision",
   "library_rule_save_and_view_results": "Save and view results",
+  "library_rule_retry_create_original": "Retry the same creation",
+  "library_rule_retry_save_original": "Retry the same save",
   "library_rule_saved": "Rule saved.",
   "library_rule_session": "Progress session",
   "library_rule_sort": "Members are ordered by subject ID.",
