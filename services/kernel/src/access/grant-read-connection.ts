@@ -28,8 +28,8 @@ function grantReadConnection(connection: PoolClient, deadline: number): GrantRea
       ...(typeof query === 'string' ? { text: query, values: values ?? [] } : query),
       query_timeout: remaining(deadline),
     };
-    const native = Promise.resolve().then(() =>
-      Reflect.apply(connection.query, connection, [config]) as Promise<unknown>,
+    const native = Promise.resolve().then(
+      () => Reflect.apply(connection.query, connection, [config]) as Promise<unknown>,
     );
     let settled = false;
     const observed = native.then(

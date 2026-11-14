@@ -31,9 +31,14 @@ function poolFor(connect: () => Promise<PoolClient>): Pool {
 test('a late grant-read checkout issues no SQL and releases its client', async () => {
   const checkout = deferred<PoolClient>();
   const released = deferred<Error | undefined>();
-  const late = clientFor(async () => ({ rows: [] }), (error) => released.resolve(error));
-  const read = withGrantReadConnection(poolFor(() => checkout.promise), Date.now() + 40, (client) =>
-    client.query('SELECT late'),
+  const late = clientFor(
+    async () => ({ rows: [] }),
+    (error) => released.resolve(error),
+  );
+  const read = withGrantReadConnection(
+    poolFor(() => checkout.promise),
+    Date.now() + 40,
+    (client) => client.query('SELECT late'),
   );
 
   await expect(read).rejects.toThrow();
@@ -46,16 +51,17 @@ test('a late grant-read checkout issues no SQL and releases its client', async (
 
 test('a successful grant snapshot commits before releasing the client', async () => {
   let releaseError: Error | undefined;
-  const source = clientFor(async () => ({ rows: [] }), (error) => (releaseError = error));
-  await withGrantReadSnapshot(poolFor(async () => source.client), Date.now() + 1_000, (client) =>
-    client.query('SELECT source'),
+  const source = clientFor(
+    async () => ({ rows: [] }),
+    (error) => (releaseError = error),
+  );
+  await withGrantReadSnapshot(
+    poolFor(async () => source.client),
+    Date.now() + 1_000,
+    (client) => client.query('SELECT source'),
   );
 
-  expect(source.statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT source',
-    'COMMIT',
-  ]);
+  expect(source.statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT source', 'COMMIT']);
   expect(releaseError).toBeUndefined();
 });
 
@@ -100,15 +106,15 @@ test('a read error remains primary when rollback runs past the deadline', async 
   );
 
   await expect(
-    withGrantReadSnapshot(poolFor(async () => source.client), Date.now() + 50, async (client) => {
-      await client.query('SELECT source');
-    }),
+    withGrantReadSnapshot(
+      poolFor(async () => source.client),
+      Date.now() + 50,
+      async (client) => {
+        await client.query('SELECT source');
+      },
+    ),
   ).rejects.toBe(primary);
 
-  expect(source.statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT source',
-    'ROLLBACK',
-  ]);
+  expect(source.statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT source', 'ROLLBACK']);
   expect(releaseError).toBeInstanceOf(Error);
 });
