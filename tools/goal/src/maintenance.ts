@@ -45,6 +45,21 @@ export async function maintenanceCommand(argv: string[], cwd: string, signal: Ab
   });
 }
 
+/** Stage boundaries distinguish runtime startup, collection and cleanup without another scheduler. */
+export async function maintenanceStage<T>(name: string, action: () => T | Promise<T>): Promise<T> {
+  const started = Date.now();
+  const cpu = process.cpuUsage();
+  console.error(`maintenance stage=${name} event=start`);
+  try {
+    return await action();
+  } finally {
+    const used = process.cpuUsage(cpu);
+    console.error(
+      `maintenance stage=${name} event=finish wallMs=${Date.now() - started} cpuMs=${Math.round((used.user + used.system) / 1000)}`,
+    );
+  }
+}
+
 /** The periodic sweep excludes generators; explicit regeneration runs as a separate, bounded process. */
 export async function runMaintenance(
   job: MaintenanceJob | 'all',
@@ -75,7 +90,7 @@ export async function runMaintenance(
           cancel = () => reject(signal.reason);
           signal.addEventListener('abort', cancel, { once: true });
         }),
-        action(),
+        maintenanceStage(name, action),
       ]);
     } catch (error) {
       failed = true;
@@ -97,41 +112,61 @@ export async function runMaintenance(
     for (const name of job === 'all' ? MAINTENANCE_JOBS.filter((name) => name !== 'regenerate') : [job]) {
       await step(name, async () => {
         switch (name) {
-          case 'reap':
+          case 'reap': {
+            const reapDeadlineMs = Math.min(deadlineMs, Date.now() + Math.max(1, Math.floor(budget / 4)));
             // The process index is backfilled in fixed pages, then task writers keep its queue current.
             const processBackfill = runtime.store.bootstrapMaintenanceProcesses(MAINTENANCE_BOOTSTRAP_PAGE_SIZE);
             for (let index = 0; index < processBackfill.examined; index++)
               observe?.('maintenance-backfill-attempt-row');
-            checkBudget();
+            if (Date.now() >= reapDeadlineMs) {
+              console.error('maintenance reap: pending (process backfill yielded at cleanup deadline)');
+              break;
+            }
             const candidates = runtime.store.reapMaintenanceCandidates(MAINTENANCE_CANDIDATE_BATCH_SIZE);
             const completed: typeof candidates = [];
-            for (const candidate of candidates) {
-              checkBudget();
-              try {
-                observe?.('reap-worktree-existence');
-                // The worktree is the custody boundary: retain the candidate until deletion makes reaping eligible.
-                if (existsSync(candidate.worktree)) continue;
-                observe?.('process-group-termination');
-                await terminateProcessGroup(candidate.process, 1000, undefined, () =>
-                  observe?.('process-directory-entry'),
-                ).catch((error: unknown) => {
-                  // A reused PID means the recorded worker is gone; there is nothing of this attempt left to reap.
-                  if (error instanceof Error && error.message === REUSED_PID_REFUSAL) return;
-                  throw error;
-                });
-                completed.push(candidate);
-              } catch (error) {
-                failed = true;
-                console.error(`maintenance reap ${candidate.taskId}:${candidate.attempt}:`, error);
+            let examined = 0;
+            try {
+              for (const candidate of candidates) {
+                if (signal.aborted || Date.now() >= reapDeadlineMs) break;
+                examined++;
+                try {
+                  observe?.('reap-worktree-existence');
+                  // The worktree is the custody boundary: retain the candidate until deletion makes reaping eligible.
+                  if (existsSync(candidate.worktree)) continue;
+                  observe?.('process-group-termination');
+                  await terminateProcessGroup(candidate.process, 1000, undefined, () =>
+                    observe?.('process-directory-entry'),
+                  ).catch((error: unknown) => {
+                    // A reused PID means the recorded worker is gone; there is nothing of this attempt left to reap.
+                    if (error instanceof Error && error.message === REUSED_PID_REFUSAL) return;
+                    throw error;
+                  });
+                  completed.push(candidate);
+                } catch (error) {
+                  failed = true;
+                  console.error(`maintenance reap ${candidate.taskId}:${candidate.attempt}:`, error);
+                }
               }
+            } finally {
+              // Persist progress even when a later candidate yields or fails.
+              runtime.store.completeMaintenanceCandidates(completed);
             }
-            runtime.store.completeMaintenanceCandidates(completed);
-            checkBudget();
+            if (examined < candidates.length || Date.now() >= reapDeadlineMs) {
+              console.error(
+                `maintenance reap: pending (${completed.length} process candidates completed before cleanup deadline)`,
+              );
+              break;
+            }
             await removeFinishedWorktree(runtime.settings, runtime.store, lifetimeRuntime, undefined, {
-              deadlineMs,
+              deadlineMs: reapDeadlineMs,
               signal,
             });
+            if (runtime.store.hasPendingWorktreeCandidates())
+              console.error(
+                'maintenance reap: pending (durable worktree candidates remain for the next scheduled pass)',
+              );
             break;
+          }
           case 'detect':
             await runtime.deliverReminders?.();
             break;
