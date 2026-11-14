@@ -46,7 +46,9 @@ export type WorkFranchiseReadingProps = PresentationProps &
 
 /** The overview and selected native region share this renderer and the installed OverviewContext. */
 export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
-  const { definitions, locale, returnTo, currentHref, relationsHref, readerSpoiler = 0, link = PlainLink } = props;
+  const { definitions, locale, returnTo, currentHref, relationsHref, link = PlainLink } = props;
+  // Render conservatively while preparation remains distinct from an actual preference.
+  const readerSpoiler = props.readerSpoiler ?? 0;
   const page = 'page' in props ? props.page : undefined;
   const selection = 'selection' in props ? props.selection : undefined;
   const region = useMemo(
@@ -78,7 +80,7 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
     currentHref,
     fallbackHref: returnTo,
     locale,
-    spoiler: readerSpoiler,
+    spoiler: props.readerSpoiler,
     release: subject?.release ?? '',
     revision: subject?.revision ?? 0,
   });

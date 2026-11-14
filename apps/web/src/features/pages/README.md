@@ -503,6 +503,14 @@ admission does not itself bound bytes or backend examined rows; the [native pres
 and [Semantic response bound](../../../../../services/kernel/src/semantic/README.md) retain those authorities.
 The component retains the supplied page, creates one selected-window array, and performs zero native reads.
 
+Decision: both Subject Work placements pass optional spoiler preparation, treating the shared `defaultReader` as
+unprepared. Undefined renders conservatively; the first actual setting binds the existing reading outside its
+source/address generation. Native rows, manual disclosure, evidence and pending callbacks remain on that reading.
+Exact browse/evidence return intent waits for preparation before deciding whether its current control exists; it
+never reveals a hidden association. Later actual preference replacement retires the source, including A/B/A, as do
+the existing source, session, release and selection replacements. `work-franchise-prepared-reading.test.tsx` covers
+both mounted placements and terminal replacement; execution is deferred to the verifier.
+
 The overview keeps the current grouped relation renderer at its existing placement. Web composes its target,
 Connections and value-inspection addresses through `subjectVisitReturn`; the receiving route validates the same
 address it consumes. Realm survives on overview and finite-view returns; Connections retains its own exact native

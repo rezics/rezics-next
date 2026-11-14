@@ -30,7 +30,7 @@ export function useWorkRegionReturn({
   currentHref?: string | undefined;
   fallbackHref: string;
   locale: string;
-  spoiler: number;
+  spoiler: number | undefined;
   release: string;
   revision: number;
 }) {
@@ -38,11 +38,12 @@ export function useWorkRegionReturn({
   const store = client ? browserObservation(client) : undefined;
   const origin = workFranchiseReturnHref(currentHref, fallbackHref, locale);
   const address = origin.split('#')[0]!;
-  const identity = JSON.stringify([descriptor, address, locale, spoiler, release, revision]);
+  const identity = JSON.stringify([descriptor, address, locale, release, revision]);
   const previous = useRef<
     | {
         sources: readonly unknown[];
         identity: string;
+        spoiler: number | undefined;
         store: typeof store;
         observation: BrowserObservationSnapshot | undefined;
         serial: number;
@@ -80,6 +81,7 @@ export function useWorkRegionReturn({
     previous.current = {
       sources: [...sources],
       identity,
+      spoiler,
       store,
       observation,
       serial: (old?.serial ?? 0) + 1,
@@ -87,9 +89,13 @@ export function useWorkRegionReturn({
     };
   }
   const binding = previous.current!;
+  // The first actual setting prepares this reading without replacing its source or callbacks.
+  // Once bound, a different actual value retires it permanently, including A/B/A.
+  if (binding.spoiler === undefined) binding.spoiler = spoiler;
   if (
     (objectSource && retiredSources.current.has(objectSource)) ||
     binding.identity !== identity ||
+    (spoiler !== undefined && binding.spoiler !== spoiler) ||
     binding.store !== store ||
     binding.observation !== observation
   )
@@ -116,7 +122,7 @@ export function useWorkRegionReturn({
     selection.spoiler === spoiler &&
     (selection.release === undefined || selection.release === release) &&
     (selection.revision === undefined || selection.revision === revision);
-  const pending = available && !visit.current.consumed && selection !== undefined;
+  const pending = available && spoiler !== undefined && !visit.current.consumed && selection !== undefined;
   const restored = useRef(false);
   restored.current = false;
   const heading = useRef<HTMLHeadingElement>(null);
@@ -171,7 +177,12 @@ export function useWorkRegionReturn({
     };
   }, []);
   const returnToFor = (selection: Omit<WorkFranchiseReturn, 'spoiler' | 'release' | 'revision'>) =>
-    workFranchiseReturnHref(currentHref, fallbackHref, locale, { ...selection, spoiler, release, revision });
+    workFranchiseReturnHref(currentHref, fallbackHref, locale, {
+      ...selection,
+      spoiler: spoiler ?? 0,
+      release,
+      revision,
+    });
   return {
     available,
     key: String(binding.serial),

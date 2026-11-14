@@ -1383,7 +1383,7 @@ export function SubjectPage({
                       returnTo={workReturn}
                       {...(currentHref !== undefined ? { currentHref } : {})}
                       {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
-                      readerSpoiler={reader?.spoilerLevel ?? 0}
+                      {...(reader && reader !== defaultReader ? { readerSpoiler: reader.spoilerLevel } : {})}
                       link={ContextLink}
                     />
                   ) : null}
@@ -1403,7 +1403,7 @@ export function SubjectPage({
                       returnTo={workReturn}
                       {...(currentHref !== undefined ? { currentHref } : {})}
                       {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
-                      readerSpoiler={reader?.spoilerLevel ?? 0}
+                      {...(reader && reader !== defaultReader ? { readerSpoiler: reader.spoilerLevel } : {})}
                       link={ContextLink}
                       {...(onWorkContinue ? { onContinue: onWorkContinue } : {})}
                     />
