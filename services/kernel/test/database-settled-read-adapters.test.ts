@@ -379,8 +379,10 @@ test('settled read wrappers preserve native array rows and a stricter caller tim
   };
 
   const content = connection();
-  const contentRows = await withReadConnection(content.pool, Date.now() + 2_000, async ({ client }) =>
-    (await client.query<[string]>(request)).rows,
+  const contentRows = await withReadConnection(
+    content.pool,
+    Date.now() + 2_000,
+    async ({ client }) => (await client.query<[string]>(request)).rows,
   );
   expect(contentRows).toEqual([['native']]);
   expect(content.queries[0]?.rowMode).toBe('array');

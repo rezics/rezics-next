@@ -47,12 +47,7 @@ export type ReadingInsightsOverview = Readonly<{
 }>;
 
 type ReadingInsightsOverviewReads = Readonly<{
-  overview(
-    actor: Actor,
-    year: number,
-    deadline: number,
-    signal?: AbortSignal,
-  ): Promise<ReadingInsightsOverview>;
+  overview(actor: Actor, year: number, deadline: number, signal?: AbortSignal): Promise<ReadingInsightsOverview>;
   overview<T>(
     actor: Actor,
     year: number,

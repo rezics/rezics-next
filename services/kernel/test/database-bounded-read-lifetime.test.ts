@@ -1,11 +1,5 @@
 import { expect, test } from 'bun:test';
-import type {
-  Pool,
-  PoolClient,
-  QueryArrayResult,
-  QueryResult,
-  QueryResultRow,
-} from 'pg';
+import type { Pool, PoolClient, QueryArrayResult, QueryResult, QueryResultRow } from 'pg';
 import {
   BoundedReadDeadlineError,
   NestedPoolCheckoutError,
