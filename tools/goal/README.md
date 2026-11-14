@@ -3784,6 +3784,8 @@ viewer in the manager window. Close obsolete viewers with a visible empty compos
 windows. On a new viewer, bounded asynchronous startup probes may select Leave paused in the exact Codex resume
 menu. They do not block manager recovery, submit a prompt or resume the Goal. Unknown panes and unrelated dialogs
 remain untouched.
+Decision: A Goal-owned Codex viewer runs under a terminal shell. Ctrl+C still reaches Codex; exiting the viewer
+returns to the shell without deleting the pane or stopping the manager's provider thread.
 Decision: the verify/promote argv proof stays in `integration-cli-help.test.ts`, separate from integration and recovery tests, so its acceptance can run independently.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 

@@ -89,8 +89,26 @@ function shellArgv(value: string): string[] | undefined {
   if (started) argv.push(token);
   return argv;
 }
+// Keep a terminal owner around the Codex process. The thread is owned by the app-server, not this shell.
+const viewerShell = [
+  '/bin/sh',
+  '-c',
+  "trap ':' INT; \"$@\"; trap - INT; printf '\\n[Goal viewer exited; manager thread is unchanged. This terminal is still open.]\\n'; exec \"${SHELL:-/bin/sh}\" -l",
+  'goal-codex-viewer',
+];
+
+function viewerArgv(value: string): string[] | undefined {
+  const observed = shellArgv(value);
+  if (observed && viewerShell.every((word, index) => observed[index] === word)) return observed.slice(viewerShell.length);
+  return observed;
+}
+
+function viewerCommand(argv: string[], manager: string): string {
+  return command(isCodexViewer(argv, manager) ? [...viewerShell, ...argv] : argv);
+}
+
 function differsOnlyByRemoteEndpoint(current: string, argv: string[]): boolean {
-  const observed = shellArgv(current);
+  const observed = viewerArgv(current);
   const remote = argv.indexOf('--remote');
   if (
     !observed ||
@@ -278,7 +296,7 @@ export class TermspacesWindows implements ManagerWindows {
       `goal-${manager}`,
       '-c',
       cwd,
-      argv.map(quote).join(' '),
+      viewerCommand(argv, manager),
     ]);
     try {
       await this.tmux(['set-option', '-w', '-t', id, '@goal-manager', manager]);
@@ -315,7 +333,7 @@ export class TermspacesWindows implements ManagerWindows {
       await this.register(manager, argv, cwd);
       return;
     }
-    await this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, argv.map(quote).join(' ')]);
+    await this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, viewerCommand(argv, manager)]);
   }
   private async paneIds(window: string): Promise<string[] | undefined> {
     const result = await this.observe(() => this.tmux(['list-panes', '-t', window, '-F', '#{pane_id}']));
@@ -331,7 +349,7 @@ export class TermspacesWindows implements ManagerWindows {
     return { dead: dead.trim(), cwd: cwd.trim(), command: startCommand.trim() };
   }
   private sameViewer(pane: { cwd: string; command: string }, argv: string[], cwd: string): boolean {
-    const observed = shellArgv(pane.command);
+    const observed = viewerArgv(pane.command);
     return (
       resolve(pane.cwd) === resolve(cwd) &&
       observed !== undefined &&
@@ -368,7 +386,7 @@ export class TermspacesWindows implements ManagerWindows {
     if (!stale.length) return false;
     const spawned = replacement === undefined;
     if (!replacement) {
-      replacement = await this.tmux(['split-window', '-d', '-h', '-P', '-F', '#{pane_id}', '-t', id, '-c', cwd, command(argv)]);
+      replacement = await this.tmux(['split-window', '-d', '-h', '-P', '-F', '#{pane_id}', '-t', id, '-c', cwd, viewerCommand(argv, manager)]);
       if (!/^%\d+$/.test(replacement)) return false;
     }
     for (const paneId of stale) {
