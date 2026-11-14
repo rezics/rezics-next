@@ -711,6 +711,7 @@ export function createEntryCommands(config: Dependencies) {
   async function listEntryStateHistory(actor: Actor, subjectId: string, options: EntryStateHistoryOptions = {}) {
     const owner = account(actor, 'library_entry:read');
     requireRoute(subjectId);
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     if (typeof options !== 'object' || options === null || Array.isArray(options))
       throw new TypeError('Entry state history options must be an object');
     if (Object.keys(options).some((key) => key !== 'cursor' && key !== 'limit'))
@@ -722,24 +723,27 @@ export function createEntryCommands(config: Dependencies) {
       throw new ProblemError('invalid_cursor');
 
     const operationPlan = entryOperationPlan('library.entry.state-history', options, limit + 1);
-    return withEntryOperation(operationPlan, () =>
+    const selected = await withEntryOperation(operationPlan, () =>
       snapshot(actor, 'library_entry:read', async (client, accountOwner, route) => {
         const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
         if (!current) throw new LibraryNotFoundError();
-        if (!current.incarnationId) {
-          if (options.cursor !== undefined) throw new ProblemError('stale_cursor');
-          return {
-            incarnationId: null,
-            currentRevision: current.revision,
-            changes: [],
-            coverage: 'unknown' as const,
-            next: null,
-          };
-        }
+        if (!current.incarnationId && options.cursor !== undefined) throw new ProblemError('stale_cursor');
         const epoch = await partitionEpochRead.run(
           { query: client.query.bind(client) },
           { partition_no: partitionOf(route) },
         );
+        if (!current.incarnationId) {
+          return {
+            epoch: epoch?.epoch,
+            page: {
+              incarnationId: null,
+              currentRevision: current.revision,
+              changes: [],
+              coverage: 'unknown' as const,
+              next: null,
+            },
+          };
+        }
         const cursorBinding = stateHistoryBinding(accountOwner, subjectId, current.incarnationId, limit);
         let afterRevision: number | null = null;
         let cursorCoverage: 'complete' | 'partial' | null = null;
@@ -769,20 +773,39 @@ export function createEntryCommands(config: Dependencies) {
           : (cursorCoverage ?? 'unknown');
         if (hasMore && !epoch) throw new CommandUnavailableError('fenced', partitionOf(route));
         return {
-          incarnationId: current.incarnationId,
-          currentRevision: current.revision,
-          changes: changes.map(stateChangeView),
-          coverage,
-          next:
-            hasMore && last && epoch
-              ? encodeCursor(tokens, cursorBinding, {
-                  epoch: epoch.epoch,
-                  after: [String(last.revision), String(current.revision), coverage],
-                })
-              : null,
+          epoch: epoch?.epoch,
+          page: {
+            incarnationId: current.incarnationId,
+            currentRevision: current.revision,
+            changes: changes.map(stateChangeView),
+            coverage,
+            next:
+              hasMore && last && epoch
+                ? encodeCursor(tokens, cursorBinding, {
+                    epoch: epoch.epoch,
+                    after: [String(last.revision), String(current.revision), coverage],
+                  })
+                : null,
+          },
         };
-      }),
+      }, deadline),
     );
+    const partition = partitionOf(requireRoute(owner.accountId));
+    await withBoundedReadConnection(
+      pool,
+      deadline,
+      async (client) => {
+        await admit(client, owner);
+        const { partition: home } = await partitionReadClientObservation(client, partition);
+        if (home.writeState !== 'active' || home.movedTo !== null || home.epoch !== selected.epoch)
+          throw new CommandUnavailableError('fenced', partition);
+      },
+      {
+        deadlineError: () => new CommandUnavailableError('deadline', partition),
+        isUncertainSettledQueryError: () => true,
+      },
+    );
+    return selected.page;
   }
 
   async function reviewEntryStateChange(actor: Actor, subjectId: string, selectedRevision: number) {
