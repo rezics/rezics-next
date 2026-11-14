@@ -17,6 +17,8 @@ import { dependencyInstallationMatches, installPrivate, installShared } from './
 import { harness, reading } from './test-support.ts';
 import { git, WorkerTasks } from './tasks.ts';
 import type { Task } from './types.ts';
+import { WorkerJob } from './job.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 
 const manifestPath = 'packages/definitions/package.json';
 function manifest(version: string) {
@@ -314,6 +316,48 @@ test('failed bounded preparation prevents a model launch without losing paid sou
     expect(existsSync(join(task.worktree, 'node_modules/.goal-private-dependencies'))).toBe(false);
     expect(h.store.attempt({ taskId: task.id, attempt: 2 })).toMatchObject({ failureKind: 'tool', exitCode: -1 });
     expect(h.store.events(task.id, 2).some((event) => event.kind === 'launch-failed')).toBe(true);
+  } finally {
+    h.close();
+  }
+});
+
+test('three dependency setup failures wake operations once and retain every raw attempt', async () => {
+  const h = fixture();
+  try {
+    h.settings.integration.operationsManager = 'operations';
+    const tasks = [];
+    for (let index = 0; index < 3; index++) {
+      const task = h.tasks.dispatch(h.briefFile);
+      await h.tasks.retry(task.id);
+      const source = h.commit(task.worktree, manifestPath, manifest(`2.0.${index}`));
+      tasks.push({ task, source });
+    }
+    writeFileSync(h.fail, 'fail');
+    for (const { task, source } of tasks) {
+      // Recreate the delivery adapter to exercise persistent folding rather than process-local suppression.
+      const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
+      const job = new WorkerJob(h.tasks, { enqueue() {} }, inbox);
+      await job.runHostTask('start', task.id);
+      await job.drain();
+      expect(git(task.worktree, ['rev-parse', 'HEAD'])).toBe(source);
+      expect(h.store.attempt({ taskId: task.id, attempt: 2 })).toMatchObject({ failureKind: 'tool', exitCode: -1 });
+      const failures = h.store.events(task.id, 2).filter((event) => event.kind === 'launch-failed');
+      expect(failures).toHaveLength(1);
+      expect(JSON.stringify(failures)).toContain('fixture install failure');
+      expect(JSON.stringify(failures)).toContain(task.worktree);
+      expect(inbox.pending(task.brief.manager)).toHaveLength(0);
+      for (const notice of inbox.notifications('operations')) inbox.notified(notice.id);
+    }
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
+    expect(inbox.pending('operations')).toMatchObject([{ deliveries: 3 }]);
+    expect(inbox.pending('operations')[0]!.event.summary).not.toContain(h.root);
+    expect(inbox.notifications('operations')).toHaveLength(0);
+    expect(inbox.pending(h.settings.integration.supermanager)).toHaveLength(0);
+    const references = h.store.db
+      .query('SELECT task_id FROM manager_inbox WHERE wakeable = 0 AND kind = ?')
+      .all('environment');
+    expect(references).toHaveLength(3);
+    expect(h.launches).toHaveLength(3);
   } finally {
     h.close();
   }
