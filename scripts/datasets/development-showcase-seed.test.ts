@@ -33,6 +33,7 @@ async function captureSeedOptions(timestamp?: string): Promise<CrossMediaSeedCli
   try {
     await runDevelopmentSeed({
       root,
+      waitForKernel: async () => {},
       env: {
         REZICS_DEV_PERSONA_ACCOUNT_KEY: 'persona.key',
         REZICS_DEV_PERSONA_ACCOUNT: owner,
