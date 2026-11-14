@@ -1,4 +1,4 @@
-import type { SubjectRead } from "@rezics/client";
+import type { SubjectRead } from '@rezics/client';
 import {
   PAGE_GLOBAL_CONTEXT,
   definedViews,
@@ -11,13 +11,13 @@ import {
   type PresentationProfile,
   type SelectedContext,
   type View,
-} from "@rezics/composition";
-import profileJson from "@rezics/composition/profiles/platform.json";
-import type { Release } from "@rezics/definitions";
-import type { SubjectPageData } from "../../features/pages/subject";
-import type { KernelRecording } from "../fake";
-import definitions from "../recorded/definitions-release.json";
-import type { FakeRoute } from "../fake-modules";
+} from '@rezics/composition';
+import profileJson from '@rezics/composition/profiles/platform.json';
+import type { Release } from '@rezics/definitions';
+import type { SubjectPageData } from '../../features/pages/subject';
+import type { KernelRecording } from '../fake';
+import definitions from '../recorded/definitions-release.json';
+import type { FakeRoute } from '../fake-modules';
 import {
   animeCandidateIds,
   animeCandidatePage,
@@ -27,62 +27,57 @@ import {
   animeCandidateZone,
   type AnimeCandidateSubject,
   type AnimeRoute,
-} from "../../zones/candidates/anime";
-import type { ZonePageRequest, ZonePageResponse } from "../../zones/appearance";
+} from '../../zones/candidates/anime';
+import type { ZonePageRequest, ZonePageResponse } from '../../zones/appearance';
 
 const zoneIds = new Set<string>(Object.values(animeCandidateIds));
-const routeNames = new Set<AnimeRoute>(["", "films", "releases", "series"]);
+const routeNames = new Set<AnimeRoute>(['', 'films', 'releases', 'series']);
 const profile = profileJson as PresentationProfile;
 const profileId = profileDigest(profile);
 const release = definitions.release as Release;
 const releaseTypes = release.types as Record<string, { bases: string[] }>;
 const globalContext: SelectedContext = {
   id: PAGE_GLOBAL_CONTEXT,
-  population: { kind: "global" },
+  population: { kind: 'global' },
 };
 const freshness = {
-  consistency: "eventual",
+  consistency: 'eventual',
   target_seconds: 10,
   caught_up: true,
 };
-const fixtureTime = "2026-10-26T00:00:00.000Z";
+const fixtureTime = '2026-10-26T00:00:00.000Z';
 
 function problem(
   status: number,
-  code:
-    "not_found" | "platform_closed" | "semantic_not_ready" | "invalid_request",
+  code: 'not_found' | 'platform_closed' | 'semantic_not_ready' | 'invalid_request',
   retryable = false,
 ): KernelRecording {
   const title =
-    code === "platform_closed"
-      ? "Platform Closed"
-      : code === "semantic_not_ready"
-        ? "Service Unavailable"
-        : code === "invalid_request"
-          ? "Bad Request"
-          : "Not Found";
+    code === 'platform_closed'
+      ? 'Platform Closed'
+      : code === 'semantic_not_ready'
+        ? 'Service Unavailable'
+        : code === 'invalid_request'
+          ? 'Bad Request'
+          : 'Not Found';
   return {
     status,
     headers: {
-      "cache-control": "no-store",
-      ...(code === "semantic_not_ready" ? { "retry-after": "1" } : {}),
+      'cache-control': 'no-store',
+      ...(code === 'semantic_not_ready' ? { 'retry-after': '1' } : {}),
     },
     type: `https://rezics.com/problems/${code}`,
     title,
     code,
     retryable,
-    effect_status: "not_applicable",
+    effect_status: 'not_applicable',
     request_id: `anime-${code}`,
   };
 }
 
-function subjectSummary(
-  item: AnimeCandidateSubject,
-  languages: string[] = [],
-): NonNullable<SubjectRead["summary"]> {
+function subjectSummary(item: AnimeCandidateSubject, languages: string[] = []): NonNullable<SubjectRead['summary']> {
   const types = [item.type, ...releaseTypes[item.type]!.bases];
-  const language =
-    languages.find((candidate) => candidate in item.labels) ?? "en";
+  const language = languages.find((candidate) => candidate in item.labels) ?? 'en';
   return {
     id: item.id,
     type: item.type,
@@ -91,7 +86,7 @@ function subjectSummary(
       value: item.labels[language as keyof typeof item.labels],
       language,
     },
-    creativeWork: types.includes("schema:CreativeWork"),
+    creativeWork: types.includes('schema:CreativeWork'),
     cover: null,
   };
 }
@@ -101,7 +96,7 @@ function subjectRead(
   context = PAGE_GLOBAL_CONTEXT,
   languages: string[] = [],
 ): SubjectRead {
-  const subject: SubjectRead["subject"] = {
+  const subject: SubjectRead['subject'] = {
     id: item.id,
     type: item.type,
     revision: 1,
@@ -133,30 +128,24 @@ function searchHit(item: AnimeCandidateSubject) {
 }
 
 function rowsForRead(zoneId: string, route: AnimeRoute, node: string) {
-  if (route === "" && node === "works") {
-    if (zoneId === animeCandidateIds.readyEmpty)
-      return animeCandidateReads.readyEmpty;
+  if (route === '' && node === 'works') {
+    if (zoneId === animeCandidateIds.readyEmpty) return animeCandidateReads.readyEmpty;
     if (zoneId === animeCandidateIds.sparse) return animeCandidateReads.sparse;
     return animeCandidateReads.admittedPreview;
   }
-  if (route === "releases" && node === "releases")
-    return animeCandidateReads.releases;
+  if (route === 'releases' && node === 'releases') return animeCandidateReads.releases;
   return [];
 }
 
 function plannedZoneReads(zoneId: string, route: AnimeRoute) {
   const page = animeCandidatePage(zoneId, route, profileId, {});
-  const plan = planReads(
-    platformRegistry,
-    page.document as CompositionDocument,
-    {
-      subject: null,
-    },
-  );
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, {
+    subject: null,
+  });
   const reads: Record<string, unknown> = {};
   for (const [node, key] of Object.entries(plan.nodes)) {
     const descriptor = plan.reads[key];
-    if (descriptor?.kind !== "search") continue;
+    if (descriptor?.kind !== 'search') continue;
     reads[key] = {
       status: 200,
       body: {
@@ -169,18 +158,14 @@ function plannedZoneReads(zoneId: string, route: AnimeRoute) {
   return reads;
 }
 
-function emptySubjectRead(
-  read: PageRead,
-  item: AnimeCandidateSubject,
-  languages: string[],
-) {
-  if (read.kind === "subject") {
+function emptySubjectRead(read: PageRead, item: AnimeCandidateSubject, languages: string[]) {
+  if (read.kind === 'subject') {
     return {
       status: 200,
       body: subjectRead(item, read.context ?? PAGE_GLOBAL_CONTEXT, languages),
     };
   }
-  if (read.kind === "links" || read.kind === "relations") {
+  if (read.kind === 'links' || read.kind === 'relations') {
     return {
       status: 200,
       body: {
@@ -191,16 +176,16 @@ function emptySubjectRead(
       },
     };
   }
-  if (read.kind === "search") {
+  if (read.kind === 'search') {
     return {
       status: 200,
       body: { subjects: [], next: null, as_of: fixtureTime },
     };
   }
-  if (read.kind === "collections") {
+  if (read.kind === 'collections') {
     return { status: 200, body: { collections: [], count: 0, next: null } };
   }
-  if (read.kind === "members") {
+  if (read.kind === 'members') {
     return { status: 200, body: { members: [], next: null } };
   }
   return { status: 204, body: null };
@@ -208,7 +193,7 @@ function emptySubjectRead(
 
 function subjectPageData(
   item: AnimeCandidateSubject,
-  view: View = "overview",
+  view: View = 'overview',
   languages: string[] = [],
 ): SubjectPageData | undefined {
   const type = releaseTypes[item.type];
@@ -222,7 +207,7 @@ function subjectPageData(
     subject: item.id,
     context: globalContext,
   });
-  const reads: SubjectPageData["reads"] = {};
+  const reads: SubjectPageData['reads'] = {};
   for (const [key, read] of Object.entries(plan.reads)) {
     reads[key] = emptySubjectRead(read, item, languages);
   }
@@ -234,7 +219,7 @@ function subjectPageData(
     document: resolved.document,
     views,
     catalogue: {
-      state: "released",
+      state: 'released',
       type: item.type,
       digest: definitions.digest,
       definitions: release,
@@ -264,62 +249,48 @@ function zoneSubjectPage(
 }
 
 function problemForState(id: string): KernelRecording | undefined {
-  if (id === animeCandidateIds.platformClosed)
-    return problem(403, "platform_closed");
-  if (id === animeCandidateIds.semanticUnavailable)
-    return problem(503, "semantic_not_ready", true);
+  if (id === animeCandidateIds.platformClosed) return problem(403, 'platform_closed');
+  if (id === animeCandidateIds.semanticUnavailable) return problem(503, 'semantic_not_ready', true);
   return undefined;
 }
 
 function isDisplayedSubject(zoneId: string, subjectId: string): boolean {
-  return [
-    ...animeCandidateRows(zoneId, ""),
-    ...animeCandidateRows(zoneId, "releases"),
-  ].some((item) => item.id === subjectId);
+  return [...animeCandidateRows(zoneId, ''), ...animeCandidateRows(zoneId, 'releases')].some(
+    (item) => item.id === subjectId,
+  );
 }
 
-async function zoneReadPage(
-  request: Request,
-  match: RegExpExecArray | null,
-): Promise<KernelRecording | undefined> {
+async function zoneReadPage(request: Request, match: RegExpExecArray | null): Promise<KernelRecording | undefined> {
   const id = match?.[1];
   if (!id || !zoneIds.has(id)) return;
-  if (id === animeCandidateIds.private || id === animeCandidateIds.missing)
-    return problem(404, "not_found");
+  if (id === animeCandidateIds.private || id === animeCandidateIds.missing) return problem(404, 'not_found');
 
   let input: ZonePageRequest;
   try {
     input = (await request.json()) as ZonePageRequest;
   } catch {
-    return problem(400, "invalid_request");
+    return problem(400, 'invalid_request');
   }
   const target = input.target;
-  if ("subject" in target) {
+  if ('subject' in target) {
     const item = animeCandidateSubject(target.subject);
-    if (!item || !isDisplayedSubject(id, item.id))
-      return problem(404, "not_found");
+    if (!item || !isDisplayedSubject(id, item.id)) return problem(404, 'not_found');
     const denied = problemForState(id);
     if (denied) return denied;
-    const view = target.view ?? "overview";
-    if (view !== "overview" && view !== "details")
-      return problem(404, "not_found");
+    const view = target.view ?? 'overview';
+    if (view !== 'overview' && view !== 'details') return problem(404, 'not_found');
     const page = zoneSubjectPage(id, item, view, input.languages ?? []);
-    return page ? { status: 200, ...page } : problem(404, "not_found");
+    return page ? { status: 200, ...page } : problem(404, 'not_found');
   }
 
   const route = target.route;
-  if (!routeNames.has(route as AnimeRoute)) return problem(404, "not_found");
+  if (!routeNames.has(route as AnimeRoute)) return problem(404, 'not_found');
   const selectedRoute = route as AnimeRoute;
-  if (selectedRoute === "" || selectedRoute === "releases") {
+  if (selectedRoute === '' || selectedRoute === 'releases') {
     const denied = problemForState(id);
     if (denied) return denied;
   }
-  const page = animeCandidatePage(
-    id,
-    selectedRoute,
-    profileId,
-    plannedZoneReads(id, selectedRoute),
-  );
+  const page = animeCandidatePage(id, selectedRoute, profileId, plannedZoneReads(id, selectedRoute));
   return { status: 200, ...page };
 }
 
@@ -328,9 +299,7 @@ type PageInput = {
   languages?: string[];
 };
 
-async function readSubjectPage(
-  request: Request,
-): Promise<KernelRecording | undefined> {
+async function readSubjectPage(request: Request): Promise<KernelRecording | undefined> {
   let input: PageInput;
   try {
     input = (await request.json()) as PageInput;
@@ -338,11 +307,11 @@ async function readSubjectPage(
     return;
   }
   const id = input.target?.subject;
-  if (typeof id !== "string") return;
+  if (typeof id !== 'string') return;
   const item = animeCandidateSubject(id);
   if (!item) return;
-  const view = input.target?.view ?? "overview";
-  if (view !== "overview" && view !== "details") return;
+  const view = input.target?.view ?? 'overview';
+  if (view !== 'overview' && view !== 'details') return;
   const page = subjectPageData(item, view, input.languages ?? []);
   return page ? { status: 200, ...page } : undefined;
 }
@@ -354,35 +323,28 @@ async function readCandidateSubject(
   const id = match?.[1];
   if (!id) return;
   const item = animeCandidateSubject(id);
-  const requestedLanguage = request.headers
-    .get("accept-language")
-    ?.split(",", 1)[0]
-    ?.split("-", 1)[0];
+  const requestedLanguage = request.headers.get('accept-language')?.split(',', 1)[0]?.split('-', 1)[0];
   return item
     ? {
         status: 200,
-        ...subjectRead(
-          item,
-          PAGE_GLOBAL_CONTEXT,
-          requestedLanguage ? [requestedLanguage] : [],
-        ),
+        ...subjectRead(item, PAGE_GLOBAL_CONTEXT, requestedLanguage ? [requestedLanguage] : []),
       }
     : undefined;
 }
 
 export const routes: FakeRoute[] = [
   {
-    method: "POST",
+    method: 'POST',
     path: /^\/v1\/zones\/([^/]+):readPage$/,
     story: ({ request, match }) => zoneReadPage(request, match),
   },
   {
-    method: "POST",
-    path: "/v1/pages:read",
+    method: 'POST',
+    path: '/v1/pages:read',
     story: ({ request }) => readSubjectPage(request),
   },
   {
-    method: "GET",
+    method: 'GET',
     path: /^\/v1\/subjects\/([^/]+)$/,
     story: ({ request, match }) => readCandidateSubject(request, match),
   },
