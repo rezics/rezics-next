@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import { gameExample, editionId } from '../src/features/catalogue/game-reader/examples';
@@ -17,7 +17,7 @@ const { GameReader } = await import('../src/features/catalogue/game-reader/view'
 const { isolatedWorkReading } = await import('../src/features/catalogue/work-reading-port');
 const { m } = await import('../src/paraglide/messages.js');
 
-async function ui() {
+export async function ui() {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -44,17 +44,13 @@ async function ui() {
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-out' });
-  const render = async (props: Parameters<typeof GameReader>[0]) => {
+  const renderContent = async (content: ReactNode) => {
     await act(async () => {
-      root.render(
-        createElement(
-          QueryClientProvider,
-          { client },
-          createElement(GameReader, { ...props, reading: isolatedWorkReading }),
-        ),
-      );
+      root.render(createElement(QueryClientProvider, { client }, content));
     });
   };
+  const render = (props: Parameters<typeof GameReader>[0]) =>
+    renderContent(createElement(GameReader, { ...props, reading: isolatedWorkReading }));
   const disclose = async (label: string, scope: Element = host, detail = 0) => {
     const summary = Array.from(scope.querySelectorAll('summary')).find((node) => node.textContent === label);
     if (!summary) throw new Error(`Missing disclosure: ${label}`);
@@ -87,7 +83,7 @@ async function ui() {
     }
     await window.happyDOM.close();
   };
-  return { host, client, render, click, disclose, close };
+  return { host, client, render, renderContent, click, disclose, close };
 }
 
 function readingText(node: Node): string {

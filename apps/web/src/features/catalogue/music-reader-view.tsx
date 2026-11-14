@@ -294,6 +294,7 @@ export function MusicAlbumReader({
   reason,
   loading,
   onRetry,
+  onEditionRetry,
   link = PlainLink,
 }: {
   locale: string;
@@ -304,6 +305,7 @@ export function MusicAlbumReader({
   reason?: Exclude<ProfileReaderState, 'ready' | 'empty'>;
   loading?: boolean;
   onRetry?: () => void;
+  onEditionRetry?: () => void;
   link?: PageLink;
 }) {
   const visit: MusicReaderVisit = musicReaderVisit({
@@ -344,7 +346,11 @@ export function MusicAlbumReader({
         />
       ) : null}
       {visit.state === 'ready' || visit.state === 'empty' ? (
-        <EditionList editions={visit.editions} locale={locale} {...(onRetry ? { onRetry } : {})} />
+        <EditionList
+          editions={visit.editions}
+          locale={locale}
+          {...(onEditionRetry ? { onRetry: onEditionRetry } : {})}
+        />
       ) : null}
       <ProfileBoundNotes bounds={visit.bounds} locale={locale} />
       <ProfileSourceList sources={visit.sources} locale={locale} />
@@ -404,11 +410,12 @@ export function MusicAlbumOverview({
     refetchOnReconnect: false,
   });
   if (!reading.available) return <p role="status">{m.music_reader_stale({}, options(locale))}</p>;
-  const editions: AlbumEditionRead | undefined =
-    !publicRead.subject.context || query.isError
-      ? { ok: false, reason: 'unavailable' }
-      : query.isFetching
-        ? undefined
+  const editions: AlbumEditionRead | undefined = !publicRead.subject.context
+    ? { ok: false, reason: 'unavailable' }
+    : query.isFetching
+      ? undefined
+      : query.isError
+        ? { ok: false, reason: 'unavailable' }
         : query.data;
   return (
     <MusicAlbumReader
@@ -418,7 +425,7 @@ export function MusicAlbumOverview({
       {...(bounds ? { bounds } : {})}
       {...(editions ? { editions } : {})}
       {...(release && publicRead.subject.context
-        ? { onRetry: () => void query.refetch({ cancelRefetch: false }) }
+        ? { onEditionRetry: () => void query.refetch({ cancelRefetch: false }) }
         : {})}
       link={link}
     />

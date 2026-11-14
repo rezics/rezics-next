@@ -50,6 +50,11 @@ Editions suppresses composed facts or supplies a catalogue total. Source, viewer
 definitions replacement retires the observation and its late results; a fresh page source establishes a new reading.
 Track reading remains independent. Existing Album and Game stories remain the visual review surfaces.
 
+`tests/subject-prepared-profile-mounts.test.tsx` reuses the typed Album/Game fixtures and the mounted Game harness
+to pin these Subject handoffs, pending replies, exact Edition retry and observation retirement. Existing assertions in
+`tests/game-reader-view.test.tsx` and `tests/subject-reading-composition.test.tsx` retain their behavior. Execution of
+these integrated cases, typing, native admission and keyboard/disclosure review is deferred to the verifier.
+
 Game dates consume shared time presentation plus release-fidelity's explicit TBA meaning. Only an absent calendar
 uses the native Gregorian default; explicit non-Gregorian calendars stay unsupported. Signed years, precision,
 timezone and uncertainty are shown even when the shared helper intentionally omits a structured date.
