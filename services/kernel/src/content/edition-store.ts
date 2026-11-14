@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { deadlineClient, within } from './access-port.ts';
 import { AccessUnavailableError, classifyUnavailability, throwAccessUnavailable } from '../access/unavailable.ts';
-import { withBoundedReadOnlyTransaction, withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { CommandUnavailableError, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -79,9 +78,23 @@ export async function withEditionReadTime<T>(
   context: Pick<ReadContext, 'deadline'>,
   read: (time: AuthoritativeTime) => Promise<T>,
 ): Promise<T> {
-  const time = await within(context.deadline, () =>
-    withConnection(deps.pool, (client) => mintReadTime(deadlineClient(client, context.deadline), deps.clock)),
-  );
+  let mintedTime: AuthoritativeTime | undefined;
+  let time: AuthoritativeTime;
+  try {
+    time = await withBoundedReadConnection(
+      deps.pool,
+      context.deadline,
+      async (client) => {
+        const minted = await mintReadTime(client as AccessClient, deps.clock);
+        mintedTime = minted;
+        return minted;
+      },
+      boundedEditionReadOptions(context.deadline),
+    );
+  } catch (error) {
+    if (mintedTime) releaseOperationalTime(mintedTime);
+    throw error;
+  }
   try {
     return await read(time);
   } finally {
