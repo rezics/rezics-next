@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access } from '../request/access.ts';
 import type {
@@ -11,7 +11,12 @@ import type {
 import type { PublicFilterCost } from './public-filter-source-contract.ts';
 import { withReadTransaction } from './read.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { requireAccessDeadline, classifyUnavailability } from '../access/unavailable.ts';
+import {
+  AccessUnavailableError,
+  requireAccessDeadline,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import { mintReadTime } from '../command/command.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
@@ -45,6 +50,23 @@ export interface SubjectCanonicalNames {
   >;
 }
 
+/** Keep checkout, queries, and transaction cleanup on the caller's original deadline. */
+function canonicalReadOptions(deadline: number) {
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown): unknown {
+      try {
+        throwAccessUnavailable(error, deadline);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  };
+}
+
 /** Current native name order, separate from the fixed-cut ID-key rebuild inventory below.
  * The finite frontier reads occupied native homes, never every partition's Subject rows.
  * A committed per-home generation avoids treating an uncommitted sequence increment as publication.
@@ -53,7 +75,7 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
   const source: SubjectCanonicalNames = {
     async observe({ deadline }) {
       requireAccessDeadline(deadline);
-      const result = await withConnection(pool, (connection) =>
+      const result = await withBoundedReadConnection(pool, deadline, (connection) =>
         deadlineClient(connection, deadline).query<{
           partition: number;
           generation: string;
@@ -67,6 +89,7 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
          LEFT JOIN core.partition home ON home.partition_no=population.partition_no
          WHERE population.canonical_count>0 ORDER BY population.partition_no LIMIT 4097`,
         ),
+        canonicalReadOptions(deadline),
       );
       requireAccessDeadline(deadline);
       if (result.rows.length > 4096) throw new ProblemError('index_not_ready');
@@ -114,10 +137,11 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
       if (current.generation !== expectedGeneration) throw new ProblemError('search_restart_required');
       const home = current.homes.find((home) => home.partition === partition);
       if (!home) throw new ProblemError('search_restart_required');
-      const candidates = await withConnection(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
+      const candidates = await withBoundedReadOnlyTransaction(
+        pool,
+        deadline,
+        async (connection) => {
+          const client = deadlineClient(connection, deadline);
           const owner = await ownerStatement.run(client, { partition_no: partition });
           if (!owner || owner.write_state === 'moved') throw new ProblemError('partition_unavailable');
           if (owner.epoch !== home.epoch || owner.position !== home.position)
@@ -136,7 +160,7 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
              ORDER BY (canonical_name IS NULL),COALESCE(canonical_name,'') COLLATE "C",subject_id LIMIT $2`,
             parameters,
           );
-          const keys = result.rows.map((row) => {
+          return result.rows.map((row) => {
             const securityRevision = Number(row.securityRevision);
             if (
               routeOf(row.id) === null ||
@@ -151,17 +175,9 @@ export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
               throw new ProblemError('index_not_ready');
             return { ...row, securityRevision };
           });
-          await client.query('COMMIT');
-          return keys;
-        } catch (error) {
-          try {
-            await connection.query('ROLLBACK');
-          } catch (rollback) {
-            discardConnection(connection, rollback as Error);
-          }
-          throw error;
-        }
-      });
+        },
+        canonicalReadOptions(deadline),
+      );
       if ((await source.observe({ deadline })).generation !== expectedGeneration)
         throw new ProblemError('search_restart_required');
       return { home, candidates };
