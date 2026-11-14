@@ -3,8 +3,8 @@ import {
   readContributionAttributions,
   type ContributionAttribution,
 } from '../access/public-identity.ts';
-import { deadlineClient } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
+import { deadlineClient, within } from './access-port.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Anchored, ReadContext } from './model.ts';
 import { readPost, type ContentReadDependencies, type PostEntry, type RetainContentRead } from './reads.ts';
@@ -61,11 +61,17 @@ export async function readContributedPost(
       })
     : undefined;
   const disclosedParent = parent?.value?.availability === 'available' ? parent.value : undefined;
-  const identities = await withConnection(dependencies.pool, (client) =>
-    readContributionAttributions(deadlineClient(client, context.deadline), [
-      value.authorId,
-      ...(disclosedParent ? [disclosedParent.authorId] : []),
-    ]),
+  const identities = await within(context.deadline, () =>
+    withBoundedReadConnection(
+      dependencies.pool,
+      context.deadline,
+      (client) =>
+        readContributionAttributions(deadlineClient(client, context.deadline), [
+          value.authorId,
+          ...(disclosedParent ? [disclosedParent.authorId] : []),
+        ]),
+      { isUncertainError: () => true },
+    ),
   );
 
   // Reuse native prepared authority and original witnesses after foreign identity work.
