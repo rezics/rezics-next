@@ -22,7 +22,7 @@ type Retry = (activation?: RetryActivation) => void | Promise<void>;
 
 const statusControl = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 wrap-anywhere';
 const statusHeading =
-  'font-display text-3xl font-semibold tracking-tight sm:text-4xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'text-2xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-3xl';
 
 /** The served page and its stories share this composition within the site's AppShell. */
 export function ReporterStatusPage(
@@ -34,39 +34,43 @@ export function ReporterStatusPage(
 ) {
   return (
     <section
-      className="mx-auto w-full max-w-3xl break-words px-4 py-6 sm:px-8 sm:py-10"
+      className="mx-auto w-full max-w-4xl break-words px-4 py-6 sm:px-6 sm:py-10"
       aria-labelledby="reporter-status-heading"
       aria-busy={'state' in props && props.state === 'loading'}
     >
-      <a
-        href={props.returnHref ?? localizeHref('/inbox')}
-        data-reporter-history-return={props.returnHref ? '' : undefined}
-        onClick={(event) => {
-          if (
-            !props.onReturn ||
-            event.defaultPrevented ||
-            event.button !== 0 ||
-            event.metaKey ||
-            event.ctrlKey ||
-            event.shiftKey ||
-            event.altKey
-          )
-            return;
-          event.preventDefault();
-          void props.onReturn();
-        }}
-        className="mb-6 inline-flex min-h-11 min-w-11 max-w-full items-center gap-2 rounded-md py-2 text-sm font-medium whitespace-normal text-muted-foreground underline-offset-4 wrap-anywhere hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
-        {props.returnHref ? m.reporter_history_return() : m.reporter_status_back()}
-      </a>
-      {'report' in props ? (
-        <ReporterStatusView {...props} />
-      ) : 'onRetry' in props ? (
-        <ReporterStatusFailure onRetry={props.onRetry} />
-      ) : (
-        <ReporterStatusReadState state={props.state} />
-      )}
+      <div className="space-y-7 rounded-2xl border bg-card p-4 sm:p-6 lg:p-8">
+        <div className="border-b pb-5">
+          <a
+            href={props.returnHref ?? localizeHref('/inbox')}
+            data-reporter-history-return={props.returnHref ? '' : undefined}
+            onClick={(event) => {
+              if (
+                !props.onReturn ||
+                event.defaultPrevented ||
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+              )
+                return;
+              event.preventDefault();
+              void props.onReturn();
+            }}
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center gap-2 rounded-md py-2 text-sm font-medium whitespace-normal text-muted-foreground underline-offset-4 wrap-anywhere hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
+            {props.returnHref ? m.reporter_history_return() : m.reporter_status_back()}
+          </a>
+        </div>
+        {'report' in props ? (
+          <ReporterStatusView {...props} />
+        ) : 'onRetry' in props ? (
+          <ReporterStatusFailure onRetry={props.onRetry} />
+        ) : (
+          <ReporterStatusReadState state={props.state} />
+        )}
+      </div>
     </section>
   );
 }
@@ -319,20 +323,22 @@ export function ReporterStatusView({
   }[report.target.kind]();
   return (
     <article className="space-y-8 break-words" aria-labelledby="reporter-status-heading">
-      <header className="space-y-4">
-        <h1 id="reporter-status-heading" tabIndex={-1} className={statusHeading}>
-          {m.reporter_status_heading()}
-        </h1>
-        <Badge
-          variant={report.outcome === 'actioned' ? 'default' : 'secondary'}
-          className="h-auto max-w-full gap-1.5 whitespace-normal px-3 py-1.5 text-sm wrap-anywhere"
-        >
-          <StatusIcon aria-hidden="true" />
-          {status.label}
-        </Badge>
-        <p className="max-w-prose text-base leading-7 text-muted-foreground">{status.explanation}</p>
+      <header className="flex flex-wrap items-start justify-between gap-4 rounded-xl border bg-muted/20 p-4 sm:p-6">
+        <div className="min-w-0 space-y-4">
+          <h1 id="reporter-status-heading" tabIndex={-1} className={statusHeading}>
+            {m.reporter_status_heading()}
+          </h1>
+          <Badge
+            variant={report.outcome === 'actioned' ? 'default' : 'secondary'}
+            className="h-auto max-w-full gap-1.5 whitespace-normal px-3 py-1.5 text-sm wrap-anywhere"
+          >
+            <StatusIcon aria-hidden="true" />
+            {status.label}
+          </Badge>
+          <p className="max-w-prose text-base leading-7 text-muted-foreground">{status.explanation}</p>
+        </div>
         {onRefresh ? (
-          <Button variant="outline" className={statusControl} onClick={() => void onRefresh()}>
+          <Button variant="outline" className={`${statusControl} shrink-0`} onClick={() => void onRefresh()}>
             <RefreshCw className="size-4" aria-hidden="true" />
             {m.reporter_status_refresh()}
           </Button>
@@ -369,7 +375,7 @@ export function ReporterStatusView({
           </li>
         </ol>
       </section>
-      <section aria-labelledby="reporter-status-submission" className="space-y-6">
+      <section aria-labelledby="reporter-status-submission" className="space-y-6 rounded-xl border p-4 sm:p-6">
         <ContentItemHeading id="reporter-status-submission" level={2} className="text-xl font-semibold">
           {m.reporter_status_submission()}
         </ContentItemHeading>
@@ -383,10 +389,12 @@ export function ReporterStatusView({
           <ContentItemHeading level={3} className="text-sm font-medium text-muted-foreground">
             {m.reporter_status_evidence()}
           </ContentItemHeading>
-          <p className="whitespace-pre-wrap leading-7">{report.evidence || m.reporter_status_no_evidence()}</p>
+          <p className="whitespace-pre-wrap wrap-anywhere leading-7">
+            {report.evidence || m.reporter_status_no_evidence()}
+          </p>
         </div>
       </section>
-      <section className="space-y-3" aria-labelledby="reporter-status-target">
+      <section className="space-y-3 rounded-xl border bg-muted/20 p-4 sm:p-6" aria-labelledby="reporter-status-target">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <ContentItemHeading id="reporter-status-target" level={2} className="text-lg font-semibold">
             {m.reporter_status_target()}

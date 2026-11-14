@@ -205,77 +205,89 @@ export function ReporterHistoryPage({
 }) {
   return (
     <section
-      className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 sm:px-8 sm:py-10"
+      className="mx-auto w-full max-w-4xl break-words px-4 py-6 sm:px-6 sm:py-10"
       aria-labelledby="reporter-history-heading"
       aria-busy={result.state === 'loading'}
     >
-      <header className="space-y-2">
-        <h1
-          id="reporter-history-heading"
-          tabIndex={-1}
-          className="text-2xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          {m.reporter_history_heading()}
-        </h1>
-        <p className="text-sm text-muted-foreground">{m.reporter_history_intro()}</p>
-        {onRefresh && result.state === 'loaded' ? (
-          <button type="button" className={historyControl} onClick={() => void onRefresh()}>
-            {m.reporter_status_refresh()}
-          </button>
+      <div className="space-y-7 rounded-2xl border bg-card p-4 sm:p-6 lg:p-8">
+        <header className="flex flex-wrap items-start justify-between gap-4 border-b pb-5">
+          <div className="min-w-0 space-y-2">
+            <h1
+              id="reporter-history-heading"
+              tabIndex={-1}
+              className="text-2xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-3xl"
+            >
+              {m.reporter_history_heading()}
+            </h1>
+            <p className="max-w-prose text-base leading-7 text-muted-foreground">{m.reporter_history_intro()}</p>
+          </div>
+          {onRefresh && result.state === 'loaded' ? (
+            <button type="button" className={historyControl} onClick={() => void onRefresh()}>
+              {m.reporter_status_refresh()}
+            </button>
+          ) : null}
+        </header>
+        {result.state === 'loading' ? (
+          <p role="status" className="rounded-lg bg-muted/40 px-4 py-3 leading-7">
+            {m.reporter_history_loading()}
+          </p>
         ) : null}
-      </header>
-      {result.state === 'loading' ? <p role="status">{m.reporter_history_loading()}</p> : null}
-      {result.state === 'denied' ? <HistoryFailure message={m.reporter_history_denied()} retry={onRetry} /> : null}
-      {result.state === 'unavailable' ? (
-        <HistoryFailure
-          message={
-            query.cursor !== undefined
-              ? m.reporter_history_continuation_unavailable()
-              : m.reporter_history_unavailable()
-          }
-          retry={onRetry}
-        />
-      ) : null}
-      {result.state === 'expired' ? (
-        <div role="alert" className="space-y-3 rounded-lg border p-4">
-          <p>{m.reporter_history_expired()}</p>
-          <button type="button" className={historyControl} onClick={() => void onRestart()}>
-            {m.reporter_history_restart()}
-          </button>
-        </div>
-      ) : null}
-      {result.state === 'retired' ? <p role="status">{m.reporter_history_denied()}</p> : null}
-      {result.state === 'loaded' && result.page.state === 'ready' ? (
-        <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap gap-3">
-          {onPrevious ? (
-            <button type="button" className={historyControl} onClick={() => void onPrevious()}>
-              {m.library_collections_previous()}
+        {result.state === 'denied' ? <HistoryFailure message={m.reporter_history_denied()} retry={onRetry} /> : null}
+        {result.state === 'unavailable' ? (
+          <HistoryFailure
+            message={
+              query.cursor !== undefined
+                ? m.reporter_history_continuation_unavailable()
+                : m.reporter_history_unavailable()
+            }
+            retry={onRetry}
+          />
+        ) : null}
+        {result.state === 'expired' ? (
+          <div role="alert" className="space-y-3 rounded-xl border bg-muted/20 p-4">
+            <p className="leading-7">{m.reporter_history_expired()}</p>
+            <button type="button" className={historyControl} onClick={() => void onRestart()}>
+              {m.reporter_history_restart()}
             </button>
-          ) : null}
-          {onFirst ? (
-            <button type="button" className={historyControl} onClick={() => void onFirst()}>
-              {m.library_collections_first_page()}
-            </button>
-          ) : null}
-        </nav>
-      ) : null}
-      {result.state === 'loaded' ? (
-        <ReporterHistoryResults
-          page={result.page}
-          query={query}
-          onSelect={onSelect}
-          onContinue={onContinue}
-          {...(onOpenStatus ? { onOpenStatus } : {})}
-        />
-      ) : null}
+          </div>
+        ) : null}
+        {result.state === 'retired' ? (
+          <p role="status" className="rounded-lg bg-muted/40 px-4 py-3 leading-7">
+            {m.reporter_history_denied()}
+          </p>
+        ) : null}
+        {result.state === 'loaded' && result.page.state === 'ready' && (onPrevious || onFirst) ? (
+          <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap gap-3">
+            {onPrevious ? (
+              <button type="button" className={historyControl} onClick={() => void onPrevious()}>
+                {m.library_collections_previous()}
+              </button>
+            ) : null}
+            {onFirst ? (
+              <button type="button" className={historyControl} onClick={() => void onFirst()}>
+                {m.library_collections_first_page()}
+              </button>
+            ) : null}
+          </nav>
+        ) : null}
+        {result.state === 'loaded' ? (
+          <ReporterHistoryResults
+            page={result.page}
+            query={query}
+            onSelect={onSelect}
+            onContinue={onContinue}
+            {...(onOpenStatus ? { onOpenStatus } : {})}
+          />
+        ) : null}
+      </div>
     </section>
   );
 }
 
 function HistoryFailure({ message, retry }: { message: string; retry: Retry }) {
   return (
-    <div role="alert" className="space-y-3 rounded-lg border p-4">
-      <p>{message}</p>
+    <div role="alert" className="space-y-3 rounded-xl border bg-muted/20 p-4">
+      <p className="leading-7">{message}</p>
       <button type="button" className={historyControl} onClick={() => void retry()}>
         {m.reporter_history_retry()}
       </button>
@@ -325,12 +337,24 @@ function ReporterHistoryResults({
   const selectedUnavailable =
     page.state === 'ready' && query.reportId !== undefined && page.selectedReportId !== query.reportId;
   return (
-    <div className="space-y-5">
-      {page.state === 'ready' && page.entries.length > 0 ? <p role="status">{m.reporter_history_ready()}</p> : null}
-      {page.state === 'preparing' ? <p role="status">{m.reporter_history_preparing()}</p> : null}
-      {selectedUnavailable ? <p role="alert">{m.reporter_history_selected_unavailable()}</p> : null}
+    <div className="space-y-6">
+      {page.state === 'ready' && page.entries.length > 0 ? (
+        <p role="status" className="text-sm leading-6 text-muted-foreground">
+          {m.reporter_history_ready()}
+        </p>
+      ) : null}
+      {page.state === 'preparing' ? (
+        <p role="status" className="rounded-lg bg-muted/40 px-4 py-3 leading-7">
+          {m.reporter_history_preparing()}
+        </p>
+      ) : null}
+      {selectedUnavailable ? (
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 leading-7">
+          {m.reporter_history_selected_unavailable()}
+        </p>
+      ) : null}
       {page.entries.length > 0 ? (
-        <ol className="space-y-5" aria-label={m.reporter_history_heading()}>
+        <ol className="space-y-4" aria-label={m.reporter_history_heading()}>
           {page.entries.map((entry) => (
             <HistoryEntry
               key={entry.id}
@@ -343,14 +367,20 @@ function ReporterHistoryResults({
           ))}
         </ol>
       ) : page.state === 'ready' && !selectedUnavailable && page.nextCursor === null ? (
-        <p role="status">{m.reporter_history_empty()}</p>
+        <p role="status" className="rounded-lg bg-muted/40 px-4 py-3 leading-7">
+          {m.reporter_history_empty()}
+        </p>
       ) : page.state === 'ready' && page.entries.length === 0 && !selectedUnavailable ? (
-        <p role="status">{m.reporter_history_sparse()}</p>
+        <p role="status" className="rounded-lg bg-muted/40 px-4 py-3 leading-7">
+          {m.reporter_history_sparse()}
+        </p>
       ) : null}
       {page.state === 'ready' && page.nextCursor !== null ? (
-        <button type="button" className={historyControl} onClick={() => void onContinue()}>
-          {m.reporter_history_continue()}
-        </button>
+        <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap justify-end border-t pt-5">
+          <button type="button" className={historyControl} onClick={() => void onContinue()}>
+            {m.reporter_history_continue()}
+          </button>
+        </nav>
       ) : null}
     </div>
   );
@@ -379,7 +409,7 @@ function HistoryEntry({
       title={targetLabel}
       {...(summary.state === 'available' ? { href: summary.href } : {})}
       data-selected={selected || undefined}
-      className="px-1 data-[selected=true]:before:opacity-100"
+      className="rounded-xl border bg-background px-3 py-3 shadow-sm transition-colors data-[selected=true]:border-primary data-[selected=true]:bg-primary/5 data-[selected=true]:ring-1 data-[selected=true]:ring-primary/30 data-[selected=true]:before:opacity-100 sm:px-4"
       state={
         <Badge
           variant={entry.outcome === 'actioned' ? 'default' : 'secondary'}
@@ -418,7 +448,7 @@ function HistoryEntry({
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <button
               type="button"
-              className={historyControl}
+              className={`${historyControl} ${selected ? 'border-primary bg-primary/10' : 'bg-background hover:bg-muted'}`}
               data-report-id={entry.id}
               aria-pressed={selected}
               onClick={() => void onSelect(entry.id)}
@@ -427,7 +457,7 @@ function HistoryEntry({
             </button>
             {statusHref ? (
               <a
-                className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md px-3 py-2 text-sm font-medium whitespace-normal underline underline-offset-4 wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md bg-muted/50 px-3 py-2 text-sm font-medium whitespace-normal underline underline-offset-4 wrap-anywhere hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 href={statusHref}
                 data-reporter-status
                 onClick={(event) => {
@@ -469,7 +499,9 @@ function HistoryEntry({
 function HistoryReference({ entry }: { entry: ReporterHistoryEntry }) {
   return (
     <details className="text-sm">
-      <summary className="min-h-11 cursor-pointer py-3 font-medium">{m.reporter_status_reference()}</summary>
+      <summary className="min-h-11 min-w-11 w-fit cursor-pointer rounded-md py-3 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        {m.reporter_status_reference()}
+      </summary>
       <dl className="relative z-20 space-y-3 pb-2">
         <div>
           <dt className="text-muted-foreground">{m.reporter_status_report_id()}</dt>
