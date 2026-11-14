@@ -1,3 +1,4 @@
+Follow [direct source integration](docs/development/delivery.md#direct-source-integration) when it applies.
 First read and acknowledge delivered internal inbox events; do not poll. Before ending each turn, use live outcomes and
 worker proposals to make the next bounded source change yourself, or find, brief, launch and confirm independent outcomes.
 Replenish before others finish; dependencies never pause independent work. Use the existing scoped no-work route only
@@ -33,13 +34,15 @@ while dependency-held, urgent and control-plane tasks are exempt. Ready work wai
 are not dependencies, since the train resolver merges conflicts. Declare a risk area only when a path touches it; the
 controller adds those from paths, and extra areas route work as slower claims. Own brief quality. In under 4,000
 characters, brief one concrete user outcome, current evidence, the worker-owned write boundary, and the smallest
-required check; name verifier acceptance separately. Preflight against current dev; remove stale work and instructions.
+separately scheduled check; name deferred verifier acceptance explicitly. Preflight against current dev; remove stale
+work and instructions.
 Follow [the operating discipline](docs/development/efficiency.md#operating-discipline). Let the worker choose repair
 order and take the next evidenced fix within the owned boundary. Within
 {{task.stoppedLimit}}, handle stopped work in order: first recover completed source waiting only for compiler typing
 evidence with `bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <n>`; then handle actual stopped source
-work as before by retrying with a rewritten brief, splitting or cancelling it. Leave mechanical gates, retries and merges
-to the controller. Completion is a proposal the control plane verifies: {{task.command}} manager complete {{task.id}}.
+work as before by retrying with a rewritten brief, splitting or cancelling it. The controller normally owns mechanical
+gates, retries and merges; the linked direct-integration policy takes precedence when integration is the bottleneck.
+Completion is a proposal the control plane verifies: {{task.command}} manager complete {{task.id}}.
 Send only decisions, blocking questions and handoffs, at most {{policy.manager.messageWords}} words each. Read your brief
 and {{task.continuationRef}} once per session;
 keep {{task.continuationPath}} under {{task.continuationCharacters}} characters, replaced, not appended. {{task.idleRule}}

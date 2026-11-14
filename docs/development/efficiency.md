@@ -174,8 +174,9 @@ outcome, tracked per Goal, task class and model profile. It improves in three wa
 Fold repairs into the journey they serve. An estimate predicts landed source; it is not a task label. Price each
 new refusal, bound or guard as required by [agent conduct](agent-conduct.md#briefs).
 
-During an authorized code-first window, use native Goal branches and record deferred acceptance. Count saved
-source, integrated code and accepted journeys separately. Compare delivery cost before changing models or width.
+Follow [direct source integration](delivery.md#direct-source-integration) whenever integration is the bottleneck,
+for every task type. During an authorized code-first window, keep source checkpoints and deferred acceptance. Count
+saved source, integrated code and accepted journeys separately. Compare delivery cost before changing models or width.
 
 The brief writer picks the model by the task's difficulty. A simple, well-specified brief pins `model: gpt-6-luna` and
 `effort: max` in its front matter. Examples: exact edits the brief names, fixture, data or translation work, and wiring
@@ -210,9 +211,9 @@ work moving under the delivery dependency rules; remove artificial dependencies.
 
 Set implementation width from runnable outcomes, writing progress, observed worker memory and accepted delivery.
 Raise or lower it as those conditions change. Running experiments or checks are a separate load: admit and measure
-them separately, and use the configured a/b check hosts for heavy verification. Concentrate the
-[minimum worker checks](verification.md#check-selection-and-failures) at the end of each coherent source batch.
-Run broader tests against a pinned revision in the verifier, report failures together, and keep unrelated
+them separately, and use the configured a/b check hosts when heavy verification is scheduled. Apply
+[direct source integration](delivery.md#direct-source-integration) before adding a worker-check prerequisite.
+Scheduled broader tests use a pinned revision in the verifier; report failures together and keep unrelated
 implementation moving while results are pending.
 
 Keep routing policy in tracked configuration and private allowance settings locally. Compare profiles on representative

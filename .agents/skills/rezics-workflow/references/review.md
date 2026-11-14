@@ -2,7 +2,9 @@
 
 Read [review rules](../../../../docs/development/verification.md#review) and
 [delivery](../../../../docs/development/delivery.md). Review the changed contract and observable outcome, using the
-required gates and risk review rather than adding repeated general review rounds.
+applicable risk review rather than adding repeated general review rounds.
+[Direct source integration](../../../../docs/development/delivery.md#direct-source-integration) governs all task types
+when integration is the bottleneck: review the logic and preserve contracts, with checks and coverage deferred.
 
 ```sh
 git diff --check
@@ -28,9 +30,11 @@ git commit -m '<English description of the completed outcome>'
 git status --short
 ```
 
-Use the task's required result format. The controller owns [integration and
-promotion](../../../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing); a worker
-handoff does not authorize manual integration. Managers verify outcomes on the promoted commit before Goal closure,
+Use the task's required result format. Follow
+[direct source integration](../../../../docs/development/delivery.md#direct-source-integration) when it applies;
+otherwise the controller owns [integration and
+promotion](../../../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing). Publication
+keeps its existing owner in either mode. Managers verify outcomes on the promoted commit before Goal closure,
 notify affected owners through the supported workflow, and retain the acceptance links in the tracked Goal.
 
 On a wrap-up instruction, follow [delivery's pause procedure](../../../../docs/development/delivery.md): checkpoint

@@ -4,6 +4,10 @@ Read [verification rules](../../../../docs/development/verification.md), especia
 selection. Use the native command in the Goal's capability manifest or task contract; a parallel specification
 without its native driver is not acceptance.
 
+During [direct source integration](../../../../docs/development/delivery.md#direct-source-integration), defer the
+checks and coverage work below for every task type. These procedures describe scheduled acceptance, not an
+integration gate; preserve product boundary validation and record exactly what remains unobserved.
+
 - [ ] Prove backend outcomes through real APIs for each persona on released fixture data. Cover independent denials,
       hidden resources, lifecycle/replay and dependency failure; use no frontend or permissive owner stubs as proof.
 - [ ] Exercise every applicable surface cell, or record the contract's reason it does not apply in the manifest.

@@ -9,11 +9,15 @@ authorization or disclosure.
 
 Keep specified, implemented, exposed, tested and promoted distinct. Report unavailable evidence as unavailable.
 
+[Direct source integration](delivery.md#direct-source-integration) governs every task type when integration is the
+bottleneck. The acceptance procedures and ordinary check requirements below apply when verification is scheduled;
+they are not source-integration or test-coverage prerequisites in that mode.
+
 ## Capability evidence
 
 Verification follows the [architecture](../architecture.md): prove backend capabilities through the API before
-building their interfaces. Write per-persona acceptance from user jobs on real-shaped, released fixture data before
-implementation, with no frontend and no mocked owner modules. Freeze missing user cases red first; use the
+accepting their interfaces. Scheduled acceptance uses per-persona user jobs on real-shaped, released fixture data,
+with no frontend and no mocked owner modules. Freeze missing user cases when that evidence is scheduled; use the
 [API acceptance gap inventory](../research/api-acceptance-gaps.md) to find them.
 
 Each Goal maintains `docs/goals/<goal>.capabilities.md`. For every capability record the user job, personas, released
@@ -39,7 +43,7 @@ Dev's floor, in order: development continues, and dev runs, so problems can be d
 landings. The dev verifier's boot smoke catches a dev that does not start and dispatches an urgent repair to the commit
 that broke it.
 
-Decision: an ordinary product attempt proves that every changed workspace type-checks, plus the tests of payment, payout, order settlement, points and balance code when it changed them. All other tests, including native, browser and growth suites, run after landing in the dev verifier, which batches dev heads, runs acceptance and sibling tests, and attributes failures by bisection. A failing test there is a repair for the owning manager, not a revert.
+Outside [direct source integration](delivery.md#direct-source-integration), an ordinary product attempt proves that every changed workspace type-checks, plus the tests of payment, payout, order settlement, points and balance code when it changed them. All other tests, including native, browser and growth suites, run after landing in the dev verifier, which batches dev heads, runs acceptance and sibling tests, and attributes failures by bisection. A failing test there is a repair for the owning manager, not a revert.
 
 Decision: typecheck repairs preserve existing test assertions and update fixtures, helper signatures and response shapes to current contracts; add behaviour tests only for concrete runtime defects.
 
@@ -47,7 +51,7 @@ Decision: budgeted compiler fixtures require a successful admission containing `
 
 Decision: Web message readiness follows the generated `messages/_index.js` exports and each leaf's exported catalogue key; retry signatures include only missing and stale evidence.
 
-Decision: under minimal verification a type error blocks a worker's success, and a failing payment, payout, order settlement, points or balance test blocks it when those paths changed. Other tests are not part of the attempt check; the wrapper refuses a test file, native, browser or growth command before any upload, with a message that tests run after landing in the dev verifier. Type errors, boot failures and payment-path failures keep current verifier handling: type errors and payment-path failures revert the landing, boot failures dispatch an urgent repair without reverting. A test failure outside those paths creates or updates one repair for the owning manager and never reverts the landing.
+Outside [direct source integration](delivery.md#direct-source-integration), under minimal verification a type error blocks a worker's success, and a failing payment, payout, order settlement, points or balance test blocks it when those paths changed. Other tests are not part of the attempt check; the wrapper refuses a test file, native, browser or growth command before any upload, with a message that tests run after landing in the dev verifier. Type errors, boot failures and payment-path failures keep current verifier handling: type errors and payment-path failures revert the landing, boot failures dispatch an urgent repair without reverting. A test failure outside those paths creates or updates one repair for the owning manager and never reverts the landing.
 
 Decision: environment walks run per Goal, not per outcome. An implementation brief declares no `native` or `browser`
 `acceptance.requires`; its outcome lands on typing like any other. Each Goal keeps at most one walk task running; it
@@ -60,7 +64,7 @@ separable or lies in another owner's code, to the owning manager. That manager d
 brief, which runs in parallel with the walk. While managers read the walk as the owner of every repair, walks repaired
 serially and backlogs stayed empty. From 03:00 to 04:00 UTC on 2026-11-07, 9 workers ran and 284 product lines landed.
 
-Decision: ordinary product worker-check commands typecheck changed workspaces before landing and refuse test, native, browser and growth commands before upload. Urgent, control-plane, proof-run and acceptance-requires briefs keep their declared checks when the host-run budget is off.
+Outside [direct source integration](delivery.md#direct-source-integration), ordinary product worker-check commands typecheck changed workspaces before landing and refuse test, native, browser and growth commands before upload. Urgent, control-plane, proof-run and acceptance-requires briefs keep their declared checks when the host-run budget is off.
 
 Decision: remote run custody admission and updates use the reader's 64 KiB serialized JSON character limit; initial admission reserves 12 KiB for host and terminal transitions. Generated typing commands retain their existing 3,000-character argv chunks and exact argument boundaries. Tests separately pin per-argument binding rejection, aggregate serialized-record rejection, and terminal retention of the canonical binding, including compressed argv, hosts file and returns.
 
@@ -105,8 +109,8 @@ to pass. Reuse unchanged valid passing evidence rather than rerunning it to comp
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.
 
-Run acceptance once after the last relevant edit, plus the root typecheck (`bun scripts/typecheck.ts`).
-Write missing contract tests and preserve frozen acceptance. A discretionary check must target a reachable failure
+When verification is scheduled, run acceptance once after the last relevant edit, plus the root typecheck
+(`bun scripts/typecheck.ts`). Write missing contract tests as that acceptance work and preserve frozen acceptance. A discretionary check must target a reachable failure
 whose result changes the next action; name at most twelve nearby test files and reuse valid receipts. Broaden only
 for shared contracts or unresolved failures. Run the full Kernel check for a runtime contract every module relies on,
 and the control-plane gate for executable changes there. Documentation alone requires neither. A successful exit
