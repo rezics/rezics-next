@@ -43,6 +43,10 @@ The growth acceptance runs the composed native producer at 64, 512 and 4,096 unr
 actual page keys fixed and adding obsolete selected-Subject history. It measures examined rows and keyed statements
 from captured plans; unrelated population and obsolete history do not supply a query bound.
 
+Deadline regression choice: stall the first selected scalar query through the native fixture pool, assert the explicit
+request deadline retires its client and skips later fields and summaries, and retain a sufficient-budget Book-card
+assertion; defer execution under the source-only attempt policy.
+
 ### Scalar source-fence addition
 
 For `S` selected scalar statement rows, where `S ≤ 20 × 12 × 32 = 7,680`, exact provenance is read with

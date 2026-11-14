@@ -283,7 +283,7 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
           for (const [key, fact] of current) relationFacts.set(key, fact);
         }
       }
-    });
+    }, input.deadline);
 
     for (const candidates of relationCandidatesByPartition.values()) {
       for (const { id, property, candidate } of candidates) {
