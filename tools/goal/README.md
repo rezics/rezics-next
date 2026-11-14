@@ -1986,6 +1986,35 @@ existing grace period, record `admission-deferred`, preserve the stack and journ
 next two-hour due cycle. Defer SEED repair routing for that run. Partial reuse still requires exact dedicated
 database generation and selected-input identity; URL, mtime and artifact digest alone are insufficient.
 
+Page-data cold preparation uses `stateDirectory/page-data-preparation.json` as a versioned stage journal. Its cache
+identity binds the exact integrated head and Git tree, Definitions release bytes, dedicated stack ports and container
+names, and each stage identity. Database reuse additionally requires a versioned generation record to match the live
+container ID, image identity and exact named PostgreSQL volume. Its digest enters every later stage key and the seed
+record. The seed record binds the result artifact SHA-256 and its validated selected-input identity: importer source
+digests, selected franchise IDs and selected members. It also binds the effective seed environment and digests of the
+generated kernel environment, persona environment and importer key without persisting their contents. An old
+head-only marker, missing artifact, changed artifact, database generation, runtime inputs or selected inputs cannot
+establish a seed cache hit. Completed
+worktree/dependency, database, search, auth setup, persona and cross-media seed stages are reused only for matching
+inputs. Database and search stages also require their exact dedicated containers to be running. A stage is checkpointed
+after success; a failure retains its frontier and the ordinary boot failure log.
+
+Before an unfinished cold stage, page-data reads the existing ordinary and urgent capacity queues. Only an unadmitted
+ticket with explicit task, attempt and operation metadata, exact live PID/start/boot/group identity, and a current
+matching task lifecycle is a source-writer waiter. Verification tasks, admitted tickets, legacy or malformed tickets,
+stale generations and ambiguous process custody do not prove a waiter. Page-data does not mutate admission tickets or
+the pressure brake. It defers at the first unfinished stage while such a writer waits, records stage, input key,
+deferral reason, journal frontier and before/after admission observations, then preserves the last native section
+evidence under its original head. The next due cycle resumes from the retained preparation journal. If pressure rises
+during the existing resumable seed stage, the owned seed group follows the existing pressure abort path; page checks
+still run on the prepared stack and the importer journal remains in place.
+
+Nested bounds remain on the existing lane: one page-data lease permits one cycle; a cycle has at most six named
+preparation stages and twelve stage-boundary admission observations, and inspects at most 256 ticket names per lane
+with an 8 KiB ceiling per ticket. It adds no timer, watcher, scheduler, capacity limit or resource cleanup. Existing
+database, search, auth, persona, seed, stack-readiness and browser/check deadlines, output caps and owned scopes remain
+in force. Preparation traces and retained-native references are stored with the page-data run in `flow_events`.
+
 Decision: isolate each page-data prerequisite at its owning boundary. A member browser setup failure leaves anonymous
 readers, SQL counts and independently token-authorized member native reads running on the same owned browser/stack.
 A missing member token skips member native calls; a missing browser sign-in skips member readers. Neither falls back

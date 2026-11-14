@@ -44,6 +44,8 @@ import type { DevVerifierRun, Settings, Task } from './types.ts';
 import { harness } from './test-support.ts';
 import { defaultPolicy, readControlPolicy } from './policy.ts';
 import { CHECK_SLICE, WORKER_SCOPE_MEMORY_MAX } from './worker-slice.ts';
+import { pageDataAdmission, pageDataPreparation, type PageDataPreparationTrace } from './page-data-admission.ts';
+import { processIdentity } from './process.ts';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -294,7 +296,280 @@ test('the policy interval, defect transition, section output and per-run report 
   }
 });
 
-test('admission pressure yields only the page-data seed and resumes its journal at the next due verifier cycle', async () => {
+test('bulk preparation yields before cold work only for a live unadmitted source writer', async () => {
+  const h = fixture();
+  try {
+    const identity = processIdentity();
+    if (!identity) throw new Error('test process identity unavailable');
+    const queue = join(h.settings.stateDirectory, 'capacity-queue');
+    mkdirSync(queue, { recursive: true });
+    const task = (id: string, kind: 'implementation' | 'verification' = 'implementation') =>
+      ({
+        id,
+        currentAttempt: 0,
+        state: 'ready',
+        brief: { kind, paths: kind === 'verification' ? [] : ['src/example.ts'] },
+      }) as Task;
+    const tasks = [
+      task('writer'),
+      task('admitted'),
+      task('stale'),
+      task('ambiguous'),
+      task('verification', 'verification'),
+    ];
+    const lifecycles = new Map(
+      tasks.map((value) => [value.id, { currentAttempt: 0, taskState: 'ready' }]),
+    );
+    const store = {
+      tasks: () => tasks,
+      capacityLifecycle: (taskId: string) => lifecycles.get(taskId),
+    };
+    let sequence = 0;
+    const addTicket = (
+      taskId: string,
+      owner = identity,
+      suffix = '',
+      operation: 'start' | 'resume' | 'omit' = 'start',
+    ): string => {
+      const name =
+        `${String(Date.now() + sequence).padStart(15, '0')}.` +
+        `${String(++sequence).padStart(8, '0')}-${owner.pid}-${taskId}${suffix}`;
+      const ticket = {
+        ...owner,
+        taskId,
+        attempt: 1,
+        ...(operation === 'omit' ? {} : { operation }),
+      };
+      writeFileSync(join(queue, name), JSON.stringify(ticket));
+      return name;
+    };
+    const writerTicket = addTicket('writer');
+    addTicket('admitted', identity, '.admitted');
+    addTicket('stale', { ...identity, pid: 2_000_000_000 });
+    addTicket('ambiguous', identity, '', 'omit');
+    addTicket('verification');
+
+    const admission = pageDataAdmission(h.settings.stateDirectory, store);
+    expect(admission.observe()).toMatchObject({ waitingSourceWriters: ['writer'], pressurePaused: false });
+    let coldSetupCalls = 0;
+    const preparation = pageDataPreparation({
+      file: join(h.settings.stateDirectory, 'page-data-preparation.json'),
+      identity: 'source-tree-v1',
+      admission,
+    });
+    const stages = [
+      {
+        id: 'database',
+        inputKey: 'database-v1',
+        run: async () => {
+          coldSetupCalls += 1;
+          return { status: 'completed' as const, work: ['database-up'] };
+        },
+      },
+    ];
+    await expect(preparation.run(stages)).resolves.toBe('deferred');
+    expect(coldSetupCalls).toBe(0);
+    expect(preparation.trace).toMatchObject({
+      status: 'deferred',
+      frontier: 'database',
+      deferral: { reason: 'live-source-writer', waitingSourceWriters: ['writer'] },
+      stages: [{ stage: 'database', status: 'deferred' }],
+    });
+    expect(preparation.trace.admission.map(({ phase }) => phase)).toEqual(['before', 'after']);
+
+    rmSync(join(queue, writerTicket));
+    const resumed = pageDataPreparation({
+      file: join(h.settings.stateDirectory, 'page-data-preparation.json'),
+      identity: 'source-tree-v1',
+      admission,
+    });
+    await expect(resumed.run(stages)).resolves.toBe('ready');
+    expect(coldSetupCalls).toBe(1);
+    expect(resumed.trace.stages).toMatchObject([
+      { stage: 'database', inputKey: 'database-v1', status: 'completed', work: ['database-up'] },
+    ]);
+    expect(typeof resumed.trace.stages[0]?.startedAt).toBe('string');
+    expect(typeof resumed.trace.stages[0]?.completedAt).toBe('string');
+  } finally {
+    h.db.close();
+  }
+});
+
+test('bulk preparation reuses completed stages for repeated identical inputs', async () => {
+  const h = fixture();
+  try {
+    const calls: string[] = [];
+    const admission = { observe: () => ({ pressurePaused: false, waitingSourceWriters: [] }) };
+    const file = join(h.settings.stateDirectory, 'page-data-preparation.json');
+    const stages = [
+      {
+        id: 'database',
+        inputKey: 'database-input-v1',
+        run: async () => {
+          calls.push('database');
+          return { status: 'completed' as const, work: ['database-up'] };
+        },
+      },
+      {
+        id: 'cross-media-seed',
+        inputKey: 'seed-input-v1',
+        run: async () => {
+          calls.push('seed');
+          return { status: 'completed' as const, work: ['cross-media-seed'] };
+        },
+      },
+    ];
+    const first = pageDataPreparation({ file, identity: 'same-source-tree', admission });
+    await expect(first.run(stages)).resolves.toBe('ready');
+    const repeated = pageDataPreparation({ file, identity: 'same-source-tree', admission });
+    await expect(repeated.run(stages)).resolves.toBe('ready');
+    expect(calls).toEqual(['database', 'seed']);
+    expect(repeated.trace.stages).toEqual([
+      { stage: 'database', inputKey: 'database-input-v1', status: 'reused' },
+      { stage: 'cross-media-seed', inputKey: 'seed-input-v1', status: 'reused' },
+    ]);
+
+    const changed = pageDataPreparation({ file, identity: 'changed-source-tree', admission });
+    await expect(changed.run(stages)).resolves.toBe('ready');
+    expect(calls).toEqual(['database', 'seed', 'database', 'seed']);
+  } finally {
+    h.db.close();
+  }
+});
+
+test('bulk preparation deferral retains native evidence until the next due cycle', async () => {
+  const h = fixture();
+  try {
+    const start = new Date('2026-11-12T00:00:00.000Z');
+    h.settings.policy = { ...defaultPolicy, pageData: { ...defaultPolicy.pageData, intervalMs: 10 } };
+    let now = start;
+    let phase: 'native' | 'deferred' | 'resumed' = 'native';
+    let calls = 0;
+    let coldSetupCalls = 0;
+    const identity = processIdentity();
+    if (!identity) throw new Error('test process identity unavailable');
+    const queue = join(h.settings.stateDirectory, 'capacity-queue');
+    mkdirSync(queue, { recursive: true });
+    const writer: Task = {
+      id: 'writer',
+      currentAttempt: 0,
+      state: 'ready',
+      brief: { kind: 'implementation', paths: ['src/example.ts'] },
+    } as Task;
+    const store = {
+      tasks: () => [writer],
+      capacityLifecycle: () => ({ currentAttempt: 0, taskState: 'ready' }),
+    };
+    const admission = pageDataAdmission(h.settings.stateDirectory, store);
+    const ticket =
+      `${String(Date.now()).padStart(15, '0')}.00000001-${identity.pid}-${writer.id}`;
+    const preparationOptions = (head: string) => ({
+      file: join(h.settings.stateDirectory, 'page-data-preparation.json'),
+      identity: 'tree-v1',
+      sourceHead: head,
+      sourceTree: 'tree-v1',
+      admission,
+    });
+    const worktreeStage = {
+      id: 'worktree-dependencies',
+      inputKey: 'worktree-v1',
+      run: async () => ({ status: 'completed' as const, work: ['worktree-refresh'] }),
+    };
+    const databaseStage = {
+      id: 'database',
+      inputKey: 'database-v1',
+      run: async () => {
+        coldSetupCalls += 1;
+        return { status: 'completed' as const, work: ['database-up-and-migrations'] };
+      },
+    };
+    const options = {
+      settings: h.settings,
+      db: h.db,
+      tasks: store,
+      inbox: { deliver() {} },
+      now: () => now,
+      routeDefect: async () => 'dispatched' as const,
+      runStack: async (head: string, invocation: string) => {
+        calls += 1;
+        if (phase === 'native') {
+          const preparation = pageDataPreparation(preparationOptions(head));
+          await preparation.run([worktreeStage]);
+          return {
+            output: completed(invocation, 'home anonymous feed DATA\n'),
+            exitCode: 0,
+            registry: h.registry,
+            preparation: preparation.trace,
+          };
+        }
+        if (phase === 'deferred' || phase === 'resumed') {
+          if (phase === 'deferred')
+            writeFileSync(
+              join(queue, ticket),
+              JSON.stringify({ ...identity, taskId: writer.id, attempt: 1, operation: 'start' }),
+            );
+          else rmSync(join(queue, ticket));
+          const preparation = pageDataPreparation(preparationOptions(head));
+          const outcome = await preparation.run([worktreeStage, databaseStage]);
+          if (outcome === 'ready')
+            return {
+              output: completed(invocation, 'home anonymous feed DATA\n'),
+              exitCode: 0,
+              registry: h.registry,
+              preparation: preparation.trace,
+            };
+          return {
+            output: '',
+            exitCode: 0,
+            preparationOnly: true as const,
+            seed: { status: 'admission-deferred' as const },
+            preparation: preparation.trace,
+          };
+        }
+        return { output: completed(invocation, 'home anonymous feed DATA\n'), exitCode: 0, registry: h.registry };
+      },
+    };
+
+    expect(await runPageDataCycle(options)).toBe('ran');
+    const native = readLatestPageDataRun(h.db)!;
+    phase = 'deferred';
+    now = new Date(start.getTime() + 11);
+    expect(await runPageDataCycle(options)).toBe('ran');
+    const deferred = readLatestPageDataRun(h.db)!;
+    expect(deferred).toMatchObject({
+      preparationOnly: true,
+      head: native.head,
+      sections: native.sections,
+      nativeEvidence: { status: 'retained', runId: native.runId, head: native.head },
+      preparation: {
+        sourceHead: native.head,
+        frontier: 'database',
+        deferral: { reason: 'live-source-writer', waitingSourceWriters: ['writer'] },
+      },
+    });
+
+    phase = 'resumed';
+    now = new Date(now.getTime() + 11);
+    expect(await runPageDataCycle(options)).toBe('ran');
+    expect(calls).toBe(3);
+    expect(coldSetupCalls).toBe(1);
+    expect(readLatestPageDataRun(h.db)).toMatchObject({
+      preparation: {
+        status: 'ready',
+        stages: [
+          { stage: 'worktree-dependencies', status: 'reused' },
+          { stage: 'database', status: 'completed', work: ['database-up-and-migrations'] },
+        ],
+      },
+    });
+    expect(readLatestPageDataRun(h.db)?.preparationOnly).toBeUndefined();
+    expect(readLatestPageDataRun(h.db)?.nativeEvidence).toBeUndefined();
+  } finally {
+    h.db.close();
+  }
+});
+
+test('bulk preparation resumes the seed journal after pressure during its resumable stage', async () => {
   const h = fixture();
   const db = openDb(':memory:');
   try {
@@ -315,7 +590,6 @@ test('admission pressure yields only the page-data seed and resumes its journal 
       saveDevVerifierRun: (run: DevVerifierRun) => void runs.set(run.key, run),
     } as unknown as Parameters<typeof verifyDev>[0]['store'];
     const firstNative = Promise.withResolvers<void>();
-    const nextNative = Promise.withResolvers<void>();
     const firstSeed = Promise.withResolvers<void>();
     const nextSeed = Promise.withResolvers<void>();
     const admission = pageDataSeedAdmission(h.settings.stateDirectory);
@@ -357,16 +631,52 @@ test('admission pressure yields only the page-data seed and resumes its journal 
           }
           expect(journal).toBe('retained-tag-parent-checkpoint');
           nextSeed.resolve();
-          await nextNative.promise;
           journal = 'published-tag-parent-checkpoint';
           seeded = true;
           return { status: 'completed', value: undefined };
         });
+        const deferred = execution.status === 'admission-deferred';
+        const preparation: PageDataPreparationTrace = {
+          version: 1,
+          identity: 'seed-input-v1',
+          status: deferred ? 'deferred' : 'ready',
+          stages: [
+            {
+              stage: 'cross-media-seed',
+              inputKey: 'seed-input-v1',
+              status: deferred ? 'deferred' : 'completed',
+            },
+          ],
+          admission: [
+            {
+              at: now.toISOString(),
+              stage: 'cross-media-seed',
+              phase: 'after',
+              pressurePaused: admission.isPaused(),
+              waitingSourceWriters: [],
+            },
+          ],
+          ...(deferred
+            ? {
+                frontier: 'cross-media-seed',
+                deferral: {
+                  reason: 'host-pressure' as const,
+                  stage: 'cross-media-seed',
+                  journalFrontier: 'cross-media-seed',
+                },
+              }
+            : {}),
+          seedJournal: {
+            path: 'showcase.sqlite',
+            state: journal ? (seeded ? 'complete' : 'retained') : 'absent',
+          },
+        };
         return {
           output: completed(invocation, 'home anonymous feed DATA\n'),
           exitCode: 0,
           registry,
-          ...(execution.status === 'admission-deferred' ? { seed: { status: execution.status } } : {}),
+          preparation,
+          ...(deferred ? { seed: { status: 'admission-deferred' as const } } : {}),
         };
       },
     };
@@ -377,7 +687,6 @@ test('admission pressure yields only the page-data seed and resumes its journal 
         runPageData: async () => expect(await runPageDataCycle(pageData)).toBe('ran'),
         runGate: async () => {
           if (pageRun === 1) firstNative.resolve();
-          if (pageRun === 2) nextNative.resolve();
           return { passed: true, output: '', timedOut: false };
         },
       });
@@ -391,6 +700,12 @@ test('admission pressure yields only the page-data seed and resumes its journal 
     expect(deferred).toMatchObject({
       seed: { status: 'admission-deferred' },
       sections: [{ page: 'home', persona: 'anonymous', section: 'feed', class: 'DATA' }],
+      preparation: {
+        status: 'deferred',
+        frontier: 'cross-media-seed',
+        deferral: { reason: 'host-pressure', journalFrontier: 'cross-media-seed' },
+        seedJournal: { state: 'retained' },
+      },
     });
     expect(journal).toBe('retained-tag-parent-checkpoint');
     expect(
@@ -399,17 +714,17 @@ test('admission pressure yields only the page-data seed and resumes its journal 
 
     now = new Date(Date.parse(deferred.at) + interval);
     writeFileSync(pressureFile, JSON.stringify({ paused: false }));
-    mkdirSync(join(h.root, 'repo/services/kernel'), { recursive: true });
-    writeFileSync(join(h.root, 'repo/services/kernel/resume.ts'), 'export const resumed = true;\n');
-    h.git('add', 'services/kernel/resume.ts');
-    h.git('commit', '-m', 'Advance verifier head for resumed seed');
 
     const nextCycle = runVerifier();
     await nextSeed.promise;
-    await nextNative.promise;
     await nextCycle;
     expect(journal).toBe('published-tag-parent-checkpoint');
     expect(readLatestPageDataRun(db)?.seed).toBeUndefined();
+    expect(readLatestPageDataRun(db)?.preparation).toMatchObject({
+      status: 'ready',
+      stages: [{ stage: 'cross-media-seed', status: 'completed' }],
+      seedJournal: { state: 'complete' },
+    });
   } finally {
     db.close();
     h.db.close();

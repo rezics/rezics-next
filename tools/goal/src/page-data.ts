@@ -7,7 +7,7 @@ import {
   readFileSync,
   readlinkSync,
   realpathSync,
-  watch as watchFs,
+  renameSync,
   writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:net';
@@ -21,6 +21,22 @@ import type { Settings, Task } from './types.ts';
 import { ensureFlow, recordFlow } from './flow.ts';
 import type { ManagerInbox } from './contracts.ts';
 import { CHECK_SLICE, WORKER_SCOPE_MEMORY_MAX, workerScopeArguments } from './worker-slice.ts';
+import {
+  pageDataAdmission,
+  pageDataPreparation,
+  pageDataSeedAdmission,
+  runPageDataSeedWithAdmission,
+  type PageDataAdmissionStore,
+  type PageDataPreparationStage,
+  type PageDataPreparationTrace,
+} from './page-data-admission.ts';
+
+export {
+  pageDataSeedAdmission,
+  runPageDataSeedWithAdmission,
+  type PageDataSeedAdmission,
+  type PageDataSeedExecution,
+} from './page-data-admission.ts';
 
 export const PAGE_DATA_CLASSES = ['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE', 'API', 'WEB', 'SEED'] as const;
 export type PageDataClass = (typeof PAGE_DATA_CLASSES)[number];
@@ -114,14 +130,12 @@ export type PageDataRun = {
   sections: PageDataSection[];
   seed?: PageDataSeedStatus;
   coverage?: { status: 'incomplete' };
+  preparation?: PageDataPreparationTrace;
+  nativeEvidence?: { status: 'retained'; runId: number; head: string };
+  preparationOnly?: true;
 };
 export type PageDataSeedPublicationStatus = { status: 'publication-incomplete'; omissions: number };
 export type PageDataSeedStatus = PageDataSeedPublicationStatus | { status: 'admission-deferred' };
-export type PageDataSeedExecution<T> = { status: 'completed'; value: T } | { status: 'admission-deferred' };
-export type PageDataSeedAdmission = {
-  isPaused: () => boolean;
-  watch: (onChange: () => void) => () => void;
-};
 export type PageDataRepair = {
   repairKey: string;
   section: PageDataSection;
@@ -185,6 +199,8 @@ type PageDataStackResult = {
   stackOutput?: string;
   diagnostics?: string;
   seed?: PageDataSeedStatus;
+  preparation?: PageDataPreparationTrace;
+  preparationOnly?: true;
   scopeLimitExceeded?: boolean;
   scopeKilled?: boolean;
 };
@@ -192,7 +208,7 @@ type PageDataStackResult = {
 export type PageDataOptions = {
   settings: Settings;
   db: Database;
-  tasks: Pick<import('./store.ts').WorkerStore, 'tasks'>;
+  tasks: PageDataAdmissionStore;
   inbox: Pick<ManagerInbox, 'deliver'>;
   routeDefect: (repair: PageDataRepair) => Promise<PageDataRepairRoute>;
   now?: () => Date;
@@ -276,46 +292,6 @@ export async function runPageDataSeedBoundary<T>(
 
   await reconcile(preparedHead);
   return seedOrResume();
-}
-
-/** Run only the cross-media seed command under the existing host-admission brake. */
-export async function runPageDataSeedWithAdmission<T>(
-  admission: PageDataSeedAdmission,
-  run: (signal: AbortSignal) => Promise<PageDataSeedExecution<T>>,
-): Promise<PageDataSeedExecution<T>> {
-  const controller = new AbortController();
-  const check = () => {
-    if (!controller.signal.aborted && admission.isPaused()) controller.abort();
-  };
-  const unwatch = admission.watch(check);
-  try {
-    check();
-    if (controller.signal.aborted) return { status: 'admission-deferred' };
-    return await run(controller.signal);
-  } finally {
-    unwatch();
-  }
-}
-
-/** Follow the pressure state already maintained by launch admission; no timer or new admission loop is added. */
-export function pageDataSeedAdmission(stateDirectory: string): PageDataSeedAdmission {
-  const pressureFile = join(stateDirectory, 'capacity-pressure.json');
-  return {
-    isPaused: () => {
-      try {
-        const value = JSON.parse(readFileSync(pressureFile, 'utf8')) as { paused?: unknown };
-        return value.paused === true;
-      } catch {
-        return false;
-      }
-    },
-    watch: (onChange) => {
-      const watcher = watchFs(stateDirectory, { persistent: false }, (_event, filename) => {
-        if (!filename || filename.toString() === 'capacity-pressure.json') onChange();
-      });
-      return () => watcher.close();
-    },
-  };
 }
 
 const seedArtifactHandoffPrefix = 'Cross-media seed artifact handoff ';
@@ -787,6 +763,9 @@ export function readLatestPageDataRun(db: Database): PageDataRun | undefined {
     classes: Record<PageDataClass, number>;
     seed?: PageDataSeedStatus;
     coverage?: PageDataRun['coverage'];
+    preparation?: PageDataRun['preparation'];
+    nativeEvidence?: PageDataRun['nativeEvidence'];
+    preparationOnly?: true;
   };
   const sections = db
     .query(
@@ -802,6 +781,9 @@ export function readLatestPageDataRun(db: Database): PageDataRun | undefined {
     sections: sections.map((value) => JSON.parse(value.detail) as PageDataSection),
     ...(metadata.seed ? { seed: metadata.seed } : {}),
     ...(metadata.coverage ? { coverage: metadata.coverage } : {}),
+    ...(metadata.preparation ? { preparation: metadata.preparation } : {}),
+    ...(metadata.nativeEvidence ? { nativeEvidence: metadata.nativeEvidence } : {}),
+    ...(metadata.preparationOnly ? { preparationOnly: true } : {}),
   };
 }
 
@@ -1011,6 +993,9 @@ function saveRun(db: Database, run: PageDataRun): void {
         classes: run.classes,
         ...(run.seed ? { seed: run.seed } : {}),
         ...(run.coverage ? { coverage: run.coverage } : {}),
+        ...(run.preparation ? { preparation: run.preparation } : {}),
+        ...(run.nativeEvidence ? { nativeEvidence: run.nativeEvidence } : {}),
+        ...(run.preparationOnly ? { preparationOnly: true } : {}),
       }),
     },
     ...run.sections.map((section) => ({
@@ -1105,11 +1090,13 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     let scopeLimitExceeded = false;
     let scopeKilled = false;
     let seed: PageDataSeedStatus | undefined;
+    let preparation: PageDataPreparationTrace | undefined;
     let registryForRun: ReadonlyMap<string, SectionConfig> | undefined;
     try {
       const result = await (
         options.runStack ??
-        ((sourceHead, checkInvocation) => runDedicatedPageDataStack(options.settings, sourceHead, checkInvocation))
+        ((sourceHead, checkInvocation) =>
+          runDedicatedPageDataStack(options.settings, sourceHead, checkInvocation, options.tasks))
       )(head, invocation);
       output = result.output;
       stackOutput = result.stackOutput ?? '';
@@ -1118,6 +1105,30 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
       scopeLimitExceeded = result.scopeLimitExceeded ?? false;
       scopeKilled = result.scopeKilled ?? false;
       seed = result.seed;
+      preparation = result.preparation;
+      if (result.preparationOnly) {
+        const previous = loadLastSuccessfulRun(options.db);
+        const nativeEvidence =
+          previous?.nativeEvidence ??
+          (previous && !previous.preparationOnly
+            ? { status: 'retained' as const, runId: previous.runId, head: previous.head }
+            : undefined);
+        const retainedHead = nativeEvidence?.head ?? previous?.head ?? head;
+        const retainedSections = previous?.sections ?? [];
+        saveRun(options.db, {
+          runId,
+          at,
+          head: retainedHead,
+          classes: pageDataClassCounts(retainedSections),
+          sections: retainedSections,
+          seed: { status: 'admission-deferred' },
+          coverage: { status: 'incomplete' },
+          ...(preparation ? { preparation } : {}),
+          ...(nativeEvidence ? { nativeEvidence } : {}),
+          preparationOnly: true,
+        });
+        return 'ran';
+      }
       if (![0, 1, 2].includes(result.exitCode) && !scopeLimitExceeded && !scopeKilled) {
         const command = commandOutput(output, diagnostics);
         const line = command.trim() ? terminalErrorLine(command) : `page-data-check exited ${result.exitCode}`;
@@ -1163,6 +1174,7 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
       sections,
       ...(seed ? { seed } : {}),
       ...(incomplete ? { coverage: { status: 'incomplete' } } : {}),
+      ...(preparation ? { preparation } : {}),
     };
     saveRun(options.db, run);
 
@@ -1385,14 +1397,20 @@ function runGitCapture(cwd: string, args: string[]): Buffer {
   return result.stdout;
 }
 
-function refreshWorktree(settings: Settings, worktree: string, head: string): void {
+function refreshWorktree(settings: Settings, worktree: string, head: string): boolean {
   if (!existsSync(worktree)) {
     runGit(settings.mainCheckout, ['worktree', 'add', '--detach', worktree, head]);
-    return;
+    return true;
   }
   if (!existsSync(join(worktree, '.git')))
     throw new Error(`Page-data worktree path is not a Git worktree: ${worktree}`);
+  if (
+    runGit(worktree, ['rev-parse', 'HEAD']) === head &&
+    runGit(worktree, ['status', '--porcelain', '--untracked-files=no']) === ''
+  )
+    return false;
   runGit(worktree, ['reset', '--hard', head]);
+  return true;
 }
 
 function readEnvFile(path: string): Record<string, string> {
@@ -1974,14 +1992,16 @@ export function dependencyFilesChanged(cwd: string, oldHead: string | undefined,
   return Boolean(result.stdout.trim());
 }
 
-async function prepareDedicatedPageDataStack(settings: Settings, head: string) {
+async function prepareDedicatedPageDataStack(settings: Settings, head: string, refresh = true) {
   const policy = pageDataSettings(settings);
   const { file, worktree, stack, names } = await stackConfiguration(settings);
-  refreshWorktree(settings, worktree, head);
+  const work: string[] = [];
+  if (refresh && refreshWorktree(settings, worktree, head)) work.push('worktree-refresh');
   const bun = process.execPath;
   let config = stack;
   let env = stackEnvironment(worktree, config, names, settings.mainCheckout);
-  if (dependencyFilesChanged(worktree, config.dependenciesHead, head)) {
+  const installDependencies = refresh && dependencyFilesChanged(worktree, config.dependenciesHead, head);
+  if (installDependencies) {
     await runCommand(
       bun,
       ['install', '--frozen-lockfile', '--backend', 'copy'],
@@ -1996,19 +2016,487 @@ async function prepareDedicatedPageDataStack(settings: Settings, head: string) {
     config = { ...config, dependenciesHead: head };
     writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
     env = stackEnvironment(worktree, config, names, settings.mainCheckout);
+    work.push('bun-install');
   }
-  return { policy, worktree, config, env, names };
+  return { policy, worktree, config, env, names, work };
+}
+
+function pageDataResourceIdentity(config: StackConfig, names: { database: string; search: string }): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        version: config.version,
+        databasePort: config.databasePort,
+        searchPort: config.searchPort,
+        webPort: config.webPort,
+        issuerPort: config.issuerPort,
+        nativePort: config.nativePort,
+        kernelPort: config.kernelPort,
+        names,
+      }),
+    )
+    .digest('hex');
+}
+
+function pageDataPreparationIdentity(
+  head: string,
+  sourceTree: string,
+  definitionsDigest: string,
+  resourceIdentity: string,
+): string {
+  return createHash('sha256')
+    .update(JSON.stringify({ version: 1, head, sourceTree, definitionsDigest, resourceIdentity }))
+    .digest('hex');
+}
+
+function pageDataPreparationStageKey(identity: string, stage: string): string {
+  return createHash('sha256').update(`${identity}\0${stage}`).digest('hex');
+}
+
+type PageDataDatabaseGeneration = {
+  containerId: string;
+  imageId: string;
+  configuredImage: string;
+  volumeName: string;
+  volumeDestination: string;
+  running: boolean;
+};
+
+type PageDataDatabaseGenerationRecord = {
+  version: 1;
+  inputKey: string;
+  generation: Omit<PageDataDatabaseGeneration, 'running'>;
+};
+
+function inspectPageDataDatabase(name: string, volumeName: string): PageDataDatabaseGeneration | undefined {
+  const format =
+    '{{.Id}}|{{.Image}}|{{.Config.Image}}|{{.State.Running}}' +
+    '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql"}}' +
+    '|{{.Type}}:{{.Name}}:{{.Destination}}{{end}}{{end}}';
+  const result = spawnSync('docker', ['inspect', '-f', format, name], {
+    encoding: 'utf8',
+    timeout: 5_000,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) return undefined;
+  const [containerId, imageId, configuredImage, running, mount, ...extra] = result.stdout.trim().split('|');
+  if (
+    extra.length > 0 ||
+    !containerId ||
+    !/^[a-f0-9]{64}$/u.test(containerId) ||
+    !imageId ||
+    !/^sha256:[a-f0-9]{64}$/u.test(imageId) ||
+    !configuredImage ||
+    configuredImage.length > 512 ||
+    (running !== 'true' && running !== 'false') ||
+    mount !== `volume:${volumeName}:/var/lib/postgresql`
+  )
+    throw new Error(`Dedicated page-data database has an unexpected generation or volume: ${name}`);
+  return {
+    containerId,
+    imageId,
+    configuredImage,
+    volumeName,
+    volumeDestination: '/var/lib/postgresql',
+    running: running === 'true',
+  };
+}
+
+function dockerContainerRunning(name: string): boolean {
+  const result = spawnSync('docker', ['inspect', '-f', '{{.State.Running}}', name], {
+    encoding: 'utf8',
+    timeout: 5_000,
+  });
+  if (result.error) throw result.error;
+  return result.status === 0 && result.stdout.trim() === 'true';
+}
+
+function pageDataDatabaseGenerationKey(generation: PageDataDatabaseGeneration): string {
+  return createHash('sha256').update(JSON.stringify(pageDataDatabaseGenerationValue(generation))).digest('hex');
+}
+
+function pageDataDatabaseGenerationValue(
+  generation: PageDataDatabaseGeneration,
+): PageDataDatabaseGenerationRecord['generation'] {
+  return {
+    containerId: generation.containerId,
+    imageId: generation.imageId,
+    configuredImage: generation.configuredImage,
+    volumeName: generation.volumeName,
+    volumeDestination: generation.volumeDestination,
+  };
+}
+
+function readPageDataDatabaseGenerationRecord(file: string): PageDataDatabaseGenerationRecord | undefined {
+  if (!pageDataRegularFile(file, 16 * 1024)) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  if (
+    !isRecord(parsed) ||
+    parsed.version !== 1 ||
+    typeof parsed.inputKey !== 'string' ||
+    !isRecord(parsed.generation) ||
+    typeof parsed.generation.containerId !== 'string' ||
+    typeof parsed.generation.imageId !== 'string' ||
+    typeof parsed.generation.configuredImage !== 'string' ||
+    typeof parsed.generation.volumeName !== 'string' ||
+    parsed.generation.volumeDestination !== '/var/lib/postgresql'
+  )
+    return undefined;
+  return parsed as unknown as PageDataDatabaseGenerationRecord;
+}
+
+function writePageDataDatabaseGenerationRecord(
+  file: string,
+  record: PageDataDatabaseGenerationRecord,
+): void {
+  const temporary = `${file}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
+  renameSync(temporary, file);
+}
+
+type PageDataSeedMarker = {
+  version: 2;
+  inputKey: string;
+  sourceHead: string;
+  sourceTree: string;
+  definitionsDigest: string;
+  resourceIdentity: string;
+  databaseGeneration: string;
+  runtimeIdentity: string;
+  selectedInputIdentity: string;
+  artifactDigest: string;
+};
+
+const seedFranchises = ['steins-gate', 'clannad', 'fate'] as const;
+const seedMemberKinds = new Set(['work', 'character', 'person', 'episode', 'release', 'organization']);
+
+function pageDataRegularFile(path: string, maximumBytes: number): boolean {
+  try {
+    const stat = lstatSync(path);
+    return stat.isFile() && stat.size <= maximumBytes;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+function pageDataSeedRuntimeIdentity(worktree: string, env: NodeJS.ProcessEnv): string | undefined {
+  const inputs = [
+    'services/kernel/.env',
+    '.temp/local-stack/seed.env',
+    '.temp/local-stack/importer.jwk',
+  ];
+  const files: Array<[string, string]> = [];
+  for (const relative of inputs) {
+    const path = join(worktree, relative);
+    if (!pageDataRegularFile(path, 256 * 1024)) return undefined;
+    files.push([relative, createHash('sha256').update(readFileSync(path)).digest('hex')]);
+  }
+  const environment = Object.entries(env)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    .sort(([left], [right]) => left.localeCompare(right));
+  const environmentBytes = environment.reduce(
+    (bytes, [key, value]) => bytes + Buffer.byteLength(key) + Buffer.byteLength(value),
+    0,
+  );
+  if (environmentBytes > 1024 * 1024) return undefined;
+  return createHash('sha256').update(JSON.stringify({ version: 1, files, environment })).digest('hex');
+}
+
+function pageDataSeedArtifactIdentity(
+  artifactFile: string,
+): { selectedInputIdentity: string; artifactDigest: string } | undefined {
+  let bytes: Buffer;
+  try {
+    const stat = lstatSync(artifactFile);
+    if (!stat.isFile() || stat.size > pageDataArtifactLimit) return undefined;
+    bytes = readFileSync(artifactFile);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+  let artifact: unknown;
+  try {
+    artifact = JSON.parse(bytes.toString('utf8'));
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+  if (!isRecord(artifact) || !isRecord(artifact.sourceDigests) || !isRecord(artifact.franchises)) return undefined;
+
+  const sourceDigests: Array<[string, string]> = [];
+  const sortedSourceDigests = Object.entries(artifact.sourceDigests).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  for (const [key, digest] of sortedSourceDigests) {
+    if (!key || key.length > 256 || typeof digest !== 'string' || !/^[a-f0-9]{64}$/u.test(digest)) return undefined;
+    sourceDigests.push([key, digest]);
+  }
+  if (sourceDigests.length === 0) return undefined;
+
+  const franchiseIds: Record<string, { bangumi: string[]; vndb: string[] }> = {};
+  for (const franchise of seedFranchises) {
+    const value = artifact.franchises[franchise];
+    if (
+      !isRecord(value) ||
+      !Array.isArray(value.bangumi) ||
+      !Array.isArray(value.vndb) ||
+      [...value.bangumi, ...value.vndb].some((id) => typeof id !== 'string' || id.length === 0 || id.length > 128)
+    )
+      return undefined;
+    franchiseIds[franchise] = {
+      bangumi: [...value.bangumi] as string[],
+      vndb: [...value.vndb] as string[],
+    };
+  }
+  if (Object.keys(artifact.franchises).some((key) => !seedFranchises.includes(key as (typeof seedFranchises)[number])))
+    return undefined;
+  if (!Array.isArray(artifact.members)) return undefined;
+  const members: string[][] = [];
+  for (const value of artifact.members) {
+    if (
+      !isRecord(value) ||
+      (value.source !== 'bangumi' && value.source !== 'vndb') ||
+      typeof value.key !== 'string' ||
+      value.key.length === 0 ||
+      value.key.length > 256 ||
+      typeof value.kind !== 'string' ||
+      !seedMemberKinds.has(value.kind) ||
+      (value.membership !== 'family' && value.membership !== 'referenced') ||
+      (value.franchise !== undefined && !seedFranchises.includes(value.franchise as (typeof seedFranchises)[number]))
+    )
+      return undefined;
+    members.push([
+      value.source,
+      value.key,
+      value.kind,
+      value.membership,
+      typeof value.franchise === 'string' ? value.franchise : '',
+    ]);
+  }
+  members.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  return {
+    selectedInputIdentity: createHash('sha256')
+      .update(JSON.stringify({ sourceDigests, franchises: franchiseIds, members }))
+      .digest('hex'),
+    artifactDigest: createHash('sha256').update(bytes).digest('hex'),
+  };
+}
+
+function validPageDataSeedMarker(
+  markerFile: string,
+  artifactFile: string,
+  expected: Omit<PageDataSeedMarker, 'artifactDigest' | 'selectedInputIdentity'>,
+): boolean {
+  if (!pageDataRegularFile(markerFile, 16 * 1024) || !pageDataRegularFile(artifactFile, pageDataArtifactLimit))
+    return false;
+  let marker: unknown;
+  try {
+    marker = JSON.parse(readFileSync(markerFile, 'utf8'));
+  } catch (error) {
+    if (error instanceof SyntaxError) return false;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  if (
+    !isRecord(marker) ||
+    marker.version !== expected.version ||
+    marker.inputKey !== expected.inputKey ||
+    marker.sourceHead !== expected.sourceHead ||
+    marker.sourceTree !== expected.sourceTree ||
+    marker.definitionsDigest !== expected.definitionsDigest ||
+    marker.resourceIdentity !== expected.resourceIdentity ||
+    marker.databaseGeneration !== expected.databaseGeneration ||
+    marker.runtimeIdentity !== expected.runtimeIdentity ||
+    typeof marker.artifactDigest !== 'string' ||
+    !/^[a-f0-9]{64}$/u.test(marker.artifactDigest)
+  )
+    return false;
+  const artifactIdentity = pageDataSeedArtifactIdentity(artifactFile);
+  return Boolean(
+    artifactIdentity &&
+      marker.selectedInputIdentity === artifactIdentity.selectedInputIdentity &&
+      marker.artifactDigest === artifactIdentity.artifactDigest,
+  );
+}
+
+function writePageDataSeedMarker(
+  markerFile: string,
+  artifactFile: string,
+  marker: Omit<PageDataSeedMarker, 'artifactDigest' | 'selectedInputIdentity'>,
+): void {
+  const artifactIdentity = pageDataSeedArtifactIdentity(artifactFile);
+  if (!artifactIdentity)
+    throw new Error('Page-data seed result is missing valid source digests and selected-input identity');
+  writeFileSync(
+    markerFile,
+    `${JSON.stringify({ ...marker, ...artifactIdentity }, null, 2)}\n`,
+    { mode: 0o600 },
+  );
 }
 
 async function runDedicatedPageDataStack(
   settings: Settings,
   head: string,
   invocation: string,
+  taskStore: PageDataAdmissionStore,
 ): Promise<PageDataStackResult> {
-  const { policy, worktree, config, names, env: preparedEnv } = await prepareDedicatedPageDataStack(settings, head);
+  const stack = await stackConfiguration(settings);
+  const { worktree, names } = stack;
+  const sourceTree = runGit(settings.mainCheckout, ['rev-parse', `${head}^{tree}`]);
+  const definitionsBytes = runGitCapture(settings.mainCheckout, ['show', `${head}:${pageDataDefinitionsReleaseFile}`]);
+  const definitionsDigest = createHash('sha256').update(definitionsBytes).digest('hex');
+  const resourceIdentity = pageDataResourceIdentity(stack.stack, names);
+  const identity = pageDataPreparationIdentity(head, sourceTree, definitionsDigest, resourceIdentity);
+  const preparation = pageDataPreparation({
+    file: join(settings.stateDirectory, 'page-data-preparation.json'),
+    identity,
+    sourceHead: head,
+    sourceTree,
+    admission: pageDataAdmission(settings.stateDirectory, taskStore),
+  });
+  const stageKey = (stage: string, databaseGeneration = '') =>
+    pageDataPreparationStageKey(databaseGeneration ? `${identity}:${databaseGeneration}` : identity, stage);
+  let policy = pageDataSettings(settings);
+  let config = stack.stack;
+  let env = stackEnvironment(worktree, config, names, settings.mainCheckout);
+  let dependenciesPrepared: Awaited<ReturnType<typeof prepareDedicatedPageDataStack>> | undefined;
+  let databaseGeneration: PageDataDatabaseGeneration | undefined;
+  const seedMarkerFile = join(settings.stateDirectory, 'page-data-seeded');
+  const databaseGenerationFile = join(settings.stateDirectory, 'page-data-database-generation.json');
+  const seedArtifactFile = resolve(worktree, '.temp/cross-media-seed/result.json');
+  const deferredPreparation = (): PageDataStackResult => {
+    preparation.trace.seedJournal = {
+      path: '.temp/cross-media-seed/showcase.sqlite',
+      state: pageDataRegularFile(join(worktree, '.temp/cross-media-seed/showcase.sqlite'), Number.MAX_SAFE_INTEGER)
+        ? 'retained'
+        : 'absent',
+    };
+    return {
+      output: '',
+      exitCode: 0,
+      preparation: preparation.trace,
+      preparationOnly: true,
+      seed: { status: 'admission-deferred' },
+    };
+  };
+  const worktreeStage: PageDataPreparationStage = {
+    id: 'worktree-dependencies',
+    inputKey: stageKey('worktree-dependencies'),
+    isComplete: () => {
+      if (!existsSync(join(worktree, '.git')) || runGit(worktree, ['rev-parse', 'HEAD']) !== head) return false;
+      if (runGit(worktree, ['status', '--porcelain', '--untracked-files=no']) !== '') return false;
+      return !dependencyFilesChanged(worktree, config.dependenciesHead, head);
+    },
+    run: async () => {
+      dependenciesPrepared = await prepareDedicatedPageDataStack(settings, head);
+      ({ policy, config, env } = dependenciesPrepared);
+      return { status: 'completed', work: dependenciesPrepared.work };
+    },
+  };
+  const worktreeReady = await preparation.run([worktreeStage]);
+  if (worktreeReady === 'deferred') return deferredPreparation();
+
+  // Refresh only the in-memory stack values when the versioned worktree boundary was already complete.
+  if (!dependenciesPrepared) dependenciesPrepared = await prepareDedicatedPageDataStack(settings, head, false);
+  ({ policy, config, env } = dependenciesPrepared);
+
+  const databaseInputKey = stageKey('database');
+  const databaseStage: PageDataPreparationStage = {
+    id: 'database',
+    inputKey: databaseInputKey,
+    isComplete: () => {
+      const current = inspectPageDataDatabase(names.database, names.database);
+      const record = readPageDataDatabaseGenerationRecord(databaseGenerationFile);
+      if (!current?.running || !record || record.inputKey !== databaseInputKey) return false;
+      const generation = pageDataDatabaseGenerationValue(current);
+      if (JSON.stringify(record.generation) !== JSON.stringify(generation)) return false;
+      databaseGeneration = current;
+      return true;
+    },
+    run: async () => {
+      await runCommand(
+        process.execPath,
+        ['run', '--cwd', 'services/kernel', 'db', 'up'],
+        worktree,
+        env,
+        policy.commandTimeoutMs,
+        policy.outputBytes,
+        'boot',
+        [0],
+        policy.stopTimeoutMs,
+      );
+      env = stackEnvironment(worktree, config, names, settings.mainCheckout);
+      const current = inspectPageDataDatabase(names.database, names.database);
+      if (!current?.running)
+        throw new Error('Dedicated page-data database did not remain running after migrations');
+      databaseGeneration = current;
+      writePageDataDatabaseGenerationRecord(databaseGenerationFile, {
+        version: 1,
+        inputKey: databaseInputKey,
+        generation: pageDataDatabaseGenerationValue(current),
+      });
+      return { status: 'completed', work: ['database-up-and-migrations'] };
+    },
+  };
+  if ((await preparation.run([databaseStage])) === 'deferred') return deferredPreparation();
+  if (!databaseGeneration?.running)
+    throw new Error('Dedicated page-data database generation was not established');
+  const databaseGenerationKey = pageDataDatabaseGenerationKey(databaseGeneration);
+
+  const searchAndAuthStages: PageDataPreparationStage[] = [
+    {
+      id: 'search',
+      inputKey: stageKey('search', databaseGenerationKey),
+      isComplete: () => dockerContainerRunning(names.search),
+      run: async () => {
+        await runCommand(
+          process.execPath,
+          ['run', '--cwd', 'services/kernel', 'search', 'up'],
+          worktree,
+          env,
+          policy.commandTimeoutMs,
+          policy.outputBytes,
+          'boot',
+          [0],
+          policy.stopTimeoutMs,
+        );
+        return { status: 'completed', work: ['search-up'] };
+      },
+    },
+    {
+      id: 'auth-setup',
+      inputKey: stageKey('auth-setup', databaseGenerationKey),
+      isComplete: () =>
+        pageDataRegularFile(join(worktree, 'services/kernel/.env'), 256 * 1024) &&
+        pageDataRegularFile(join(worktree, '.temp/local-stack/importer.jwk'), 256 * 1024),
+      run: async () => {
+        await runCommand(
+          process.execPath,
+          ['services/auth/scripts/dev-stack.ts', 'setup'],
+          worktree,
+          env,
+          policy.commandTimeoutMs,
+          policy.outputBytes,
+          'boot',
+          [0],
+          policy.stopTimeoutMs,
+        );
+        env = stackEnvironment(worktree, config, names, settings.mainCheckout);
+        return { status: 'completed', work: ['auth-setup'] };
+      },
+    },
+  ];
+  if ((await preparation.run(searchAndAuthStages)) === 'deferred') return deferredPreparation();
+
   const bun = process.execPath;
-  let env = preparedEnv;
-  const seeded = join(settings.stateDirectory, 'page-data-seeded');
   const stackCapture: BoundedOutput = {
     value: '',
     context: launchContext(worktree, head, [bun, 'services/auth/scripts/dev-stack.ts', 'start'], env),
@@ -2020,42 +2508,6 @@ async function runDedicatedPageDataStack(
   let failed = false;
   let failure: unknown;
   try {
-    await runCommand(
-      bun,
-      ['run', '--cwd', 'services/kernel', 'db', 'up'],
-      worktree,
-      env,
-      policy.commandTimeoutMs,
-      policy.outputBytes,
-      'boot',
-      [0],
-      policy.stopTimeoutMs,
-    );
-    env = stackEnvironment(worktree, config, names, settings.mainCheckout);
-    await runCommand(
-      bun,
-      ['run', '--cwd', 'services/kernel', 'search', 'up'],
-      worktree,
-      env,
-      policy.commandTimeoutMs,
-      policy.outputBytes,
-      'boot',
-      [0],
-      policy.stopTimeoutMs,
-    );
-    await runCommand(
-      bun,
-      ['services/auth/scripts/dev-stack.ts', 'setup'],
-      worktree,
-      env,
-      policy.commandTimeoutMs,
-      policy.outputBytes,
-      'boot',
-      [0],
-      policy.stopTimeoutMs,
-    );
-    env = stackEnvironment(worktree, config, names, settings.mainCheckout);
-
     child = spawn(bun, ['services/auth/scripts/dev-stack.ts', 'start'], {
       cwd: worktree,
       env,
@@ -2098,59 +2550,118 @@ async function runDedicatedPageDataStack(
         );
       },
       async () => {
-        if (existsSync(seeded)) return undefined;
-        await runCommand(
-          bun,
-          ['services/auth/scripts/dev-stack.ts', 'persona'],
-          worktree,
-          env,
-          policy.seedTimeoutMs,
-          policy.outputBytes,
-          'boot',
-          [0],
-          policy.stopTimeoutMs,
-        );
-        env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
-        const execution = await runPageDataSeedWithAdmission(
-          pageDataSeedAdmission(settings.stateDirectory),
-          async (signal) => {
-            const seedResult = await runCommand(
-              bun,
-              ['scripts/datasets/cross-media-seed.ts', '--dev'],
-              worktree,
-              env,
-              policy.seedTimeoutMs,
-              policy.outputBytes,
-              'boot',
-              [0, 1],
-              policy.stopTimeoutMs,
-              signal,
-            );
-            if (seedResult.admissionDeferred) return { status: 'admission-deferred' };
-            const status = pageDataSeedStatus(
-              seedResult.exitCode,
-              commandOutput(seedResult.stdout, seedResult.stderr),
-              resolve(worktree, '.temp/cross-media-seed/result.json'),
-            );
-            return { status: 'completed', value: status };
+        const persona = await preparation.run([
+          {
+            id: 'persona',
+            inputKey: stageKey('persona'),
+            isComplete: () =>
+              pageDataRegularFile(join(worktree, 'services/kernel/.env'), 256 * 1024) &&
+              pageDataRegularFile(join(worktree, '.temp/local-stack/importer.jwk'), 256 * 1024) &&
+              pageDataRegularFile(join(worktree, '.temp/local-stack/seed.env'), 256 * 1024),
+            run: async () => {
+              await runCommand(
+                bun,
+                ['services/auth/scripts/dev-stack.ts', 'persona'],
+                worktree,
+                env,
+                policy.seedTimeoutMs,
+                policy.outputBytes,
+                'boot',
+                [0],
+                policy.stopTimeoutMs,
+              );
+              return { status: 'completed', work: ['persona'] };
+            },
           },
-        );
-        if (execution.status === 'admission-deferred') {
-          captureEvent(stackCapture, { kind: 'seed', status: execution.status });
-          return { status: execution.status };
+        ]);
+        env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
+        if (persona === 'deferred') {
+          preparation.trace.seedJournal = {
+            path: '.temp/cross-media-seed/showcase.sqlite',
+            state: pageDataRegularFile(
+              join(worktree, '.temp/cross-media-seed/showcase.sqlite'),
+              Number.MAX_SAFE_INTEGER,
+            )
+              ? 'retained'
+              : 'absent',
+          };
+          return { status: 'admission-deferred' };
         }
-        const status = execution.value;
-        if (status)
-          captureEvent(stackCapture, {
-            kind: 'seed',
-            status: status.status,
-            omissions: status.omissions,
-          });
-        if (!status) {
-          mkdirSync(join(worktree, '.temp/local-stack'), { recursive: true });
-          writeFileSync(seeded, `${head}\n`, { flag: 'w' });
-        }
-        return status;
+        const runtimeIdentity = pageDataSeedRuntimeIdentity(worktree, env);
+        if (!runtimeIdentity) throw new Error('Page-data seed runtime inputs are incomplete or invalid');
+        const seedMarker: Omit<PageDataSeedMarker, 'artifactDigest' | 'selectedInputIdentity'> = {
+          version: 2,
+          inputKey: stageKey('cross-media-seed', `${databaseGenerationKey}:${runtimeIdentity}`),
+          sourceHead: head,
+          sourceTree,
+          definitionsDigest,
+          resourceIdentity,
+          databaseGeneration: databaseGenerationKey,
+          runtimeIdentity,
+        };
+        let publicationStatus: PageDataSeedPublicationStatus | undefined;
+        const seed = await preparation.run([
+          {
+            id: 'cross-media-seed',
+            inputKey: seedMarker.inputKey,
+            isComplete: () => validPageDataSeedMarker(seedMarkerFile, seedArtifactFile, seedMarker),
+            run: async () => {
+              const execution = await runPageDataSeedWithAdmission(
+                pageDataSeedAdmission(settings.stateDirectory, taskStore),
+                async (signal) => {
+                  const seedResult = await runCommand(
+                    bun,
+                    ['scripts/datasets/cross-media-seed.ts', '--dev'],
+                    worktree,
+                    env,
+                    policy.seedTimeoutMs,
+                    policy.outputBytes,
+                    'boot',
+                    [0, 1],
+                    policy.stopTimeoutMs,
+                    signal,
+                  );
+                  if (seedResult.admissionDeferred) return { status: 'admission-deferred' };
+                  const status = pageDataSeedStatus(
+                    seedResult.exitCode,
+                    commandOutput(seedResult.stdout, seedResult.stderr),
+                    seedArtifactFile,
+                  );
+                  return { status: 'completed', value: status };
+                },
+              );
+              if (execution.status === 'admission-deferred') {
+                captureEvent(stackCapture, { kind: 'seed', status: execution.status });
+                return { status: 'admission-deferred', reason: 'host-pressure' };
+              }
+              publicationStatus = execution.value;
+              if (publicationStatus) {
+                captureEvent(stackCapture, {
+                  kind: 'seed',
+                  status: publicationStatus.status,
+                  omissions: publicationStatus.omissions,
+                });
+                return { status: 'incomplete', work: ['cross-media-seed'] };
+              }
+              writePageDataSeedMarker(seedMarkerFile, seedArtifactFile, seedMarker);
+              return { status: 'completed', work: ['cross-media-seed'] };
+            },
+          },
+        ]);
+        preparation.trace.seedJournal = {
+          path: '.temp/cross-media-seed/showcase.sqlite',
+          state: validPageDataSeedMarker(seedMarkerFile, seedArtifactFile, seedMarker)
+            ? 'complete'
+            : pageDataRegularFile(
+                  join(worktree, '.temp/cross-media-seed/showcase.sqlite'),
+                  Number.MAX_SAFE_INTEGER,
+                )
+              ? 'retained'
+              : 'absent',
+        };
+        if (seed === 'deferred') return { status: 'admission-deferred' };
+        if (seed === 'incomplete') return publicationStatus;
+        return undefined;
       },
     );
 
@@ -2224,6 +2735,7 @@ async function runDedicatedPageDataStack(
     registry: registry!,
     stackOutput: pageDataCaptureOutput(stackCapture, policy.outputBytes),
     ...(seedStatus ? { seed: seedStatus } : {}),
+    preparation: preparation.trace,
     ...(result.scopeLimitExceeded ? { scopeLimitExceeded: true } : {}),
     ...(result.scopeKilled ? { scopeKilled: true } : {}),
   };
