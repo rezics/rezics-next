@@ -1,9 +1,11 @@
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient, readAccount } from './access-port.ts';
+import { readAccount } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
-import { withConnection } from '../database/pool.ts';
+import { AccessUnavailableError, CommandUnavailableError, classifyUnavailability } from '../access/unavailable.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readVisibleRatingQuestion, ratingQuestionIdentity, ratingQuestionView } from '../rating/question-directory.ts';
 import {
@@ -15,7 +17,6 @@ import {
 import { STANDARD_QUESTION_ID, VOTE_SCOPE } from '../rating/votes.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
-import { withReadTransaction } from '../semantic/read.ts';
 import viewerEntries from './viewer-facts-entries.sql';
 import type { ViewerFact, ViewerFactInput, ViewerFactsPage, ViewerQuestion, ViewerVoteFact } from './contract/index.ts';
 export type {
@@ -64,6 +65,20 @@ type NativeStage = {
 };
 const nativeStages = new WeakMap<PreparedViewerFacts, NativeStage>();
 const entryReadStages = new WeakMap<PreparedViewerFacts, EntryReadStage>();
+
+const readOptions = {
+  deadlineError: () => new AccessUnavailableError('deadline'),
+  mapError(error: unknown) {
+    // Keep the causal failure even when transaction cleanup uses the remaining deadline.
+    if (error instanceof AccessUnavailableError || error instanceof CommandUnavailableError) return error;
+    const reason = classifyUnavailability(error);
+    return reason === 'deadline' || reason === 'contention' || reason === 'overloaded'
+      ? new AccessUnavailableError(reason)
+      : error;
+  },
+  // The lifetime distinguishes settled PostgreSQL errors from uncertain native transport failures.
+  isUncertainSettledQueryError: () => true,
+};
 
 function unavailable(reason: Extract<ViewerFactsPage, { state: 'unavailable' }>['reason']): ViewerFactsPage {
   return { state: 'unavailable', reason, retryable: reason !== 'response_limit' };
@@ -176,7 +191,7 @@ export async function prepareViewerFacts(
   const canReadVotes = actor.scopes.includes(VOTE_SCOPE);
   const originals = [...new Set(rows.map((row) => row.subjectId))];
   const [mappings, question] = await Promise.all([
-    readIdentityMappings(dependencies.pool, originals),
+    withRequestDeadline(deadline, () => readIdentityMappings(dependencies.pool, originals)),
     canReadVotes ? readVisibleRatingQuestion(dependencies, actor, questionId, deadline, false) : Promise.resolve(null),
   ]);
   const records = originals.map((subjectId, index) => ({ subjectId, mapping: mappings[index]! }));
@@ -311,20 +326,27 @@ export async function viewerFactsCurrent(
 ): Promise<boolean> {
   if (!validAccount(actor) || actor.accountId !== prepared.accountId || actorIdentity(actor) !== prepared.actorIdentity)
     return false;
-  const accountCurrent = await withReadTransaction(dependencies.pool, async (client) =>
-    currentAccount(deadlineClient(client, deadline), actor),
+  const accountCurrent = await withBoundedReadOnlyTransaction(
+    dependencies.pool,
+    deadline,
+    (client) => currentAccount(client, actor),
+    readOptions,
   );
   if (!accountCurrent) return false;
   if (prepared.canReadEntries) {
     const stage = entryReadStages.get(prepared);
     if (!stage) return false;
     const currentRows = stage.ids.length
-      ? await withReadTransaction(dependencies.pool, (client) =>
-          viewerEntries.run(deadlineClient(client, deadline), {
-            route: routeOf(actor.accountId)!,
-            account_id: actor.accountId,
-            subject_ids: [...stage.ids],
-          }),
+      ? await withBoundedReadOnlyTransaction(
+          dependencies.pool,
+          deadline,
+          (client) =>
+            viewerEntries.run(client, {
+              route: routeOf(actor.accountId)!,
+              account_id: actor.accountId,
+              subject_ids: [...stage.ids],
+            }),
+          readOptions,
         )
       : [];
     if (entryFingerprint(prepared, currentRows) !== stage.fingerprint) return false;
@@ -339,7 +361,7 @@ export async function viewerFactsCurrent(
   }
 
   const originals = prepared.mappings.map(({ subjectId }) => subjectId);
-  const mappings = await readIdentityMappings(dependencies.pool, originals);
+  const mappings = await withRequestDeadline(deadline, () => readIdentityMappings(dependencies.pool, originals));
   if (
     mappings.length !== prepared.mappings.length ||
     mappings.some(
@@ -388,18 +410,13 @@ export async function readViewerFactsPage(
 ): Promise<ViewerFactsPage> {
   if (!validAccount(actor)) throw new GrantDeniedError();
   const prepared = await prepareViewerFacts(dependencies, actor, rows, questionId, deadline);
-  const page = await withConnection(dependencies.pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const result = await readViewerFacts(client, actor, prepared);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
-  });
+  const page = await withBoundedReadOnlyTransaction(
+    dependencies.pool,
+    deadline,
+    (client) => readViewerFacts(client, actor, prepared),
+    readOptions,
+  );
   if (page.state !== 'current') return page;
+  // Final authority observations start only after the source snapshot commits and releases.
   return (await viewerFactsCurrent(dependencies, actor, prepared, deadline)) ? page : unavailable('currentness');
 }
