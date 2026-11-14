@@ -81,11 +81,11 @@ those contracts; consumer fixtures and stories require the producer's supported 
 
 The integration preserves separate server, browser and current-readback source and visit identities:
 
-| Source | Required acceptance |
-| --- | --- |
-| Selected server revision | Inspect its supplied footnotes before choosing the server body; the explicit choice retains them in the editor and command submission. |
+| Source                   | Required acceptance                                                                                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Selected server revision | Inspect its supplied footnotes before choosing the server body; the explicit choice retains them in the editor and command submission.                                  |
 | Browser writing revision | Inspect its independent footnotes before choosing the browser body; the explicit choice retains them in the editor and submission against the selected server revision. |
-| Later current read | Inspect only its returned footnotes under the readback identity; acknowledgement continues to describe the submitted source and revision independently. |
+| Later current read       | Inspect only its returned footnotes under the readback identity; acknowledgement continues to describe the submitted source and revision independently.                 |
 
 A disclosure in one preview cannot reveal another preview; source, revision or visit replacement retires its state,
 including replacement by equal bytes. Supported structured nodes, authored language, spoiler disclosure, heading
