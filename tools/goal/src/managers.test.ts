@@ -1096,7 +1096,9 @@ test('a parked manager accepts a same-thread operator UserMessage after turn/sta
       turnDisposition: { threadId, turnId: 'operator-turn-1', status: 'inProgress', intent: 'work' },
     });
     expect(
-      s.requests().filter((request) => request.method === 'turn/interrupt' && request.params.turnId === 'operator-turn-1'),
+      s
+        .requests()
+        .filter((request) => request.method === 'turn/interrupt' && request.params.turnId === 'operator-turn-1'),
     ).toHaveLength(0);
     expect(
       s
@@ -1259,7 +1261,12 @@ test('a real manager stop cancels the pending parked-turn decision and keeps sto
         intent: 'controller-stop',
       },
     });
-    expect(s.requests().filter((request) => request.method === 'thread/goal/set').at(-1)).toMatchObject({
+    expect(
+      s
+        .requests()
+        .filter((request) => request.method === 'thread/goal/set')
+        .at(-1),
+    ).toMatchObject({
       params: { threadId: manager.threadId, status: 'paused', origin: 'user' },
     });
   } finally {

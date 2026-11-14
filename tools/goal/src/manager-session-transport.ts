@@ -69,10 +69,7 @@ export function userMessageTurn(notification: Notification): { threadId: string;
 
 function userMessageItem(item: unknown): boolean {
   return Boolean(
-    item &&
-      typeof item === 'object' &&
-      !Array.isArray(item) &&
-      (item as { type?: unknown }).type === 'userMessage',
+    item && typeof item === 'object' && !Array.isArray(item) && (item as { type?: unknown }).type === 'userMessage',
   );
 }
 
@@ -222,8 +219,7 @@ export class ManagerSessionTransport {
         const itemEntry = entry as { turnId?: unknown; item?: unknown };
         if (typeof itemEntry.turnId !== 'string' || !itemEntry.turnId)
           throw new Error('Invalid thread/items/list turn identity for manager turn');
-        if (itemEntry.turnId !== turnId)
-          throw new Error('Mismatched thread/items/list turn identity for manager turn');
+        if (itemEntry.turnId !== turnId) throw new Error('Mismatched thread/items/list turn identity for manager turn');
         const item = itemEntry.item;
         const type =
           item && typeof item === 'object' && !Array.isArray(item) ? (item as { type?: unknown }).type : null;
