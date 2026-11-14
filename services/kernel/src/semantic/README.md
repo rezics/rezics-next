@@ -136,6 +136,8 @@ Definitions' public root owns pure `languageRanges`/`chooseLabel`, including bro
 
 ## Library whole-source title inputs
 
+Decision: export the Semantic observer through `adapters/index.ts` and extend native regression coverage for title, original-language, identity/control-home, redirect, lifecycle and owner-tuple changes; Content installation and 101-entry receiving remain cross-owner continuations, and all execution checks are deferred under source-only delivery.
+
 Decision: Library title basis v2 hashes the active Global Definitions release and all 4,096 native owner tuples plus transactionally maintained per-home title-source revisions; Semantic source and identity writes advance those revisions, while Core commit positions and Library-only derivatives do not.
 
 `adapters/title-inputs.ts` exposes `createSemanticTitleInputsAdapter(pool)`, whose `observe({subjects, deadline})`

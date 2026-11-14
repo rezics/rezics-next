@@ -47,6 +47,12 @@ export function createNativeSemanticCopyWorkReaderPort(searchEvidence: CopyWorkS
 }
 export { nativeReleasedDefinitions, type NativeReleasedDefinitions } from './released-definitions.ts';
 export { nativeCopyListContext, type NativeCopyListContext } from './copy-list-context.ts';
+export { createSemanticTitleInputsAdapter } from './title-inputs.ts';
+export type {
+  SemanticTitleInputEntry,
+  SemanticTitleInputs,
+  SemanticTitleInputsObservation,
+} from './title-inputs.ts';
 
 export {
   createLibrarySubjectIdentityAdapter,
