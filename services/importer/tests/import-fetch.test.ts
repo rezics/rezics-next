@@ -58,6 +58,57 @@ test('429 waits for Retry-After and retries the exact idempotent request', async
 });
 
 test('401 renews once while other denials are not retried and unsafe origins receive no credentials', async () => {
+  const refreshCalls: boolean[] = [];
+  const requests: { wire: unknown[]; authorization: string | null }[] = [];
+  const scheduled: number[] = [];
+  const refreshed = createImportFetch({
+    origin,
+    token: async (fresh = false) => {
+      refreshCalls.push(fresh);
+      return fresh ? 'renewed-token' : 'expired-token';
+    },
+    now: () => 10_000,
+    deadlineMs: 1_200,
+    schedule: (_callback, ms) => {
+      scheduled.push(ms);
+      return () => {};
+    },
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const sent = new Request(input, init);
+      requests.push({
+        wire: [
+          sent.url,
+          sent.method,
+          await sent.text(),
+          sent.headers.get('idempotency-key'),
+          sent.headers.get('rezics-session-token'),
+          sent.redirect,
+        ],
+        authorization: sent.headers.get('authorization'),
+      });
+      return requests.length === 1 ? new Response(null, { status: 401 }) : Response.json({ results: [] });
+    }) as typeof fetch,
+  });
+  const sealed = request();
+  sealed.headers.set('idempotency-key', '"stable-command-1"');
+  expect((await refreshed(sealed)).status).toBe(200);
+  expect(refreshCalls).toEqual([false, true]);
+  expect(requests).toHaveLength(2);
+  expect(requests[0]!.wire).toEqual([
+    origin + '/v1/subjects:batchWrite',
+    'POST',
+    body,
+    '"stable-command-1"',
+    'opaque-session',
+    'manual',
+  ]);
+  expect(requests[1]!.wire).toEqual(requests[0]!.wire);
+  expect(requests.map(({ authorization }) => authorization)).toEqual([
+    'Bearer expired-token',
+    'Bearer renewed-token',
+  ]);
+  expect(scheduled).toEqual([1_200]);
+
   for (const status of [401, 403, 404, 409, 422]) {
     let calls = 0;
     const tokenCalls: boolean[] = [];
