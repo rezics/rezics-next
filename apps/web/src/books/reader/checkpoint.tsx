@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { hostedBookHref } from './address';
@@ -9,10 +9,27 @@ import {
   type CheckpointObservation,
 } from './native-checkpoint';
 import type { CheckpointCommand, CheckpointWrite } from './checkpoint-api';
+import {
+  captureCheckpointIntent,
+  checkpointConfirmsIntent,
+  type CheckpointIntent,
+  type CheckpointIntentContext,
+  type CheckpointLifetime,
+  type CheckpointTransport,
+} from './checkpoint-intent';
 import type { BookPage } from './source';
-import { sameCheckpointPosition, type CheckpointPosition } from './checkpoint-position';
+import type { CheckpointPosition } from './checkpoint-position';
 
-type Pending = { command: CheckpointCommand; key: string };
+const nativeTransport: CheckpointTransport = { read: readNativeHostedCheckpoint, write: writeNativeHostedCheckpoint };
+type Outcome = {
+  intent: CheckpointIntent;
+  state: 'sending' | 'saved' | 'cleared' | 'uncertain' | 'conflict' | 'changed';
+};
+type Reading = {
+  owner: CheckpointLifetime;
+  observation: CheckpointObservation | null;
+  outcome: Outcome | null;
+};
 export type HostedBookCheckpointProps = {
   subjectId: string;
   viewer: string;
@@ -21,9 +38,11 @@ export type HostedBookCheckpointProps = {
   isCurrent: () => boolean;
   reload: () => void;
   position: CheckpointPosition;
+  /** Stories and acceptance use this component with installed native response shapes. */
+  transport?: CheckpointTransport;
 };
 
-/** A chapter checkpoint, with native availability and CAS. Retiring the reading also retires its private controls. */
+/** A private checkpoint belongs to one admitted reading, never to a replacement visit. */
 export function HostedBookCheckpoint({
   subjectId,
   viewer,
@@ -32,170 +51,152 @@ export function HostedBookCheckpoint({
   isCurrent,
   reload,
   position,
+  transport = nativeTransport,
 }: HostedBookCheckpointProps) {
-  const [observation, setObservation] = useState<CheckpointObservation | null>(null);
-  const [retry, setRetry] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<'saved' | 'cleared' | 'conflict' | 'uncertain' | 'changed' | null>(null);
+  const [reading, setReading] = useState<Reading | null>(null);
   const controls = useRef<HTMLElement>(null);
-  const pending = useRef<Pending | null>(null);
-  const writing = useRef(false);
-  const live = useRef(false);
-  const lifetime = useRef<AbortController | null>(null);
+  const active = useRef<CheckpointLifetime | null>(null);
+  const visit = useMemo(() => ({}), [subjectId, viewer, locale, page, isCurrent, position, transport]);
+  const renderedVisit = useRef(visit);
+  renderedVisit.current = visit;
   const options = { locale };
-  useEffect(() => {
-    const controller = new AbortController();
-    live.current = true;
-    lifetime.current = controller;
-    const current = () => !controller.signal.aborted && isCurrent();
-    if (current()) {
-      setObservation(null);
-      void readNativeHostedCheckpoint({ data: { subjectId, viewer, locale }, signal: controller.signal }).then(
-        (value) => {
-          if (current()) {
-            setObservation(value);
-            if (value.state === 'ready') position.restore(value.value, controls.current);
-          }
-        },
-        () => {
-          if (current()) setObservation({ state: 'unavailable' });
-        },
-      );
-    }
-    return () => {
-      live.current = false;
-      controller.abort();
-    };
-  }, [subjectId, viewer, locale, page, isCurrent, position, retry]);
-  const current = () => live.current && isCurrent();
-  const value = observation?.state === 'ready' ? observation.value : null;
 
-  const send = async (captured: Pending) => {
-    if (!current() || writing.current || !observation?.csrfToken) return;
-    writing.current = true;
-    pending.current = captured;
-    setBusy(true);
-    setNotice(null);
+  const read = async (owner: CheckpointLifetime, restore: boolean) => {
+    if (!owner.current() || owner.read || owner.intent) return;
+    const request = {};
+    owner.read = request;
+    setReading((previous) => previous?.owner === owner ? { ...previous, observation: null } : previous);
+    let observation: CheckpointObservation;
+    try {
+      observation = await transport.read({ data: { subjectId, viewer, locale }, signal: owner.controller.signal });
+    } catch {
+      observation = { state: 'unavailable' };
+    }
+    if (!owner.current() || owner.read !== request) return;
+    owner.read = null;
+    // Reading observes current state; it cannot confirm an earlier uncertain command.
+    setReading((previous) => previous?.owner === owner ? { ...previous, observation } : previous);
+    if (restore && observation.state === 'ready') position.restore(observation.value, controls.current);
+  };
+
+  useEffect(() => {
+    const owner: CheckpointLifetime = {
+      controller: new AbortController(),
+      current: () => active.current === owner && renderedVisit.current === visit &&
+        !owner.controller.signal.aborted && isCurrent(),
+      read: null,
+      write: null,
+      intent: null,
+    };
+    active.current = owner;
+    setReading({ owner, observation: null, outcome: null });
+    void read(owner, true);
+    return () => {
+      owner.controller.abort();
+      owner.intent = null;
+      owner.read = null;
+      owner.write = null;
+      if (active.current === owner) active.current = null;
+    };
+  }, [visit]);
+
+  const current = () => reading?.owner.current() === true;
+  // Remove old private controls before the replacement effect runs, including equal-value A/B/A visits.
+  if (!reading || !current()) return null;
+  const { owner, observation, outcome } = reading;
+  const value = observation?.state === 'ready' ? observation.value : null;
+  const busy = outcome?.state === 'sending';
+  const needsRecovery = outcome?.state === 'conflict' || outcome?.state === 'changed';
+  const blocked = busy || !observation?.csrfToken || owner.intent !== null || needsRecovery;
+
+  const send = async (intent: CheckpointIntent) => {
+    const owning = intent.owner;
+    if (!owning.current() || owning.write || (owning.intent !== null && owning.intent !== intent)) return;
+    const request = {};
+    owning.write = request;
+    owning.intent = intent;
+    setReading((previous) => previous?.owner === owning ? { ...previous, outcome: { intent, state: 'sending' } } : previous);
     let result: CheckpointWrite;
     try {
-      result = await writeNativeHostedCheckpoint({
-        data: { viewer, locale, ...captured },
-        headers: { 'X-CSRF-Token': observation.csrfToken },
-        ...(lifetime.current ? { signal: lifetime.current.signal } : {}),
-      });
+      // The BFF still prepares and authorizes the current server session on every dispatch.
+      result = await intent.sender(intent.request);
     } catch {
       result = { state: 'uncertain' };
     }
-    writing.current = false;
-    if (!current()) return;
-    setBusy(false);
-    if (result.state === 'ready') {
-      pending.current = null;
-      setObservation({ ...result, csrfToken: observation.csrfToken });
-      const command = captured.command;
-      const saved = result.value;
-      const matches =
-        command.kind === 'clear'
-          ? saved.state === 'none'
-          : saved.state === 'saved' &&
-            saved.address.catalogueId === command.address.catalogueId &&
-            saved.address.publicationRevisionId === command.address.publicationRevisionId &&
-            saved.address.occurrenceId === command.address.occurrenceId &&
-            saved.address.targetRevisionId === command.address.targetRevisionId &&
-            saved.address.targetSha256 === command.address.targetSha256 &&
-            sameCheckpointPosition(saved.address.documentPosition, command.address.documentPosition);
-      setNotice(matches ? (command.kind === 'save' ? 'saved' : 'cleared') : 'changed');
-    } else {
-      if (result.state !== 'uncertain') pending.current = null;
-      setNotice(result.state === 'uncertain' ? 'uncertain' : result.state === 'conflict' ? 'conflict' : 'changed');
-    }
+    if (!owning.current() || owning.write !== request) return;
+    owning.write = null;
+    if (result.state !== 'uncertain') owning.intent = null;
+    setReading((previous) => {
+      if (previous?.owner !== owning) return previous;
+      if (result.state === 'denied') return { owner: owning, observation: result, outcome: null };
+      if (result.state === 'ready') {
+        return {
+          owner: owning,
+          observation: { ...result, csrfToken: intent.request.headers['X-CSRF-Token'] },
+          outcome: {
+            intent,
+            state: checkpointConfirmsIntent(intent, result.value) ?
+              (intent.request.data.command.kind === 'save' ? 'saved' : 'cleared') : 'changed',
+          },
+        };
+      }
+      return {
+        ...previous,
+        outcome: { intent, state: result.state === 'uncertain' ? 'uncertain' : result.state === 'conflict' ? 'conflict' : 'changed' },
+      };
+    });
+  };
+  const start = (command: CheckpointCommand, context: CheckpointIntentContext) => {
+    if (!owner.current() || blocked || owner.write || owner.read || !observation?.csrfToken) return;
+    void send(captureCheckpointIntent({
+      owner, command, context, key: crypto.randomUUID(), viewer, locale,
+      csrfToken: observation.csrfToken, sender: transport.write,
+    }));
   };
   const save = () => {
-    if (!current() || !value || page.kind !== 'chapter') return;
+    if (!owner.current() || blocked || !value || page.kind !== 'chapter') return;
     const { publication, selection } = page.address;
-    // Native publications always carry a release ID; the optional consumer form also serves illustrative hosts.
-    const publicationRevisionId = publication.releaseRevisionId!;
-    void send({
-      key: crypto.randomUUID(),
-      command: {
-        kind: 'save',
-        subjectId,
-        expectedRevision: value.state === 'saved' ? value.revision : null,
-        address: {
-          catalogueId: publication.id,
-          publicationRevisionId,
-          occurrenceId: selection.occurrenceId,
-          targetRevisionId: selection.body.revisionId,
-          targetSha256: selection.body.sha256,
-          documentPosition: position.capture(controls.current),
-        },
+    start({
+      kind: 'save', subjectId, expectedRevision: value.state === 'saved' ? value.revision : null,
+      address: {
+        catalogueId: publication.id,
+        publicationRevisionId: publication.releaseRevisionId!,
+        occurrenceId: selection.occurrenceId,
+        targetRevisionId: selection.body.revisionId,
+        targetSha256: selection.body.sha256,
+        documentPosition: position.capture(controls.current),
       },
-    });
+    }, { kind: 'save', title: page.title });
   };
   const clear = () => {
     if (value?.state !== 'saved') return;
-    void send({ key: crypto.randomUUID(), command: { kind: 'clear', subjectId, expectedRevision: value.revision } });
+    start({ kind: 'clear', subjectId, expectedRevision: value.revision }, {
+      kind: 'clear', title: value.resume.availability === 'available' ? value.resume.title : null,
+    });
   };
-  const blocked =
-    busy || !observation?.csrfToken || notice === 'uncertain' || notice === 'conflict' || notice === 'changed';
-  const resume =
-    value?.state === 'saved' && value.resume.availability === 'available'
-      ? hostedBookHref(value.address.catalogueId, locale, {
-          subject: subjectId,
-          release: value.address.publicationRevisionId,
-          occurrence: value.address.occurrenceId,
-          view: 'chapter',
-        })
-      : null;
-  const message =
-    notice === 'saved'
-      ? m.book_reader_checkpoint_saved({}, options)
-      : notice === 'cleared'
-        ? m.book_reader_checkpoint_cleared({}, options)
-        : notice === 'uncertain'
-          ? m.book_reader_checkpoint_uncertain({}, options)
-          : notice === 'conflict' || notice === 'changed'
-            ? m.book_reader_changed({}, options)
-            : observation === null
-              ? m.book_reader_loading({}, options)
-              : observation.state !== 'ready'
-                ? m.book_reader_progress_unavailable({}, options)
-                : value?.state === 'none'
-                  ? m.book_reader_checkpoint_none({}, options)
-                  : null;
-  const retryCommand =
-    notice === 'uncertain'
-      ? () => {
-          if (pending.current) void send(pending.current);
-        }
-      : notice === 'conflict' || notice === 'changed'
-        ? () => {
-            if (current()) reload();
-          }
-        : observation && observation.state !== 'ready'
-          ? () => {
-              if (current()) setRetry((value) => value + 1);
-            }
-          : undefined;
-  return (
-    <HostedBookCheckpointControls
-      controlsRef={controls}
-      locale={locale}
-      chapter={page.kind === 'chapter'}
-      message={message}
-      saved={value?.state === 'saved'}
-      withheld={value?.state === 'saved' && value.resume.availability === 'unavailable'}
-      resume={
-        resume && value?.state === 'saved' && value.resume.availability === 'available'
-          ? { href: resume, title: value.resume.title }
-          : null
-      }
-      busy={busy}
-      blocked={blocked}
-      isCurrent={current}
-      {...(value && page.kind === 'chapter' ? { save } : {})}
-      {...(value?.state === 'saved' ? { clear } : {})}
-      {...(retryCommand ? { retry: retryCommand } : {})}
-    />
-  );
+  const resume = value?.state === 'saved' && value.resume.availability === 'available'
+    ? { href: hostedBookHref(value.address.catalogueId, locale, {
+        subject: subjectId, release: value.address.publicationRevisionId,
+        occurrence: value.address.occurrenceId, view: 'chapter',
+      }), title: value.resume.title }
+    : null;
+  const message = outcome?.state === 'saved' ? m.book_reader_checkpoint_saved({}, options)
+    : outcome?.state === 'cleared' ? m.book_reader_checkpoint_cleared({}, options)
+    : outcome?.state === 'uncertain' ? m.book_reader_checkpoint_uncertain({}, options)
+    : needsRecovery ? m.book_reader_changed({}, options)
+    : observation === null ? m.book_reader_loading({}, options)
+    : observation.state !== 'ready' ? m.book_reader_progress_unavailable({}, options)
+    : value?.state === 'none' ? m.book_reader_checkpoint_none({}, options) : null;
+  const retry = outcome?.state === 'uncertain' ? () => void send(outcome.intent)
+    : needsRecovery ? () => { if (owner.current()) reload(); }
+    : observation && observation.state !== 'ready' ? () => void read(owner, false) : undefined;
+
+  return <HostedBookCheckpointControls
+    controlsRef={controls} locale={locale} chapter={page.kind === 'chapter'} message={message}
+    saved={value?.state === 'saved'} withheld={value?.state === 'saved' && value.resume.availability === 'unavailable'}
+    resume={resume} busy={busy} blocked={blocked} isCurrent={current}
+    {...(value && page.kind === 'chapter' ? { save } : {})}
+    {...(value?.state === 'saved' ? { clear } : {})}
+    {...(retry ? { retry } : {})}
+  />;
 }

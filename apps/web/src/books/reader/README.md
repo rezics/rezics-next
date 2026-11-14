@@ -193,9 +193,17 @@ document bytes. The external-response boundary rejects a mismatched occurrence, 
 than linking to a different saved chapter.
 
 Save and clear use native CAS revisions, idempotency keys and the installed POST BFF's session/CSRF checks. Each
-successful command is followed by one current body-free metadata read before showing the result. An uncertain delivery keeps
-its exact command and key for Retry. A conflict or changed selection requires a fresh visit; there is no optimistic
-checkpoint success. Reading retirement aborts private requests and fences completion and controls. Ordinary Library
+successful command is followed by one current body-free metadata read before showing the result.
+
+Decision: uncertain save/clear replay retains the original command, CAS, key, viewer, locale, CSRF header, sender and
+owning abort signal. Each effect incarnation and request has its own completion fence; even an equal-value replacement
+reading cannot inherit its intent. A separate observation never confirms an uncertain command. Acknowledged readback
+confirms the action only when its exact catalogue/release/occurrence/body revision/digest/position matches (or Clear
+reads back native none); a differing current value keeps changed-reading recovery. Replay, failed checkpoint read
+retry and explicit current-reading recovery are distinct actions. Original action context and supplied saved chapter
+context remain visible beside uncertainty. New writes stay unavailable until the original outcome is resolved, and
+conflict/changed recovery requires a fresh visit. These choices add no read, polling, persistence or private snapshot.
+Reading retirement aborts private requests and fences completion and controls. Ordinary Library
 Progress, page units and Continue remain independent, as owned by [Library](../../../../../services/kernel/src/library/README.md).
 
 The independent `renderProgress(page, isCurrent)` extension remains available for an admitted Commerce region;
