@@ -1926,6 +1926,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         return loanRequest('list', actor, request, job.deadline, requestInput, async () => {
           const readPage = () =>
             admission.run('normal', job, () => command(() => loans().listLoans(actor, requestInput, job.deadline)));
+          const assertCurrentOwner = () =>
+            admission.run('normal', job, () => command(() => loans().assertCurrentOwner(actor, job.deadline)));
           const page = await readPage();
           const membership = (value: typeof page) =>
             JSON.stringify(
@@ -1954,7 +1956,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           });
           if (!selectedCopies.length) await revalidate();
           const contextByLoan = new Map(contexts.map((context) => [context.id, context]));
-          return {
+          const response = {
             filter: page.filter,
             boundary: page.boundary,
             generation: page.generation,
@@ -1979,6 +1981,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               };
             }),
           };
+          await assertCurrentOwner();
+          return response;
         });
       },
     )

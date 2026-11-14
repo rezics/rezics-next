@@ -114,7 +114,15 @@ async function admitAccount(client: Pick<PoolClient, 'query'>, owner: AccountAct
   const route = routeOf(owner.accountId);
   if (route === null) throw new GrantDeniedError();
   const current = await readAccount(client, route, owner.accountId);
-  if (!current || current.kind !== 'actor' || current.state !== 'active' || current.fenced)
+  if (
+    !current ||
+    current.kind !== 'actor' ||
+    current.state !== 'active' ||
+    current.fenced ||
+    !Number.isSafeInteger(owner.authnEpoch) ||
+    owner.authnEpoch < 1 ||
+    current.minimumAuthnEpoch > BigInt(owner.authnEpoch)
+  )
     throw new GrantDeniedError();
 }
 
@@ -574,5 +582,11 @@ export function createLoanCommands(config: Dependencies) {
     );
   }
 
-  return { createLoan, extendLoan, returnLoan, listLoans };
+  async function assertCurrentOwner(actor: Actor, deadline?: number): Promise<void> {
+    const owner = requireActor(actor, 'copy:list');
+    const operationDeadline = deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
+    await withRequestDeadline(operationDeadline, () => readOnly(pool, owner, async () => undefined));
+  }
+
+  return { createLoan, extendLoan, returnLoan, listLoans, assertCurrentOwner };
 }

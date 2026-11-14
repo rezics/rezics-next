@@ -81,6 +81,10 @@ Decision: each copy context's `facts` is the closed union the generated client d
 `code`), so a loan page serializes through the Web server function without casts. Loans read and refresh under the
 `copy.list` gate, the personal-library operation Copies already uses; the exposure table has no loan-specific operation.
 
+Decision: native loan reads compare the request actor's `authnEpoch` with the current Access account floor. The
+mounted list repeats that admission after person and copy enrichment, under the original request deadline, before
+returning any page.
+
 The request access seam binds prepared History accounts to the live loan command transaction. The
 [mounted work contract](../services/kernel/src/library/performance-contract.md#private-physical-copy-loans)
 covers the manifest owner's original funding, current authorization before receipt replay, and one request deadline
@@ -168,6 +172,11 @@ The [mounted native journey](../services/kernel/test/library/loan-http.test.ts) 
 receipt replay, one open loan per copy, inclusive due dates, overdue state, extension and stale revision,
 disposal and deletion refusal while a loan is open, repeated return conflict, and returned history after copy
 deletion. The date and model suites cover the calendar and lifecycle rules independently.
+
+Current-owner credential assertions in [loan-current-credential.test.ts](../services/kernel/test/library/loan-current-credential.test.ts)
+cover current and retired credentials on open, history and empty pages, including a floor advance while a response
+is delayed. [loans.test.ts](../services/kernel/test/library/loans.test.ts) pins the mounted final admission after
+person and copy enrichment. Execution is deferred in the source-only window.
 
 The Web command intent source cases in `apps/web/tests/loan-intent.test.ts` cover replay, definitive refusal,
 late effects and credential/source retirement. The selected controls and route story acceptance are described in
