@@ -93,14 +93,13 @@ function shellArgv(value: string): string[] | undefined {
 const viewerShell = [
   '/bin/sh',
   '-c',
-  'trap \':\' INT; "$@"; trap - INT; printf \'\\n[Goal viewer exited; manager thread is unchanged. This terminal is still open.]\\n\'; exec "${SHELL:-/bin/sh}" -l',
+  "trap ':' INT; \"$@\"; trap - INT; printf '\\n[Goal viewer exited; manager thread is unchanged. This terminal is still open.]\\n'; exec \"${SHELL:-/bin/sh}\" -l",
   'goal-codex-viewer',
 ];
 
 function viewerArgv(value: string): string[] | undefined {
   const observed = shellArgv(value);
-  if (observed && viewerShell.every((word, index) => observed[index] === word))
-    return observed.slice(viewerShell.length);
+  if (observed && viewerShell.every((word, index) => observed[index] === word)) return observed.slice(viewerShell.length);
   return observed;
 }
 
@@ -191,7 +190,7 @@ const isUnavailableObservation = (error: unknown) => {
 };
 const isAbsentWindowObservation = (error: unknown) =>
   !isUnavailableObservation(error) &&
-  /no server running|can'?t find (?:session|window|pane)|\(No such file or directory\)/i.test(errorMessage(error));
+  /no server running|can'?t find (?:session|window)|\(No such file or directory\)/i.test(errorMessage(error));
 const unavailableWindowStatus = (error: unknown) => {
   if (error instanceof Error && error.message.startsWith('window status unavailable:')) return error;
   const message = errorMessage(error);
@@ -217,19 +216,6 @@ export function pausedGoalMenuSelection(capture: string): 'resume' | 'leave' | u
   const first = /›[ \t]+1\. Resume goal/.test(menu[resume]!);
   const second = /›[ \t]+2\. Leave paused/.test(menu[resume + 1]!);
   if (first !== second) return first ? 'resume' : 'leave';
-}
-
-/** Inspect the actual terminal cursor row, never a matching prompt in recent history. */
-function emptyViewerComposer(snapshot: string): boolean {
-  const [cursor, ...rows] = snapshot.split('\n');
-  const position = /^2:(\d+):0$/.exec(cursor ?? '');
-  if (!position) return false;
-  const row = rows[Number(position[1])];
-  // Codex draws its placeholder in dim text. Literal draft text with the same words is not a placeholder.
-  const placeholder = '\x1b[2mAsk Codex to do anything\x1b[0m';
-  return (
-    row?.includes(placeholder) === true && row.replace(/\x1b\[[0-9;]*m/g, '').trim() === '› Ask Codex to do anything'
-  );
 }
 
 export interface ManagerWindows {
@@ -357,10 +343,7 @@ export class TermspacesWindows implements ManagerWindows {
   }
   private async paneIds(window: string): Promise<string[] | undefined> {
     const result = await this.observe(() => this.tmux(['list-panes', '-t', window, '-F', '#{pane_id}']));
-    return result
-      ?.split('\n')
-      .map((pane) => pane.trim())
-      .filter(Boolean);
+    return result?.split('\n').map((pane) => pane.trim()).filter(Boolean);
   }
   private async pane(windowOrPane: string): Promise<{ dead: string; cwd: string; command: string } | undefined> {
     const [dead, cwd, startCommand] = await Promise.all([
@@ -395,95 +378,42 @@ export class TermspacesWindows implements ManagerWindows {
     if (!panes?.length) return false;
     const stale: string[] = [];
     let replacement: string | undefined;
-    let failedCurrent = false;
-    let changed = false;
     for (const paneId of panes) {
       const observed = await this.pane(paneId);
       if (!observed || resolve(observed.cwd) !== resolve(cwd)) continue;
       if (this.sameViewer(observed, argv, cwd)) {
-        if (observed.dead === '0' && !replacement) replacement = paneId;
-        else {
-          stale.push(paneId);
-          if (observed.dead !== '0') failedCurrent = true;
-        }
+        // Do not repeatedly start a viewer that already failed on this endpoint.
+        if (observed.dead !== '0') return false;
+        replacement = paneId;
       } else if (differsOnlyByRemoteEndpoint(observed.command, argv)) {
         if (observed.dead === '0' || (observed.dead === '1' && options.restoreExited)) stale.push(paneId);
       }
     }
-    // Do not repeatedly start a viewer that already failed on this endpoint.
-    if (!replacement && (failedCurrent || stale.length === 0)) return false;
-    if (!replacement && panes.length === 1 && (await this.hasEmptyComposer(stale[0]!))) {
-      // Reuse a proven empty terminal. Successive host restarts need not create any new panes.
-      replacement = stale.pop()!;
-      changed = true;
-      await this.tmux(['respawn-pane', '-k', '-t', replacement, '-c', cwd, viewerCommand(argv, manager)]);
-    } else if (!replacement) {
-      replacement = await this.tmux([
-        'split-window',
-        '-d',
-        '-h',
-        '-P',
-        '-F',
-        '#{pane_id}',
-        '-t',
-        id,
-        '-c',
-        cwd,
-        viewerCommand(argv, manager),
-      ]);
+    if (!stale.length) {
+      if (replacement) this.dismissStartupGoalMenu(id, replacement, argv, cwd);
+      return false;
+    }
+    if (!replacement) {
+      replacement = await this.tmux(['split-window', '-d', '-h', '-P', '-F', '#{pane_id}', '-t', id, '-c', cwd, viewerCommand(argv, manager)]);
       if (!/^%\d+$/.test(replacement)) return false;
-      changed = true;
     }
     for (const paneId of stale) {
-      changed = true;
-      if (await this.hasEmptyComposer(paneId)) {
-        await this.tmux(['kill-pane', '-t', paneId]);
-      } else {
-        // Preserve unsent or uncertain input without occupying the manager's layout.
-        await this.tmux(['break-pane', '-d', '-s', paneId, '-n', `goal-draft-${manager}-${paneId.slice(1)}`]);
+      const screen = await this.observe(() => this.tmux(['capture-pane', '-p', '-t', paneId]));
+      // Only the plain default prompt positively establishes that there is no visible draft.
+      if (screen && /^›[ \t]+Ask Codex to do anything[ \t]*$/m.test(screen) && !pausedGoalMenuSelection(screen)) {
+        const tail = screen.split('\n').slice(-12);
+        const prompts = tail.filter((line) => /^›/.test(line.trimStart()));
+        if (prompts.length === 1 && prompts[0]!.trim() === '› Ask Codex to do anything') {
+          await this.tmux(['kill-pane', '-t', paneId]);
+          continue;
+        }
       }
+      // Keep the original terminal process and any draft without occupying the manager's layout.
+      await this.tmux(['break-pane', '-d', '-s', paneId, '-n', `goal-draft-${manager}-${paneId.slice(1)}`]);
     }
-    await this.closeEmptyDraftWindows(session, manager, argv, cwd);
     this.dismissStartupGoalMenu(id, replacement, argv, cwd);
-    if (changed) await this.tmux(['select-pane', '-t', replacement]);
-    return changed;
-  }
-  private async hasEmptyComposer(paneId: string): Promise<boolean> {
-    const snapshot = await this.observe(() =>
-      this.tmux([
-        'display-message',
-        '-p',
-        '-t',
-        paneId,
-        '#{cursor_x}:#{cursor_y}:#{pane_in_mode}',
-        ';',
-        'capture-pane',
-        '-e',
-        '-p',
-        '-t',
-        paneId,
-      ]),
-    );
-    return snapshot !== undefined && emptyViewerComposer(snapshot);
-  }
-  private async closeEmptyDraftWindows(session: string, manager: string, argv: string[], cwd: string): Promise<void> {
-    const listing = await this.observe(() =>
-      this.tmux(['list-windows', '-t', session, '-F', '#{pane_id}:#{window_panes}:#{window_linked}:#{window_name}']),
-    );
-    for (const entry of listing?.split('\n') ?? []) {
-      const draft = /^(%\d+):1:0:(.*)$/.exec(entry);
-      if (!draft) continue;
-      const paneId = draft[1]!;
-      if (draft[2] !== `goal-draft-${manager}-${paneId.slice(1)}`) continue;
-      const pane = await this.pane(paneId);
-      if (
-        !pane ||
-        resolve(pane.cwd) !== resolve(cwd) ||
-        (!this.sameViewer(pane, argv, cwd) && !differsOnlyByRemoteEndpoint(pane.command, argv))
-      )
-        continue;
-      if (await this.hasEmptyComposer(paneId)) await this.tmux(['kill-pane', '-t', paneId]);
-    }
+    await this.tmux(['select-pane', '-t', replacement]);
+    return true;
   }
   private async watchViewerStartup(windowId: string, argv: string[], cwd: string): Promise<void> {
     const panes = await this.paneIds(windowId);

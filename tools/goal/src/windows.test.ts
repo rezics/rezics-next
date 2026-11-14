@@ -85,26 +85,13 @@ test('Preserve a manager session when its window status is unavailable', async (
   expect(respawns.some((argv) => argv.includes('respawn-pane') && argv.includes('-k'))).toBe(true);
 });
 
-const emptyComposer =
-  '2:2:0\n› an older submitted message\n\n\x1b[1m›\x1b[0m \x1b[2mAsk Codex to do anything\x1b[0m\nGPT-6.1-Sol high';
-const sameWordsDraft = '26:2:0\n› previously submitted\n\n› Ask Codex to do anything\nGPT-6.1-Sol high';
-
 function viewerFixture(dead = '0') {
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   const command = (argv: string[]) => argv.map(quote).join(' ');
   const oldArgv = [
-    'env',
-    '-u',
-    'CODEX_HOME',
-    '-u',
-    'GOAL_MANAGER',
-    'CODEX_HOME=/codex',
-    'GOAL_MANAGER=manager',
-    '/home/edge/.local/bin/codex',
-    'resume',
-    'thread-1',
-    '--remote',
-    'ws://127.0.0.1:10001',
+    'env', '-u', 'CODEX_HOME', '-u', 'GOAL_MANAGER',
+    'CODEX_HOME=/codex', 'GOAL_MANAGER=manager', '/home/edge/.local/bin/codex', 'resume', 'thread-1',
+    '--remote', 'ws://127.0.0.1:10001',
   ];
   const currentArgv = [...oldArgv];
   currentArgv[currentArgv.length - 1] = 'ws://127.0.0.1:10002';
@@ -112,68 +99,47 @@ function viewerFixture(dead = '0') {
   const panes = new Map<string, { dead: string; cwd: string; command: string; draft: string }>([
     ['%3', { dead, cwd: '/cwd', command: `"${command(oldArgv)}"`, draft: 'unsent screenshot notes' }],
   ]);
-  const archived = new Map<string, { dead: string; cwd: string; command: string; draft: string }>();
-  const snapshots = new Map<string, string>();
+  const archived = new Map<string, unknown>();
   let nextPane = 4;
   const probes: (() => void)[] = [];
   let menuReady = true;
   let activePane = '%3';
   let owned = true;
-  const windows = new TermspacesWindows(
-    { socket: '/socket', session: 'stable' },
-    (_executable, argv) => {
-      calls.push(argv);
-      if (argv.includes('list-sessions')) return '$1\tstable\tstable';
-      if (argv.includes('list-windows')) {
-        if (argv.at(-1)?.includes('#{window_name}')) {
-          return [...archived.keys()].map((id) => `${id}:1:0:goal-draft-manager-${id.slice(1)}`).join('\n');
-        }
-        return owned ? '@3\tmanager' : '@2\tother';
-      }
-      if (argv.includes('list-panes')) return [...panes.keys()].join('\n');
-      if (argv.includes('display-message')) {
-        const target = argv[argv.indexOf('-t') + 1]!;
-        if (argv.includes('capture-pane')) return snapshots.get(target) ?? '';
-        const pane = panes.get(target.startsWith('@') ? activePane : target) ?? archived.get(target);
-        if (!pane) return '';
-        if (argv.at(-1) === '#{pane_dead}') return pane.dead;
-        if (argv.at(-1) === '#{pane_current_path}') return pane.cwd;
-        return pane.command;
-      }
-      if (argv.includes('split-window')) {
-        const id = `%${nextPane++}`;
-        panes.set(id, {
-          dead: '0',
-          cwd: argv[argv.indexOf('-c') + 1]!,
-          command: argv.at(-1)!,
-          draft: '',
-        });
-        activePane = id;
-        return id;
-      }
-      if (argv.includes('break-pane')) {
-        const id = argv[argv.indexOf('-s') + 1]!;
-        archived.set(id, panes.get(id)!);
-        panes.delete(id);
-      }
-      if (argv.includes('select-pane')) activePane = argv.at(-1)!;
-      if (argv.includes('kill-pane')) {
-        panes.delete(argv.at(-1)!);
-        archived.delete(argv.at(-1)!);
-      }
-      if (argv.includes('respawn-pane')) {
-        const target = argv[argv.indexOf('-t') + 1]!;
-        panes.get(target)!.command = argv.at(-1)!;
-      }
-      if (argv.includes('capture-pane') && argv.at(-1) !== '%3' && !menuReady) return '› Ask Codex to do anything';
-      if (argv.includes('capture-pane') && argv.at(-1) !== '%3' && menuReady)
-        return 'Resume paused goal?\n› 1. Resume goal   Mark it active and continue when idle\n2. Leave paused  Keep it paused; use /goal resume later\nenter select · esc back';
-      return '';
-    },
-    (_delayMs, probe) => {
-      probes.push(probe);
-    },
-  );
+  const windows = new TermspacesWindows({ socket: '/socket', session: 'stable' }, (_executable, argv) => {
+    calls.push(argv);
+    if (argv.includes('list-sessions')) return '$1\tstable\tstable';
+    if (argv.includes('list-windows')) return owned ? '@3\tmanager' : '@2\tother';
+    if (argv.includes('list-panes')) return [...panes.keys()].join('\n');
+    if (argv.includes('display-message')) {
+      const target = argv[argv.indexOf('-t') + 1]!;
+      const pane = panes.get(target.startsWith('@') ? activePane : target);
+      if (!pane) return '';
+      if (argv.at(-1) === '#{pane_dead}') return pane.dead;
+      if (argv.at(-1) === '#{pane_current_path}') return pane.cwd;
+      return pane.command;
+    }
+    if (argv.includes('split-window')) {
+      const id = `%${nextPane++}`;
+      panes.set(id, {
+        dead: '0',
+        cwd: argv[argv.indexOf('-c') + 1]!,
+        command: argv.at(-1)!,
+        draft: '',
+      });
+      activePane = id;
+      return id;
+    }
+    if (argv.includes('break-pane')) {
+      const id = argv[argv.indexOf('-s') + 1]!;
+      archived.set(id, panes.get(id));
+      panes.delete(id);
+    }
+    if (argv.includes('select-pane')) activePane = argv.at(-1)!;
+    if (argv.includes('kill-pane')) panes.delete(argv.at(-1)!);
+    if (argv.includes('capture-pane') && argv.at(-1) !== '%3' && !menuReady) return '› Ask Codex to do anything';
+    if (argv.includes('capture-pane') && argv.at(-1) !== '%3' && menuReady) return 'Resume paused goal?\n› 1. Resume goal   Mark it active and continue when idle\n2. Leave paused  Keep it paused; use /goal resume later\nenter select · esc back';
+    return '';
+  }, (_delayMs, probe) => { probes.push(probe); });
   return {
     windows,
     calls,
@@ -181,7 +147,6 @@ function viewerFixture(dead = '0') {
     probes,
     setMenuReady: (ready: boolean) => (menuReady = ready),
     archived,
-    snapshots,
     oldArgv,
     currentArgv,
     encode: command,
@@ -212,43 +177,6 @@ test('reconnects to one manager pane across successive endpoint changes and move
   expect([...f.panes.keys()]).toEqual(['%5']);
   expect(f.calls.filter((argv) => argv.includes('split-window'))).toHaveLength(2);
   expect(f.calls.some((argv) => argv.includes('respawn-pane') || argv.includes('kill-pane'))).toBe(false);
-});
-
-test('reuses an empty stale pane even when submitted prompts are visible in its history', async () => {
-  const f = viewerFixture();
-  f.snapshots.set('%3', emptyComposer);
-  for (const endpoint of [10002, 10003, 10004]) {
-    const argv = [...f.oldArgv.slice(0, -1), `ws://127.0.0.1:${endpoint}`];
-    expect(await f.windows.rebindIfStale('manager', argv, '/cwd')).toBe(true);
-    expect(await f.windows.rebindIfStale('manager', argv, '/cwd')).toBe(false);
-    expect(f.panes.get('%3')?.command).toEndWith(f.encode(argv));
-  }
-  expect([...f.panes.keys()]).toEqual(['%3']);
-  expect(f.archived.size).toBe(0);
-  expect(f.calls.filter((argv) => argv.includes('split-window') || argv.includes('break-pane'))).toHaveLength(0);
-});
-
-test('converges existing duplicates while preserving actual drafts and other threads', async () => {
-  const f = viewerFixture();
-  const stale = f.panes.get('%3')!;
-  f.panes.set('%4', { ...stale, command: f.encode(f.currentArgv), draft: '' });
-  f.panes.set('%5', { ...stale, command: f.encode(f.currentArgv), draft: '' });
-  f.snapshots.set('%5', emptyComposer);
-  f.snapshots.set('%3', sameWordsDraft.replace('26:2:0', '2:2:0'));
-  f.archived.set('%8', { ...stale, draft: '' });
-  f.archived.set('%9', { ...stale, command: stale.command.replace('thread-1', 'foreign-thread') });
-  f.snapshots.set('%8', emptyComposer);
-  f.snapshots.set('%9', emptyComposer);
-  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(true);
-  expect([...f.panes.keys()]).toEqual(['%4']);
-  expect([...f.archived.keys()]).toEqual(['%9', '%3']);
-  expect(f.calls.filter((argv) => argv.includes('kill-pane')).map((argv) => argv.at(-1))).toEqual(['%5', '%8']);
-  f.snapshots.set('%3', emptyComposer.replace('2:2:0', '2:2:1'));
-  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
-  expect(f.archived.has('%3')).toBe(true);
-  f.snapshots.set('%3', emptyComposer);
-  await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd');
-  expect([...f.archived.keys()]).toEqual(['%9']);
 });
 
 test('a menu arriving after viewer recovery is left paused exactly once', async () => {
@@ -315,8 +243,7 @@ test('restores a dead stale pane only when authorized and does not repeat a same
 });
 
 test('recognizes the visible paused-goal selection without confirming other dialogs', () => {
-  const body =
-    'Resume paused goal?\n1. Resume goal   Mark it active and continue when idle\n› 2. Leave paused  Keep it paused; use /goal resume later\nenter select · esc back';
+  const body = 'Resume paused goal?\n1. Resume goal   Mark it active and continue when idle\n› 2. Leave paused  Keep it paused; use /goal resume later\nenter select · esc back';
   expect(pausedGoalMenuSelection(body)).toBe('leave');
   expect(pausedGoalMenuSelection(body.replace('enter select · esc back', ''))).toBeUndefined();
   expect(pausedGoalMenuSelection('Someone said Resume paused goal?')).toBeUndefined();
