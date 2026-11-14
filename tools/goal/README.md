@@ -3206,8 +3206,9 @@ retired-thread notifications, once-per-identity start, interrupt fallback, recon
 flushing pending work.
 Decision: manager thread resume omits `latestTurn` when provider history has no recognized disposition; recognized
 `inProgress`, `completed`, `interrupted` and `failed` dispositions are preserved.
-Every Codex manager `turn/start` pins `gpt-6.1-sol` and the manager's configured effort, including the opening,
-idle inbox wakes, and renewed continuation threads. The app-server `turn/steer` request accepts input and an
+Every Codex manager `turn/start` pins its configured model and effort, including opening, inbox wakes and renewed
+threads. The default is `gpt-6.1-sol`; an optional `model` in the local manager JSON overrides it for that role only.
+The override is read for each new controller turn and during recovery, so it applies without replacing the thread. The app-server `turn/steer` request accepts input and an
 `expectedTurnId`, but no model or effort override, so steering keeps the active turn's pinned settings. Recovery and
 turn-race rejoins pass the same model plus the manager's effort and `compactTokens` through `thread/resume`. Forwarding
 the threshold does not prove that compaction occurred.

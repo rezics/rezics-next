@@ -31,6 +31,7 @@ export type ManagerSpec = {
   engine: 'codex' | 'claude';
   pool: CodexPool;
   budget: number;
+  model?: string;
   effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   supermanager: string;
   compactTokens?: number;
@@ -219,6 +220,8 @@ export type CompletionEvidence = { passed: boolean; evidencePath: string; summar
 export type ManagerServices = {
   policy?: ControlPolicy;
   connect?: (pool: CodexPool, onStart?: (identity: ProcessIdentity) => void) => Promise<AppServer>;
+  /** An optional local override for a managed Codex role, read before opening or starting a turn. */
+  codexManagerModel?: (id: string) => string | undefined;
   /** Read-only admission against the current retained pool allowance before an inbox wake starts a model turn. */
   canStartTurn?: (spec: Pick<ManagerSpec, 'engine' | 'pool' | 'effort'>) => boolean;
   windows: ManagerWindows;

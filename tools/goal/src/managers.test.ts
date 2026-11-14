@@ -15,7 +15,7 @@ import type { Task } from './types.ts';
 
 async function setup(
   policy?: ControlPolicy,
-  options: { autoStartGoalOnActive?: boolean; lateStartGoalOnPause?: boolean } = {},
+  options: { autoStartGoalOnActive?: boolean; lateStartGoalOnPause?: boolean; codexManagerModel?: (id: string) => string | undefined } = {},
 ) {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
@@ -42,6 +42,7 @@ async function setup(
   const services = {
     ...(policy ? { policy } : {}),
     canStartTurn: () => turnAllowed,
+    ...(options.codexManagerModel ? { codexManagerModel: options.codexManagerModel } : {}),
     connect: async (_pool?: CodexPool, _onStart?: (identity: ProcessIdentity) => void) => {
       connections++;
       return client;
@@ -192,6 +193,32 @@ test('manager startup follows installed protocol and two managers share one app-
     expect(s.managers.get(s.spec.id).turns).toBe(1);
     await s.managers.start({ ...s.spec, id: 'second' });
     expect(s.connections).toBe(1);
+  } finally {
+    await s.close();
+  }
+});
+
+test('a manager model override applies to its next turn on the same thread only', async () => {
+  let model: string | undefined;
+  const s = await setup(undefined, { codexManagerModel: (id) => id === 'manager' ? model : undefined });
+  try {
+    const original = await s.managers.start(s.spec);
+    const peer = await s.managers.start({ ...s.spec, id: 'peer' });
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: original.threadId, turn: { id: original.activeTurnId, status: 'completed' } },
+    });
+    model = 'gpt-6-astra';
+    s.inbox.deliver({ managerId: s.spec.id, kind: 'instruction', summary: 'Continue implementing the same scope' });
+    await s.managers.wake(s.spec.id);
+    await s.managers.flush();
+    const starts = s.requests().filter((request) => request.method === 'turn/start');
+    expect(starts.filter((r) => r.params.threadId === original.threadId).at(-1)?.params).toMatchObject({
+      model: 'gpt-6-astra', effort: 'high',
+    });
+    expect(starts.filter((r) => r.params.threadId === peer.threadId).at(-1)?.params.model).toBe('gpt-6.1-sol');
+    expect(s.managers.get(s.spec.id).threadId).toBe(original.threadId);
+    expect(s.requests().filter((r) => r.method === 'thread/start')).toHaveLength(2);
   } finally {
     await s.close();
   }
