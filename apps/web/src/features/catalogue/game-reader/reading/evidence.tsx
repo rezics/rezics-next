@@ -62,7 +62,9 @@ export function GameEvidence({
       {statement.qualifiers.map((part, index) => (
         <div key={index}>
           <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
-            {page.labels[part.property.id]?.text || m.subject_value_unlabelled({}, o)}
+            {page.labels[part.property.id]?.text || (
+              <code className="font-mono text-xs">{part.property.id}</code>
+            )}
           </dt>
           <dd>{value(part)}</dd>
         </div>
@@ -91,7 +93,9 @@ export function GameEvidence({
               {reference.parts.map((part, n) => (
                 <div key={n}>
                   <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
-                    {page.labels[part.property.id]?.text || m.subject_value_unlabelled({}, o)}
+                    {page.labels[part.property.id]?.text || (
+                      <code className="font-mono text-xs">{part.property.id}</code>
+                    )}
                   </dt>
                   <dd>{value(part)}</dd>
                 </div>

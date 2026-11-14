@@ -55,9 +55,24 @@ async function ui() {
       );
     });
   };
+  const disclose = async (label: string, scope: Element = host, detail = 0) => {
+    const summary = Array.from(scope.querySelectorAll('summary')).find((node) => node.textContent === label);
+    if (!summary) throw new Error(`Missing disclosure: ${label}`);
+    if (detail === 0) summary.focus();
+    await act(async () => {
+      summary.dispatchEvent(new MouseEvent('click', { bubbles: true, detail }));
+    });
+    return summary.parentElement as HTMLDetailsElement;
+  };
   const click = async (label: string) => {
     const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === label);
     if (!button) throw new Error(`Missing button: ${label}`);
+    const ancestors: HTMLDetailsElement[] = [];
+    for (let node = button.parentElement; node; node = node.parentElement)
+      if (node.tagName === 'DETAILS' && !(node as HTMLDetailsElement).open)
+        ancestors.unshift(node as HTMLDetailsElement);
+    for (const details of ancestors)
+      await disclose(details.querySelector('summary')!.textContent!, details);
     button.focus();
     await act(async () => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
@@ -73,8 +88,123 @@ async function ui() {
     }
     await window.happyDOM.close();
   };
-  return { host, client, render, click, close };
+  return { host, client, render, click, disclose, close };
 }
+
+function readingText(node: Node): string {
+  if (node instanceof Element && node.tagName === 'DETAILS' && !node.hasAttribute('open'))
+    return node.querySelector('summary')?.textContent ?? '';
+  return node.childNodes.length ? Array.from(node.childNodes).map(readingText).join(' ') : node.textContent ?? '';
+}
+
+test('default Game reading exposes useful labelled facts and historical meaning before optional evidence and comparison', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = workReleaseComparisonExample('withheld');
+    const platform = fixture.publicRead.subject.statements['schema:gamePlatform']![0]!;
+    platform.rezics.release = `sha256:${'2'.repeat(64)}`;
+    const initial = await fixture.read();
+    const props = { ...fixture.address, locale: 'en', source: fixture, reader: null, transport: fixture.read, initial };
+    await mounted.render(props);
+    const calls = fixture.calls.length;
+    for (const text of ['Harbour game', 'Windows', 'Source engine', 'May 2024', m.release_fidelity_historical()])
+      expect(readingText(mounted.host)).toContain(text);
+    for (const text of ['Trial 0.8', '+2024-05', 'Harbour Digital', 'source:status-02?', platform.id])
+      expect(readingText(mounted.host)).not.toContain(text);
+    expect(Array.from(mounted.host.querySelectorAll('details')).every((node) => !node.open)).toBe(true);
+    const fact = mounted.host.querySelector(`[data-game-current-assertion="${platform.id}"]`)!;
+    await mounted.disclose(m.game_reader_evidence(), fact);
+    expect(readingText(fact)).toContain('ja');
+    expect(readingText(fact)).toContain(platform.rezics.release);
+    expect(readingText(fact)).toContain(platform.rank);
+    await mounted.disclose(m.game_profile_credits());
+    expect(readingText(mounted.host)).toContain('Harbour Studio Ltd');
+    await mounted.disclose(m.subject_editions(), mounted.host, 1);
+    const comparison = mounted.host.querySelector('[data-slot="work-release-comparison"]')!;
+    expect(readingText(comparison)).not.toContain('Harbour Digital');
+    await mounted.disclose(m.game_reader_compare_title(), comparison);
+    expect(readingText(comparison)).toContain('Harbour Digital');
+    expect(readingText(comparison)).toContain(m.game_reader_compare_withheld());
+    expect(fixture.calls.length).toBe(calls);
+    await mounted.render({ ...props, compact: true });
+    expect(readingText(mounted.host)).toContain('Windows');
+    await mounted.render({ ...props, source: {} });
+    expect(Array.from(mounted.host.querySelectorAll('details')).every((node) => !node.open)).toBe(true);
+    expect(fixture.calls.length).toBe(calls);
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('initial edition failure stays behind Editions while current work facts remain readable and retry stays open', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = workReleaseComparisonExample();
+    const seed = await fixture.read();
+    if (!seed.ok) throw new Error('Expected admitted work');
+    const addresses: GameReaderAddress[] = [];
+    await mounted.render({
+      ...fixture.address,
+      locale: 'en',
+      source: fixture,
+      reader: null,
+      initial: { ...seed, editions: [], editionFailure: { ok: false, reason: 'unavailable' } },
+      transport: (address) => {
+        addresses.push(address);
+        return fixture.read(address);
+      },
+    });
+    expect(readingText(mounted.host)).toContain('Windows');
+    expect(readingText(mounted.host)).not.toContain(m.game_reader_unavailable());
+    expect(addresses).toEqual([]);
+    const editions = await mounted.disclose(m.subject_editions());
+    expect(readingText(editions)).toContain(m.game_reader_unavailable());
+    await mounted.click(m.album_tracks_retry());
+    expect(addresses).toEqual([fixture.address]);
+    expect(editions.isConnected && editions.open).toBe(true);
+    expect(readingText(editions)).not.toContain(m.game_reader_unavailable());
+    expect(editions.querySelector(`a[href*="${editionId}"]`)).not.toBeNull();
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('exact classification keyboard return selects its admitted fact without opening Editions or evidence', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = gameExample();
+    const initial = await fixture.read();
+    if (!initial.ok) throw new Error('Expected admitted work');
+    const field = initial.groups
+      .find((group) => group.id === 'classification')!
+      .fields.find((field) => field.statements.length)!;
+    const statement = field.statements[0]!;
+    await mounted.render({
+      ...fixture.address,
+      locale: 'en',
+      source: fixture,
+      reader: null,
+      transport: fixture.read,
+      initial,
+      returnSelection: {
+        ...fixture.address,
+        holder: fixture.address.id,
+        source: '/en/subjects/game',
+        locale: 'en',
+        release: initial.digest,
+        reader: null,
+        property: field.property,
+        statement: statement.id,
+        focus: 'keyboard',
+      },
+    });
+    expect(document.activeElement?.getAttribute('data-game-current-assertion')).toBe(statement.id);
+    expect(mounted.host.querySelector<HTMLDetailsElement>('[data-slot="game-release-destination"]')?.open).toBe(false);
+    expect(mounted.host.querySelector('details[open]')).toBeNull();
+  } finally {
+    await mounted.close();
+  }
+});
 
 test('ordinary facts and exact release destinations retain source meaning and keyboard return across bounded retry', async () => {
   const mounted = await ui();
@@ -102,6 +232,7 @@ test('ordinary facts and exact release destinations retain source meaning and ke
     expect(mounted.host.textContent).toContain(fixture.publicRead.subject.labels.en);
     expect(mounted.host.textContent).toContain(fixture.publicRead.subject.sourceRecords[0]!.name);
     expect(fixture.calls).toHaveLength(2);
+    await mounted.disclose(m.subject_editions());
     const destination = mounted.host.querySelector<HTMLAnchorElement>(`a[href*="${editionId}"]`)!;
     expect(destination.getAttribute('href')).toBe(
       `/en/subjects/${editionId}/harbour-trial-japanese-windows?realm=games`,
@@ -143,6 +274,7 @@ test('unqualified selected membership supports public release navigation and ret
     const fixture = gameExample('visual-novel');
     fixture.first.links[0]!.assertion!.qualifiers = [];
     await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport: fixture.read });
+    await mounted.disclose(m.subject_editions());
     const destination = mounted.host.querySelector<HTMLAnchorElement>(`a[href*="${editionId}"][href$="/release"]`)!;
     expect(destination).not.toBeNull();
     expect(destination.target).toBe('_blank');
@@ -331,6 +463,10 @@ test('inspection keeps each native association and its rank, qualifier and refer
     ])
       expect(panel.textContent).toContain(value);
     expect(panel.textContent).toContain(m.release_fidelity_historical());
+    expect(readingText(panel)).not.toContain('Trial 0.8');
+    await mounted.disclose(m.game_reader_evidence(), panel);
+    expect(readingText(panel)).toContain('Trial 0.8');
+    expect(readingText(panel)).toContain('source:version');
     expect(panel.querySelector('[data-reference="edition-reference"] a')?.getAttribute('href')).toBe(
       'https://example.test/edition-source',
     );
@@ -340,8 +476,9 @@ test('inspection keeps each native association and its rank, qualifier and refer
     const other = Array.from(controls).filter((node) => node.textContent === m.game_reader_inspect())[1]!;
     await act(async () => {
       other.focus();
-      other.click();
+      other.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
     });
+    expect(document.activeElement).toBe(other);
     const next = mounted.host.querySelector('[data-slot="game-edition-inspection"]')!;
     expect(next.textContent).toContain(second.statement);
     expect(next.textContent).toContain(m.game_reader_no_qualifiers());
@@ -361,7 +498,7 @@ test('a missing assertion is unavailable and a missing summary remains withheld,
     Reflect.deleteProperty(row, 'summary');
     delete row.assertion;
     await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport: fixture.read });
-    expect(mounted.host.querySelector('[data-date-kind="partial"]')?.textContent).toContain('+2024-05');
+    expect(mounted.host.querySelector('[data-date-kind="partial"]')?.textContent).toBe('May 2024');
     expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
     await mounted.click(m.game_reader_inspect());
     const panel = mounted.host.querySelector('[data-slot="game-edition-inspection"]')!;
@@ -400,6 +537,8 @@ test.each([false, true])(
       };
       if (!cursor) fixture.respond(broken);
       await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport });
+      expect(mounted.host.querySelector<HTMLDetailsElement>('[data-slot="game-release-destination"]')?.open).toBe(false);
+      if (!cursor) expect(readingText(mounted.host)).not.toContain(m.game_reader_compare_unavailable());
       if (cursor) {
         fixture.respond(broken);
         await mounted.click(m.work_parts_more());
@@ -408,8 +547,11 @@ test.each([false, true])(
       expect(mounted.host.textContent).toContain(m.game_reader_compare_unavailable());
       expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).not.toBeNull();
       expect(mounted.host.querySelector('[data-slot="work-release-comparison"]')).toBeNull();
+      if (!cursor) await mounted.disclose(m.subject_editions());
+      expect(readingText(mounted.host)).toContain(m.game_reader_compare_unavailable());
       fixture.respond(body);
       await mounted.click(m.album_tracks_retry());
+      expect(mounted.host.querySelector<HTMLDetailsElement>('[data-slot="game-release-destination"]')?.open).toBe(true);
       const target = { ...fixture.address, ...(cursor ? { cursor: 'opaque:game/next' } : {}) };
       expect(addresses.slice(-2)).toEqual([target, target]);
       const requests = fixture.calls.slice(-4).map((url) => new URL(url));
@@ -418,6 +560,7 @@ test.each([false, true])(
         requests.filter((url) => url.pathname.endsWith('/links')).map((url) => url.searchParams.get('cursor')),
       ).toEqual([target.cursor ?? null, target.cursor ?? null]);
       expect(mounted.host.querySelectorAll('[data-slot="work-release-comparison"]')).toHaveLength(1);
+      expect(mounted.host.querySelector<HTMLDetailsElement>('[data-slot="work-release-comparison"]')?.open).toBe(false);
       expect(mounted.host.textContent).toContain('Harbour Digital');
       expect(mounted.host.textContent).not.toContain(m.game_reader_compare_unavailable());
       if (cursor) {
@@ -449,6 +592,7 @@ test('reader replacement fences a pending comparison retry and its former releas
       });
     };
     await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport });
+    await mounted.disclose(m.subject_editions());
     const retry = Array.from(mounted.host.querySelectorAll('button')).find(
       (button) => button.textContent === m.album_tracks_retry(),
     )!;
@@ -468,6 +612,7 @@ test('reader replacement fences a pending comparison retry and its former releas
       transport: replacement.read,
     });
     await act(async () => deliver(good));
+    expect(mounted.host.querySelector<HTMLDetailsElement>('[data-slot="game-release-destination"]')?.open).toBe(false);
     expect(mounted.host.textContent).toContain(m.game_reader_editions_empty());
     expect(mounted.host.textContent).not.toContain('Harbour Digital');
     expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
