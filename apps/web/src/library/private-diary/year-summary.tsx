@@ -2,33 +2,29 @@ import { Link } from '@tanstack/react-router';
 import type { DiaryAddress } from './address';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import type { ReportedYearRead, ReportedYearSummary } from './native';
-import { privateCount } from './presentation';
+import type { ReportedYearRead } from './native';
+import { reportPresentation, type ReportPresentation } from './presentation';
 
-type Counts = ReportedYearSummary['monthUnallocated'];
-function CountsView({ counts }: { counts: Counts }) {
+function CountsView({ presentation }: { presentation: ReportPresentation }) {
   return (
     <dl className="grid gap-3 sm:grid-cols-3">
       {[
-        [m.library_diary_completed(), counts.completedOccurrences],
-        [m.library_diary_distinct_subjects(), counts.distinctCompletedSubjects],
-        [m.library_diary_repeats(), counts.repeatOccurrences],
-      ].map(([label, count]) => (
-        <div key={label}>
+        presentation.counts.completed,
+        presentation.counts.distinct,
+        presentation.counts.repeats,
+        presentation.unknownProfile,
+      ].map(({ label, value }) => (
+        <div key={label} className="min-w-0 [overflow-wrap:anywhere]">
           <dt className="text-sm">{label}</dt>
-          <dd className="text-xl font-semibold">{privateCount(count!)}</dd>
+          <dd className="text-xl font-semibold">{value}</dd>
         </div>
       ))}
-      <div className="sm:col-span-3 text-sm">
-        <dt>{m.library_diary_year_precision()}</dt>
-        <dd>
-          {m.library_diary_year_precision_counts({
-            year: privateCount(counts.finishPrecision.year),
-            month: privateCount(counts.finishPrecision.month),
-            day: privateCount(counts.finishPrecision.day),
-          })}
-        </dd>
-      </div>
+      {presentation.finishPrecision ? (
+        <div className="sm:col-span-3 min-w-0 text-sm [overflow-wrap:anywhere]">
+          <dt>{presentation.finishPrecision.label}</dt>
+          <dd>{presentation.finishPrecision.value}</dd>
+        </div>
+      ) : null}
     </dl>
   );
 }
@@ -46,8 +42,10 @@ export function ReportedYearPanel({
   address?: DiaryAddress;
 }) {
   const summary = result.kind === 'ready' && result.value.year === year ? result.value : null;
+  const locale = getLocale();
+  const presentation = summary ? reportPresentation(summary, summary, locale) : null;
   const monthName = (month: number) =>
-    new Intl.DateTimeFormat(getLocale(), { month: 'long', timeZone: 'UTC' }).format(
+    new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(
       new Date(Date.UTC(2000, month - 1, 1)),
     );
   return (
@@ -55,27 +53,19 @@ export function ReportedYearPanel({
       <h2 id="library-diary-year-summary" className="text-lg font-semibold">
         {m.library_diary_year_heading({ year })}
       </h2>
-      {summary ? (
+      {summary && presentation ? (
         <>
-          <CountsView counts={summary} />
-          <p className="text-sm">{m.library_diary_year_help()}</p>
-          <p className="text-sm">
-            {m.library_diary_coverage({
-              native: summary.coverage.nativeSessions,
-              other: summary.coverage.otherHistory,
-              meaning: summary.coverage.unitMeaning,
-              unknown: privateCount(summary.completedOccurrencesWithUnknownProfile),
-            })}
+          <CountsView presentation={presentation} />
+          <p className="text-sm">{presentation.yearHelp}</p>
+          <p className="text-sm">{presentation.coverageMeaning}</p>
+          {address.month === undefined ? <p className="text-sm">{presentation.coverageScope}</p> : null}
+          <p className="text-sm">{presentation.ownerScope}</p>
+          <p className="text-sm">{presentation.unknownHistory}</p>
+          {presentation.ownerCoverage ? <p className="text-sm">{presentation.ownerCoverage}</p> : null}
+          <p className="min-w-0 break-all text-sm">
+            {presentation.snapshot.label}:{' '}
+            <bdi dir="ltr">{presentation.snapshot.revision}</bdi>
           </p>
-          <p className="text-sm">
-            {m.library_diary_year_coverage({
-              initialized: privateCount(summary.coverage.initializedSessions),
-              retained: privateCount(summary.coverage.retainedSessions),
-              missing: privateCount(summary.coverage.completedOccurrencesWithMissingFinish),
-              unsupported: privateCount(summary.coverage.completedOccurrencesWithUnsupportedFinish),
-            })}
-          </p>
-          <p className="text-sm">{m.library_diary_currentness({ state: summary.currentness.state })}</p>
           <ul className="grid gap-3 sm:grid-cols-2">
             {summary.months.map((bucket) => (
               <li key={bucket.month} className="min-w-0 rounded-md border p-3">
@@ -87,7 +77,7 @@ export function ReportedYearPanel({
                 >
                   {monthName(bucket.month)}
                 </Link>
-                <CountsView counts={bucket} />
+                <CountsView presentation={reportPresentation(summary, bucket, locale)} />
               </li>
             ))}
             <li className="min-w-0 rounded-md border p-3">
@@ -99,7 +89,7 @@ export function ReportedYearPanel({
               >
                 {m.library_diary_year_unallocated()}
               </Link>
-              <CountsView counts={summary.monthUnallocated} />
+              <CountsView presentation={reportPresentation(summary, summary.monthUnallocated, locale)} />
             </li>
           </ul>
         </>

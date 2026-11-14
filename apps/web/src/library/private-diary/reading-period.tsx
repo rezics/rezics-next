@@ -4,39 +4,47 @@ import type { DiaryAddress } from './address';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { ConsumptionSummary, DiaryReadFailure, ReportedYearRead, ReportedYearSummary } from './native';
-import { privateCount } from './presentation';
+import { reportPresentation, type ReportPresentation } from './presentation';
 
 type AllTimeRead = { kind: 'ready'; value: ConsumptionSummary } | DiaryReadFailure | { kind: 'not-selected' };
 type BucketCounts = ReportedYearSummary['monthUnallocated'];
-type SummaryCounts = Pick<ConsumptionSummary, 'completedOccurrences' | 'distinctCompletedSubjects' | 'repeatOccurrences'>;
-type SummaryCurrentness = ConsumptionSummary['currentness'] | ReportedYearSummary['currentness'];
+type SummaryCounts = Pick<
+  ConsumptionSummary,
+  'completedOccurrences' | 'distinctCompletedSubjects' | 'repeatOccurrences' | 'completedOccurrencesWithUnknownProfile'
+> &
+  Partial<Pick<BucketCounts, 'finishPrecision'>>;
 
 function SummaryReading({
+  summary,
   counts,
-  currentness,
   children,
 }: {
+  summary: ConsumptionSummary | ReportedYearSummary;
   counts: SummaryCounts;
-  currentness: SummaryCurrentness;
-  children: ReactNode;
+  children: (presentation: ReportPresentation) => ReactNode;
 }) {
+  const presentation = reportPresentation(summary, counts, getLocale());
+
   return (
     <details className="min-w-0 border-t pt-2">
       <summary className="min-h-11 cursor-pointer rounded px-1 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [overflow-wrap:anywhere]">
         <span className="mr-2 inline-block max-w-full [overflow-wrap:anywhere]">
-          {m.library_diary_completed()}: {privateCount(counts.completedOccurrences)}
+          {presentation.counts.completed.label}: {presentation.counts.completed.value}
         </span>
         <span className="mr-2 inline-block max-w-full [overflow-wrap:anywhere]">
-          {m.library_diary_distinct_subjects()}: {privateCount(counts.distinctCompletedSubjects)}
+          {presentation.counts.distinct.label}: {presentation.counts.distinct.value}
         </span>
         <span className="inline-block max-w-full [overflow-wrap:anywhere]">
-          {m.library_diary_repeats()}: {privateCount(counts.repeatOccurrences)}
+          {presentation.counts.repeats.label}: {presentation.counts.repeats.value}
         </span>
         <span className="mt-1 block text-xs text-muted-foreground [overflow-wrap:anywhere]">
-          {m.library_diary_currentness({ state: currentness.state })}
+          {presentation.snapshot.label}:{' '}
+          <bdi dir="ltr" className="[overflow-wrap:anywhere]">
+            {presentation.snapshot.revision}
+          </bdi>
         </span>
       </summary>
-      <div className="min-w-0 space-y-2 pb-2 pt-1">{children}</div>
+      <div className="min-w-0 space-y-2 pb-2 pt-1">{children(presentation)}</div>
     </details>
   );
 }
@@ -79,33 +87,26 @@ function YearBucket({ address, result }: { address: DiaryAddress; result: Report
     );
 
   return (
-    <SummaryReading counts={counts} currentness={summary.currentness}>
-      <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
-        {m.library_diary_year_precision_counts({
-          year: privateCount(counts.finishPrecision.year),
-          month: privateCount(counts.finishPrecision.month),
-          day: privateCount(counts.finishPrecision.day),
-        })}
-      </p>
-      <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
-        {m.library_diary_coverage({
-          native: summary.coverage.nativeSessions,
-          other: summary.coverage.otherHistory,
-          meaning: summary.coverage.unitMeaning,
-          unknown: privateCount(counts.completedOccurrencesWithUnknownProfile),
-        })}
-      </p>
-      <p className="mt-1 min-w-0 text-sm [overflow-wrap:anywhere]">{m.library_diary_period_coverage_scope()}</p>
-      <p className="mt-2 min-w-0 text-sm [overflow-wrap:anywhere]">{m.library_diary_period_owner_scope()}</p>
-      <p className="mt-2 min-w-0 text-sm [overflow-wrap:anywhere]">{m.library_diary_period_unknown_history()}</p>
-      <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
-        {m.library_diary_year_coverage({
-          initialized: privateCount(summary.coverage.initializedSessions),
-          retained: privateCount(summary.coverage.retainedSessions),
-          missing: privateCount(summary.coverage.completedOccurrencesWithMissingFinish),
-          unsupported: privateCount(summary.coverage.completedOccurrencesWithUnsupportedFinish),
-        })}
-      </p>
+    <SummaryReading summary={summary} counts={counts}>
+      {(presentation) => (
+        <>
+          <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
+            {presentation.finishPrecision
+              ? `${presentation.finishPrecision.label}: ${presentation.finishPrecision.value}`
+              : presentation.precisionUnavailable}
+          </p>
+          <p className="min-w-0 text-sm [overflow-wrap:anywhere]">{presentation.coverageMeaning}</p>
+          <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
+            {presentation.unknownProfile.label}: {presentation.unknownProfile.value}
+          </p>
+          <p className="mt-1 min-w-0 text-sm [overflow-wrap:anywhere]">{presentation.coverageScope}</p>
+          <p className="mt-2 min-w-0 text-sm [overflow-wrap:anywhere]">{presentation.ownerScope}</p>
+          <p className="mt-2 min-w-0 text-sm [overflow-wrap:anywhere]">{presentation.unknownHistory}</p>
+          {presentation.ownerCoverage ? (
+            <p className="min-w-0 text-sm [overflow-wrap:anywhere]">{presentation.ownerCoverage}</p>
+          ) : null}
+        </>
+      )}
     </SummaryReading>
   );
 }
@@ -167,21 +168,18 @@ export function ReadingPeriod({
 
       {allTimeSelected ? (
         allTime.kind === 'ready' ? (
-          <SummaryReading counts={allTime.value} currentness={allTime.value.currentness}>
-            <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
-              {m.library_diary_coverage({
-                native: allTime.value.coverage.nativeSessions,
-                other: allTime.value.coverage.otherHistory,
-                meaning: allTime.value.coverage.unitMeaning,
-                unknown: privateCount(allTime.value.completedOccurrencesWithUnknownProfile),
-              })}
-            </p>
-            <p className="min-w-0 text-sm [overflow-wrap:anywhere]">{m.library_diary_period_coverage_scope()}</p>
-            <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
-              {m.library_diary_statistics_scope({ scope: allTime.value.scope })}
-            </p>
-            <p className="min-w-0 text-sm [overflow-wrap:anywhere]">{m.library_diary_period_precision_unavailable()}</p>
-            <p className="min-w-0 text-sm [overflow-wrap:anywhere]">{m.library_diary_period_unknown_history()}</p>
+          <SummaryReading summary={allTime.value} counts={allTime.value}>
+            {(presentation) => (
+              <>
+                <p className="min-w-0 text-sm [overflow-wrap:anywhere]">{presentation.coverageMeaning}</p>
+                <p className="min-w-0 text-sm [overflow-wrap:anywhere]">
+                  {presentation.unknownProfile.label}: {presentation.unknownProfile.value}
+                </p>
+                <p className="min-w-0 text-sm [overflow-wrap:anywhere]">{presentation.coverageScope}</p>
+                <p className="min-w-0 text-sm [overflow-wrap:anywhere]">{presentation.precisionUnavailable}</p>
+                <p className="min-w-0 text-sm [overflow-wrap:anywhere]">{presentation.unknownHistory}</p>
+              </>
+            )}
           </SummaryReading>
         ) : allTime.kind === 'denied' || allTime.kind === 'closed' ? (
           <p role="status" className="min-w-0 [overflow-wrap:anywhere]">
