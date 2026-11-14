@@ -102,7 +102,14 @@ export class KnowledgeOrganizationReading {
     const sequence = ++this.sequence;
     const previous = this.snapshot;
     this.publish({ ...previous, state: 'preparing', page: undefined, frontier });
-    const result = await this.operations.read(frontier.request);
+    let result: Awaited<ReturnType<OrganizationOperations['read']>>;
+    try {
+      result = await this.operations.read(frontier.request);
+    } catch {
+      if (!this.active() || sequence !== this.sequence) return;
+      this.publish({ ...this.snapshot, state: 'unavailable', frontier, page: undefined });
+      return;
+    }
     if (!this.active() || sequence !== this.sequence) return;
     if (result.state === 'denied' || result.state === 'signed-out' || result.state === 'retired') {
       this.close(result.state);
@@ -142,7 +149,14 @@ export class KnowledgeOrganizationReading {
     const page = snapshot.page;
     this.publish({ ...snapshot, command: 'preparing' });
     const pending = this.snapshot;
-    const prepared = await this.operations.prepare();
+    let prepared: Awaited<ReturnType<OrganizationOperations['prepare']>>;
+    try {
+      prepared = await this.operations.prepare();
+    } catch {
+      if (!this.active(pending)) return;
+      this.publish({ ...this.snapshot, state: 'unavailable', command: 'idle', source: undefined, review: undefined });
+      return;
+    }
     if (!this.active(pending)) return;
     if (prepared.state === 'signed-out' || prepared.state === 'retired') {
       this.close(prepared.state);
@@ -182,7 +196,14 @@ export class KnowledgeOrganizationReading {
     const review = snapshot.review;
     this.publish({ ...snapshot, command: 'sending', page: undefined });
     const pending = this.snapshot;
-    const result = await this.operations.move(review.intent);
+    let result: Awaited<ReturnType<OrganizationOperations['move']>>;
+    try {
+      result = await this.operations.move(review.intent);
+    } catch {
+      if (!this.active(pending)) return;
+      this.publish({ ...this.snapshot, command: 'uncertain' });
+      return;
+    }
     if (!this.active(pending)) return;
     if (result.state === 'acknowledged') {
       this.publish({
