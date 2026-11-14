@@ -289,6 +289,14 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
     originalPresentation?.label.state === 'available'
       ? originalPresentation.label.value
       : m.realm_publication_selected();
+  const actionLabel = (action: PublicationChange['action'] | undefined) =>
+    action === 'publish'
+      ? m.realm_publication_publish()
+      : action === 'withdraw'
+        ? m.realm_publication_review_withdraw()
+        : action === 'reject'
+          ? m.realm_publication_review_reject()
+          : null;
   useEffect(() => {
     if (control.reviewAction) setOpen(true);
   }, [control.reviewAction, control.target?.id]);
@@ -390,27 +398,16 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
               <ContentItemFrame
                 as="div"
                 role="group"
-                className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 py-3"
+                className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-3"
                 aria-label={m.realm_publication_selected()}
                 data-publication-subject="original"
               >
-                <div data-content-item-slot="visual">
-                  {originalPresentation?.cover.state === 'available' ? (
-                    <Cover
-                      subject={{ id: preparation!.subject.originalId, title, types: [] }}
-                      cover={originalPresentation.cover.value}
-                      src={coverSrc}
-                      size="xs"
-                      decorative
-                    />
-                  ) : null}
-                </div>
-                <div ref={summary} className="min-w-0 flex-1 space-y-1">
+                <div ref={summary} className="min-w-0 space-y-1">
                   <p className="text-xs text-muted-foreground">{m.realm_publication_original_subject()}</p>
                   <ContentItemHeading
                     level={4}
                     tabIndex={-1}
-                    className="text-[17px] leading-snug font-semibold sm:text-lg"
+                    className="break-words text-[17px] leading-snug font-semibold sm:text-lg"
                   >
                     <bdi
                       lang={
@@ -422,6 +419,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                       {title}
                     </bdi>
                   </ContentItemHeading>
+                  <p className="break-words text-sm text-muted-foreground">{selected.id}</p>
                   {originalPresentation && originalPresentation.label.state !== 'available' ? (
                     <p
                       data-content-item-slot="metadata"
@@ -435,13 +433,8 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                           : m.realm_publication_label_unavailable()}
                     </p>
                   ) : null}
-                  {originalPresentation?.cover.state === 'available' ? (
-                    <FeedCardImageCredit cover={originalPresentation.cover.value} locale={locale} />
-                  ) : originalPresentation ? (
-                    <p
-                      data-publication-cover={originalPresentation.cover.state}
-                      className="text-sm text-muted-foreground"
-                    >
+                  {originalPresentation && originalPresentation.cover.state !== 'available' ? (
+                    <p data-publication-cover={originalPresentation.cover.state} className="text-sm text-muted-foreground">
                       {originalPresentation.cover.state === 'empty'
                         ? m.realm_publication_cover_empty()
                         : originalPresentation.cover.state === 'concealed'
@@ -453,7 +446,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                     {m.realm_publication_confirm()}
                   </p>
                 </div>
-                <ListRowControl data-content-item-slot="actions" className="col-start-2 min-w-0">
+                <ListRowControl data-content-item-slot="actions" className="min-w-0">
                   <Button
                     className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
                     variant="ghost"
@@ -495,7 +488,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
               </div>
             )}
             {preparation ? (
-              <div className="min-w-0 space-y-2" aria-label={m.realm_publication_read()}>
+              <ContentItemFrame as="section" aria-label={m.realm_publication_scope()} className="min-w-0 space-y-2 py-3">
                 <p>
                   {m.realm_publication_prepared_realm({
                     realm:
@@ -508,7 +501,7 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                         : m.realm_publication_title_unavailable(),
                   })}
                 </p>
-                <p className="text-sm">
+                <p className="break-words text-sm">
                   {m.realm_publication_prepared_subject({
                     original: preparation.subject.originalId,
                     current: preparation.subject.currentId,
@@ -530,16 +523,200 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                     </time>
                   </p>
                 ) : null}
-                {preparation.subject.currentId !== preparation.subject.originalId ? (
+                <ListRowControl data-content-item-slot="actions" className="flex flex-wrap gap-2">
+                  {(['publish', 'withdraw', 'reject'] as const).map((action) => (
+                    <Button
+                      key={action}
+                      className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                      disabled={
+                        !selected || control.locked || !preparation || !admittedPublicationCommand(preparation, action)
+                      }
+                      onClick={(event) => {
+                        onCommand?.(event);
+                        void control.change(action);
+                      }}
+                    >
+                      {actionLabel(action)}
+                    </Button>
+                  ))}
+                </ListRowControl>
+              </ContentItemFrame>
+            ) : null}
+          </fieldset>
+          {preparation && preparation.subject.currentId !== preparation.subject.originalId ? (
+            <section
+              className="min-w-0 space-y-1 border-s border-border ps-3"
+              aria-label={m.realm_publication_terminal_subject()}
+              data-publication-subject="terminal"
+            >
+              <h4 className="font-semibold">{m.realm_publication_terminal_subject()}</h4>
+              <p className="break-words text-sm">{preparation.subject.currentId}</p>
+              {terminalPresentation && terminalPresentation.label.state !== 'available' ? (
+                <p
+                  data-publication-label={terminalPresentation.label.state}
+                  className="text-sm text-muted-foreground"
+                >
+                  {terminalPresentation.label.state === 'empty'
+                    ? m.realm_publication_label_empty()
+                    : terminalPresentation.label.state === 'concealed'
+                      ? m.realm_publication_label_concealed()
+                      : m.realm_publication_label_unavailable()}
+                </p>
+              ) : null}
+              {terminalPresentation && terminalPresentation.cover.state !== 'available' ? (
+                <p data-publication-cover={terminalPresentation.cover.state} className="text-sm text-muted-foreground">
+                  {terminalPresentation.cover.state === 'empty'
+                    ? m.realm_publication_cover_empty()
+                    : terminalPresentation.cover.state === 'concealed'
+                      ? m.realm_publication_cover_concealed()
+                      : m.realm_publication_cover_unavailable()}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+
+          {control.preparationState && control.preparationState !== 'ready' ? (
+            <div role="status" className="min-w-0 max-w-xl space-y-2 text-sm">
+              {control.preparationState === 'loading'
+                ? m.realm_publication_reading()
+                : control.preparationState === 'denied'
+                  ? m.realm_publication_denied()
+                  : control.preparationState === 'unavailable'
+                    ? m.realm_publication_preparation_unavailable()
+                    : null}
+            </div>
+          ) : null}
+          {control.busy ? (
+            <ContentItemFrame as="div" role="status" className="max-w-xl space-y-2 py-3 text-sm">
+              {control.target ? (
+                <p className="break-words">
+                  <span>{m.realm_publication_original_subject()}</span>
+                  <bdi>{control.target.id}</bdi>
+                </p>
+              ) : null}
+              {control.action ? <p>{actionLabel(control.action)}</p> : null}
+              {m.realm_publication_saving()}
+            </ContentItemFrame>
+          ) : null}
+          {!control.busy && control.outcome ? (
+            <ContentItemFrame as="div" role="status" className="min-w-0 max-w-xl space-y-2 py-3 text-sm">
+              {control.target ? (
+                <>
+                  <p>{m.realm_publication_original_subject()}</p>
+                  <p className="break-words"><bdi>{control.target.id}</bdi></p>
+                </>
+              ) : null}
+              {control.action ? <p>{actionLabel(control.action)}</p> : null}
+              {control.outcome.kind === 'saved' ? (
+                <p>
+                  {control.action === 'publish'
+                    ? m.realm_publication_saved()
+                    : control.action === 'reject'
+                      ? m.realm_publication_rejected()
+                      : m.realm_publication_removed()}
+                </p>
+              ) : null}
+              {control.outcome.kind === 'denied' ? <p>{m.realm_publication_denied()}</p> : null}
+              {control.outcome.kind === 'invalid' ? <p>{m.realm_publication_invalid()}</p> : null}
+              {control.outcome.kind === 'unavailable' ? (
+                <>
+                  <p>{m.realm_publication_uncertain()}</p>
+                  <ListRowControl data-content-item-slot="actions">
+                    <Button
+                      className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                      variant="outline"
+                      onClick={(event) => {
+                        onCommand?.(event);
+                        void control.retry();
+                      }}
+                    >
+                      {m.realm_publication_retry()}
+                    </Button>
+                  </ListRowControl>
+                </>
+              ) : null}
+              {control.outcome.kind === 'conflict' ? (
+                <>
+                  <p>{m.realm_publication_conflict()}</p>
+                  <div className="space-y-2">
+                    <ListRowControl data-content-item-slot="actions">
+                      <Button
+                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                        variant="outline"
+                        disabled={control.preparationState === 'loading'}
+                        onClick={() => void control.review()}
+                      >
+                        {m.realm_publication_review()}
+                      </Button>
+                    </ListRowControl>
+                    <ListRowControl data-content-item-slot="actions">
+                      <Button
+                        className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                        variant="outline"
+                        onClick={() => void refresh()}
+                      >
+                        {m.realm_shelf_restart()}
+                      </Button>
+                    </ListRowControl>
+                  </div>
+                </>
+              ) : null}
+            </ContentItemFrame>
+          ) : null}
+          {(selected || control.preparationState) &&
+          !control.busy &&
+          control.outcome?.kind !== 'unavailable' &&
+          control.outcome?.kind !== 'conflict' ? (
+            <Button
+              className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+              variant="outline"
+              disabled={control.preparationState === 'loading'}
+              onClick={() => void control.inspect()}
+            >
+              {m.realm_publication_read()}
+            </Button>
+          ) : null}
+          {open && selected && preparation ? (
+            <div className="min-w-0 max-w-xl space-y-2">
+              <details className="min-w-0 rounded-md border border-border px-3">
+                <summary className="flex min-h-11 cursor-pointer items-center py-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                  {m.realm_publication_original_subject()}
+                </summary>
+                <section className="min-w-0 space-y-2 pb-3" data-publication-presentation="original">
+                  {originalPresentation?.label.state === 'available' ? (
+                    <p className="break-words">
+                      <bdi lang={originalPresentation.label.language}>{originalPresentation.label.value}</bdi>
+                    </p>
+                  ) : null}
+                  {originalPresentation?.cover.state === 'available' ? (
+                    <div className="flex min-w-0 items-start gap-3">
+                      <Cover
+                        subject={{ id: preparation.subject.originalId, title, types: [] }}
+                        cover={originalPresentation.cover.value}
+                        src={coverSrc}
+                        size="xs"
+                        decorative
+                      />
+                      <FeedCardImageCredit cover={originalPresentation.cover.value} locale={locale} />
+                    </div>
+                  ) : null}
+                </section>
+              </details>
+              {preparation.subject.currentId !== preparation.subject.originalId ? (
+                <details className="min-w-0 rounded-md border border-border px-3">
+                  <summary className="flex min-h-11 cursor-pointer items-center py-2 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                    {m.realm_publication_terminal_subject()}
+                  </summary>
                   <section
-                    className="min-w-0 space-y-2 border-s border-border ps-3"
-                    aria-label={m.realm_publication_terminal_subject()}
+                    className="min-w-0 space-y-2 pb-3"
                     data-publication-subject="terminal"
+                    data-publication-presentation="terminal"
                   >
                     <h4 className="font-semibold">{m.realm_publication_terminal_subject()}</h4>
-                    <p className="text-sm">{preparation.subject.currentId}</p>
+                    <p className="break-words text-sm">{preparation.subject.currentId}</p>
                     {terminalPresentation?.label.state === 'available' ? (
-                      <p>
+                      <p className="break-words">
                         <bdi lang={terminalPresentation.label.language}>{terminalPresentation.label.value}</bdi>
                       </p>
                     ) : terminalPresentation ? (
@@ -585,114 +762,11 @@ function PublicationControlsVisit({ control, refresh, search, onCommand }: Publi
                       </p>
                     ) : null}
                   </section>
-                ) : null}
-              </div>
-            ) : null}
-            <ListRowControl data-content-item-slot="actions" className="flex flex-wrap gap-2">
-              {(['publish', 'withdraw', 'reject'] as const).map((action) => (
-                <Button
-                  key={action}
-                  className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
-                  disabled={
-                    !selected || control.locked || !preparation || !admittedPublicationCommand(preparation, action)
-                  }
-                  onClick={(event) => {
-                    onCommand?.(event);
-                    void control.change(action);
-                  }}
-                >
-                  {action === 'publish'
-                    ? m.realm_publication_publish()
-                    : action === 'withdraw'
-                      ? m.realm_publication_review_withdraw()
-                      : m.realm_publication_review_reject()}
-                </Button>
-              ))}
-            </ListRowControl>
-          </fieldset>
+                </details>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-      ) : null}
-      {control.preparationState && control.preparationState !== 'ready' ? (
-        <div role="status" className="min-w-0 space-y-2 text-sm">
-          {control.preparationState === 'loading'
-            ? m.realm_publication_reading()
-            : control.preparationState === 'denied'
-              ? m.realm_publication_denied()
-              : control.preparationState === 'unavailable'
-                ? m.realm_publication_preparation_unavailable()
-                : null}
-        </div>
-      ) : null}
-      {(selected || control.preparationState || control.outcome?.kind === 'unavailable') && !control.busy ? (
-        <Button
-          className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
-          variant="outline"
-          disabled={control.preparationState === 'loading'}
-          onClick={() => void control.inspect()}
-        >
-          {m.realm_publication_read()}
-        </Button>
-      ) : null}
-      {control.busy ? (
-        <ContentItemFrame as="div" role="status" className="py-3 text-sm">
-          {m.realm_publication_saving()}
-        </ContentItemFrame>
-      ) : null}
-      {!control.busy && control.outcome ? (
-        <ContentItemFrame as="div" role="status" className="min-w-0 space-y-2 py-3 text-sm">
-          {control.outcome.kind === 'saved' ? (
-            <p>
-              {control.action === 'publish'
-                ? m.realm_publication_saved()
-                : control.action === 'reject'
-                  ? m.realm_publication_rejected()
-                  : m.realm_publication_removed()}
-            </p>
-          ) : null}
-          {control.outcome.kind === 'denied' ? <p>{m.realm_publication_denied()}</p> : null}
-          {control.outcome.kind === 'invalid' ? <p>{m.realm_publication_invalid()}</p> : null}
-          {control.outcome.kind === 'unavailable' ? (
-            <>
-              <p>{m.realm_publication_uncertain()}</p>
-              <ListRowControl data-content-item-slot="actions">
-                <Button
-                  className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
-                  variant="outline"
-                  onClick={(event) => {
-                    onCommand?.(event);
-                    void control.retry();
-                  }}
-                >
-                  {m.realm_publication_retry()}
-                </Button>
-              </ListRowControl>
-            </>
-          ) : null}
-          {control.outcome.kind === 'conflict' ? (
-            <>
-              <p>{m.realm_publication_conflict()}</p>
-              <ListRowControl data-content-item-slot="actions">
-                <Button
-                  className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
-                  variant="outline"
-                  disabled={control.preparationState === 'loading'}
-                  onClick={() => void control.review()}
-                >
-                  {m.realm_publication_review()}
-                </Button>
-              </ListRowControl>
-              <ListRowControl data-content-item-slot="actions">
-                <Button
-                  className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
-                  variant="outline"
-                  onClick={() => void refresh()}
-                >
-                  {m.realm_shelf_restart()}
-                </Button>
-              </ListRowControl>
-            </>
-          ) : null}
-        </ContentItemFrame>
       ) : null}
     </div>
   );
