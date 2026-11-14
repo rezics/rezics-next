@@ -1,6 +1,23 @@
 import { expect, test } from 'bun:test';
 import { follow, mountFollowing, page, realmId, spaceId } from './helpers/following-reading';
 import { prepareFollowing } from '../src/library/following-reading/presentation';
+import type { MineFollow } from '../src/library/mine-following';
+
+test('Zone opening uses only its supplied destination and visible identity', () => {
+  const zone = follow('zone');
+  const destinations: MineFollow['destination'][] = [
+    undefined,
+    { kind: 'unavailable' },
+    { kind: 'space', spaceId, address: 'not-a-zone' },
+    { kind: 'realm', realmId },
+  ];
+  for (const destination of destinations)
+    expect(prepareFollowing(page({ ...zone, destination }), 'en').rows[0]!.destination).toBeNull();
+  expect(
+    prepareFollowing(page({ ...zone, target: null, destination: { kind: 'zone', zoneId: spaceId } }), 'en').rows[0]!
+      .destination,
+  ).toBeNull();
+});
 
 test('one native-order index at 1/10/20 rows; repeated exact selections do not prepare identities again', () => {
   for (const n of [1, 10, 20]) {
@@ -24,10 +41,11 @@ test('one native-order index at 1/10/20 rows; repeated exact selections do not p
   }
 });
 
-test('a mixed twenty-row page inspects supplied Subject, Collection and missing identity without initial point reads', async () => {
+test('a mixed twenty-row page inspects supplied Subject, Collection, Zone and missing identity without point reads', async () => {
   let reads = 0;
   const subject = follow('subject', 'subject-id');
   const collection = follow('collection', 'collection-id');
+  const zone = { ...follow('zone', 'zone-target'), destination: { kind: 'zone' as const, zoneId: realmId } };
   const missing = { ...follow('space', 'missing-id'), target: null };
   const suppliedSpace = {
     ...follow('space', spaceId),
@@ -43,8 +61,9 @@ test('a mixed twenty-row page inspects supplied Subject, Collection and missing 
     subject,
     collection,
     suppliedSpace,
+    zone,
     missing,
-    ...Array.from({ length: 16 }, (_, i) =>
+    ...Array.from({ length: 15 }, (_, i) =>
       follow((['space', 'subject', 'collection'] as const)[i % 3]!, `mixed-${i}`),
     ),
   ];
@@ -60,16 +79,25 @@ test('a mixed twenty-row page inspects supplied Subject, Collection and missing 
       ),
     ).toEqual(follows.map((row) => row.targetType));
     expect(h.host.querySelector<HTMLAnchorElement>(`[data-follow-target-type="space"] a`)?.getAttribute('href')).toBe(
-      '/en/spaces/quiet%20%2Freading',
+      '/en/spaces/quiet%20%2F%20reading',
     );
     expect(h.host.querySelector(`[data-follow-target-type="space"] a`)?.getAttribute('href')).not.toContain(spaceId);
-    for (const row of [subject, collection]) {
+    for (const row of [subject, collection, zone]) {
       await h.inspect(row.targetId);
       const panel = h.host.querySelector('[role="dialog"]')!;
       expect(panel.textContent).toContain(row.target!.label as string);
       expect(panel.querySelector('a')?.getAttribute('href')).toContain(
-        row.targetType === 'subject' ? '/en/subjects/subject-id/' : '/en/collections/collection-id',
+        row.targetType === 'subject'
+          ? '/en/subjects/subject-id/'
+          : row.targetType === 'zone'
+            ? `/en/zones/${realmId}`
+            : '/en/collections/collection-id',
       );
+      if (row.targetType === 'zone') {
+        expect(panel.textContent).toContain('Followed Zone ID');
+        expect(panel.textContent).not.toContain('Followed Space ID');
+        expect(panel.textContent).not.toContain('Reading this community');
+      }
     }
     const missingRow = h.host.querySelectorAll('[data-follow-target-type="space"]')[1]!;
     await h.settle(() => missingRow.querySelector<HTMLButtonElement>('button[aria-label^="Inspect "]')!.click());

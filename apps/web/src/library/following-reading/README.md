@@ -5,12 +5,10 @@ control and page refresh remain independent controls. Native kind stays visible,
 exposure withdrawal and return suspension explain why opening is unavailable without changing the follow. Inspection
 groups exact references, follow source and command meaning in a disclosure. The installed FULL target has no
 description field; only a deliberate current Space read supplies its summary. No row enrichment is added.
-Impeccable reference files are absent from the supplied reference/skill locations; the documented shared
-[ContentItem](../../../../../packages/ui/src/components/content-item.md) slots provide the layout fallback.
-Focused regression sources and stories are delivered for the dev verifier; test, typing, build and browser execution
-are deferred for source-only delivery. `following-target-reading.test.tsx` pins independent opening,
-current prose and the reference disclosure. The shared-item assertion expects the additional Open link and source text
-inside inspection; the clipboard regression opens that disclosure before copying. Other lifecycle assertions stay intact.
+The shared [ContentItem](../../../../../packages/ui/src/components/content-item.md) slots own the row layout.
+`following-target-reading.test.tsx` covers supplied identities, independent opening, current Space prose and the
+reference disclosure. `following-reading-return.test.tsx` covers kind-bound return suspension and retirement.
+Illustrative stories do not establish native admission or browser acceptance.
 
 Following renders one native FULL page in supplied order, at most twenty rows. Its summary identities and exact target
 index are prepared once per page in O(N); inspection selects by exact target ID in O(1). Local confirmed removal
@@ -72,8 +70,9 @@ Content/community retains Space/Realm reads and membership; watch/Inbox manageme
 community navigation remain with their existing owners.
 
 The bounded journey is one `GET /v1/follows?view=FULL&limit=20`, optionally one deliberate selected
-`GET /v1/spaces/{spaceId}`, then ordinary navigation to the supplied address or the exact admitted Realm. Existing
-follow removal uses its existing writer, independently.
+`GET /v1/spaces/{spaceId}`, then ordinary navigation to the supplied Space address, Realm ID or Zone ID.
+Zone inspection uses only the FULL page. Follow removal uses its existing writer, independently. Navigation, retry
+and inspection controls keep a minimum height of 44px.
 Native work includes the page producer's [`fullView`](../../../../../services/kernel/src/library/views.ts)
 summary expansion and the Community reader's nested access/admission, not just the HTTP request count; those budgets
 remain with their native owners. Connected stories distinguish selected-read success, denial, retirement, unavailability
@@ -82,7 +81,7 @@ and no destination; inspection alone does not prove native admission or lifecycl
 Decision: retain the installed FULL producer, count relay/default-worker composition and mounted Following receiver;
 use a stable inspection marker for translated browser-return focus. Existing page, command and lifecycle assertions
 remain unchanged; `following-reading-return.test.tsx` adds the localized fresh-page return regression. Native, browser,
-growth and promoted-revision acceptance remain separate from worker workspace typing.
+growth and promoted-revision acceptance remain separate from illustrative source cases.
 
 ## Admission and command custody
 

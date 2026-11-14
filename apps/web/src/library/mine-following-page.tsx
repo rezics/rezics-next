@@ -697,7 +697,7 @@ function MineFollowingPageState({
         <div className="space-y-3">
           <p role="status">{status === 'preparing' ? m.library_follow_loading() : m.library_follow_unavailable()}</p>
           {onRetry ? (
-            <Button variant="outline" onClick={onRetry}>
+            <Button className="min-h-11" variant="outline" onClick={onRetry}>
               {m.library_follow_retry()}
             </Button>
           ) : null}
@@ -708,7 +708,10 @@ function MineFollowingPageState({
           <p role="alert">
             {page.kindUnavailable ? m.following_kind_unavailable() : m.library_directory_address_invalid()}
           </p>
-          <a href={`/${getLocale()}/library/following`} className={buttonVariants({ variant: 'outline' })}>
+          <a
+            href={`/${getLocale()}/library/following`}
+            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+          >
             {m.library_directory_address_first_page()}
           </a>
         </div>
@@ -807,7 +810,10 @@ function MineFollowingPageState({
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
-              <a href={`/${getLocale()}/search`} className={buttonVariants({ variant: 'outline' })}>
+              <a
+                href={`/${getLocale()}/search`}
+                className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+              >
                 {m.search_heading()}
               </a>
             </EmptyContent>
@@ -826,7 +832,7 @@ function MineFollowingPageState({
           >
             {navigation?.previous ? (
               navigationDisabled ? (
-                <Button variant="outline" disabled>
+                <Button className="min-h-11" variant="outline" disabled>
                   {m.following_navigation_previous()}
                 </Button>
               ) : (
@@ -837,7 +843,7 @@ function MineFollowingPageState({
                     ...(navigation.previous.kind === 'all' ? {} : { kind: navigation.previous.kind }),
                   }}
                   onClick={(event) => navigate(event, navigation.previous!, 'previous')}
-                  className={buttonVariants({ variant: 'outline' })}
+                  className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
                 >
                   {m.following_navigation_previous()}
                 </Link>
@@ -845,7 +851,9 @@ function MineFollowingPageState({
             ) : null}
             {nextCursor ? (
               navigationDisabled ? (
-                <Button disabled>{m.library_collection_more()}</Button>
+                <Button className="min-h-11" disabled>
+                  {m.library_collection_more()}
+                </Button>
               ) : (
                 <Link
                   to="/library/following"
@@ -859,7 +867,7 @@ function MineFollowingPageState({
             ) : null}
             {restart ? (
               navigationDisabled ? (
-                <Button variant="outline" disabled>
+                <Button className="min-h-11" variant="outline" disabled>
                   {m.library_collections_first_page()}
                 </Button>
               ) : (
@@ -867,7 +875,7 @@ function MineFollowingPageState({
                   to="/library/following"
                   search={kind === 'all' ? {} : { kind }}
                   onClick={(event) => navigate(event, { cursor: null, kind }, 'first')}
-                  className={buttonVariants({ variant: 'outline' })}
+                  className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
                 >
                   {m.library_collections_first_page()}
                 </Link>

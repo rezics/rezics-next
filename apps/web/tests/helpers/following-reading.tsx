@@ -4,6 +4,7 @@ import { act, useState } from 'react';
 import * as start from '../../.storybook/react-start';
 import type { MineFollow, MineFollowingPage } from '../../src/library/mine-following';
 import type { FollowingSpaceReader } from '../../src/library/following-reading/inspection';
+import { followingKind } from '../../src/library/following-kind-navigation/address';
 
 export const spaceId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 export const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000099';
@@ -84,6 +85,7 @@ export async function mountFollowing(initial: MineFollowingPage, readSpace?: Fol
     path: '/library/following',
     validateSearch: (search: Record<string, unknown>) => ({
       cursor: typeof search.cursor === 'string' ? search.cursor : undefined,
+      kind: followingKind(search.kind) ?? 'all',
     }),
     component: () => {
       const [current, update] = useState(initial);
@@ -92,6 +94,7 @@ export async function mountFollowing(initial: MineFollowingPage, readSpace?: Fol
         <MineFollowingPageView
           page={current}
           cursor={route.useSearch().cursor}
+          kind={route.useSearch().kind}
           readSpace={readSpace}
           onRefresh={() => refreshes++}
         />

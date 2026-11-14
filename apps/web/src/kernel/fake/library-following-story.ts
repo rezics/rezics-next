@@ -22,7 +22,9 @@ export type LibraryFollowingStoryMode =
   | 'reading-long'
   | 'reading-current-source'
   | 'return-readmission'
-  | 'same-cursor-retry';
+  | 'same-cursor-retry'
+  | 'native-zone'
+  | 'zone-unavailable';
 
 type ListAdmission = 'ready' | 'denied' | 'unavailable';
 let mode: LibraryFollowingStoryMode = 'recorded';
@@ -36,6 +38,8 @@ const listReads: { cursor: string | null; targetType: string | null }[] = [];
 export const followingStoryCursor = 'following/native+page/2';
 export const followingStorySpaceId = followsRecording.follows[0]!.targetId;
 export const followingStoryCollectionId = followsRecording.follows[1]!.targetId;
+export const followingStoryZoneId = '00000000-0000-4000-8000-000000000084';
+export const followingStoryZoneTitle = 'A quiet reading zone';
 
 export function setLibraryFollowingStoryMode(next: LibraryFollowingStoryMode): void {
   mode = next;
@@ -55,6 +59,19 @@ export function setLibraryFollowingStoryAdmission(next: ListAdmission): void {
 
 export function libraryFollowingStoryReads() {
   return [...listReads];
+}
+
+function zoneRow(targetId = followingStoryZoneId): FollowEdge {
+  return {
+    targetId,
+    targetType: 'zone',
+    state: 'following',
+    reason: 'explicit',
+    updatedAt: followsRecording.follows[0]!.updatedAt,
+    ownerId: '00000000-0000-4000-8000-000000000001',
+    target: { id: targetId, type: 'zone', label: followingStoryZoneTitle },
+    destination: { kind: 'zone', zoneId: targetId },
+  };
 }
 
 /** Use the installed FULL wire shapes: Subjects have language-tagged labels, other targets plain labels. */
@@ -78,6 +95,14 @@ function nativeRows(): FollowEdge[] {
           }
         : { id: source.target.id, type: source.target.type, label: source.target.label },
   }));
+  if (mode === 'native-zone') rows.unshift(zoneRow());
+  if (mode === 'zone-unavailable') {
+    const hidden = zoneRow('00000000-0000-4000-8000-000000000085');
+    return [
+      { ...zoneRow(), destination: { kind: 'unavailable' } },
+      { ...hidden, target: null },
+    ];
+  }
   return [
     ...rows,
     {
@@ -192,7 +217,7 @@ function list(request: Request) {
     });
     return page(follows, 'next-page', targetType);
   }
-  return page(base, mode === 'same-cursor-retry' ? 'following/native+page/3' : null, targetType);
+  return page(base, mode === 'same-cursor-retry' || mode === 'native-zone' ? 'following/native+page/3' : null, targetType);
 }
 
 export const routes: FakeRoute[] = [

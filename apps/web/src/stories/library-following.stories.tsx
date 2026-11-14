@@ -5,6 +5,8 @@ import {
   followingStoryCollectionId,
   followingStoryCursor,
   followingStorySpaceId,
+  followingStoryZoneId,
+  followingStoryZoneTitle,
   libraryFollowingStoryReads,
   setLibraryFollowingStoryAdmission,
   setLibraryFollowingStoryMode,
@@ -90,6 +92,46 @@ export const SignedIn: Story = {
     ).toHaveAttribute('href', /\/spaces\/quiet-novel-club$/);
   },
   render: () => FollowingStory(),
+};
+
+export const NativeZoneInspection: Story = {
+  render: () => FollowingStory('native-zone'),
+  play: async ({ canvasElement }) => {
+    let row = await followRow(canvasElement, followingStoryZoneTitle);
+    await expect(within(row).getByText(m.library_following_kind_zone(), { exact: true })).toBeVisible();
+    await userEvent.click(within(canvasElement).getByRole('link', { name: m.following_kind_zone(), exact: true }));
+    await waitFor(() => expect(libraryFollowingStoryReads().at(-1)?.targetType).toBe('zone'));
+    row = await followRow(canvasElement, followingStoryZoneTitle);
+    await expect(within(row).getByRole('link', { name: m.following_reading_open({ title: followingStoryZoneTitle }) }))
+      .toHaveAttribute('href', new RegExp(`/zones/${followingStoryZoneId}$`));
+    await userEvent.click(within(row).getByRole('button', {
+      name: m.following_reading_inspect_target({ title: followingStoryZoneTitle }),
+    }));
+    const panel = await within(canvasElement).findByRole('dialog');
+    await expect(within(panel).getByRole('heading', { name: followingStoryZoneTitle })).toHaveFocus();
+    await userEvent.click(within(panel).getByText(m.following_reading_details()));
+    await expect(within(panel).getByText(m.following_reading_zone_id())).toBeVisible();
+    await expect(within(panel).getByText(followingStoryZoneId)).toBeVisible();
+    await expect(libraryFollowingStoryReads().some(({ targetType }) => targetType === null)).toBe(true);
+  },
+};
+
+export const ZoneUnavailableDestination: Story = {
+  render: () => FollowingStory('zone-unavailable', `${pagePaths['library-following']}?kind=zone`),
+  play: async ({ canvasElement }) => {
+    const row = await followRow(canvasElement, followingStoryZoneTitle);
+    await expect(within(row).queryByRole('link')).toBeNull();
+    await expect(within(row).getByText(m.following_reading_no_destination())).toBeVisible();
+    const hidden = canvasElement.querySelector<HTMLElement>('[data-follow-target$="000085"]')!;
+    await expect(within(hidden).getByText(m.following_reading_identity_unavailable())).toBeVisible();
+    await expect(within(hidden).queryByRole('link')).toBeNull();
+    await userEvent.click(within(row).getByRole('button', {
+      name: m.following_reading_inspect_target({ title: followingStoryZoneTitle }),
+    }));
+    const panel = await within(canvasElement).findByRole('dialog');
+    await expect(within(panel).getByText(m.following_reading_no_destination())).toBeVisible();
+    await expect(within(panel).queryByRole('link')).toBeNull();
+  },
 };
 
 export const KeyboardMenuInteraction: Story = {

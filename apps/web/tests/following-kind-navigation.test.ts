@@ -14,7 +14,7 @@ import { loadMineFollowingPage } from '../src/library/mine-following';
 import type { SessionEnv } from '../src/session/client';
 
 test('kind address admits the rebuilt target kinds without broadening unknown filters', () => {
-  for (const kind of ['all', 'subject', 'collection', 'space']) expect(followingKind(kind)).toBe(kind);
+  for (const kind of ['all', 'subject', 'collection', 'space', 'zone']) expect(followingKind(kind)).toBe(kind);
   expect(followingKind(undefined)).toBe('all');
   for (const invalid of ['', 'author', 'concept', 'realm', ['space'], null, 1])
     expect(followingKind(invalid)).toBeNull();
@@ -36,6 +36,12 @@ test('native reads select a complete kind, retain it on stale restart, and omit 
           state: 'following',
           reason: 'explicit',
           target: null,
+          ...(kind === 'zone'
+            ? {
+                target: { id: targetId, type: 'zone', label: 'Native Zone identity' },
+                destination: { kind: 'zone', zoneId: targetId },
+              }
+            : {}),
         })),
         next: 'continue',
       });
@@ -60,7 +66,7 @@ test('native reads select a complete kind, retain it on stale restart, and omit 
       }),
     },
   } as unknown as Partial<SessionEnv>;
-  for (const kind of ['subject', 'collection', 'space', 'all']) {
+  for (const kind of ['subject', 'collection', 'space', 'zone', 'all']) {
     const request = new Request('https://site.test/library/following', {
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
     });
@@ -74,7 +80,14 @@ test('native reads select a complete kind, retain it on stale restart, and omit 
     expect(page.next).toBe('continue');
     expect(page.cursorReset).toBe(true);
     expect(page.kindUnavailable).toBeUndefined();
-    for (const url of requests.splice(0)) {
+    if (kind === 'zone')
+      expect(page.follows[0]).toMatchObject({
+        target: { id: 'second', type: 'zone', label: 'Native Zone identity' },
+        destination: { kind: 'zone', zoneId: 'second' },
+      });
+    const reads = requests.splice(0);
+    expect(reads.map((url) => url.searchParams.get('cursor'))).toEqual(['another-kind-cursor', null]);
+    for (const url of reads) {
       expect(url.searchParams.get('targetType')).toBe(kind === 'all' ? null : kind);
       expect(url.searchParams.get('limit')).toBe('20');
       expect(url.searchParams.get('view')).toBe('FULL');

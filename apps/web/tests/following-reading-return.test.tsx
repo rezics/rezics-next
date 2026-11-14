@@ -3,6 +3,66 @@ import { deferred, follow, mountFollowing, page, realmId, spaceId } from './help
 import { m } from '../src/paraglide/messages.js';
 import { followingReturnFrontier, followingReturnLocationState } from '../src/library/following-reading/return-context';
 
+const zone = { ...follow('zone'), destination: { kind: 'zone' as const, zoneId: realmId } };
+
+test('Zone continuation and return keep the kind and suspend opening until a fresh native page', async () => {
+  const h = await mountFollowing({ ...page(zone), next: 'native/next+' });
+  try {
+    await h.settle(() =>
+      h.router.navigate({ to: '/library/following', search: { kind: 'zone', cursor: 'native/current+' } }),
+    );
+    expect(h.host.querySelector('nav a[aria-current="page"]')?.textContent).toBe('Zones');
+    expect(h.host.querySelector('a[href*="native%2Fnext"]')?.getAttribute('href')).toContain('kind=zone');
+    const trigger = await h.inspect(spaceId);
+    const link = h.host.querySelector<HTMLAnchorElement>('[role="dialog"] a')!;
+    expect(link.getAttribute('href')).toBe(`/en/zones/${realmId}`);
+    await h.settle(() => link.dispatchEvent(new h.window.MouseEvent('click', { bubbles: true, cancelable: true })));
+    expect(h.window.history.state.followingReturn).toEqual({
+      locale: 'en',
+      subject: 'owner',
+      cursor: 'native/current+',
+      kind: 'zone',
+      targetId: spaceId,
+    });
+    await h.settle(() => h.window.dispatchEvent(new h.window.Event('pagehide')));
+    expect(h.host.querySelector('[role="dialog"]')).toBeNull();
+    expect(h.host.querySelector('[data-follow-target-type="zone"] a')).toBeNull();
+    const show = new h.window.Event('pageshow');
+    Object.defineProperty(show, 'persisted', { value: true });
+    await h.settle(() => h.window.dispatchEvent(show));
+    expect(h.refreshes).toBe(1);
+    expect(h.window.document.activeElement).toBe(trigger);
+    expect(h.window.history.state.followingReturn).toBeUndefined();
+    expect(h.host.querySelector('[data-follow-target-type="zone"] a')).toBeNull();
+    await h.replace({ ...page(zone), next: 'native/next+' });
+    expect(h.host.querySelector('[data-follow-target-type="zone"] a')?.getAttribute('href')).toBe(`/en/zones/${realmId}`);
+  } finally {
+    await h.dispose();
+  }
+});
+
+test.each(['native replacement', 'locale', 'exposure', 'account'] as const)('Zone inspection retires on %s', async (change) => {
+  const h = await mountFollowing(page(zone));
+  const { setLocale } = await import('../src/paraglide/runtime.js');
+  try {
+    await h.inspect(spaceId);
+    if (change === 'native replacement') await h.replace(page({ ...zone, destination: { kind: 'unavailable' } }));
+    else if (change === 'exposure') await h.admit([]);
+    else if (change === 'account') await h.account('other');
+    else {
+      setLocale('ja', { reload: false });
+      await h.replace(page(zone));
+    }
+    expect(h.host.querySelector('[role="dialog"]')).toBeNull();
+    if (change === 'native replacement') expect(h.host.querySelector('[data-follow-target-type="zone"] a')).toBeNull();
+    if (change === 'locale')
+      expect(h.host.querySelector('[data-follow-target-type="zone"] a')?.getAttribute('href')).toBe(`/ja/zones/${realmId}`);
+  } finally {
+    setLocale('en', { reload: false });
+    await h.dispose();
+  }
+});
+
 test('a fresh translated page restores the returned target by identity rather than English control text', async () => {
   const h = await mountFollowing(page(follow('subject')));
   const { setLocale } = await import('../src/paraglide/runtime.js');
