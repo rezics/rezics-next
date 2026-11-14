@@ -15,14 +15,18 @@ import {
   type GraphBrowserRouteState,
   type GraphNode,
   type GraphRead,
+  type GraphRelation,
   type GraphSelection,
-  type GraphTruncation,
 } from './index';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const selectClass =
+  'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal *:data-[slot=select-value]:line-clamp-none *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:whitespace-normal [overflow-wrap:anywhere]';
+const selectItemClass =
+  'min-h-11 min-w-0 whitespace-normal [&_[data-slot=select-item-text]]:whitespace-normal [&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal [overflow-wrap:anywhere]';
 
 export type { GraphBrowserTransport } from './index';
 
@@ -35,162 +39,234 @@ function selectedKey(selection: GraphSelection | undefined) {
   return selection.kind === 'node' ? `node:${selection.id}` : `edge:${selection.statement}`;
 }
 
-function GraphList({
-  nodes,
-  edges,
-  selected,
-  selectionConfirmed,
-  onSelect,
-  locale,
-}: {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
+type ProjectedNode = GraphNode & { position: number };
+type ProjectedEdge = {
+  edge: GraphEdge;
+  position: number;
+  from: ProjectedNode | undefined;
+  to: ProjectedNode | undefined;
+  relation: GraphRelation | undefined;
+};
+type GraphProjection = {
+  nodes: ProjectedNode[];
+  nodeById: Map<string, ProjectedNode>;
+  relationById: Map<string, GraphRelation>;
+  edges: ProjectedEdge[];
+  edgeByStatement: Map<string, ProjectedEdge>;
+};
+
+/** One current response supplies every label and endpoint; projection never hydrates a node. */
+export function projectGraph(read: Extract<GraphRead, { ok: true }>): GraphProjection {
+  const nodes = read.graph.nodes.map((node, position) => ({ ...node, position }));
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const relationById = new Map(read.relations.map((relation) => [relation.id, relation]));
+  const edges = read.graph.edges.map((edge, position) => ({
+    edge,
+    position,
+    from: nodeById.get(edge.from),
+    to: nodeById.get(edge.to),
+    relation: relationById.get(edge.property),
+  }));
+  return { nodes, nodeById, relationById, edges, edgeByStatement: new Map(edges.map((row) => [row.edge.statement, row])) };
+}
+
+function nodeLabel(node: GraphNode | undefined, locale: string) {
+  return node?.label || m.subject_value_unlabelled({}, option(locale));
+}
+
+function relationLabel(relation: GraphRelation | undefined, locale: string) {
+  return relation?.label.text || m.graph_explore_relation_unavailable({}, option(locale));
+}
+
+type ExplorationProps = {
+  projection: GraphProjection;
   selected: string;
   selectionConfirmed: boolean;
   onSelect: (selection: GraphSelection) => void;
   locale: string;
+};
+
+function NodeControl({
+  node,
+  id,
+  selected,
+  selectionConfirmed,
+  onSelect,
+  locale,
+  onKeyDown,
+}: Omit<ExplorationProps, 'projection'> & {
+  node: GraphNode | undefined;
+  id: string;
+  onKeyDown?: ((event: KeyboardEvent<HTMLButtonElement>) => void) | undefined;
 }) {
-  const o = option(locale);
-  const nodeOf = (id: string) => nodes.find((node) => node.id === id);
+  const key = `node:${id}`;
+  const confirmed = selectionConfirmed && selected === key;
   return (
-    <table className="w-full min-w-0 border-collapse text-sm">
-      <caption className="sr-only">{m.graph_explore_list({}, o)}</caption>
-      <thead>
-        <tr>
-          <th className="border-b py-2 text-start">{m.graph_explore_from({}, o)}</th>
-          <th className="border-b py-2 text-start">{m.graph_explore_edge({}, o)}</th>
-          <th className="border-b py-2 text-start">{m.graph_explore_to({}, o)}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {edges.map((edge) => {
-          const key = `edge:${edge.statement}`;
-          return (
-            <tr key={edge.statement} className={selected === key ? 'bg-muted' : undefined}>
-              <td className="py-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={actionClass}
-                  data-graph-selection={`node:${edge.from}`}
-                  aria-pressed={selectionConfirmed && selected === `node:${edge.from}`}
-                  onClick={() => onSelect({ kind: 'node', id: edge.from })}
-                >
-                  {nodeOf(edge.from)?.label || m.subject_value_unlabelled({}, o)}
-                </Button>
-              </td>
-              <td className="py-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={actionClass}
-                  data-graph-selection={key}
-                  aria-pressed={selectionConfirmed && selected === key}
-                  onClick={() => onSelect({ kind: 'edge', ...edge })}
-                >
-                  {edge.property}
-                </Button>
-              </td>
-              <td className="py-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={actionClass}
-                  data-graph-selection={`node:${edge.to}`}
-                  aria-pressed={selectionConfirmed && selected === `node:${edge.to}`}
-                  onClick={() => onSelect({ kind: 'node', id: edge.to })}
-                >
-                  {nodeOf(edge.to)?.label || m.subject_value_unlabelled({}, o)}
-                </Button>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <Button
+      type="button"
+      variant={confirmed ? 'default' : 'outline'}
+      className={`${actionClass} w-full justify-start`}
+      data-graph-selection={key}
+      aria-pressed={confirmed}
+      onClick={() => onSelect({ kind: 'node', id })}
+      onKeyDown={onKeyDown}
+    >
+      <span className="min-w-0">{nodeLabel(node, locale)}</span>
+    </Button>
   );
 }
 
-function GraphDiagram({
-  nodes,
-  edges,
-  selected,
-  selectionConfirmed,
-  onSelect,
-  locale,
-}: {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  selected: string;
-  selectionConfirmed: boolean;
-  onSelect: (selection: GraphSelection) => void;
-  locale: string;
+function EdgeControl({ row, selected, selectionConfirmed, onSelect, locale }: Omit<ExplorationProps, 'projection'> & {
+  row: ProjectedEdge;
 }) {
+  const key = `edge:${row.edge.statement}`;
+  const confirmed = selectionConfirmed && selected === key;
+  return (
+    <Button
+      type="button"
+      variant={confirmed ? 'default' : 'outline'}
+      className={`${actionClass} w-full justify-start gap-2`}
+      data-graph-selection={key}
+      aria-pressed={confirmed}
+      onClick={() => onSelect({ kind: 'edge', ...row.edge })}
+    >
+      <span className="shrink-0 font-mono text-xs" aria-hidden="true">{row.position + 1}</span>
+      <span className="min-w-0">
+        <span className="sr-only">{m.graph_explore_statement_number({ number: String(row.position + 1) }, option(locale))}: </span>
+        {relationLabel(row.relation, locale)}
+      </span>
+    </Button>
+  );
+}
+
+function GraphList(props: ExplorationProps) {
+  const { projection, selected, selectionConfirmed, locale } = props;
   const o = option(locale);
-  const order = useMemo(() => nodes.map((node) => node.id), [nodes]);
-  function move(event: KeyboardEvent<HTMLButtonElement>, id: string) {
+  return (
+    <div className="min-w-0 space-y-5">
+      <section aria-label={m.graph_explore_nodes({}, o)} className="space-y-2">
+        <h3 className="text-sm font-medium">{m.graph_explore_nodes({}, o)}</h3>
+        <ul className="grid min-w-0 gap-2 sm:grid-cols-2">
+          {projection.nodes.map((node) => (
+            <li key={node.id} className="min-w-0"><NodeControl {...props} node={node} id={node.id} /></li>
+          ))}
+        </ul>
+      </section>
+      <table className="w-full min-w-0 table-fixed border-collapse text-sm">
+        <caption className="pb-2 text-start font-medium">{m.graph_explore_list({}, o)}</caption>
+        <thead>
+          <tr>
+            <th scope="col" className="border-b p-2 text-start">{m.graph_explore_from({}, o)}</th>
+            <th scope="col" className="border-b p-2 text-start">{m.graph_explore_relation({}, o)}</th>
+            <th scope="col" className="border-b p-2 text-start">{m.graph_explore_to({}, o)}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {projection.edges.map((row) => (
+            <tr key={row.edge.statement} className={selectionConfirmed && selected === `edge:${row.edge.statement}` ? 'bg-muted' : undefined}>
+              <td className="border-b px-1 py-2 align-top"><NodeControl {...props} node={row.from} id={row.edge.from} /></td>
+              <td className="border-b px-1 py-2 align-top"><EdgeControl {...props} row={row} /></td>
+              <td className="border-b px-1 py-2 align-top"><NodeControl {...props} node={row.to} id={row.edge.to} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type DiagramPath = { statement: string; from: string; to: string };
+
+/** HTML owns all box sizes. SVG draws only connections between measured controls. */
+function GraphDiagram(props: ExplorationProps & { visible: boolean }) {
+  const { projection, selected, selectionConfirmed, onSelect, locale, visible } = props;
+  const o = option(locale);
+  const marker = useId().replace(/:/g, '');
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const nodeRefs = useRef(new Map<string, HTMLDivElement>());
+  const edgeRefs = useRef(new Map<string, HTMLDivElement>());
+  const [paths, setPaths] = useState<DiagramPath[]>([]);
+  useEffect(() => {
+    if (!visible) return;
+    const canvas = canvasRef.current!;
+    function measure() {
+      const origin = canvas.getBoundingClientRect();
+      const nodes = new Map([...nodeRefs.current].map(([id, element]) => [id, element.getBoundingClientRect()]));
+      const edges = new Map([...edgeRefs.current].map(([id, element]) => [id, element.getBoundingClientRect()]));
+      setPaths(projection.edges.flatMap(({ edge }) => {
+        const from = nodes.get(edge.from);
+        const to = nodes.get(edge.to);
+        const control = edges.get(edge.statement);
+        // Concealed or omitted endpoints have no invented connection geometry.
+        if (!from || !to || !control) return [];
+        const x1 = from.right - origin.left;
+        const y1 = from.top + from.height / 2 - origin.top;
+        const x2 = to.right - origin.left;
+        const y2 = to.top + to.height / 2 - origin.top;
+        const x = control.left - origin.left;
+        const y = control.top + control.height / 2 - origin.top;
+        const middle = (x1 + x) / 2;
+        return [{
+          statement: edge.statement,
+          from: `M ${x1} ${y1} C ${middle} ${y1}, ${middle} ${y - 5}, ${x} ${y - 5}`,
+          to: `M ${x} ${y + 5} C ${middle} ${y + 5}, ${middle} ${y2}, ${x2} ${y2}`,
+        }];
+      }));
+    }
+    measure();
+    const observer = new canvas.ownerDocument.defaultView!.ResizeObserver(measure);
+    observer.observe(canvas);
+    for (const element of nodeRefs.current.values()) observer.observe(element);
+    for (const element of edgeRefs.current.values()) observer.observe(element);
+    return () => observer.disconnect();
+  }, [projection, visible]);
+
+  function move(event: KeyboardEvent<HTMLButtonElement>, node: ProjectedNode) {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
-    const index = order.indexOf(id);
-    const next = event.key === 'ArrowDown' ? (order[index + 1] ?? order[0]) : (order[index - 1] ?? order.at(-1));
-    if (next) onSelect({ kind: 'node', id: next });
+    const offset = event.key === 'ArrowDown' ? 1 : -1;
+    const next = projection.nodes[(node.position + offset + projection.nodes.length) % projection.nodes.length]!;
+    nodeRefs.current.get(next.id)?.querySelector('button')?.focus();
+    onSelect({ kind: 'node', id: next.id });
   }
-  const width = 360;
-  const height = Math.max(160, nodes.length * 48);
   return (
-    <svg
-      role="group"
-      aria-label={m.graph_explore_diagram({}, o)}
-      viewBox={`0 0 ${width} ${height}`}
-      className="max-w-full"
-    >
-      {edges.map((edge, index) => {
-        const from = order.indexOf(edge.from);
-        const to = order.indexOf(edge.to);
-        const y1 = 24 + Math.max(from, 0) * 48;
-        const y2 = 24 + Math.max(to, 0) * 48;
-        const key = `edge:${edge.statement}`;
-        return (
-          <g key={edge.statement}>
-            <line x1={48} y1={y1} x2={312} y2={y2} className="stroke-border" strokeWidth={selected === key ? 3 : 1} />
-            <foreignObject x={140} y={(y1 + y2) / 2 - 16} width={80} height={32}>
-              <Button
-                type="button"
-                size="sm"
-                variant={selected === key ? 'default' : 'outline'}
-                className={actionClass}
-                data-graph-selection={key}
-                aria-pressed={selectionConfirmed && selected === key}
-                onClick={() => onSelect({ kind: 'edge', ...edge })}
-              >
-                {index + 1}
-              </Button>
-            </foreignObject>
-          </g>
-        );
-      })}
-      {nodes.map((node, index) => {
-        const key = `node:${node.id}`;
-        const x = index % 2 === 0 ? 8 : 248;
-        const y = 8 + index * 48;
-        return (
-          <foreignObject key={node.id} x={x} y={y} width={104} height={40}>
-            <Button
-              type="button"
-              size="sm"
-              variant={selected === key ? 'default' : 'outline'}
-              className={actionClass}
-              data-graph-selection={key}
-              aria-pressed={selectionConfirmed && selected === key}
-              onClick={() => onSelect({ kind: 'node', id: node.id })}
-              onKeyDown={(event) => move(event, node.id)}
-            >
-              {node.label || m.subject_value_unlabelled({}, o)}
-            </Button>
-          </foreignObject>
-        );
-      })}
-    </svg>
+    <section aria-label={m.graph_explore_diagram({}, o)} className="min-w-0 space-y-3">
+      <p className="text-sm text-muted-foreground">{m.graph_explore_diagram_help({}, o)}</p>
+      <div ref={canvasRef} className="relative grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-x-10">
+        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+          <defs>
+            <marker id={marker} markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M 0 0 L 6 3 L 0 6 Z" fill="currentColor" />
+            </marker>
+          </defs>
+          {paths.map((path) => (
+            <g key={path.statement} className={selectionConfirmed && selected === `edge:${path.statement}` ? 'text-primary' : 'text-muted-foreground'}>
+              <path d={path.from} fill="none" stroke="currentColor" strokeWidth={selectionConfirmed && selected === `edge:${path.statement}` ? 2.5 : 1} />
+              <path d={path.to} fill="none" stroke="currentColor" strokeWidth={selectionConfirmed && selected === `edge:${path.statement}` ? 2.5 : 1} markerEnd={`url(#${marker})`} />
+            </g>
+          ))}
+        </svg>
+        <div className="relative min-w-0 space-y-4">
+          <h3 className="text-sm font-medium">{m.graph_explore_nodes({}, o)}</h3>
+          {projection.nodes.map((node) => (
+            <div key={node.id} ref={(element) => { if (element) nodeRefs.current.set(node.id, element); else nodeRefs.current.delete(node.id); }} className="min-w-0 bg-background">
+              <NodeControl {...props} node={node} id={node.id} onKeyDown={(event) => move(event, node)} />
+            </div>
+          ))}
+        </div>
+        <div className="relative min-w-0 space-y-4">
+          <h3 className="text-sm font-medium">{m.graph_explore_statements({}, o)}</h3>
+          {projection.edges.map((row) => (
+            <div key={row.edge.statement} ref={(element) => { if (element) edgeRefs.current.set(row.edge.statement, element); else edgeRefs.current.delete(row.edge.statement); }} className="min-w-0 space-y-1 bg-background">
+              <EdgeControl {...props} row={row} />
+              <p className="text-xs text-muted-foreground">
+                <span>{nodeLabel(row.from, locale)}</span><span aria-hidden="true"> → </span><span className="sr-only"> {m.graph_explore_to({}, o)} </span><span>{nodeLabel(row.to, locale)}</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -426,6 +502,8 @@ export function GraphBrowserPage({
   const relationId = useId();
   const directionId = useId();
   const depthId = useId();
+  const workspaceId = useId();
+  const [viewMode, setViewMode] = useState<'list' | 'diagram'>('list');
   const failureRef = useRef<HTMLParagraphElement>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
   const relationRef = useRef<HTMLButtonElement>(null);
@@ -571,7 +649,8 @@ export function GraphBrowserPage({
   const activeRoute = active?.route ?? route;
   const baseRead = active?.read;
   const keepDetail = active?.status === 'success' || active?.kind === 'expansion';
-  const read = baseRead && !keepDetail ? { ...baseRead, detail: null } : baseRead;
+  const read = useMemo(() => baseRead && !keepDetail ? { ...baseRead, detail: null } : baseRead, [baseRead, keepDetail]);
+  const projection = useMemo(() => read ? projectGraph(read) : undefined, [read]);
   const selection = requestedSelection(activeRoute);
   const selected = selectedKey(selection);
   const selectionConfirmed = active?.status === 'success' && !!selection;
@@ -666,7 +745,7 @@ export function GraphBrowserPage({
       const intent = focusIntentRef.current;
       if (intent.kind === 'selection') {
         const target = [...(pageRef.current?.querySelectorAll<HTMLButtonElement>('[data-graph-selection]') ?? [])].find(
-          (button) => button.dataset.graphSelection === intent.key,
+          (button) => button.dataset.graphSelection === intent.key && !button.closest('[hidden]'),
         );
         (target ?? detailHeadingRef.current ?? relationRef.current)?.focus();
       } else relationRef.current?.focus();
@@ -709,7 +788,7 @@ export function GraphBrowserPage({
         <div className="space-y-6">
           <form
             key={active?.readRevision ?? 0}
-            className="flex min-w-0 flex-wrap gap-3"
+            className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
             onSubmit={(event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
@@ -723,28 +802,28 @@ export function GraphBrowserPage({
               );
             }}
           >
-            <Field className="min-w-40 flex-1">
+            <Field className="min-w-0">
               <FieldLabel htmlFor={relationId}>{m.graph_explore_relation({}, o)}</FieldLabel>
               <SharedSelect.Select
                 name="property"
                 defaultValue={read.query.property[0] ?? read.relations[0]?.id ?? null}
                 items={read.relations.map((relation) => ({
                   value: relation.id,
-                  label: `${relation.label.text}${relation.inverse?.text ? ` / ${relation.inverse.text}` : ''}`,
+                  label: `${relationLabel(relation, locale)}${relation.inverse?.text ? ` / ${relation.inverse.text}` : ''}`,
                 }))}
               >
                 <SharedSelect.SelectTrigger
                   id={relationId}
                   ref={relationRef}
-                  className="max-md:min-h-11 pointer-coarse:min-h-11"
+                  className={selectClass}
                 >
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>
                 <SharedSelect.SelectContent>
                   <SharedSelect.SelectGroup>
                     {read.relations.map((relation) => (
-                      <SharedSelect.SelectItem key={relation.id} value={relation.id}>
-                        {relation.label.text}
+                      <SharedSelect.SelectItem className={selectItemClass} key={relation.id} value={relation.id}>
+                        {relationLabel(relation, locale)}
                         {relation.inverse?.text ? ` / ${relation.inverse.text}` : ''}
                       </SharedSelect.SelectItem>
                     ))}
@@ -752,7 +831,7 @@ export function GraphBrowserPage({
                 </SharedSelect.SelectContent>
               </SharedSelect.Select>
             </Field>
-            <Field className="min-w-32">
+            <Field className="min-w-0">
               <FieldLabel htmlFor={directionId}>{m.graph_explore_direction({}, o)}</FieldLabel>
               <SharedSelect.Select
                 name="direction"
@@ -763,19 +842,19 @@ export function GraphBrowserPage({
                   { value: 'in', label: m.graph_explore_in({}, o) },
                 ]}
               >
-                <SharedSelect.SelectTrigger id={directionId} className="max-md:min-h-11 pointer-coarse:min-h-11">
+                <SharedSelect.SelectTrigger id={directionId} className={selectClass}>
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>
                 <SharedSelect.SelectContent>
                   <SharedSelect.SelectGroup>
-                    <SharedSelect.SelectItem value="both">{m.graph_explore_both({}, o)}</SharedSelect.SelectItem>
-                    <SharedSelect.SelectItem value="out">{m.graph_explore_out({}, o)}</SharedSelect.SelectItem>
-                    <SharedSelect.SelectItem value="in">{m.graph_explore_in({}, o)}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem className={selectItemClass} value="both">{m.graph_explore_both({}, o)}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem className={selectItemClass} value="out">{m.graph_explore_out({}, o)}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem className={selectItemClass} value="in">{m.graph_explore_in({}, o)}</SharedSelect.SelectItem>
                   </SharedSelect.SelectGroup>
                 </SharedSelect.SelectContent>
               </SharedSelect.Select>
             </Field>
-            <Field className="min-w-32">
+            <Field className="min-w-0">
               <FieldLabel htmlFor={depthId}>{m.graph_explore_depth({}, o)}</FieldLabel>
               <SharedSelect.Select
                 name="depth"
@@ -785,13 +864,13 @@ export function GraphBrowserPage({
                   { value: '2', label: m.graph_explore_depth2({}, o) },
                 ]}
               >
-                <SharedSelect.SelectTrigger id={depthId} className="max-md:min-h-11 pointer-coarse:min-h-11">
+                <SharedSelect.SelectTrigger id={depthId} className={selectClass}>
                   <SharedSelect.SelectValue />
                 </SharedSelect.SelectTrigger>
                 <SharedSelect.SelectContent>
                   <SharedSelect.SelectGroup>
-                    <SharedSelect.SelectItem value="1">{m.graph_explore_depth1({}, o)}</SharedSelect.SelectItem>
-                    <SharedSelect.SelectItem value="2">{m.graph_explore_depth2({}, o)}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem className={selectItemClass} value="1">{m.graph_explore_depth1({}, o)}</SharedSelect.SelectItem>
+                    <SharedSelect.SelectItem className={selectItemClass} value="2">{m.graph_explore_depth2({}, o)}</SharedSelect.SelectItem>
                   </SharedSelect.SelectGroup>
                 </SharedSelect.SelectContent>
               </SharedSelect.Select>
@@ -805,23 +884,21 @@ export function GraphBrowserPage({
           {read.graph.truncated.length > 0 && (
             <p role="status">{m.graph_explore_incomplete({ limit: String(GRAPH_LIMIT) }, o)}</p>
           )}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <GraphList
-              nodes={read.graph.nodes}
-              edges={read.graph.edges}
-              selected={selected}
-              selectionConfirmed={selectionConfirmed}
-              onSelect={select}
-              locale={locale}
-            />
-            <GraphDiagram
-              nodes={read.graph.nodes}
-              edges={read.graph.edges}
-              selected={selected}
-              selectionConfirmed={selectionConfirmed}
-              onSelect={select}
-              locale={locale}
-            />
+          <div className="flex min-w-0 flex-wrap gap-2" role="group" aria-label={m.graph_explore_view({}, o)}>
+            <Button type="button" variant={viewMode === 'list' ? 'default' : 'outline'} className={actionClass} aria-pressed={viewMode === 'list'} aria-controls={workspaceId} onClick={() => setViewMode('list')}>
+              {m.graph_explore_list({}, o)}
+            </Button>
+            <Button type="button" variant={viewMode === 'diagram' ? 'default' : 'outline'} className={actionClass} aria-pressed={viewMode === 'diagram'} aria-controls={workspaceId} onClick={() => setViewMode('diagram')}>
+              {m.graph_explore_diagram({}, o)}
+            </Button>
+          </div>
+          <div id={workspaceId} className="min-w-0 rounded-lg border p-3 sm:p-4">
+            <div hidden={viewMode !== 'list'}>
+              <GraphList projection={projection!} selected={selected} selectionConfirmed={selectionConfirmed} onSelect={select} locale={locale} />
+            </div>
+            <div hidden={viewMode !== 'diagram'}>
+              <GraphDiagram projection={projection!} selected={selected} selectionConfirmed={selectionConfirmed} onSelect={select} locale={locale} visible={viewMode === 'diagram'} />
+            </div>
           </div>
           {read.graph.truncated.map((entry) => (
             <Button
