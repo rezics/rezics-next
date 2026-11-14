@@ -8,7 +8,6 @@ import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../session/reading-policy';
 import { m } from '../paraglide/messages.js';
 import { PersonalLibraryPage } from './entries-page';
-import { EntriesFirstPage } from './entries-current';
 import { shelfMutationLease, type ShelfMutationLease } from './shelf-rows';
 import {
   personalLibraryAddress,
@@ -27,7 +26,7 @@ import type { ShelfPresentationResolution } from './shelf-preferences';
 import { PersonalShelfOrigin, usePersonalShelfObservation, type ShelfOrigin } from './personal-shelf-origin';
 
 import { ShelfSummaryAcknowledgement, useShelfSummaryCurrent } from './shelf-summary-current';
-import { ShelfSummaryCount, ShelfSummaryNavigation, type ShelfSummaryPresentation } from './shelf-summary-view';
+import type { ShelfSummaryPresentation } from './shelf-summary-view';
 
 const subscribe = () => () => {};
 function matches(value: PersonalLibraryCurrentRead | undefined, subject: string, address: PersonalLibraryAddress) {
@@ -498,20 +497,26 @@ function PersonalLibraryRead({
   }, [isCurrent, query.refetch]);
   if (!accepted)
     return (
-      <div className="flex flex-col items-start gap-3">
-        <h1 className="text-3xl font-semibold">
-          {m.library_heading()}
-          <ShelfSummaryCount page={summary.page} locale={address.locale} />
-        </h1>
-        <ShelfSummaryNavigation summary={summary} locale={address.locale} view={presentation?.intent ?? input} />
-        <p role={query.isError || query.data ? 'alert' : 'status'}>
-          {query.isError || query.data ? m.error_message() : m.library_sort_preparing()}
-        </p>
-        {query.isError || query.data ? retryControl : null}
-        {query.isError || query.data ? (
-          <EntriesFirstPage locale={address.locale} view={presentation?.intent ?? input} />
-        ) : null}
-      </div>
+      <PersonalLibraryPage
+        page={{
+          signedIn: true,
+          entries: [],
+          next: null,
+          ...(address.type ? { type: address.type } : {}),
+          ...(address.state ? { state: address.state } : {}),
+          sort: { orderBy: address.orderBy, direction: address.direction },
+          readState: query.isError || query.data ? 'unavailable' : 'preparing',
+        }}
+        summary={summary}
+        locale={address.locale}
+        display={display}
+        {...(presentation ? { presentation } : {})}
+        {...(address.cursor ? { cursor: address.cursor } : {})}
+        acceptedNavigation={{ pins: { state: 'preparing' }, collections: [], collectionsState: 'preparing' }}
+        continueState={{ state: 'loaded', entries: [], next: null }}
+        windowRetry={query.isError || query.data ? retryControl : undefined}
+        isCurrent={isCurrent}
+      />
     );
   return (
     <div>

@@ -78,13 +78,22 @@ function failureText(reason: ShelfFailure): string {
   return m.error_message();
 }
 const densities: Record<ShelfSize, CoverDensity> = { s: 'small', m: 'medium', l: 'large' };
+function suppliedProgress(progress: PersonalLibraryEntry['activeProgressSession'], locale: string) {
+  const view = progressView(progress ?? null, locale);
+  if (!view) return undefined;
+  const meaningUnavailable = progress?.dimension !== 'percent' && !progress?.unitLabel;
+  return {
+    value: meaningUnavailable || view.percent === null ? null : view.percent / 100,
+    label: meaningUnavailable ? `${view.text} · ${m.library_progress_unit_unspecified()}` : view.text,
+  };
+}
 function entryProgress(entry: PersonalLibraryEntry, locale: string) {
-  const view = progressView(entry.activeProgressSession ?? null, locale);
-  return view ? { value: view.percent == null ? null : view.percent / 100, label: view.text } : undefined;
+  return (
+    suppliedProgress(entry.activeProgressSession, locale) ?? { value: null, label: m.library_shelf_progress_none() }
+  );
 }
 function labelEntryProgress(entry: LabelShelfEntry, locale: string) {
-  const view = progressView(entry.activeProgressSession ?? null, locale);
-  return view ? { value: view.percent === null ? null : view.percent / 100, label: view.text } : undefined;
+  return suppliedProgress(entry.activeProgressSession, locale);
 }
 function titleOf(entry: PersonalLibraryEntry, locale: string) {
   return entry.subject
@@ -308,63 +317,69 @@ function ShelfSelectionBar({
   };
   if (!controls.bulkStatusWriteAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) return null;
   const eligible = controls.rows.some((row) => controls.selectable(row.entry));
-  if (!controls.selected.length)
-    return (
-      <>
+  return (
+    <>
+      <div className="flex min-h-11 flex-wrap items-center gap-2" data-shelf-selection-launcher>
         {eligible ? (
           <Button
             variant="outline"
+            className="min-h-11"
             disabled={!controls.hydrated || controls.selectionPending}
             onClick={controls.selectPage}
           >
             {m.library_selection_page()}
           </Button>
         ) : null}
-        <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
-      </>
-    );
-  return (
-    <>
-      <div className="[&_[data-slot=button]]:min-h-11">
-        <SharedSelectionBar
-          count={controls.selected.length}
-          label={(count) => m.library_selection_count({ count })}
-          ariaLabel={m.library_selection_heading()}
-          bottomOffset="var(--bottom-nav-height, 5rem)"
-          statusMessage={
-            selectionLimitReached ? m.library_selection_limit_reached({ limit: shelfSelectionLimit }) : undefined
-          }
-          primaryAction={
-            <Button
-              ref={launcher}
-              variant="outline"
-              className="min-h-11"
-              disabled={controls.selectionPending || !controls.isCurrent()}
-              onClick={openReview}
-            >
-              {m.library_selection_review()}
-            </Button>
-          }
-          actions={
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Button
-                variant="ghost"
-                className="min-h-11"
-                disabled={controls.selectionPending}
-                onClick={controls.selectPage}
-              >
-                {m.library_selection_page()}
-              </Button>
-              <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
-              <ShelfLabelAction controls={controls} />
-              <ShelfLabelAction controls={controls} kind="unassign" />
-            </div>
-          }
-          onCancel={controls.clearSelection}
-          cancelLabel={m.library_selection_clear()}
-          moreLabel={m.library_selection_more()}
-        />
+        {!controls.selected.length ? (
+          <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
+        ) : (
+          <span className="text-sm text-muted-foreground" role="status">
+            {m.library_selection_count({ count: controls.selected.length })}
+          </span>
+        )}
       </div>
+      {controls.selected.length ? (
+        <div className="[&_[data-slot=button]]:min-h-11">
+          <SharedSelectionBar
+            count={controls.selected.length}
+            label={(count) => m.library_selection_count({ count })}
+            ariaLabel={m.library_selection_heading()}
+            bottomOffset="var(--bottom-nav-height, 5rem)"
+            statusMessage={
+              selectionLimitReached ? m.library_selection_limit_reached({ limit: shelfSelectionLimit }) : undefined
+            }
+            primaryAction={
+              <Button
+                ref={launcher}
+                variant="outline"
+                className="min-h-11"
+                disabled={controls.selectionPending || !controls.isCurrent()}
+                onClick={openReview}
+              >
+                {m.library_selection_review()}
+              </Button>
+            }
+            actions={
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <Button
+                  variant="ghost"
+                  className="min-h-11"
+                  disabled={controls.selectionPending}
+                  onClick={controls.selectPage}
+                >
+                  {m.library_selection_page()}
+                </Button>
+                <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
+                <ShelfLabelAction controls={controls} />
+                <ShelfLabelAction controls={controls} kind="unassign" />
+              </div>
+            }
+            onCancel={controls.clearSelection}
+            cancelLabel={m.library_selection_clear()}
+            moreLabel={m.library_selection_more()}
+          />
+        </div>
+      ) : null}
       <SelectionReviewView
         open={reviewOpen}
         onOpenChange={(open) => (open ? openReview() : closeReview())}
@@ -458,6 +473,31 @@ function BulkStatusReview({ controls }: { controls: Controls }) {
   );
 }
 
+function ShelfEntryIdentity({
+  entry,
+  controls,
+  includeType = false,
+}: {
+  entry: PersonalLibraryEntry;
+  controls: Controls;
+  includeType?: boolean;
+}) {
+  return (
+    <span className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground" data-shelf-entry-identity>
+      {includeType ? <span>{entry.subject?.typeLabel ?? m.library_type_unnamed()}</span> : null}
+      <ShelfWorkContextView entry={entry} locale={controls.locale} isCurrent={controls.isCurrent} />
+      <LibraryOwnScore
+        subjectId={entry.subjectId}
+        locale={controls.locale}
+        {...(entry.viewerRowKey ? { rowKey: entry.viewerRowKey } : {})}
+        {...(entry.personalScore !== undefined ? { personalScore: entry.personalScore } : {})}
+        {...(controls.scoreQuestion ? { scoreQuestion: controls.scoreQuestion } : {})}
+        {...(controls.viewerFacts ? { viewerFacts: controls.viewerFacts } : {})}
+      />
+    </span>
+  );
+}
+
 function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
   const { rows, locale } = controls;
   return (
@@ -488,15 +528,7 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
               cover={coverOf(entry)}
               secondary={
                 <>
-                  <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />
-                  <LibraryOwnScore
-                    subjectId={entry.subjectId}
-                    locale={locale}
-                    {...(entry.viewerRowKey ? { rowKey: entry.viewerRowKey } : {})}
-                    {...(entry.personalScore !== undefined ? { personalScore: entry.personalScore } : {})}
-                    {...(controls.scoreQuestion ? { scoreQuestion: controls.scoreQuestion } : {})}
-                    {...(controls.viewerFacts ? { viewerFacts: controls.viewerFacts } : {})}
-                  />
+                  <ShelfEntryIdentity entry={entry} controls={controls} includeType />
                   {readEntry ? <div className="mt-2 flex justify-center">{readEntry}</div> : null}
                 </>
               }
@@ -547,17 +579,7 @@ function ListView({ controls }: { controls: Controls }) {
             {...(localizedTitle.lang ? { titleLang: localizedTitle.lang } : {})}
             meta={
               <>
-                <span>{entry.subject?.typeLabel}</span>
-                <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />
-                <LibraryOwnScore
-                  subjectId={entry.subjectId}
-                  locale={locale}
-                  {...(entry.viewerRowKey ? { rowKey: entry.viewerRowKey } : {})}
-                  {...(entry.personalScore !== undefined ? { personalScore: entry.personalScore } : {})}
-                  {...(controls.scoreQuestion ? { scoreQuestion: controls.scoreQuestion } : {})}
-                  {...(controls.viewerFacts ? { viewerFacts: controls.viewerFacts } : {})}
-                />
-                {readEntry}
+                <ShelfEntryIdentity entry={entry} controls={controls} includeType />
               </>
             }
             {...(progress ? { progress } : {})}
@@ -577,7 +599,8 @@ function ListView({ controls }: { controls: Controls }) {
                 }
               : {})}
             date={
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex flex-wrap items-center gap-2">
+                {readEntry}
                 <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
                   <Updated entry={entry} locale={locale} />
                 </EntryMenu>
@@ -617,24 +640,12 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
       ...selectionProps(entry, controls),
       selectLabel: title.text,
       href: entry.subject ? hrefOf(entry, locale) : '',
-      titleContext: (
-        <>
-          <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />
-          <LibraryOwnScore
-            subjectId={entry.subjectId}
-            locale={locale}
-            {...(entry.viewerRowKey ? { rowKey: entry.viewerRowKey } : {})}
-            {...(entry.personalScore !== undefined ? { personalScore: entry.personalScore } : {})}
-            {...(controls.scoreQuestion ? { scoreQuestion: controls.scoreQuestion } : {})}
-            {...(controls.viewerFacts ? { viewerFacts: controls.viewerFacts } : {})}
-          />
-        </>
-      ),
+      titleContext: <ShelfEntryIdentity entry={entry} controls={controls} />,
       title: title.text,
       ...(title.lang ? { titleLang: title.lang } : {}),
       cover: coverOf(entry),
       ...(entryProgress(entry, locale) ? { progress: <ProgressRow {...entryProgress(entry, locale)!} /> } : {}),
-      type: entry.subject?.typeLabel,
+      type: entry.subject?.typeLabel ?? m.library_type_unnamed(),
       status: (
         <span className="inline-flex items-center gap-1">
           {!activityVisible ? (
@@ -657,7 +668,11 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
         </span>
       ),
       added: <RelativeTime value={entry.createdAt} locale={locale} timeZone="UTC" />,
-      finished: entry.finishedAt ? <RelativeTime value={entry.finishedAt} locale={locale} timeZone="UTC" /> : '—',
+      finished: entry.finishedAt ? (
+        <RelativeTime value={entry.finishedAt} locale={locale} timeZone="UTC" />
+      ) : (
+        m.library_shelf_no_finish()
+      ),
       lastActivity: (
         <span className="inline-flex items-center gap-1">
           {activityVisible ? controls.readEntry(row) : null}

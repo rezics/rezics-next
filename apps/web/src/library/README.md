@@ -83,6 +83,14 @@ authorization remains decisive when reading the inventory.
 
 ## Saved shelf presentation
 
+Decision: the private Library uses one header/action area, a horizontally scrollable status strip and compact
+filters with the selected type or independent label visible. View details and saved-default guidance are optional;
+Continue follows the shelf. Layout and column changes retain the installed page, cursor and selection. Shared
+shelf primitives keep their existing interfaces. Missing progress meaning and finish history use explicit text,
+never a synthetic percentage, score or date. Main review stories mount the actual `/library` route with a coherent
+member population, first use and source-local recovery. Focused acceptance is authored for the deferred verifier;
+the source attempt runs only the final workspace typecheck under the closing verification instruction.
+
 Library presentation resolves explicit valid URL choices first, then the current account's native shelf defaults, then
 the existing application defaults. Layouts use an exact absolute-IRI type scope when the address type is an IRI and
 otherwise use `all`. Settings edits `all` and individual admitted types. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`

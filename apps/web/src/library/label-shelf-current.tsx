@@ -480,7 +480,8 @@ function LabelShelfRead({
       ? { first: action('first', null) }
       : {}),
     ...(shown.state === 'loaded' && shown.next ? { next: action('next', shown.next) } : {}),
-    ...(page.state === 'cursor-rejected' && source.cursor !== null && !query.isFetching
+    ...((page.state === 'cursor-rejected' || page.state === 'unavailable' || page.state === 'preparing') &&
+    !query.isFetching
       ? {
           retry: {
             href: currentHref,

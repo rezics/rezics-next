@@ -9,7 +9,7 @@ import type { LibraryNavigationRead } from './pins-read';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { readContinueEntries, type ContinueEntry, type ContinueView } from './continue-read';
 import type { LibraryRestoreReceipt, LibraryRestoreResult, PersonalLibraryView } from './entries-read';
-import { Exposure, useOperation } from '../kernel/exposure';
+import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import {
@@ -201,26 +201,29 @@ export function PersonalLibraryPage({
     ? m.library_tracked_entries_state({ status: page.stateLabel ?? m.library_other() })
     : m.library_tracked_entries();
   return (
-    <div className="w-full min-w-0 space-y-5">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <PageHeading>
-          {m.library_heading()}
-          {summary ? <ShelfSummaryCount page={summary.page} locale={locale} /> : null}
-        </PageHeading>
-        <Exposure operation="library_label.list">
-          <a href={`/${locale}/library/labels`} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-            {m.library_nav_labels()}
+    <div className="mx-auto w-full min-w-0 max-w-6xl space-y-5" data-personal-library-page>
+      <header className="space-y-3 border-b pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <PageHeading>{m.library_heading()}</PageHeading>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {m.library_shelf_private()}
+              {summary ? <ShelfSummaryCount page={summary.page} locale={locale} /> : null}
+            </p>
+          </div>
+          <a href={`/${locale}/search`} className={buttonVariants({ size: 'lg' })}>
+            {m.library_browse()}
           </a>
-        </Exposure>
+        </div>
+        <LibraryNavigation
+          current="tracked"
+          locale={locale}
+          pins={currentNavigation?.pins ?? { state: navigation.isError ? 'unavailable' : 'preparing' }}
+          collections={currentNavigation?.collections ?? []}
+          collectionsState={currentNavigation?.collectionsState ?? (navigation.isError ? 'unavailable' : 'preparing')}
+        />
       </header>
-      <LibraryNavigation
-        current="tracked"
-        locale={locale}
-        pins={currentNavigation?.pins ?? { state: navigation.isError ? 'unavailable' : 'preparing' }}
-        collections={currentNavigation?.collections ?? []}
-        collectionsState={currentNavigation?.collectionsState ?? (navigation.isError ? 'unavailable' : 'preparing')}
-      />
-      {summary ? <ShelfSummaryNavigation summary={summary} locale={locale} view={{ ...firstPage }} /> : null}
+      {summary ? <ShelfSummaryNavigation summary={summary} locale={locale} view={firstPage} /> : null}
       {undo ? (
         <EntryUndoForm
           undo={undo}
@@ -233,112 +236,122 @@ export function PersonalLibraryPage({
         />
       ) : null}
       {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
-      {continueAbsent ? null : (
-        <div hidden={!continueAdmitted}>
-          <ContinueSection
-            {...(currentContinue ? { state: currentContinue } : continueEntries ? { entries: continueEntries } : {})}
-            onRetry={() => {
-              if (continueCurrent?.() ?? true) void resume.refresh();
-            }}
-            busy={resume.busy}
-            locale={locale}
-            density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
-          />
+      <section hidden={!entriesAdmitted} aria-labelledby="tracked-entries-heading" className="min-w-0 space-y-4">
+        <div className="rounded-xl border bg-muted/20 p-3 sm:p-4" data-shelf-filters>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <div
+              className="flex min-w-0 flex-wrap items-center gap-2"
+              role="group"
+              aria-label={m.library_shelf_filters()}
+            >
+              <ShelfTypes
+                key={`${locale}:${page.type ?? ''}`}
+                locale={locale}
+                view={intent}
+                {...(page.typeLabel ? { typeLabel: page.typeLabel } : {})}
+              />
+              <Exposure operation="library_label.list">
+                <a href={`/${locale}/library/labels`} className={buttonVariants({ variant: 'outline' })}>
+                  {m.library_nav_labels()}
+                </a>
+              </Exposure>
+              {page.type || page.state ? (
+                <Exposure operation="collection.create">
+                  <SaveQueryLink id="library" selection={saveQuerySelection} />
+                </Exposure>
+              ) : null}
+            </div>
+            <Exposure operation="library_entry.list">
+              <DisplayControls
+                compact
+                {...typeSearch}
+                {...(page.state ? { state: page.state } : {})}
+                locale={locale}
+                display={display}
+                {...(presentation ? { presentation } : {})}
+                {...(isCurrent ? { isCurrent } : {})}
+                tableAvailable={!page.readState && page.entries.length > 0}
+                {...(filterSort ? { filterSort } : {})}
+                {...(effectiveCursor ? { cursor: effectiveCursor } : {})}
+              />
+            </Exposure>
+          </div>
+          {page.type || page.state ? (
+            <div className="mt-3 flex flex-wrap gap-2 text-sm" data-shelf-selected-filters>
+              {page.type ? (
+                <span className="inline-flex min-h-9 max-w-full flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1">
+                  <span className="break-words">{m.library_type_filtered({ type: typeLabel })}</span>
+                  <a href={clearTypeHref} className="min-h-8 content-center underline underline-offset-4">
+                    {m.library_type_clear()}
+                  </a>
+                </span>
+              ) : null}
+              {page.state ? (
+                <span className="inline-flex min-h-9 max-w-full flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1">
+                  <span>{m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}</span>
+                  <a
+                    href={shelfHref(locale, { ...firstPage, state: undefined })}
+                    className="min-h-8 content-center underline underline-offset-4"
+                  >
+                    {m.library_clear_state()}
+                  </a>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-      )}
-      <section hidden={!entriesAdmitted} aria-labelledby="tracked-entries-heading" className="space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 tabIndex={-1} id="tracked-entries-heading" className="text-2xl font-semibold">
+        <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
+          <h2 tabIndex={-1} id="tracked-entries-heading" className="text-lg font-semibold tracking-tight">
             {heading}
           </h2>
-          <Exposure operation="library_entry.list">
-            <DisplayControls
-              {...typeSearch}
-              {...(page.state ? { state: page.state } : {})}
-              locale={locale}
-              display={display}
-              {...(presentation ? { presentation } : {})}
-              {...(isCurrent ? { isCurrent } : {})}
-              tableAvailable={!page.readState && page.entries.length > 0}
-              {...(filterSort ? { filterSort } : {})}
-              {...(effectiveCursor ? { cursor: effectiveCursor } : {})}
-            />
-          </Exposure>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          <a className="underline underline-offset-4" href={`/${locale}/settings#display`}>
-            {m.settings_shelf_heading()}
-          </a>
-        </p>
-        <SortControls
-          key={`${page.type ?? ''}:${page.state ?? ''}:${sort.orderBy}:${sort.direction}`}
-          locale={locale}
-          {...(page.state ? { state: page.state } : {})}
-          display={display}
-          sort={sort}
-          {...(presentation ? { presentation } : {})}
-          {...(isCurrent ? { isCurrent } : {})}
-          {...typeSearch}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <ShelfTypes
-            key={`${locale}:${page.type ?? ''}`}
+          <SortControls
             locale={locale}
-            view={intent}
-            {...(page.typeLabel ? { typeLabel: page.typeLabel } : {})}
+            {...(page.state ? { state: page.state } : {})}
+            display={display}
+            sort={sort}
+            {...(presentation ? { presentation } : {})}
+            {...(isCurrent ? { isCurrent } : {})}
+            {...typeSearch}
           />
-          {page.type ? (
-            <a href={clearTypeHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-              {m.library_type_clear()}
-            </a>
-          ) : null}
-          {page.type || page.state ? (
-            <Exposure operation="collection.create">
-              <SaveQueryLink id="library" selection={saveQuerySelection} />
-            </Exposure>
-          ) : null}
         </div>
         {page.cursorReset ? <p role="status">{m.library_sort_restarted()}</p> : null}
-        {page.type ? (
-          <p className="text-sm text-muted-foreground">{m.library_type_filtered({ type: typeLabel })}</p>
-        ) : null}
-        {page.state ? (
-          <p className="text-sm text-muted-foreground">
-            {m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}
-          </p>
-        ) : null}
-        {page.readState === 'score-unavailable' ? (
-          <ShelfScoreUnavailable locale={locale} view={firstPage} />
-        ) : page.readState === 'preparing' && sort.orderBy === 'personalScore' && scorePreparation ? (
-          <div className="flex flex-col items-start gap-3">
-            <ShelfScorePreparation
-              isCurrent={isCurrent ?? (() => true)}
-              prepare={scorePreparation.prepare}
-              refresh={scorePreparation.refresh}
-            />
-            <EntriesFirstPage locale={locale} view={firstPage} />
-          </div>
-        ) : page.readState === 'preparing' && sort.orderBy === 'title' && titlePreparation ? (
-          <div className="flex flex-col items-start gap-3">
-            <ShelfTitlePreparation
-              isCurrent={isCurrent ?? (() => true)}
-              prepare={titlePreparation.prepare}
-              refresh={titlePreparation.refresh}
-            />
-            <EntriesFirstPage locale={locale} view={firstPage} />
-          </div>
-        ) : page.readState ? (
-          <div className="flex flex-col items-start gap-3">
-            <p role={page.readState === 'preparing' ? 'status' : 'alert'}>
-              {page.readState === 'closed'
-                ? m.platform_closed_message()
-                : page.readState === 'denied'
-                  ? m.library_sort_denied()
-                  : page.readState === 'preparing'
-                    ? m.library_sort_preparing()
-                    : m.error_message()}
-            </p>
-            <EntriesFirstPage locale={locale} view={firstPage} />
+        {page.readState ? (
+          <div className="space-y-3 rounded-xl border border-dashed bg-muted/20 p-4 sm:p-6" data-shelf-recovery>
+            {page.readState === 'score-unavailable' ? (
+              <ShelfScoreUnavailable locale={locale} view={firstPage} />
+            ) : page.readState === 'preparing' && sort.orderBy === 'personalScore' && scorePreparation ? (
+              <div className="flex flex-col items-start gap-3">
+                <ShelfScorePreparation
+                  isCurrent={isCurrent ?? (() => true)}
+                  prepare={scorePreparation.prepare}
+                  refresh={scorePreparation.refresh}
+                />
+                <EntriesFirstPage locale={locale} view={firstPage} />
+              </div>
+            ) : page.readState === 'preparing' && sort.orderBy === 'title' && titlePreparation ? (
+              <div className="flex flex-col items-start gap-3">
+                <ShelfTitlePreparation
+                  isCurrent={isCurrent ?? (() => true)}
+                  prepare={titlePreparation.prepare}
+                  refresh={titlePreparation.refresh}
+                />
+                <EntriesFirstPage locale={locale} view={firstPage} />
+              </div>
+            ) : page.readState ? (
+              <div className="flex flex-col items-start gap-3">
+                <p role={page.readState === 'preparing' ? 'status' : 'alert'}>
+                  {page.readState === 'closed'
+                    ? m.platform_closed_message()
+                    : page.readState === 'denied'
+                      ? m.library_sort_denied()
+                      : page.readState === 'preparing'
+                        ? m.library_sort_preparing()
+                        : m.error_message()}
+                </p>
+                <EntriesFirstPage locale={locale} view={firstPage} />
+              </div>
+            ) : null}
+            {windowRetry}
           </div>
         ) : (
           <ShelfEntries
@@ -398,7 +411,7 @@ export function PersonalLibraryPage({
           />
         )}
         <nav className="flex flex-wrap gap-3" aria-label={m.library_tracked_entries()}>
-          {windowRetry}
+          {!page.readState ? windowRetry : null}
           {windowControls?.previous !== undefined ? (
             <a
               className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
@@ -449,6 +462,19 @@ export function PersonalLibraryPage({
           ) : null}
         </nav>
       </section>
+      {continueAbsent ? null : (
+        <div hidden={!continueAdmitted}>
+          <ContinueSection
+            {...(currentContinue ? { state: currentContinue } : continueEntries ? { entries: continueEntries } : {})}
+            onRetry={() => {
+              if (continueCurrent?.() ?? true) void resume.refresh();
+            }}
+            busy={resume.busy}
+            locale={locale}
+            density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -535,18 +561,48 @@ export function LabelShelfPage({
       </div>
     );
   return (
-    <div className="max-w-6xl space-y-6 text-foreground">
-      <PageHeading data-label-shelf-heading tabIndex={-1}>
-        {page.label.name}
-      </PageHeading>
+    <div className="mx-auto w-full min-w-0 max-w-6xl space-y-5 text-foreground" data-personal-label-shelf>
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+        <div className="min-w-0">
+          <PageHeading data-label-shelf-heading tabIndex={-1}>
+            {page.label.name}
+          </PageHeading>
+          <p className="mt-1 text-sm text-muted-foreground">{m.library_shelf_label_scope()}</p>
+        </div>
+        <a
+          href={shelfHref(locale, { ...view(page.label.id), label: undefined, cursor: undefined })}
+          className={buttonVariants({ variant: 'outline' })}
+        >
+          {m.library_heading()}
+        </a>
+      </header>
       <SubjectLabelNotice {...(page.labelResult !== undefined ? { result: page.labelResult } : {})} />
-      <DisplayControls
-        locale={locale}
-        display={display}
-        label={page.label.id}
-        {...(presentation ? { presentation } : {})}
-        {...(isCurrent ? { isCurrent } : {})}
-      />
+      <div
+        className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3"
+        data-shelf-filters
+      >
+        <nav aria-label={m.library_shelf_filters()} className="flex min-w-0 flex-wrap items-center gap-2">
+          <span
+            className="max-w-full break-words rounded-md border bg-background px-3 py-2 text-sm font-medium"
+            data-shelf-selected-label
+          >
+            {page.label.name}
+          </span>
+          <Exposure operation="library_label.list">
+            <a href={`/${locale}/library/labels`} className={buttonVariants({ variant: 'ghost' })}>
+              {m.library_nav_labels()}
+            </a>
+          </Exposure>
+        </nav>
+        <DisplayControls
+          compact
+          locale={locale}
+          display={display}
+          label={page.label.id}
+          {...(presentation ? { presentation } : {})}
+          {...(isCurrent ? { isCurrent } : {})}
+        />
+      </div>
       {page.entries.length ? (
         <LabelShelfEntries
           entries={page.entries}

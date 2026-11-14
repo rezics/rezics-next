@@ -93,7 +93,9 @@ export function DisplayControls({
   tableAvailable,
   presentation,
   isCurrent,
+  compact = false,
 }: {
+  compact?: boolean;
   state?: LibraryEntryStateWrite;
   type?: string;
   locale: string;
@@ -130,10 +132,33 @@ export function DisplayControls({
   };
   const clearStateView: ShelfPresentationIntent = { ...stateSearch };
   delete clearStateView.state;
+  const viewDetails = (
+    <>
+      <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
+        {m.library_shelf_restore_defaults()}
+      </a>
+      {compact ? (
+        <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={`/${locale}/settings#display`}>
+          {m.settings_shelf_heading()}
+        </a>
+      ) : null}
+      <PresentationNotice {...(presentation ? { presentation } : {})} display={display} {...(label ? { label } : {})} />
+    </>
+  );
+  const guidance = compact ? (
+    <details className="min-w-0 text-sm">
+      <summary className="min-h-11 cursor-pointer content-center rounded-md px-2 text-muted-foreground hover:text-foreground focus-visible:outline-2">
+        {m.library_shelf_view_details()}
+      </summary>
+      <div className="flex max-w-xl flex-wrap gap-2 rounded-lg border bg-background p-3">{viewDetails}</div>
+    </details>
+  ) : (
+    viewDetails
+  );
   if (!hydrated) {
     const selected = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
     return (
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <nav aria-label={m.library_layout()} className="flex gap-1">
           {shelfLayouts.map((layout) => (
             <a
@@ -160,24 +185,17 @@ export function DisplayControls({
             ))}
           </nav>
         ) : null}
-        {state ? (
+        {state && !compact ? (
           <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={shelfHref(locale, clearStateView)}>
             {m.library_clear_state()}
           </a>
         ) : null}
-        <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
-          {m.library_shelf_restore_defaults()}
-        </a>
-        <PresentationNotice
-          {...(presentation ? { presentation } : {})}
-          display={display}
-          {...(label ? { label } : {})}
-        />
+        {guidance}
       </div>
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-4">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
       <ToggleGroup
         aria-label={m.library_layout()}
         value={[display.layout]}
@@ -224,15 +242,12 @@ export function DisplayControls({
           ))}
         </ToggleGroup>
       ) : null}
-      {state ? (
+      {state && !compact ? (
         <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={shelfHref(locale, clearStateView)}>
           {m.library_clear_state()}
         </a>
       ) : null}
-      <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
-        {m.library_shelf_restore_defaults()}
-      </a>
-      <PresentationNotice {...(presentation ? { presentation } : {})} display={display} {...(label ? { label } : {})} />
+      {guidance}
     </div>
   );
 }
