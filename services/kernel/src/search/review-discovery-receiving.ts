@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
-import { withConnection } from '../database/pool.ts';
+import type { Pool, PoolClient } from 'pg';
+import { discardConnection, withConnection, withQueryAccounting } from '../database/pool.ts';
+import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { lookupEventType } from '../events/catalogue.ts';
 import { REVIEW_DISCOVERY_CHANGED } from '../content/review-discovery-events.ts';
-import { readReviewDiscoveryChanges, refreshReviewDiscoveryChanges } from './native-bindings.ts';
+import { readReviewDiscoveryChanges, refreshReviewDiscoveryChanges, withReadTransaction } from './native-bindings.ts';
 import type { ReviewDiscoverySource } from '../content/review-discovery.ts';
 import { discoveryGenerations } from './generations.ts';
 import { withDiscoveryTarget, type DiscoveryProjection, type DiscoveryTarget } from './account-discovery.ts';
@@ -11,6 +13,7 @@ import { withDiscoveryTarget, type DiscoveryProjection, type DiscoveryTarget } f
 /** Increment when the installed native read/Format2 projection meaning changes. */
 export const REVIEW_RECEIVING_MEANING = 'content-review-current-format2-v1';
 export const REVIEW_RECEIVING_BATCH = 100;
+const turnBudgetMs = 30_000;
 const maxPosition = 9_223_372_036_854_775_807n;
 const targetWhere = 'prefix=$1 AND generation=$2 AND index_uuid=$3 AND incarnation=$4 AND meaning=$5';
 const where = `${targetWhere} AND partition_no=$6`;
@@ -23,6 +26,158 @@ const parameters = (target: DiscoveryTarget) => [
 ];
 function partition(value: number) {
   if (!Number.isInteger(value) || value < 0 || value > 4095) throw new RangeError('Invalid receiving partition');
+}
+
+export type ReviewReceivingContext = Readonly<{ deadline: number }>;
+
+export class ReviewReceivingDeadlineError extends Error {
+  constructor() {
+    super('Review discovery receiving deadline expired');
+    this.name = 'ReviewReceivingDeadlineError';
+  }
+}
+
+function remaining(deadline: number) {
+  const milliseconds = deadline - Date.now();
+  if (!Number.isFinite(deadline) || milliseconds <= 0) throw new ReviewReceivingDeadlineError();
+  return Math.max(1, Math.floor(milliseconds));
+}
+
+/** Late owner completions cannot resume receiving. Their request context keeps the original deadline. */
+async function within<T>(deadline: number, work: () => Promise<T>): Promise<T> {
+  remaining(deadline);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve()
+        .then(() => {
+          remaining(deadline);
+          return withRequestDeadline(deadline, work);
+        })
+        .then((value) => {
+          remaining(deadline);
+          return value;
+        }),
+      new Promise<never>((_, reject) => {
+        const expire = () => {
+          const milliseconds = deadline - Date.now();
+          if (milliseconds > 0) timer = setTimeout(expire, Math.max(1, Math.ceil(milliseconds)));
+          else reject(new ReviewReceivingDeadlineError());
+        };
+        timer = setTimeout(expire, Math.max(1, Math.ceil(deadline - Date.now())));
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function turn<T>(context: ReviewReceivingContext | undefined, work: (deadline: number) => Promise<T>): Promise<T> {
+  if (context && !Number.isFinite(context.deadline)) throw new TypeError('Invalid review receiving deadline');
+  const deadline = Math.min(Date.now() + turnBudgetMs, deadlineFor(turnBudgetMs), context?.deadline ?? Infinity);
+  return within(deadline, () => work(deadline));
+}
+
+/** Writable checkout, not a read snapshot. Only a completely cleaned session may return to the pool. */
+function connection<T>(
+  pool: Pool,
+  deadline: number,
+  work: (client: PoolClient) => Promise<T>,
+  unsettledProjection?: () => Promise<void> | undefined,
+): Promise<T> {
+  let reusable = false;
+  return withBoundedReadLifetime(
+    (run) =>
+      withConnection(pool, async (raw) => {
+        try {
+          return await run(raw);
+        } finally {
+          // This also covers expiry while a manual transaction or advisory session lock is idle.
+          if (!reusable) {
+            discardConnection(raw, new Error('Review receiving session was not fully released'));
+            // applyReviews owns an uncancellable transport. Keep its existing single-publisher lock
+            // until that effect settles, even though the caller and bounded client have expired.
+            // The target owner must provide terminal cancellation before this custody can be finite.
+            await unsettledProjection?.()?.catch(() => {});
+          }
+        }
+      }),
+    discardConnection,
+    deadline,
+    async (client) => {
+      const settings = (
+        await client.query<{ statement_timeout: string; lock_timeout: string }>(
+          `SELECT current_setting('statement_timeout') AS statement_timeout,
+           current_setting('lock_timeout') AS lock_timeout`,
+        )
+      ).rows[0]!;
+      await client.query(`SELECT set_config('statement_timeout',$1,false),set_config('lock_timeout',$1,false)`, [
+        `${remaining(deadline)}ms`,
+      ]);
+      const value = await work(client);
+      await client.query(`SELECT set_config('statement_timeout',$1,false),set_config('lock_timeout',$2,false)`, [
+        settings.statement_timeout,
+        settings.lock_timeout,
+      ]);
+      reusable = true;
+      return value;
+    },
+    {
+      deadlineError: () => new ReviewReceivingDeadlineError(),
+      isUncertainSettledQueryError: () => true,
+    },
+  );
+}
+
+/** Adapt only Search's withConnection helpers to this owned checkout. Never pass this to native owners. */
+function onSession<T>(pool: Pool, client: PoolClient, work: (session: Pool) => Promise<T>): Promise<T> {
+  const borrowed = Object.create(client) as PoolClient;
+  // The outer lifetime restores or discards the physical client, including on helper cleanup failure.
+  borrowed.release = () => {};
+  const session = Object.create(pool) as Pool;
+  let checkedOut = false;
+  session.connect = (async () => {
+    if (checkedOut) throw new Error('Review receiving session was already checked out');
+    checkedOut = true;
+    return borrowed;
+  }) as Pool['connect'];
+  // The physical checkout already accounts every query. Borrowing it is not another checkout/query cost.
+  return withQueryAccounting(
+    { connection: (dispatch) => dispatch(), query: (_sql, _operands, dispatch) => dispatch() },
+    () => work(session),
+  );
+}
+
+type TargetSearch = Parameters<typeof withDiscoveryTarget>[1];
+
+/** Only the target-session checks use this transport; projection retains its own transport custody. */
+function targetSearch(search: TargetSearch, deadline: number): TargetSearch {
+  return {
+    ...search,
+    async request<T>(
+      method: Parameters<TargetSearch['request']>[0],
+      path: string,
+      body?: unknown,
+      options?: Parameters<TargetSearch['request']>[3],
+    ) {
+      const controller = new AbortController();
+      const abort = () => controller.abort(options?.signal?.reason);
+      if (options?.signal?.aborted) abort();
+      else options?.signal?.addEventListener('abort', abort, { once: true });
+      try {
+        return await within(deadline, () =>
+          search.request<T>(method, path, body, {
+            ...options,
+            timeoutMs: Math.min(options?.timeoutMs ?? Infinity, remaining(deadline)),
+            signal: controller.signal,
+          }),
+        );
+      } finally {
+        options?.signal?.removeEventListener('abort', abort);
+        controller.abort();
+      }
+    },
+  };
 }
 
 type Stored = {
@@ -52,10 +207,15 @@ export async function readReviewDiscoveryReceiving(
   pool: Pool,
   target: DiscoveryTarget,
   home: number,
+  context?: ReviewReceivingContext,
 ): Promise<ReviewReceivingFrontier> {
   partition(home);
+  return turn(context, (deadline) => connection(pool, deadline, (client) => read(client, target, home)));
+}
+
+async function read(client: PoolClient, target: DiscoveryTarget, home: number): Promise<ReviewReceivingFrontier> {
   const row = (
-    await pool.query<Stored>(
+    await client.query<Stored>(
       `SELECT acknowledged::text,requested::text,through::text,completed_cut::text,native_position::text,status,claim
      FROM search.review_discovery_receiving WHERE ${where}`,
       [...parameters(target), home],
@@ -74,8 +234,8 @@ export async function readReviewDiscoveryReceiving(
   };
 }
 
-async function ensure(pool: Pool, target: DiscoveryTarget, home: number) {
-  await pool.query(
+async function ensure(client: PoolClient, target: DiscoveryTarget, home: number) {
+  await client.query(
     `INSERT INTO search.review_discovery_receiving(prefix,generation,index_uuid,incarnation,meaning,partition_no)
      VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
     [...parameters(target), home],
@@ -83,28 +243,38 @@ async function ensure(pool: Pool, target: DiscoveryTarget, home: number) {
 }
 
 /** Events carry identities/original provenance, never an index body or a Content revision ordering. */
-export async function requestReviewDiscoveryReceiving(pool: Pool, prefix: string, data: unknown): Promise<void> {
+export async function requestReviewDiscoveryReceiving(
+  pool: Pool,
+  prefix: string,
+  data: unknown,
+  context?: ReviewReceivingContext,
+): Promise<void> {
   if (!lookupEventType(REVIEW_DISCOVERY_CHANGED)?.Check(data)) throw new TypeError('Invalid review receiving wakeup');
   const wake = data as { partition: number; through: string };
   if (BigInt(wake.through) > maxPosition) throw new RangeError('Review receiving wakeup exceeds native position');
-  for (const target of await discoveryGenerations(pool, prefix)) {
-    if (!target.uuid || ['retired', 'retiring', 'quarantined', 'allocated'].includes(target.state)) continue;
-    await ensure(pool, target, wake.partition);
-    await pool.query(
-      `UPDATE search.review_discovery_receiving SET requested=GREATEST(requested,$7::bigint),
-       pending=pending OR $7::bigint>acknowledged,
-       status=CASE WHEN $7::bigint>acknowledged THEN 'preparing' ELSE status END WHERE ${where}`,
-      [...parameters(target), wake.partition, wake.through],
-    );
-  }
+  return turn(context, (deadline) =>
+    connection(pool, deadline, async (client) => {
+      const targets = await onSession(pool, client, (session) => discoveryGenerations(session, prefix));
+      for (const target of targets) {
+        if (!target.uuid || ['retired', 'retiring', 'quarantined', 'allocated'].includes(target.state)) continue;
+        await ensure(client, target, wake.partition);
+        await client.query(
+          `UPDATE search.review_discovery_receiving SET requested=GREATEST(requested,$7::bigint),
+           pending=pending OR $7::bigint>acknowledged,
+           status=CASE WHEN $7::bigint>acknowledged THEN 'preparing' ELSE status END WHERE ${where}`,
+          [...parameters(target), wake.partition, wake.through],
+        );
+      }
+    }),
+  );
 }
 
 const encode = (value: unknown) =>
   JSON.stringify(value, (_, item) => (typeof item === 'bigint' ? item.toString() : item));
 
-/** One admitted page. A short durable claim releases the checkout before native refresh (including max=1 pools).
+/** One admitted deadline and page. A short claim releases the checkout before native refresh (including max=1 pools).
  * Target session custody then fences staging, index application, visible observation and acknowledged progress.
- * An expired claimant cannot write after its successor: claim validation is inside that same target custody.
+ * Receiving mutations require a live claim; uncertain external projection never acknowledges progress.
  */
 export function createReviewDiscoveryReceiving(options: {
   pool: Pool;
@@ -118,80 +288,138 @@ export function createReviewDiscoveryReceiving(options: {
   const batch = options.batchSize ?? REVIEW_RECEIVING_BATCH;
   if (!Number.isInteger(batch) || batch < 1 || batch > 100) throw new RangeError('Invalid review receiving page limit');
 
-  async function step(home: number): Promise<ReviewReceivingFrontier> {
+  async function step(home: number, context?: ReviewReceivingContext): Promise<ReviewReceivingFrontier> {
     partition(home);
-    await ensure(pool, target, home);
+    return turn(context, (deadline) => receive(home, deadline));
+  }
+
+  async function receive(home: number, deadline: number): Promise<ReviewReceivingFrontier> {
     const values = [...parameters(target), home];
     const claim = randomUUID();
-    const claimed = (
-      await pool.query<Stored>(
-        `UPDATE search.review_discovery_receiving SET claim=$7,claim_until=clock_timestamp()+interval '30 seconds',
-       pending=true,status='preparing' WHERE ${where}
-       AND (claim IS NULL OR claim_until<=clock_timestamp())
-       RETURNING acknowledged::text,requested::text,through::text,completed_cut::text,native_position::text,status,claim`,
-        [...values, claim],
-      )
-    ).rows[0];
-    if (!claimed) return readReviewDiscoveryReceiving(pool, target, home);
+    let attempted = false;
+    const frontier = () => connection(pool, deadline, (client) => read(client, target, home));
     try {
+      const claimed = await connection(pool, deadline, async (client) => {
+        await ensure(client, target, home);
+        attempted = true;
+        return (
+          await client.query<Stored>(
+            `UPDATE search.review_discovery_receiving
+             SET claim=$7,claim_until=statement_timestamp()+$8::double precision*interval '1 millisecond',
+             pending=true,status='preparing' WHERE ${where}
+             AND (claim IS NULL OR claim_until<=clock_timestamp())
+             AND statement_timestamp()+$8::double precision*interval '1 millisecond'>clock_timestamp()
+             RETURNING acknowledged::text,requested::text,through::text,completed_cut::text,native_position::text,status,claim`,
+            [...values, claim, remaining(deadline)],
+          )
+        ).rows[0];
+      });
+      if (!claimed) return await frontier();
       if (!source) throw new Error('Native review receiving source is unavailable');
       // Recover by reading current native rows again. A staged body is never a refresh cache.
-      const page = await readReviewDiscoveryChanges(
-        pool,
-        home,
-        BigInt(claimed.acknowledged),
-        batch,
-        claimed.through === null ? undefined : BigInt(claimed.through),
+      // The nested native callable sees its original Pool and this short, shared-deadline snapshot.
+      const page = await within(deadline, () =>
+        withReadTransaction(
+          pool,
+          () =>
+            readReviewDiscoveryChanges(
+              pool,
+              home,
+              BigInt(claimed.acknowledged),
+              batch,
+              claimed.through === null ? undefined : BigInt(claimed.through),
+            ),
+          deadline,
+        ),
       );
-      const retained = await pool.query(
-        `UPDATE search.review_discovery_receiving SET through=$8,stage=$9::jsonb WHERE ${where} AND claim=$7`,
-        [...values, claim, page.through.toString(), encode({ page })],
+      const retained = await connection(pool, deadline, (client) =>
+        client.query(
+          `UPDATE search.review_discovery_receiving SET through=$8,stage=$9::jsonb WHERE ${where}
+           AND claim=$7 AND claim_until>clock_timestamp() AND acknowledged=$10::bigint
+           AND (through IS NULL OR through=$8::bigint)`,
+          [...values, claim, page.through.toString(), encode({ page }), claimed.acknowledged],
+        ),
       );
-      if (retained.rowCount !== 1) return readReviewDiscoveryReceiving(pool, target, home);
+      if (retained.rowCount !== 1) throw new Error('Review receiving claim was superseded or expired');
       const ids = [...new Set(page.changes.map((change) => change.id))];
-      const refreshed = ids.length ? await refreshReviewDiscoveryChanges(source, page) : undefined;
-      const actions = refreshed ? await projection.prepareReviews(refreshed, ids) : [];
-      await withDiscoveryTarget(pool, search, target, async (client, index) => {
+      const refreshed = ids.length
+        ? await within(deadline, () => refreshReviewDiscoveryChanges(source, page))
+        : undefined;
+      const actions = refreshed ? await within(deadline, () => projection.prepareReviews(refreshed, ids)) : [];
+      let applying: Promise<void> | undefined;
+      const apply = async (client: PoolClient, index: string) => {
         const admitted = await client.query(
           `UPDATE search.review_discovery_receiving SET stage=$8::jsonb WHERE ${where}
-           AND claim=$7 AND claim_until>clock_timestamp()`,
-          [...values, claim, encode({ page, actions, nativePosition: refreshed?.nativePosition ?? null })],
+           AND claim=$7 AND claim_until>clock_timestamp() AND acknowledged=$9::bigint AND through=$10::bigint
+           AND ($11::bigint IS NULL OR native_position IS NULL OR native_position<=$11::bigint)`,
+          [
+            ...values,
+            claim,
+            encode({ page, actions, nativePosition: refreshed?.nativePosition ?? null }),
+            claimed.acknowledged,
+            page.through.toString(),
+            refreshed?.nativePosition.toString() ?? null,
+          ],
         );
-        if (admitted.rowCount !== 1) throw new Error('Review receiving claim was superseded or expired');
-        await projection.applyReviews(actions, {
-          client,
-          index,
-          async acknowledge() {
-            // Copy settlement and receiving frontier commit in the same PostgreSQL transaction,
-            // only after the exact engine effects have become visible. A lost response repeats refresh.
-            const result = await client.query(
-              `UPDATE search.review_discovery_receiving SET acknowledged=$8,
-               through=$9,completed_cut=CASE WHEN $9::bigint IS NULL THEN $10 ELSE completed_cut END,
-               native_position=COALESCE($11::bigint,native_position),stage=NULL,
-               pending=($9::bigint IS NOT NULL OR requested>$8::bigint),
-               status=CASE WHEN $9::bigint IS NOT NULL OR requested>$8::bigint THEN 'preparing' ELSE 'ready' END,
-               claim=NULL,claim_until=NULL WHERE ${where} AND claim=$7 AND acknowledged=$12::bigint`,
-              [
-                ...values,
-                claim,
-                page.after.toString(),
-                page.next === null ? null : page.through.toString(),
-                page.through.toString(),
-                refreshed?.nativePosition.toString() ?? null,
-                claimed.acknowledged,
-              ],
-            );
-            if (result.rowCount !== 1) throw new Error('Review receiving acknowledgement lost its claim');
-          },
+        if (admitted.rowCount !== 1)
+          throw new Error('Review receiving claim or native observation is no longer current');
+        await within(deadline, () => {
+          applying = projection.applyReviews(actions, {
+            client,
+            index,
+            async acknowledge() {
+              remaining(deadline);
+              // Copy settlement and receiving frontier commit in the same PostgreSQL transaction,
+              // only after the exact engine effects have become visible. A lost response repeats refresh.
+              const result = await client.query(
+                `UPDATE search.review_discovery_receiving SET acknowledged=$8,
+                 through=$9,completed_cut=CASE WHEN $9::bigint IS NULL THEN $10 ELSE completed_cut END,
+                 native_position=COALESCE($11::bigint,native_position),stage=NULL,
+                 pending=($9::bigint IS NOT NULL OR requested>$8::bigint),
+                 status=CASE WHEN $9::bigint IS NOT NULL OR requested>$8::bigint THEN 'preparing' ELSE 'ready' END,
+                 claim=NULL,claim_until=NULL WHERE ${where} AND claim=$7 AND claim_until>clock_timestamp()
+                 AND acknowledged=$12::bigint AND through=$10::bigint
+                 AND ($11::bigint IS NULL OR native_position IS NULL OR native_position<=$11::bigint)`,
+                [
+                  ...values,
+                  claim,
+                  page.after.toString(),
+                  page.next === null ? null : page.through.toString(),
+                  page.through.toString(),
+                  refreshed?.nativePosition.toString() ?? null,
+                  claimed.acknowledged,
+                ],
+              );
+              if (result.rowCount !== 1) throw new Error('Review receiving acknowledgement lost its claim');
+            },
+          });
+          return applying;
         });
-      });
-      return await readReviewDiscoveryReceiving(pool, target, home);
-    } catch (error) {
-      await pool.query(
-        `UPDATE search.review_discovery_receiving SET status='unavailable',pending=true,claim=NULL,claim_until=NULL
-         WHERE ${where} AND claim=$7`,
-        [...values, claim],
+      };
+      await connection(
+        pool,
+        deadline,
+        (owned) =>
+          onSession(pool, owned, (session) =>
+            withDiscoveryTarget(session, targetSearch(search, deadline), target, apply),
+          ),
+        () => applying,
       );
+      return await frontier();
+    } catch (error) {
+      if (attempted && Date.now() < deadline) {
+        try {
+          await connection(pool, deadline, (client) =>
+            client.query(
+              `UPDATE search.review_discovery_receiving SET status='unavailable',pending=true,claim=NULL,claim_until=NULL
+               WHERE ${where} AND claim=$7`,
+              [...values, claim],
+            ),
+          );
+        } catch {
+          // No new cleanup budget. The bounded session is retired and the durable claim expires.
+        }
+      }
       throw error;
     }
   }
@@ -199,44 +427,50 @@ export function createReviewDiscoveryReceiving(options: {
   /** Fair indexed pending seeks, with a fixed 4096-partition sweep for restart and missed wakeups.
    * The existing supervisor calls this once per live target; there is no second poller or drain loop.
    */
-  async function next() {
-    const values = parameters(target);
-    const home = await withConnection(pool, async (client) => {
-      await client.query(
-        `INSERT INTO search.review_discovery_receiving_scan(prefix,generation,index_uuid,incarnation,meaning)
-         VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-        values,
-      );
-      const cursor = (
-        await client.query<{ partition_no: number }>(
-          `SELECT partition_no FROM search.review_discovery_receiving_scan WHERE ${targetWhere}`,
+  async function next(context?: ReviewReceivingContext) {
+    return turn(context, async (deadline) => {
+      const values = parameters(target);
+      const home = await connection(pool, deadline, async (client) => {
+        await client.query(
+          `INSERT INTO search.review_discovery_receiving_scan(prefix,generation,index_uuid,incarnation,meaning)
+           VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
           values,
-        )
-      ).rows[0]!.partition_no;
-      let due: number | undefined;
-      // Two keyset seeks implement wraparound, both bounded by the fixed native partition domain.
-      for (const after of [cursor, 0]) {
-        const selected = (
+        );
+        const cursor = (
           await client.query<{ partition_no: number }>(
-            `SELECT partition_no FROM search.review_discovery_receiving WHERE ${targetWhere}
-           AND pending AND partition_no>=$6 AND (claim IS NULL OR claim_until<=clock_timestamp())
-           ORDER BY partition_no LIMIT 1`,
-            [...values, after],
+            `SELECT partition_no FROM search.review_discovery_receiving_scan WHERE ${targetWhere}`,
+            values,
           )
-        ).rows[0];
-        if (selected) {
-          due = selected.partition_no;
-          break;
+        ).rows[0]!.partition_no;
+        let due: number | undefined;
+        // Two keyset seeks implement wraparound, both bounded by the fixed native partition domain.
+        for (const after of [cursor, 0]) {
+          const selected = (
+            await client.query<{ partition_no: number }>(
+              `SELECT partition_no FROM search.review_discovery_receiving WHERE ${targetWhere}
+               AND pending AND partition_no>=$6 AND (claim IS NULL OR claim_until<=clock_timestamp())
+               ORDER BY partition_no LIMIT 1`,
+              [...values, after],
+            )
+          ).rows[0];
+          if (selected) {
+            due = selected.partition_no;
+            break;
+          }
         }
-      }
-      const selected = due ?? cursor;
-      await client.query(`UPDATE search.review_discovery_receiving_scan SET partition_no=$6 WHERE ${targetWhere}`, [
-        ...values,
-        (selected + 1) % 4096,
-      ]);
-      return selected;
+        const selected = due ?? cursor;
+        await client.query(`UPDATE search.review_discovery_receiving_scan SET partition_no=$6 WHERE ${targetWhere}`, [
+          ...values,
+          (selected + 1) % 4096,
+        ]);
+        return selected;
+      });
+      return receive(home, deadline);
     });
-    return step(home);
   }
-  return { step, next, status: (home: number) => readReviewDiscoveryReceiving(pool, target, home) };
+  return {
+    step,
+    next,
+    status: (home: number, context?: ReviewReceivingContext) => readReviewDiscoveryReceiving(pool, target, home, context),
+  };
 }
