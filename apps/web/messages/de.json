@@ -12430,5 +12430,17 @@
   "studio_source_consent_stale": "Der Quelldienst hat die geprüfte Quelle als veraltet abgelehnt. Prüfe die ausgewählte gespeicherte Version erneut. Der Erlaubnisstatus ist unbekannt.",
   "studio_source_consent_unavailable": "Diese Quellerlaubnis ist mit deinem aktuellen Zugriff nicht verfügbar. Ihr Status ist unbekannt; daraus folgt nicht, dass eine Erlaubnis fehlt.",
   "studio_source_consent_failed": "Diese Erlaubnisaktion wurde abgelehnt. Der Erlaubnisstatus ist unbekannt; daraus folgt nicht, dass eine Erlaubnis fehlt.",
-  "studio_source_consent_revoke_help": "Der Widerruf dieser Erlaubnis kann diese Version für Buchleser unzugänglich machen."
+  "studio_source_consent_revoke_help": "Der Widerruf dieser Erlaubnis kann diese Version für Buchleser unzugänglich machen.",
+  "knowledge_workspace_documents": "Dokumente",
+  "knowledge_workspace_details": "Dokumentdetails",
+  "knowledge_workspace_notebook_details": "Notizbuchdetails",
+  "knowledge_workspace_only_you": "Nur du",
+  "knowledge_workspace_writing": "Schreiben",
+  "knowledge_workspace_saved": "Gespeicherte Quelle",
+  "knowledge_workspace_return_editor": "Zurück zu deinem Dokument",
+  "knowledge_workspace_reading": "Lesen",
+  "knowledge_workspace_tools": "Dokumentaktionen",
+  "knowledge_workspace_navigation_open": "Dokumente durchsuchen",
+  "knowledge_workspace_metadata": "Sprache, Lizenz und Themen",
+  "knowledge_workspace_unsaved": "Ungespeicherte Änderungen"
 }

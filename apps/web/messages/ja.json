@@ -12430,5 +12430,17 @@
   "studio_source_consent_stale": "ソースサービスが確認済みのソースを古いものとして拒否しました。選択した保存済み版を再確認してください。許可状態は不明です。",
   "studio_source_consent_unavailable": "現在のアクセス条件では、このソースの許可を利用できません。状態は不明であり、許可がないことを示すものではありません。",
   "studio_source_consent_failed": "この許可操作は拒否されました。許可状態は不明であり、許可がないことを示すものではありません。",
-  "studio_source_consent_revoke_help": "この許可を取り消すと、Bookの読者がこの版を開けなくなる場合があります。"
+  "studio_source_consent_revoke_help": "この許可を取り消すと、Bookの読者がこの版を開けなくなる場合があります。",
+  "knowledge_workspace_documents": "ドキュメント",
+  "knowledge_workspace_details": "ドキュメントの詳細",
+  "knowledge_workspace_notebook_details": "ノートブックの詳細",
+  "knowledge_workspace_only_you": "自分のみ",
+  "knowledge_workspace_writing": "執筆",
+  "knowledge_workspace_saved": "保存済みの原稿",
+  "knowledge_workspace_return_editor": "自分のドキュメントに戻る",
+  "knowledge_workspace_reading": "閲覧",
+  "knowledge_workspace_tools": "ドキュメントの操作",
+  "knowledge_workspace_navigation_open": "ドキュメントを探す",
+  "knowledge_workspace_metadata": "言語・ライセンス・主題",
+  "knowledge_workspace_unsaved": "未保存の変更"
 }

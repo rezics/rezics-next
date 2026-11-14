@@ -55,7 +55,7 @@ export function KnowledgeNavigationReturnLink({
   const returning = useKnowledgeNavigationReturn();
   returning.retireForAddress(binding, address);
   return (
-    <div className="mx-auto w-full min-w-0 max-w-3xl px-4 pt-4 sm:px-6">
+    <div className="mx-auto w-full min-w-0 max-w-6xl px-4 pt-4 sm:px-6">
       <Link
         to="/knowledge/notebooks/$notebookId"
         params={{ notebookId: address.notebookId }}

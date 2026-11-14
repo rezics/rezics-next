@@ -12430,5 +12430,17 @@
   "studio_source_consent_stale": "Le service de la source a rejeté la source vérifiée comme obsolète. Vérifiez à nouveau la version enregistrée choisie. L’état de l’autorisation est inconnu.",
   "studio_source_consent_unavailable": "Cette autorisation de source est indisponible avec votre accès actuel. Son état est inconnu ; cela ne prouve pas qu’une autorisation manque.",
   "studio_source_consent_failed": "Cette action d’autorisation a été rejetée. L’état de l’autorisation est inconnu ; cela ne prouve pas qu’une autorisation manque.",
-  "studio_source_consent_revoke_help": "Révoquer cette autorisation peut rendre cette version inaccessible aux lecteurs du livre."
+  "studio_source_consent_revoke_help": "Révoquer cette autorisation peut rendre cette version inaccessible aux lecteurs du livre.",
+  "knowledge_workspace_documents": "Documents",
+  "knowledge_workspace_details": "Détails du document",
+  "knowledge_workspace_notebook_details": "Détails du carnet",
+  "knowledge_workspace_only_you": "Vous uniquement",
+  "knowledge_workspace_writing": "Rédaction",
+  "knowledge_workspace_saved": "Source enregistrée",
+  "knowledge_workspace_return_editor": "Revenir à votre document",
+  "knowledge_workspace_reading": "Lecture",
+  "knowledge_workspace_tools": "Actions du document",
+  "knowledge_workspace_navigation_open": "Parcourir les documents",
+  "knowledge_workspace_metadata": "Langue, licence et sujets",
+  "knowledge_workspace_unsaved": "Modifications non enregistrées"
 }

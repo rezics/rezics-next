@@ -1,3 +1,5 @@
+import { KnowledgeDetails, KnowledgeValue, knowledgeControl, knowledgeLink } from './workspace';
+import { KnowledgeWorkspaceNavigation } from './workspace-navigation';
 import { KnowledgeReferenceAuthoring } from './reference-authoring';
 import { KnowledgeReferenceBody } from './reference-view';
 import { referenceIssues, type KnowledgeReference } from './reference-model';
@@ -82,12 +84,10 @@ import { knowledgeNavigationBinding } from './navigation-return';
 import { KnowledgeHistoryPanel } from './history-panel';
 import type { KnowledgeHistoryOperations } from './history';
 
-const controlClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const controlClass = knowledgeControl;
 const inputClass =
   'min-h-11 min-w-0 max-w-full border-border bg-background px-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal break-words py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const linkClass = knowledgeLink;
 const defaultLicence = 'LicenseRef-rezics-terms';
 const operationSources = new WeakMap<object, number>();
 let nextOperationSource = 0;
@@ -456,29 +456,42 @@ function Field({ id, label, children }: { id: string; label: string; children: R
   );
 }
 
-function IdentityValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 space-y-1">
-      <dt className="text-sm font-medium text-foreground">{label}</dt>
-      <dd className="min-w-0 break-all font-mono text-sm text-muted-foreground">{value}</dd>
-    </div>
-  );
-}
+const IdentityValue = KnowledgeValue;
 
-function PrivatePageFrame({ title, locale, children }: { title: string; locale: string; children: React.ReactNode }) {
+function PrivatePageFrame({
+  title,
+  locale,
+  children,
+  navigation,
+  status,
+}: {
+  title: string;
+  locale: string;
+  children: React.ReactNode;
+  navigation?: React.ReactNode;
+  status?: React.ReactNode;
+}) {
   const options = localeOptions(locale);
   return (
     <main
-      className="mx-auto w-full min-w-0 max-w-3xl space-y-8 px-4 py-6 text-foreground [overflow-wrap:anywhere] sm:px-6 sm:py-8"
+      className="mx-auto w-full min-w-0 max-w-6xl px-4 py-6 text-foreground [overflow-wrap:anywhere] sm:px-6 sm:py-8"
       data-private-knowledge-visit
     >
-      <header className="min-w-0 space-y-3">
-        <PageHeading>{title}</PageHeading>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
-          {m.knowledge_private_intro({}, options)}
+      <header className="mb-8 min-w-0 space-y-3 border-b border-border pb-6">
+        <p className="text-xs font-medium tracking-wide text-muted-foreground">
+          {m.knowledge_workspace_only_you({}, options)}
         </p>
+        <PageHeading>{title}</PageHeading>
+        {status}
       </header>
-      {children}
+      <div
+        className={
+          navigation ? 'grid min-w-0 gap-8 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-12' : 'mx-auto min-w-0 max-w-3xl'
+        }
+      >
+        {navigation}
+        <div className="min-w-0 space-y-8">{children}</div>
+      </div>
     </main>
   );
 }
@@ -1289,7 +1302,6 @@ function PrivateKnowledgeEditor({
           disabled={documentFrozen || !!documentReceipt}
           onSelect={applyTemplate}
         />
-        <h2 className="text-lg font-semibold">{m.knowledge_private_document_title({}, options)}</h2>
         <DocumentDraftFields
           ids={ids}
           locale={locale}
@@ -1337,14 +1349,19 @@ function PrivateKnowledgeEditor({
             <p role="status" className="break-words">
               {m.knowledge_private_document_acknowledged({}, options)}
             </p>
-            <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-              <IdentityValue label={m.knowledge_private_document_id({}, options)} value={documentReceipt.documentId} />
-              <IdentityValue
-                label={m.knowledge_private_placement_id({}, options)}
-                value={documentReceipt.placementId}
-              />
-              <IdentityValue label={m.knowledge_private_revision({}, options)} value={documentReceipt.revisionId} />
-            </dl>
+            <KnowledgeDetails label={m.knowledge_workspace_details({}, options)}>
+              <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <IdentityValue
+                  label={m.knowledge_private_document_id({}, options)}
+                  value={documentReceipt.documentId}
+                />
+                <IdentityValue
+                  label={m.knowledge_private_placement_id({}, options)}
+                  value={documentReceipt.placementId}
+                />
+                <IdentityValue label={m.knowledge_private_revision({}, options)} value={documentReceipt.revisionId} />
+              </dl>
+            </KnowledgeDetails>
             {readState === 'preparing' ? <p role="status">{m.knowledge_private_readback({}, options)}</p> : null}
             {readState !== 'ready' && readState !== 'preparing' && createdAddress ? (
               <FailureNotice state={readState} locale={locale} retry={() => void readCreated(createdAddress)} />
@@ -1396,7 +1413,7 @@ function PrivateKnowledgeEditor({
             retry={preparationState !== 'preparing' ? () => setPreparationAttempt((value) => value + 1) : undefined}
           />
         ) : null}
-        <section className="min-w-0 space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6">
+        <section className="min-w-0 space-y-6">
           <KnowledgePlacementChoiceBar
             locale={locale}
             choice={placementChoice}
@@ -1425,20 +1442,21 @@ function PrivateKnowledgeEditor({
                   <p role="status" className="break-words">
                     {m.knowledge_private_creating_at({}, options)}
                   </p>
-                  <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-                    <IdentityValue
-                      label={m.knowledge_private_notebook_title({}, options)}
-                      value={selectedNotebook.title}
-                    />
-                    <IdentityValue
-                      label={m.knowledge_private_notebook_id({}, options)}
-                      value={selectedNotebook.notebookId}
-                    />
-                    <IdentityValue
-                      label={m.knowledge_private_subject({}, options)}
-                      value={selectedNotebook.subjectId}
-                    />
-                  </dl>
+                  <h2 className="text-lg font-semibold">{selectedNotebook.title}</h2>
+                  <KnowledgeDetails label={m.knowledge_workspace_notebook_details({}, options)}>
+                    <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+                      <IdentityValue
+                        label={m.knowledge_private_notebook_id({}, options)}
+                        value={selectedNotebook.notebookId}
+                        exact
+                      />
+                      <IdentityValue
+                        label={m.knowledge_private_subject({}, options)}
+                        value={selectedNotebook.subjectId}
+                        exact
+                      />
+                    </dl>
+                  </KnowledgeDetails>
                   {access.readOutline !== 'available' ? (
                     <FailureNotice state={access.readOutline} locale={locale} />
                   ) : (
@@ -1462,10 +1480,11 @@ function PrivateKnowledgeEditor({
             </div>
           ) : (
             <>
-              <h2 className="text-lg font-semibold">{m.knowledge_private_notebook_title({}, options)}</h2>
-              <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-                <IdentityValue label={m.knowledge_private_subject({}, options)} value={address.subjectId} />
-              </dl>
+              <KnowledgeDetails label={m.knowledge_workspace_notebook_details({}, options)}>
+                <dl>
+                  <IdentityValue label={m.knowledge_private_subject({}, options)} value={address.subjectId} exact />
+                </dl>
+              </KnowledgeDetails>
               <form className="min-w-0 space-y-5" onSubmit={(event) => void submitNotebook(event)}>
                 <Field id={ids.notebookTitle} label={m.knowledge_private_notebook_title({}, options)}>
                   <Input
@@ -1499,16 +1518,18 @@ function PrivateKnowledgeEditor({
                   <p role="status" className="break-words">
                     {m.knowledge_private_notebook_acknowledged({}, options)}
                   </p>
-                  <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-                    <IdentityValue
-                      label={m.knowledge_private_notebook_id({}, options)}
-                      value={notebookReceipt.notebookId}
-                    />
-                    <IdentityValue
-                      label={m.knowledge_private_structure_revision({}, options)}
-                      value={notebookReceipt.structureRevisionId}
-                    />
-                  </dl>
+                  <KnowledgeDetails label={m.knowledge_workspace_notebook_details({}, options)}>
+                    <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+                      <IdentityValue
+                        label={m.knowledge_private_notebook_id({}, options)}
+                        value={notebookReceipt.notebookId}
+                      />
+                      <IdentityValue
+                        label={m.knowledge_private_structure_revision({}, options)}
+                        value={notebookReceipt.structureRevisionId}
+                      />
+                    </dl>
+                  </KnowledgeDetails>
                   {documentForm}
                 </div>
               ) : null}
@@ -1566,14 +1587,35 @@ function PrivateKnowledgeEditor({
   const showRevisionFailure = !['idle', 'pending', 'acknowledged'].includes(revisionState);
   const formLocked = !!revisionIntent || revisionBusy || lifecycle.locked;
   return (
-    <PrivatePageFrame title={head.title} locale={locale}>
-      <div className="min-w-0 space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
-        <p className="text-sm text-muted-foreground">{m.knowledge_private_current_head({}, options)}</p>
-        <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-          <IdentityValue label={m.knowledge_private_notebook_id({}, options)} value={head.notebookId} />
-          <IdentityValue label={m.knowledge_private_revision({}, options)} value={head.revisionId} />
-        </dl>
-        <ReviewMetadata draft={draft} subjectIds={head.subjectIds} locale={locale} />
+    <PrivatePageFrame
+      title={head.title}
+      locale={locale}
+      status={
+        <p className="text-sm text-muted-foreground">
+          {dirty ? m.knowledge_workspace_unsaved({}, options) : m.knowledge_private_current_head({}, options)}
+        </p>
+      }
+      navigation={
+        <KnowledgeWorkspaceNavigation
+          address={{ notebookId: head.notebookId, documentId: head.documentId }}
+          title={head.title}
+          locale={locale}
+          binding={binding}
+          operations={operations}
+          admission={access.readOutline}
+          current={() => active.current}
+          onRetire={retire}
+        />
+      }
+    >
+      <div className="min-w-0 space-y-8">
+        <KnowledgeDetails label={m.knowledge_workspace_details({}, options)}>
+          <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <IdentityValue label={m.knowledge_private_notebook_id({}, options)} value={head.notebookId} exact />
+            <IdentityValue label={m.knowledge_private_document_id({}, options)} value={head.documentId} exact />
+            <IdentityValue label={m.knowledge_private_revision({}, options)} value={head.revisionId} exact />
+          </dl>
+        </KnowledgeDetails>
         <form className="min-w-0 space-y-5" onSubmit={(event) => void submitRevision(event)}>
           <DocumentDraftFields
             ids={ids}
@@ -1598,7 +1640,15 @@ function PrivateKnowledgeEditor({
           {revisionReceipt ? (
             <section className="min-w-0 space-y-3" aria-live="polite">
               <p role="status">{m.knowledge_private_saved_receipt({}, options)}</p>
-              <IdentityValue label={m.knowledge_private_revision({}, options)} value={revisionReceipt.revisionId} />
+              <KnowledgeDetails label={m.knowledge_workspace_saved({}, options)}>
+                <dl>
+                  <IdentityValue
+                    label={m.knowledge_private_revision({}, options)}
+                    value={revisionReceipt.revisionId}
+                    exact
+                  />
+                </dl>
+              </KnowledgeDetails>
               {readbackState === 'preparing' ? <p role="status">{m.knowledge_private_readback({}, options)}</p> : null}
               {readbackState === 'unavailable' || readbackState === 'not-found' || readbackState === 'denied' ? (
                 <FailureNotice state={readbackState} locale={locale} retry={() => void readCurrent('readback')} />
@@ -1670,6 +1720,17 @@ function PrivateKnowledgeEditor({
             </Button>
           </div>
         </form>
+        <nav
+          aria-label={m.knowledge_workspace_tools({}, options)}
+          className="flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-3"
+        >
+          <a href="#knowledge-revisions" className={linkClass}>
+            {m.knowledge_history_heading({}, options)}
+          </a>
+          <a href="#knowledge-publication" className={linkClass}>
+            {m.knowledge_publication_heading({}, options)}
+          </a>
+        </nav>
         <KnowledgeLifecyclePanel controller={lifecycle} blocked={lifecycleBlocked} locale={locale} />
         <KnowledgeHistoryPanel
           address={{ notebookId: head.notebookId, documentId: head.documentId }}
@@ -1772,28 +1833,6 @@ function DocumentDraftFields({
           onChange={(event) => onChange({ ...draft, title: event.currentTarget.value })}
         />
       </Field>
-      <Field id={ids.language} label={m.knowledge_private_language({}, options)}>
-        <Input
-          id={ids.language}
-          className={inputClass}
-          value={draft.language ?? ''}
-          maxLength={64}
-          autoComplete="off"
-          disabled={disabled}
-          onChange={(event) => onChange({ ...draft, language: event.currentTarget.value || null })}
-        />
-      </Field>
-      <Field id={ids.licence} label={m.knowledge_private_licence({}, options)}>
-        <Input
-          id={ids.licence}
-          className={inputClass}
-          value={draft.licence}
-          maxLength={128}
-          autoComplete="off"
-          disabled={disabled}
-          onChange={(event) => onChange({ ...draft, licence: event.currentTarget.value })}
-        />
-      </Field>
       <div className="min-w-0 space-y-2">
         <p className="text-sm font-medium">{m.knowledge_private_body({}, options)}</p>
         <RichTextEditor
@@ -1840,6 +1879,37 @@ function DocumentDraftFields({
           </Button>
         </div>
       ) : null}
+      <KnowledgeDetails label={m.knowledge_workspace_metadata({}, options)}>
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+          <Field id={ids.language} label={m.knowledge_private_language({}, options)}>
+            <Input
+              id={ids.language}
+              className={inputClass}
+              value={draft.language ?? ''}
+              maxLength={64}
+              autoComplete="off"
+              disabled={disabled}
+              onChange={(event) => onChange({ ...draft, language: event.currentTarget.value || null })}
+            />
+          </Field>
+          <Field id={ids.licence} label={m.knowledge_private_licence({}, options)}>
+            <Input
+              id={ids.licence}
+              className={inputClass}
+              value={draft.licence}
+              maxLength={128}
+              autoComplete="off"
+              disabled={disabled}
+              onChange={(event) => onChange({ ...draft, licence: event.currentTarget.value })}
+            />
+          </Field>
+        </div>
+        <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+          {subjectIds.map((subjectId) => (
+            <IdentityValue key={subjectId} label={m.knowledge_private_subject({}, options)} value={subjectId} exact />
+          ))}
+        </dl>
+      </KnowledgeDetails>
       <KnowledgeReferenceAuthoring
         onEditingChange={(editing) => {
           setReferencePending(editing);
@@ -1851,11 +1921,6 @@ function DocumentDraftFields({
         onChange={(next) => onChange({ ...draft, ...next })}
         inspect={inspect}
       />
-      <dl className="grid min-w-0 gap-4 sm:grid-cols-2" aria-label={m.knowledge_private_subject_ids({}, options)}>
-        {subjectIds.map((subjectId) => (
-          <IdentityValue key={subjectId} label={m.knowledge_private_subject({}, options)} value={subjectId} />
-        ))}
-      </dl>
     </div>
   );
 }

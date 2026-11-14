@@ -12437,5 +12437,17 @@
   "literary_reader_detail_hint": "Open a title in a new tab to keep your place here.",
   "literary_reader_about_reading": "About this reading",
   "literary_reader_more_values": "Show all values",
-  "literary_reader_no_stream": "No list was supplied for this view."
+  "literary_reader_no_stream": "No list was supplied for this view.",
+  "knowledge_workspace_documents": "Documents",
+  "knowledge_workspace_details": "Document details",
+  "knowledge_workspace_notebook_details": "Notebook details",
+  "knowledge_workspace_only_you": "Only you",
+  "knowledge_workspace_writing": "Writing",
+  "knowledge_workspace_saved": "Saved source",
+  "knowledge_workspace_return_editor": "Return to your document",
+  "knowledge_workspace_reading": "Reading",
+  "knowledge_workspace_tools": "Document actions",
+  "knowledge_workspace_navigation_open": "Browse documents",
+  "knowledge_workspace_metadata": "Language, licence and subjects",
+  "knowledge_workspace_unsaved": "Unsaved changes"
 }

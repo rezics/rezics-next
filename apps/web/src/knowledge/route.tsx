@@ -1,3 +1,4 @@
+import { KnowledgePublicationReturnLink } from './publication-return';
 import { KnowledgeTransferCaller } from './transfer-caller';
 import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
@@ -183,6 +184,7 @@ export function KnowledgeDocumentCaller({
 
   return (
     <>
+      <KnowledgePublicationReturnLink documentId={request.documentId} locale={request.locale} />
       {subjectReturn ? <KnowledgeDiscoveryReturnLink href={subjectReturn} locale={request.locale} /> : null}
       <KnowledgeDocumentPage
         request={request}

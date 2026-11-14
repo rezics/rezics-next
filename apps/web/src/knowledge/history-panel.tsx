@@ -1,3 +1,4 @@
+import { KnowledgeDetails, knowledgeControl } from './workspace';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { DocumentSnapshot } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -13,8 +14,7 @@ import {
 } from './history';
 import { KnowledgeHistoryComparisonView } from './history-comparison';
 
-const control =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const control = knowledgeControl;
 type Admission = 'unknown' | 'available' | 'denied' | 'unavailable';
 
 /** Editor-owned lifetime: no router navigation, query cache, persistence or automatic reads. */
@@ -199,7 +199,8 @@ export function KnowledgeHistoryPanel({
   const state = showComparison ? compareState : pageState;
   return (
     <section
-      className="min-w-0 space-y-5 border-t border-border pt-6"
+      id="knowledge-revisions"
+      className="min-w-0 scroll-mt-6 space-y-5 border-t border-border pt-6"
       aria-label={m.knowledge_history_heading({}, options)}
     >
       <div className="flex min-w-0 flex-wrap gap-3">
@@ -232,23 +233,25 @@ export function KnowledgeHistoryPanel({
           <h2
             ref={heading}
             tabIndex={-1}
-            className="text-xl font-semibold leading-snug text-balance focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="text-lg font-semibold leading-snug focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {showComparison ? m.knowledge_history_comparison({}, options) : m.knowledge_history_heading({}, options)}
           </h2>
           <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
             {m.knowledge_history_intro({}, options)}
           </p>
-          <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
-            <div className="min-w-0">
-              <dt className="text-sm font-medium">{m.knowledge_private_document_id({}, options)}</dt>
-              <dd className="break-all text-sm">{address.documentId}</dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="text-sm font-medium">{m.knowledge_private_notebook_id({}, options)}</dt>
-              <dd className="break-all text-sm">{address.notebookId}</dd>
-            </div>
-          </dl>
+          <KnowledgeDetails label={m.knowledge_workspace_details({}, options)}>
+            <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+              <div className="min-w-0">
+                <dt className="text-sm font-medium">{m.knowledge_private_document_id({}, options)}</dt>
+                <dd className="break-all text-sm">{address.documentId}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-sm font-medium">{m.knowledge_private_notebook_id({}, options)}</dt>
+                <dd className="break-all text-sm">{address.notebookId}</dd>
+              </div>
+            </dl>
+          </KnowledgeDetails>
           <div className="flex min-w-0 flex-wrap gap-3">
             {showComparison ? (
               <Button type="button" variant="outline" className={control} onClick={back}>
@@ -314,20 +317,22 @@ export function KnowledgeHistoryPanel({
                           timeZone: 'UTC',
                         }).format(new Date(row.createdAt))}
                       </time>
-                      <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
-                        <div>
-                          <dt className="text-sm font-medium">{m.knowledge_private_language({}, options)}</dt>
-                          <dd className="text-sm text-muted-foreground">{row.language ?? '—'}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-sm font-medium">{m.knowledge_private_licence({}, options)}</dt>
-                          <dd className="break-words text-sm text-muted-foreground">{row.licence}</dd>
-                        </div>
-                        <div className="min-w-0 sm:col-span-2">
-                          <dt className="text-sm font-medium">{m.knowledge_history_digest({}, options)}</dt>
-                          <dd className="break-all text-sm text-muted-foreground">{row.sha256}</dd>
-                        </div>
-                      </dl>
+                      <KnowledgeDetails label={m.knowledge_workspace_details({}, options)}>
+                        <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+                          <div>
+                            <dt className="text-sm font-medium">{m.knowledge_private_language({}, options)}</dt>
+                            <dd className="text-sm text-muted-foreground">{row.language ?? '—'}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-sm font-medium">{m.knowledge_private_licence({}, options)}</dt>
+                            <dd className="break-words text-sm text-muted-foreground">{row.licence}</dd>
+                          </div>
+                          <div className="min-w-0 sm:col-span-2">
+                            <dt className="text-sm font-medium">{m.knowledge_history_digest({}, options)}</dt>
+                            <dd className="break-all text-sm text-muted-foreground">{row.sha256}</dd>
+                          </div>
+                        </dl>
+                      </KnowledgeDetails>
                       <div className="flex min-w-0 flex-wrap gap-x-6 gap-y-2">
                         {(['left', 'right'] as const).map((side) => (
                           <label key={side} className="flex min-h-11 min-w-11 cursor-pointer items-center gap-3 py-2">

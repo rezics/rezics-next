@@ -12430,5 +12430,17 @@
   "studio_source_consent_stale": "来源服务判定已审阅来源过期并拒绝了操作。请重新审阅所选的已保存版本。许可状态未知。",
   "studio_source_consent_unavailable": "你的当前访问权限无法使用此来源许可。其状态未知；这并不表示缺少许可。",
   "studio_source_consent_failed": "此许可操作被拒绝。许可状态未知；这并不表示缺少许可。",
-  "studio_source_consent_revoke_help": "撤销此许可可能导致 Book 读者无法打开此版本。"
+  "studio_source_consent_revoke_help": "撤销此许可可能导致 Book 读者无法打开此版本。",
+  "knowledge_workspace_documents": "文档",
+  "knowledge_workspace_details": "文档详情",
+  "knowledge_workspace_notebook_details": "笔记本详情",
+  "knowledge_workspace_only_you": "仅自己可见",
+  "knowledge_workspace_writing": "写作",
+  "knowledge_workspace_saved": "已保存的原稿",
+  "knowledge_workspace_return_editor": "返回自己的文档",
+  "knowledge_workspace_reading": "阅读",
+  "knowledge_workspace_tools": "文档操作",
+  "knowledge_workspace_navigation_open": "浏览文档",
+  "knowledge_workspace_metadata": "语言、许可与主题",
+  "knowledge_workspace_unsaved": "尚未保存的更改"
 }

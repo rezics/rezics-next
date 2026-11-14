@@ -12430,5 +12430,17 @@
   "studio_source_consent_stale": "El servicio de la fuente ha rechazado la fuente revisada por estar desactualizada. Revisa de nuevo la versión guardada seleccionada. El estado del permiso es desconocido.",
   "studio_source_consent_unavailable": "Este permiso de fuente no está disponible con tu acceso actual. Su estado es desconocido; esto no demuestra que falte el permiso.",
   "studio_source_consent_failed": "Esta acción de permiso ha sido rechazada. El estado del permiso es desconocido; esto no demuestra que falte el permiso.",
-  "studio_source_consent_revoke_help": "Revocar este permiso puede impedir que los lectores del libro accedan a esta versión."
+  "studio_source_consent_revoke_help": "Revocar este permiso puede impedir que los lectores del libro accedan a esta versión.",
+  "knowledge_workspace_documents": "Documentos",
+  "knowledge_workspace_details": "Detalles del documento",
+  "knowledge_workspace_notebook_details": "Detalles del cuaderno",
+  "knowledge_workspace_only_you": "Solo tú",
+  "knowledge_workspace_writing": "Escritura",
+  "knowledge_workspace_saved": "Fuente guardada",
+  "knowledge_workspace_return_editor": "Volver a tu documento",
+  "knowledge_workspace_reading": "Lectura",
+  "knowledge_workspace_tools": "Acciones del documento",
+  "knowledge_workspace_navigation_open": "Explorar documentos",
+  "knowledge_workspace_metadata": "Idioma, licencia y temas",
+  "knowledge_workspace_unsaved": "Cambios sin guardar"
 }

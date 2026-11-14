@@ -1,3 +1,4 @@
+import { KnowledgeDetails } from './workspace';
 import { useMemo } from 'react';
 import type { DocumentSnapshot } from '@rezics/document';
 import { DocumentBody } from '../document-body';
@@ -40,17 +41,21 @@ function RevisionReading({
       <h3 className="text-lg font-semibold leading-snug">
         {side === 'left' ? m.knowledge_history_left({}, options) : m.knowledge_history_right({}, options)}
       </h3>
-      <dl className="min-w-0 space-y-3">
-        <Value label={m.knowledge_private_revision({}, options)}>{revision.revisionId}</Value>
-        <Value label={m.knowledge_private_document_title({}, options)}>{revision.title}</Value>
-        <Value label={m.knowledge_private_language({}, options)}>{revision.language ?? '—'}</Value>
-        <Value label={m.knowledge_private_licence({}, options)}>{revision.licence}</Value>
-        <Value label={m.knowledge_history_digest({}, options)}>{revision.sha256}</Value>
-        <Value label={m.knowledge_private_subject_ids({}, options)}>{revision.subjectIds.join('\n')}</Value>
-        <Value label={m.knowledge_history_provenance({}, options)}>
-          {revision.provenance ? JSON.stringify(revision.provenance, null, 2) : '—'}
-        </Value>
-      </dl>
+      <p className="text-xl font-semibold leading-snug">{revision.title}</p>
+      <p className="text-sm [overflow-wrap:anywhere]">{revision.revisionId}</p>
+      <KnowledgeDetails label={m.knowledge_workspace_details({}, options)}>
+        <dl className="min-w-0 space-y-3">
+          <Value label={m.knowledge_private_revision({}, options)}>{revision.revisionId}</Value>
+          <Value label={m.knowledge_private_document_title({}, options)}>{revision.title}</Value>
+          <Value label={m.knowledge_private_language({}, options)}>{revision.language ?? '—'}</Value>
+          <Value label={m.knowledge_private_licence({}, options)}>{revision.licence}</Value>
+          <Value label={m.knowledge_history_digest({}, options)}>{revision.sha256}</Value>
+          <Value label={m.knowledge_private_subject_ids({}, options)}>{revision.subjectIds.join('\n')}</Value>
+          <Value label={m.knowledge_history_provenance({}, options)}>
+            {revision.provenance ? JSON.stringify(revision.provenance, null, 2) : '—'}
+          </Value>
+        </dl>
+      </KnowledgeDetails>
       <div className="min-w-0 space-y-4">
         {revision.body.doc.content!.map((block) => {
           const id = block.attrs!.id as string;
@@ -122,7 +127,7 @@ export function KnowledgeHistoryComparisonView({
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
         {m.knowledge_history_difference_help({}, options)}
       </p>
-      <div className="grid min-w-0 gap-8 md:grid-cols-2">
+      <div className="grid min-w-0 gap-8 xl:grid-cols-2">
         <RevisionReading revision={comparison.left} other={comparison.right} side="left" locale={locale} />
         <RevisionReading revision={comparison.right} other={comparison.left} side="right" locale={locale} />
       </div>

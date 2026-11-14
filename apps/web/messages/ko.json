@@ -12430,5 +12430,17 @@
   "studio_source_consent_stale": "소스 서비스가 검토한 소스를 오래된 것으로 거부했습니다. 선택한 저장 버전을 다시 검토하세요. 허용 상태를 알 수 없습니다.",
   "studio_source_consent_unavailable": "현재 접근 조건에서는 이 소스 허용을 이용할 수 없습니다. 상태를 알 수 없으며 허용이 없다는 뜻은 아닙니다.",
   "studio_source_consent_failed": "이 허용 작업이 거부되었습니다. 허용 상태를 알 수 없으며 허용이 없다는 뜻은 아닙니다.",
-  "studio_source_consent_revoke_help": "이 허용을 취소하면 Book 독자가 이 버전을 열지 못할 수 있습니다."
+  "studio_source_consent_revoke_help": "이 허용을 취소하면 Book 독자가 이 버전을 열지 못할 수 있습니다.",
+  "knowledge_workspace_documents": "문서",
+  "knowledge_workspace_details": "문서 세부 정보",
+  "knowledge_workspace_notebook_details": "노트북 세부 정보",
+  "knowledge_workspace_only_you": "나만 보기",
+  "knowledge_workspace_writing": "작성",
+  "knowledge_workspace_saved": "저장된 원본",
+  "knowledge_workspace_return_editor": "내 문서로 돌아가기",
+  "knowledge_workspace_reading": "읽기",
+  "knowledge_workspace_tools": "문서 작업",
+  "knowledge_workspace_navigation_open": "문서 찾아보기",
+  "knowledge_workspace_metadata": "언어, 라이선스 및 주제",
+  "knowledge_workspace_unsaved": "저장하지 않은 변경 사항"
 }
