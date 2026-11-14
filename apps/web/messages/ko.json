@@ -12483,5 +12483,14 @@
   "knowledge_workspace_navigation_open": "문서 찾아보기",
   "knowledge_workspace_metadata": "언어, 라이선스 및 주제",
   "knowledge_workspace_unsaved": "저장하지 않은 변경 사항",
-  "knowledge_workspace_publication_selected": "공개 리비전이 선택되어 있습니다"
+  "knowledge_workspace_publication_selected": "공개 리비전이 선택되어 있습니다",
+  "library_history_recorded_event": "기록된 감상 · 현재 상태",
+  "library_history_first_use": "독서와 시청, 청취 기록이 여기에 표시됩니다. 기록을 열어 해당 이력과 함께 비공개 감상을 남겨 보세요.",
+  "library_history_open_library": "라이브러리 열기",
+  "library_history_window_details": "이 페이지 정보",
+  "library_journal_edit_entry": "일기 작성 또는 수정",
+  "library_journal_public_boundary": "공개 로그는 게시 시점의 기록입니다. 비공개 일기는 비공개로 유지되며 자동으로 포함되지 않습니다.",
+  "library_history_published_snapshot": "이 날짜는 게시 시점의 기록입니다. 현재 진행 상황과 비공개 일기는 달라졌을 수 있습니다.",
+  "library_journal_original_value": "검토 시점의 원래 값",
+  "library_journal_reflection_placeholder": "무엇이 마음에 남았나요? 비공개 감상을 적어 보세요…"
 }

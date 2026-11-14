@@ -12490,5 +12490,14 @@
   "knowledge_workspace_navigation_open": "Browse documents",
   "knowledge_workspace_metadata": "Language, licence and subjects",
   "knowledge_workspace_unsaved": "Unsaved changes",
-  "knowledge_workspace_publication_selected": "A public revision is selected"
+  "knowledge_workspace_publication_selected": "A public revision is selected",
+  "library_history_recorded_event": "Recorded occurrence · current state",
+  "library_history_first_use": "Your reading, watching and listening sessions will appear here. Open an occurrence to keep a private reflection alongside its recorded history.",
+  "library_history_open_library": "Open Library",
+  "library_history_window_details": "About this window",
+  "library_journal_edit_entry": "Write or revise your journal",
+  "library_journal_public_boundary": "Published logs are public snapshots. Your private journal stays private and is never included automatically.",
+  "library_history_published_snapshot": "These dates belong to this published snapshot. Current progress and your private journal may have changed.",
+  "library_journal_original_value": "Original value at review",
+  "library_journal_reflection_placeholder": "What stayed with you? Write a private reflection…"
 }

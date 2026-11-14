@@ -12483,5 +12483,14 @@
   "knowledge_workspace_navigation_open": "Dokumente durchsuchen",
   "knowledge_workspace_metadata": "Sprache, Lizenz und Themen",
   "knowledge_workspace_unsaved": "Ungespeicherte Änderungen",
-  "knowledge_workspace_publication_selected": "Eine öffentliche Version ist ausgewählt"
+  "knowledge_workspace_publication_selected": "Eine öffentliche Version ist ausgewählt",
+  "library_history_recorded_event": "Erfasster Durchgang · aktueller Stand",
+  "library_history_first_use": "Hier erscheinen deine Lese-, Film- und Hörsitzungen. Öffne einen Durchgang, um neben dem erfassten Verlauf persönliche Gedanken festzuhalten.",
+  "library_history_open_library": "Bibliothek öffnen",
+  "library_history_window_details": "Über diesen Ausschnitt",
+  "library_journal_edit_entry": "Tagebucheintrag schreiben oder überarbeiten",
+  "library_journal_public_boundary": "Veröffentlichte Protokolle sind öffentliche Momentaufnahmen. Dein privates Tagebuch bleibt privat und wird nie automatisch übernommen.",
+  "library_history_published_snapshot": "Diese Daten gehören zur veröffentlichten Momentaufnahme. Dein aktueller Fortschritt und dein privates Tagebuch können sich geändert haben.",
+  "library_journal_original_value": "Ursprünglicher Wert bei der Prüfung",
+  "library_journal_reflection_placeholder": "Was ist dir geblieben? Halte deine Gedanken privat fest…"
 }

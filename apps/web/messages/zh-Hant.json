@@ -12483,5 +12483,14 @@
   "knowledge_workspace_navigation_open": "瀏覽文件",
   "knowledge_workspace_metadata": "語言、授權與主題",
   "knowledge_workspace_unsaved": "尚未儲存的變更",
-  "knowledge_workspace_publication_selected": "已選擇公開修訂版"
+  "knowledge_workspace_publication_selected": "已選擇公開修訂版",
+  "library_history_recorded_event": "已記錄的體驗 · 目前狀態",
+  "library_history_first_use": "你的閱讀、觀看與聆聽紀錄會顯示在這裡。開啟一筆紀錄，即可在歷史旁寫下私人感想。",
+  "library_history_open_library": "開啟書架",
+  "library_history_window_details": "關於本頁紀錄",
+  "library_journal_edit_entry": "撰寫或修改日記",
+  "library_journal_public_boundary": "發布的日誌是公開的快照。私人日記始終私密，不會自動包含在公開日誌中。",
+  "library_history_published_snapshot": "這些日期屬於發布時的快照。目前進度和私人日記可能已有變化。",
+  "library_journal_original_value": "確認時的原始值",
+  "library_journal_reflection_placeholder": "有什麼讓你難忘？寫下私人感想吧…"
 }

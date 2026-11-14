@@ -12483,5 +12483,14 @@
   "knowledge_workspace_navigation_open": "Explorar documentos",
   "knowledge_workspace_metadata": "Idioma, licencia y temas",
   "knowledge_workspace_unsaved": "Cambios sin guardar",
-  "knowledge_workspace_publication_selected": "Hay una revisión pública seleccionada"
+  "knowledge_workspace_publication_selected": "Hay una revisión pública seleccionada",
+  "library_history_recorded_event": "Sesión registrada · estado actual",
+  "library_history_first_use": "Aquí aparecerán tus sesiones de lectura, visionado y escucha. Abre una sesión para guardar una reflexión privada junto a su historial registrado.",
+  "library_history_open_library": "Abrir biblioteca",
+  "library_history_window_details": "Acerca de esta página",
+  "library_journal_edit_entry": "Escribir o revisar tu diario",
+  "library_journal_public_boundary": "Los registros publicados son instantáneas públicas. Tu diario privado sigue siendo privado y nunca se incluye automáticamente.",
+  "library_history_published_snapshot": "Estas fechas pertenecen a esta instantánea publicada. Tu progreso actual y tu diario privado pueden haber cambiado.",
+  "library_journal_original_value": "Valor original al revisar",
+  "library_journal_reflection_placeholder": "¿Qué te ha dejado? Escribe una reflexión privada…"
 }

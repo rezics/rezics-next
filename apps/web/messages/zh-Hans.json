@@ -12483,5 +12483,14 @@
   "knowledge_workspace_navigation_open": "浏览文档",
   "knowledge_workspace_metadata": "语言、许可与主题",
   "knowledge_workspace_unsaved": "尚未保存的更改",
-  "knowledge_workspace_publication_selected": "已选择公开修订版"
+  "knowledge_workspace_publication_selected": "已选择公开修订版",
+  "library_history_recorded_event": "已记录的体验 · 当前状态",
+  "library_history_first_use": "你的阅读、观看和收听记录会显示在这里。打开一条记录，即可在历史旁写下私人感想。",
+  "library_history_open_library": "打开书架",
+  "library_history_window_details": "关于本页记录",
+  "library_journal_edit_entry": "撰写或修改日记",
+  "library_journal_public_boundary": "发布的日志是公开的快照。私人日记始终私密，不会自动包含在公开日志中。",
+  "library_history_published_snapshot": "这些日期属于发布时的快照。当前进度和私人日记可能已有变化。",
+  "library_journal_original_value": "确认时的原始值",
+  "library_journal_reflection_placeholder": "有什么让你难忘？写下私人感想吧…"
 }

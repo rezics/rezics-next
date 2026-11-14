@@ -515,3 +515,25 @@ public producer entries and keep their implementations, including Continue's ind
 The archive application-lifetime regression retains equal-value replacement, A/B/A, query recreation and synchronous
 completed-byte erasure assertions. Its mounted composition case also pins independent section retirement and
 sign-out erasure before React publishes the replacement; returning to the same account never restores retired bytes.
+
+## Journal and history reading
+
+Decision: group adjacent native rows by recorded UTC day without sorting, accumulating windows or adding row reads;
+open one occurrence for private text and accepted amount meaning. Contextual journal editing keeps explicit
+Cancel, Review, Save and exact Retry. Capture the original journal comparison when reviewing a command, so a later
+current read cannot rewrite its before-values. The current read remains separately labeled and never proves a retry.
+The native reflection remains plain text in the existing Textarea and text reader; it is never converted to a rich
+Document, copied to publication, or placed in a shared cache. Public logs remain explicitly published snapshots.
+
+The timeline uses the supplied native Subject identity and language even when its current Subject is unavailable.
+Reported dates retain partial precision; recorded dates and technical provenance are separate. Empty first use
+links to Library; sparse continuation still offers the exact next window. Full multilingual writing wraps within a
+readable measure, with mobile save/cancel targets in the selected editor. Active progress and session controls keep
+their existing owner; this outcome only composes private journal and explicit publication sections.
+
+Design sources: this owner, `private-diary/{native,address,server,occurrence-server,occurrence-detail,reading-occurrence}`,
+`log-page`, `my-logs-page`, `logs-progress`, their existing regression sources, the installed client diary/journal
+contracts, and the read-only main checkout `.reference/INDEX.md`. Impeccable files are absent from the permitted
+skill/reference roots; use the documented project-context fallback in `docs/development/delivery.md#skill-instructions`.
+Mounted actual-route stories use constructed contract-shaped data; they are manual examples, not native acceptance.
+Focused acceptance source is maintained; test, compiler, build, browser and native execution are deferred.

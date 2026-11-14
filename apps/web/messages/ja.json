@@ -12483,5 +12483,14 @@
   "knowledge_workspace_navigation_open": "ドキュメントを探す",
   "knowledge_workspace_metadata": "言語・ライセンス・主題",
   "knowledge_workspace_unsaved": "未保存の変更",
-  "knowledge_workspace_publication_selected": "公開する版が選択されています"
+  "knowledge_workspace_publication_selected": "公開する版が選択されています",
+  "library_history_recorded_event": "記録された体験 · 現在の状態",
+  "library_history_first_use": "読書・視聴・聴取の記録がここに表示されます。記録を開くと、その履歴に個人的な感想を残せます。",
+  "library_history_open_library": "ライブラリを開く",
+  "library_history_window_details": "このページについて",
+  "library_journal_edit_entry": "日記を書く・編集する",
+  "library_journal_public_boundary": "公開ログは公開時点の記録です。非公開の日記が自動的に含まれることはありません。",
+  "library_history_published_snapshot": "これらの日付は公開時点の記録です。現在の進捗や非公開の日記は変更されている場合があります。",
+  "library_journal_original_value": "確認時点の元の値",
+  "library_journal_reflection_placeholder": "心に残ったことを、非公開の感想として書いてみましょう…"
 }
