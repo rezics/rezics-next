@@ -23,9 +23,18 @@ import {
   statusLabel,
   recordTitle,
 } from './presentation';
+import { ArchiveEntryRecordLayout, ArchiveEntryWorkspace } from './entry-workspace';
 
 const control = `${actionClass} rounded-md border disabled:opacity-50`;
 const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+type RecoveryArea = 'records' | 'review' | 'results';
+type FocusIntent = {
+  token: number;
+  area: RecoveryArea;
+  trigger: HTMLElement;
+  activeBefore: Element | null;
+  ready: boolean;
+};
 
 /** Every callback consults the current query cache and address, including before React effects run. */
 export function ArchiveEntryRecoveryPage() {
@@ -69,7 +78,9 @@ export function ArchiveEntryRecoveryPage() {
 export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRecoveryJourney | null }) {
   const [, render] = useState(0);
   const workspace = useRef<HTMLElement>(null);
+  const focusSequence = useRef(0);
   const [confirmation, setConfirmation] = useState<unknown>(null);
+  const [focusIntent, setFocusIntent] = useState<FocusIntent | null>(null);
   const [opened, setOpened] = useState<{
     uploadId: string | undefined;
     reviewStamp: string;
@@ -109,20 +120,72 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           : locked
             ? 'review'
             : 'records';
-  const showArea = (area: 'records' | 'review' | 'results') =>
-    setOpened({ uploadId, reviewStamp, resultsGeneration, area });
+  const beginFocusIntent = (targetArea: RecoveryArea, trigger: HTMLElement, ready = true) => {
+    const intent: FocusIntent = {
+      token: ++focusSequence.current,
+      area: targetArea,
+      trigger,
+      activeBefore: document.activeElement,
+      ready,
+    };
+    setFocusIntent(intent);
+    return intent;
+  };
+  const showArea = (targetArea: RecoveryArea, trigger: HTMLElement) => {
+    setOpened({ uploadId, reviewStamp, resultsGeneration, area: targetArea });
+    beginFocusIntent(targetArea, trigger);
+  };
   useEffect(() => {
-    if (uploadId || terminal) {
-      const heading = area === 'records' ? 'rows' : area === 'review' ? 'selected' : 'results';
-      workspace.current?.querySelector<HTMLElement>(`#archive-${heading}-heading`)?.focus();
+    if (!focusIntent?.ready) return;
+    const clearIntent = () =>
+      setFocusIntent((current) => (current?.token === focusIntent.token ? null : current));
+    if (area !== focusIntent.area) {
+      clearIntent();
+      return;
     }
-  }, [area, uploadId, terminal]);
+    const active = document.activeElement;
+    const focusReturnedToBody = focusIntent.activeBefore === focusIntent.trigger && active === document.body;
+    if (active !== focusIntent.trigger && active !== focusIntent.activeBefore && !focusReturnedToBody) {
+      clearIntent();
+      return;
+    }
+    const targetId =
+      focusIntent.area === 'records'
+        ? 'archive-rows-heading'
+        : focusIntent.area === 'review'
+          ? 'archive-selected-heading'
+          : 'archive-results-heading';
+    const target = workspace.current?.querySelector<HTMLElement>(`#${targetId}`);
+    const recover = () => {
+      const candidates = [
+        focusIntent.trigger,
+        ...Array.from(workspace.current?.querySelectorAll<HTMLElement>('[data-archive-focus-trigger]') ?? []),
+      ];
+      const trigger = candidates.find(
+        (candidate) =>
+          candidate.isConnected && !candidate.closest('[hidden]') && !candidate.matches(':disabled'),
+      );
+      if (trigger) trigger.focus();
+    };
+    if (target?.isConnected && !target.closest('[hidden]')) {
+      target.focus();
+      if (document.activeElement !== target) recover();
+    } else recover();
+    clearIntent();
+  }, [area, focusIntent]);
   const live = state !== null && journey !== null;
   const owner = journey?.visit.viewer ?? null;
   if (owner) bindArchiveCustodyOwner(owner);
   const completed = owner ? completedArchiveFor(owner) : null;
-  const act = (action: Promise<void>) => {
+  const act = (action: Promise<void>, onSettled?: () => void) => {
     void action;
+    if (onSettled) void action.then(onSettled, onSettled);
+  };
+  const actWithFocus = (targetArea: RecoveryArea, trigger: HTMLElement, action: Promise<void>) => {
+    const intent = beginFocusIntent(targetArea, trigger, false);
+    act(action, () =>
+      setFocusIntent((current) => (current?.token === intent.token ? { ...current, ready: true } : current)),
+    );
   };
 
   const operation = (
@@ -150,40 +213,45 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
     </section>
   );
 
-  return (
-    <main ref={workspace} className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
-      <header className="space-y-3">
-        <PageHeading>{m.library_archive_title()}</PageHeading>
-        <p>{m.library_archive_intro()}</p>
-        <ArchiveRecoveryDestinations current="entries" />
-      </header>
-      <nav aria-label={m.library_archive_steps()}>
-        <ol className="flex flex-wrap gap-3 text-sm">
-          <li aria-current={!hasUpload && !state?.results ? 'step' : undefined} className={control}>
-            1. {m.library_archive_upload_step()}
+  const header = (
+    <>
+      <PageHeading>{m.library_archive_title()}</PageHeading>
+      <p>{m.library_archive_intro()}</p>
+      <ArchiveRecoveryDestinations current="entries" />
+    </>
+  );
+  const areaNavigation = (
+    <nav aria-label={m.library_archive_steps()}>
+      <ol className="flex flex-wrap gap-3 text-sm">
+        <li aria-current={!hasUpload && !state?.results ? 'step' : undefined} className={control}>
+          1. {m.library_archive_upload_step()}
+        </li>
+        {(
+          [
+            ['records', m.library_archive_entry_map_step(), 'archive-rows', !hasUpload || terminal],
+            ['review', m.library_archive_review_step(), 'archive-selected', !hasUpload || terminal],
+            ['results', m.library_archive_results_step(), 'archive-results', !hasUpload && !state?.results],
+          ] as const
+        ).map(([target, label, id, disabled], index) => (
+          <li key={target}>
+            <button
+              type="button"
+              className={control}
+              data-archive-focus-trigger="true"
+              aria-current={(hasUpload || state?.results) && area === target ? 'step' : undefined}
+              aria-controls={disabled ? undefined : id}
+              disabled={disabled}
+              onClick={(event) => showArea(target, event.currentTarget)}
+            >
+              {index + 2}. {label}
+            </button>
           </li>
-          {(
-            [
-              ['records', m.library_archive_entry_map_step(), 'archive-rows', !hasUpload || terminal],
-              ['review', m.library_archive_review_step(), 'archive-selected', !hasUpload || terminal],
-              ['results', m.library_archive_results_step(), 'archive-results', !hasUpload && !state?.results],
-            ] as const
-          ).map(([target, label, id, disabled], index) => (
-            <li key={target}>
-              <button
-                type="button"
-                className={control}
-                aria-current={(hasUpload || state?.results) && area === target ? 'step' : undefined}
-                aria-controls={disabled ? undefined : id}
-                disabled={disabled}
-                onClick={() => showArea(target)}
-              >
-                {index + 2}. {label}
-              </button>
-            </li>
-          ))}
-        </ol>
-      </nav>
+        ))}
+      </ol>
+    </nav>
+  );
+  const statusContent = (
+    <>
       <p role="status" aria-live="polite">
         {snapshot?.notice
           ? notice(snapshot.notice)
@@ -198,451 +266,495 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
       {snapshot?.notice && snapshot.notice !== 'uncertain' && snapshot.notice !== 'file_too_large' ? (
         <EvidenceDetails value={{ notice: snapshot.notice }} />
       ) : null}
-      <details
-        key={state?.upload?.id ?? 'upload'}
-        open={!hasUpload && !state?.results}
-        className="rounded-lg border p-4"
-      >
-        <summary className={`${control} cursor-pointer font-medium`}>
-          {hasUpload || state?.results ? m.library_archive_entry_replace() : m.library_archive_upload_step()}
-        </summary>
-        <section aria-labelledby="archive-upload" className="space-y-3 pt-3">
-          <h2 id="archive-upload" className="text-xl font-semibold">
-            {m.library_archive_upload_step()}
-          </h2>
-          <p id="archive-file-help">{m.library_archive_entry_upload_help()}</p>
-          {hasUpload || state?.results ? <p>{m.library_archive_entry_replace_help()}</p> : null}
-          <label htmlFor="archive-file" className="block font-medium">
-            {m.library_archive_choose_file()}
-          </label>
-          <input
-            id="archive-file"
-            type="file"
-            accept="application/json,.json"
+    </>
+  );
+  const uploadPanel = (
+    <details key={state?.upload?.id ?? 'upload'} open={!hasUpload && !state?.results} className="space-y-3">
+      <summary className={control + ' cursor-pointer font-medium'}>
+        {hasUpload || state?.results ? m.library_archive_entry_replace() : m.library_archive_upload_step()}
+      </summary>
+      <section aria-labelledby="archive-upload" className="space-y-3 pt-3">
+        <h2 id="archive-upload" className="text-xl font-semibold">
+          {m.library_archive_upload_step()}
+        </h2>
+        <p id="archive-file-help">{m.library_archive_entry_upload_help()}</p>
+        {hasUpload || state?.results ? <p>{m.library_archive_entry_replace_help()}</p> : null}
+        <label htmlFor="archive-file" className="block font-medium">
+          {m.library_archive_choose_file()}
+        </label>
+        <input
+          id="archive-file"
+          type="file"
+          accept="application/json,.json"
+          disabled={!live || uploadLocked}
+          aria-describedby="archive-file-help"
+          className={control + ' block w-full max-w-full'}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            if (file) act(journey!.upload(file));
+          }}
+        />
+        {snapshot?.uploadUncertain && (
+          <button type="button" className={control} disabled={busy} onClick={() => act(journey!.retryUpload())}>
+            {m.library_archive_recovery_retry_original()}
+          </button>
+        )}
+        {!hasUpload && snapshot?.hasOriginalArchive ? (
+          <button
+            type="button"
+            className={control}
             disabled={!live || uploadLocked}
-            aria-describedby="archive-file-help"
-            className={`${control} block w-full max-w-full`}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
-              event.currentTarget.value = '';
-              if (file) act(journey!.upload(file));
-            }}
-          />
-          {snapshot?.uploadUncertain && (
-            <button type="button" className={control} disabled={busy} onClick={() => act(journey!.retryUpload())}>
-              {m.library_archive_recovery_retry_original()}
-            </button>
-          )}
-          {!hasUpload && snapshot?.hasOriginalArchive ? (
-            <button
-              type="button"
-              className={control}
-              disabled={!live || uploadLocked}
-              onClick={() => act(journey!.adoptOriginal())}
-            >
-              {m.library_archive_recovery_restart_original()}
-            </button>
-          ) : null}
-          {!hasUpload && completed && !snapshot?.hasOriginalArchive ? (
-            <button
-              type="button"
-              className={control}
-              disabled={!live || uploadLocked}
-              onClick={() => act(journey!.upload(archiveFileFromCustody(completed)))}
-            >
-              {m.library_archive_use_completed_export()}
-            </button>
-          ) : null}
-          {completed || snapshot?.hasOriginalArchive ? <p>{m.library_archive_completed_export_help()}</p> : null}
-        </section>
-      </details>
-      <details className="space-y-3 rounded-lg border p-4">
-        <summary id="archive-scope" className={`${control} cursor-pointer font-semibold`}>
-          {m.library_archive_scope_title()}
+            onClick={() => act(journey!.adoptOriginal())}
+          >
+            {m.library_archive_recovery_restart_original()}
+          </button>
+        ) : null}
+        {!hasUpload && completed && !snapshot?.hasOriginalArchive ? (
+          <button
+            type="button"
+            className={control}
+            disabled={!live || uploadLocked}
+            onClick={() => act(journey!.upload(archiveFileFromCustody(completed)))}
+          >
+            {m.library_archive_use_completed_export()}
+          </button>
+        ) : null}
+        {completed || snapshot?.hasOriginalArchive ? <p>{m.library_archive_completed_export_help()}</p> : null}
+      </section>
+    </details>
+  );
+  const scopePanel = (
+    <details className="space-y-3 rounded-lg border p-4">
+      <summary id="archive-scope" className={control + ' cursor-pointer font-semibold'}>
+        {m.library_archive_scope_title()}
+      </summary>
+      <p>{m.library_archive_entry_scope()}</p>
+      <p>{m.library_archive_personal_help()}</p>
+      <p>{m.library_archive_deliberate()}</p>
+      <p>{m.library_archive_history()}</p>
+    </details>
+  );
+  const inventory = hasUpload ? (
+    <section aria-labelledby="archive-inventory" className="space-y-3">
+      <p>
+        {m.library_archive_entry_counts({
+          rows: state!.upload!.metadata.rows,
+          bytes: state!.upload!.metadata.recordBytes,
+        })}
+      </p>
+      <p>{m.library_archive_entry_expiry({ date: state!.upload!.metadata.expiresAt })}</p>
+      <details className="rounded-lg border p-3">
+        <summary id="archive-inventory" className={control + ' cursor-pointer font-semibold'}>
+          {m.library_archive_entry_inventory()}
         </summary>
-        <p>{m.library_archive_entry_scope()}</p>
-        <p>{m.library_archive_personal_help()}</p>
-        <p>{m.library_archive_deliberate()}</p>
-        <p>{m.library_archive_history()}</p>
+        <p>{m.library_archive_entry_count_help()}</p>
+        <dl className="grid gap-2 sm:grid-cols-2">
+          {state!.upload!.metadata.coverage.map((item) => (
+            <div key={item.section} className="rounded border p-3">
+              <dt className="font-semibold">{sectionLabel(item.section)}</dt>
+              <dd>
+                {item.capture === 'empty'
+                  ? m.library_archive_recovery_coverage_empty()
+                  : !supportedRecoverySection(item.section) || item.treatment === 'retained-unsupported'
+                    ? m.library_archive_recovery_coverage_unsupported({ rows: item.rows })
+                    : m.library_archive_recovery_coverage_requires_mapping({ rows: item.rows })}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <EvidenceDetails value={state!.upload!.metadata} />
+        <button type="button" className={control} disabled={busy} onClick={() => act(journey!.status())}>
+          {m.library_archive_entry_status()}
+        </button>
       </details>
-      {(hasUpload || state?.results) && (
-        <>
-          {hasUpload && (
-            <section aria-labelledby="archive-inventory" className="space-y-3">
-              <p>
-                {m.library_archive_entry_counts({
-                  rows: state.upload!.metadata.rows,
-                  bytes: state.upload!.metadata.recordBytes,
-                })}
+    </section>
+  ) : null;
+  const windowNavigation =
+    area === 'records' && hasUpload ? (
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          className={control}
+          data-archive-focus-trigger="true"
+          disabled={previewBusy || state!.pageNavigation.previous.length === 0}
+          onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('previous'))}
+        >
+          {m.library_window_previous()}
+        </button>
+        <button
+          type="button"
+          className={control}
+          data-archive-focus-trigger="true"
+          disabled={previewBusy}
+          onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('first'))}
+        >
+          {m.library_archive_entry_first()}
+        </button>
+        <button
+          type="button"
+          className={control}
+          data-archive-focus-trigger="true"
+          disabled={previewBusy || state!.page?.context.next == null}
+          onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('next'))}
+        >
+          {m.library_archive_entry_next()}
+        </button>
+        <button
+          type="button"
+          className={control}
+          data-archive-focus-trigger="true"
+          disabled={previewBusy || state!.pageNavigation.current === null}
+          onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('refresh'))}
+        >
+          {m.library_archive_entry_results_refresh()}
+        </button>
+        {state!.pageNavigation.staged?.failed && (
+          <button
+            type="button"
+            className={control}
+            data-archive-focus-trigger="true"
+            disabled={previewBusy}
+            onClick={(event) => actWithFocus('records', event.currentTarget, journey!.page('retry'))}
+          >
+            {m.library_window_retry()}
+          </button>
+        )}
+      </div>
+    ) : area === 'results' && (hasUpload || state?.results) && phase !== 'expired' ? (
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          className={control}
+          data-archive-focus-trigger="true"
+          disabled={busy || state!.resultsNavigation.previous.length === 0}
+          onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('previous'))}
+        >
+          {m.library_window_previous()}
+        </button>
+        <button
+          type="button"
+          className={control}
+          data-archive-focus-trigger="true"
+          disabled={busy}
+          onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('first'))}
+        >
+          {m.library_archive_entry_first()}
+        </button>
+        <button
+          type="button"
+          className={control}
+          data-archive-focus-trigger="true"
+          disabled={busy || state!.results?.context.next == null}
+          onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('next'))}
+        >
+          {m.library_archive_entry_next()}
+        </button>
+        <button
+          type="button"
+          className={control}
+          data-archive-focus-trigger="true"
+          disabled={busy}
+          onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('refresh'))}
+        >
+          {m.library_archive_entry_results_refresh()}
+        </button>
+        {state!.resultsNavigation.staged?.failed && (
+          <button
+            type="button"
+            className={control}
+            data-archive-focus-trigger="true"
+            disabled={busy}
+            onClick={(event) => actWithFocus('results', event.currentTarget, journey!.results('retry'))}
+          >
+            {m.library_window_retry()}
+          </button>
+        )}
+      </div>
+    ) : null;
+  const records = (hasUpload || state?.results) && !terminal ? (
+    <section
+      id="archive-rows"
+      hidden={area !== 'records'}
+      aria-labelledby="archive-rows-heading"
+      className="space-y-4"
+    >
+      <h2
+        id="archive-rows-heading"
+        tabIndex={-1}
+        className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {m.library_archive_entry_records()}
+      </h2>
+      <p>{m.library_archive_entry_mapping_help()}</p>
+      {state!.results ? <p>{m.library_archive_entry_edit_help()}</p> : null}
+      {state!.page?.rows.length === 0 && <p>{m.library_archive_entry_empty()}</p>}
+      {state!.page?.rows.map((row) => (
+        <ArchiveEntryRecordLayout
+          key={owner + ':' + state!.upload!.id + ':' + row.ordinal}
+          context={
+            <>
+              <h3 className="font-semibold">{recordTitle(row)}</h3>
+              <p className="text-sm">
+                {sectionLabel(row.section)} · {statusLabel(row.status)}
               </p>
-              <p>{m.library_archive_entry_expiry({ date: state.upload!.metadata.expiresAt })}</p>
-              <details className="rounded-lg border p-3">
-                <summary id="archive-inventory" className={`${control} cursor-pointer font-semibold`}>
-                  {m.library_archive_entry_inventory()}
-                </summary>
-                <p>{m.library_archive_entry_count_help()}</p>
-                <dl className="grid gap-2 sm:grid-cols-2">
-                  {state.upload!.metadata.coverage.map((item) => (
-                    <div key={item.section} className="rounded border p-3">
-                      <dt className="font-semibold">{sectionLabel(item.section)}</dt>
-                      <dd>
-                        {item.capture === 'empty'
-                          ? m.library_archive_recovery_coverage_empty()
-                          : !supportedRecoverySection(item.section) || item.treatment === 'retained-unsupported'
-                            ? m.library_archive_recovery_coverage_unsupported({ rows: item.rows })
-                            : m.library_archive_recovery_coverage_requires_mapping({ rows: item.rows })}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-                <EvidenceDetails value={state.upload!.metadata} />
-                <button type="button" className={control} disabled={busy} onClick={() => act(journey!.status())}>
-                  {m.library_archive_entry_status()}
-                </button>
-              </details>
-            </section>
-          )}
-          {!terminal && locked ? operation : null}
-          {!terminal && (
-            <section
-              id="archive-rows"
-              hidden={area !== 'records'}
-              aria-labelledby="archive-rows-heading"
-              className="space-y-4"
-            >
-              <h2
-                id="archive-rows-heading"
-                tabIndex={-1}
-                className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {m.library_archive_entry_records()}
-              </h2>
-              <p>{m.library_archive_entry_mapping_help()}</p>
-              {state.results ? <p>{m.library_archive_entry_edit_help()}</p> : null}
-              {state.page?.rows.length === 0 && <p>{m.library_archive_entry_empty()}</p>}
-              {state.page?.rows.map((row) => (
-                <article
-                  key={`${owner}:${state.upload!.id}:${row.ordinal}`}
-                  className="space-y-3 rounded-lg border p-4"
-                >
-                  <h3 className="font-semibold">{recordTitle(row)}</h3>
-                  <p className="text-sm">
-                    {sectionLabel(row.section)} · {statusLabel(row.status)}
-                  </p>
-                  <ArchiveRecordSummary row={row} />
-                  <ArchiveNativeReviewSummary row={row} />
-                  {supportedRecoverySection(row.section) &&
-                  !['unsupported', 'applying', 'acknowledged'].includes(row.status) ? (
-                    row.section === 'annotations' ? (
-                      <AnnotationMappingForm
-                        key={`${row.ordinal}:${state.upload!.id}`}
-                        row={row}
-                        disabled={
-                          busy ||
-                          locked ||
-                          (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))
-                        }
-                        onChoose={(choice) => journey!.choose(choice)}
-                      />
-                    ) : row.section === 'journals' ? (
-                      <JournalMappingForm
-                        key={`${row.ordinal}:${state.upload!.id}`}
-                        row={row}
-                        disabled={
-                          busy ||
-                          locked ||
-                          (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))
-                        }
-                        onChoose={(choice) => journey!.choose(choice)}
-                      />
-                    ) : row.section === 'provenance' ? (
-                      <ObservationMappingForm
-                        key={`${row.ordinal}:${state.upload!.id}`}
-                        row={row}
-                        disabled={
-                          busy ||
-                          locked ||
-                          (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))
-                        }
-                        onChoose={(choice) => journey!.choose(choice)}
-                      />
-                    ) : (
-                      <MappingForm
-                        key={`${row.ordinal}:${state.upload!.id}`}
-                        row={row}
-                        disabled={
-                          busy ||
-                          locked ||
-                          (state.choices.length >= 20 &&
-                            !state.choices.some((choice) => choice.ordinal === row.ordinal))
-                        }
-                        onChoose={(choice) => journey!.choose(choice)}
-                      />
-                    )
-                  ) : (
-                    <p>
-                      {row.section === 'provenance'
-                        ? m.library_archive_personal_observation_evidence()
-                        : m.library_archive_entry_retained()}
-                    </p>
-                  )}
-                </article>
-              ))}
-              <div className="flex flex-wrap gap-3">
+              <ArchiveRecordSummary row={row} />
+              <ArchiveNativeReviewSummary row={row} />
+            </>
+          }
+          operation={
+            supportedRecoverySection(row.section) &&
+            !['unsupported', 'applying', 'acknowledged'].includes(row.status) ? (
+              row.section === 'annotations' ? (
+                <AnnotationMappingForm
+                  key={row.ordinal + ':' + state!.upload!.id}
+                  row={row}
+                  disabled={
+                    busy ||
+                    locked ||
+                    (state!.choices.length >= 20 && !state!.choices.some((c) => c.ordinal === row.ordinal))
+                  }
+                  onChoose={(choice) => journey!.choose(choice)}
+                />
+              ) : row.section === 'journals' ? (
+                <JournalMappingForm
+                  key={row.ordinal + ':' + state!.upload!.id}
+                  row={row}
+                  disabled={
+                    busy ||
+                    locked ||
+                    (state!.choices.length >= 20 && !state!.choices.some((c) => c.ordinal === row.ordinal))
+                  }
+                  onChoose={(choice) => journey!.choose(choice)}
+                />
+              ) : row.section === 'provenance' ? (
+                <ObservationMappingForm
+                  key={row.ordinal + ':' + state!.upload!.id}
+                  row={row}
+                  disabled={
+                    busy ||
+                    locked ||
+                    (state!.choices.length >= 20 && !state!.choices.some((c) => c.ordinal === row.ordinal))
+                  }
+                  onChoose={(choice) => journey!.choose(choice)}
+                />
+              ) : (
+                <MappingForm
+                  key={row.ordinal + ':' + state!.upload!.id}
+                  row={row}
+                  disabled={
+                    busy ||
+                    locked ||
+                    (state!.choices.length >= 20 &&
+                      !state!.choices.some((choice) => choice.ordinal === row.ordinal))
+                  }
+                  onChoose={(choice) => journey!.choose(choice)}
+                />
+              )
+            ) : (
+              <p>
+                {row.section === 'provenance'
+                  ? m.library_archive_personal_observation_evidence()
+                  : m.library_archive_entry_retained()}
+              </p>
+            )
+          }
+        />
+      ))}
+      <button
+        type="button"
+        className={control}
+        data-archive-focus-trigger="true"
+        onClick={(event) => showArea('review', event.currentTarget)}
+      >
+        {m.library_archive_entry_selected({ count: state!.choices.length })}
+      </button>
+    </section>
+  ) : null;
+  const reviewPanel = (hasUpload || state?.results) && !terminal ? (
+    <section
+      id="archive-selected"
+      hidden={area !== 'review'}
+      aria-labelledby="archive-selected-heading"
+      className="space-y-3"
+    >
+      <h2
+        id="archive-selected-heading"
+        tabIndex={-1}
+        className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {m.library_archive_entry_selected({ count: state!.choices.length })}
+      </h2>
+      <p>{m.library_archive_entry_assignment_help()}</p>
+      <p>{m.library_archive_entry_confirmation_help()}</p>
+      {state!.choices.map((choice) => {
+        const row = displayedRows.get(choice.ordinal);
+        return (
+          <ArchiveEntryRecordLayout
+            key={choice.ordinal}
+            context={row ? <ArchiveNativeReviewSummary row={row} /> : null}
+            operation={
+              <>
+                <ArchiveChoiceSummary choice={choice.choice} row={row} />
                 <button
                   type="button"
                   className={control}
-                  disabled={previewBusy || state.pageNavigation.previous.length === 0}
-                  onClick={() => act(journey!.page('previous'))}
+                  disabled={busy || locked}
+                  onClick={() => journey!.unselect(choice.ordinal)}
                 >
-                  {m.library_window_previous()}
+                  {m.library_archive_entry_unselect({ ordinal: choice.ordinal })}
                 </button>
-                <button
-                  type="button"
-                  className={control}
-                  disabled={previewBusy}
-                  onClick={() => act(journey!.page('first'))}
-                >
-                  {m.library_archive_entry_first()}
-                </button>
-                <button
-                  type="button"
-                  className={control}
-                  disabled={previewBusy || state.page?.context.next == null}
-                  onClick={() => act(journey!.page('next'))}
-                >
-                  {m.library_archive_entry_next()}
-                </button>
-                <button
-                  type="button"
-                  className={control}
-                  disabled={previewBusy || state.pageNavigation.current === null}
-                  onClick={() => act(journey!.page('refresh'))}
-                >
-                  {m.library_archive_entry_results_refresh()}
-                </button>
-                {state.pageNavigation.staged?.failed && (
-                  <button
-                    type="button"
-                    className={control}
-                    disabled={previewBusy}
-                    onClick={() => act(journey!.page('retry'))}
-                  >
-                    {m.library_window_retry()}
-                  </button>
-                )}
-              </div>
-              <button type="button" className={control} onClick={() => showArea('review')}>
-                {m.library_archive_entry_selected({ count: state.choices.length })}
-              </button>
-            </section>
-          )}
-          {!terminal && (
-            <section
-              id="archive-selected"
-              hidden={area !== 'review'}
-              aria-labelledby="archive-selected-heading"
-              className="space-y-3"
-            >
-              <h2
-                id="archive-selected-heading"
-                tabIndex={-1}
-                className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {m.library_archive_entry_selected({ count: state.choices.length })}
-              </h2>
-              <p>{m.library_archive_entry_assignment_help()}</p>
-              <p>{m.library_archive_entry_confirmation_help()}</p>
-              {state.choices.map((choice) => (
-                <div key={choice.ordinal} className="space-y-2 rounded border p-3">
-                  <ArchiveChoiceSummary choice={choice.choice} row={displayedRows.get(choice.ordinal)} />
-                  {displayedRows.has(choice.ordinal) ? (
-                    <ArchiveNativeReviewSummary row={displayedRows.get(choice.ordinal)!} />
-                  ) : null}
-                  <button
-                    type="button"
-                    className={control}
-                    disabled={busy || locked}
-                    onClick={() => journey!.unselect(choice.ordinal)}
-                  >
-                    {m.library_archive_entry_unselect({ ordinal: choice.ordinal })}
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                className={control}
-                disabled={busy || locked || state.choices.length === 0}
-                onClick={() => act(journey!.review())}
-              >
-                {m.library_archive_entry_review()}
-              </button>
-              {review && (
-                <div className="space-y-3 rounded border p-4">
-                  {snapshot!.reviewed.map((item) => {
-                    const row = displayedRows.get(item.ordinal);
-                    return (
-                      <p key={item.ordinal}>
-                        {row ? recordTitle(row) : m.library_archive_present_title_unavailable()} ·{' '}
-                        {statusLabel(item.status)}
-                      </p>
-                    );
-                  })}
-                  <EvidenceDetails value={review.body} title={m.library_archive_progress_exact()} />
-                  <label className="flex min-h-11 items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={confirmed}
-                      disabled={busy || locked}
-                      onChange={(event) => setConfirmation(event.currentTarget.checked ? review : null)}
-                    />
-                    {m.library_archive_entry_confirm()}
-                  </label>
-                  <button
-                    type="button"
-                    className={control}
-                    disabled={busy || locked || !confirmed}
-                    onClick={() => {
-                      setConfirmation(null);
-                      act(journey!.apply());
-                    }}
-                  >
-                    {m.library_archive_entry_apply()}
-                  </button>
-                </div>
-              )}
-              <button type="button" className={control} disabled={locked} onClick={() => showArea('records')}>
-                {m.library_archive_entry_edit()}
-              </button>
-              <p>{m.library_archive_entry_edit_help()}</p>
-            </section>
-          )}
-          {(hasUpload || state.results) && (
-            <section
-              id="archive-results"
-              hidden={area !== 'results'}
-              aria-labelledby="archive-results-heading"
-              className="space-y-3"
-            >
-              <h2
-                id="archive-results-heading"
-                tabIndex={-1}
-                className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {m.library_archive_results_step()}
-              </h2>
-              {phase === 'complete' ? (
-                <p role="status" className="font-semibold">
-                  {m.library_archive_recovery_complete_title()}
-                </p>
-              ) : null}
-              <p>{m.library_archive_entry_result_help()}</p>
-              {!state.results ? <p>{m.library_archive_entry_results_unread()}</p> : null}
-              {state.results?.rows.length === 0 ? <p>{m.library_archive_entry_results_empty()}</p> : null}
-              {state.results?.rows.map((row) => (
-                <div key={row.ordinal} className="space-y-2 rounded border p-3">
-                  <h3 className="font-semibold">
-                    {displayedRows.has(row.ordinal)
-                      ? recordTitle(displayedRows.get(row.ordinal)!)
-                      : m.library_archive_present_title_unavailable()}
-                  </h3>
-                  <p>
-                    {sectionLabel(row.section)} · {statusLabel(row.status)}
-                  </p>
-                  <EvidenceDetails value={row} />
-                  {row.subjectId && (
-                    <>
-                      <a
-                        className={`${control} inline-flex items-center underline`}
-                        href={localizeHref(`/subjects/${row.subjectId}`)}
-                      >
-                        {m.library_archive_entry_subject()}
-                      </a>
-                      <a className={`${control} inline-flex items-center underline`} href={localizeHref('/library')}>
-                        {m.library_archive_entry_open_library()}
-                      </a>
-                    </>
-                  )}
-                  {row.sessionId ? (
-                    <a
-                      className={`${control} inline-flex items-center underline`}
-                      href={localizeHref(`/library/progress/${row.sessionId}`)}
-                    >
-                      {m.library_archive_progress_open_session()}
-                    </a>
-                  ) : null}
-                  {(row.subjectId || row.labelId) && (
-                    <button
-                      type="button"
-                      className={control}
-                      disabled={busy || phase === 'expired'}
-                      onClick={() => act(journey!.readCurrent(row.ordinal))}
-                    >
-                      {m.library_archive_entry_read_current()}
-                    </button>
-                  )}
-                </div>
-              ))}
-              {snapshot?.readback && <ArchiveCurrentFacts value={snapshot.readback.value} />}
-              {phase !== 'expired' && (
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    className={control}
-                    disabled={busy || state.resultsNavigation.previous.length === 0}
-                    onClick={() => act(journey!.results('previous'))}
-                  >
-                    {m.library_window_previous()}
-                  </button>
-                  <button
-                    type="button"
-                    className={control}
-                    disabled={busy}
-                    onClick={() => act(journey!.results('first'))}
-                  >
-                    {m.library_archive_entry_first()}
-                  </button>
-                  <button
-                    type="button"
-                    className={control}
-                    disabled={busy || state.results?.context.next == null}
-                    onClick={() => act(journey!.results('next'))}
-                  >
-                    {m.library_archive_entry_next()}
-                  </button>
-                  <button
-                    type="button"
-                    className={control}
-                    disabled={busy}
-                    onClick={() => act(journey!.results('refresh'))}
-                  >
-                    {m.library_archive_entry_results_refresh()}
-                  </button>
-                  {state.resultsNavigation.staged?.failed && (
-                    <button
-                      type="button"
-                      className={control}
-                      disabled={busy}
-                      onClick={() => act(journey!.results('retry'))}
-                    >
-                      {m.library_window_retry()}
-                    </button>
-                  )}
-                </div>
-              )}
-              {!terminal && (
+              </>
+            }
+          />
+        );
+      })}
+      <button
+        type="button"
+        className={control}
+        disabled={busy || locked || state!.choices.length === 0}
+        onClick={(event) => actWithFocus('review', event.currentTarget, journey!.review())}
+      >
+        {m.library_archive_entry_review()}
+      </button>
+      {review && (
+        <div className="space-y-3 rounded border p-4">
+          {snapshot!.reviewed.map((item) => {
+            const row = displayedRows.get(item.ordinal);
+            return (
+              <p key={item.ordinal}>
+                {row ? recordTitle(row) : m.library_archive_present_title_unavailable()} · {statusLabel(item.status)}
+              </p>
+            );
+          })}
+          <EvidenceDetails value={review.body} title={m.library_archive_progress_exact()} />
+          <label className="flex min-h-11 items-center gap-3">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              disabled={busy || locked}
+              onChange={(event) => setConfirmation(event.currentTarget.checked ? review : null)}
+            />
+            {m.library_archive_entry_confirm()}
+          </label>
+          <button
+            type="button"
+            className={control}
+            disabled={busy || locked || !confirmed}
+            onClick={() => {
+              setConfirmation(null);
+              act(journey!.apply());
+            }}
+          >
+            {m.library_archive_entry_apply()}
+          </button>
+        </div>
+      )}
+      <button
+        type="button"
+        className={control}
+        disabled={locked}
+        onClick={(event) => showArea('records', event.currentTarget)}
+      >
+        {m.library_archive_entry_edit()}
+      </button>
+      <p>{m.library_archive_entry_edit_help()}</p>
+    </section>
+  ) : null;
+  const resultsPanel = hasUpload || state?.results ? (
+    <section
+      id="archive-results"
+      hidden={area !== 'results'}
+      aria-labelledby="archive-results-heading"
+      className="space-y-3"
+    >
+      <h2
+        id="archive-results-heading"
+        tabIndex={-1}
+        className="text-xl font-semibold focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {m.library_archive_results_step()}
+      </h2>
+      {phase === 'complete' ? (
+        <p role="status" className="font-semibold">
+          {m.library_archive_recovery_complete_title()}
+        </p>
+      ) : null}
+      <p>{m.library_archive_entry_result_help()}</p>
+      {!state!.results ? <p>{m.library_archive_entry_results_unread()}</p> : null}
+      {state!.results?.rows.length === 0 && <p>{m.library_archive_entry_results_empty()}</p>}
+      {state!.results?.rows.map((row) => (
+        <ArchiveEntryRecordLayout
+          key={row.ordinal}
+          context={
+            <>
+              <h3 className="font-semibold">
+                {displayedRows.has(row.ordinal)
+                  ? recordTitle(displayedRows.get(row.ordinal)!)
+                  : m.library_archive_present_title_unavailable()}
+              </h3>
+              <p>
+                {sectionLabel(row.section)} · {statusLabel(row.status)}
+              </p>
+            </>
+          }
+          operation={
+            <>
+              <EvidenceDetails value={row} />
+              {row.subjectId && (
                 <>
-                  <button type="button" className={control} disabled={locked} onClick={() => showArea('records')}>
-                    {m.library_archive_entry_edit()}
-                  </button>
-                  <p>{m.library_archive_entry_edit_help()}</p>
+                  <a
+                    className={control + ' inline-flex items-center underline'}
+                    href={localizeHref('/subjects/' + row.subjectId)}
+                  >
+                    {m.library_archive_entry_subject()}
+                  </a>
+                  <a className={control + ' inline-flex items-center underline'} href={localizeHref('/library')}>
+                    {m.library_archive_entry_open_library()}
+                  </a>
                 </>
               )}
-            </section>
-          )}
-          {!terminal && !locked ? operation : null}
+              {row.sessionId ? (
+                <a
+                  className={control + ' inline-flex items-center underline'}
+                  href={localizeHref('/library/progress/' + row.sessionId)}
+                >
+                  {m.library_archive_progress_open_session()}
+                </a>
+              ) : null}
+              {(row.subjectId || row.labelId) && (
+                <button
+                  type="button"
+                  className={control}
+                  disabled={busy || phase === 'expired'}
+                  onClick={() => act(journey!.readCurrent(row.ordinal))}
+                >
+                  {m.library_archive_entry_read_current()}
+                </button>
+              )}
+            </>
+          }
+        />
+      ))}
+      {snapshot?.readback && <ArchiveCurrentFacts value={snapshot.readback.value} />}
+      {!terminal && (
+        <>
+          <button
+            type="button"
+            className={control}
+            disabled={locked}
+            onClick={(event) => showArea('records', event.currentTarget)}
+          >
+            {m.library_archive_entry_edit()}
+          </button>
+          <p>{m.library_archive_entry_edit_help()}</p>
         </>
       )}
+    </section>
+  ) : null;
+  const afterBodyActions = (
+    <>
+      {(hasUpload || state?.results) && !terminal && !locked ? operation : null}
       {phase === 'expired' && (
         <>
           <p>{m.library_archive_entry_expired()}</p>
@@ -656,12 +768,34 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           {m.library_archive_recovery_restart()}
         </button>
       ) : null}
-      <nav aria-label={m.library_archive_destinations()} className="flex flex-wrap gap-3">
-        <a href={localizeHref('/library')} className={`${control} inline-flex items-center underline`}>
-          {m.library_archive_return()}
-        </a>
-      </nav>
-    </main>
+    </>
+  );
+  const footer = (
+    <nav aria-label={m.library_archive_destinations()} className="flex flex-wrap gap-3">
+      <a href={localizeHref('/library')} className={control + ' inline-flex items-center underline'}>
+        {m.library_archive_return()}
+      </a>
+    </nav>
+  );
+
+  return (
+    <ArchiveEntryWorkspace
+      mainRef={workspace}
+      header={header}
+      areaNavigation={areaNavigation}
+      status={statusContent}
+      upload={uploadPanel}
+      scope={scopePanel}
+      inventory={inventory ? <div className="space-y-3 rounded-lg border p-4">{inventory}</div> : null}
+      beforeBodyActions={!terminal && locked ? operation : null}
+      windowNavigation={windowNavigation}
+      windowNavigationLabel={area === 'results' ? m.library_archive_results_step() : m.library_archive_entry_records()}
+      records={records}
+      review={reviewPanel}
+      results={resultsPanel}
+      afterBodyActions={afterBodyActions}
+      footer={footer}
+    />
   );
 }
 
