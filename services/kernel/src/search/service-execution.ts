@@ -353,6 +353,11 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
   const release = releaseOverride
     ? () => requestStep(releaseOverride)
     : async () => ((await readActiveRelease())?.release as FilterRelease | undefined) ?? null;
+  async function acquireFacetProvider(context: { deadline: number }) {
+    const provider = facetProvider ? await requestStep(() => facetProvider(context), context.deadline) : undefined;
+    if (provider || publicFilters === undefined) return provider;
+    return requestStep(() => publicFilters().facetProvider(context), context.deadline);
+  }
   const realmRelease = releaseOverride
     ? async (expected?: string) => {
         const current = await release();
@@ -1700,9 +1705,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       request = ownSubjectRequest(request);
       const identityEpoch = await executedIdentity(context.deadline);
       if (request.scope !== undefined) {
-        const provider =
-          (await facetProvider?.()) ??
-          (publicFilters === undefined ? undefined : await publicFilters().facetProvider());
+        const provider = await acquireFacetProvider(context);
         if (!provider) throw indexNotReady();
         return readScopedFacetDiscovery(cursors, provider, request, async (scopedRequest) => {
           if (!context.scope) throw indexNotReady();
@@ -1828,8 +1831,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       admitFacets(facets, catalogue, current);
       // The native factory must resolve the actual registered catalogue/meaning/identity context.
       // Neither preview buckets nor a guessed Global/type configuration can replace this boundary.
-      const provider =
-        (await facetProvider?.()) ?? (publicFilters === undefined ? undefined : await publicFilters().facetProvider());
+      const provider = await acquireFacetProvider(context);
       if (!provider) throw indexNotReady();
       return readFacetDiscovery(
         cursors,

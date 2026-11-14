@@ -10,7 +10,7 @@ import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { discoveryIndexName } from './indices.ts';
 import type { SearchGenerationPublication } from './generation-publication.ts';
 import type { Access } from '../request/access.ts';
-import { withRequestDeadline } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import type { KernelClock } from '../clock.ts';
 import { createPublicFilterCustody } from './public-filter-custody.ts';
@@ -97,7 +97,7 @@ export type DefaultPublicFilterRuntime = Readonly<{
   /** Typed currentness and aggregate proofs over retained capture/query/repair. */
   privacy(operations: PublicFilterConsumerOperations): QueryPrivacyConsumer;
   /** Trusted native facet composition; omitted generation or meaning stays closed. */
-  facetProvider(): Promise<FacetDiscoveryProvider | undefined>;
+  facetProvider(context?: PublicFilterConsumerContext): Promise<FacetDiscoveryProvider | undefined>;
   close(): Promise<void>;
 }>;
 
@@ -529,15 +529,21 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         );
       });
     },
-    facetProvider() {
+    facetProvider(context = { deadline: deadlineFor(30_000) }) {
       return track(async () => {
-        const current = await sourcePublication.activeRelease(config.pool);
-        const state = await subjectGenerations(config.search, config.prefix);
+        // Bound acquisition only; retained operations below receive each later caller's context.
+        const acquisition = {
+          ...context,
+          deadline: Math.min(context.deadline, deadlineFor(checkDeadline(context))),
+        };
+        const current = await requestMeaning(acquisition);
+        const state = await subjectGenerations(requestSearch(acquisition), config.prefix);
+        checkDeadline(acquisition);
         const generation = state.active;
         if (!current || generation === null || !current.release.types['schema:Thing']) return undefined;
         const physicalTarget = subjectIndexName(config.prefix, generation);
         const meaning = { digest: current.digest, release: current.release, type: 'schema:Thing' };
-        return {
+        const provider = {
           source: config.prefix,
           meaning,
           generation,
@@ -568,6 +574,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
             },
           }),
         };
+        checkDeadline(acquisition);
+        return provider;
       });
     },
     close() {
