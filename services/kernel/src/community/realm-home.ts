@@ -1,6 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
+import type { PoolClient } from 'pg';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
   deadlineClient,
@@ -8,9 +9,15 @@ import {
   createRealmHomeBoardObservationReader,
   realmHomeBoardResponse,
 } from './domain-ports.ts';
-import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  CommandUnavailableError,
+  requireAccessDeadline,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { ReadContext } from '../content/model.ts';
@@ -53,6 +60,38 @@ export type RealmHomePage = Readonly<{
   viewer: RealmHomeViewer;
   actions: RealmHomeActions;
 }>;
+
+function boundedContainerReadOptions() {
+  const uncertain = (error: unknown) => {
+    const reason = classifyUnavailability(error);
+    return reason === 'deadline' || reason === 'overloaded';
+  };
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      if (error instanceof CommandUnavailableError) return error;
+      try {
+        throwAccessUnavailable(error);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: uncertain,
+    isUncertainSettledQueryError: () => true,
+    isUncertainWorkError: uncertain,
+  };
+}
+
+function withContainerReadConnection<T>(
+  deps: RealmHomeDependencies,
+  context: ReadContext,
+  read: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  if (!Number.isFinite(context.deadline)) return withConnection(deps.pool, read);
+  return withBoundedReadConnection(deps.pool, context.deadline, read, boundedContainerReadOptions());
+}
+
 const closed = { additionalProperties: false } as const;
 const homeMembership = t.Union([
   t.Object(
@@ -113,7 +152,7 @@ export function RealmHomePageSchema() {
 async function observeContainer(deps: RealmHomeDependencies, realmId: string, context: ReadContext) {
   const realm = await readRealm(deps, context.actor, realmId, context);
   if (!realm) return null;
-  const before = await withConnection(deps.pool, async (connection) => {
+  const before = await withContainerReadConnection(deps, context, async (connection) => {
     const client = deadlineClient(connection, context.deadline);
     const at = await mintReadTime(client, deps.clock);
     return readContainerBinding(client, { realmId, at });
@@ -135,7 +174,7 @@ async function observeContainer(deps: RealmHomeDependencies, realmId: string, co
         { ...identity, eligibility: spaceReadEligibility(identity) },
         { pool: deps.pool, deadline: context.deadline },
       );
-      return withConnection(deps.pool, async (connection) => {
+      return withContainerReadConnection(deps, context, async (connection) => {
         const client = deadlineClient(connection, context.deadline);
         const at = await mintReadTime(client, deps.clock);
         if (!(await check(client, at))) return null;
