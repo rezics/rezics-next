@@ -15,7 +15,11 @@ import {
 import { gameEntryState, gameShowcasePage, selectGameShowcase } from '../src/kernel/fake/game-showcase';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { gameOverviewInitial } from '../src/features/pages/game-overview';
-import { readGameReader, type GameReaderReady } from '../src/features/catalogue/game-reader/model';
+import {
+  gameReaderEditionPage,
+  readGameReader,
+  type GameReaderReady,
+} from '../src/features/catalogue/game-reader/model';
 import { gameDatePresentation } from '../src/features/catalogue/game-reader/date';
 import { subjectTabs } from '../src/features/pages/views';
 import { QUESTION } from '../src/kernel/fake/ratings';
@@ -179,4 +183,87 @@ test('member library and score controls read back per Subject without changing a
   expect((await vote.delete(undefined, { headers })).status).toBe(204);
   expect((await vote.get({ headers })).status).toBe(404);
   expect((await entry.get()).status).toBe(401);
+});
+
+test('comparison HTTP admission preserves native facts and useful memberships independently', async () => {
+  const seed = await ready();
+  const page = gameShowcasePage();
+  const response = leaf(page, 'editions');
+  const body = response.body as SubjectLinksResponse;
+  const address = { id: game.id, context: seed.public.subject.context, type: 'schema:VideoGame' };
+  const admit = (workReleaseCards: unknown) => gameReaderEditionPage(seed, address, 200, { ...body, workReleaseCards });
+  for (const comparison of [body.workReleaseCards, { state: 'available', cards: [] }, { state: 'unavailable' }]) {
+    const result = admit(comparison);
+    expect(result.ok && result.workReleaseCards).toBe(comparison);
+    expect(result.ok && result.editions).toBe(body.links);
+  }
+  const invalid = [
+    undefined, null, {}, { state: 'available' }, { state: 'available', cards: {} }, { state: 'other' },
+    { state: 'available', cards: [null] },
+    { state: 'available', cards: [], extra: 'x'.repeat(2 * 1024 * 1024) },
+  ];
+  for (const comparison of invalid) {
+    const result = admit(comparison);
+    expect(result).toMatchObject({ ok: true, workReleaseCards: { state: 'unavailable' }, next: body.next });
+    expect(result.ok && result.public).toBe(seed.public);
+    expect(result.ok && result.editions).toBe(body.links);
+    response.body = { ...body, workReleaseCards: comparison };
+    expect(gameOverviewInitial(page, seed)).toMatchObject({
+      ok: true, editions: body.links, workReleaseCards: { state: 'unavailable' },
+    });
+  }
+  expect(gameReaderEditionPage(seed, address, 200, { ...body, links: [...body.links, body.links[0]] })).toEqual({ ok: false, reason: 'unavailable' });
+  expect(gameReaderEditionPage(seed, address, 200, { ...body, next: 'x'.repeat(4097) })).toEqual({ ok: false, reason: 'unavailable' });
+  expect(gameReaderEditionPage(seed, address, 200, { ...body, extra: 'x'.repeat(3 * 1024 * 1024) })).toEqual({ ok: false, reason: 'unavailable' });
+});
+
+test('malformed native comparison identities, evidence and budgets never become rendered facts', async () => {
+  const seed = await ready();
+  const body = leaf(gameShowcasePage(), 'editions').body as SubjectLinksResponse;
+  if (body.workReleaseCards?.state !== 'available') throw new Error('Expected native comparison cards');
+  const card = body.workReleaseCards.cards[0]!;
+  const property = 'schema:inLanguage';
+  const field = card.fields[property];
+  if (field.state !== 'available') throw new Error('Expected native language facts');
+  const statement = field.statements[0]!;
+  const replace = (value: unknown) => ({ ...card, fields: { ...card.fields, [property]: value } });
+  const address = { id: game.id, context: seed.public.subject.context, type: 'schema:VideoGame' };
+  const admit = (workReleaseCards: unknown) => gameReaderEditionPage(seed, address, 200, { ...body, workReleaseCards });
+  for (const state of ['unsupported', 'missing', 'withheld', 'unavailable']) {
+    const comparison = { state: 'available', cards: [replace({ state })] };
+    const result = admit(comparison);
+    expect(result.ok && result.workReleaseCards).toBe(comparison);
+  }
+  for (const type of ['somevalue', 'novalue']) {
+    const comparison = { state: 'available', cards: [replace({ ...field, statements: [{ ...statement, value: { type } }] })] };
+    const result = admit(comparison);
+    expect(result.ok && result.workReleaseCards).toBe(comparison);
+  }
+  const invalid = [
+    { ...card, subject: game.id },
+    { ...card, type: 'schema:Person' },
+    { ...card, summary: { ...card.summary, id: game.id } },
+    { ...card, membership: { ...card.membership, id: statement.id } },
+    { ...card, membership: { ...card.membership, value: { type: 'value', content: gameSparse.id } } },
+    { ...card, related: { [game.id]: null } },
+    { ...card, summary: { ...card.summary, cover: { ...card.summary.cover!, credit: null } } },
+    { ...card, fields: {} }, replace(null), replace({ state: 'other' }),
+    replace({ state: 'available' }), replace({ ...field, related: [] }),
+    replace({ ...field, statements: [null] }),
+    replace({ ...field, statements: [{ ...statement, property: { ...statement.property, id: 'schema:publisher' } }] }),
+    replace({ ...field, statements: [{ ...statement, value: { type: 'value' } }] }),
+    replace({ ...field, statements: [{ ...statement, qualifiers: [null] }] }),
+    replace({ ...field, statements: [{ ...statement, references: [{ hash: 'source', parts: [null] }] }] }),
+    replace({ ...field, statements: [{ ...statement, rezics: null }] }),
+    replace({ ...field, statements: Array(33).fill(statement) }),
+    replace({ ...field, statements: [{ ...statement, qualifiers: Array(65).fill(statement) }] }),
+    replace({ ...field, statements: [{ ...statement, references: Array(33).fill({ hash: 'source', parts: [] }) }] }),
+    replace({ ...field, statements: [{ ...statement, references: [{ hash: 'source', parts: Array(65).fill(statement) }] }] }),
+    replace({ ...field, statements: [{ ...statement, value: { type: 'value', content: 'x'.repeat(64 * 1024) } }] }),
+  ];
+  for (const cards of [...invalid.map((value) => [value]), [card, card], Array(21).fill(card)]) {
+    const result = admit({ state: 'available', cards });
+    expect(result).toMatchObject({ ok: true, workReleaseCards: { state: 'unavailable' } });
+    expect(result.ok && result.editions).toBe(body.links);
+  }
 });

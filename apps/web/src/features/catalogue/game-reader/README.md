@@ -102,6 +102,9 @@ Admission checks all native card fields, statement/evidence shapes and summary/c
 and matches each card's Subject, Type and membership to its ordered admitted row. Native unavailable, available-empty,
 missing, withheld and unsupported meanings stay distinct. The comparison Retry explicitly rereads that same native
 page, including its cursor, through the existing window request fence; replacement retires pending results.
+Retrying an accepted page is a revisit: it neither hits the forward cursor-cycle refusal nor pushes Previous again.
+An unaccepted navigation failure keeps its original traversal intent when retried. Every accepted retry still counts
+toward the existing 64-window fence.
 Admission costs O(N + K) for at most 20 memberships and the supplied facts within the comparison's 2 MiB cap, with
 native field limits of 32 statements, 64 qualifiers, 32 references, 64 parts per reference and 64 KiB per field statement.
 It adds no request, hydration or retained response history; membership assertions keep their existing row byte bound.
