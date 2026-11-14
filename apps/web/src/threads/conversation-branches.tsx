@@ -197,8 +197,9 @@ export function ConversationBranches({
         </ConversationInspection>
         {current && returnPoint ? (
           <nav
+            data-slot="conversation-return-navigation"
             aria-label={m.thread_branch_return_navigation()}
-            className="sticky top-20 z-10 flex min-w-0 rounded-lg border bg-background/95 p-1 shadow-sm"
+            className="sticky top-20 z-10 flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/95 p-2 shadow-sm backdrop-blur"
           >
             <Button type="button" variant="outline" className={controlClass} onClick={returnToOrigin}>
               {m.thread_branch_return({ position: returnPoint.index + 1 })}
@@ -223,13 +224,28 @@ export function ConversationBranches({
                 data-conversation-row={row.index}
                 data-relationship-stop={row.stop}
                 data-conversation-part={opening ? 'opening' : 'reply'}
+                data-slot={opening ? 'conversation-opening' : 'conversation-reply'}
                 hidden={conversationRowHidden(row, visit.collapsed)}
                 onClickCapture={(event) => follow(event, row)}
-                className={opening ? 'min-w-0 space-y-1' : 'min-w-0 space-y-1 border-s-2 border-border ps-2 sm:ps-3'}
+                className={
+                  opening
+                    ? 'min-w-0 space-y-2 rounded-xl border border-border/70 bg-muted/30 p-2 sm:p-3'
+                    : 'min-w-0 space-y-2 border-s-2 border-border ps-2 sm:ps-3'
+                }
                 style={{ marginInlineStart: `min(${Math.min(row.ancestors.length, 3) * 0.5}rem, 4vw)` }}
               >
-                <div className="flex min-w-0 flex-wrap items-center gap-1 px-1 text-xs text-muted-foreground">
-                  {opening ? <span className="font-semibold text-foreground">{m.conversation_opening()}</span> : null}
+                <div
+                  data-slot="conversation-row-controls"
+                  className="flex min-w-0 flex-wrap items-center gap-1 px-1 text-xs text-muted-foreground [overflow-wrap:anywhere]"
+                >
+                  {opening ? (
+                    <span
+                      data-slot="conversation-opening-label"
+                      className="inline-flex min-h-7 items-center rounded-full border border-border/70 bg-background px-2 font-semibold text-foreground"
+                    >
+                      {m.conversation_opening()}
+                    </span>
+                  ) : null}
                   <a href={`#${row.anchorId}`} className={`${controlClass} inline-flex items-center hover:underline`}>
                     {m.thread_branch_position({ position: row.index + 1 })}
                   </a>
@@ -255,7 +271,10 @@ export function ConversationBranches({
                   ) : null}
                 </div>
                 {row.ancestors.length ? (
-                  <ConversationInspection label={m.conversation_reply_path()} className="px-2">
+                  <ConversationInspection
+                    label={m.conversation_reply_path()}
+                    className="px-2 [overflow-wrap:anywhere]"
+                  >
                     <nav aria-label={m.thread_branch_path()} className="min-w-0">
                       <ol className="flex min-w-0 flex-wrap items-center gap-1">
                         {row.ancestors.map((index) => (

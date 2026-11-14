@@ -184,35 +184,40 @@ export function ThreadReadingHeader({
   const subjectReturn = currentOrigin ? boardPreparedSearch({ href: origin }, getLocale()).returnTo : undefined;
   const restart = origin ? boardReturnRestart(origin) : undefined;
   return (
-    <header className="min-w-0 min-h-8 scroll-mt-24 space-y-3 px-1 [overflow-wrap:anywhere]">
-      <BoardContext realm={page.realm} board={page.board} boardReturn={currentOrigin ? origin : undefined} prominent />
-      {subjectReturn ? (
-        <a
-          data-slot="thread-subject-return"
-          href={subjectReturn}
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
-        >
-          {m.subject_connections_return()}
-        </a>
-      ) : null}
-      {currentOrigin ? (
-        <a
-          href={origin}
-          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
-        >
-          {m.board_reading_return()}
-        </a>
-      ) : origin ? (
-        <div role="status" className="space-y-2 text-sm">
-          <p>{m.board_reading_return_unavailable()}</p>
-          {restart ? (
-            <a href={restart} className="inline-flex min-h-11 items-center underline">
-              {m.board_reading_restart()}
-            </a>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="space-y-3">
+    <header
+      data-slot="conversation-header"
+      className="min-h-8 min-w-0 scroll-mt-24 space-y-5 px-1 [overflow-wrap:anywhere]"
+    >
+      <div data-slot="conversation-navigation" className="min-w-0 space-y-1">
+        <BoardContext realm={page.realm} board={page.board} boardReturn={currentOrigin ? origin : undefined} prominent />
+        {subjectReturn ? (
+          <a
+            data-slot="thread-subject-return"
+            href={subjectReturn}
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {m.subject_connections_return()}
+          </a>
+        ) : null}
+        {currentOrigin ? (
+          <a
+            href={origin}
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {m.board_reading_return()}
+          </a>
+        ) : origin ? (
+          <div role="status" className="space-y-2 text-sm">
+            <p>{m.board_reading_return_unavailable()}</p>
+            {restart ? (
+              <a href={restart} className="inline-flex min-h-11 items-center underline">
+                {m.board_reading_restart()}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div data-slot="conversation-identity" className="min-w-0 space-y-3">
         <ConversationKind kind={page.thread.kind} />
         <PageHeading className="max-w-[32ch] text-2xl leading-tight text-balance sm:text-3xl">
           {title ?? m.threads_untitled()}
@@ -223,17 +228,19 @@ export function ThreadReadingHeader({
           </div>
         ) : null}
       </div>
-      <ThreadSubjects subjects={page.subjects} />
-      <ThreadReviewContext
-        context={page.reviewContext}
-        thread={page.thread}
-        posts={page.posts.posts}
-        cursor={page.composed?.query.cursor}
-        boardReturn={boardReturn}
-        locale={getLocale()}
-      />
+      <div data-slot="conversation-subject-context" className="min-w-0 space-y-3">
+        <ThreadSubjects subjects={page.subjects} />
+        <ThreadReviewContext
+          context={page.reviewContext}
+          thread={page.thread}
+          posts={page.posts.posts}
+          cursor={page.composed?.query.cursor}
+          boardReturn={boardReturn}
+          locale={getLocale()}
+        />
+      </div>
       {page.linkedPostUnavailable ? (
-        <div role="status" className="space-y-2">
+        <div data-slot="conversation-status" role="status" className="space-y-2">
           <p>{m.thread_post_unavailable()}</p>
           <a
             href={threadLocation(getLocale(), { id: page.thread.id, title }, undefined, undefined, undefined, origin)}

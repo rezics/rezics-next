@@ -35,19 +35,30 @@ export function PostReadingFrame({
         data-slot="content-item-frame"
         className="min-w-0 rounded-xl border border-border/60 bg-card px-4 py-5 sm:px-6 sm:py-6"
       >
-        <header className="post-reading-header mb-5 min-w-0">{byline}</header>
-        {context}
-        {children}
+        <header
+          data-slot="post-reading-identity"
+          className="post-reading-header mb-5 min-w-0 [overflow-wrap:anywhere]"
+        >
+          {byline}
+        </header>
+        {context ? (
+          <div data-slot="post-reading-context" className="mb-4 min-w-0 [overflow-wrap:anywhere]">
+            {context}
+          </div>
+        ) : null}
+        <div data-slot="post-reading-body" className="min-w-0 max-w-full">{children}</div>
         <div
           data-slot="post-conversation-actions"
-          className="mt-5 min-w-0 max-w-full border-t border-border/60 pt-3 [&_[data-slot=feed-action-bar]]:justify-start"
+          className="mt-5 min-w-0 max-w-full border-t border-border/60 pt-3 [overflow-wrap:anywhere] [&_[data-slot=feed-action-bar]]:flex-wrap [&_[data-slot=feed-action-bar]]:justify-start [&_[data-slot=feed-action-bar]_button]:whitespace-normal [&_[data-slot=feed-action-bar]_button]:[overflow-wrap:anywhere] [&_[data-slot=feed-action-bar]_a]:whitespace-normal [&_[data-slot=feed-action-bar]_a]:[overflow-wrap:anywhere]"
         >
           {actions}
         </div>
         {details ? (
-          <ConversationInspection label={m.conversation_post_details()} className="mt-1">
-            {details}
-          </ConversationInspection>
+          <div data-slot="post-reading-inspection" className="mt-1 min-w-0">
+            <ConversationInspection label={m.conversation_post_details()}>
+              {details}
+            </ConversationInspection>
+          </div>
         ) : null}
       </ContentItemFrame>
     </li>
