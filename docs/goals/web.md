@@ -9,6 +9,9 @@ This is the manager-facing scope and acceptance index. Linked module documents o
 producer availability. Read the relevant owner section for an assignment; do not load every linked document into a
 manager opening or worker prompt. Operational evidence and unresolved handoffs belong in the current continuation.
 
+Decision: this documentation-only relocation preserves product, native and visual acceptance under the linked
+owners; verification here covers the diff, formatting, links and headings, with manager-opening measurement separate.
+
 ## Delivery constraints
 
 Deliver complete independent frontend outcomes through Goal; confirm worker process and first product source, and
@@ -74,6 +77,9 @@ components. Search owns Search composition and templates; agree named slots and 
 Accounts owns Auth behavior; Content owns media and communities; Semantic owns definitions and Zones. Correct shared
 visual defects as a class while retaining domain differences.
 
+<a id="mixed-home-delivery"></a>
+<a id="home-content-item-presentation"></a>
+
 ### Mixed Home
 
 The [Home owner](../../apps/web/src/features/feed/home.md) owns selectors, lifetime, bounded return, cost and positive
@@ -92,6 +98,7 @@ Collection/review/Space discovery, Home return and moderator workbench. The
 [second-scope plan](../research/web-second-scope-plan.md) is supporting decomposition, not another contract authority.
 Extend existing routes independently against stable owner seams; only truly missing producer APIs hold final binding.
 
+<!-- prettier-ignore -->
 | Journey | Detailed owner |
 | --- | --- |
 | Saved query create, reopen, owner management and explicit publication | [Saved-query directory](../../apps/web/src/library/saved-query-directory.md#save-and-reopen-a-query), [results](../../apps/web/src/library/saved-query-results.md) |
@@ -107,6 +114,7 @@ Extend existing routes independently against stable owner seams; only truly miss
 These are authoritative detail destinations, not mandatory opening reads. Current installed interfaces and remaining
 producer gaps live with these owners; do not copy historical availability snapshots back into this index.
 
+<!-- prettier-ignore -->
 | Journey | Detailed owner |
 | --- | --- |
 | Shared navigation and Subject purchase entry | [Shell navigation](../../apps/web/src/shell/README.md#navigation-contributions), [purchase slot](../../apps/web/src/features/pages/README.md#subject-purchase-entry-slot) |
@@ -126,6 +134,9 @@ producer gaps live with these owners; do not copy historical availability snapsh
 | Server drafts and current-context post history | [Drafts](../../apps/web/src/threads/own-drafts/README.md), [history](../../apps/web/src/threads/post-history-lifetime.md) |
 | Settings watch inventory and current Inbox context/individual acknowledgement | [Settings](../../apps/web/src/settings/README.md#watches), [Inbox](../../apps/web/src/inbox/README.md) |
 | Ordered Source closure and useful default coverage | [Search Source delivery](../../services/kernel/src/search/README.md#source-closure-delivery-order) |
+
+<a id="adopted-quality-round-three-requirements"></a>
+<a id="adopted-core-page-experience-requirements"></a>
 
 ### Adopted experience requirements
 
