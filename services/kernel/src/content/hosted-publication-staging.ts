@@ -1490,23 +1490,34 @@ async function requireSealedStage(client: AccessClient, stageInput: StageRow): P
  * a fresh activation private. An activation committed first retains its public
  * selection and receipt; withdrawing it uses the separate unpublish operation.
  * Retained source/candidate rows survive, and repeated cancellation is idempotent. */
-export async function cancelHostedPublicationStaging(
+export async function cancelHostedPublicationStagingWithEvidence(
   client: AccessClient,
   actorInput: Actor,
   locator: HostedPublicationStagingLocator,
-): Promise<HostedPublicationStagingCheckpoint> {
+): Promise<Readonly<{ checkpoint: HostedPublicationStagingCheckpoint; changed: boolean }>> {
   const actor = accountActor(actorInput);
   const stage = await lockStage(client, locator);
   assertActorBinding(stage, actor);
-  const refreshed = await refreshExpiry(client, stage);
-  if (refreshed.status === 'expired' || refreshed.status === 'cancelled' || refreshed.status === 'failed')
-    return checkpoint(refreshed);
+  const refreshed = await refreshExpiryWithEvidence(client, stage);
+  const live = refreshed.stage;
+  if (live.status === 'expired' || live.status === 'cancelled' || live.status === 'failed')
+    return { checkpoint: checkpoint(live), changed: refreshed.expired };
   await client.query(
     `UPDATE content.hosted_publication_staging SET status='cancelled'
      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
     [stage.route, stage.catalogue_id, stage.stage_id],
   );
-  return checkpoint(await stageSnapshot(client, stage.route, locator));
+  return { checkpoint: checkpoint(await stageSnapshot(client, stage.route, locator)), changed: true };
+}
+
+/** Native callers keep the checkpoint-only contract; mounted commands use the
+ * locked transition evidence to decide whether to announce a change. */
+export async function cancelHostedPublicationStaging(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+): Promise<HostedPublicationStagingCheckpoint> {
+  return (await cancelHostedPublicationStagingWithEvidence(client, actorInput, locator)).checkpoint;
 }
 
 /** A read-only progress snapshot remains author/epoch bound and expires through

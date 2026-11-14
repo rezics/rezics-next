@@ -24,7 +24,7 @@ import {
   advanceHostedPublicationStaging,
   appendHostedPublicationSelectionBatch,
   beginHostedPublicationStaging,
-  cancelHostedPublicationStaging,
+  cancelHostedPublicationStagingWithEvidence,
   freezeHostedPublicationSelection,
   requireRoute,
   readHostedPublicationStagingProgress,
@@ -410,8 +410,12 @@ export function cancelHostedPublicationPreparation(
     { stageId },
     context,
     async (tx) => {
-      const stage = await cancelHostedPublicationStaging(tx as AccessClient, actor, locator(catalogueId, stageId));
-      return progress(catalogueId, stage);
+      const result = await cancelHostedPublicationStagingWithEvidence(
+        tx as AccessClient,
+        actor,
+        locator(catalogueId, stageId),
+      );
+      return { value: progress(catalogueId, result.checkpoint), changed: result.changed };
     },
     { stageId, allowMissing: false },
   );

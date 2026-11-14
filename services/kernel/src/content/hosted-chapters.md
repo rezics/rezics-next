@@ -424,6 +424,9 @@ Build and reclaim already fence the stage before candidate work. A cancellation 
 activation committed first keeps its exact receipt and selected edition after cancellation or expiry. Cancellation
 does not unpublish; withdrawal remains a separate command. Exact authorized receipt replay precedes this fence.
 
+Decision: mounted Cancel emits preparation-changed only when its locked transition persisted cancellation or expiry.
+A terminal-stage retry with a fresh outer key is a no-effect command; an authorized exact receipt replay keeps its original response.
+
 Decision: because the HTTP body accepts any syntactically valid `HostedId` for `stepId`, every fresh
 hosted-preparation advance requires that ID to share the catalogue's native route before progress is read or candidate
 materialization/page writes occur; otherwise the wrong-route ID can consume a page and cannot be corrected in place.

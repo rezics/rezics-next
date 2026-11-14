@@ -703,3 +703,47 @@ test('mounted boundary rejects malformed batches and non-authors; cancel and sta
   expect(wrongEpochReplay.status).toBe(404);
   expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
 });
+
+test('Cancel emits only for a persisted transition and preserves the selected edition', async () => {
+  const book = await newBook();
+  const start = (stageId: string) =>
+    f.native.call('POST', `${book.path}:prepareRelease`, {
+      stageId,
+      expectedRevisionId: book.created.revisionId,
+      expectedPublicationId: book.published.revisionId,
+      mode: 'whole',
+    });
+
+  const cancelledStart = await start(book.newId());
+  expect(cancelledStart.status).toBe(202);
+  const cancelledPath = prepPath(book.path, cancelledStart.value.stageId as string);
+  const beforeCancel = await preparationEventCount(book.catalogueId);
+  const cancelKey = crypto.randomUUID();
+  const cancelled = await f.native.call('POST', `${cancelledPath}:cancel`, {}, { key: cancelKey });
+  expect(cancelled.value.stage.state).toBe('cancelled');
+  expect(await preparationEventCount(book.catalogueId)).toBe(beforeCancel + 1);
+  const cancelReplay = await f.native.call('POST', `${cancelledPath}:cancel`, {}, { key: cancelKey });
+  expect(cancelReplay.value).toEqual(cancelled.value);
+  const repeatedCancel = await f.native.call('POST', `${cancelledPath}:cancel`, {}, { key: crypto.randomUUID() });
+  expect(repeatedCancel.value.stage.state).toBe('cancelled');
+  expect(await preparationEventCount(book.catalogueId)).toBe(beforeCancel + 1);
+
+  const expiryStart = await start(book.newId());
+  expect(expiryStart.status).toBe(202);
+  const expiryStageId = expiryStart.value.stageId as string;
+  const expiryPath = prepPath(book.path, expiryStageId);
+  await f.native.pool.query(
+    `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
+     WHERE catalogue_id=$1 AND stage_id=$2`,
+    [book.catalogueId, expiryStageId],
+  );
+  const beforeExpiry = await preparationEventCount(book.catalogueId);
+  const expiryKey = crypto.randomUUID();
+  const expired = await f.native.call('POST', `${expiryPath}:cancel`, {}, { key: expiryKey });
+  expect(expired.value.stage.state).toBe('expired');
+  expect(await preparationEventCount(book.catalogueId)).toBe(beforeExpiry + 1);
+  const expiryReplay = await f.native.call('POST', `${expiryPath}:cancel`, {}, { key: expiryKey });
+  expect(expiryReplay.value).toEqual(expired.value);
+  expect(await preparationEventCount(book.catalogueId)).toBe(beforeExpiry + 1);
+  expect(await selectedRelease(book.catalogueId)).toBe(book.published.revisionId);
+});
