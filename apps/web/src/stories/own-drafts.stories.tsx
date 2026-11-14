@@ -423,7 +423,7 @@ export const UncertainCommand: Story = {
       await view.findByRole('button', { name: m.own_drafts_use_server({}, { locale: args.locale }) }),
     );
     await userEvent.click(await view.findByRole('button', { name: m.thread_edit_save() }));
-    await expect(view.findByRole('button', { name: m.own_drafts_retry_save() })).resolves.toBeVisible();
+    await expect(view.findByRole('button', { name: m.thread_recovery_retry_original() })).resolves.toBeVisible();
   },
 };
 export const EraseReview: Story = {

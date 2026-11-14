@@ -1,7 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Button } from '@rezics/ui/shadcn/button';
+import { fromPlainText } from '@rezics/document';
+import type { RevisedPost, WriteFailure } from '../threads/actions';
+import { sessionQueryKey } from '../reader/lifetime/index';
 import { PageStory, pagePaths, newThreadReady } from './page';
 import { m } from '../paraglide/messages.js';
 import type { DocumentSnapshot } from '@rezics/document';
@@ -13,6 +18,7 @@ import searchRecording from '../kernel/recorded/search.json';
 const meta = {
   title: 'Community/Post Editor',
   id: 'pages-community-post-editor',
+  excludeStories: ['AuthoringRecoveryExample', 'originalRequestJourney'],
   parameters: {
     layout: 'fullscreen',
   },
@@ -338,4 +344,184 @@ export const ReplyImageUsed: Story = {
   name: 'Reply / Image used in another post',
   render: usedMedia,
   play: reusedMediaPlay,
+};
+
+
+type RecoveryKind = 'create' | 'reply' | 'edit' | 'publish';
+type RecoveryResult = { ok: true; value: string; post: RevisedPost } | WriteFailure;
+/** Prepared transport only: real shared composer, request owner, reader, editor and departure confirmation. */
+export function AuthoringRecoveryExample({ kind = 'reply' }: { kind?: RecoveryKind }) {
+  const [client] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(sessionQueryKey, {
+      state: 'signed-in', subject: 'prepared-author', csrfToken: 'prepared-authoring-credential',
+    });
+    return client;
+  });
+  const [commands, setCommands] = useState<object[]>([]);
+  const count = useRef(0);
+  const pending = useRef<((result: RecoveryResult) => void) | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const accepted = (): RecoveryResult => ({
+    ok: true, value: 'acknowledged',
+    post: { id: 'prepared-post', revisionId: 'acknowledged-revision' } as RevisedPost,
+  });
+  const submit = async (command: object): Promise<RecoveryResult> => {
+    count.current++;
+    setCommands((current) => [...current, structuredClone(command)]);
+    if (count.current === 1) return { ok: false, reason: 'unavailable' };
+    if (count.current > 2) return accepted();
+    return new Promise((resolve) => { pending.current = resolve; });
+  };
+  const finish = () => {
+    pending.current?.(accepted());
+    pending.current = null;
+  };
+  const refuse = () => {
+    pending.current?.({ ok: false, reason: 'invalid' });
+    pending.current = null;
+  };
+  return (
+    <QueryClientProvider client={client}>
+      <main className="mx-auto min-w-0 max-w-4xl space-y-4 p-4 sm:p-8">
+        <p className="rounded-lg border border-border p-3 text-sm">
+          Prepared transport: the first response is lost. Original retry waits for the supplied acknowledgement or
+          refusal below. The command reader and working editor are real; no native request is sent.
+        </p>
+        <output aria-label="Prepared command count">{commands.length}</output>
+        <div className="flex min-w-0 flex-wrap gap-2">
+          <Button className="h-auto min-h-11 whitespace-normal" onClick={finish}>Prepared acknowledge original</Button>
+          <Button className="h-auto min-h-11 whitespace-normal" onClick={refuse}>Prepared refuse original</Button>
+        </div>
+        {completed ? <p role="status">Prepared deliberate completion</p> : kind === 'edit' || kind === 'publish' ? (
+          <InlinePostEditor
+            initialBody={fromPlainText('The original submitted correction.', 'blocks')}
+            revisionId="original-revision"
+            idempotencyKey="0192f3a0-6c1e-7b2a-9d4e-000000000082"
+            containerId="0192f3a0-6c1e-7b2a-9d4e-000000000077"
+            allowPublish={kind === 'publish'}
+            onSubmit={submit}
+            onPublish={submit}
+            onCancel={() => setCompleted(true)}
+            onSuccess={() => setCompleted(true)}
+          />
+        ) : (
+          <PostComposer
+            initialBody={fromPlainText('The original submitted writing.', 'blocks')}
+            initialKey="0192f3a0-6c1e-7b2a-9d4e-000000000081"
+            localDraft={false}
+            titleRequired={kind === 'create'}
+            {...(kind === 'create'
+              ? { boardId: '0192f3a0-6c1e-7b2a-9d4e-000000000077' }
+              : { containerId: '0192f3a0-6c1e-7b2a-9d4e-000000000077' })}
+            replyTargetId={kind === 'reply' ? '0192f3a0-6c1e-7b2a-9d4e-000000000079' : null}
+            onSubmit={submit}
+            onSuccess={() => setCompleted(true)}
+          />
+        )}
+        <details className="min-w-0">
+          <summary className="min-h-11 cursor-pointer p-3">Prepared request operands</summary>
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
+            {JSON.stringify(commands, null, 2)}
+          </pre>
+        </details>
+      </main>
+    </QueryClientProvider>
+  );
+}
+
+export const originalRequestJourney = (kind: RecoveryKind): NonNullable<Story['play']> => async ({ canvasElement }) => {
+  const view = within(canvasElement);
+  const label = kind === 'create' ? m.thread_new_body_label() : kind === 'reply' ? m.thread_reply_label() : m.thread_reply_body_label();
+  const editor = await view.findByRole('textbox', { name: label });
+  if (kind === 'create') await userEvent.type(view.getByLabelText(m.thread_title_label()), 'Original title');
+  const send = kind === 'edit' ? m.thread_edit_save() : kind === 'publish' ? m.own_drafts_publish() : m.thread_write_send();
+  await userEvent.click(await view.findByRole('button', { name: send }));
+  await view.findByText(m.thread_recovery_unknown());
+  await userEvent.click(editor);
+  await userEvent.keyboard(' Newer working words.');
+  if (kind === 'create') await userEvent.type(view.getByLabelText(m.thread_title_label()), ' with a newer title');
+  await userEvent.click(view.getByText(m.thread_recovery_submitted(), { selector: 'summary' }));
+  const submitted = within(view.getByRole('region', { name: m.thread_recovery_submitted() }));
+  await expect(submitted.queryByText(/Newer working words/)).toBeNull();
+  if (kind === 'create') await expect(submitted.getByText('Original title')).toBeVisible();
+  const retry = view.getByRole('button', { name: m.thread_recovery_retry_original() });
+  await expect(retry).toBeEnabled();
+  await userEvent.click(retry);
+  await expect(view.getByLabelText('Prepared command count')).toHaveTextContent('2');
+  await userEvent.click(view.getByRole('button', { name: 'Prepared acknowledge original' }));
+  await view.findByText(m.thread_recovery_acknowledged());
+  await expect(editor).toHaveTextContent('Newer working words.');
+  await expect(retry).toBeDisabled();
+  await userEvent.click(view.getByRole('button', { name: m.thread_recovery_working() }));
+  await expect(editor).toHaveFocus();
+};
+export const OriginalCreateRetry: Story = {
+  name: 'New thread / Edit locally and retry original',
+  render: () => <AuthoringRecoveryExample kind="create" />,
+  play: originalRequestJourney('create'),
+};
+export const OriginalReplyRetry: Story = {
+  name: 'Reply / Edit locally and retry original',
+  render: () => <AuthoringRecoveryExample />,
+  play: originalRequestJourney('reply'),
+};
+export const OriginalEditRetry: Story = {
+  name: 'Edit / Edit locally and retry original',
+  render: () => <AuthoringRecoveryExample kind="edit" />,
+  play: originalRequestJourney('edit'),
+};
+export const OriginalPublishRetry: Story = {
+  name: 'Publish / Edit locally and retry original',
+  render: () => <AuthoringRecoveryExample kind="publish" />,
+  play: originalRequestJourney('publish'),
+};
+export const KnownRefusalCorrection: Story = {
+  name: 'Reply / Correct newer writing after known refusal',
+  render: () => <AuthoringRecoveryExample />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.click(await view.findByRole('button', { name: m.thread_write_send() }));
+    await view.findByText(m.thread_recovery_unknown());
+    const editor = view.getByRole('textbox', { name: m.thread_reply_label() });
+    await userEvent.click(editor);
+    await userEvent.keyboard(' Keep this correction.');
+    await userEvent.click(view.getByRole('button', { name: m.thread_recovery_retry_original() }));
+    await userEvent.click(view.getByRole('button', { name: 'Prepared refuse original' }));
+    await view.findByText(m.thread_write_invalid());
+    await expect(editor).toHaveTextContent('Keep this correction.');
+    await expect(view.getByRole('button', { name: m.thread_write_send() })).toBeEnabled();
+  },
+};
+
+
+export const OriginalReplyWithNewMedia: Story = {
+  name: 'Reply / Original retry keeps newer media local',
+  render: () => <AuthoringRecoveryExample />,
+  beforeEach: () => {
+    const original = globalThis.fetch;
+    const mediaId = '0192f3a0-6c1e-7b2a-9d4e-000000000083';
+    globalThis.fetch = (async (input, init) => {
+      const path = new URL(String(input), window.location.href).pathname;
+      if (path !== '/media' && path !== `/media/${mediaId}`) return original(input, init);
+      if (init?.method === 'PUT') return new Response(null, { status: 204 });
+      return Response.json({ media: {
+        id: mediaId, containerId: '0192f3a0-6c1e-7b2a-9d4e-000000000077',
+        state: init?.method === 'POST' ? 'reserved' : 'available', mediaType: 'image/png', byteCount: 68,
+      } });
+    }) as typeof fetch;
+    return () => { globalThis.fetch = original; };
+  },
+  play: async (context) => {
+    const view = within(context.canvasElement);
+    await userEvent.click(await view.findByRole('button', { name: m.thread_write_send() }));
+    await view.findByText(m.thread_recovery_unknown());
+    await imageReplyPlay(context);
+    await view.findByRole('img', { name: 'A small test image' });
+    await userEvent.click(view.getByRole('button', { name: m.thread_recovery_retry_original() }));
+    await userEvent.click(view.getByRole('button', { name: 'Prepared acknowledge original' }));
+    await view.findByText(m.thread_recovery_acknowledged());
+    await expect(view.getByRole('img', { name: 'A small test image' })).toBeVisible();
+    await expect(view.getByLabelText('Prepared command count')).toHaveTextContent('2');
+  },
 };

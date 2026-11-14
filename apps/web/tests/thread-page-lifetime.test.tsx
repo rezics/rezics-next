@@ -824,7 +824,7 @@ test('cache retirement hides obsolete page disclosure but keeps the dirty reply 
     expect(commands).toHaveLength(1);
     expect(commands[0]!.parentId).toBe(id(41));
     const retry = [...page.host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === m.thread_write_retry(),
+      (button) => button.textContent?.trim() === m.thread_recovery_retry_original(),
     );
     expect(retry).toBeDefined();
     await userSession.click(retry!);
@@ -870,7 +870,7 @@ test('cache retirement hides obsolete page disclosure but keeps the dirty reply 
     expect(replyRegion!.querySelector<HTMLInputElement>('input[name="idempotency_key"]')?.value).toBe(exactKey);
     expect(
       [...page.host.querySelectorAll<HTMLButtonElement>('button')].some(
-        (button) => button.textContent?.trim() === m.thread_write_retry(),
+        (button) => button.textContent?.trim() === m.thread_recovery_retry_original(),
       ),
     ).toBe(true);
 

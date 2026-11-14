@@ -7,6 +7,7 @@ import {
   type DocumentNode,
   type DocumentSnapshot,
 } from '@rezics/document';
+import { DocumentBody } from '../document-body';
 import { RichTextEditor, type RichTextEditorLabels, type UploadState, type UploadAttachment } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -63,11 +64,121 @@ type WritingRequest<Result, Value> = {
   target: string;
   revisionId?: string;
   acknowledged?: boolean;
+  settleWriting?: (outcome: 'success' | 'refused' | 'unknown') => void;
 };
 
 // Deliberate form actions only; the rich editor owns its formatting and image controls.
 const authoringActionClassName =
   'h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-2 leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+
+function writingActionLabel(action: WritingAction): string {
+  switch (action) {
+    case 'create': return m.thread_recovery_create();
+    case 'reply': return m.thread_recovery_reply();
+    case 'save': return m.thread_recovery_save();
+    case 'publish': return m.thread_recovery_publish();
+  }
+}
+
+/** Both authoring consumers read the original intent; this surface cannot prepare a replacement command. */
+function WritingRequestRecovery({
+  command,
+  request,
+  changed,
+  submitting,
+  acknowledged,
+  onRetry,
+  onComplete,
+  onKeepEditing,
+}: {
+  command: ReplyCommand<unknown>;
+  request: Pick<WritingRequest<unknown, unknown>, 'action' | 'target' | 'revisionId'>;
+  changed: boolean;
+  submitting: boolean;
+  acknowledged: boolean;
+  onRetry: () => void;
+  onComplete: () => void;
+  onKeepEditing: () => void;
+}) {
+  const heading = useId();
+  const reader = useId();
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const keepButton = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    // Return a retrying author's focus deliberately, without interrupting someone writing in the editor.
+    if (acknowledged && document.activeElement === retryButton.current) keepButton.current?.focus();
+  }, [acknowledged]);
+  return (
+    <section
+      aria-labelledby={heading}
+      className="mt-5 min-w-0 space-y-3 rounded-xl border border-border bg-muted/30 p-4 [overflow-wrap:anywhere]"
+    >
+      <h3 id={heading} className="font-semibold">{m.thread_recovery_heading()}</h3>
+      <p className="font-medium">{writingActionLabel(request.action)}</p>
+      <p role="status" aria-live="polite">
+        {acknowledged ? m.thread_recovery_acknowledged() : m.thread_recovery_unknown()}
+      </p>
+      {changed || acknowledged ? <p>{m.thread_write_uncertain_changed()}</p> : null}
+      <p className="text-sm text-muted-foreground">
+        {m.thread_recovery_target({ target: request.target })}
+      </p>
+      {request.revisionId ? (
+        <p className="text-sm text-muted-foreground">{m.thread_recovery_revision({ revision: request.revisionId })}</p>
+      ) : null}
+      <details className="min-w-0 rounded-lg border border-border bg-background p-3">
+        <summary
+          className={`${authoringActionClassName} cursor-pointer rounded-md`}
+          aria-controls={reader}
+        >
+          {m.thread_recovery_submitted()}
+        </summary>
+        <section id={reader} aria-label={m.thread_recovery_submitted()} className="min-w-0 space-y-3 pt-3">
+          {request.action === 'create' ? (
+            <div>
+              <h4 className="text-sm text-muted-foreground">{m.thread_title_label()}</h4>
+              <p className="font-semibold whitespace-pre-wrap">{command.title}</p>
+            </div>
+          ) : null}
+          <div className="max-h-[60dvh] min-w-0 overflow-auto rounded-lg border border-border p-3">
+            <DocumentBody
+              document={command.body}
+              className="mx-0! w-full [overflow-wrap:anywhere]"
+              labels={{ imageUnavailable: m.thread_inspection_image_unavailable() }}
+            />
+          </div>
+          <p className="text-sm text-muted-foreground">{m.thread_recovery_document_notice()}</p>
+        </section>
+      </details>
+      <div className="flex min-w-0 flex-wrap gap-2">
+        <Button
+          ref={retryButton}
+          type="button"
+          className={authoringActionClassName}
+          disabled={submitting || acknowledged}
+          onClick={onRetry}
+        >
+          {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
+          {m.thread_recovery_retry_original()}
+        </Button>
+        <Button
+          ref={keepButton}
+          type="button"
+          variant="outline"
+          className={authoringActionClassName}
+          onClick={onKeepEditing}
+        >
+          {m.thread_recovery_working()}
+        </Button>
+        {acknowledged ? (
+          <Button type="button" variant="outline" className={authoringActionClassName} onClick={onComplete}>
+            {m.thread_recovery_complete()}
+          </Button>
+        ) : null}
+      </div>
+      {acknowledged ? <p className="text-sm text-muted-foreground">{m.thread_recovery_return_notice()}</p> : null}
+    </section>
+  );
+}
 
 /** Cache notifications fence away/back changes even when React batches their renders. */
 function useComposerLifetime() {
@@ -124,6 +235,9 @@ function useComposerLifetime() {
       lifetime.controller.abort();
     };
   }, [client, lifetime]);
+  useLayoutEffect(() => {
+    if (!lifetime.current()) renderRetired(true);
+  });
   return lifetime;
 }
 
@@ -616,6 +730,8 @@ function PostComposerContent<T, Context = undefined>({
   const initialSubmissionContext = useRef(JSON.stringify(submissionContext));
   const initialReplyTarget = useRef(replyTargetId ?? null);
   const bodyRef = useRef(body);
+  const latestWorking = useRef({ title, submissionContext, replyTargetId });
+  latestWorking.current = { title, submissionContext, replyTargetId };
   const [snapshotPhase, setSnapshotPhase] = useState<'ready' | 'pending' | 'failed'>('ready');
   const snapshotPhaseRef = useRef(snapshotPhase);
   const publishingSnapshot = useRef(false);
@@ -665,7 +781,7 @@ function PostComposerContent<T, Context = undefined>({
     commandContext,
   );
   const ready =
-    (canStart || replyIntent.current.unresolved) &&
+    canStart &&
     canSubmit &&
     snapshotPhase === 'ready' &&
     bodyCanSend &&
@@ -695,7 +811,7 @@ function PostComposerContent<T, Context = undefined>({
         uncertainChanged),
     replyIntent.current.unresolved || (lifetime.current() && submittingRef.current),
     departureSignature,
-    undefined,
+    () => acknowledged?.complete(),
     () => lifetime.retire(),
   );
   const uploadTarget = containerId ?? (boardId ? { newThread: { boardId, idempotencyKey } } : undefined);
@@ -743,16 +859,16 @@ function PostComposerContent<T, Context = undefined>({
         lifetime.current() &&
         canSubmit &&
         !submittingRef.current &&
-        !replyIntent.current.unresolved &&
         pendingRef.current === 0 &&
         snapshotPhaseRef.current !== 'pending',
       snapshot: () => ({ body: bodyRef.current, phase: snapshotPhaseRef.current, raw: rawEditorWork.current }),
       replace: (next) => {
-        if (!lifetime.current() || submittingRef.current || replyIntent.current.unresolved || pendingRef.current > 0)
-          return;
-        const nextKey = crypto.randomUUID();
-        replyIntent.current.reset(nextKey);
-        setIdempotencyKey(nextKey);
+        if (!lifetime.current() || submittingRef.current || pendingRef.current > 0) return;
+        if (!replyIntent.current.unresolved && !acknowledged) {
+          const nextKey = crypto.randomUUID();
+          replyIntent.current.reset(nextKey);
+          setIdempotencyKey(nextKey);
+        }
         updateBody(next);
         setFailure(null);
         setUploadNotice(null);
@@ -1061,7 +1177,9 @@ function PostComposerContent<T, Context = undefined>({
   function handleUploadState(state: UploadState, count: number, attachments?: number) {
     if (!lifetime.current()) return;
     // Every admitted occurrence, including a failed one, must be resolved or deliberately removed.
-    editorPendingRef.current = attachments ?? (state === 'failed' ? Math.max(1, count) : count);
+    const next = attachments ?? (state === 'failed' ? Math.max(1, count) : count);
+    if (next !== editorPendingRef.current) writingRevision.current++;
+    editorPendingRef.current = next;
     updatePending();
   }
 
@@ -1099,6 +1217,7 @@ function PostComposerContent<T, Context = undefined>({
       delivery = {
         send: () => onSubmit(command),
         finish: onSuccess,
+        settleWriting: (outcome) => localWriting.draft?.settle(outcome),
         workingRevision: writingRevision.current,
         credential: sessionCsrfToken(),
         locale,
@@ -1123,11 +1242,20 @@ function PostComposerContent<T, Context = undefined>({
     onPendingChange?.(true);
     setFailure(null);
     try {
-      const result = await original.send();
+      let result: WriteResult<T>;
+      try {
+        result = await original.send();
+      } catch {
+        if (!current()) return;
+        replyIntent.current.settle(false);
+        original.settleWriting?.('unknown');
+        setFailure({ ok: false, reason: 'unavailable' });
+        return;
+      }
       if (!current()) return;
       if (!result.ok) {
         replyIntent.current.settle(result.reason !== 'unavailable');
-        localWriting.draft?.settle(result.reason === 'unavailable' ? 'unknown' : 'refused');
+        original.settleWriting?.(result.reason === 'unavailable' ? 'unknown' : 'refused');
         if (result.reason !== 'unavailable') request.current = null;
         setFailure({
           ...result,
@@ -1137,18 +1265,32 @@ function PostComposerContent<T, Context = undefined>({
         });
         return;
       }
+      const workingChanged = !replyIntent.current.canPrepare(
+        {
+          title: latestWorking.current.title,
+          body: bodyRef.current,
+          mediaIds: mediaIdsFromSources(imageSources(bodyRef.current)),
+          ...(latestWorking.current.submissionContext === undefined
+            ? {}
+            : { submissionContext: latestWorking.current.submissionContext }),
+        },
+        latestWorking.current.replyTargetId ?? null,
+        commandContext,
+      );
       replyIntent.current.settle(true);
-      localWriting.draft?.settle('success');
+      original.settleWriting?.('success');
+      const acceptedValue = result.value;
       const complete = () => {
         if (!current()) return;
         departure.release();
-        original.finish(result.value);
+        original.finish(acceptedValue);
         if (boardId && !containerId) lifetime.retire();
       };
       if (
         writingRevision.current !== original.workingRevision ||
         snapshotPhaseRef.current !== 'ready' ||
-        pendingRef.current > 0
+        pendingRef.current > 0 ||
+        workingChanged
       ) {
         // The result belongs to the submitted version. Keep newer writing and its uploads in this owner.
         original.acknowledged = true;
@@ -1171,11 +1313,6 @@ function PostComposerContent<T, Context = undefined>({
         replyIntent.current.reset(nextKey);
       }
       complete();
-    } catch {
-      if (!current()) return;
-      replyIntent.current.settle(false);
-      localWriting.draft?.settle('unknown');
-      setFailure({ ok: false, reason: 'unavailable' });
     } finally {
       if (current()) {
         submittingRef.current = false;
@@ -1250,7 +1387,7 @@ function PostComposerContent<T, Context = undefined>({
               aria-placeholder={titleRequired ? undefined : m.thread_reply_placeholder()}
               data-placeholder={titleRequired ? undefined : m.thread_reply_placeholder()}
               className={`${fallbackSize} min-w-0 max-w-full [overflow-wrap:anywhere] rounded-2xl border border-border/60 bg-background px-4 py-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] sm:px-6`}
-              contentEditable={!submitting}
+              contentEditable
               role="textbox"
               suppressContentEditableWarning
             >
@@ -1259,7 +1396,6 @@ function PostComposerContent<T, Context = undefined>({
           ) : null}
           <RichTextEditor
             value={body}
-            disabled={submitting}
             onChange={updateBody}
             onSnapshotPending={snapshotPending}
             onSnapshotError={snapshotFailed}
@@ -1297,7 +1433,7 @@ function PostComposerContent<T, Context = undefined>({
         <PortableWritingControls
           transfer={writing}
           signal={lifetime.controller.signal}
-          disabled={submitting || replyIntent.current.unresolved || pendingUploads > 0 || snapshotPhase === 'pending'}
+          disabled={submitting || pendingUploads > 0 || snapshotPhase === 'pending'}
           phase={snapshotPhase}
         />
       ) : null}
@@ -1317,7 +1453,7 @@ function PostComposerContent<T, Context = undefined>({
           ) : (
             <>
               <p>{refusalText(failure)}</p>
-              {failure.reason !== 'media-unavailable' ? (
+              {failure.reason !== 'media-unavailable' && !replyIntent.current.unresolved ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -1348,16 +1484,13 @@ function PostComposerContent<T, Context = undefined>({
           restoreDisabled={pendingUploads > 0}
           hasLiveWriting={Boolean(title) || hasDocumentContent(body)}
           onRestore={(payload) => {
-            if (
-              !lifetime.current() ||
-              submittingRef.current ||
-              replyIntent.current.unresolved ||
-              pendingRef.current > 0
-            )
-              return;
-            const nextKey = crypto.randomUUID();
-            replyIntent.current.reset(nextKey);
-            setIdempotencyKey(nextKey);
+            if (!lifetime.current() || submittingRef.current || pendingRef.current > 0) return;
+            if (!replyIntent.current.unresolved && !acknowledged) {
+              const nextKey = crypto.randomUUID();
+              replyIntent.current.reset(nextKey);
+              setIdempotencyKey(nextKey);
+            }
+            invalidateWriting();
             setTitle(payload.title);
             updateBody(payload.body);
             setFailure(null);
@@ -1366,10 +1499,20 @@ function PostComposerContent<T, Context = undefined>({
           }}
         />
       ) : null}
-      {uncertainChanged ? (
-        <p className="mt-5 min-w-0 [overflow-wrap:anywhere]" role="alert">
-          {m.thread_write_uncertain_changed()}
-        </p>
+      {request.current && replyIntent.current.original() && (replyIntent.current.unresolved || acknowledged) ? (
+        <WritingRequestRecovery
+          command={replyIntent.current.original()!}
+          request={request.current}
+          changed={uncertainChanged || writingRevision.current !== request.current.workingRevision}
+          submitting={submitting}
+          acknowledged={Boolean(acknowledged)}
+          onRetry={() => void submit(undefined, true)}
+          onComplete={() => departure.requestDiscard()}
+          onKeepEditing={() => {
+            if (!lifetime.current()) return;
+            editorHost.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+          }}
+        />
       ) : null}
     </div>
   );
@@ -1456,6 +1599,7 @@ function InlinePostEditorContent({
 }: InlinePostEditorProps) {
   const lifetime = useComposerLifetime();
   const editorRoot = useRef<HTMLDivElement>(null);
+  const discardAction = useRef(onCancel);
   const locale = getLocale();
   const labels = useMemo(() => editorLabels(), [locale]);
   const [body, setBody] = useState(initialBody);
@@ -1491,8 +1635,11 @@ function InlinePostEditorContent({
     commandContext(commandAction),
   );
   const ready =
-    snapshotPhase === 'ready' && hasDocumentContent(body) && !draftHasMediaIssues(failure, body) &&
-    !editIntent.current.unresolved && !acknowledged;
+    snapshotPhase === 'ready' &&
+    hasDocumentContent(body) &&
+    !draftHasMediaIssues(failure, body) &&
+    !editIntent.current.unresolved &&
+    !acknowledged;
   const liveHostDirtyRef = useRef(false);
   function liveEditorHost() {
     return (
@@ -1543,7 +1690,7 @@ function InlinePostEditorContent({
         )),
     () => lifetime.current() && (submittingRef.current || editIntent.current.unresolved),
     departureSignature,
-    onCancel,
+    () => discardAction.current(),
     () => lifetime.retire(),
   );
   const mediaUpload = useComposerUpload(containerId, ownedMediaIds, lifetime);
@@ -1791,7 +1938,15 @@ function InlinePostEditorContent({
     const current = () =>
       lifetime.current(owner) && original.credential === sessionCsrfToken() && original.locale === getLocale();
     try {
-      const result = await original.send();
+      let result: { ok: true; post: RevisedPost } | EditFailure;
+      try {
+        result = await original.send();
+      } catch {
+        if (!current()) return;
+        editIntent.current.settle(false);
+        setFailure({ ok: false, reason: 'unavailable' });
+        return;
+      }
       if (!current()) return;
       if (!result.ok) {
         editIntent.current.settle(result.reason !== 'unavailable');
@@ -1805,10 +1960,11 @@ function InlinePostEditorContent({
         return;
       }
       editIntent.current.settle(true);
+      const acceptedPost = result.post;
       const complete = () => {
         if (!current()) return;
         departure.release();
-        original.finish(result.post);
+        original.finish(acceptedPost);
       };
       if (
         writingRevision.current !== original.workingRevision ||
@@ -1821,10 +1977,6 @@ function InlinePostEditorContent({
       }
       request.current = null;
       complete();
-    } catch {
-      if (!current()) return;
-      editIntent.current.settle(false);
-      setFailure({ ok: false, reason: 'unavailable' });
     } finally {
       if (current()) {
         submittingRef.current = false;
@@ -1871,7 +2023,9 @@ function InlinePostEditorContent({
   function handleUploadState(state: UploadState, count: number, attachments?: number) {
     if (!lifetime.current()) return;
     // Every admitted occurrence, including a failed one, must be resolved or deliberately removed.
-    editorPendingRef.current = attachments ?? (state === 'failed' ? Math.max(1, count) : count);
+    const next = attachments ?? (state === 'failed' ? Math.max(1, count) : count);
+    if (next !== editorPendingRef.current) writingRevision.current++;
+    editorPendingRef.current = next;
     updatePending();
   }
 
@@ -1901,6 +2055,7 @@ function InlinePostEditorContent({
           return;
         event.preventDefault();
         event.stopPropagation();
+        discardAction.current = onCancel;
         departure.requestDiscard(onCancel);
       }}
     >
@@ -1939,29 +2094,20 @@ function InlinePostEditorContent({
       ) : null}
       <form className="min-w-0 space-y-4 [overflow-wrap:anywhere]" onSubmit={submit}>
         <p className="text-sm font-medium">{m.thread_reply_body_label()}</p>
-        {submitting ? (
-          <p
-            className="min-w-0 min-h-32 [overflow-wrap:anywhere] rounded-xl border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground"
-            role="status"
-          >
-            {m.thread_edit_saving()}
-          </p>
-        ) : (
-          <RichTextEditor
-            key={revisionId}
-            value={body}
-            onChange={updateBody}
-            onSnapshotPending={snapshotPending}
-            onSnapshotError={snapshotFailed}
-            label={m.thread_reply_body_label()}
-            labels={labels}
-            lookupMention={lookupPostMention}
-            className="thread-post-editor"
-            upload={upload}
-            renderUpload={mediaUpload.renderUpload}
-            onUploadState={handleUploadState}
-          />
-        )}
+        <RichTextEditor
+          key={revisionId}
+          value={body}
+          onChange={updateBody}
+          onSnapshotPending={snapshotPending}
+          onSnapshotError={snapshotFailed}
+          label={m.thread_reply_body_label()}
+          labels={labels}
+          lookupMention={lookupPostMention}
+          className="thread-post-editor"
+          upload={upload}
+          renderUpload={mediaUpload.renderUpload}
+          onUploadState={handleUploadState}
+        />
         {failure ? (
           <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]" role="alert">
             <p>{postEditFailureText(failure)}</p>
@@ -1999,45 +2145,45 @@ function InlinePostEditorContent({
             {uploadNotice}
           </p>
         ) : null}
-        {uncertainChanged ? (
-          <p className="min-w-0 [overflow-wrap:anywhere]" role="alert">
-            {m.thread_write_uncertain_changed()}
-          </p>
+        {request.current && editIntent.current.original() && (editIntent.current.unresolved || acknowledged) ? (
+          <WritingRequestRecovery
+            command={editIntent.current.original()!}
+            request={request.current}
+            changed={uncertainChanged || writingRevision.current !== request.current.workingRevision}
+            submitting={submitting}
+            acknowledged={Boolean(acknowledged)}
+            onRetry={() => void submit(undefined, true)}
+            onComplete={() => {
+              if (!lifetime.current() || !acknowledged) return;
+              discardAction.current = acknowledged.complete;
+              departure.requestDiscard();
+            }}
+            onKeepEditing={() => {
+              if (lifetime.current()) liveEditorHost()?.focus();
+            }}
+          />
         ) : null}
         <div className="flex min-w-0 flex-wrap gap-2 [overflow-wrap:anywhere]">
           {inspection ? <WritingInspectionToolbar inspection={inspection} /> : null}
-          {!editIntent.current.unresolved || commandAction === 'save' ? (
+          <Button
+            type="submit"
+            name="own-draft-action"
+            value="save"
+            className={authoringActionClassName}
+            disabled={!ready || submitting || pendingUploads > 0}
+          >
+            {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
+            {m.thread_edit_save()}
+          </Button>
+          {allowPublish ? (
             <Button
-              type={editIntent.current.unresolved ? "button" : "submit"}
-              onClick={editIntent.current.unresolved ? () => void submit(undefined, true) : undefined}
-              name="own-draft-action"
-              value="save"
-              className={authoringActionClassName}
-              disabled={
-                (!editIntent.current.unresolved && (!ready || pendingUploads > 0)) ||
-                submitting ||
-                (editIntent.current.unresolved && commandAction !== 'save')
-              }
-            >
-              {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
-              {editIntent.current.unresolved ? m.own_drafts_retry_save() : m.thread_edit_save()}
-            </Button>
-          ) : null}
-          {allowPublish && (!editIntent.current.unresolved || commandAction === 'publish') ? (
-            <Button
-              type={editIntent.current.unresolved ? "button" : "submit"}
-              onClick={editIntent.current.unresolved ? () => void submit(undefined, true) : undefined}
+              type="submit"
               name="own-draft-action"
               value="publish"
               className={authoringActionClassName}
-              disabled={
-                (!editIntent.current.unresolved && (!ready || pendingUploads > 0)) ||
-                submitting ||
-                (editIntent.current.unresolved && commandAction !== 'publish')
-              }
+              disabled={!ready || submitting || pendingUploads > 0}
             >
-              {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
-              {editIntent.current.unresolved ? m.own_drafts_retry_publish() : m.own_drafts_publish()}
+              {m.own_drafts_publish()}
             </Button>
           ) : null}
           <Button
@@ -2045,7 +2191,10 @@ function InlinePostEditorContent({
             variant="outline"
             className={authoringActionClassName}
             disabled={submitting}
-            onClick={() => departure.requestDiscard(onCancel)}
+            onClick={() => {
+              discardAction.current = onCancel;
+              departure.requestDiscard(onCancel);
+            }}
           >
             {m.thread_edit_cancel()}
           </Button>

@@ -116,9 +116,8 @@ and a changed or lost session release protection and retire the old editor.
 
 Each editor owns its in-flight reads, uploads and submission continuations. Unmounting, changing its container or
 new-thread intent, or losing/replacing the signed-in subject retires that work irreversibly, including switching
-away and back to the same account. A same-account token refresh keeps the mounted editor, dirty draft, uncertain
-command and exact original idempotency key; a late reply does not publish, invalidate or rotate that key after
-credential replacement. Copied-image reads are aborted; late results cannot reserve an image, restore private writing, change a
+away and back to the same account. Credential or locale replacement retires the mounted editor and its private recovery; a late reply cannot publish,
+invalidate, rotate a key or invoke completion after retirement. Copied-image reads are aborted; late results cannot reserve an image, restore private writing, change a
 replacement editor or call its parent. A prepared editor with an unknown session does not gain upload authority.
 Choosing an ordinary reply parent keeps the current writing and reply-intent rules.
 
@@ -588,8 +587,9 @@ Inspecting a file never changes writing. **Replace unsent body** explicitly repl
 posting choices intact, resets a settled current-visit command key and returns keyboard focus to the editor.
 **Keep current writing**, Cancel and Escape retain the draft. A synchronous editor transaction, title/body change,
 normal recovery restore or upload-source replacement invalidates the pending preview/read. Confirmation compares the
-exact current draft revision again. A newer file selection or cancellation retires older callbacks. In-flight and
-uncertain commands and pending uploads suspend replacement; a file can never reset their immutable command or key.
+exact current draft revision again. A newer file selection or cancellation retires older callbacks. In-flight commands
+and pending uploads suspend replacement. During uncertainty a confirmed replacement changes only the working body,
+retaining the original request and key; a file never changes that request or establishes its outcome.
 
 Exports contain only the currently identified editable body, using installed canonical `serializeDocument` or
 `documentText`, with the same media/component/link repairs and notices. They never include command metadata, receipts,

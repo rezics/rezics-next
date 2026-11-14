@@ -357,7 +357,7 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     const unknown = await openDialog(pending.origin, m.thread_authoring_leave_pending());
     await stayAndRestore(unknown.stay, pending.origin);
     expect(pending.commands).toEqual([command]);
-    await click(button(host, m.thread_write_retry()));
+    await click(button(host, m.thread_recovery_retry_original()));
     await settle(() => pending.commands.length === 2);
     expect(pending.commands).toEqual([command, command]);
     const confirmed = await openDialog(pending.origin, m.thread_authoring_leave_pending());

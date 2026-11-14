@@ -334,7 +334,7 @@ export const UncertainCommandLock: Story = {
   play: async (context) => {
     const view = within(context.canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.thread_write_send() }));
-    await view.findByRole('button', { name: m.thread_write_retry() });
+    await view.findByRole('button', { name: m.thread_recovery_retry_original() });
     await inspect(context);
     await expect(await screen.findByText(m.thread_inspection_unknown())).toBeVisible();
   },

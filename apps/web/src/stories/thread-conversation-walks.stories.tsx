@@ -105,7 +105,7 @@ export const ReplyFailureThenExactRetry: Story = {
     const key = canvasElement.querySelector<HTMLInputElement>('input[name="idempotency_key"]')!;
     const sentKey = key.value;
     await userEvent.click(view.getByRole('button', { name: m.thread_write_send() }));
-    const retry = await view.findByRole('button', { name: m.thread_write_retry() });
+    const retry = await view.findByRole('button', { name: m.thread_recovery_retry_original() });
     await expect(editor).toHaveTextContent(response);
     await expect(key.value).toBe(sentKey);
     await expect(view.getByText('The written description gives us enough to continue the conversation.')).toBeVisible();

@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import { act } from 'react';
 import type { CurrentPost, EditFailure } from '../src/threads/actions';
 
@@ -13,6 +14,7 @@ test('stale editing reviews before replacement, keeps the full correction, and s
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
     HTMLFormElement: window.HTMLFormElement,
     Element: window.Element,
     Node: window.Node,
@@ -36,6 +38,9 @@ test('stale editing reviews before replacement, keeps the full correction, and s
   const { sessionQuery } = await import('../src/session/query');
   const { fromPlainText } = await import('@rezics/document');
   const { m } = await import('../src/paraglide/messages.js');
+  const require = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
+  const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: window.document });
   const fetcher = mock(() => Promise.reject(new Error('Unexpected recovery read')));
   Object.defineProperty(globalThis, 'fetch', {
     configurable: true,
@@ -59,6 +64,8 @@ test('stale editing reviews before replacement, keeps the full correction, and s
   } as CurrentPost;
   const commands: Parameters<React.ComponentProps<typeof InlinePostEditor>['onSubmit']>[0][] = [];
   let outcome: EditFailure = { ok: false, reason: 'stale', currentPost: current };
+  const publishCommands: typeof commands = [];
+  const senders: string[] = [];
   let cancelled = false;
   const button = (label: string, scope: ParentNode = document) =>
     [...scope.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === label)!;
@@ -72,8 +79,8 @@ test('stale editing reviews before replacement, keeps the full correction, and s
       });
     expect(ready()).toBe(true);
   };
-  const mount = async () => {
-    await act(async () => root.render(null));
+  const mount = async (remount = true, publish = false, sender = 'original') => {
+    if (remount) await act(async () => root.render(null));
     client.setQueryData(sessionQuery.queryKey, owner);
     await act(async () =>
       root.render(
@@ -81,11 +88,18 @@ test('stale editing reviews before replacement, keeps the full correction, and s
           <InlinePostEditor
             initialBody={draft}
             initialMediaIds={[localMedia]}
-            revisionId="original-revision"
+            revisionId={sender === 'replacement' ? 'replacement-revision' : 'original-revision'}
+            allowPublish={publish}
             idempotencyKey="original-key"
             containerId="thread"
             onSubmit={async (command) => {
+              senders.push(sender);
               commands.push(structuredClone(command));
+              return outcome;
+            }}
+            onPublish={async (command) => {
+              senders.push(sender);
+              publishCommands.push(structuredClone(command));
               return outcome;
             }}
             onCancel={() => (cancelled = true)}
@@ -123,7 +137,7 @@ test('stale editing reviews before replacement, keeps the full correction, and s
     expect(commands[2]).toMatchObject({ body: current.body, revisionId: current.revisionId, mediaIds: [] });
     expect(commands[2]!.idempotencyKey).not.toBe(commands[0]!.idempotencyKey);
     expect(host.textContent).not.toContain(m.thread_edit_review_current());
-    await click(m.thread_edit_save());
+    await click(m.thread_recovery_retry_original());
     expect(commands[3]).toEqual(commands[2]);
     outcome = { ok: false, reason: 'stale', currentPost: { ...current, body: null } };
     await mount();
@@ -134,6 +148,26 @@ test('stale editing reviews before replacement, keeps the full correction, and s
     expect(button(m.thread_edit_replace_current(), popup()!).disabled).toBe(true);
     await click(m.thread_edit_keep_editing(), popup()!);
     expect(editor()!.textContent).toContain('Unsaved correction');
+    // Publish replay retains its original action, sender and revision even after replacement props and local edits.
+    outcome = { ok: false, reason: 'unavailable' };
+    await mount(true, true, 'original-publish');
+    await click(m.own_drafts_publish());
+    const published = structuredClone(publishCommands[0]!);
+    await act(async () => {
+      await user.click(editor()!);
+      await user.keyboard(' newer local correction');
+    });
+    await mount(false, false, 'replacement');
+    expect(button(m.thread_edit_save()).disabled).toBe(true);
+    await click(m.thread_recovery_retry_original());
+    expect(publishCommands).toEqual([published, published]);
+    expect(senders.slice(-2)).toEqual(['original-publish', 'original-publish']);
+    expect(published.revisionId).toBe('original-revision');
+    expect(JSON.stringify(published.body)).not.toContain('newer local correction');
+    outcome = { ok: false, reason: 'invalid' };
+    await click(m.thread_recovery_retry_original());
+    expect(editor()!.textContent).toContain('newer local correction');
+    expect(button(m.thread_edit_save()).disabled).toBe(false);
     expect(fetcher).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());

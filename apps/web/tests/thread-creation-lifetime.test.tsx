@@ -320,7 +320,7 @@ test('real new-thread composition preserves a selected review citation and retri
     expect(page.writes).toHaveLength(1);
     await act(async () => {
       const retry = [...page.host.querySelectorAll('button')].find(
-        (button) => button.textContent?.trim() === page.m.thread_write_retry(),
+        (button) => button.textContent?.trim() === page.m.thread_recovery_retry_original(),
       );
       expect(retry).toBeDefined();
       await page.user.click(retry!);

@@ -2,6 +2,7 @@ import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, useState } from 'react';
+import type { WriteFailure } from '../src/threads/actions';
 import * as start from '../.storybook/react-start';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -66,6 +67,7 @@ async function mountComposer() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'writer', csrfToken: 'original-csrf' });
   const submitted: unknown[] = [];
+  let nextOutcome: () => Promise<{ ok: true; value: string } | WriteFailure> = async () => ({ ok: true, value: 'created' });
   let rebind!: (binding: { initialKey: string; boardId: string }) => void;
   function Compose() {
     const [binding, setBinding] = useState({ initialKey: 'draft-key', boardId: 'board' });
@@ -75,8 +77,8 @@ async function mountComposer() {
         {...binding}
         localDraft={false}
         onSubmit={async (command) => {
-          submitted.push(command);
-          return { ok: true, value: 'created' };
+          submitted.push(structuredClone(command));
+          return nextOutcome();
         }}
         onSuccess={() => {}}
       />
@@ -128,6 +130,7 @@ async function mountComposer() {
     editor,
     attach,
     submitted,
+    respondWith: (response: typeof nextOutcome) => { nextOutcome = response; },
     rebind: (binding: Parameters<typeof rebind>[0]) => act(async () => rebind(binding)),
     async dispose() {
       await act(async () => root.unmount());
@@ -316,5 +319,66 @@ test('board and command-key replacements retire old attachment callbacks while t
       transport.mockRestore();
       await page.dispose();
     }
+  }
+});
+
+
+// Source-only: native media authority and the mounted recovery verifier own execution.
+test('exact replay excludes newer media and acknowledgement preserves pending working attachments', async () => {
+  const page = await mountComposer();
+  const lateImage = deferred<Response>();
+  let reservations = 0;
+  const transfers: string[] = [];
+  const transport = spyOn(globalThis, 'fetch').mockImplementation(async (input, init = {}) => {
+    const path = String(input);
+    if (init.method === 'POST') {
+      reservations++;
+      return Response.json({ media: {
+        id: imageId(reservations), containerId: 'native-container', state: 'reserved',
+        mediaType: 'image/png', byteCount: 3,
+      } });
+    }
+    if (init.method === 'PUT') {
+      transfers.push(path);
+      return new Response(null, { status: 204 });
+    }
+    if (path === `/media/${imageId(3)}`) return lateImage.promise;
+    return Response.json({ media: {
+      id: path.split('/').at(-1), state: 'available', mediaType: 'image/png', byteCount: 3,
+    } });
+  });
+  try {
+    await act(async () => {
+      await page.user.click(page.editor());
+      await page.user.keyboard('Original writing with a submitted image.');
+    });
+    await page.attach('Submitted image');
+    await page.settle(() => !page.button(page.m.thread_write_send()).disabled);
+    page.respondWith(async () => ({ ok: false, reason: 'unavailable' }));
+    await page.click(page.m.thread_write_send());
+    const original = structuredClone(page.submitted[0]);
+    await page.attach('New working image');
+    await page.settle(() => !!page.host.querySelector('[role="img"][aria-label="New working image"]'));
+    await page.attach('Pending working image');
+    await page.settle(() => reservations === 3);
+    page.respondWith(async () => ({ ok: true, value: 'created' }));
+    expect(page.button(page.m.thread_recovery_retry_original()).disabled).toBe(false);
+    await page.click(page.m.thread_recovery_retry_original());
+    expect(page.submitted).toEqual([original, original]);
+    expect(JSON.stringify(original)).toContain('Submitted image');
+    expect(JSON.stringify(original)).not.toContain('New working image');
+    expect(page.editor().textContent).toContain('Original writing');
+    expect(page.host.querySelector('[role="img"][aria-label="New working image"]')).not.toBeNull();
+    await act(async () => lateImage.resolve(Response.json({ media: {
+      id: imageId(3), state: 'available', mediaType: 'image/png', byteCount: 3,
+    } })));
+    await page.settle(() => !!page.host.querySelector('[role="img"][aria-label="Pending working image"]'));
+    expect(reservations).toBe(3);
+    expect(transfers).toEqual([1, 2, 3].map((n) => `/media/${imageId(n)}`));
+    expect(page.button(page.m.thread_recovery_retry_original()).disabled).toBe(true);
+    expect(page.submitted).toHaveLength(2);
+  } finally {
+    transport.mockRestore();
+    await page.dispose();
   }
 });

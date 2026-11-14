@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { AuthoringRecoveryExample, originalRequestJourney } from './composer.stories';
 import { useEffect, useState } from 'react';
 import { documentText, fromPlainText } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -265,5 +266,24 @@ export const AwayBackRedactsPreview: Story = {
     await userEvent.click(view.getByRole('button', { name: 'Prepared account away/back' }));
     await expect(view.queryByText(initialText)).not.toBeInTheDocument();
     await view.findByText(m.thread_authoring_session_changed());
+  },
+};
+
+
+export const LateAcknowledgementRetainsNewerWriting: Story = {
+  render: () => <AuthoringRecoveryExample />,
+  play: async (context) => {
+    await originalRequestJourney('reply')(context);
+    const view = within(context.canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.thread_recovery_complete() }));
+    const dialog = await screen.findByRole('alertdialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: m.thread_authoring_stay() }));
+    await expect(view.getByRole('textbox', { name: m.thread_reply_label() })).toHaveTextContent('Newer working words.');
+    await expect(view.queryByText('Prepared deliberate completion')).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.thread_recovery_complete() }));
+    const confirmation = await screen.findByRole('alertdialog');
+    await userEvent.click(within(confirmation).getByRole('button', { name: m.thread_authoring_discard() }));
+    await view.findByText('Prepared deliberate completion');
+    await expect(view.getByLabelText('Prepared command count')).toHaveTextContent('2');
   },
 };
