@@ -372,9 +372,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
           : [exact];
       }
     };
-    const readBindings = (
-      readSubject: (id: string) => Promise<ReviewedSubjectRead | null> = async (id) => read(id),
-    ) =>
+    const readBindings = (readSubject: (id: string) => Promise<ReviewedSubjectRead | null> = async (id) => read(id)) =>
       currentBangumiCreatorCreditBindings({
         resolution: resolution!,
         acknowledgements: journal.acknowledgedCommands(),
@@ -389,10 +387,7 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     setRoleEvidence({ 'schema:url': 'deprecated', 'schema:sameAs': 'deprecated', 'skos:inScheme': 'deprecated' });
     expect(roleCodes(await readBindings())).toEqual(['41']);
 
-    setRoleEvidence(
-      { 'schema:url': 'normal', 'schema:sameAs': 'preferred', 'skos:inScheme': 'normal' },
-      true,
-    );
+    setRoleEvidence({ 'schema:url': 'normal', 'schema:sameAs': 'preferred', 'skos:inScheme': 'normal' }, true);
     expect(roleCodes(await readBindings())).toEqual(['2', '41']);
 
     setRoleEvidence({ 'schema:url': 'normal', 'schema:sameAs': 'normal', 'skos:inScheme': 'preferred' });

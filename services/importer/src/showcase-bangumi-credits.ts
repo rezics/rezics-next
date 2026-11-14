@@ -288,9 +288,7 @@ function currentRank(statement: PublicVocabularyStatement): boolean {
 }
 
 function valueAt(read: ReviewedSubjectRead | null, property: string, expected: string): boolean {
-  const subject = read?.subject as
-    | { statements?: Record<string, readonly PublicVocabularyStatement[]> }
-    | undefined;
+  const subject = read?.subject as { statements?: Record<string, readonly PublicVocabularyStatement[]> } | undefined;
   return (
     subject?.statements?.[property]?.some(
       (statement) =>
@@ -311,9 +309,7 @@ function statementCites(command: BatchCommand, uri: string): boolean {
 }
 
 function hasCurrentValues(read: ReviewedSubjectRead | null, property: string): boolean {
-  const subject = read?.subject as
-    | { statements?: Record<string, readonly PublicVocabularyStatement[]> }
-    | undefined;
+  const subject = read?.subject as { statements?: Record<string, readonly PublicVocabularyStatement[]> } | undefined;
   return subject?.statements?.[property]?.some(currentRank) ?? false;
 }
 
@@ -497,10 +493,7 @@ export async function prepareBangumiCreatorCreditBindings(input: {
   let schemeMustNotRestore = previousSchemeWasPublished && !scheme;
   if (previousScheme && !scheme) {
     const oldRead = await read(previousScheme.subjectId);
-    if (
-      hasCurrentValues(oldRead, 'schema:sameAs') &&
-      !valueAt(oldRead, 'schema:sameAs', bangumiStaffSchemeUri)
-    )
+    if (hasCurrentValues(oldRead, 'schema:sameAs') && !valueAt(oldRead, 'schema:sameAs', bangumiStaffSchemeUri))
       schemeMustNotRestore = true;
   }
   let schemeManifest = input.prior?.manifest;
