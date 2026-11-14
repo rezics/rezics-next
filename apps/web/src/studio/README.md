@@ -272,6 +272,22 @@ receipts and pages retain HTTP validation; no Client declaration, complete-tree 
 `hosted-draft-point-lifecycle.ts` owns shared root-append/point replay, stale refresh, receipt and retirement.
 An HTTP200 receipt acknowledges the write independently of observation. Its exact revision, including historical
 replay, selects a new bounded window; failed readback retries only that exact page and never resubmits the command.
+Decision: after acknowledgement, both callers offer explicit Next edit. It discards the sealed command, title,
+selected saved version and all point anchors, closes the picker and retires the receipt window before one native
+owner-head read. Only a successful owner observation admits a new operation, using the existing picker, outline,
+preparation and exact head CAS. A failed or denied read stays locked with an explicit read retry; repeated activation
+while reading does no additional work. The last receipt remains historical acknowledgement, never a claim about
+the current draft, publication or public reading. Unknown original commands retain only their original replay path.
+Each explicit next-edit/retry costs one bounded owner read plus the existing new-head window and selected reads;
+one window and O(1) intent are retained, without scans, hidden refill or persisted private drafts.
+
+Continuation sources read before design: this draft-point contract and the bounded-root-append section;
+`hosted-draft-point-lifecycle.ts`, point and root-append visits/views/tests, both entry compositions,
+`hosted-draft-picker.ts`, `hosted-outline-window.ts`, `hosted-contract.ts`, `hosted-native.ts`,
+`hosted-actions.ts`, the existing point stories and locale copy; Content's versioned-outline and bounded-root
+contracts; and the read-only main checkout `.reference/INDEX.md`. The brief's append paths refer to the delivered
+`hosted-root-append.ts`, `hosted-root-append-view.tsx` and `studio-hosted-root-append.test.tsx`.
+
 Account, session incarnation, source, credential, locale and departure retire selections, abort pending requests and
 fence late results and focus. Shared wrapping 44px controls and eight-locale `studio_draft_point_*` messages retain
 the existing Studio appearance. Review/recovery requests keyboard focus only while the initiating focus remains;

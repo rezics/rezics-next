@@ -19,7 +19,8 @@ type Phase =
   | 'uncertain'
   | 'stale'
   | 'rejected'
-  | 'acknowledged';
+  | 'acknowledged'
+  | 'next-edit';
 export type DraftCommandIntent<Request> = Readonly<{
   request: Request;
   csrfToken: string;
@@ -60,7 +61,7 @@ export type DraftCommandOptions<Request, Choice> = {
   selected?(choice: Choice, selection: StudioSelection, head: string): Choice;
 };
 
-/** Shared root-append/point command lifecycle: exact replay, stale refresh, receipt-only acknowledgement. */
+/** Shared draft commands: exact replay, explicit fresh-head continuation and receipt-only acknowledgement. */
 export class HostedDraftCommandVisit<Request, Choice> {
   protected state: HostedDraftCommandState<Request, Choice>;
   private readonly origin;
@@ -68,7 +69,7 @@ export class HostedDraftCommandVisit<Request, Choice> {
   private readonly disconnectPicker: () => void;
   private readonly listeners = new Set<() => void>();
   protected request: AbortController | null = null;
-  private reviewedSend!: DraftCommandOptions<Request, Choice>['send'];
+  private reviewedSend: DraftCommandOptions<Request, Choice>['send'] | null = null;
   private retired = false;
 
   constructor(protected readonly options: DraftCommandOptions<Request, Choice>) {
@@ -233,7 +234,7 @@ export class HostedDraftCommandVisit<Request, Choice> {
     this.request = request;
     this.update({ ...state, phase: 'submitting', error: null });
     try {
-      const result = await this.reviewedSend(intent.request, request.signal, intent.csrfToken);
+      const result = await this.reviewedSend!(intent.request, request.signal, intent.csrfToken);
       if (!this.current(request)) return;
       if (!result.ok) {
         this.update({
@@ -262,7 +263,37 @@ export class HostedDraftCommandVisit<Request, Choice> {
   refreshHead = async (): Promise<void> => {
     if (!this.current() || this.state.kind !== 'active' || this.state.phase !== 'stale' || this.state.refreshing)
       return;
+    await this.readHead(this.state);
+  };
+
+  /** An acknowledged command can never be replayed by starting or retrying the next edit. */
+  nextEdit = async (): Promise<void> => {
+    if (
+      !this.current() ||
+      this.state.kind !== 'active' ||
+      (this.state.phase !== 'acknowledged' && this.state.phase !== 'next-edit') ||
+      this.state.refreshing
+    )
+      return;
     const state = this.state;
+    // Retire even an unfinished receipt readback before observing the next current owner head.
+    this.request?.abort();
+    state.outline.dispose();
+    this.picker.close();
+    this.picker.retainSelection(null);
+    this.reviewedSend = null;
+    await this.readHead({
+      ...state,
+      phase: 'next-edit',
+      choice: this.options.choice,
+      selection: null,
+      title: '',
+      intent: null,
+      error: null,
+    });
+  };
+
+  private async readHead(state: Extract<HostedDraftCommandState<Request, Choice>, { kind: 'active' }>) {
     const request = new AbortController();
     this.request = request;
     this.update({ ...state, refreshing: true, error: null });
@@ -285,7 +316,7 @@ export class HostedDraftCommandVisit<Request, Choice> {
         ...state,
         head,
         outline,
-        choice: this.options.refreshed?.(state.choice) ?? state.choice,
+        choice: state.phase === 'stale' ? (this.options.refreshed?.(state.choice) ?? state.choice) : state.choice,
         phase: 'idle',
         refreshing: false,
         intent: null,
@@ -295,5 +326,5 @@ export class HostedDraftCommandVisit<Request, Choice> {
     } finally {
       if (this.request === request) this.request = null;
     }
-  };
+  }
 }
