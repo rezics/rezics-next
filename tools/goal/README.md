@@ -1332,8 +1332,9 @@ if [ "$(jq '.alerts | length' <<<"$duty")" -gt 0 ]; then
 fi
 ```
 
-The native call sends the frozen report through the same `.temp/goal/telegram.ts text` path and returns its delivery
-state and report reference. Keep the inbox fallback above, remove the bridge's final direct `telegram.ts text "$msg"`
+The native call passes the frozen report to `.temp/goal/telegram.ts hourly-text` and returns its delivery state
+and report reference. The private notifier projects one bounded Telegram chat message from the report; the complete
+frozen report remains in Goal and is also available to the native inbox bridge. Keep the inbox fallback above, remove the bridge's final direct `telegram.ts text "$msg"`
 send to avoid a second sender, and restart the one existing bridge process after its current boundary send. Do not add
 a second timer or watcher. Delivery remains first-write and at-most-once across that restart.
 
@@ -3356,8 +3357,10 @@ briefs written or moved back since the turn began count as decisions and reset t
 
 For Codex managers, matched work completion persists inbox-wait intent and pauses native Goal autonomy. The manager
 remains running on the same thread with its objective, budget and usage. Real mail waits unread during pool or allowance
-holds; admission reactivates only a controller-parked Goal and uses the existing start-or-steer path. Activation can
-start the turn first; the host rejoins and steers it. User pauses and native budget, usage, blocked and complete states
+holds; admission reactivates only a controller-parked Goal and uses the existing start-or-steer path. The first
+delivery on a new host connection rejoins the original thread before activation. A viewer can already have loaded the
+thread, and steering it does not subscribe the controller to completion events; without the rejoin, native autonomy
+can keep running after work finishes. Activation may start the turn first; the subscribed host steers it. User pauses and native budget, usage, blocked and complete states
 retain their meaning. Blocked Goals accept admitted explicit inbox turns without reactivation. Empty wakeups and
 recovery leave idle threads parked. See the
 [OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
@@ -3531,7 +3534,8 @@ observation window before publication: cp-sync reads one instant of live-worker 
 requests on tasks in the landing state, then publishes. After the restart it verifies that each resident unit started
 after publication, then takes four readings a minute apart (`policy.cpSync.residentSamples` and
 `policy.cpSync.residentSampleMs`). It rolls back only on a real regression: live workers fell by more than half, or no
-landing merged in that window while landings already in flight before publication were requested. A quiet window with
+landing merged in that window while ordinary dev product landings were already pending before publication. A queued
+or running main control-plane proof does not establish demand on the ordinary dev lane. A quiet window with
 no landing in flight never rolls back. A stale train started from the previous `tools/goal` lets its running command
 finish, stops at the next command boundary, releases its lanes and exits; its successor runs the published code. The
 resident host, which runs attempt supervision, is restarted by systemd: it finishes its active requests on SIGTERM, and
@@ -3541,8 +3545,9 @@ A resident host also notices a publication that cp-sync did not make, such as a 
 `main`. It polls `main:tools/goal` every `policy.host.codePollMs`. Once it has run for `policy.host.restartIntervalMs`
 and `main` names another revision, it starts no new attempt, finishes its active requests, and exits; systemd starts it
 on the published code, and its successor adopts the running attempts. A host restarts this way at most once per
-interval. cp-sync restarts the host after its own publication whatever the interval, and a host that cannot read `main`
-keeps its revision.
+interval. cp-sync restarts the host after its own publication whatever the interval. If that restart races an
+automatic systemd handoff, it waits within the host startup budget for a ready successor started after publication.
+A host that cannot read `main` keeps its revision.
 
 cp-sync refuses when the main checkout has uncommitted or untracked files under the synced paths, when `main`
 moved, when stabilize changed control-plane paths that dev lacks, or while another run holds `.temp/goal/cp-sync.lock`.
