@@ -33,6 +33,7 @@ export type BoundedReadLifetimeOptions = Readonly<{
   isUncertainError?: (error: unknown) => boolean;
   isUncertainSettledQueryError?: (error: unknown) => boolean;
   isUncertainWorkError?: (error: unknown) => boolean;
+  onRetire?: () => void;
 }>;
 
 type Checkout = <T>(work: (client: PoolClient) => Promise<T>) => Promise<T>;
@@ -152,11 +153,18 @@ export function withBoundedReadLifetime<T>(
   let uncertain = false;
   let uncertainty: unknown;
   let activeQueries = 0;
+  let pendingQueries = 0;
   const settledServerErrors = new Set<unknown>();
   // Native custody is independent of whether this helper owns automatic completion.
   let transaction: 'none' | 'open' = 'none';
   let hasFailure = false;
   let firstFailure: unknown;
+
+  const retire = () => {
+    if (retired) return;
+    retired = true;
+    options.onRetire?.();
+  };
 
   const remember = (error: unknown) => {
     if (!hasFailure) {
@@ -168,6 +176,7 @@ export function withBoundedReadLifetime<T>(
     if (uncertain) return;
     uncertain = true;
     uncertainty = error;
+    retire();
     if (connection) discardConnection(connection, asError(error));
   };
   const retiredError = () => new RetiredReadClientError();
@@ -207,11 +216,15 @@ export function withBoundedReadLifetime<T>(
       } catch (error) {
         return completeWithCallback(Promise.reject(error));
       }
-      if (config.query_timeout === undefined) config.query_timeout = timeout;
-      else if (typeof config.query_timeout === 'number' && config.query_timeout > 0)
-        config.query_timeout = Math.min(config.query_timeout, timeout);
+      config.query_timeout =
+        typeof config.query_timeout === 'number' && config.query_timeout > 0
+          ? Math.min(config.query_timeout, timeout)
+          : timeout;
 
       const transactionAfter = transactionStateAfter(config.text);
+      if (transactionAfter === 'none' && pendingQueries > 0)
+        return completeWithCallback(Promise.reject(new Error('A terminal transaction query cannot follow unsettled SQL')));
+      pendingQueries += 1;
       let dispatched = false;
       let settled = false;
       let nativeFailed = false;
@@ -229,6 +242,7 @@ export function withBoundedReadLifetime<T>(
           // A late terminal response must never undo an earlier discard.
           if (dispatched && transactionAfter !== undefined) transaction = transactionAfter;
           settled = true;
+          pendingQueries -= 1;
           if (dispatched) activeQueries -= 1;
           return result;
         },
@@ -236,6 +250,7 @@ export function withBoundedReadLifetime<T>(
           // A native rejection alone does not prove that the server finished the query.
           settled = isPostgresServerError(error);
           nativeFailed = true;
+          if (!dispatched || settled) pendingQueries -= 1;
           if (dispatched && settled) activeQueries -= 1;
           throw error;
         },
@@ -284,7 +299,8 @@ export function withBoundedReadLifetime<T>(
         const mapped = mapError(error, options);
         remember(mapped);
         if (
-          !settledServerErrors.has(error) &&
+          (!settledServerErrors.has(error) || options.isUncertainSettledQueryError?.(error) ||
+            options.isUncertainSettledQueryError?.(mapped)) &&
           (options.isUncertainWorkError?.(error) || options.isUncertainWorkError?.(mapped))
         )
           discard(mapped);
@@ -309,16 +325,17 @@ export function withBoundedReadLifetime<T>(
     } catch (error) {
       const mapped = mapError(error, options);
       remember(mapped);
-      if (activeQueries > 0 || transaction === 'open') discard(firstFailure);
+      if (Date.now() >= deadline || activeQueries > 0 || transaction === 'open') discard(firstFailure);
       throw firstFailure;
     } finally {
-      retired = true;
+      retire();
     }
   });
 
   return until(operation, deadline, deadlineError).catch((error: unknown) => {
-    retired = true;
-    if (connection && (activeQueries > 0 || transaction === 'open')) discard(hasFailure ? firstFailure : error);
+    retire();
+    if (connection && (Date.now() >= deadline || activeQueries > 0 || transaction === 'open'))
+      discard(hasFailure ? firstFailure : error);
     if (hasFailure) throw firstFailure;
     throw mapError(error, options);
   });

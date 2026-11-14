@@ -10,6 +10,25 @@ Decision: `timing.ts` is the public defining entry for request-local command tim
 
 ## Existing execution and receipts
 
+### Ordinary command terminal lifetime
+
+An ordinary `runCommand` or receipt preflight keeps the original `Pool` and the earliest
+request, command or work deadline through authoritative time mint, pool admission, `BEGIN`, body and
+callback SQL, `COMMIT`, and cleanup. The bounded checkout guards each native query with
+the remaining absolute deadline, including controls issued before `SET LOCAL` takes effect.
+An expired or uncertain checkout is retired and its underlying pool client is released
+with an error; late body or callback code has no further SQL dispatch authority. The
+executor retains custody of the original callback and its eventual settlement.
+
+A lost or timed-out `COMMIT` response is an uncertain durable outcome. It must not be
+reported as success or as a proven rollback, and it must not be retried as a fresh effect.
+Owners settle receipt-bearing commands by reading their existing receipt under current
+authorization; receipt-free owners use their existing durable owner result or redrive
+semantics. A pg query timeout and error-release close the client side of an uncertain
+session, but pg exposes no terminal server acknowledgement proving that an in-flight
+`COMMIT` was cancelled before it became durable. This boundary remains an explicit
+runtime acceptance gap.
+
 ### Shared-history erasure
 
 The supported native sink is `declareCommandHistory(tx, kind, { response, events })`. Owners declare typed

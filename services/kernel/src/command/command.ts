@@ -18,7 +18,7 @@ import { claimPublisherCoordination } from './publisher-coordination.ts';
 import readReceipt from './read-receipt.sql';
 import readOwnCompletion from './read-own-completion.sql';
 import readTime from './time.sql';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { discardConnection, withBoundedCommandConnection, withBoundedReadConnection, withConnection } from '../database/pool.ts';
 import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
 import { readPartition } from '../partition/partition.ts';
 import { commandPhase, countContentionRetry, measureCommandPhase } from './timing.ts';
@@ -271,8 +271,7 @@ export function authoritativeTimeValue(time: AuthoritativeTime): string {
 /** Read-only context is unavailable before authorization or after the attempt. */
 export function currentCommand(tx: CommandTransaction): CurrentCommand {
   const context = commands.get(tx);
-  if (!context) throw new TypeError('No authorized live command transaction');
-  assertSelectedCallback(tx);
+  if (!context || !hasLiveCommandTransaction(tx)) throw new TypeError('No authorized live command transaction');
   return context;
 }
 /** Trusted owner factories reuse the live executor resources; this grants no second checkout. */
@@ -319,7 +318,7 @@ export function releaseOperationalTime(time: AuthoritativeTime): void {
 }
 
 const transactionCallbacks = Symbol('command callbacks');
-type CallbackState = { active: boolean; callbacks: CommandCallback[] };
+type CallbackState = { active: boolean; deadline: number; callbacks: CommandCallback[] };
 type CallbackTransaction = CommandTransaction & { [transactionCallbacks]?: CallbackState };
 // Optional-path copies must not inherit callback authority by copying a symbol.
 const selectedCallbacks = new WeakMap<CallbackState, { tx: CommandTransaction; dispatch: CommandDispatchLifetime }>();
@@ -338,7 +337,7 @@ function assertSelectedCallback(tx: CommandTransaction): void {
  */
 export function registerCommandCallback(tx: CommandTransaction, callback: CommandCallback): void {
   const state = (tx as CallbackTransaction)[transactionCallbacks];
-  if (!state?.active) throw new TypeError('No live command transaction');
+  if (!state?.active || Date.now() >= state.deadline) throw new TypeError('No live command transaction');
   assertSelectedCallback(tx);
   // Selected no-effect and fence profiles never admit callbacks. Association
   // admits at most two Source callbacks on the live dispatch transaction.
@@ -356,7 +355,8 @@ export function registerCommandCallback(tx: CommandTransaction, callback: Comman
  * executor attempt is live. The symbol capability is private to this module.
  */
 export function hasLiveCommandTransaction(tx: CommandTransaction): boolean {
-  if ((tx as CallbackTransaction)[transactionCallbacks]?.active !== true) return false;
+  const state = (tx as CallbackTransaction)[transactionCallbacks];
+  if (state?.active !== true || Date.now() >= state.deadline) return false;
   try {
     assertSelectedCallback(tx);
     return true;
@@ -404,6 +404,17 @@ export class CommandResultErasedError extends Error {
   }
 }
 
+/** A sent COMMIT may be durable even when its native response is lost. */
+export class CommandCommitUncertainError extends Error {
+  readonly partition: number;
+
+  constructor(partition: number, cause: unknown) {
+    super(`Command COMMIT result is uncertain for partition ${partition}`, { cause });
+    this.name = 'CommandCommitUncertainError';
+    this.partition = partition;
+  }
+}
+
 export class TooManyEventsError extends Error {
   readonly partition: number;
   readonly count: number;
@@ -445,8 +456,11 @@ async function waitForWritable(pool: Pool, partition: number, deadline: number):
     // retains a transaction, evidence check or pool connection.
     await pause(25);
     if (Date.now() >= deadline) break;
-    const state = await withConnection(pool, (client) =>
-      boundedRead(client, deadline, () => readPartition(client, partition)),
+    const state = await withBoundedReadConnection(
+      pool,
+      deadline,
+      (client) => boundedRead(client, deadline, () => readPartition(client, partition)),
+      { deadlineError: () => new CommandUnavailableError('deadline', partition) },
     ).catch((error: unknown) => {
       if (classifyUnavailability(error) === 'deadline') throw new CommandUnavailableError('fenced', partition);
       throw error;
@@ -649,11 +663,17 @@ async function executeCommand<T>(
   const basis = options.basis ? Object.freeze({ ...options.basis }) : null;
   const authorization = options.authorization;
   const commandWork = currentCommandWorkAssociation();
-  const deadline = commandWork
+  const declaredDeadline = commandWork
     ? Math.min(options.deadline ?? commandWork.deadline, commandWork.deadline)
     : (options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS));
-  if (commandWork && commandWork.deadline !== deadline)
+  if (commandWork && commandWork.deadline !== declaredDeadline)
     throw new TypeError('Command work association must use the original command deadline');
+  // A request may have a shorter original budget than a trusted command option.
+  // The long fallback only observes request context; it cannot extend a command.
+  const deadline = dispatch || publisher
+    ? declaredDeadline
+    : Math.min(declaredDeadline, deadlineFor(2_147_483_647));
+  if (!Number.isSafeInteger(deadline)) throw new TypeError('Invalid command deadline');
   let contentionAttempts = 0;
   let lastAccessContention: AccessUnavailableError | undefined;
   let singleAttemptCount = 0;
@@ -667,7 +687,12 @@ async function executeCommand<T>(
       if (authorization?.prepare) {
         // The clock read finishes before parent/org evidence and child checkout.
         time = await measureCommandPhase('time_mint', () =>
-          withConnection(pool, (client) => boundedRead(client, deadline, () => mintTime(client, options.clock))),
+          withBoundedReadConnection(
+            pool,
+            deadline,
+            (client) => boundedRead(client, deadline, () => mintTime(client, options.clock)),
+            { deadlineError: () => new CommandUnavailableError('deadline', partition) },
+          ),
         );
         attempt = Object.freeze({ partition, basis, time, ...(commandWork ? { commandWork } : {}) });
         attemptDeadlines.set(attempt, deadline);
@@ -677,15 +702,30 @@ async function executeCommand<T>(
       const gate = await measureCommandPhase('gate_wait', () => enterCommandGate(pool, partition, deadline));
       if (gate.status !== 'acquired') throw new CommandUnavailableError(gate.status, partition);
       commandPhase('transaction_pool_wait');
+      const ordinary = !dispatch && !publisher;
+      let callbackState: CallbackState | undefined;
+      let commitPending = false;
       const checkout = async <R>(work: (client: PoolClient) => Promise<R>): Promise<R> => {
         dispatch?.checkout();
-        return withConnection(pool, (client) => {
+        const run = (client: PoolClient) => {
           // Actual acquisition boundary, inside withConnection's release custody.
-          // Do not wrap the whole transaction as a checkout await: its client has
-          // already been released when that outer await settles.
           dispatch?.checkpoint();
           return work(client);
-        });
+        };
+        return ordinary
+          ? withBoundedCommandConnection(pool, deadline, run, {
+              deadlineError: () => new CommandUnavailableError('deadline', partition),
+              mapError: (error) =>
+                commitPending && !(error instanceof CommandCommitUncertainError)
+                  ? new CommandCommitUncertainError(partition, error)
+                  : error,
+              isUncertainWorkError: (error) => error instanceof CommandCommitUncertainError,
+              isUncertainSettledQueryError: (error) => error instanceof CommandCommitUncertainError,
+              onRetire: () => {
+                if (callbackState) callbackState.active = false;
+              },
+            })
+          : withConnection(pool, run);
       };
       const result = await checkout(async (client) => {
         commandPhase('transaction_body');
@@ -700,10 +740,25 @@ async function executeCommand<T>(
         }
         dispatch?.bindQuery(tx, client);
         if (receiptKeys) bindReceiptKeys(tx, receiptKeys);
-        const callbackState: CallbackState = { active: true, callbacks: [] };
-        Object.defineProperty(tx, transactionCallbacks, { value: callbackState });
-        if (dispatch) selectedCallbacks.set(callbackState, { tx, dispatch });
-        if (publisher) publisherCallbacks.add(callbackState);
+        const state: CallbackState = { active: true, deadline, callbacks: [] };
+        callbackState = state;
+        Object.defineProperty(tx, transactionCallbacks, { value: state });
+        if (dispatch) selectedCallbacks.set(state, { tx, dispatch });
+        if (publisher) publisherCallbacks.add(state);
+        const commit = async () => {
+          if (ordinary) commitPending = true;
+          try {
+            const result = await client.query('COMMIT');
+            commitPending = false;
+            return result;
+          } catch (error) {
+            if (ordinary)
+              throw error instanceof CommandCommitUncertainError
+                ? error
+                : new CommandCommitUncertainError(partition, error);
+            throw error;
+          }
+        };
         try {
           dispatch?.checkpoint();
           if (dispatch) await dispatch.control('begin', () => client.query('BEGIN ISOLATION LEVEL SERIALIZABLE'));
@@ -750,7 +805,7 @@ async function executeCommand<T>(
               if (!Buffer.from(row.requestDigest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
               if (row.payloadState === 'minimized') throw new CommandResultErasedError();
               receiptOwners.delete(tx);
-              await measureCommandPhase('commit', () => client.query('COMMIT'));
+              await measureCommandPhase('commit', commit);
               sealEventTypes();
               return {
                 value: row.response as T,
@@ -765,7 +820,7 @@ async function executeCommand<T>(
           if (mode === 'receipt-only') throw authorization!.denied();
           if (receiptPreflight) {
             receiptOwners.delete(tx);
-            await measureCommandPhase('commit', () => client.query('COMMIT'));
+            await measureCommandPhase('commit', commit);
             sealEventTypes();
             return receiptNotFound;
           }
@@ -804,7 +859,7 @@ async function executeCommand<T>(
             dispatch?.checkpoint();
             if (
               (dispatch && !noEffect && !dispatch.admitsEvents()) ||
-              (callbackState.callbacks.length > 0 && !dispatch?.admitsCallbacks()) ||
+              (state.callbacks.length > 0 && !dispatch?.admitsCallbacks()) ||
               commandRecordSources(tx).length ||
               hasCommandRecordSourceSet(tx) ||
               commandAgentIdentitySource(tx)
@@ -834,11 +889,14 @@ async function executeCommand<T>(
           validateCommandHistory(tx, options.receipt?.kind, response.value, events);
           await authorization?.finalize?.(tx, attempt, evidence);
           dispatch?.checkpoint();
-          if (noEffect && callbackState.callbacks.length > 0)
+          if (noEffect && state.callbacks.length > 0)
             throw new TypeError('A no-effect command registers no work');
           const runCallbacks = async () => {
-            for (let index = 0; index < callbackState.callbacks.length; index++)
-              await callbackState.callbacks[index]!(transactionId);
+            for (let index = 0; index < state.callbacks.length; index++) {
+              if (!state.active || Date.now() >= deadline)
+                throw new CommandUnavailableError('deadline', partition);
+              await state.callbacks[index]!(transactionId);
+            }
           };
           if (dispatch?.admitsCallbacks()) await dispatch.callbacks(runCallbacks);
           else await runCallbacks();
@@ -926,7 +984,7 @@ async function executeCommand<T>(
             publisher.assertLive();
           }
           await measureCommandPhase('commit', () =>
-            dispatch ? dispatch.control('commit', () => client.query('COMMIT')) : client.query('COMMIT'),
+            dispatch ? dispatch.control('commit', () => client.query('COMMIT')) : commit(),
           );
           sealEventTypes();
           return {
@@ -948,6 +1006,10 @@ async function executeCommand<T>(
             }
             throw error;
           }
+          if (error instanceof CommandCommitUncertainError) {
+            discardConnection(client, error);
+            throw error;
+          }
           if (!(error instanceof AccessUnavailableError) && classifyUnavailability(error) === 'deadline') {
             try {
               await client.query('ROLLBACK');
@@ -967,8 +1029,8 @@ async function executeCommand<T>(
           releaseCommandHistory(tx);
           nativeReceipts.delete(tx);
           receiptOwners.delete(tx);
-          callbackState.active = false;
-          callbackState.callbacks.length = 0;
+          state.active = false;
+          state.callbacks.length = 0;
           attempts.delete(tx);
           commands.delete(tx);
           commandResources.delete(tx);
@@ -998,6 +1060,7 @@ async function executeCommand<T>(
         throw error;
       }
       if (error instanceof IdempotencyConflictError) throw error;
+      if (error instanceof CommandCommitUncertainError) throw error;
       if (error instanceof CommandUnavailableError) throw error;
       const reason = classifyUnavailability(error);
       lastAccessContention = error instanceof AccessUnavailableError && reason === 'contention' ? error : undefined;

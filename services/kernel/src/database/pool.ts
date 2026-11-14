@@ -30,6 +30,7 @@ export class NestedPoolCheckoutError extends Error {
 
 const heldPools = new AsyncLocalStorage<ReadonlySet<Pool>>();
 const brokenClients = new WeakMap<PoolClient, Error>();
+const checkedOutClients = new WeakMap<PoolClient, { released: boolean }>();
 type Connect = Pool['connect'];
 
 export function createPool(
@@ -111,11 +112,21 @@ export function withBoundedReadConnection<T>(
   read: (client: PoolClient) => Promise<T>,
   options: BoundedReadOptions = {},
 ): Promise<T> {
+  return withBoundedCommandConnection(pool, deadline, read, options);
+}
+
+/** Bound a native transaction without changing the identity of its original Pool. */
+export function withBoundedCommandConnection<T>(
+  pool: Pool,
+  deadline: number,
+  work: (client: PoolClient) => Promise<T>,
+  options: BoundedReadOptions = {},
+): Promise<T> {
   return withBoundedReadLifetime(
-    (work) => withConnection(pool, work),
-    (client, error) => discardConnection(client, error),
+    (run) => withConnection(pool, run),
+    (client, error) => retireConnection(client, error),
     deadline,
-    read,
+    work,
     options,
   );
 }
@@ -129,7 +140,7 @@ export function withBoundedReadOnlyTransaction<T>(
 ): Promise<T> {
   return withBoundedReadLifetime(
     (work) => withConnection(pool, work),
-    (client, error) => discardConnection(client, error),
+    (client, error) => retireConnection(client, error),
     deadline,
     read,
     { ...options, transaction: 'repeatable-read-read-only' },
@@ -142,6 +153,8 @@ async function checkedOutConnection<T>(
   accounting: QueryAccounting | undefined,
 ): Promise<T> {
   const client = await pool.connect();
+  const custody = { released: false };
+  checkedOutClients.set(client, custody);
   const parent = heldPools.getStore();
   const next = new Set(parent);
   next.add(pool);
@@ -155,10 +168,24 @@ async function checkedOutConnection<T>(
     return await heldPools.run(next, () => work(client));
   } finally {
     client.query = originalQuery;
-    client.release(brokenClients.get(client));
+    checkedOutClients.delete(client);
+    if (!custody.released) {
+      custody.released = true;
+      client.release(brokenClients.get(client));
+    }
   }
 }
 
 export function discardConnection(client: PoolClient, error: Error): void {
   brokenClients.set(client, error);
+}
+
+/** Error-release closes an uncertain pg session while its original callback still drains. */
+export function retireConnection(client: PoolClient, error: Error): void {
+  discardConnection(client, error);
+  const custody = checkedOutClients.get(client);
+  if (custody && !custody.released) {
+    custody.released = true;
+    client.release(error);
+  }
 }
