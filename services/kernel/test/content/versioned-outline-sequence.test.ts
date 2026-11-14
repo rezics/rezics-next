@@ -1,12 +1,14 @@
 import { expect, test } from 'bun:test';
 import {
   chapterRankVersionedOutlineSequenceNode,
+  createVersionedOutlineSequenceReadAccess,
   createVersionedOutlineSequenceReadWriteSet,
   insertVersionedOutlineSequenceNode,
   joinVersionedOutlineSequences,
   maximumVersionedOutlineSequenceSubtreeHeight,
   moveVersionedOutlineSequenceRange,
   rankVersionedOutlineSequenceNode,
+  rankVersionedOutlineSequenceNodes,
   selectVersionedOutlineSequenceChapter,
   selectVersionedOutlineSequenceNode,
   splitVersionedOutlineSequence,
@@ -55,6 +57,18 @@ function seedBalanced(
 function workspace(snapshot: Snapshot) {
   const read: VersionedOutlineSequenceSnapshotReader<string> = async (id) => snapshot.get(id) ?? null;
   return createVersionedOutlineSequenceReadWriteSet(read);
+}
+
+function batchWorkspace(snapshot: Snapshot, batches?: string[][]) {
+  return createVersionedOutlineSequenceReadAccess<string>(
+    async (id) => snapshot.get(id) ?? null,
+    async (ids) => {
+      batches?.push([...ids]);
+      const selected = new Map<string, VersionedOutlineSequenceNode<string> | null>();
+      for (const id of ids) selected.set(id, snapshot.get(id) ?? null);
+      return selected;
+    },
+  );
 }
 
 function commit(
@@ -152,6 +166,52 @@ test('same-rank inserts preserve IDs and exact bigint rank/select plus sparse ch
   const outsider = seedBalanced(1, 'other-');
   const roots = new Map([...selected, ...outsider.nodes]);
   expect(await rankVersionedOutlineSequenceNode(workspace(roots), rootId, outsider.rootId!)).toBeNull();
+});
+
+test('multi-rank frontiers deduplicate shared paths across roots and stay pinned to their snapshot', async () => {
+  const first = seedBalanced(63, 'frontier-a-');
+  const second = seedBalanced(31, 'frontier-b-');
+  const original = new Map([...first.nodes, ...second.nodes]);
+  const batches: string[][] = [];
+  const requests = [
+    ...first.ids.slice(10, 22).map((nodeId) => ({ rootId: first.rootId, nodeId })),
+    { rootId: first.rootId, nodeId: first.ids[15]! },
+    ...second.ids.slice(4, 8).map((nodeId) => ({ rootId: second.rootId, nodeId })),
+    { rootId: first.rootId, nodeId: second.ids[3]! },
+    { rootId: first.rootId, nodeId: 'missing-frontier-node' },
+    { rootId: null, nodeId: first.ids[0]! },
+  ];
+
+  expect(await rankVersionedOutlineSequenceNodes(batchWorkspace(original, batches), requests)).toEqual([
+    ...Array.from({ length: 12 }, (_, index) => BigInt(index + 10)),
+    15n,
+    4n,
+    5n,
+    6n,
+    7n,
+    null,
+    null,
+    null,
+  ]);
+  expect(batches.length).toBeLessThan(requests.length);
+  expect(batches.every((batch) => batch.length <= requests.length * 2 + 2)).toBe(true);
+  const loadedIds = batches.flat();
+  expect(loadedIds).toHaveLength(new Set(loadedIds).size);
+  expect(batches.every((batch) => batch.length === new Set(batch).size)).toBe(true);
+
+  const edit = workspace(original);
+  const moved = await moveVersionedOutlineSequenceRange(edit, first.rootId, 10n, 3n, 43n);
+  const updated = commit(original, edit);
+  expect(
+    await rankVersionedOutlineSequenceNodes(batchWorkspace(original), [
+      { rootId: first.rootId, nodeId: first.ids[11]! },
+    ]),
+  ).toEqual([11n]);
+  expect(
+    await rankVersionedOutlineSequenceNodes(batchWorkspace(updated), [
+      { rootId: moved.rootId, nodeId: first.ids[11]! },
+    ]),
+  ).toEqual([41n]);
 });
 
 test('split handles edges and arbitrary height joins without changing logical IDs', async () => {

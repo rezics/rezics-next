@@ -1,14 +1,17 @@
 import type { AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import {
+  createVersionedOutlineSequenceReadAccess,
   createVersionedOutlineSequenceReadWriteSet,
   type VersionedOutlineSequenceNode,
+  type VersionedOutlineSequenceReadAccess,
   type VersionedOutlineSequenceReadWriteSet,
 } from './versioned-outline-sequence.ts';
 import commitVersion from './hosted-version-commit.sql';
 import createGeneration from './hosted-version-create-generation.sql';
 import readHead from './hosted-version-read-head.sql';
 import readNode from './hosted-version-read-node.sql';
+import readNodes from './hosted-version-read-nodes.sql';
 import readChildDepth from './hosted-version-read-child-depth.sql';
 import readOccurrence from './hosted-version-read-occurrence.sql';
 import readOccurrences from './hosted-version-read-occurrences.sql';
@@ -238,6 +241,59 @@ async function readHostedVersionSequenceNode<Value extends object>(
   };
 }
 
+/** Reads a deduplicated temporal frontier for one exact Book index and selected snapshot. */
+async function readHostedVersionSequenceNodes<Value extends object>(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  indexKind: HostedVersionIndexKind,
+  nodeIds: readonly string[],
+): Promise<ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>> {
+  checkSnapshot(snapshot);
+  const selectedIds = [...new Set(nodeIds)];
+  for (const nodeId of selectedIds) checkOwnedId(snapshot.route, nodeId);
+  if (selectedIds.length === 0) return new Map();
+  const rows = (
+    await client.query<NodeRow>(readNodes.sql, [
+      snapshot.route,
+      snapshot.catalogueId,
+      snapshot.generationId,
+      indexKind,
+      selectedIds,
+      snapshot.sequence.toString(),
+    ])
+  ).rows;
+  const nodes = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
+  for (const id of selectedIds) nodes.set(id, null);
+  for (const row of rows) {
+    if (row.is_deleted) continue;
+    const state = decodeValue<PersistedSequenceNode<Value>>(row.node_state);
+    const storedValue = state.value;
+    nodes.set(row.node_id, {
+      id: row.node_id,
+      treeParentId: row.tree_parent_id,
+      ...state,
+      subtreeHeight: row.subtree_height ?? state.subtreeHeight ?? subtreeHeightOf(storedValue),
+      maximumSubtreeHeight: row.maximum_subtree_height ?? state.maximumSubtreeHeight ?? null,
+      maximumSubtreeOccurrenceId: row.maximum_subtree_occurrence_id ?? state.maximumSubtreeOccurrenceId ?? null,
+    });
+  }
+  return nodes;
+}
+
+/** Creates an immutable page reader with one cache and a native batch seam for each selected index. */
+export function createHostedVersionSequenceReadAccess<Value extends object>(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  indexKind: HostedVersionIndexKind,
+): VersionedOutlineSequenceReadAccess<Value> {
+  checkSnapshot(snapshot);
+  const boundSnapshot = Object.freeze({ ...snapshot });
+  return createVersionedOutlineSequenceReadAccess<Value>(
+    (id) => readHostedVersionSequenceNode<Value>(client, boundSnapshot, indexKind, id),
+    (ids) => readHostedVersionSequenceNodes<Value>(client, boundSnapshot, indexKind, ids),
+  );
+}
+
 /** Product containment state is read independently from index-tree node state. */
 export async function readHostedVersionOccurrence<Value extends object>(
   client: AccessClient,
@@ -390,6 +446,7 @@ export function createHostedVersionWrite<Value extends object>(
       indexKind,
       createVersionedOutlineSequenceReadWriteSet<Value>((id) =>
         readHostedVersionSequenceNode<Value>(client, boundSnapshot, indexKind, id),
+        (ids) => readHostedVersionSequenceNodes<Value>(client, boundSnapshot, indexKind, ids),
       ),
     );
   overlays.set(write, {

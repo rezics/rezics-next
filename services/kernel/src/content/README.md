@@ -61,6 +61,10 @@ Children and directional chapter navigation inspect at most 20 raw occurrences p
 catalogue, selected revision, parent/direction, original frontier and actor; sparse results never refill or lose
 progress. Moving an occurrence changes only its address in the new revision, preserving old exact links.
 
+Decision: outline and both chapter directions resolve visible sibling positions through one read-only, revision-pinned
+rank frontier per selected AVL level. Each temporal batch carries route, catalogue, generation, index, node IDs and
+sequence; shared ancestors are read once, and exact single-placement reads retain their point path.
+
 The [hosted catalogue API contract](hosted-chapters.md) defines operation IDs, request fields, current draft
 selection, canonical byte encoding, continuation binding, cost and integration boundaries. Native growth,
 schema dump refresh and installed client publication remain owned by the existing integration workflows.

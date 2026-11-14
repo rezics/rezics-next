@@ -31,6 +31,10 @@ export type VersionedOutlineSequenceSnapshotReader<Value> = (
   id: string,
 ) => Promise<VersionedOutlineSequenceNode<Value> | null>;
 
+export type VersionedOutlineSequenceSnapshotBatchReader<Value> = (
+  ids: readonly string[],
+) => Promise<ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>>;
+
 export type VersionedOutlineSequenceWork = Readonly<{
   nodeReadCalls: number;
   distinctVisitedNodeCount: number;
@@ -39,17 +43,78 @@ export type VersionedOutlineSequenceWork = Readonly<{
   writtenNodeCount: number;
 }>;
 
+export type VersionedOutlineSequenceReadAccess<Value> = Readonly<{
+  readNode: (id: string) => Promise<VersionedOutlineSequenceNode<Value> | null>;
+  readNodes: (ids: readonly string[]) => Promise<ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>>;
+  readonly nodeReads: ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>;
+  work: () => VersionedOutlineSequenceWork;
+}>;
+
 /**
  * One operation-local view of a selected snapshot and one transaction-local overlay. Reuse one workspace
  * for all sequence changes in the owner transaction; create another workspace to read an older root.
  */
-export type VersionedOutlineSequenceReadWriteSet<Value> = Readonly<{
-  readNode: (id: string) => Promise<VersionedOutlineSequenceNode<Value> | null>;
-  writeNode: (node: VersionedOutlineSequenceNode<Value>) => void;
-  readonly nodeReads: ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>;
-  readonly nodeWrites: ReadonlyMap<string, VersionedOutlineSequenceNode<Value>>;
-  work: () => VersionedOutlineSequenceWork;
-}>;
+export type VersionedOutlineSequenceReadWriteSet<Value> = VersionedOutlineSequenceReadAccess<Value> &
+  Readonly<{
+    writeNode: (node: VersionedOutlineSequenceNode<Value>) => void;
+    readonly nodeWrites: ReadonlyMap<string, VersionedOutlineSequenceNode<Value>>;
+  }>;
+
+/** Cache one immutable selected snapshot with a bounded batch seam and no write overlay. */
+export function createVersionedOutlineSequenceReadAccess<Value>(
+  readSelectedSnapshot: VersionedOutlineSequenceSnapshotReader<Value>,
+  readSelectedSnapshotBatch?: VersionedOutlineSequenceSnapshotBatchReader<Value>,
+): VersionedOutlineSequenceReadAccess<Value> {
+  const nodeReads = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
+  const visited = new Set<string>();
+  let nodeReadCalls = 0;
+
+  async function readNodes(
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>> {
+    nodeReadCalls += ids.length;
+    const selectedIds = [...new Set(ids)];
+    const missingIds = selectedIds.filter((id) => !nodeReads.has(id));
+    if (missingIds.length > 0) {
+      const loaded = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
+      if (readSelectedSnapshotBatch) {
+        for (const [id, node] of await readSelectedSnapshotBatch(missingIds)) loaded.set(id, node);
+      } else {
+        for (const id of missingIds) loaded.set(id, await readSelectedSnapshot(id));
+      }
+      for (const id of missingIds) {
+        const node = loaded.get(id) ?? null;
+        if (node !== null && node.id !== id) {
+          throw new Error('Versioned outline sequence snapshot returned a different node identity');
+        }
+        nodeReads.set(id, node);
+      }
+    }
+
+    const result = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
+    for (const id of selectedIds) {
+      const node = nodeReads.get(id) ?? null;
+      if (node !== null) visited.add(id);
+      result.set(id, node);
+    }
+    return result;
+  }
+
+  return {
+    async readNode(id) {
+      return (await readNodes([id])).get(id) ?? null;
+    },
+    readNodes,
+    nodeReads,
+    work: () => ({
+      nodeReadCalls,
+      distinctVisitedNodeCount: visited.size,
+      snapshotProbeCount: nodeReads.size,
+      stagedWriteCalls: 0,
+      writtenNodeCount: 0,
+    }),
+  };
+}
 
 /**
  * Cache each snapshot probe once and make staged writes visible to later operations in the same overlay.
@@ -57,33 +122,52 @@ export type VersionedOutlineSequenceReadWriteSet<Value> = Readonly<{
  */
 export function createVersionedOutlineSequenceReadWriteSet<Value>(
   readSelectedSnapshot: VersionedOutlineSequenceSnapshotReader<Value>,
+  readSelectedSnapshotBatch?: VersionedOutlineSequenceSnapshotBatchReader<Value>,
 ): VersionedOutlineSequenceReadWriteSet<Value> {
+  const selectedSnapshot = createVersionedOutlineSequenceReadAccess(
+    readSelectedSnapshot,
+    readSelectedSnapshotBatch,
+  );
   const nodeReads = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
   const nodeWrites = new Map<string, VersionedOutlineSequenceNode<Value>>();
   const visited = new Set<string>();
   let nodeReadCalls = 0;
   let stagedWriteCalls = 0;
 
+  async function readNodes(
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>> {
+    nodeReadCalls += ids.length;
+    const result = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
+    const missingIds: string[] = [];
+    for (const id of new Set(ids)) {
+      if (nodeWrites.has(id)) {
+        const node = nodeWrites.get(id)!;
+        visited.add(id);
+        result.set(id, node);
+      } else if (nodeReads.has(id)) {
+        const node = nodeReads.get(id)!;
+        if (node !== null) visited.add(id);
+        result.set(id, node);
+      } else {
+        missingIds.push(id);
+      }
+    }
+    if (missingIds.length > 0) {
+      for (const [id, node] of await selectedSnapshot.readNodes(missingIds)) {
+        nodeReads.set(id, node);
+        if (node !== null) visited.add(id);
+        result.set(id, node);
+      }
+    }
+    return result;
+  }
+
   return {
     async readNode(id) {
-      nodeReadCalls += 1;
-      if (nodeWrites.has(id)) {
-        visited.add(id);
-        return nodeWrites.get(id)!;
-      }
-      if (nodeReads.has(id)) {
-        const cached = nodeReads.get(id)!;
-        if (cached !== null) visited.add(id);
-        return cached;
-      }
-      const node = await readSelectedSnapshot(id);
-      if (node !== null && node.id !== id) {
-        throw new Error('Versioned outline sequence snapshot returned a different node identity');
-      }
-      nodeReads.set(id, node);
-      if (node !== null) visited.add(id);
-      return node;
+      return (await readNodes([id])).get(id) ?? null;
     },
+    readNodes,
     writeNode(node) {
       stagedWriteCalls += 1;
       visited.add(node.id);
@@ -126,7 +210,7 @@ function chapterWeightOf<Value>(node: VersionedOutlineSequenceNode<Value>): bigi
 }
 
 async function requireNode<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   id: string,
 ): Promise<VersionedOutlineSequenceNode<Value>> {
   const node = await access.readNode(id);
@@ -134,12 +218,12 @@ async function requireNode<Value>(
   return node;
 }
 
-async function countOf<Value>(access: VersionedOutlineSequenceReadWriteSet<Value>, id: string | null): Promise<bigint> {
+async function countOf<Value>(access: VersionedOutlineSequenceReadAccess<Value>, id: string | null): Promise<bigint> {
   return id === null ? 0n : (await requireNode(access, id)).count;
 }
 
 async function chapterCountOf<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   id: string | null,
 ): Promise<bigint> {
   return id === null ? 0n : (await requireNode(access, id)).chapterCount;
@@ -376,7 +460,7 @@ async function joinRoots<Value>(
 }
 
 async function sequenceCount<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   rootId: string | null,
 ): Promise<bigint> {
   if (rootId === null) return 0n;
@@ -491,7 +575,7 @@ export async function setVersionedOutlineSequenceSubtreeHeight<Value>(
 
 /** Exact zero-based rank; null means the node is absent from this selected root. */
 async function rankInRoot<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   rootId: string | null,
   id: string,
   chapterOnly: boolean,
@@ -523,7 +607,7 @@ async function rankInRoot<Value>(
 }
 
 export function rankVersionedOutlineSequenceNode<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   rootId: string | null,
   id: string,
 ): Promise<bigint | null> {
@@ -532,16 +616,113 @@ export function rankVersionedOutlineSequenceNode<Value>(
 
 /** Number of chapter-weighted nodes strictly before this member of the selected root. */
 export function chapterRankVersionedOutlineSequenceNode<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   rootId: string | null,
   id: string,
 ): Promise<bigint | null> {
   return rankInRoot(access, rootId, id, true);
 }
 
+export type VersionedOutlineSequenceNodeRankRequest = Readonly<{
+  rootId: string | null;
+  nodeId: string;
+}>;
+
+/** Resolve visible members across selected roots by loading shared rank paths in bounded frontiers. */
+export async function rankVersionedOutlineSequenceNodes<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
+  requests: readonly VersionedOutlineSequenceNodeRankRequest[],
+): Promise<readonly (bigint | null)[]> {
+  if (requests.length === 0) return [];
+
+  const loaded = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
+  async function loadFrontier(ids: readonly (string | null)[]): Promise<void> {
+    const missingIds = [...new Set(ids.filter((id): id is string => id !== null))].filter(
+      (id) => !loaded.has(id),
+    );
+    if (missingIds.length === 0) return;
+    const nodes = await access.readNodes(missingIds);
+    for (const id of missingIds) loaded.set(id, nodes.get(id) ?? null);
+  }
+  function requireLoaded(id: string): VersionedOutlineSequenceNode<Value> {
+    const node = loaded.get(id) ?? null;
+    if (node === null) throw new Error('Versioned outline sequence references a missing node');
+    return node;
+  }
+
+  await loadFrontier([
+    ...requests.flatMap(({ rootId }) => (rootId === null ? [] : [rootId])),
+    ...requests.flatMap(({ rootId, nodeId }) => (rootId === null ? [] : [nodeId])),
+  ]);
+  for (const rootId of new Set(requests.map(({ rootId }) => rootId).filter((id): id is string => id !== null))) {
+    if (requireLoaded(rootId).treeParentId !== null)
+      throw new Error('Versioned outline sequence operation requires a selected root');
+  }
+
+  type Candidate = {
+    requestIndex: number;
+    rootId: string;
+    current: VersionedOutlineSequenceNode<Value>;
+    parentId: string | null;
+    rank: bigint;
+    visited: Set<string>;
+  };
+  const ranks: (bigint | null)[] = requests.map(() => null);
+  const candidates: Candidate[] = [];
+  for (let requestIndex = 0; requestIndex < requests.length; requestIndex += 1) {
+    const request = requests[requestIndex]!;
+    if (request.rootId === null) continue;
+    const node = loaded.get(request.nodeId) ?? null;
+    if (node === null) continue;
+    candidates.push({
+      requestIndex,
+      rootId: request.rootId,
+      current: node,
+      parentId: node.treeParentId,
+      rank: 0n,
+      visited: new Set([node.id]),
+    });
+  }
+
+  await loadFrontier(candidates.flatMap(({ current }) => [current.leftId, current.treeParentId]));
+  for (const candidate of candidates) {
+    candidate.rank = candidate.current.leftId === null ? 0n : requireLoaded(candidate.current.leftId).count;
+  }
+
+  while (true) {
+    const steps: { candidate: Candidate; parent: VersionedOutlineSequenceNode<Value>; isRight: boolean }[] = [];
+    for (const candidate of candidates) {
+      if (candidate.parentId === null) {
+        ranks[candidate.requestIndex] = candidate.current.id === candidate.rootId ? candidate.rank : null;
+        continue;
+      }
+      const parent = requireLoaded(candidate.parentId);
+      if (candidate.visited.has(parent.id))
+        throw new Error('Versioned outline sequence tree-parent links contain a cycle');
+      const isLeft = parent.leftId === candidate.current.id;
+      const isRight = parent.rightId === candidate.current.id;
+      if (isLeft === isRight) throw new Error('Versioned outline sequence tree-parent link is inconsistent');
+      steps.push({ candidate, parent, isRight });
+    }
+    if (steps.length === 0) break;
+
+    await loadFrontier(
+      steps.flatMap(({ parent, isRight }) => [parent.treeParentId, ...(isRight ? [parent.leftId] : [])]),
+    );
+    for (const { candidate, parent, isRight } of steps) {
+      if (isRight) candidate.rank += (parent.leftId === null ? 0n : requireLoaded(parent.leftId).count) + 1n;
+      candidate.visited.add(parent.id);
+      candidate.current = parent;
+      candidate.parentId = parent.treeParentId;
+    }
+  }
+
+  return ranks;
+}
+
 /** Select a node by exact zero-based rank; out-of-range ranks return null. */
 export async function selectVersionedOutlineSequenceNode<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   rootId: string | null,
   rank: bigint,
 ): Promise<VersionedOutlineSequenceNode<Value> | null> {
@@ -566,7 +747,7 @@ export async function selectVersionedOutlineSequenceNode<Value>(
 
 /** Select a chapter by zero-based weighted rank; unweighted nodes and empty parts consume no rank. */
 export async function selectVersionedOutlineSequenceChapter<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   rootId: string | null,
   chapterRank: bigint,
 ): Promise<VersionedOutlineSequenceNode<Value> | null> {

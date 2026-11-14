@@ -102,6 +102,16 @@ function stringIndex(
       nodeReads.set(id, node);
       return node;
     },
+    async readNodes(ids) {
+      const selected = await inner.readNodes(ids);
+      const nodes = new Map<string, VersionedOutlineSequenceNode<string> | null>();
+      for (const [id, node] of selected) {
+        const mapped = asString(node);
+        nodeReads.set(id, mapped);
+        nodes.set(id, mapped);
+      }
+      return nodes;
+    },
     writeNode(node) {
       const previous = inner.nodeWrites.get(node.id) ?? inner.nodeReads.get(node.id);
       const storedValue: unknown = previous?.value;
