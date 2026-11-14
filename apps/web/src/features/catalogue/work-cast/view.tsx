@@ -1,5 +1,5 @@
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CoverList } from '../../pages/cover-list';
 import type { Item, RowValue } from '../../pages/overview';
 import { SpoilerGate } from '../../pages/values';
@@ -108,6 +108,40 @@ function subjectIdFromHref(href: string): string | undefined {
   }
 }
 
+type ReturnFocusIntent = {
+  key: string;
+  addressKey: string;
+  status: 'pending' | 'cancelled' | 'consumed';
+  origin: Element | null;
+};
+
+function currentHeading(root: HTMLDivElement | null): HTMLElement | null {
+  const section = root?.closest<HTMLElement>('section[aria-labelledby]');
+  const document = section?.ownerDocument;
+  const labelledBy = section?.getAttribute('aria-labelledby')?.split(/\s+/) ?? [];
+  for (const id of labelledBy) {
+    const heading = document?.getElementById(id);
+    if (heading && /^H[1-6]$/.test(heading.tagName)) return heading;
+  }
+  return null;
+}
+
+function canReceiveRestoredFocus(target: HTMLElement): boolean {
+  if (
+    !target.isConnected ||
+    target.closest('[hidden], [inert], [aria-hidden="true"]') ||
+    target.getClientRects().length === 0
+  )
+    return false;
+  const view = target.ownerDocument.defaultView;
+  if (!view) return false;
+  for (let ancestor: HTMLElement | null = target; ancestor; ancestor = ancestor.parentElement) {
+    const style = view.getComputedStyle(ancestor);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+  }
+  return true;
+}
+
 function InspectTab({ href, lang, className, children }: LinkProps) {
   return (
     <a href={href} lang={lang} className={className} target="_blank" rel="noopener noreferrer">
@@ -153,11 +187,21 @@ export function WorkCastWindow({
   label: string;
   navigation?: WorkCastNavigation | undefined;
 }) {
-  const initialReturn =
-    navigation?.returnState ?? (typeof window === 'undefined' ? undefined : workCastVisitReturn(window.location.hash));
+  const locationHash = typeof window === 'undefined' ? undefined : window.location.hash;
+  const initialReturn = useMemo(
+    () => navigation?.returnState ?? (locationHash !== undefined ? workCastVisitReturn(locationHash) : undefined),
+    [navigation?.returnState, locationHash],
+  );
   const currentContext = contextId(value);
   const currentNode = navigation?.node ?? initialReturn?.node;
   const returnKey = JSON.stringify(initialReturn ?? null);
+  const returnFocusKey = JSON.stringify([
+    returnKey,
+    currentContext,
+    currentNode ?? null,
+    initialReturn?.statement ?? null,
+    initialReturn?.character ?? null,
+  ]);
   const [presentation, setPresentation] = useState<Presentation>(() =>
     initialReturn?.context === currentContext && (!currentNode || initialReturn.node === currentNode)
       ? initialReturn.presentation
@@ -165,6 +209,7 @@ export function WorkCastWindow({
   );
   const [returnChanged, setReturnChanged] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const returnFocusIntent = useRef<ReturnFocusIntent | null>(null);
   const disclosedTargets = new Set(
     items.flatMap((item) => [
       ...(item.label.text.trim() ? [item.id] : []),
@@ -188,17 +233,78 @@ export function WorkCastWindow({
       : undefined;
 
   useLayoutEffect(() => {
+    if (returnKey === 'null') return;
+    const element = root.current;
+    const ownerDocument = element?.ownerDocument;
+    if (!element || !ownerDocument) return;
+    let intent = returnFocusIntent.current;
+    if (!intent || intent.addressKey !== returnKey) {
+      intent = { key: returnFocusKey, addressKey: returnKey, status: 'pending', origin: ownerDocument.activeElement };
+      returnFocusIntent.current = intent;
+    } else if (intent.key !== returnFocusKey) {
+      intent.key = returnFocusKey;
+    }
+    if (intent.status !== 'pending') return;
+
+    const heading = currentHeading(element);
+    const onFocusIn = (event: FocusEvent) => {
+      if (intent.status !== 'pending') return;
+      if (
+        event.target === intent.origin ||
+        event.target === ownerDocument.body ||
+        event.target === ownerDocument.documentElement ||
+        event.target === heading
+      )
+        return;
+      intent.status = 'cancelled';
+    };
+    ownerDocument.addEventListener('focusin', onFocusIn, true);
+    return () => ownerDocument.removeEventListener('focusin', onFocusIn, true);
+  }, [returnFocusKey, returnKey]);
+
+  useEffect(() => {
     if (!initialReturn) return;
+    const intent = returnFocusIntent.current;
+    const element = root.current;
+    const ownerDocument = element?.ownerDocument;
+    if (!intent || intent.key !== returnFocusKey || !element || !ownerDocument || intent.status === 'consumed') return;
+
+    const heading = currentHeading(element);
+    const ownsFocus = () => {
+      if (intent.status !== 'pending') return false;
+      const active = ownerDocument.activeElement;
+      if (
+        active === intent.origin ||
+        active === ownerDocument.body ||
+        active === ownerDocument.documentElement ||
+        active === heading
+      )
+        return true;
+      intent.status = 'cancelled';
+      return false;
+    };
+    const focusOnce = (target: HTMLElement | null) => {
+      if (intent.status !== 'pending') return;
+      const stillOwnsFocus = ownsFocus();
+      if (!stillOwnsFocus) return;
+      intent.status = 'consumed';
+      if (!target || !canReceiveRestoredFocus(target)) return;
+      target.tabIndex = -1;
+      target.focus();
+    };
+
     if (
       initialReturn.context !== currentContext ||
       (navigation?.node !== undefined && initialReturn.node !== navigation.node)
     ) {
-      setPresentation('character');
+      if (intent.status === 'pending') setPresentation('character');
       setReturnChanged(true);
+      focusOnce(heading);
       return;
     }
     if (!initialReturn.statement) {
       setReturnChanged(false);
+      focusOnce(null);
       return;
     }
     const admitted = initialReturn.character
@@ -212,14 +318,19 @@ export function WorkCastWindow({
       ? `li[data-statement="${initialReturn.statement}"][data-character="${initialReturn.character}"]`
       : `[data-statement="${initialReturn.statement}"]`;
     const row = admitted ? root.current?.querySelector<HTMLElement>(selector) : null;
-    if (!row || row.closest('[hidden], [inert]')) {
+    if (!row || !canReceiveRestoredFocus(row)) {
       setReturnChanged(true);
+      focusOnce(heading);
       return;
     }
-    row.tabIndex = -1;
-    row.focus();
     setReturnChanged(false);
-  }, [returnKey, items, presentation, projected, currentContext, navigation?.node, initialReturn]);
+    focusOnce(row);
+  }, [returnFocusKey, returnKey, items, projected, currentContext, currentNode, navigation?.node, initialReturn]);
+
+  function choosePresentation(next: Presentation) {
+    if (returnFocusIntent.current?.status === 'pending') returnFocusIntent.current.status = 'cancelled';
+    setPresentation(next);
+  }
 
   function valueFor(focus: { statement: string; character?: string }): RowValue & { subject?: string | null } {
     const CurrentLink = value.link;
@@ -309,7 +420,7 @@ export function WorkCastWindow({
           type="button"
           aria-pressed={presentation === 'character'}
           className={optionClass(presentation === 'character')}
-          onClick={() => setPresentation('character')}
+          onClick={() => choosePresentation('character')}
         >
           {m.work_cast_group_by_character({}, options)}
         </button>
@@ -317,7 +428,7 @@ export function WorkCastWindow({
           type="button"
           aria-pressed={presentation === 'credit-order'}
           className={optionClass(presentation === 'credit-order')}
-          onClick={() => setPresentation('credit-order')}
+          onClick={() => choosePresentation('credit-order')}
         >
           {m.work_cast_original_order({}, options)}
         </button>
