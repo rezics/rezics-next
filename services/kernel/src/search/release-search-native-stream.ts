@@ -21,6 +21,7 @@ import {
 import {
   ReleaseSearchRelevanceStateConflict,
   ReleaseSearchRelevanceStateExpired,
+  ReleaseSearchRelevanceStatePreparing,
   type ReleaseSearchRelevanceLocation,
   type ReleaseSearchRelevanceState,
 } from './release-search-relevance-state.ts';
@@ -90,6 +91,8 @@ type Position = {
   seenWorks?: string[];
   /** Opaque PostgreSQL lineage locator for relevance group duplicate suppression. */
   relevance?: ReleaseSearchRelevanceLocation;
+  /** Alternates while an old retained lineage is migrated in bounded private batches. */
+  migrationPulse?: 0 | 1;
 };
 
 type RelevanceProgress = Readonly<{
@@ -218,7 +221,11 @@ function position(after: string | null, expected: string, children: boolean): Po
             value.relevance === null ||
             !canonicalId(value.relevance.execution) ||
             !canonicalId(value.relevance.node) ||
-            Object.keys(value.relevance).some((key) => key !== 'execution' && key !== 'node'))))) ||
+            Object.keys(value.relevance).some((key) => key !== 'execution' && key !== 'node'))) ||
+        (value.migrationPulse !== undefined &&
+          (children ||
+            value.relevance === undefined ||
+            (value.migrationPulse !== 0 && value.migrationPulse !== 1))))) ||
     Object.keys(value).some(
       (key) =>
         ![
@@ -226,7 +233,7 @@ function position(after: string | null, expected: string, children: boolean): Po
           'binding',
           'namesAfter',
           'skipWorkFor',
-          ...(value.version === 1 ? ['seenWorks'] : ['relevance']),
+          ...(value.version === 1 ? ['seenWorks'] : ['relevance', 'migrationPulse']),
         ].includes(key),
     )
   )
@@ -454,6 +461,27 @@ export function createReleaseSearchCandidateStreams(input: {
       }
     const currentMatches = relevancePage ? await input.currentMatches?.(request, relevancePage.keys) : undefined;
     const classified = new Map((await classify(page.keys)).map((key) => [key.id, key]));
+    const assertPageCurrent = async () => {
+      const rechecked = new Map((await classify(page.keys)).map((key) => [key.id, key]));
+      if (
+        [...classified].some(([id, value]) => !isDeepStrictEqual(value, rechecked.get(id))) ||
+        [...rechecked.keys()].some((id) => !classified.has(id))
+      )
+        throw new ReleaseGroupingRestartRequired();
+      await assertCurrent();
+    };
+    const preparingPage = () => ({
+      keys: [] as Candidate[],
+      after: JSON.stringify({
+        version: 2,
+        binding: expected,
+        namesAfter: cursor.namesAfter,
+        ...(cursor.skipWorkFor ? { skipWorkFor: cursor.skipWorkFor } : {}),
+        ...(relevanceLocation ? { relevance: relevanceLocation } : {}),
+        migrationPulse: cursor.migrationPulse === 1 ? 0 : 1,
+      }),
+      exhausted: false,
+    });
     const keys: Candidate[] = [];
     let namesAfter = cursor.namesAfter;
     let skipWorkFor = cursor.skipWorkFor;
@@ -479,6 +507,10 @@ export function createReleaseSearchCandidateStreams(input: {
           seenWorks.add(id);
       } catch (error) {
         if (error instanceof ReleaseSearchRelevanceStateExpired) throw new ReleaseGroupingRestartRequired();
+        if (error instanceof ReleaseSearchRelevanceStatePreparing) {
+          await assertPageCurrent();
+          return preparingPage();
+        }
         throw error;
       }
     }
@@ -531,13 +563,7 @@ export function createReleaseSearchCandidateStreams(input: {
       if (keys.length === size) break;
     }
     const consumed = namesAfter === page.after && skipWorkFor === undefined;
-    const rechecked = new Map((await classify(page.keys)).map((key) => [key.id, key]));
-    if (
-      [...classified].some(([id, value]) => !isDeepStrictEqual(value, rechecked.get(id))) ||
-      [...rechecked.keys()].some((id) => !classified.has(id))
-    )
-      throw new ReleaseGroupingRestartRequired();
-    await assertCurrent();
+    await assertPageCurrent();
     if (relevanceLocation && relevanceBinding && emittedWorks.size) {
       const branchValue = canonicalize({ after: cursor.namesAfter, skipWorkFor: cursor.skipWorkFor, size });
       if (branchValue === undefined) return unavailable();
@@ -553,6 +579,7 @@ export function createReleaseSearchCandidateStreams(input: {
       } catch (error) {
         if (error instanceof ReleaseSearchRelevanceStateExpired || error instanceof ReleaseSearchRelevanceStateConflict)
           throw new ReleaseGroupingRestartRequired();
+        if (error instanceof ReleaseSearchRelevanceStatePreparing) return preparingPage();
         throw error;
       }
     }
