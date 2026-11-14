@@ -1,3 +1,4 @@
+-- migrate:up
 -- Store per-value depth and its AVL maximum beside immutable sequence nodes.
 -- A NULL maximum marks older materialized trees whose cached aggregate must
 -- be derived from the selected occurrence facts before editing.
