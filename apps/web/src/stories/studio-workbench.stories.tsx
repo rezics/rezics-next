@@ -14,7 +14,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Stable manual review entries using the installed workbench and real controller in the routed signed-in shell. Constructed response fixtures illustrate private drafting; publication is unavailable and no release is invented. Use all eight locale globals, both themes and phone390/desktop1280. Dirty reviews retain working text after a supplied stale save: choose another draft, then save, discard or keep editing. Comparison starts with one explicitly selected saved version. Scripted walks are under Walks/Studio/Workbench; native, visual and promoted acceptance remain verifier work.',
+          'Stable manual review entries using the installed workbench and real controller in the routed signed-in shell. Constructed responses support local saves, bounded saved-version history, exact inspection, comparison and draft-only copy review. Native publication is unavailable in every scenario; no release is invented. Use all eight locale globals, both themes and phone390/desktop1280. Dirty reviews retain working text after a supplied stale save: choose another draft, then save, discard or keep editing. Comparison starts with one explicitly selected saved version. Scripted walks are under Walks/Studio/Workbench; native, visual and promoted acceptance remain verifier work.',
       },
     },
   },
@@ -22,8 +22,28 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Book: Story = { args: { profile: 'book', scenario: 'populated' } };
-export const Column: Story = { args: { profile: 'column', scenario: 'populated' } };
+export const Book: Story = {
+  args: { profile: 'book', scenario: 'populated' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Edit and save a Book chapter, open Saved versions, inspect an earlier exact version, compare it with the current saved draft, review a copy into the working draft, then return to editing. The local fixture supports save and history; native Book publication is unavailable and the publication panel explains that limit.',
+      },
+    },
+  },
+};
+export const Column: Story = {
+  args: { profile: 'column', scenario: 'populated' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Edit and save a Column draft, browse its saved versions, inspect and compare an earlier exact body, review a copy into the working draft, then return to editing. The local fixture supports save and history; native article publication is unavailable and the publication panel explains that limit.',
+      },
+    },
+  },
+};
 const newDraft: Story['play'] = async ({ canvasElement }) => {
   const canvas = within(canvasElement);
   const copy = workbenchCopy[getLocale()];
