@@ -15,10 +15,12 @@ export function ProfileAvatarCrop({
   controller,
   state,
   disabled,
+  onPendingAction,
 }: {
   controller: ProfileAvatarUpload;
   state: CropState;
   disabled: boolean;
+  onPendingAction: (source: HTMLButtonElement) => void;
 }) {
   const horizontalId = useId();
   const verticalId = useId();
@@ -116,7 +118,10 @@ export function ProfileAvatarCrop({
           type="button"
           className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
           disabled={controlsDisabled}
-          onClick={controller.applyCrop}
+          onClick={(event) => {
+            onPendingAction(event.currentTarget);
+            controller.applyCrop();
+          }}
         >
           {state.phase === 'exporting' ? m.settings_profile_crop_preparing() : m.settings_profile_crop_apply()}
         </Button>
@@ -125,7 +130,10 @@ export function ProfileAvatarCrop({
           variant="outline"
           className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
           disabled={controlsDisabled}
-          onClick={controller.useOriginal}
+          onClick={(event) => {
+            onPendingAction(event.currentTarget);
+            controller.useOriginal();
+          }}
         >
           {m.settings_profile_crop_use_original()}
         </Button>

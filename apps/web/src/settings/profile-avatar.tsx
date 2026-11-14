@@ -111,6 +111,8 @@ export function ProfileAvatar({
   const ambient = useSettingsAmbient();
   const input = useRef<HTMLInputElement>(null);
   const choose = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const focusIntent = useRef<HTMLElement | null>(null);
   const { state, controller } = upload;
   const waiting = usePreferenceRetry(undefined, state.retryAt ?? 0);
   const adviceWaiting = usePreferenceRetry(undefined, state.adviceRetryAt ?? 0);
@@ -121,8 +123,31 @@ export function ProfileAvatar({
   const status = avatarStatus(state, avatar, changed, saving);
   const chooseDisabled = disabled || !upload.canUpload();
   const editDisabled = referenceDisabled;
+  const retainPendingFocus = (source: HTMLButtonElement) => {
+    const continuation = cancel.current;
+    if (
+      focusIntent.current !== source ||
+      source.ownerDocument.activeElement !== source ||
+      !continuation?.isConnected ||
+      continuation.disabled
+    )
+      return;
+    focusIntent.current = continuation;
+    continuation.focus();
+  };
   return (
-    <div role="group" aria-labelledby={`${id}-label`} className="space-y-3">
+    <div
+      role="group"
+      aria-labelledby={`${id}-label`}
+      className="space-y-3"
+      onFocusCapture={(event) => {
+        focusIntent.current = event.target instanceof HTMLElement ? event.target : null;
+      }}
+      onBlurCapture={(event) => {
+        const next = event.relatedTarget;
+        if (!(next instanceof Node) || !event.currentTarget.contains(next)) focusIntent.current = null;
+      }}
+    >
       <p id={`${id}-label`} className="text-sm font-medium">
         {m.settings_profile_avatar()}
       </p>
@@ -207,12 +232,14 @@ export function ProfileAvatar({
         />
         {selected || state.phase === 'error' ? (
           <Button
+            ref={cancel}
             type="button"
             variant="outline"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled}
             onClick={() => {
               if (disabled) return;
+              focusIntent.current = null;
               controller.cancel();
               choose.current?.focus();
             }}
@@ -225,8 +252,10 @@ export function ProfileAvatar({
             type="button"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={chooseDisabled}
-            onClick={() => {
-              if (upload.canUpload()) controller.useOriginal();
+            onClick={(event) => {
+              if (!upload.canUpload()) return;
+              retainPendingFocus(event.currentTarget);
+              controller.useOriginal();
             }}
           >
             {m.settings_profile_crop_use_original()}
@@ -240,6 +269,7 @@ export function ProfileAvatar({
             disabled={disabled || waiting}
             onClick={() => {
               if (disabled) return;
+              focusIntent.current = null;
               controller.retry();
               choose.current?.focus();
             }}
@@ -269,6 +299,7 @@ export function ProfileAvatar({
             disabled={editDisabled}
             onClick={() => {
               if (!upload.canInteract()) return;
+              focusIntent.current = null;
               controller.remove();
               choose.current?.focus();
             }}
@@ -277,7 +308,12 @@ export function ProfileAvatar({
           </Button>
         ) : null}
       </div>
-      <ProfileAvatarCrop controller={controller} state={state} disabled={disabled} />
+      <ProfileAvatarCrop
+        controller={controller}
+        state={state}
+        disabled={disabled}
+        onPendingAction={retainPendingFocus}
+      />
       {state.phase === 'cancelled' ? (
         <p role="status" className="text-sm text-muted-foreground">
           {m.settings_profile_avatar_cancelled()}
