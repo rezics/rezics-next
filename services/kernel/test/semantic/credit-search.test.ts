@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -15,6 +15,7 @@ import {
   receiveCreditSearchMatch,
 } from '../../src/semantic/credit-search.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
+import * as identityMappings from '../../src/semantic/identity-adapters/read.ts';
 import { createRealAccess } from './real-access.ts';
 import { newId } from '../../src/route/route.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -160,6 +161,10 @@ test('installed adapter and Search receiver match VN aliases and anime homonyms'
     string,
     any
   >;
+  const role = (await ok('/v1/subjects', { type: 'skos:Concept', labels: { en: 'Lead voice' } }, 201)).subject as Record<
+    string,
+    any
+  >;
   const anime = (
     await ok(
       '/v1/subjects',
@@ -168,8 +173,12 @@ test('installed adapter and Search receiver match VN aliases and anime homonyms'
         labels: { en: 'Homonym Cast' },
         statements: {
           'wdt:P725': [
-            statement('wdt:P725', satoA.id, [{ property: { id: 'wdt:P453' }, value: value(character.id) }]),
-            statement('wdt:P725', satoB.id),
+            statement('wdt:P725', satoA.id, [
+              { property: { id: 'wdt:P3831' }, value: value(role.id) },
+              { property: { id: 'wdt:P453' }, value: value(character.id) },
+            ]),
+            // An ID-shaped string qualifier is not an item dependency.
+            statement('wdt:P725', satoB.id, [{ property: { id: 'wdt:P1932' }, value: value(role.id) }]),
           ],
         },
       },
@@ -197,6 +206,50 @@ test('installed adapter and Search receiver match VN aliases and anime homonyms'
   expect(satos).toEqual([satoA.id, satoB.id].sort());
   expect(animeProjection.names.every((name) => name.name.value === 'Sato')).toBe(true);
   expect(await receiveCreditSearchMatch(composed, animeProjection, animeProjection.names[1]!)).toBe('current');
+
+  let publicProjection = animeProjection;
+  for (const dependency of [role, character]) {
+    const matched = publicProjection.names.find((name) => name.targetId === satoA.id)!;
+    expect(matched.qualifiers).toEqual([
+      { property: 'wdt:P3831', value: role.id },
+      { property: 'wdt:P453', value: character.id },
+    ]);
+    await ok(`/v1/subjects/${dependency.id}:hide`, { reason: 'concealed credit qualifier' });
+    expect(await composed.current(matched, publicProjection.observation)).toBe(false);
+    expect(await composed.unchanged(anime.id, publicProjection.observation)).toBe(false);
+    expect(await receiveCreditSearchMatch(composed, publicProjection, matched)).toBe('changed');
+
+    const page = await composed.page({
+      workId: anime.id,
+      after: null,
+      observation: null,
+      limits: CREDIT_SEARCH_LIMITS,
+    });
+    expect(page.state).toBe('current');
+    if (page.state !== 'current') throw new Error('current page with a hidden qualifier');
+    expect(page.entries.map((entry) => entry.witness.targetId)).toEqual([satoB.id]);
+
+    const concealed = await receiveCreditSearch(composed, anime.id);
+    expect(concealed.state).toBe('complete');
+    if (concealed.state !== 'complete') throw new Error('complete public sibling projection');
+    expect(concealed.names.map((name) => name.targetId)).toEqual([satoB.id]);
+    expect(concealed.names[0]!.qualifiers).toEqual([{ property: 'wdt:P1932', value: role.id }]);
+    // Replaying the exact statement under a fresh observation must also check its dependencies.
+    expect(await composed.current(matched, concealed.observation)).toBe(false);
+    expect(await composed.unchanged(anime.id, concealed.observation)).toBe(true);
+    expect(await receiveCreditSearchMatch(composed, concealed, concealed.names[0]!)).toBe('current');
+
+    await ok(`/v1/subjects/${dependency.id}:restore`, { reason: 'restored credit qualifier' });
+    expect(await composed.unchanged(anime.id, concealed.observation)).toBe(false);
+    const restored = await receiveCreditSearch(composed, anime.id);
+    expect(restored.state).toBe('complete');
+    if (restored.state !== 'complete') throw new Error('complete restored credit projection');
+    const restoredMatch = restored.names.find((name) => name.targetId === satoA.id)!;
+    expect(restoredMatch.statementId).toBe(matched.statementId);
+    expect(restoredMatch.qualifiers).toEqual(matched.qualifiers);
+    expect(await receiveCreditSearchMatch(composed, restored, restoredMatch)).toBe('current');
+    publicProjection = restored;
+  }
 });
 
 test('an unready native selection reports preparing, resumes and then returns complete names', async () => {
@@ -286,6 +339,28 @@ test('credit, name, concealment, merge and release changes invalidate the origin
   expect(concealed.state).toBe('complete');
   if (concealed.state !== 'complete') throw new Error('complete after creator concealment');
   expect(concealed.names.every((name) => name.targetId !== author.id)).toBe(true);
+
+  // Pin the mapped-reader branch; subject visibility and terminal names still come from native reads.
+  const nativeIdentityMappings = identityMappings.readIdentityMappings;
+  const mappedIdentity = spyOn(identityMappings, 'readIdentityMappings').mockImplementation(async (readPool, ids) => {
+    const mappings = await nativeIdentityMappings(readPool, ids);
+    return mappings.map((mapping, index) =>
+      ids[index] === author.id || ids[index] === extra.id
+        ? { ...mapping, state: 'mapped' as const, terminal: duplicate.id, epoch: 1n }
+        : mapping,
+    );
+  });
+  try {
+    const mapped = await receiveCreditSearch(adapter, work.id);
+    expect(mapped.state).toBe('complete');
+    if (mapped.state !== 'complete') throw new Error('complete public mapped credit projection');
+    // Both credits map to one visible terminal, but only the visible original may be retained in a witness.
+    expect(mapped.names.map((name) => name.targetId)).toEqual([extra.id]);
+    expect(mapped.names[0]!.name.value).toBe('Duplicate Author');
+    expect(await receiveCreditSearchMatch(adapter, mapped, mapped.names[0]!)).toBe('current');
+  } finally {
+    mappedIdentity.mockRestore();
+  }
 
   const survivor = extra.id < duplicate.id ? extra.id : duplicate.id;
   const redirected = extra.id < duplicate.id ? duplicate.id : extra.id;
