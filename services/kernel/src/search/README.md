@@ -2327,6 +2327,9 @@ The existing public `search(principal, request, context)` composes open/search/f
 Factory shutdown drains those public calls and closes outstanding retained operations before its
 runtime and work client.
 
+Decision: both private default-discovery read-only snapshots use `withBoundedReadOnlyTransaction` on the retained
+request deadline; expiry maps to Search unavailable, and bounded cleanup retires late or uncertain clients.
+
 Decision: default Search returns its real runner before initial Subject inventory completes; the owned refresh and
 relays carry a cancellable native-request lifetime, and stop aborts and drains that work. Worker service startup is
 not Search readiness: the installed default producers and current native catalogue output remain the read gate.
