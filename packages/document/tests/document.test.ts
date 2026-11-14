@@ -32,6 +32,37 @@ const snapshot = (content: DocumentNode[], profile: 'text' | 'blocks' = 'blocks'
   doc: { type: 'doc', content },
 });
 
+function expectDOMBlockRoundTrip(value: DocumentSnapshot): void {
+  const schema = schemaForProfile(value.profile);
+  schema.nodeFromJSON(value.doc).descendants((node) => {
+    if (!node.type.spec.parseDOM || !('id' in node.attrs)) return;
+    const original = node.type.create({ ...node.attrs, lang: 'ar', dir: 'rtl' }, node.content, node.marks);
+    const [tag, attrs] = node.type.spec.toDOM!(original) as [string, Record<string, unknown>];
+    const rule = node.type.spec.parseDOM.find((rule) => rule.tag.split('[')[0] === tag)!;
+    const restored = rule.getAttrs!({
+      getAttribute: (name: string) => (attrs[name] == null ? null : String(attrs[name])),
+    } as unknown as HTMLElement);
+    expect(restored).not.toBe(false);
+    expect(node.type.create(restored || null, node.content, node.marks).eq(original)).toBe(true);
+  });
+}
+
+test('ordinary DOM tags retain identity, language and custom attributes in both profiles', () => {
+  for (const profile of ['text', 'blocks'] as const) {
+    expectDOMBlockRoundTrip(
+      fromMarkdown(
+        '# One\n\n## Two\n\n### Three\n\n#### Four\n\n##### Five\n\n###### Six\n\n> Quoted\n\n3. Item\n   - Nested\n\n```\ncode\n```\n\n---',
+        profile,
+      ),
+    );
+    const schema = schemaForProfile(profile);
+    expect(schema.nodes.codeBlock.spec.parseDOM![0]).toMatchObject({ tag: 'pre', preserveWhitespace: 'full' });
+    expect(
+      schema.nodes.paragraph.spec.parseDOM![0]!.getAttrs!({ getAttribute: () => null } as unknown as HTMLElement),
+    ).toEqual({ id: null, lang: null, dir: null });
+  }
+});
+
 test('image content attributes and author concealment round-trip', () => {
   const image = {
     type: 'image',
@@ -137,6 +168,7 @@ test('footnote definition DOM attributes and formatted body survive both schemas
       .create(attrs === false ? null : attrs, body)
       .toJSON() as DocumentNode;
     const document = normalizeDocument(snapshot([definition], profile));
+    expectDOMBlockRoundTrip(document);
     const preserved = document.doc.content?.[0];
 
     expect(preserved?.attrs).toMatchObject({
@@ -202,7 +234,11 @@ test('rich markup, ruby, nested lists and table cells retain IDs and base text',
           type: 'tableRow',
           attrs: { id: 'row' },
           content: [
-            { type: 'tableHeader', attrs: { id: 'cell-1' }, content: [paragraph('cell-p-1', 'A')] },
+            {
+              type: 'tableHeader',
+              attrs: { id: 'cell-1', colspan: 2, colwidth: [120, 160] },
+              content: [paragraph('cell-p-1', 'A')],
+            },
             { type: 'tableCell', attrs: { id: 'cell-2' }, content: [paragraph('cell-p-2', 'B')] },
           ],
         },
@@ -211,6 +247,7 @@ test('rich markup, ruby, nested lists and table cells retain IDs and base text',
   ]);
   expect(parseDocument(value)).toBe(value);
   const normalized = normalizeDocument(value);
+  expectDOMBlockRoundTrip(normalized);
   expect(documentText(normalized)).toBe('漢字😀\n一\n二\nA\nB');
   expect(documentParagraphs(normalized)[0]).toEqual({ id: 'heading', text: '漢字😀' });
   expect(parseStoredDocument(serializeDocument(normalized))).toEqual(normalized);

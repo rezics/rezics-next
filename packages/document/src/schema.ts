@@ -180,10 +180,23 @@ function domAttrs(attrs: Record<string, unknown>): Record<string, string> {
 function block(spec: NodeSpec): NodeSpec {
   const original = spec.toDOM;
   const attrs = { ...spec.attrs, ...commonAttrs };
-  if (!original) return { ...spec, attrs };
+  const parseDOM = spec.parseDOM?.map((rule) => {
+    if (!rule.tag) return rule;
+    const originalGetAttrs = rule.getAttrs;
+    return {
+      ...rule,
+      getAttrs: (element: HTMLElement) => {
+        const originalAttrs = typeof originalGetAttrs === 'function' ? originalGetAttrs(element) : rule.attrs;
+        if (originalAttrs === false) return false;
+        return { ...originalAttrs, ...readCommonDOMAttrs(element) };
+      },
+    };
+  });
+  if (!original) return { ...spec, attrs, parseDOM };
   return {
     ...spec,
     attrs,
+    parseDOM,
     toDOM: (node) => {
       const originalOutput = original(node);
       if (!Array.isArray(originalOutput)) return originalOutput;

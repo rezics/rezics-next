@@ -79,6 +79,18 @@ IDs and assigns absent/duplicate IDs without changing the source object. IDs
 identify units within a document; precise external references also pin the
 document revision. Ordinary text spans do not receive permanent IDs.
 
+Decision: shared schema tag import rules restore `data-block-id`, `lang` and
+`dir` alongside their existing node attributes. Native DOM serialization and
+import retain these facts on paragraphs, all heading levels, quotations,
+ordinary lists and their items, code blocks, horizontal rules, tables, rows,
+cells and footnote definitions, including nested content. Heading levels,
+ordered-list starts, table spans/widths and footnote labels retain their
+existing rules. Rule refusal, options and style-rule meaning stay intact.
+Missing common attributes read as null; DOM import allocates no IDs and adds
+no import rules for unsupported nodes. Existing snapshot validation and
+`withDocumentIds` keep their responsibilities. This remains one
+O(nodes + attributes) import with no I/O or per-node lookup added.
+
 `normalizeDocument` applies declared defaults, ProseMirror mark ordering and
 adjacent-text merging. `parseDocument` preserves supplied JSON after validation.
 `serializeDocument` returns the RFC 8785 canonical form of the normalized
