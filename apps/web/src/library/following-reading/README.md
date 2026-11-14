@@ -1,5 +1,17 @@
 # Following target reading
 
+Decision: identity leads the shared ContentItem rows and selected inspection; Open, Inspect, the existing removal
+control and page refresh remain independent controls. Native kind stays visible, and missing identity, Collection
+exposure withdrawal and return suspension explain why opening is unavailable without changing the follow. Inspection
+groups exact references, follow source and command meaning in a disclosure. The installed FULL target has no
+description field; only a deliberate current Space read supplies its summary. No row enrichment is added.
+Impeccable reference files are absent from the supplied reference/skill locations; the documented shared
+[ContentItem](../../../../../packages/ui/src/components/content-item.md) slots provide the layout fallback.
+The final minimal verification policy requires Web workspace typing; focused regression sources and routed stories
+are delivered for the dev verifier, with acceptance and browser execution deferred. `following-target-reading.test.tsx` pins independent opening,
+current prose and the reference disclosure. The shared-item assertion expects the additional Open link and source text
+inside inspection; the clipboard regression opens that disclosure before copying. Other lifecycle assertions stay intact.
+
 Following renders one native FULL page in supplied order, at most twenty rows. Its summary identities and exact target
 index are prepared once per page in O(N); inspection selects by exact target ID in O(1). Local confirmed removal
 leaves a sparse page. Next uses the opaque cursor and replaces the page; a stale continuation retains the existing

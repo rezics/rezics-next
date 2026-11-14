@@ -145,6 +145,8 @@ function localizedEntry(path: string): string {
 /** Prepare once before route reads; release when this source/locale/entry is retired. */
 export type PreparePageFixture = () => void | (() => void);
 
+export type PageStoryContext = { router: AnyRouter; queryClient: QueryClient };
+
 /** Each story enters the generated application route tree at its localized public URL. */
 export function PageStory({
   visitor,
@@ -156,6 +158,7 @@ export function PageStory({
   homeFeedFixture,
   prepareFixture,
   previewNewTabs = false,
+  onReady,
 }: {
   visitor: 'Signed In' | 'Signed Out';
   path: string;
@@ -166,6 +169,8 @@ export function PageStory({
   homeFeedFixture?: HomeFeedStory;
   prepareFixture?: PreparePageFixture;
   previewNewTabs?: boolean;
+  /** Let a routed story drive current admission and history through this page's actual owners. */
+  onReady?: (context: PageStoryContext) => void | (() => void);
 }) {
   const entry = localizedEntry(path);
   const locale = getLocale();
@@ -221,6 +226,11 @@ export function PageStory({
       setLabelCatalogueStory(false);
     };
   }, [source, previewNewTabs]);
+
+  useLayoutEffect(() => {
+    if (visit?.source !== source) return;
+    return onReady?.({ router: visit.router, queryClient: visit.queryClient });
+  }, [onReady, source, visit]);
 
   // Do not mount route consumers against a previous source's fixture or query cache.
   if (visit?.source !== source) return null;

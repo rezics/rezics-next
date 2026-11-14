@@ -3,12 +3,18 @@ import type { MineFollow, MineFollowingPage } from '../mine-following';
 import { displayLibraryTitle } from '../title';
 import { suppliedDestination } from './destinations';
 
-export function followingKind(follow: MineFollow): string {
+export function followingTargetKind(follow: MineFollow): string {
   return follow.targetType === 'subject'
-    ? (follow.target?.typeLabel ?? m.library_following_subjects())
+    ? m.library_follow_count_context_subject()
     : follow.targetType === 'collection'
       ? m.library_following_kind_collection()
       : m.library_following_kind_space();
+}
+
+export function followingKind(follow: MineFollow): string {
+  return follow.targetType === 'subject'
+    ? (follow.target?.typeLabel ?? m.library_following_subjects())
+    : followingTargetKind(follow);
 }
 export function followingReason(follow: MineFollow): string {
   return follow.reason === 'library'
@@ -30,6 +36,7 @@ export function prepareFollowing(page: MineFollowingPage, locale: string) {
           return {
             follow,
             title,
+            targetKind: followingTargetKind(follow),
             kind: followingKind(follow),
             reason: followingReason(follow),
             destination: suppliedDestination(follow, title.text, locale),

@@ -92,7 +92,7 @@ export function FollowingInspection({
   returnFrontier?: FollowingReturnFrontier | null;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
-  const { follow, title, kind, reason, destination: supplied } = selection.row;
+  const { follow, title, targetKind, kind, reason, destination: supplied } = selection.row;
   const space = useSelectedSpace(selection, subject, locale, readSpace);
   useLayoutEffect(() => {
     if (selection.current()) heading.current?.focus();
@@ -121,8 +121,10 @@ export function FollowingInspection({
             : space.result.state === 'unavailable'
               ? m.following_reading_unavailable()
               : null;
+  const collectionWithdrawn = supplied?.kind === 'collection' && !canReadCollection;
   return (
     <section
+      id="following-inspection"
       role="dialog"
       aria-labelledby="following-inspection-title"
       className="min-w-0 space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6"
@@ -133,38 +135,52 @@ export function FollowingInspection({
         }
       }}
     >
-      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-sm text-muted-foreground">{m.following_reading_inspection()}</p>
-          <h2
-            ref={heading}
-            tabIndex={-1}
-            id="following-inspection-title"
-            lang={title.lang}
-            className="break-words text-xl font-semibold outline-offset-4"
-          >
-            {title.text}
-          </h2>
-          <p>{kind}</p>
+      <header className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-medium text-muted-foreground">{m.following_reading_inspection()}</p>
+          <Button className="min-h-11" variant="ghost" onClick={close}>
+            {m.following_reading_close()}
+          </Button>
         </div>
-        <Button className="min-h-11" variant="outline" onClick={close}>
-          {m.following_reading_close()}
-        </Button>
+        <div className="flex min-w-0 items-start gap-4">
+          {follow.target?.cover ? <SubjectCover subject={follow.target} ratio="2:3" size="md" /> : null}
+          <div className="min-w-0 space-y-2">
+            <h2
+              ref={heading}
+              tabIndex={-1}
+              id="following-inspection-title"
+              lang={title.lang}
+              className="text-xl leading-snug font-semibold wrap-anywhere outline-offset-4 sm:text-2xl"
+            >
+              {title.text}
+            </h2>
+            <p className="flex flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span className="font-medium">{targetKind}</span>
+              {kind !== targetKind ? <span>{kind}</span> : null}
+            </p>
+          </div>
+        </div>
       </header>
-      {follow.target?.cover ? <SubjectCover subject={follow.target} ratio="2:3" size="md" /> : null}
-      <div className="space-y-2 text-sm text-muted-foreground">
-        <p>{reason}</p>
-        <p>{m.following_reading_meaning()}</p>
-        <p>{m.following_reading_remove_meaning()}</p>
-        {actionHref ? null : <p role="status">{m.following_reading_actions_unavailable()}</p>}
-      </div>
-      {stateText ? <p role="status">{stateText}</p> : null}
       {ready ? (
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2" data-following-current-identity="">
           <h3 className="text-sm font-medium text-muted-foreground">{m.following_reading_current_identity()}</h3>
-          <p className="break-words text-lg font-semibold">{ready.title}</p>
-          {ready.summary ? <p className="whitespace-pre-wrap break-words">{ready.summary}</p> : null}
+          {ready.title !== title.text ? (
+            <p className="text-lg leading-snug font-semibold wrap-anywhere">{ready.title}</p>
+          ) : null}
+          {ready.summary ? (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed wrap-anywhere">{ready.summary}</p>
+          ) : null}
         </div>
+      ) : null}
+      {stateText ? (
+        <p role="status" className="text-sm leading-relaxed">
+          {stateText}
+        </p>
+      ) : null}
+      {collectionWithdrawn ? (
+        <p role="status" className="text-sm leading-relaxed">
+          {m.following_reading_collection_withdrawn()}
+        </p>
       ) : null}
       {isSpace &&
       (space.result.state === 'unavailable' || space.result.state === 'denied' || space.result.state === 'retired') ? (
@@ -180,8 +196,8 @@ export function FollowingInspection({
           {m.library_follow_retry()}
         </Button>
       ) : null}
-      {destination ? (
-        <div className="space-y-2">
+      <div className="space-y-3">
+        {destination ? (
           <a
             className={buttonVariants({
               variant: 'default',
@@ -200,49 +216,70 @@ export function FollowingInspection({
               ? m.following_reading_open_realm()
               : m.following_reading_open({ title: ready?.title ?? title.text })}
           </a>
-          <p className="text-sm text-muted-foreground">{m.following_reading_destination_admission()}</p>
+        ) : (!isSpace || ready) && !collectionWithdrawn ? (
+          <p role="status" className="text-sm leading-relaxed">
+            {m.following_reading_no_destination()}
+          </p>
+        ) : null}
+        {destination ? (
+          <p className="text-sm leading-relaxed text-muted-foreground">{m.following_reading_destination_admission()}</p>
+        ) : null}
+        {actionHref && actionHref !== destination?.href ? (
+          <a
+            className={buttonVariants({
+              variant: 'outline',
+              className: 'min-h-11 max-w-full whitespace-normal break-words',
+            })}
+            href={actionHref}
+            onClick={(event) => {
+              followingDestinationClick(event, () => selection.current() && space.current(), returnFrontier);
+            }}
+          >
+            {m.realm_membership_label()}
+          </a>
+        ) : null}
+      </div>
+      <details className="group min-w-0 border-t border-border pt-2">
+        <summary className="min-h-11 cursor-pointer content-center py-2 text-sm font-medium text-muted-foreground outline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
+          {m.following_reading_details()}
+        </summary>
+        <div className="min-w-0 space-y-5 pt-3">
+          <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">
+            <p>{reason}</p>
+            <p>{m.following_reading_meaning()}</p>
+            <p>{m.following_reading_remove_meaning()}</p>
+            {actionHref ? null : <p>{m.following_reading_actions_unavailable()}</p>}
+          </div>
+          <dl className="min-w-0 space-y-4">
+            <FollowingReference
+              label={
+                follow.targetType === 'space'
+                  ? m.following_reading_space_id()
+                  : follow.targetType === 'collection'
+                    ? m.following_reading_collection_id()
+                    : m.following_reading_subject_id()
+              }
+              value={follow.targetId}
+              current={selection.current}
+            />
+            {ready?.address ? (
+              <FollowingReference
+                label={m.following_reading_space_address()}
+                value={ready.address}
+                current={space.current}
+              />
+            ) : null}
+            {ready?.realmId ? (
+              <FollowingReference
+                label={m.following_reading_realm_id()}
+                value={ready.realmId}
+                current={space.current}
+              />
+            ) : null}
+          </dl>
         </div>
-      ) : !isSpace || ready ? (
-        <p role="status">{m.following_reading_no_destination()}</p>
-      ) : null}
-      {actionHref && actionHref !== destination?.href ? (
-        <a
-          className={buttonVariants({
-            variant: 'outline',
-            className: 'min-h-11 max-w-full whitespace-normal break-words',
-          })}
-          href={actionHref}
-          onClick={(event) => {
-            followingDestinationClick(event, () => selection.current() && space.current(), returnFrontier);
-          }}
-        >
-          {m.realm_membership_label()}
-        </a>
-      ) : null}
-      <dl className="space-y-3">
-        <FollowingReference
-          label={
-            follow.targetType === 'space'
-              ? m.following_reading_space_id()
-              : follow.targetType === 'collection'
-                ? m.following_reading_collection_id()
-                : m.following_reading_subject_id()
-          }
-          value={follow.targetId}
-          current={selection.current}
-        />
-        {ready?.address ? (
-          <FollowingReference
-            label={m.following_reading_space_address()}
-            value={ready.address}
-            current={space.current}
-          />
-        ) : null}
-        {ready?.realmId ? (
-          <FollowingReference label={m.following_reading_realm_id()} value={ready.realmId} current={space.current} />
-        ) : null}
-      </dl>
-      <Button className="min-h-11" variant="outline" onClick={close}>
+      </details>
+      <Button className="min-h-11 max-w-full whitespace-normal" variant="outline" onClick={close}>
         {m.following_reading_return_controls()}
       </Button>
     </section>
