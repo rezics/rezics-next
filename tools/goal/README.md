@@ -2506,11 +2506,14 @@ The supermanager sets direction and the managers own the work. This applies to e
   the acceptance tests the brief does not name. If a frozen assertion contradicts the contract, an owner document or
   delivered code, it changes the smallest side and lists the reason; ordinary dev product landings may carry that
   repair, while control-plane, stabilize and verification landings retain the frozen refusal. Only cross-Goal
-  contracts are frozen in advance. It decides ambiguities itself, including a product choice the brief does not make,
-  by taking the reversible option most consistent with the owner documents and decided references; it records each decision in its
-  summary and the owning document, tells its manager with
-  `bun tools/goal/src/cli.ts inbox send <manager> info "<decision>" --task <task>`, and continues. When requirements
-  conflict, it follows the owner documents and delivered code and changes the smaller side. A blocker is only a
+  contracts are frozen in advance. It decides ambiguities itself, including product choices the brief does not make,
+  by taking the reversible option most consistent with owner documents and decided references. It records routine
+  implementation and fixture choices in its summary and
+  manager inbox; fixture-only choices do not require an owner-document edit. For an adopted contract change, it records
+  the choice in its summary and edits the owner document only when that path is declared in the brief; otherwise it
+  sends the owner the exact proposed change through the manager inbox and continues independent source. It uses
+  `bun tools/goal/src/cli.ts inbox send <manager> info "<decision>" --task <task>` for manager handoffs. When
+  requirements conflict, it follows the owner documents and delivered code and changes the smaller side. A blocker is only a
   conflict where every choice breaks an owner-document rule, a tool or infrastructure failure, or a large survey of
   products or sources. Undelivered code from another Goal, absent receipts and unfinished work are not blockers. The
   worker does its own research and stops only for a large survey.

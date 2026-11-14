@@ -19,7 +19,7 @@ Check premises against your base first.
 
 Write missing acceptance tests the contract names or implies. Update and list tests if a contract change alters asserted behaviour; keep unchanged assertions. Use the fewest tests that pin user-visible behaviour and edge cases (fewer test lines than product lines); add stories only for named states.
 
-Record this choice in one summary line and the owner doc, send `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.
+Fixture-only choices get one summary line and a manager inbox handoff through `bun tools/goal/src/cli.ts inbox send web info "<decision>"`; continue the declared source without an owner-doc edit. For adopted contract changes, record one summary line and edit the owner doc if its path is in your brief; otherwise send the owner the exact proposed change through that inbox and continue independent source.
 
 On dev, for a completed and committed product after the wrapper's own rerun, source success is allowed only when every remaining check failure is explicitly shared transport or infrastructure. Name each failed check and its exact error, and each skipped or unreached check as unverified; never label any of them passed. Do not retry source solely for infrastructure. Type, test and product failures remain non-success; the dev verifier completes deferred checks after merge.
 

@@ -64,6 +64,23 @@ test('the worker prompt names the main checkout as read-only and asks for paths 
   expect(prompt).toContain('Work only in /work/trees/t1;');
 });
 
+test('product prompts hand off fixture choices and route adopted contract changes by declared document scope', () => {
+  const cases: { kind: Brief['kind']; paths: string[] }[] = [
+    { kind: 'implementation', paths: ['src/a.ts'] },
+    { kind: 'implementation', paths: ['src/a.ts', 'docs/goals/web.md'] },
+    { kind: 'research', paths: ['src/a.ts'] },
+  ];
+  for (const item of cases) {
+    const prompt = renderWorkerPrompt({ task: worker(contract(item)), mainCheckout: MAP_MAIN }).prompt;
+    expect(prompt).toContain(
+      'fixture-only choices get one summary line and a manager inbox handoff through `bun tools/goal/src/cli.ts inbox send web info "<decision>"`',
+    );
+    expect(prompt).toContain(
+      'For adopted contract changes, record one summary line and edit the owner doc if its path is in your brief; otherwise send the owner the exact proposed change through that inbox and continue independent source.',
+    );
+  }
+});
+
 // Skipped while LOCAL_STORYBOOK_AVAILABLE is false (storybook-dev.ts still refuses interactive use).
 test.skip('an interface worker is told to start and use its own worktree Storybook', () => {
   const task = (kind: string, paths: string[]) =>
