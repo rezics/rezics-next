@@ -29,7 +29,9 @@ export type NativeFollowCountsDriver = Omit<FollowCountsDriver, 'fault'> & {
       | Parameters<FollowCountsDriver['fault']>[0]
       | 'consumer_lag_unavailable'
       | 'total_unavailable'
-      | 'outgoing_unavailable',
+      | 'outgoing_unavailable'
+      | 'owner_admission_unavailable'
+      | 'home_admission_unavailable',
   ): Promise<void>;
 };
 const keyOf = (follower: Principal, target: CountTarget): CountKey => ({
@@ -429,13 +431,17 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
         await dependencyLock.query(
           state === 'access_unavailable'
             ? 'LOCK TABLE access.resource_grant,access.resource_role_grant IN ACCESS EXCLUSIVE MODE'
-            : state === 'consumer_lag_unavailable'
-              ? 'LOCK TABLE core.consumer_lag IN ACCESS EXCLUSIVE MODE'
-              : state === 'total_unavailable'
-                ? 'LOCK TABLE library.follow_count_total IN ACCESS EXCLUSIVE MODE'
-                : state === 'outgoing_unavailable'
-                  ? 'LOCK TABLE library.follow_count_owner IN ACCESS EXCLUSIVE MODE'
-                  : 'LOCK TABLE library.follow_count_health IN ACCESS EXCLUSIVE MODE',
+            : state === 'owner_admission_unavailable'
+              ? 'LOCK TABLE access.account IN ACCESS EXCLUSIVE MODE'
+              : state === 'home_admission_unavailable'
+                ? 'LOCK TABLE core.partition IN ACCESS EXCLUSIVE MODE'
+                : state === 'consumer_lag_unavailable'
+                  ? 'LOCK TABLE core.consumer_lag IN ACCESS EXCLUSIVE MODE'
+                  : state === 'total_unavailable'
+                    ? 'LOCK TABLE library.follow_count_total IN ACCESS EXCLUSIVE MODE'
+                    : state === 'outgoing_unavailable'
+                      ? 'LOCK TABLE library.follow_count_owner IN ACCESS EXCLUSIVE MODE'
+                      : 'LOCK TABLE library.follow_count_health IN ACCESS EXCLUSIVE MODE',
         );
       },
       async publicArtifacts() {

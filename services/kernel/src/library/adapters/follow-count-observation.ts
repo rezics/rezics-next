@@ -42,11 +42,10 @@ export async function readFollowCountHealthObservation(tx: AccessClient): Promis
   };
 }
 
-/** Autocommit count reads retain the original deadline, including checkout wait.
- * Every query checks expiry before dispatch, including after a late checkout.
- * A rejected query may still have native IO in flight: mark its borrowed socket
- * for discard before withConnection releases it, without queuing a rollback.
- * Caller-owned snapshots do not pass through this borrowed-client boundary. */
+/** Borrowed Follow reads retain the original deadline through checkout and every query.
+ * A late checkout dispatches no SQL. A rejected callback discards its borrowed socket
+ * before release so an open transaction is cleaned up without queuing rollback behind
+ * uncertain native IO. Caller-owned snapshots keep their existing lifetime. */
 export function withFollowCountReadConnection<T>(
   pool: Pool,
   deadline: number,

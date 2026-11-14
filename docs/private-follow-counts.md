@@ -248,6 +248,8 @@ connection before normal release so timed-out native queries cannot retain or re
 helper retains `withConnection` work accounting. Snapshot consumers keep their caller-owned connection and its
 existing lifetime.
 
+Decision: Follow admission uses the bounded borrowed-read lifetime and discards failed transaction connections without rollback.
+
 Dispatch and sampling run at most every 10 seconds. Provision and measure healthy end-to-end completion within
 60 seconds, including large-account fan-out; alert on violations. A recent heartbeat cannot redefine healthy.
 Return retryable `503 dependency_unavailable`, `Retry-After` and no count when the conservative bound exceeds

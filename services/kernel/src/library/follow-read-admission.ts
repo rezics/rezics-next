@@ -1,8 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
 import { CommandUnavailableError, GrantDeniedError } from '../access/contract/errors.ts';
 import accountShare from '../access/account-share.sql';
-import { deadlineClient, readAccountCommandState } from './access-port.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { readAccountCommandState } from './access-port.ts';
+import { withFollowCountReadConnection } from './adapters/follow-count-observation.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -75,27 +75,13 @@ export async function admitPrivateFollowRead(
   )
     throw new GrantDeniedError();
 
-  return withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    let committed = false;
-    try {
-      await client.query('BEGIN');
-      const admitted = await readCurrentOwnerHome(client, owner);
-      if (expected && admitted.epoch !== expected.epoch)
-        throw new CommandUnavailableError('fenced', admitted.partition);
-      await client.query('COMMIT');
-      committed = true;
-      return admitted;
-    } catch (error) {
-      if (!committed) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (cleanup) {
-          discardConnection(connection, cleanup instanceof Error ? cleanup : new Error('Follow read rollback failed'));
-        }
-      }
-      throw error;
-    }
+  return withFollowCountReadConnection(pool, deadline, async (client) => {
+    await client.query('BEGIN');
+    const admitted = await readCurrentOwnerHome(client, owner);
+    if (expected && admitted.epoch !== expected.epoch)
+      throw new CommandUnavailableError('fenced', admitted.partition);
+    await client.query('COMMIT');
+    return admitted;
   });
 }
 

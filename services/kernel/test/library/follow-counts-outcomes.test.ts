@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { once } from 'node:events';
 import { Pool, type PoolClient } from 'pg';
 import { withQueryAccounting } from '../../src/database/pool.ts';
+import { admitPrivateFollowRead } from '../../src/library/follow-read-admission.ts';
 import {
   requireFollowCountHealth,
   withFollowCountReadConnection,
@@ -15,6 +16,91 @@ await import('../../../../specs/follow-counts-outcomes.test.ts');
 test('Follow acceptance binds the native factory by its actual file URL', async () => {
   expect(process.env.FOLLOW_COUNTS_DRIVER).toBe(location.href);
   expect(typeof (await import('./support/follow-counts-driver.ts')).createFollowCountsDriver).toBe('function');
+});
+
+test('private Follow admission bounds owner and home locks and discards expired checkouts', async () => {
+  const driver = await createFollowCountsDriver();
+  const pool = new Pool({
+    connectionString: driver.world.native.databaseUrl,
+    max: 1,
+    connectionTimeoutMillis: 2_000,
+    query_timeout: 2_000,
+  });
+  const owner = await driver.world.native.accountActor('owner');
+  let held: PoolClient | undefined;
+  const removed = () => once(pool, 'remove', { signal: AbortSignal.timeout(5_000) });
+  const observe = (startedAt: number, expected?: Awaited<ReturnType<typeof admitPrivateFollowRead>>) => {
+    const cost = { connections: 0, queries: [] as string[] };
+    const run = () => admitPrivateFollowRead(pool, owner, startedAt + 100, expected);
+    return {
+      cost,
+      run: () =>
+        withQueryAccounting(
+          {
+            connection(dispatch) {
+              cost.connections++;
+              return dispatch();
+            },
+            query(sql, _operands, dispatch) {
+              cost.queries.push(sql);
+              return dispatch();
+            },
+          },
+          run,
+        ),
+    };
+  };
+  try {
+    const initial = await admitPrivateFollowRead(pool, owner, Date.now() + 2_000);
+    expect(await admitPrivateFollowRead(pool, owner, Date.now() + 2_000, initial)).toEqual(initial);
+
+    for (const fault of ['owner_admission_unavailable', 'home_admission_unavailable'] as const) {
+      await driver.fault(fault);
+      const observed = observe(Date.now(), initial);
+      const released = removed();
+      const startedAt = Date.now();
+      await expect(observed.run()).rejects.toThrow();
+      expect(Date.now() - startedAt).toBeLessThan(1_000);
+      await released;
+      expect(observed.cost.connections).toBe(1);
+      expect(observed.cost.queries).not.toContain('ROLLBACK');
+      expect(pool.totalCount).toBe(0);
+      await driver.fault('clear');
+      expect(await admitPrivateFollowRead(pool, owner, Date.now() + 2_000, initial)).toEqual(initial);
+    }
+
+    held = await pool.connect();
+    const client = held;
+    const query = client.query;
+    let dispatched = 0;
+    held.query = ((...args: unknown[]) => {
+      dispatched++;
+      return Reflect.apply(query, client, args);
+    }) as PoolClient['query'];
+    const observed = observe(Date.now());
+    const released = removed();
+    const startedAt = Date.now();
+    await expect(observed.run()).rejects.toThrow();
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    held.release();
+    held = undefined;
+    await released;
+    expect(dispatched).toBe(0);
+    expect(observed.cost).toEqual({ connections: 1, queries: [] });
+    expect(pool.waitingCount).toBe(0);
+    expect(await admitPrivateFollowRead(pool, owner, Date.now() + 2_000, initial)).toEqual(initial);
+  } finally {
+    held?.release();
+    try {
+      await driver.fault('clear');
+    } finally {
+      try {
+        await pool.end();
+      } finally {
+        await driver.close();
+      }
+    }
+  }
 });
 
 test('expired health, total, outgoing and queued reads release capacity and retain work accounting', async () => {
