@@ -1,7 +1,6 @@
 import { admitMineCollectionsAddress, type MineCollectionsAddressError } from './mine-collections-address';
 import { MineCollectionsAddressRecovery } from './mine-collections-address-recovery';
 import { Exposure, useOperation, useOperationAdmission } from '../kernel/exposure';
-import { ContentItem } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@rezics/ui/shadcn/empty';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -10,12 +9,10 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import { useQuery } from '@tanstack/react-query';
 import { personalRead } from '../session/reading-policy';
 import { useSession } from '../session';
-import { browseCollectionTitle } from './collection-browser';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { LibraryNavigation } from './library-nav';
-import { PinControl } from './pin-control';
 import { matchesPinsOrigin, type LibraryPinsRead } from './pins-read';
 import { useLibraryReadOrigin, type AcceptedPinsOrigin } from './pins-current';
 import {
@@ -25,7 +22,8 @@ import {
   type MineCollectionsWindowsSnapshot,
 } from './mine-collections-windows/visit';
 import type { MineCollection, MineCollectionsPage } from './mine-collections';
-import { SavedQueryDirectory } from './saved-query-directory';
+import { ownedSavedQueries, SavedQueryDirectory } from './saved-query-directory';
+import { MineCollectionsWorkspace } from './mine-collections-workspace';
 import {
   readMineCollectionsViewerPage,
   type MineCollectionsAddress,
@@ -298,8 +296,11 @@ function MineCollectionsViewerRead({
   );
 }
 
-function browseRecords(collections: readonly MineCollection[]): CollectionBrowseRecord[] {
-  return collections.map((collection) => ({ ...collection, preview: collection.preview ?? { state: 'unavailable' } }));
+function browseRecords(collections: readonly MineCollection[], viewerId?: string): CollectionBrowseRecord[] {
+  const savedQueryIds = new Set(viewerId ? ownedSavedQueries(collections, viewerId).map(({ id }) => id) : []);
+  return collections
+    .filter(({ id }) => !savedQueryIds.has(id))
+    .map((collection) => ({ ...collection, preview: collection.preview ?? { state: 'unavailable' } }));
 }
 
 export function MineCollectionsPageView({
@@ -369,9 +370,9 @@ export function MineCollectionsPageView({
     }
     if (windows.consumeFocus(windowAuthorityKey)) collectionRegion.current?.focus();
   }, [loaded, windows, windowAuthorityKey, windowSnapshot.focusReady, windowCurrent]);
-  const collections = loaded ? browseRecords(page.collections) : [];
+  const collections = loaded ? browseRecords(page.collections, viewerId) : [];
   const navigationCollections = page.navigationCollections ?? page.collections;
-  const firstPageEmpty = loaded && !collections.length && !currentCursor && !page.next;
+  const firstPageEmpty = loaded && !page.collections.length && !currentCursor && !page.next;
   const createAction = (
     <a href={`/${getLocale()}/collections/new`} className={buttonVariants({ variant: 'outline' })}>
       <PlusIcon aria-hidden="true" />
@@ -379,228 +380,215 @@ export function MineCollectionsPageView({
     </a>
   );
   if (requestedAddress.addressError) return <MineCollectionsAddressRecovery address={requestedAddress} />;
-  return (
-    <div className="w-full min-w-0 max-w-none space-y-5 text-foreground">
-      <article className="w-full min-w-0 space-y-5">
-        <header className="flex flex-wrap items-center justify-between gap-3">
+  const directory = (
+    <section
+      aria-labelledby="mine-collections-directory-heading"
+      className="min-w-0 space-y-4"
+      data-current-directory
+    >
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div id="mine-collections-directory-heading" className="min-w-0">
           <PageHeading>{m.library_collections_heading()}</PageHeading>
-          {loaded && collections.length ? (
-            <div className="flex flex-wrap items-center gap-2">
+        </div>
+        {loaded && (page.collections.length > 0 || canCreate) ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {page.collections.length ? (
               <Exposure operation="library_label.list">
                 <Link to="/library/labels" className={buttonVariants({ variant: 'outline' })}>
                   {m.library_labels_heading()}
                 </Link>
               </Exposure>
-              <Exposure operation="collection.create">{createAction}</Exposure>
-            </div>
-          ) : null}
-        </header>
-        {page.signedIn ? (
-          <LibraryNavigation
-            current="collections"
-            pins={pins}
-            collections={loaded ? navigationCollections : []}
-            collectionsState={page.state ?? 'loaded'}
-            showCollectionsNotice={false}
-          />
-        ) : null}
-        {loaded && viewerId ? (
-          <SavedQueryDirectory
-            collections={page.collections}
-            capability={savedQueryCapability}
-            viewerId={viewerId}
-            canEditRules={canEditRules}
-            currentHref={currentHref}
-            next={page.next}
-            layout={layout}
-          />
-        ) : null}
-        {loaded && collections.length ? <CollectionBrowseToolbar layout={layout} onLayoutChange={setLayout} /> : null}
-        {page.signedIn && (page.cursorReset || windowSnapshot.cursorReset) ? (
-          <p role="status">{m.library_collections_cursor_reset()}</p>
-        ) : null}
-        {!page.signedIn ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyDescription>{m.library_sign_in()}</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <a
-                href={`/auth/sign-in?return_to=${encodeURIComponent(currentHref)}`}
-                className={buttonVariants({ variant: 'outline' })}
-              >
-                {m.account_sign_in()}
-              </a>
-            </EmptyContent>
-          </Empty>
-        ) : !loaded ? (
-          <Empty data-collections-state={page.state}>
-            <EmptyHeader>
-              <EmptyDescription role={page.state === 'error' || page.state === 'unavailable' ? 'alert' : 'status'}>
-                {page.state === 'preparing'
-                  ? m.library_collections_preparing()
-                  : page.state === 'denied'
-                    ? m.library_collections_denied()
-                    : page.state === 'error'
-                      ? m.library_collections_read_failed()
-                      : m.library_collections_unavailable()}
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              {page.state === 'denied' ? (
-                <a href={exploreHref} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-                  {exploreLabel}
-                </a>
-              ) : onRetry ? (
-                <button
-                  type="button"
-                  className={buttonVariants({ variant: 'outline', size: 'lg' })}
-                  onClick={(event) => onRetry(event.currentTarget)}
-                >
-                  {m.library_collections_retry()}
-                </button>
-              ) : (
-                <a href={currentHref} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-                  {m.library_collections_retry()}
-                </a>
-              )}
-            </EmptyContent>
-          </Empty>
-        ) : (
-          <div
-            ref={collectionRegion}
-            role="region"
-            aria-label={m.library_collections_heading()}
-            tabIndex={-1}
-            className="rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
-            data-collections-list-region
-          >
-            {collections.length ? (
-              <CollectionBrowseList
-                collections={collections}
-                layout={layout}
-                menuFor={(collection: CollectionBrowseRecord) => (
-                  <PinControl collectionId={collection.id} pins={pins} mode="collection" origin={pinsOrigin} />
-                )}
-              />
-            ) : (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyDescription>
-                    {firstPageEmpty ? m.library_collections_empty() : m.library_collections_page_empty()}
-                  </EmptyDescription>
-                  {firstPageEmpty ? (
-                    <EmptyDescription>
-                      {canCreate ? m.library_collections_start() : m.library_collections_start_unavailable()}
-                    </EmptyDescription>
-                  ) : null}
-                </EmptyHeader>
-                {firstPageEmpty && canCreate ? <EmptyContent>{createAction}</EmptyContent> : null}
-              </Empty>
-            )}
+            ) : null}
+            {canCreate ? <Exposure operation="collection.create">{createAction}</Exposure> : null}
           </div>
-        )}
-        {loaded && (canPrevious || canFirst || page.next) ? (
-          <Exposure operation="collection.list">
-            <nav aria-label={m.library_collections_heading()} className="flex flex-wrap gap-2">
-              {canPrevious ? (
-                <Link
-                  to="/library/collections"
-                  search={{
-                    ...(windowSnapshot.coordinates.at(-2) ? { cursor: windowSnapshot.coordinates.at(-2)! } : {}),
-                    layout,
-                  }}
-                  onClick={(event) => {
-                    if (
-                      event.defaultPrevented ||
-                      (event.button !== 0 && event.detail !== 0) ||
-                      event.metaKey ||
-                      event.ctrlKey ||
-                      event.shiftKey ||
-                      event.altKey
-                    )
-                      return;
-                    if (onMove && !onMove('previous', windowSnapshot.coordinates.at(-2) ?? null, event.currentTarget))
-                      event.preventDefault();
-                  }}
-                  className={buttonVariants({ variant: 'outline', size: 'lg' })}
-                >
-                  {m.library_collections_previous()}
-                </Link>
-              ) : null}
-              {canFirst ? (
-                <Link
-                  to="/library/collections"
-                  search={{ layout }}
-                  onClick={(event) => {
-                    if (
-                      event.defaultPrevented ||
-                      (event.button !== 0 && event.detail !== 0) ||
-                      event.metaKey ||
-                      event.ctrlKey ||
-                      event.shiftKey ||
-                      event.altKey
-                    )
-                      return;
-                    if (onMove && !onMove('first', null, event.currentTarget)) event.preventDefault();
-                  }}
-                  className={buttonVariants({ variant: 'outline', size: 'lg' })}
-                >
-                  {m.library_collections_first_page()}
-                </Link>
-              ) : null}
-              {page.next ? (
-                <Link
-                  to="/library/collections"
-                  search={{ cursor: page.next, layout }}
-                  onClick={(event) => {
-                    if (
-                      event.defaultPrevented ||
-                      (event.button !== 0 && event.detail !== 0) ||
-                      event.metaKey ||
-                      event.ctrlKey ||
-                      event.shiftKey ||
-                      event.altKey
-                    )
-                      return;
-                    if (onMove && !onMove('next', page.next, event.currentTarget)) event.preventDefault();
-                  }}
-                  className={buttonVariants({ variant: 'outline', size: 'lg' })}
-                >
-                  {m.library_collection_more()}
-                </Link>
-              ) : null}
-            </nav>
-          </Exposure>
         ) : null}
-        {page.signedIn && pins.state === 'loaded' && pins.pins.length ? (
-          <details className="rounded-xl bg-muted/30 p-3" data-library-pin-manager>
-            <summary className="cursor-pointer text-sm font-medium">{m.library_pin_pinned_section()}</summary>
-            <section aria-labelledby="library-pinned-heading" className="mt-3">
-              <h2 id="library-pinned-heading" className="sr-only">
-                {m.library_pin_pinned_section()}
-              </h2>
-              <ul className="space-y-1">
-                {pins.pins.map((pin) => (
-                  <ContentItem
-                    key={pin.collectionId}
-                    title={
-                      pin.target
-                        ? browseCollectionTitle({ ...pin.target, title: pin.target.title ?? null })
-                        : m.library_pin_unavailable()
-                    }
-                    headingLevel={3}
-                    {...(pin.target
-                      ? { href: `/${getLocale()}/collections/${encodeURIComponent(pin.collectionId)}` }
-                      : {})}
-                    actions={<PinControl collectionId={pin.collectionId} pins={pins} mode="list" origin={pinsOrigin} />}
-                  />
-                ))}
-              </ul>
-            </section>
-          </details>
-        ) : null}
-      </article>
-    </div>
+      </header>
+      {page.signedIn ? (
+        <LibraryNavigation
+          current="collections"
+          pins={pins}
+          collections={loaded ? navigationCollections : []}
+          collectionsState={page.state ?? 'loaded'}
+          showCollectionsNotice={false}
+        />
+      ) : null}
+      {loaded ? <CollectionBrowseToolbar layout={layout} onLayoutChange={setLayout} /> : null}
+      {page.signedIn && (page.cursorReset || windowSnapshot.cursorReset) ? (
+        <p role="status">{m.library_collections_cursor_reset()}</p>
+      ) : null}
+      {!page.signedIn ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyDescription>{m.library_sign_in()}</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <a
+              href={`/auth/sign-in?return_to=${encodeURIComponent(currentHref)}`}
+              className={buttonVariants({ variant: 'outline' })}
+            >
+              {m.account_sign_in()}
+            </a>
+          </EmptyContent>
+        </Empty>
+      ) : !loaded ? (
+        <Empty data-collections-state={page.state}>
+          <EmptyHeader>
+            <EmptyDescription role={page.state === 'error' || page.state === 'unavailable' ? 'alert' : 'status'}>
+              {page.state === 'preparing'
+                ? m.library_collections_preparing()
+                : page.state === 'denied'
+                  ? m.library_collections_denied()
+                  : page.state === 'error'
+                    ? m.library_collections_read_failed()
+                    : m.library_collections_unavailable()}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            {page.state === 'denied' ? (
+              <a href={exploreHref} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+                {exploreLabel}
+              </a>
+            ) : onRetry ? (
+              <button
+                type="button"
+                className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                onClick={(event) => onRetry(event.currentTarget)}
+              >
+                {m.library_collections_retry()}
+              </button>
+            ) : (
+              <a href={currentHref} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+                {m.library_collections_retry()}
+              </a>
+            )}
+          </EmptyContent>
+        </Empty>
+      ) : (
+        <div
+          ref={collectionRegion}
+          role="region"
+          aria-label={m.library_collections_heading()}
+          tabIndex={-1}
+          className="rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+          data-collections-list-region
+        >
+          {collections.length ? (
+            <CollectionBrowseList
+              collections={collections}
+              layout={layout}
+              menuFor={(collection: CollectionBrowseRecord) => (
+                <PinControl collectionId={collection.id} pins={pins} mode="collection" origin={pinsOrigin} />
+              )}
+            />
+          ) : (
+            <Empty>
+              <EmptyHeader>
+                <EmptyDescription>
+                  {firstPageEmpty ? m.library_collections_empty() : m.library_collections_page_empty()}
+                </EmptyDescription>
+                {firstPageEmpty ? (
+                  <EmptyDescription>
+                    {canCreate ? m.library_collections_start() : m.library_collections_start_unavailable()}
+                  </EmptyDescription>
+                ) : null}
+              </EmptyHeader>
+            </Empty>
+          )}
+        </div>
+      )}
+      {loaded && (canPrevious || canFirst || page.next) ? (
+        <Exposure operation="collection.list">
+          <nav aria-label={m.library_collections_heading()} className="flex flex-wrap gap-2">
+            {canPrevious ? (
+              <Link
+                to="/library/collections"
+                search={{
+                  ...(windowSnapshot.coordinates.at(-2) ? { cursor: windowSnapshot.coordinates.at(-2)! } : {}),
+                  layout,
+                }}
+                onClick={(event) => {
+                  if (
+                    event.defaultPrevented ||
+                    (event.button !== 0 && event.detail !== 0) ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  if (onMove && !onMove('previous', windowSnapshot.coordinates.at(-2) ?? null, event.currentTarget))
+                    event.preventDefault();
+                }}
+                className={buttonVariants({ variant: 'outline', size: 'lg' })}
+              >
+                {m.library_collections_previous()}
+              </Link>
+            ) : null}
+            {canFirst ? (
+              <Link
+                to="/library/collections"
+                search={{ layout }}
+                onClick={(event) => {
+                  if (
+                    event.defaultPrevented ||
+                    (event.button !== 0 && event.detail !== 0) ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  if (onMove && !onMove('first', null, event.currentTarget)) event.preventDefault();
+                }}
+                className={buttonVariants({ variant: 'outline', size: 'lg' })}
+              >
+                {m.library_collections_first_page()}
+              </Link>
+            ) : null}
+            {page.next ? (
+              <Link
+                to="/library/collections"
+                search={{ cursor: page.next, layout }}
+                onClick={(event) => {
+                  if (
+                    event.defaultPrevented ||
+                    (event.button !== 0 && event.detail !== 0) ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  if (onMove && !onMove('next', page.next, event.currentTarget)) event.preventDefault();
+                }}
+                className={buttonVariants({ variant: 'outline', size: 'lg' })}
+              >
+                {m.library_collection_more()}
+              </Link>
+            ) : null}
+          </nav>
+        </Exposure>
+      ) : null}
+    </section>
+  );
+  const savedQueries = loaded && viewerId ? (
+    <SavedQueryDirectory
+      collections={page.collections}
+      capability={savedQueryCapability}
+      viewerId={viewerId}
+      canEditRules={canEditRules}
+      currentHref={currentHref}
+      next={page.next}
+      layout={layout}
+    />
+  ) : null;
+  return (
+    <MineCollectionsWorkspace
+      directory={directory}
+      savedQueries={savedQueries}
+      pins={pins}
+      pinsOrigin={pinsOrigin}
+      signedIn={page.signedIn}
+    />
   );
 }
