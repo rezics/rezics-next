@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
   AlertDialog,
@@ -58,30 +58,72 @@ export function RelatedWorkCreate({
   const [offered, setOffered] = useState<CreateType[]>([]);
   const [unavailable, setUnavailable] = useState<string[]>([]);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [loadedToken, setLoadedToken] = useState<string>();
+  const [restoredId, setRestoredId] = useState<string>();
+  const [inlineDestination, setInlineDestination] = useState(0);
   const returning = useRef(false);
   const selectedBases = useRef<string[]>([]);
+  const pendingOpener = useRef<HTMLElement | null>(null);
+  const createRoot = useRef<HTMLDivElement>(null);
+  const returnButton = useRef<HTMLButtonElement>(null);
   const titleId = useId();
 
   useEffect(() => {
     if (!token) {
       setHandoff(undefined);
+      setLoadedToken(undefined);
+      setRestoredId(undefined);
       return;
     }
     returning.current = false;
     const current = readRelatedWorkHandoff(token);
-    if (!current || current.phase !== 'creating' || current.reader !== reader || !readerLive()) {
+    if (
+      !current ||
+      (current.phase !== 'creating' && current.phase !== 'ready') ||
+      current.reader !== reader ||
+      !readerLive()
+    ) {
       discardRelatedWorkHandoff(token);
       setHandoff(undefined);
+      setRestoredId(undefined);
+      setLoadedToken(token);
       return;
     }
+    setRestoredId(current.createdId);
     setHandoff(current);
+    setLoadedToken(token);
     return () => {
       if (!returning.current) discardRelatedWorkHandoff(token);
     };
   }, [token, reader, readerLive]);
 
   useEffect(() => {
-    const current = handoff;
+    const clear = (event: Event) => {
+      if (event.type !== 'focusin' || event.target !== pendingOpener.current) pendingOpener.current = null;
+    };
+    document.addEventListener('pointerdown', clear, true);
+    document.addEventListener('focusin', clear, true);
+    return () => {
+      document.removeEventListener('pointerdown', clear, true);
+      document.removeEventListener('focusin', clear, true);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!inlineDestination) return;
+    const opener = pendingOpener.current;
+    pendingOpener.current = null;
+    if (!opener) return;
+    const target =
+      returnButton.current ?? createRoot.current?.querySelector<HTMLElement>('section[role="status"][tabindex="-1"]');
+    if (!target?.isConnected || !target.getClientRects().length) return;
+    const active = target.ownerDocument.activeElement;
+    if (active === opener || active === target.ownerDocument.body || active === target.ownerDocument.documentElement)
+      target.focus();
+  }, [inlineDestination]);
+
+  useEffect(() => {
+    const current = handoff?.token === token ? handoff : undefined;
     const directory = transport.typeDirectory;
     if (!current || !directory) {
       setOffered([]);
@@ -108,7 +150,7 @@ export function RelatedWorkCreate({
   }, [handoff, transport.typeDirectory]);
 
   function recordCreated(result: Created) {
-    const current = handoff;
+    const current = handoff?.token === token ? handoff : undefined;
     if (!current || !readerLive()) return;
     const next = recordCreatedRelatedWork(
       current.token,
@@ -123,10 +165,25 @@ export function RelatedWorkCreate({
       return;
     }
     setHandoff(next);
+    const identity = result.reader.state === 'ready' ? result.reader.identity : undefined;
+    if (next.phase === 'creating' && identity?.id === result.id && transport.typeDirectory) {
+      // A restored acknowledgement has no in-memory Type bases. Re-read its exact descriptor.
+      void transport.typeDirectory
+        .descriptor(identity.type)
+        .then((descriptor) => {
+          if (!descriptor.ok || descriptor.type.id !== identity.type || !readerLive()) return;
+          const admitted = recordCreatedRelatedWork(current.token, current.workId, current.reader, result.id, {
+            ...identity,
+            bases: descriptor.type.bases ?? [],
+          });
+          if (admitted) setHandoff(admitted);
+        })
+        .catch(() => undefined);
+    }
   }
 
   function returnWithIdentity(identity: CreatedRelatedWork) {
-    const current = handoff;
+    const current = handoff?.token === token ? handoff : undefined;
     if (
       !current ||
       current.identity?.id !== identity.id ||
@@ -145,7 +202,7 @@ export function RelatedWorkCreate({
   }
 
   function returnDraft() {
-    const current = handoff;
+    const current = handoff?.token === token ? handoff : undefined;
     if (!current || !readerLive() || !beginRelatedWorkDraftReturn(current.token, current.workId, reader)) {
       if (current) discardRelatedWorkHandoff(current.token);
       setHandoff(undefined);
@@ -157,57 +214,85 @@ export function RelatedWorkCreate({
     );
   }
 
-  const returnedIdentity = handoff?.phase === 'ready' ? handoff.identity : undefined;
-  const sourceHref = handoff ? subjectHref({ id: handoff.workId, label: handoff.sourceLabel }, locale).href : undefined;
+  const visibleHandoff = loadedToken === token ? handoff : undefined;
+  const returnedIdentity = visibleHandoff?.phase === 'ready' ? visibleHandoff.identity : undefined;
+  const sourceHref = visibleHandoff
+    ? subjectHref({ id: visibleHandoff.workId, label: visibleHandoff.sourceLabel }, locale).href
+    : undefined;
 
   return (
-    <div className="space-y-6">
-      {token && !handoff && <p role="alert">{m.related_work_handoff_invalid({}, options)}</p>}
-      {handoff && (
+    <div
+      className="space-y-6"
+      onKeyDownCapture={(event) => {
+        if (!token || (event.key !== 'Enter' && event.key !== ' ')) return;
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const submitter = target.closest<HTMLElement>('button[type="submit"], input[type="submit"], input[type="image"]');
+        if (submitter) pendingOpener.current = submitter;
+        else if (event.key === 'Enter' && target instanceof HTMLInputElement &&
+          !['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'image', 'hidden'].includes(target.type))
+          pendingOpener.current = target;
+      }}
+      onClickCapture={(event) => {
+        if (!token) return;
+        const target = event.target;
+        const button = target instanceof Element ? target.closest<HTMLElement>('button') : null;
+        if (button && createRoot.current?.contains(button))
+          pendingOpener.current = event.detail === 0 && event.nativeEvent.isTrusted ? button : null;
+      }}
+    >
+      {token && loadedToken === token && !visibleHandoff && <p role="alert">{m.related_work_handoff_invalid({}, options)}</p>}
+      {visibleHandoff && (
         <section aria-labelledby={titleId} className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
           <h2 id={titleId} className="text-lg font-semibold">
             {m.related_work_source({}, options)}
           </h2>
           <p>
-            {m.related_work_create_context({ relation: handoff.propertyLabel, source: handoff.sourceLabel }, options)}
+            {m.related_work_create_context({ relation: visibleHandoff.propertyLabel, source: visibleHandoff.sourceLabel }, options)}
           </p>
           {sourceHref && (
             <a className={`${buttonVariants({ variant: 'outline' })}`} href={sourceHref}>
-              {handoff.sourceLabel || handoff.workId}
+              {visibleHandoff.sourceLabel || visibleHandoff.workId}
             </a>
           )}
           <p className="text-sm text-muted-foreground">{m.related_work_distinct({}, options)}</p>
         </section>
       )}
-      <CreateSubjectForm
+      {(!token || visibleHandoff) && <div ref={createRoot}><CreateSubjectForm
         locale={locale}
         session={session}
         transport={transport}
         onCreated={(result) => {
-          if (handoff) recordCreated(result);
+          if (visibleHandoff) recordCreated(result);
         }}
-        onNavigate={handoff ? () => {} : onNavigate}
+        onNavigate={visibleHandoff ? () => setInlineDestination((value) => value + 1) : onNavigate}
+        {...(restoredId ? { restoredAcknowledgementId: restoredId } : {})}
         {...(!token && identityIntake ? { identityIntake } : {})}
-        {...(handoff
+        {...(visibleHandoff
           ? {
               typeAdmission: {
                 offered,
                 unavailable,
                 admitType: (type: CreateType) => {
-                  const admitted = relatedWorkTargetAdmitted(type.id, type.bases ?? [], handoff.targets);
+                  const admitted = relatedWorkTargetAdmitted(type.id, type.bases ?? [], visibleHandoff.targets);
                   if (admitted) selectedBases.current = type.bases ?? [];
                   return admitted;
                 },
               },
             }
           : {})}
-      />
+      /></div>}
       {returnedIdentity && (
-        <Button type="button" variant="outline" onClick={() => returnWithIdentity(returnedIdentity)}>
-          {m.related_work_return_to_draft({}, options)}
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button ref={returnButton} type="button" variant="outline" onClick={() => returnWithIdentity(returnedIdentity)}>
+            {m.related_work_return_to_draft({}, options)}
+          </Button>
+          {restoredId && <a className={buttonVariants({ variant: 'outline' })} href={subjectHref(returnedIdentity, locale).href}>
+            {m.catalogue_create_open({}, options)}
+          </a>}
+        </div>
       )}
-      {handoff && handoff.phase === 'creating' && !handoff.createdId && (
+      {visibleHandoff && visibleHandoff.phase === 'creating' && !visibleHandoff.createdId && (
         <Button type="button" variant="outline" onClick={() => setConfirmLeave(true)}>
           {m.related_work_cancel({}, options)}
         </Button>

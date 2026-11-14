@@ -234,12 +234,20 @@ export function recordCreatedRelatedWork(
   identity?: CreatedRelatedWork,
 ): RelatedWorkHandoff | undefined {
   const value = readRelatedWorkHandoff(token);
-  if (!value || value.phase !== 'creating' || value.workId !== workId || value.reader !== reader || !uuid.test(id))
+  if (
+    !value ||
+    (value.phase !== 'creating' && value.phase !== 'ready') ||
+    value.workId !== workId ||
+    value.reader !== reader ||
+    !uuid.test(id)
+  )
     return undefined;
   if (value.createdId && value.createdId !== id) {
     discardRelatedWorkHandoff(token);
     return undefined;
   }
+  // A later public reader retry cannot erase an already admitted exact identity.
+  if (value.phase === 'ready') return value;
   value.createdId = id;
   const createdIdentity =
     identity && validIdentity(identity, id) && relatedWorkTargetAdmitted(identity.type, identity.bases, value.targets)
