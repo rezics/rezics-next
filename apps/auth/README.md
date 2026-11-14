@@ -274,7 +274,7 @@ summary is never written to storage, a URL, history state or cookies; an ordinar
 Page departure immediately clears the inputs (including detached DOM nodes), retires command callbacks and aborts
 advice reads. Leaving cannot cancel a native effect. A retained document first reads current `/recovery/page` advice
 before enabling new work. Loading and read failure have visible states, fixed sign-in exits and an explicit read Retry.
-Focus moves to the generic return explanation or read result when private controls retire.
+The generic return explanation replaces retired private controls without taking reader focus.
 
 A start acknowledgement confirms neither account existence nor mail delivery. An unavailable start response keeps
 its outcome unknown. Requesting another link is deliberate new work: the person reviews fresh start advice and
@@ -287,6 +287,13 @@ Stay preserves active work; explicit Leave clears it and warns that a sent reque
 
 Deliberate fresh recovery opens an empty start form after current start advice, while generic earlier
 uncertainty remains visible and independent of the new request.
+
+Decision: only a focused keyboard activation of Retry or fresh recovery owns orientation to its matching form,
+return explanation or failed-read boundary. Keep the requesting control focusable during its pending advice read,
+without admitting another action. Focus movement, pointer use, another action, focus/visibility observation,
+attempt replacement, retirement and unmount cancel intent. Initial loading, pointer activation and unrelated
+advice results never take focus; equal results and delayed replies obey the same ownership. Invalid-fragment and
+submission feedback retain their existing local focus boundaries. Intent uses O(1) mounted state and adds zero I/O.
 
 Whole-call cost: summary capture and display make zero requests. Entry, retained return, focus/visibility refresh,
 explicit read Retry and deliberate transition from completion history to a fresh start each make at most one installed
