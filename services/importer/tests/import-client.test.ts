@@ -196,7 +196,7 @@ test('candidate listing keeps the kernel status when the Treaty reply has no Res
           get: async () => ({
             status: 403,
             data: null,
-            error: { value: { type: 'about:blank', code: 'forbidden' } },
+            error: { value: { type: 'about:blank', code: 'forbidden', request_id: 'req-denied' } },
           }),
         },
       }),
@@ -213,6 +213,49 @@ test('candidate listing keeps the kernel status when the Treaty reply has no Res
     expect(error).toBeInstanceOf(ImportTransportError);
     expect((error as ImportTransportError).status).toBe(403);
     expect((error as ImportTransportError).code).toBe('forbidden');
+    expect((error as ImportTransportError).failurePhase).toBe('response');
+    expect((error as ImportTransportError).correlationId).toBe('req-denied');
+  }
+});
+
+test('direct and Eden synthetic failures retain nested network causes without inventing an HTTP status', async () => {
+  const cause = new TypeError('fetch failed with private request text', {
+    cause: Object.assign(new Error('private upstream text'), { code: 'ECONNREFUSED' }),
+  });
+  for (const mode of ['throw', 'envelope', 'synthetic-response'] as const) {
+    const transport = createImportTransport({
+      origin: 'https://api.importer.test',
+      tokenProvider: async () => 'private-token',
+      client: {
+        subjects: () => ({
+          candidates: {
+            get: async () => {
+              if (mode === 'throw') throw cause;
+              return {
+                status: 503,
+                data: null,
+                error: { status: 503, value: cause },
+                ...(mode === 'synthetic-response' ? { response: new Response(null, { status: 503 }) } : {}),
+              };
+            },
+          },
+        }),
+      } as never,
+    });
+    const failure = await transport
+      .reviewedCandidates(subjectId, { property: 'schema:name', context: subjectId, limit: 100 })
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ImportTransportError);
+    const error = failure as ImportTransportError;
+    expect(error.cause).toBe(cause);
+    expect(error.status).toBeUndefined();
+    expect(error.type).toBeUndefined();
+    expect(error.code).toBeUndefined();
+    expect(error.failurePhase).toBe('network');
+    expect(formatSeedError(error)).toContain('status=none type=none problem=none phase=network');
+    expect(formatSeedError(error)).toContain('network=ECONNREFUSED');
+    expect(formatSeedError(error)).not.toContain('private');
+    expect(formatSeedError(error)).not.toContain('503');
   }
 });
 
@@ -552,7 +595,9 @@ test('classification mutation transport rejects malformed and opposite-state suc
 });
 
 test('transport failure retains safe request metadata and its original network cause', async () => {
-  const cause = Object.assign(new Error('Bearer private-token in upstream text'), { code: 'ECONNRESET' });
+  const cause = new TypeError('fetch failed with private-token', {
+    cause: Object.assign(new Error('Bearer private-token in upstream text'), { code: 'ECONNRESET' }),
+  });
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'private-token',
@@ -571,13 +616,15 @@ test('transport failure retains safe request metadata and its original network c
     networkCode: 'ECONNRESET',
   });
   expect((failure as ImportTransportError).cause).toBe(cause);
+  expect((failure as ImportTransportError).status).toBeUndefined();
   const diagnostic = formatSeedError(failure);
+  expect(diagnostic).toContain('status=none type=none problem=none phase=network');
   expect(diagnostic).toContain('network=ECONNRESET');
   expect(diagnostic).not.toContain('private-token');
   expect(diagnostic).not.toContain('upstream text');
 });
 
-test('HTTP failure retains only its public problem code and correlation ID', async () => {
+test('typed HTTP 503 retains its public type, code and correlation through the Subject phase wrapper', async () => {
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'private-token',
@@ -585,8 +632,12 @@ test('HTTP failure retains only its public problem code and correlation ID', asy
     fetch: (async () =>
       Response.json(
         {
-          type: 'https://rezics.com/problems/dependency_unavailable',
-          code: 'dependency_unavailable',
+          type: 'https://rezics.com/problems/transaction_retry_exhausted',
+          code: 'transaction_retry_exhausted',
+          status: 503,
+          retryable: true,
+          effect_status: 'not_applied',
+          request_id: 'problem-req-1234',
           title: 'private response text',
           detail: 'raw imported record body',
         },
@@ -600,13 +651,20 @@ test('HTTP failure retains only its public problem code and correlation ID', asy
     origin: 'https://api.importer.test',
     path: `/v1/subjects/${subjectId}`,
     status: 503,
-    code: 'dependency_unavailable',
+    type: 'https://rezics.com/problems/transaction_retry_exhausted',
+    code: 'transaction_retry_exhausted',
+    retryable: true,
     phase: 'SubjectGET503',
     failurePhase: 'http',
     correlationId: 'req-1234',
   });
+  expect((failure as ImportTransportError).cause).toMatchObject({
+    value: { detail: 'raw imported record body' },
+  });
   const diagnostic = formatSeedError(failure);
-  expect(diagnostic).toContain('problem=dependency_unavailable');
+  expect(diagnostic).toContain('status=503 type=https://rezics.com/problems/transaction_retry_exhausted');
+  expect(diagnostic).toContain('problem=transaction_retry_exhausted phase=http');
+  expect(diagnostic).toContain('classification=SubjectGET503');
   expect(diagnostic).toContain('correlation=req-1234');
   expect(diagnostic).not.toContain('private response text');
   expect(diagnostic).not.toContain('raw imported record body');

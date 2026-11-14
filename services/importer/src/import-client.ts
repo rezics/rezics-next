@@ -40,6 +40,7 @@ import {
   MAX_IMPORT_TOTAL_WAIT_MS,
   type ImportHttpOptions,
   importCorrelationId,
+  importNetworkCode,
   importRequestFailure,
   importResponseDiagnostics,
   notifyImportRequestStart,
@@ -252,7 +253,7 @@ function sourceStatisticBody(input: unknown): ImportSourceStatisticValue {
 
 export type ImportTransportPhase = 'readiness' | 'merge403' | 'SubjectGET503';
 
-/** Error diagnostics retain only the HTTP classifier, never remote bodies or credentials. */
+/** Expose safe request diagnostics; retain the original failure only on the private cause chain. */
 export class ImportTransportError extends Error {
   readonly method: string | undefined;
   readonly origin: string | undefined;
@@ -302,7 +303,7 @@ export function importTransportDiagnostics(
 }
 
 function safeDiagnosticField(value: unknown, pattern: RegExp, limit: number): string | undefined {
-  return typeof value === 'string' && value.length <= limit && pattern.test(value) ? value : undefined;
+  return typeof value === 'string' && value.length <= limit && pattern.exec(value)?.[0] === value ? value : undefined;
 }
 
 /** Operator-visible transport envelope. Causes and response bodies remain private to the Error chain. */
@@ -312,17 +313,20 @@ export function formatImportTransportError(error: ImportTransportError): string 
   const origin = safeDiagnosticField(values.origin, /^https?:\/\/[A-Za-z0-9.:[\]_-]+(?::[0-9]{1,5})?$/u, 256);
   const path = safeDiagnosticField(values.path, /^\/[A-Za-z0-9._~!$&'()*+,;=:@%\/-]{0,512}$/u, 512);
   const target = `${origin ?? 'unknown-origin'}${path ?? ''}`;
-  const fallbackPhase = error.status === undefined ? 'transport' : 'http';
+  const fallbackPhase = error.status === undefined ? 'unknown' : 'http';
   const phase = safeDiagnosticField(values.phase, /^[a-z-]{1,24}$/u, 24) ?? fallbackPhase;
   const status =
     Number.isInteger(error.status) && error.status! >= 100 && error.status! <= 599 ? String(error.status) : 'none';
+  const type =
+    safeDiagnosticField(error.type, /^(?:about:blank|https:\/\/rezics\.com\/problems\/[a-z0-9_-]{1,80})$/u, 108) ??
+    'none';
   const code = safeDiagnosticField(error.code, /^[a-z0-9_-]{1,80}$/u, 80) ?? 'none';
   const network =
     safeDiagnosticField(error.networkCode, /^(?:E[A-Z0-9_]{1,64}|ERR_[A-Z0-9_]{1,64}|UND_ERR_[A-Z0-9_]{1,64})$/u, 72) ??
     'none';
   const correlation = safeDiagnosticField(error.correlationId, /^[A-Za-z0-9._:-]{1,128}$/u, 128) ?? 'none';
   const classification = safeDiagnosticField(error.phase, /^[A-Za-z][A-Za-z0-9]{0,31}$/u, 32);
-  return `Import transport failed phase=${phase} method=${method} target=${target} status=${status} problem=${code} network=${network} correlation=${correlation}${classification ? ` classification=${classification}` : ''}`;
+  return `Import transport failed status=${status} type=${type} problem=${code} phase=${phase}${classification ? ` classification=${classification}` : ''} network=${network} correlation=${correlation} method=${method} target=${target}`;
 }
 
 export function importTransportCause(error: unknown): string {
@@ -336,16 +340,39 @@ function requestPath(url: string | undefined): string | undefined {
   if (!url) return undefined;
   try {
     const path = new URL(url).pathname;
-    return path.startsWith('/v1/') && path.length <= 200 ? path : undefined;
+    return path.startsWith('/v1/') && path.length <= 512 ? path : undefined;
   } catch {
     return undefined;
   }
 }
-function attachRequest(error: ImportTransportError, method?: string, path?: string): ImportTransportError {
+function attachRequest(
+  error: ImportTransportError,
+  method?: string,
+  path?: string,
+  origin?: string,
+): ImportTransportError {
   return new ImportTransportError(error.status, error.type, error.code, error.retryable, error.retry, error.phase, {
     ...copiedDiagnostics(error),
     ...(error.method === undefined && method !== undefined ? { method } : {}),
     ...(error.path === undefined && path !== undefined ? { path } : {}),
+    ...(error.origin === undefined && origin !== undefined ? { origin } : {}),
+  });
+}
+
+function requestFailure(
+  error: unknown,
+  request?: Partial<Pick<ImportRequestDiagnostics, 'method' | 'path' | 'origin'>>,
+): ImportTransportError {
+  if (error instanceof ImportTransportError)
+    return attachRequest(error, request?.method, request?.path, request?.origin);
+  const diagnostics = importRequestFailure(error);
+  const networkCode = !diagnostics || diagnostics.phase === 'network' ? importNetworkCode(error) : undefined;
+  return new ImportTransportError(diagnostics?.status, undefined, diagnostics?.code, false, undefined, undefined, {
+    phase: 'network',
+    ...request,
+    ...diagnostics,
+    ...(networkCode === undefined ? {} : { networkCode }),
+    cause: error,
   });
 }
 
@@ -371,25 +398,24 @@ function subjectReadOverloadResumeDelay(
 }
 
 function httpFailure(reply: ClientResponse, last?: { method: string; path: string }): ImportTransportError {
-  // Only public problem identifiers are useful to callers. No remote diagnostic text is retained.
+  // Only public problem identifiers are exposed. Remote diagnostic text stays on the private cause chain.
   const outer =
     typeof reply.error === 'object' && reply.error !== null && !types.isProxy(reply.error) ? reply.error : undefined;
   const nested = outer === undefined ? undefined : Object.getOwnPropertyDescriptor(outer, 'value')?.value;
   const value =
     typeof nested === 'object' && nested !== null && !types.isProxy(nested) ? nested : (outer as object | undefined);
-  // Eden represents a rejected fetch as a 503 error envelope with the thrown value.
+  // Eden can supply a synthetic 503 Response as well as an envelope for a rejected fetch.
   // Recover our request-local error before interpreting public HTTP problem fields.
-  if (!reply.response && value instanceof ImportTransportError) return attachRequest(value, last?.method, last?.path);
+  if (value && (value instanceof ImportTransportError || types.isNativeError(value) || importRequestFailure(value)))
+    return requestFailure(value, last);
   const field = (name: string): unknown =>
     value && !types.isProxy(value) ? Object.getOwnPropertyDescriptor(value, name)?.value : undefined;
-  const type = field('type');
-  const safeType =
-    type === 'about:blank' ||
-    (typeof type === 'string' && /^https:\/\/rezics\.com\/problems\/[a-z0-9_-]{1,80}$/u.test(type))
-      ? type
-      : undefined;
-  const code = field('code');
-  const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/u.test(code) ? code : undefined;
+  const safeType = safeDiagnosticField(
+    field('type'),
+    /^(?:about:blank|https:\/\/rezics\.com\/problems\/[a-z0-9_-]{1,80})$/u,
+    108,
+  );
+  const safeCode = safeDiagnosticField(field('code'), /^[a-z0-9_-]{1,80}$/u, 80);
   const request = reply.response ? importResponseDiagnostics(reply.response) : undefined;
   let fallback: { origin?: string; path?: string } = {};
   if (reply.response?.url) {
@@ -400,15 +426,9 @@ function httpFailure(reply: ClientResponse, last?: { method: string; path: strin
       // A generated response can omit or malformedly report its URL; keep the safe envelope partial.
     }
   }
-  const correlationValue = reply.response
-    ? (request?.correlationId ?? importCorrelationId(reply.response) ?? field('request_id'))
-    : undefined;
-  const correlationId =
-    typeof correlationValue === 'string' &&
-    correlationValue.length <= 128 &&
-    /^[A-Za-z0-9._:-]+$/.test(correlationValue)
-      ? correlationValue
-      : undefined;
+  const correlationValue =
+    request?.correlationId ?? (reply.response ? importCorrelationId(reply.response) : undefined) ?? field('request_id');
+  const correlationId = safeDiagnosticField(correlationValue, /^[A-Za-z0-9._:-]{1,128}$/u, 128);
   return new ImportTransportError(
     reply.response?.status ?? (reply.status > 0 ? reply.status : undefined),
     safeType,
@@ -421,6 +441,7 @@ function httpFailure(reply: ClientResponse, last?: { method: string; path: strin
       ...(last && !request ? { method: last.method, path: last.path } : {}),
       phase: reply.response ? 'http' : 'response',
       ...(correlationId === undefined ? {} : { correlationId }),
+      cause: reply.error,
     },
   );
 }
@@ -436,20 +457,7 @@ async function response(
     reply = await call();
   } catch (error) {
     signal?.throwIfAborted();
-    const request = last?.();
-    if (error instanceof ImportTransportError) throw attachRequest(error, request?.method, request?.path);
-    const diagnostics = importRequestFailure(error);
-    if (diagnostics) {
-      throw new ImportTransportError(undefined, undefined, undefined, false, undefined, undefined, {
-        ...diagnostics,
-        cause: error,
-      });
-    }
-    throw new ImportTransportError(undefined, undefined, undefined, false, undefined, undefined, {
-      phase: 'network',
-      ...(request ?? {}),
-      cause: error,
-    });
+    throw requestFailure(error, last?.());
   }
   signal?.throwIfAborted();
   if (
@@ -579,15 +587,10 @@ export function createImportTransport(options: ImportTransportOptions) {
         }
         return reply;
       } catch (error) {
-        if (error instanceof ImportTransportError) throw attachRequest(error, lastRequest.method, lastRequest.path);
-        const diagnostics = importRequestFailure(error);
-        throw new ImportTransportError(undefined, undefined, undefined, false, undefined, undefined, {
-          phase: 'network',
+        throw requestFailure(error, {
           method: request.method,
           origin: new URL(request.url).origin,
           path: new URL(request.url).pathname,
-          ...diagnostics,
-          cause: error,
         });
       } finally {
         stopForwarding();

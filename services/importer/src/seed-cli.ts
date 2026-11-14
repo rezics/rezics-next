@@ -5,6 +5,7 @@ import type { ImportRunResult } from './importer.ts';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { types } from 'node:util';
 
 /** Fixed local phases only: never derive diagnostic text from source records or remote errors. */
 const finalizationPhases = {
@@ -161,7 +162,7 @@ export async function finalizeSeedResult(input: {
 }
 
 function safeField(value: unknown, pattern: RegExp, limit: number): string | undefined {
-  return typeof value === 'string' && value.length <= limit && pattern.test(value) ? value : undefined;
+  return typeof value === 'string' && value.length <= limit && pattern.exec(value)?.[0] === value ? value : undefined;
 }
 
 function details(values: Partial<ImportRequestDiagnostics>, fallbackPhase: string): string {
@@ -178,11 +179,22 @@ function details(values: Partial<ImportRequestDiagnostics>, fallbackPhase: strin
   const network =
     safeField(values.networkCode, /^(?:E[A-Z0-9_]{1,64}|ERR_[A-Z0-9_]{1,64}|UND_ERR_[A-Z0-9_]{1,64})$/u, 72) ?? 'none';
   const correlation = safeField(values.correlationId, /^[A-Za-z0-9._:-]{1,128}$/u, 128) ?? 'none';
-  return `${operation}phase=${phase} method=${method} target=${target} status=${status} problem=${code} network=${network} correlation=${correlation}`;
+  return `${operation}phase=${phase} method=${method} target=${target} status=${status} type=none problem=${code} network=${network} correlation=${correlation}`;
 }
 
 function credentialCause(error: unknown): CredentialFailure | undefined {
   return error instanceof CredentialDeniedError || error instanceof CredentialServiceError ? error : undefined;
+}
+
+/** Local phase wrappers may keep a transport failure as their cause. Never inspect their diagnostic text. */
+export function seedTransportError(error: unknown): ImportTransportError | undefined {
+  let value = error;
+  for (let depth = 0; depth < 4; depth++) {
+    if (typeof value !== 'object' || value === null || types.isProxy(value)) return undefined;
+    if (value instanceof ImportTransportError) return value;
+    value = Object.getOwnPropertyDescriptor(value, 'cause')?.value;
+  }
+  return undefined;
 }
 
 /** Render only safe operation metadata. Causes and response bodies remain private to the Error chain. */
@@ -203,9 +215,10 @@ function formatSeedCause(error: unknown): string {
     const run = importRunFailures.get(error);
     if (run) return `Cross-media seed import failed provider=${run.provider} kind=${run.kind}`;
   }
-  if (error instanceof ImportTransportError) {
-    const cause = credentialCause(error.cause);
-    return `${formatImportTransportError(error)}${cause ? ` auth{${details(cause.diagnostics ?? {}, 'credential')}}` : ''}`;
+  const transport = seedTransportError(error);
+  if (transport) {
+    const cause = credentialCause(transport.cause);
+    return `${formatImportTransportError(transport)}${cause ? ` auth{${details(cause.diagnostics ?? {}, 'credential')}}` : ''}`;
   }
   if (error instanceof CredentialDeniedError || error instanceof CredentialServiceError)
     return `Credential request failed ${details(error.diagnostics ?? {}, 'credential')}`;
