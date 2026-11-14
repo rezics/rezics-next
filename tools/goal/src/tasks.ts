@@ -120,7 +120,11 @@ export function reportRetryInstallFailure(
   const reason = cause instanceof BoundedProcessError && cause.timedOut ? 'timed out' : 'failed';
   const summary = `Worktree dependency setup ${reason}. Repair shared dependency admission, then retry affected tasks without replacing their worktrees. Details are in task launch-failed events.`;
   inbox.record(ownership.manager, {
-    managerId: ownership.manager, taskId: ownership.taskId, kind: 'environment', summary, attempt: ownership.attempt,
+    managerId: ownership.manager,
+    taskId: ownership.taskId,
+    kind: 'environment',
+    summary,
+    attempt: ownership.attempt,
   });
   // A stable summary without per-task identity uses the inbox's existing repeat fold, including across host restarts.
   inbox.deliver({ managerId: ownership.operations, kind: 'environment', summary });
@@ -2437,12 +2441,16 @@ export class WorkerTasks {
           );
           const manager = this.store.task(taskId).brief.manager;
           if (error instanceof DependencyInstallError) {
-            throw reportRetryInstallFailure(inbox, {
-              manager,
-              operations: this.settings.integration.operationsManager ?? this.settings.integration.supermanager,
-              taskId,
-              attempt: next.attempt,
-            }, error);
+            throw reportRetryInstallFailure(
+              inbox,
+              {
+                manager,
+                operations: this.settings.integration.operationsManager ?? this.settings.integration.supermanager,
+                taskId,
+                attempt: next.attempt,
+              },
+              error,
+            );
           }
           const detail = String(error)
             .replace(/[\r\n]+/g, ' ')
