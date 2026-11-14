@@ -334,6 +334,8 @@ publication pointer CAS in the same transaction. Until the active owner exports 
 binding, native point commands reject compatibility publication descriptors with a stale-publication precondition;
 the compatibility publisher remains unchanged.
 
+Decision: keep Content at the prepared authorization boundary until Book supplies native expected-version readers and the atomic writer; leave point routes and exact Book-link dispatch unmounted, and retain current manifest reads until dispatch is coordinated.
+
 Copy only the affected sibling, preorder and chapter index paths and at most H explicitly selected ancestors; create
 one small version root/count summary and atomically CAS the publication pointer with receipt/identity-only event.
 Normal append or single revision replacement is O(H log N) logical index changes, independent of total
