@@ -33,7 +33,9 @@ change edit or publication authority.
 The producer admits at most 32 statements per field, 64 qualifiers per statement, 32 references and 64 parts per
 reference; each statement is at most 64 KiB UTF-8. An exceeded field budget marks that field unavailable. The complete
 cards payload is limited to 2 MiB UTF-8; over-budget output makes the aggregate unavailable rather than truncating a
-field or card. The web reader checks the membership page and cards against their separate ceilings.
+field or card. Scalar and current relation facts for one release are projected together once through Semantic's
+canonical item resolver; field count and byte limits apply to the public statements it returns. The web reader checks
+the membership page and cards against their separate ceilings.
 
 The growth acceptance runs the composed native producer at 64, 512 and 4,096 unrelated Subjects while holding the
 actual page keys fixed and adding obsolete selected-Subject history. It measures examined rows and keyed statements

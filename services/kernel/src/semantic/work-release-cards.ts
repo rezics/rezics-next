@@ -7,7 +7,7 @@ import { readSubjectSummaries, type SubjectSummary } from './summaries.ts';
 import { slotView } from './slots.ts';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
-import { isRelationProperty, type FactRow, type Statement } from './item.ts';
+import { factDataTypes, isRelationProperty, resolveItem, type FactRow, type Statement } from './item.ts';
 import { withReadTransaction } from './read.ts';
 import { waitForSubjectLinks } from './link-freshness.ts';
 import type { WorkReleaseCardMembershipLink, WorkReleaseCardsInput } from './copy-work-reader-port.ts';
@@ -61,23 +61,15 @@ type CardSource = {
 type RelationKey = { id: string; property: string; candidate: CurrentRelationCandidate };
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
-function statementOf(fact: FactRow): Statement | undefined {
-  if (fact.kind !== 'statement' || !fact.statement_id || !fact.body || typeof fact.body !== 'object') return undefined;
-  const statement = fact.body as Statement;
-  return statement.id === fact.statement_id && statement.property?.id === fact.property ? statement : undefined;
-}
-
 function statementBytes(statement: Statement): number {
   return new TextEncoder().encode(JSON.stringify(statement)).byteLength;
 }
 
-function fieldFactsWithinBudget(facts: readonly FactRow[]): facts is readonly (FactRow & { body: Statement })[] {
+function statementsWithinBudget(statements: readonly Statement[]): boolean {
   return (
-    facts.length <= workReleaseCardFieldLimit &&
-    facts.every((fact) => {
-      const statement = statementOf(fact);
+    statements.length <= workReleaseCardFieldLimit &&
+    statements.every((statement) => {
       return (
-        statement !== undefined &&
         statement.qualifiers.length <= workReleaseCardQualifierLimit &&
         statement.references.length <= workReleaseCardReferenceLimit &&
         statement.references.every((reference) => reference.parts.length <= workReleaseCardReferencePartLimit) &&
@@ -85,6 +77,60 @@ function fieldFactsWithinBudget(facts: readonly FactRow[]): facts is readonly (F
       );
     })
   );
+}
+
+export type WorkReleaseCardFactProjection = { statements: Statement[]; unavailable: boolean };
+
+/** Project one selected native batch through the canonical item resolver without filling missing row evidence. */
+export function projectWorkReleaseCardFacts(
+  subject: string,
+  type: string,
+  release: Release,
+  context: string,
+  fields: ReadonlyMap<string, readonly FactRow[] | null>,
+): Map<string, WorkReleaseCardFactProjection> {
+  const projected = new Map<string, WorkReleaseCardFactProjection>();
+  const projectable = new Map<string, readonly FactRow[]>();
+  const rows: FactRow[] = [];
+  for (const [property, facts] of fields) {
+    if (
+      facts === null ||
+      facts.some(
+        (fact) =>
+          fact.kind !== 'statement' ||
+          fact.property !== property ||
+          !fact.statement_id ||
+          fact.fact_revision === null ||
+          fact.fact_revision === undefined ||
+          typeof fact.fact_release !== 'string' ||
+          fact.fact_release.length === 0,
+      )
+    ) {
+      projected.set(property, { statements: [], unavailable: true });
+      continue;
+    }
+    projectable.set(property, facts);
+    rows.push(...facts);
+    projected.set(property, { statements: [], unavailable: false });
+  }
+  if (!rows.length) return projected;
+
+  // Every row in this batch has its own stored evidence. The first row supplies only the
+  // resolver's required subject-level fallback, which is unused for these complete rows.
+  const evidence = rows[0]!;
+  const item = resolveItem(subject, rows, type, factDataTypes(release, rows), {
+    revision: evidence.fact_revision!,
+    release: evidence.fact_release!,
+    context,
+  });
+  for (const property of projectable.keys()) {
+    const statements = item.statements[property] ?? [];
+    projected.set(property, {
+      statements,
+      unavailable: !statementsWithinBudget(statements),
+    });
+  }
+  return projected;
 }
 
 function jsonBytes(value: unknown): number {
@@ -142,6 +188,7 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
 
     const relationCandidatesByPartition = new Map<number, RelationKey[]>();
     const relationFacts = new Map<string, FactRow>();
+    const typeById = new Map(memberships.map(({ id, type }) => [id, type]));
     await withReadTransaction(input.pool, async (client) => {
       const homes = new Map<number, string[]>();
       for (const id of ids) {
@@ -210,10 +257,6 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
             }
             const view = await slotView(local, id, property, context, defaults);
             const facts = view.facts.filter((fact) => fact.kind === 'statement');
-            if (!fieldFactsWithinBudget(facts)) {
-              fields.set(property, { facts: [], withheld: false, unavailable: true });
-              continue;
-            }
             fields.set(property, { facts: [...facts], withheld: !!view.resolution });
           }
           selected.set(id, fields);
@@ -247,13 +290,20 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
       }
     }
 
+    const projected = new Map<string, Map<string, WorkReleaseCardFactProjection>>();
+    for (const [id, fields] of selected) {
+      const batch = new Map<string, readonly FactRow[] | null>();
+      for (const [property, field] of fields) batch.set(property, field.unavailable ? null : field.facts);
+      projected.set(id, projectWorkReleaseCardFacts(id, typeById.get(id)!, input.release, context, batch));
+    }
+
     const targetIds = new Set<string>();
-    for (const fields of selected.values()) {
+    for (const fields of projected.values()) {
       for (const field of fields.values()) {
-        for (const fact of field.facts) {
-          const statement = statementOf(fact);
+        if (field.unavailable) continue;
+        for (const statement of field.statements) {
           if (
-            statement?.property.data_type === 'wikibase-item' &&
+            statement.property.data_type === 'wikibase-item' &&
             statement.value.type === 'value' &&
             typeof statement.value.content === 'string' &&
             routeOf(statement.value.content) !== null
@@ -285,6 +335,7 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
     const cards: WorkReleaseCard[] = memberships.map(({ id, type, summary, membership, related }) => {
       const fields = {} as Record<(typeof workReleaseCardProperties)[number], WorkReleaseCardField>;
       const selectedFields = selected.get(id) ?? new Map<string, SelectedField>();
+      const projectedFields = projected.get(id) ?? new Map<string, WorkReleaseCardFactProjection>();
       const cardRelated: Record<string, SubjectSummary> = { ...related };
       for (const property of workReleaseCardProperties) {
         if (!(requested.get(id) ?? []).includes(property)) {
@@ -300,11 +351,12 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
           fields[property] = { state: 'unavailable' };
           continue;
         }
-        if (!fieldFactsWithinBudget(field.facts)) {
+        const projection = projectedFields.get(property);
+        if (!projection || projection.unavailable) {
           fields[property] = { state: 'unavailable' };
           continue;
         }
-        if (!field.facts.length) {
+        if (!projection.statements.length) {
           fields[property] = { state: 'missing' };
           continue;
         }
@@ -315,12 +367,7 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
         const statements: Statement[] = [];
         const fieldRelated: Record<string, SubjectSummary> = {};
         let withheld = false;
-        for (const fact of field.facts) {
-          const statement = statementOf(fact);
-          if (!statement) {
-            withheld = true;
-            break;
-          }
+        for (const statement of projection.statements) {
           if (statement.property.data_type === 'wikibase-item' && statement.value.type === 'value') {
             if (typeof statement.value.content !== 'string' || routeOf(statement.value.content) === null) {
               withheld = true;
