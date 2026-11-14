@@ -256,7 +256,7 @@ export const ArchiveReadFailed: Story = {
 };
 
 export const Review: Story = {
-  name: 'Populated review',
+  name: 'Populated review · sealed mixed presentation',
   render: () => (
     <div className="mx-auto max-w-4xl p-4">
       <ArchiveRecoveryReview
@@ -279,6 +279,7 @@ export const Review: Story = {
     const apply = canvas.getByRole('button', { name: m.library_archive_recovery_apply_action() });
     await expect(apply).toBeDisabled();
     await expect(canvas.getByText(m.library_archive_recovery_destination_private())).toBeVisible();
+    await expect(canvas.getByText(m.library_archive_recovery_presentation_source_mixed())).toBeVisible();
     await expect(canvas.getByText(occurrenceRows[0]!.note!)).toBeVisible();
     await expect(canvas.getByText(occurrenceRows[1]!.note!)).toBeVisible();
     await expect(canvas.getByText(m.library_archive_progress_exact()).closest('details')).not.toHaveAttribute('open');
@@ -296,6 +297,7 @@ export const StaleReviewConflict: Story = {
 };
 
 export const PartialResult: Story = {
+  name: 'Partial member result · presentation unattempted',
   render: () => (
     <div className="mx-auto max-w-4xl p-4">
       <ArchiveRecoveryResults
@@ -407,6 +409,7 @@ const completed: RecoveryOutcomesPage = {
   })),
 };
 export const CompletedResult: Story = {
+  name: 'Completed member result · mixed presentation and current readback',
   render: () => (
     <div className="mx-auto max-w-4xl p-4">
       <ArchiveRecoveryResults
@@ -443,10 +446,142 @@ export const CompletedResult: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: m.library_archive_recovery_complete_title() })).toBeVisible();
     await expect(canvas.getByRole('heading', { name: 'Recovered private reading list' })).toBeVisible();
+    await expect(canvas.getByText(m.library_archive_recovery_presentation_mixed())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.library_archive_recovery_open_collection() })).toHaveAttribute(
       'href',
       expect.stringContaining(status.collectionId!),
     );
     await expect(canvas.getByText(m.library_archive_entry_current()).closest('details')).not.toHaveAttribute('open');
   },
+};
+
+const readPresentationTypes = async () => [
+  { id: 'schema:Book', label: 'Book' },
+  { id: 'schema:Movie', label: 'Film — an alternative current presentation choice' },
+];
+
+function PresentationChoiceStory({ available }: { available: boolean }) {
+  const [kind, setKind] = useState<string | null>(null);
+  return (
+    <RecoveryPresentationTypesContext.Provider value={readPresentationTypes}>
+      <div className="mx-auto max-w-4xl p-4">
+        <ArchiveRecoveryReview
+          collection={collection}
+          selected={selected}
+          targets={new Map([[occurrenceRows[0]!.sourceSubjectId!, subject]])}
+          presentationKind={kind}
+          presentationEvidence={
+            available
+              ? {
+                  ...presentationEvidence,
+                  presentationKind: 'schema:Book',
+                  presentationDisposition: 'available_explicit_choice',
+                  presentationAdmissible: true,
+                }
+              : presentationEvidence
+          }
+          review={null}
+          busy={false}
+          onTarget={() => undefined}
+          onPresentationKind={setKind}
+          onSubmit={() => undefined}
+          onApply={() => undefined}
+        />
+      </div>
+    </RecoveryPresentationTypesContext.Provider>
+  );
+}
+
+export const ExplicitPresentationChoice: Story = {
+  name: 'Available archived Type · explicit current choice required',
+  render: () => <PresentationChoiceStory available />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const mixed = await canvas.findByRole('radio', { name: new RegExp(m.library_collection_mixed_label()) });
+    await expect(mixed).toBeChecked();
+    const book = await canvas.findByRole('radio', { name: 'Book', exact: true });
+    await expect(book).not.toBeChecked();
+    await userEvent.click(book);
+    await expect(book).toBeChecked();
+    await userEvent.click(mixed);
+    await expect(mixed).toBeChecked();
+  },
+};
+
+export const UnsupportedArchivedPresentation: Story = {
+  name: 'Unsupported archived meaning · mixed or another current Type',
+  render: () => <PresentationChoiceStory available={false} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.library_archive_recovery_presentation_archived_unsupported())).toBeVisible();
+    await expect(await canvas.findByRole('radio', { name: /Film/ })).toBeEnabled();
+    await expect(canvas.getByRole('radio', { name: new RegExp(m.library_collection_mixed_label()) })).toBeChecked();
+  },
+};
+
+const sealedType = { kind: 'schema:Book', source: 'archived' as const, releaseDigest: 'a'.repeat(64) };
+export const SealedTypeReview: Story = {
+  name: 'Explicit archived Type · sealed review and release digest',
+  render: () => (
+    <div className="mx-auto max-w-4xl p-4">
+      <ArchiveRecoveryReview
+        collection={{ ...collection, presentationKind: sealedType.kind }}
+        selected={selected}
+        targets={new Map([[occurrenceRows[0]!.sourceSubjectId!, subject]])}
+        presentationKind={sealedType.kind}
+        presentationEvidence={{
+          ...presentationEvidence,
+          presentationKind: sealedType.kind,
+          presentationDisposition: 'available_explicit_choice',
+          presentationAdmissible: true,
+        }}
+        review={{ ...nativeReview, review: { ...nativeReview.review!, presentation: sealedType } }}
+        busy={false}
+        onTarget={() => undefined}
+        onPresentationKind={() => undefined}
+        onSubmit={() => undefined}
+        onApply={() => undefined}
+      />
+    </div>
+  ),
+};
+
+function PresentationResultStory({ stale }: { stale: boolean }) {
+  const result: RecoveryOutcomesPage = {
+    ...completed,
+    ...(stale ? { state: 'reviewed', collectionId: null, collection: null, outcomes: [] } : {}),
+    presentation: {
+      ...sealedType,
+      state: stale ? 'unsupported_or_stale' : 'adopted',
+      reason: stale ? 'release_changed' : null,
+    },
+  };
+  return (
+    <div className="mx-auto max-w-4xl p-4">
+      <ArchiveRecoveryResults
+        status={result}
+        page={result}
+        receiving={null}
+        busy={false}
+        canPrevious={false}
+        sourceTitle={collection.title}
+        targets={new Map([[occurrenceRows[0]!.sourceSubjectId!, subject]])}
+        onRead={() => undefined}
+        onFirst={() => undefined}
+        onPrevious={() => undefined}
+        onNext={() => undefined}
+        onReadCollection={() => undefined}
+      />
+    </div>
+  );
+}
+
+export const AdoptedPresentation: Story = {
+  name: 'Adopted presentation · independent of completed members',
+  render: () => <PresentationResultStory stale={false} />,
+};
+
+export const StalePresentation: Story = {
+  name: 'Unsupported or stale presentation · new review required',
+  render: () => <PresentationResultStory stale />,
 };

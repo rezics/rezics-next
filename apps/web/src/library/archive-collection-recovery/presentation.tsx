@@ -2,11 +2,9 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { CollectionTypeOption } from '../collection-presentation';
 import { ReleasedTypeChoices } from '../collection-presentation-review/type-options';
-import type {
-  RecoveryPresentationChoice,
-  RecoveryPresentationEvidence,
-  RecoveryStatus,
-} from './contract';
+import { actionClass } from '../private-export/controls';
+import { EvidenceDetails } from '../archive-progress-recovery/review';
+import type { RecoveryPresentationChoice, RecoveryPresentationEvidence, RecoveryStatus } from './contract';
 
 async function readPresentationTypes(): Promise<readonly CollectionTypeOption[] | null> {
   const { readArchiveRecoveryPresentationTypes } = await import('./server');
@@ -125,6 +123,7 @@ export function RecoveryPresentationChoices({
             {evidence.presentationKind ?? m.library_collection_mixed_label()}
           </p>
           <p className="text-sm">{archivedDisposition(evidence)}</p>
+          <EvidenceDetails value={evidence} />
         </div>
       ) : null}
       {pending ? <p role="status">{m.library_archive_recovery_presentation_loading()}</p> : null}
@@ -141,7 +140,7 @@ export function RecoveryPresentationChoices({
       {!pending && types === null ? (
         <button
           type="button"
-          className="min-h-11 w-fit max-w-full rounded-md border px-4 py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+          className={`${actionClass} w-fit max-w-full rounded-md border text-start [overflow-wrap:anywhere]`}
           disabled={disabled}
           onClick={() => setAttempt((value) => value + 1)}
         >

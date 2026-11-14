@@ -92,7 +92,8 @@ row copies; its canonical JSON body is at most 155,884 ASCII bytes for UUID oper
 remains capped at `3R + 2` attempts. Upload transfer remains `O(U)`. The visit does not walk pages to a total, hydrate
 each row, reconstruct rank keys, or load the archive into browser storage. Subject suggestions run only after an
 explicit search term. Presentation choices add one active-release read per opened choice editor or explicit retry;
-the immutable definitions body keeps its existing producer bounds and cache. Mixed adds no native Type lookup, and
+the immutable definitions body keeps its existing producer bounds and cache. The browser holds one options array
+(`O(T)` in the definitions-bounded released Types), without scanning member pages. Mixed adds no native Type lookup, and
 review adds only the native addressed Type admission and constant-size sealed choice.
 
 Decision: keep the original encoded archive after a successful read so Cancel then Restart can reuse it; a completed
@@ -100,7 +101,9 @@ export from this signed-in owner is the same source. Results reopen the current 
 privacy, member identities, notes and order.
 
 Stories cover upload, local preparation, file-read failure, populated review, unsupported evidence, sparse
-continuation, unknown application recovery, acknowledged result, stale conflict and partial result.
+continuation, unknown application recovery, acknowledged result, stale conflict and partial result. Presentation
+stories label explicit current choices, unsupported archived meaning, sealed mixed/Type reviews, and separate
+mixed/adopted/unsupported-or-stale/unattempted outcomes.
 Journey tests pin original-archive restart, exact original bytes, opaque sequential cursors, native Collection readback and other-member denial. The native Web owner
 and other-member walk exports a completed file, restores through the page, and rereads the Collection. Focused Web
 acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer acceptance

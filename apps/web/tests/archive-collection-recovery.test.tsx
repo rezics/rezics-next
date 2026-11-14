@@ -8,6 +8,7 @@ import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import {
   RECOVERY_UPLOAD_BYTES,
   type RecoveryCollection,
+  type RecoveryEffectCommand,
   type RecoveryCollectionsPage,
   type RecoveryOccurrence,
   type RecoveryOccurrencesPage,
@@ -16,6 +17,8 @@ import {
   type RecoveryReview,
   type RecoveryStatus,
 } from '../src/library/archive-collection-recovery/contract';
+import type { CollectionTypeOption } from '../src/library/collection-presentation';
+import { makeReviewBody } from '../src/library/archive-collection-recovery/selection';
 import type { RecoveryVisit } from '../src/library/archive-collection-recovery/visit';
 import {
   commitRecoveryRead,
@@ -86,7 +89,10 @@ const { createRoot } = await import('react-dom/client');
 const { ArchiveCollectionRecoveryPortContext } = await import('../src/library/archive-collection-recovery/port');
 const { PrivateArchiveCollectionRecoveryPage } = await import('../src/library/archive-collection-recovery/page');
 const { RecoveryPresentationTypesContext } = await import('../src/library/archive-collection-recovery/presentation');
-const releasedTypes = async () => [{ id: 'schema:Book', label: 'Book' }, { id: 'schema:Movie', label: 'Film' }];
+const releasedTypes = async () => [
+  { id: 'schema:Book', label: 'Book' },
+  { id: 'schema:Movie', label: 'Film' },
+];
 const previousLocale = getLocale();
 await setLocale('en', { reload: false });
 
@@ -193,7 +199,7 @@ function reviewResult(selectedOccurrences = 2): RecoveryReview {
   return {
     ...status('reviewed', { selectedCollectionId: collectionId, selectedOccurrences }),
     review: {
-      reviewId: 'recovery-review-1',
+      reviewId: '00000000-0000-4000-8000-000000000101',
       digest: 'a'.repeat(64),
       epoch: 1,
       presentation: { kind: null, source: 'mixed', releaseDigest: null },
@@ -387,7 +393,11 @@ function fakePort(
   return { port, calls };
 }
 
-async function mount(port: RecoveryPort, initialVisit = visit(), readTypes = releasedTypes) {
+async function mount(
+  port: RecoveryPort,
+  initialVisit = visit(),
+  readTypes: () => Promise<readonly CollectionTypeOption[] | null> = releasedTypes,
+) {
   let currentVisit = initialVisit;
   let forceRender = () => undefined;
   function TestRoot() {
@@ -396,8 +406,11 @@ async function mount(port: RecoveryPort, initialVisit = visit(), readTypes = rel
     return createElement(
       ArchiveCollectionRecoveryPortContext.Provider,
       { value: port },
-      createElement(RecoveryPresentationTypesContext.Provider, { value: readTypes },
-        createElement(PrivateArchiveCollectionRecoveryPage, { visit: currentVisit })),
+      createElement(
+        RecoveryPresentationTypesContext.Provider,
+        { value: readTypes },
+        createElement(PrivateArchiveCollectionRecoveryPage, { visit: currentVisit }),
+      ),
     );
   }
   const rootRoute = createRootRoute({ component: TestRoot });
@@ -725,7 +738,7 @@ test('mounted recovery navigates independent native windows, revises selection, 
     expect((reviewed.body as { presentationKind?: string | null }).presentationKind).toBeNull();
     expect(reviewed.body.mappings).toEqual([{ sourceSubjectId: subjectId, targetSubjectId: targetId }]);
     expect(view.host.textContent).toContain(m.library_archive_recovery_new_private_destination());
-    expect(view.host.textContent).toContain(m.library_archive_recovery_mapping_current({ id: targetId }));
+    expect(view.host.textContent).toContain(m.library_archive_recovery_mapping_current({ id: target.title }));
     const confirmation = view.host.querySelector('input[type=checkbox]')!;
     await click(confirmation);
     await click(button(view.host, m.library_archive_recovery_apply_action()));
@@ -974,6 +987,250 @@ test('another account is refused at the restored Collection reader', async () =>
     journey.retire();
   }
 });
+
+async function openPresentationReview(host: HTMLElement) {
+  await uploadSmallFile(host);
+  await click(button(host, m.library_archive_recovery_choose_collection()));
+  for (const checkbox of host.querySelectorAll('input[type=checkbox][aria-label]')) await click(checkbox);
+  await click(button(host, m.library_archive_recovery_open_review()));
+}
+
+test('an explicit current Type is sealed, retries its original confirmation after a release change, and has independent readback', async () => {
+  const fake = fakePort({ uncertainApply: true });
+  let typeReads = 0;
+  let currentLabel = 'Book';
+  const choice = { kind: 'schema:Book', source: 'alternative' as const, releaseDigest: 'a'.repeat(64) };
+  const reviewed = reviewResult();
+  reviewed.review!.presentation = choice;
+  reviewed.presentation = { ...choice, state: 'unattempted', reason: null };
+  fake.port.review = async (command) => {
+    fake.calls.reviews.push(structuredClone(command));
+    return { kind: 'ok', value: reviewed };
+  };
+  const adopted = { ...choice, state: 'adopted' as const, reason: null };
+  fake.port.outcomes = async () => ({ kind: 'ok', value: { ...outcomesPage(), presentation: adopted } });
+  const view = await mount(fake.port, visit(), async () => {
+    typeReads++;
+    return [{ id: 'schema:Book', label: currentLabel }];
+  });
+  try {
+    await openPresentationReview(view.host);
+    expect(view.host.querySelector<HTMLInputElement>('input[type=radio][value=""]')?.checked).toBe(true);
+    expect(view.host.textContent).toContain(m.library_archive_recovery_presentation_archived_unsupported());
+    await click(view.host.querySelector('input[type=radio][value="schema:Book"]')!);
+    await click(button(view.host, m.library_archive_recovery_review_action()));
+    expect(fake.calls.reviews[0]).toMatchObject({ body: { presentationKind: 'schema:Book' } });
+    const sealed = view.host.querySelector('[data-recovery-presentation="sealed"]')!;
+    expect(sealed.textContent).toContain('schema:Book');
+    expect(sealed.textContent).toContain(choice.releaseDigest);
+    expect(sealed.textContent).toContain(m.library_archive_recovery_presentation_source_alternative());
+    await click(view.host.querySelector('input[type=checkbox]')!);
+    await click(button(view.host, m.library_archive_recovery_apply_action()));
+    currentLabel = 'A later release label';
+    expect(button(view.host, m.library_archive_recovery_edit_selection()).disabled).toBe(true);
+    await click(button(view.host, m.library_archive_recovery_retry_original()));
+    expect(fake.calls.applies[1]).toEqual(fake.calls.applies[0]);
+    expect(fake.calls.applies[1]).toMatchObject({
+      body: { reviewId: reviewed.review!.reviewId, digest: reviewed.review!.digest },
+    });
+    expect(Object.keys((fake.calls.applies[1] as { body: object }).body).sort()).toEqual(['digest', 'reviewId']);
+    expect(typeReads).toBe(1);
+    expect(view.host.textContent).not.toContain(currentLabel);
+    expect(view.host.querySelector('[data-recovery-presentation="adopted"]')).toBeTruthy();
+    expect(view.host.textContent).toContain(m.library_archive_recovery_effect_unresolved());
+    await click(button(view.host, m.library_archive_recovery_read_collection()));
+    expect(view.host.querySelector('[data-receiving-presentation]')?.textContent).toContain(
+      m.library_collection_mixed_label(),
+    );
+    expect(view.host.querySelector('[data-recovery-presentation="adopted"]')).toBeTruthy();
+  } finally {
+    await view.close();
+  }
+});
+
+test('unknown review retains explicit choice and command key; replacement review and source selection remain deliberate', async () => {
+  const fake = fakePort();
+  const commands: Extract<RecoveryEffectCommand, { kind: 'review' }>[] = [];
+  fake.port.review = async (command) => {
+    commands.push(structuredClone(command));
+    if (commands.length === 1) return { kind: 'unknown', command };
+    const value = reviewResult();
+    value.review!.reviewId = `00000000-0000-4000-8000-00000000010${commands.length}`;
+    value.review!.presentation = {
+      kind: command.body.presentationKind ?? null,
+      source: command.body.presentationKind ? 'alternative' : 'mixed',
+      releaseDigest: command.body.presentationKind ? 'a'.repeat(64) : null,
+    };
+    return { kind: 'ok', value };
+  };
+  const { createArchiveCollectionRecoveryJourney } =
+    await import('../src/library/archive-collection-recovery/controller');
+  const journey = createArchiveCollectionRecoveryJourney({ port: fake.port, visit: visit() });
+  try {
+    await journey.upload('e30=');
+    await journey.chooseCollection(collection);
+    journey.setSelection(new Map([firstOccurrence, secondOccurrence].map((row) => [row.sourceOccurrenceId, row])));
+    journey.prepareReview();
+    journey.setPresentationKind('schema:Book');
+    await journey.reviewSelection();
+    journey.setPresentationKind(null);
+    journey.editSelection();
+    await journey.cancel();
+    expect(journey.snapshot().presentationKind).toBe('schema:Book');
+    expect(fake.calls.cancels).toHaveLength(0);
+    await journey.retryUnknown();
+    expect(commands[1]).toEqual(commands[0]);
+    expect(commands[1]!.body.selectedOccurrenceIds).toEqual([occurrenceOne, occurrenceTwo]);
+    journey.setPresentationKind(null);
+    expect(journey.snapshot().presentationKind).toBe('schema:Book');
+    journey.editSelection();
+    journey.prepareReview();
+    journey.setPresentationKind(null);
+    await journey.reviewSelection();
+    expect(commands[2]!.key).not.toBe(commands[0]!.key);
+    expect(commands[2]!.body.presentationKind).toBeNull();
+    expect(journey.snapshot().review?.review?.reviewId).toBe('00000000-0000-4000-8000-000000000103');
+    await journey.apply();
+    expect(fake.calls.applies[0]).toMatchObject({ body: { reviewId: '00000000-0000-4000-8000-000000000103' } });
+    journey.restart();
+    await journey.upload('e30=');
+    await journey.chooseCollection(collection);
+    expect(journey.snapshot().presentationKind).toBeNull();
+    expect(journey.snapshot().selected.size).toBe(0);
+    expect(journey.snapshot().review).toBeNull();
+  } finally {
+    journey.retire();
+  }
+});
+
+test('a stale unaccepted presentation is read separately before new review; cancellation does not invent adoption', async () => {
+  const fake = fakePort();
+  fake.port.apply = async () => ({ kind: 'conflict' });
+  const stale = {
+    state: 'unsupported_or_stale' as const,
+    kind: 'schema:Book',
+    source: 'alternative' as const,
+    releaseDigest: 'a'.repeat(64),
+    reason: 'release_changed',
+  };
+  fake.port.status = async () => ({ kind: 'ok', value: status('reviewed', { presentation: stale }) });
+  const { createArchiveCollectionRecoveryJourney } =
+    await import('../src/library/archive-collection-recovery/controller');
+  const journey = createArchiveCollectionRecoveryJourney({ port: fake.port, visit: visit() });
+  try {
+    await journey.upload('e30=');
+    await journey.chooseCollection(collection);
+    journey.setSelection(new Map([[occurrenceOne, firstOccurrence]]));
+    journey.prepareReview();
+    journey.setPresentationKind('schema:Book');
+    await journey.reviewSelection();
+    await journey.apply();
+    await journey.refreshConflict();
+    expect(journey.snapshot()).toMatchObject({
+      stage: 'results',
+      review: null,
+      status: { fullRestoration: false, collectionId: null, presentation: stale },
+    });
+    journey.prepareReview();
+    journey.setPresentationKind(null);
+    await journey.reviewSelection();
+    expect(fake.calls.reviews[1]).toMatchObject({
+      body: { presentationKind: null, selectedOccurrenceIds: [occurrenceOne] },
+    });
+    await journey.cancel();
+    expect(journey.snapshot().status?.presentation.state).toBe('unattempted');
+  } finally {
+    journey.retire();
+  }
+});
+
+test('presentation outcomes stay separate from complete membership in all four native states', async () => {
+  const { ArchiveRecoveryResults } = await import('../src/library/archive-collection-recovery/results');
+  const host = window.document.createElement('div');
+  const root = createRoot(host);
+  const labels = {
+    mixed: m.library_archive_recovery_presentation_mixed(),
+    adopted: m.library_archive_recovery_presentation_adopted(),
+    unsupported_or_stale: m.library_archive_recovery_presentation_stale(),
+    unattempted: m.library_archive_recovery_presentation_unattempted(),
+  };
+  try {
+    for (const state of ['mixed', 'adopted', 'unsupported_or_stale', 'unattempted'] as const) {
+      const nativeStatus = status('complete', {
+        presentation: { state, kind: null, source: null, releaseDigest: null, reason: null },
+      });
+      await act(async () =>
+        root.render(
+          createElement(ArchiveRecoveryResults, {
+            status: nativeStatus,
+            page: null,
+            receiving: null,
+            busy: false,
+            canPrevious: false,
+            onRead: () => {},
+            onFirst: () => {},
+            onPrevious: () => {},
+            onNext: () => {},
+            onReadCollection: () => {},
+          }),
+        ),
+      );
+      expect(host.querySelector(`[data-recovery-presentation="${state}"]`)?.textContent).toContain(labels[state]);
+      expect(host.textContent).toContain(m.library_archive_recovery_complete_title());
+      expect(host.textContent).toContain(m.library_archive_recovery_presentation_partial_scope());
+      expect(nativeStatus.fullRestoration).toBe(false);
+    }
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+test('canonical review keeps duplicate occurrences and treats omitted and null presentation as mixed', () => {
+  const input = {
+    collectionId,
+    selected: new Map([firstOccurrence, secondOccurrence].map((row) => [row.sourceOccurrenceId, row])),
+    targets: new Map([[subjectId, targetId]]),
+  };
+  const mixed = makeReviewBody(input);
+  expect(mixed.presentationKind).toBeNull();
+  expect(makeReviewBody({ ...input, presentationKind: null })).toEqual(mixed);
+  expect(makeReviewBody({ ...input, presentationKind: 'schema:Book' })).toEqual({
+    ...mixed,
+    presentationKind: 'schema:Book',
+  });
+  expect(mixed.selectedOccurrenceIds).toEqual([occurrenceOne, occurrenceTwo]);
+  expect(mixed.mappings).toEqual([{ sourceSubjectId: subjectId, targetSubjectId: targetId }]);
+});
+
+test.each(['account', 'credential', 'locale'] as const)(
+  'a %s replacement retires a pending presentation review and ignores its late seal',
+  async (boundary) => {
+    const fake = fakePort();
+    let finish!: (value: Awaited<ReturnType<RecoveryPort['review']>>) => void;
+    fake.port.review = () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      });
+    const view = await mount(fake.port);
+    try {
+      await openPresentationReview(view.host);
+      await click(view.host.querySelector('input[type=radio][value="schema:Book"]')!);
+      await click(button(view.host, m.library_archive_recovery_review_action()));
+      if (boundary === 'locale') await setLocale('fr', { reload: false });
+      await view.replaceVisit(
+        visit(boundary === 'account' ? 'viewer-b' : 'viewer-a', boundary === 'credential' ? 'epoch-b' : 'epoch-a'),
+      );
+      await act(async () => finish({ kind: 'ok', value: reviewResult() }));
+      expect(view.host.querySelector('[data-recovery-presentation="sealed"]')).toBeNull();
+      expect(view.host.textContent).not.toContain(collection.title!);
+      expect(view.host.querySelector('input[type=file]')).toBeTruthy();
+      expect(fake.calls.applies).toHaveLength(0);
+    } finally {
+      await view.close();
+      await setLocale('en', { reload: false });
+    }
+  },
+);
 
 test('a cursor window retains eight predecessors and abandons a forward branch after returning', () => {
   const admission: RecoveryReadAdmission = {

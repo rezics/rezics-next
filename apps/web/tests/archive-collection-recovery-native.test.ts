@@ -1,6 +1,10 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import type { RecoveryEffectCommand, RecoveryStatus } from '../src/library/archive-collection-recovery/contract';
+import type {
+  RecoveryEffectCommand,
+  RecoveryReview,
+  RecoveryStatus,
+} from '../src/library/archive-collection-recovery/contract';
 
 mock.module('../src/session/request', () => ({
   prepareSession: async () => true,
@@ -82,3 +86,116 @@ test('the current Collection reader refuses another account at the native bounda
   );
   expect(await port.receivingCollection(uploadId)).toEqual({ kind: 'denied' });
 });
+
+test('native binding forwards the explicit review and replays only the original confirmation with its credential', async () => {
+  const requests: Request[] = [];
+  const choice = { kind: 'schema:Book', source: 'archived' as const, releaseDigest: 'a'.repeat(64) };
+  const confirmation = { reviewId: uploadId, digest: 'b'.repeat(64) };
+  const reviewed: RecoveryReview = {
+    ...status,
+    state: 'reviewed',
+    confirmation,
+    review: {
+      ...confirmation,
+      presentation: choice,
+      epoch: 1,
+      completeMembership: true,
+      completeOrder: true,
+      selectedOccurrences: 1,
+      mappings: [],
+    },
+    completeMembership: true,
+    completeOrder: true,
+    mappings: [],
+    pin: { state: 'unsupported', reason: null, reviewedRevision: null },
+    presentation: { ...choice, state: 'unattempted', reason: null },
+  };
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      if (requests.length === 1 || requests.length === 3) return Response.json({}, { status: 503 });
+      return Response.json(
+        request.url.endsWith('/review')
+          ? reviewed
+          : {
+              ...status,
+              state: 'complete',
+              collectionId: uploadId,
+              presentation: { ...choice, state: 'adopted', reason: null },
+            },
+      );
+    }) as typeof fetch,
+  });
+  const port = kernelArchiveCollectionRecoveryPort(client, new Request('https://site.test/library/recovery'), {}, true);
+  const review: Extract<RecoveryEffectCommand, { kind: 'review' }> = {
+    kind: 'review',
+    uploadId,
+    key: 'original-Type-review',
+    body: { collectionId: uploadId, presentationKind: choice.kind, selectedOccurrenceIds: [uploadId], mappings: [] },
+  };
+  expect(await port.review(review)).toEqual({ kind: 'unknown', command: review });
+  const acknowledgement = await port.review(review);
+  expect(acknowledgement).toMatchObject({ kind: 'ok', value: { review: { presentation: choice } } });
+  const apply: Extract<RecoveryEffectCommand, { kind: 'apply' }> = { kind: 'apply', uploadId, body: confirmation };
+  expect(await port.apply(apply)).toEqual({ kind: 'unknown', command: apply });
+  expect(await port.apply(apply)).toMatchObject({
+    kind: 'ok',
+    value: { fullRestoration: false, presentation: { ...choice, state: 'adopted' } },
+  });
+  expect(requests).toHaveLength(4);
+  for (const [index, request] of requests.entries()) {
+    expect(request.headers.get('authorization')).toBe('Bearer current-viewer');
+    expect(await request.clone().json()).toEqual(index < 2 ? review.body : confirmation);
+    expect(request.headers.get('idempotency-key')).toBe(index < 2 ? JSON.stringify(review.key) : null);
+  }
+});
+
+test.each(['owner', 'mixed'] as const)(
+  'Collection readback projects the current %s presentation independently of archive outcomes',
+  async (source) => {
+    const client = createKernelClient('https://kernel.test', {
+      fetch: (async (input, init) => {
+        const url = new URL(new Request(input, init).url);
+        return Response.json(
+          url.pathname.endsWith('/members')
+            ? {
+                members: [
+                  {
+                    id: uploadId,
+                    subjectId: uploadId,
+                    note: 'Same occurrence note',
+                    addedAt: '2024-01-01T00:00:00.000Z',
+                  },
+                ],
+                next: null,
+              }
+            : {
+                collection: {
+                  id: uploadId,
+                  title: 'Current private Collection',
+                  memberCount: 1,
+                  visibility: 'private',
+                  presentationKind: source === 'owner' ? 'schema:Book' : null,
+                  presentationKindSource: source,
+                },
+              },
+        );
+      }) as typeof fetch,
+    });
+    const port = kernelArchiveCollectionRecoveryPort(
+      client,
+      new Request('https://site.test/library/recovery'),
+      {},
+      true,
+    );
+    expect(await port.receivingCollection(uploadId)).toMatchObject({
+      kind: 'ok',
+      value: {
+        presentationKind: source === 'owner' ? 'schema:Book' : null,
+        presentationKindSource: source,
+        members: [{ note: 'Same occurrence note' }],
+      },
+    });
+  },
+);
