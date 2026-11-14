@@ -15,7 +15,7 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import type { MyRealmsNativeItem } from '../src/community/my-realms-current/contract';
+import type { MyRealmsCurrentController, MyRealmsNativeItem } from '../src/community/my-realms-current/contract';
 import { createMyRealmsLeaveIntent, sameLeaveAdmission } from '../src/community/my-realms-current/selection';
 import { realmLeaveReadResolves } from '../src/community/realm-leave-recovery';
 
@@ -132,7 +132,12 @@ test('selected leave admission freezes the Account episode, advice, key and cred
   expect(realmLeaveReadResolves({ kind: 'uncertain', ownerReason: 'unavailable' }, 'none')).toBe(false);
 });
 
-async function render(items: MyRealmsNativeItem[], next: string | null, locale: (typeof locales)[number]) {
+async function render(
+  items: MyRealmsNativeItem[],
+  next: string | null,
+  locale: (typeof locales)[number],
+  currentController?: MyRealmsCurrentController,
+) {
   await setLocale(locale, { reload: false });
   const response = { items, next };
   const client = createKernelClient('https://kernel.example', { fetch: async () => Response.json(response) });
@@ -143,7 +148,7 @@ async function render(items: MyRealmsNativeItem[], next: string | null, locale: 
   const route = createRoute({
     getParentRoute: () => root,
     path: '/realms',
-    component: () => createElement(MyRealmsPageView, { page }),
+    component: () => createElement(MyRealmsPageView, { page, currentController }),
   });
   const router = createRouter({
     routeTree: root.addChildren([route]),
@@ -187,4 +192,50 @@ test('rendered current rows expose only admitted destinations and retain supplie
       expect(markup).not.toContain(m.realms_empty({}, { locale }));
     }
   }
+});
+
+// Authored for the dev verifier; the source window does not execute acceptance.
+test('one selected leave review precedes browsing while independent current action advice stays on each row', async () => {
+  const admitted = itemAt(0);
+  const source = itemAt(1);
+  const withheld: MyRealmsNativeItem = {
+    ...source,
+    current: {
+      ...source.current,
+      actions: { ...source.current.actions, enter: { state: 'prohibited', reason: 'not_authorized' } },
+    },
+  };
+  const selected = formatMyRealmsCurrent({ items: [admitted], next: null }).realms[0]!;
+  const controller: MyRealmsCurrentController = {
+    ready: true,
+    review: { row: selected, phase: 'review', standing: 'member', retryAllowed: false },
+    select() {},
+    cancel() {},
+    confirm() {},
+    retry() {},
+    refresh() {},
+    discard() {},
+  };
+  const { markup } = await render([admitted, withheld], null, 'en', controller);
+  const rows = [...markup.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gu)].map((match) => match[1]!);
+  expect(rows).toHaveLength(2);
+  expect(markup.match(/data-slot="my-realms-leave-review"/gu)).toHaveLength(1);
+  expect(markup.indexOf('data-slot="my-realms-leave-review"')).toBeLessThan(markup.indexOf('<ul'));
+  const review = markup.split('data-slot="my-realms-leave-review"')[1]!.split('</section>')[0]!;
+  expect(review).toContain(`<h2`);
+  expect(review).toContain(selected.name);
+  expect(review).not.toContain(withheld.name);
+  expect(review).toContain(m.my_realms_leave_confirm_button());
+  expect(review).toContain(m.action_cancel());
+  for (const row of rows) {
+    expect(row).not.toContain('my-realms-leave-review');
+    expect(row).not.toContain(m.my_realms_leave_confirm_button());
+    expect(row).toContain(m.realm_leave());
+  }
+  expect(rows[0]).toContain('aria-expanded="true"');
+  expect(rows[0]).toMatch(/aria-controls="[^"]+-leave-review"/u);
+  expect(rows[1]).toContain('aria-expanded="false"');
+  expect(rows[1]).not.toContain(`/realms/${withheld.realmId}"`);
+  expect(rows[1]).toContain(`/realms/${withheld.realmId}/members`);
+  expect(rows[1]).toContain(m.my_realms_action_prohibited({ action: m.my_realms_open() }));
 });

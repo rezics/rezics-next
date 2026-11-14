@@ -47,6 +47,7 @@ export function MyRealmsPageView({
           <MyRealmsLeaveReview
             key={currentController.review.row.realmId}
             controller={currentController}
+            id={`${headingId}-leave-review`}
             onDismiss={() => {
               if (leaveTrigger.current?.isConnected) leaveTrigger.current.focus();
             }}
@@ -59,6 +60,7 @@ export function MyRealmsPageView({
                 <MyRealmsCurrentRowView
                   row={realm}
                   controller={currentController}
+                  reviewId={`${headingId}-leave-review`}
                   onLeaveSelect={(trigger) => {
                     leaveTrigger.current = trigger;
                   }}

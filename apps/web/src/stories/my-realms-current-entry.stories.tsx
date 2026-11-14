@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
+import { PageStory, pageReady } from './page';
+import { interfaceCursors, interfaceRealmTitle } from '../kernel/fake/realm-home-interface';
 import { MyRealmsPageView } from '../community/my-realms-page';
 import type {
   MyRealmsCurrentController,
@@ -111,4 +113,78 @@ export const UncertainExactRetry: Story = {
     currentController: reviewController('uncertain'),
   },
   globals: phone,
+};
+
+export const RoutedMemberEntry: Story = {
+  name: 'Actual route · member entry',
+  render: () => (
+    <PageStory visitor="Signed In" credentialMode="session" path={`/realms?cursor=${interfaceCursors.member}`} />
+  ),
+  play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
+    const view = within(within(canvasElement).getByRole('main'));
+    await expect(await view.findByRole('heading', { level: 2, name: interfaceRealmTitle })).toBeVisible();
+    await expect(view.getByRole('link', { name: m.my_realms_open() })).toBeVisible();
+    await expect(view.getByRole('link', { name: m.my_realms_manage() })).toBeVisible();
+    await expect(view.queryByRole('region', { name: m.my_realms_leave_review() })).toBeNull();
+  },
+};
+
+export const RoutedWithheldDestination: Story = {
+  name: 'Actual route · membership with withheld destination',
+  render: () => (
+    <PageStory visitor="Signed In" credentialMode="session" path={`/realms?cursor=${interfaceCursors.withheld}`} />
+  ),
+  play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
+    const view = within(within(canvasElement).getByRole('main'));
+    await expect(await view.findByRole('heading', { level: 2, name: interfaceRealmTitle })).toBeVisible();
+    await expect(view.queryByRole('link', { name: m.my_realms_open() })).toBeNull();
+    await expect(view.queryByRole('link', { name: m.my_realms_manage() })).toBeNull();
+    await expect(view.getByText(m.my_realms_action_prohibited({ action: m.my_realms_open() }))).toBeVisible();
+  },
+};
+
+export const RoutedDeliberateLeave: Story = {
+  name: 'Actual route · deliberate leave review and cancel',
+  render: () => (
+    <PageStory visitor="Signed In" credentialMode="session" path={`/realms?cursor=${interfaceCursors.member}`} />
+  ),
+  play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
+    const main = within(canvasElement).getByRole('main');
+    const view = within(main);
+    const leave = await view.findByRole('button', { name: m.realm_leave() });
+    await expect(leave).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(leave);
+    const review = await view.findByRole('region', { name: m.my_realms_leave_review() });
+    await expect(within(review).getByRole('heading', { name: m.my_realms_leave_review() })).toHaveFocus();
+    await expect(review.closest('[data-slot="my-realms-item"]')).toBeNull();
+    await expect(view.getByRole('link', { name: m.my_realms_open() })).toBeVisible();
+    await expect(within(review).getByText(m.my_realms_leave_confirm({ realm: interfaceRealmTitle }))).toBeVisible();
+    await userEvent.click(within(review).getByRole('button', { name: m.action_cancel() }));
+    await expect(view.queryByRole('region', { name: m.my_realms_leave_review() })).toBeNull();
+    await expect(leave).toHaveFocus();
+    await expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth + 1);
+  },
+};
+
+export const RoutedSparseContinuation: Story = {
+  name: 'Actual route · sparse inventory keeps continuation',
+  render: () => (
+    <PageStory visitor="Signed In" credentialMode="session" path={`/realms?cursor=${interfaceCursors.sparse}`} />
+  ),
+  play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
+    const view = within(within(canvasElement).getByRole('main'));
+    await expect(await view.findByText(m.realm_list_details_sparse_page_empty())).toBeVisible();
+    await expect(view.queryByText(m.realms_empty())).toBeNull();
+    const next = view.getByRole('link', { name: m.realms_more() });
+    await expect(new URL(next.getAttribute('href')!, location.origin).searchParams.get('cursor')).toBe(
+      interfaceCursors.next,
+    );
+    await userEvent.click(next);
+    await expect(await view.findByRole('heading', { level: 2, name: interfaceRealmTitle })).toBeVisible();
+    await expect(view.getByRole('link', { name: m.prq_previous() })).toBeVisible();
+  },
 };

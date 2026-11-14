@@ -7,8 +7,10 @@ import type { MyRealmsCurrentController } from './contract';
 export function MyRealmsLeaveReview({
   controller,
   onDismiss,
+  id,
 }: {
   controller: MyRealmsCurrentController;
+  id?: string | undefined;
   onDismiss?: (() => void) | undefined;
 }) {
   const headingId = useId();
@@ -52,6 +54,7 @@ export function MyRealmsLeaveReview({
 
   return (
     <section
+      id={id}
       aria-labelledby={headingId}
       aria-busy={review.phase === 'submitting' || review.standing === 'loading'}
       className="min-w-0 space-y-4 rounded-xl border border-border bg-muted/40 p-4 [overflow-wrap:anywhere] sm:p-6 [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"

@@ -617,18 +617,21 @@ function SpaceHome({
   const { Follow: FollowTargetControl, ResourceAccess: ResourceAccessLink, Heading: PageHeading } = application;
   const coverSrc = application.coverSrc;
   const participation = !spaceRemoved ? (
-    <section aria-label={m.space_follow_label()} className="flex flex-wrap items-start gap-3">
-      {signedOut ? (
-        <Button
-          nativeButton={false}
-          variant="outline"
-          render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(readingReturn)}`} />}
-        >
-          {m.library_follow()}
-        </Button>
-      ) : (
-        <FollowTargetControl targetId={page.space.id} />
-      )}
+    <div className="flex min-w-0 flex-col items-stretch gap-5 sm:flex-row sm:flex-wrap sm:items-start">
+      <section aria-label={m.space_follow_label()} className="min-w-0 space-y-2">
+        <p className="text-sm font-medium text-muted-foreground">{m.space_follow_label()}</p>
+        {signedOut ? (
+          <Button
+            nativeButton={false}
+            variant="outline"
+            render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(readingReturn)}`} />}
+          >
+            {m.library_follow()}
+          </Button>
+        ) : (
+          <FollowTargetControl targetId={page.space.id} />
+        )}
+      </section>
       {page.realm && !realmRemoved && (nativeObservation ? true : readable && !frozen) ? (
         <RealmMembership
           realm={page.realm}
@@ -639,7 +642,7 @@ function SpaceHome({
           {...(nativeObservation ? { nativeObservation } : {})}
         />
       ) : null}
-    </section>
+    </div>
   ) : null;
   const banner = page.space.banner;
   const bannerVariant = banner?.variants.find((variant) => variant.format === 'webp') ?? banner?.variants.at(-1);

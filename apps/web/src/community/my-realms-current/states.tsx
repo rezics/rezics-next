@@ -73,8 +73,10 @@ export function MyRealmsCurrentRowView({
   row,
   controller,
   onLeaveSelect,
+  reviewId,
 }: {
   row: MyRealmsCurrentRow;
+  reviewId?: string | undefined;
   controller?: MyRealmsCurrentController | undefined;
   onLeaveSelect?: ((trigger: HTMLButtonElement) => void) | undefined;
 }) {
@@ -115,29 +117,31 @@ export function MyRealmsCurrentRowView({
             </p>
           </header>
           <div className="space-y-3">
-            <nav
-              aria-label={row.name}
-              className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center"
-            >
-              {actions.enter.state === 'available' ? (
-                <Link
-                  to="/realms/$id"
-                  params={{ id: row.realmId }}
-                  className={`${entryClass} bg-primary text-primary-foreground hover:bg-primary/90`}
-                >
-                  {m.my_realms_open()}
-                </Link>
-              ) : null}
-              {actions.manage.state === 'available' ? (
-                <Link
-                  to="/realms/$id/members"
-                  params={{ id: row.realmId }}
-                  className={`${entryClass} border border-border text-primary hover:bg-muted`}
-                >
-                  {m.my_realms_manage()}
-                </Link>
-              ) : null}
-            </nav>
+            {actions.enter.state === 'available' || actions.manage.state === 'available' ? (
+              <nav
+                aria-label={row.name}
+                className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+              >
+                {actions.enter.state === 'available' ? (
+                  <Link
+                    to="/realms/$id"
+                    params={{ id: row.realmId }}
+                    className={`${entryClass} bg-primary text-primary-foreground hover:bg-primary/90`}
+                  >
+                    {m.my_realms_open()}
+                  </Link>
+                ) : null}
+                {actions.manage.state === 'available' ? (
+                  <Link
+                    to="/realms/$id/members"
+                    params={{ id: row.realmId }}
+                    className={`${entryClass} border border-border text-primary hover:bg-muted`}
+                  >
+                    {m.my_realms_manage()}
+                  </Link>
+                ) : null}
+              </nav>
+            ) : null}
             <div className="space-y-1">
               <AdviceStatus action="enter" advice={actions.enter} />
               <AdviceStatus action="manage" advice={actions.manage} />
@@ -154,7 +158,8 @@ export function MyRealmsCurrentRowView({
           <Button
             type="button"
             variant="ghost"
-            aria-pressed={selected}
+            aria-expanded={Boolean(selected)}
+            aria-controls={selected ? reviewId : undefined}
             className="h-auto min-h-11 max-w-full whitespace-normal text-muted-foreground"
             onClick={(event) => {
               onLeaveSelect?.(event.currentTarget);
