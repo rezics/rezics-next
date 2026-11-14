@@ -39,6 +39,7 @@ export type BangumiJourneySnapshot = {
   next: number | null;
   position: ImportPagePosition;
   pageReadFailed: boolean;
+  pageRevision: number;
   cancelled: boolean;
   page: BangumiRow[];
   meta: BangumiRowMeta[];
@@ -95,6 +96,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   let count = 0;
   let after = -1;
   let next: number | null = null;
+  let pageRevision = 0;
   let cancelled = false;
   let page: BangumiRow[] = [];
   let outcomes: BangumiOutcome[] = [];
@@ -151,6 +153,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       count,
       after,
       next,
+      pageRevision,
       position: coordinates.position(),
       pageReadFailed: pageRequest !== null && !busy && unknown === null,
       cancelled,
@@ -182,6 +185,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     count = 0;
     after = -1;
     next = null;
+    pageRevision = 0;
     cancelled = false;
     page = [];
     outcomes = [];
@@ -264,6 +268,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     const response = await run(command, () => port.page(command), retry);
     if (!response || response.kind !== 'page' || !live() || token !== generation) return snapshot();
     const current = response.page;
+    pageRevision += 1;
     uploadId = current.uploadId;
     page = current.rows;
     after = cursor;
@@ -306,16 +311,24 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       return snapshot();
     }
     const previous = uploadId;
-    clearPrivate();
+    const token = ++generation;
+    coordinates.retire();
+    pageRequest = null;
     if (previous) {
       const remove: Extract<BangumiCommand, { kind: 'delete' }> = {
         kind: 'delete',
         uploadId: previous,
         key: newCommandKey(),
       };
-      await port.delete(remove);
+      busy = true;
+      try {
+        await port.delete(remove);
+      } finally {
+        if (token === generation) busy = false;
+      }
       cost.recordCall('delete');
-      if (!live()) return snapshot();
+      if (!live() || token !== generation) return snapshot();
+      clearPrivate();
     }
     uploadText = upload;
     const command: Extract<BangumiCommand, { kind: 'preview' }> = { kind: 'preview', key: newCommandKey(), upload };

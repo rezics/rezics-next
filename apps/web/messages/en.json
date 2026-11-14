@@ -5610,7 +5610,7 @@
   "library_import_page_navigation": "Import pages",
   "library_import_first_page": "First",
   "library_import_previous_page": "Previous",
-  "library_import_page_history_edge": "Earlier page coordinates are no longer retained. Use First to return to the start.",
+  "library_import_page_history_edge": "This is the earliest page in your recent history. Choose First to return to the start.",
   "library_import_page_retry": "Retry requested page",
   "library_import_page_read_failed": "The requested page could not be loaded. Your displayed items and reviewed choices have not changed.",
   "library_import_page_navigation_help": "Moving between pages rereads source records. It does not apply choices or grant score consent.",

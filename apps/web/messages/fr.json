@@ -5610,7 +5610,7 @@
   "library_import_page_navigation": "Pages de l’import",
   "library_import_first_page": "Première",
   "library_import_previous_page": "Précédente",
-  "library_import_page_history_edge": "Les positions des pages plus anciennes ne sont plus conservées. Utilisez Première pour revenir au début.",
+  "library_import_page_history_edge": "C’est la page la plus ancienne de votre historique récent. Choisissez Première pour revenir au début.",
   "library_import_page_retry": "Réessayer la page demandée",
   "library_import_page_read_failed": "La page demandée n’a pas pu être chargée. Les éléments affichés et les choix vérifiés restent inchangés.",
   "library_import_page_navigation_help": "Changer de page relit les données source. Cela n’applique aucun choix et ne donne aucun consentement pour les notes.",

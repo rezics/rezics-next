@@ -5610,7 +5610,7 @@
   "library_import_page_navigation": "Importseiten",
   "library_import_first_page": "Erste Seite",
   "library_import_previous_page": "Vorherige Seite",
-  "library_import_page_history_edge": "Frühere Seitenpositionen werden nicht mehr vorgehalten. Mit „Erste Seite“ gelangen Sie zum Anfang.",
+  "library_import_page_history_edge": "Dies ist die früheste Seite in Ihrem letzten Verlauf. Wählen Sie „Erste Seite“, um zum Anfang zurückzukehren.",
   "library_import_page_retry": "Angeforderte Seite erneut laden",
   "library_import_page_read_failed": "Die angeforderte Seite konnte nicht geladen werden. Die angezeigten Einträge und geprüften Auswahlen sind unverändert.",
   "library_import_page_navigation_help": "Beim Seitenwechsel werden die Quelldaten erneut gelesen. Dabei werden weder Auswahlen angewendet noch Bewertungen bestätigt.",

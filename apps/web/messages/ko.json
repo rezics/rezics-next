@@ -5610,7 +5610,7 @@
   "library_import_page_navigation": "가져오기 페이지",
   "library_import_first_page": "처음",
   "library_import_previous_page": "이전",
-  "library_import_page_history_edge": "더 이전 페이지의 위치는 보관되지 않습니다. 처음 버튼으로 시작 위치로 돌아갈 수 있습니다.",
+  "library_import_page_history_edge": "최근 기록에서 가장 이전 페이지입니다. 처음 버튼으로 시작 위치로 돌아갈 수 있습니다.",
   "library_import_page_retry": "요청한 페이지 다시 불러오기",
   "library_import_page_read_failed": "요청한 페이지를 불러오지 못했습니다. 표시된 항목과 검토한 선택은 변경되지 않았습니다.",
   "library_import_page_navigation_help": "페이지를 이동하면 원본 기록을 다시 읽습니다. 선택을 적용하거나 평점 반영에 동의하지 않습니다.",

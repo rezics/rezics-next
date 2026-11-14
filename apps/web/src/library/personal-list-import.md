@@ -8,8 +8,9 @@ no old page bodies, grants no score consent and sends no write. AniList/Bangumi 
 review metadata; MAL confirms only the displayed page and retains its draft field choices for a later native reread.
 A returned page retires any absent or replaced review authority and consent, while acknowledged outcomes and exact
 uncertain write operands remain independent. Upload replacement, cancellation and reader retirement clear the trail
-and retire late reads. Wrapped 44px navigation follows First, Previous, Next in keyboard order; successful movement
-focuses its page status and failed movement leaves explicit retry and recovery controls. No prefetch or ordinal
+and retire late reads, including independent score reads from a replaced upload. Wrapped 44px navigation follows
+First, Previous, Next in keyboard order; each successful read focuses its page status, including a same-page retry.
+Failed movement leaves explicit retry and recovery controls. No prefetch or ordinal
 arithmetic supplies a predecessor.
 
 Navigation design sources: this owner; the declared AniList/Bangumi controllers and all three page/review owners;

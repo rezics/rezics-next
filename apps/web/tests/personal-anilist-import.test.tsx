@@ -1039,3 +1039,144 @@ test('item review keeps independent labels beside identity and preserves mounted
   expect(labels.closest('[hidden]')).toBeNull();
   expect(f.applies).toHaveLength(0);
 });
+
+test('observed sparse AniList coordinates bound Previous, retain off-page review and expose native First', async () => {
+  const f = recordingPort(100);
+  const nativePage = f.port.page;
+  const coordinates = [-1, 2, 11, 23, 34, 45, 56, 67, 78, 89];
+  const reads: number[] = [];
+  let failPrevious = false;
+  f.port.page = async (command) => {
+    reads.push(command.after);
+    if (failPrevious) return { kind: 'unavailable' };
+    const response = await nativePage(command);
+    if (response.kind === 'page') {
+      response.page.next = coordinates[coordinates.indexOf(command.after) + 1] ?? null;
+      if (command.after === 23) response.page.rows = [];
+    }
+    return response;
+  };
+  const journey = createAniListJourney({ port: f.port, visit: visit() });
+  await journey.preview(envelope(100));
+  await journey.review(0, subject);
+  const reviewId = journey.snapshot().meta[0]!.reviewId;
+  for (let index = 1; index < coordinates.length; index += 1) await journey.nextPage();
+  expect(reads).toEqual(coordinates);
+  expect(journey.snapshot().meta.find((item) => item.ordinal === 0)?.reviewId).toBe(reviewId);
+  failPrevious = true;
+  let snap = await journey.previousPage();
+  expect(snap.after).toBe(89);
+  expect(snap.position.previous).toBe(78);
+  expect(snap.pageReadFailed).toBe(true);
+  failPrevious = false;
+  snap = await journey.retryPage();
+  expect(reads.slice(-2)).toEqual([78, 78]);
+  expect(snap.after).toBe(78);
+  for (let index = 0; index < 7; index += 1) snap = await journey.previousPage();
+  expect(snap.after).toBe(2);
+  expect(snap.position).toEqual({ previous: null, canFirst: true, atRetainedEdge: true });
+  const seen = reads.length;
+  await journey.previousPage();
+  expect(reads).toHaveLength(seen);
+  snap = await journey.firstPage();
+  expect(reads.at(-1)).toBe(-1);
+  expect(snap.position.previous).toBeNull();
+  expect(snap.position.canFirst).toBe(false);
+  expect(f.applies).toEqual([]);
+  expect(f.reviews).toHaveLength(1);
+});
+
+test('AniList movement cannot replace an uncertain apply and retires with source, cancellation and reader', async () => {
+  const f = recordingPort(30, { failApplyOnce: true });
+  const current = visit();
+  const journey = createAniListJourney({ port: f.port, visit: current });
+  await journey.preview(envelope(30));
+  await journey.review(0, subject);
+  await journey.nextPage();
+  await journey.previousPage();
+  journey.openConfirm();
+  journey.confirmSource({ privacy: true, timestamps: true });
+  await journey.confirm();
+  const original = structuredClone(f.applies[0]);
+  const reads = journey.cost().calls.page;
+  await journey.nextPage();
+  await journey.previousPage();
+  await journey.firstPage();
+  await journey.retryPage();
+  expect(journey.cost().calls.page).toBe(reads);
+  await journey.retryUnknown();
+  expect(f.applies[1]).toEqual(original);
+  expect(journey.snapshot().outcomes[0]?.status).toBe('applied');
+  journey.backToReview();
+  await journey.nextPage();
+  await journey.preview(envelope(2));
+  expect(journey.snapshot().position).toEqual({ previous: null, canFirst: false, atRetainedEdge: false });
+  await journey.nextPage();
+  await journey.cancelAdmission();
+  expect(journey.snapshot().position.previous).toBeNull();
+  const held = journey.cost().calls.page;
+  await journey.nextPage();
+  expect(journey.cost().calls.page).toBe(held);
+  const fresh = createAniListJourney({ port: f.port, visit: current });
+  await fresh.loadPage(id, -1);
+  let finish!: (value: Awaited<ReturnType<AniListImportPort['page']>>) => void;
+  f.port.page = () => new Promise((resolve) => { finish = resolve; });
+  const late = fresh.nextPage();
+  current.retire();
+  finish({ kind: 'page', page: pageOf([row(20)], { next: 29 }) });
+  await late;
+  expect(fresh.snapshot().after).toBe(-1);
+  expect(fresh.snapshot().position.previous).toBeNull();
+});
+
+test('AniList returning to an absent native review retires authority and score consent', async () => {
+  const f = recordingPort(30);
+  const journey = createAniListJourney({ port: f.port, visit: visit() });
+  await journey.preview(envelope(30));
+  await journey.review(0, subject);
+  await journey.nextPage();
+  const nativePage = f.port.page;
+  f.port.page = async (command) => {
+    const response = await nativePage(command);
+    if (response.kind === 'page') response.page.rows = response.page.rows.map((item) => ({ ...item, review: null }));
+    return response;
+  };
+  const snap = await journey.firstPage();
+  expect(snap.meta.find((item) => item.ordinal === 0)?.reviewId).toBeNull();
+  expect(snap.meta.find((item) => item.ordinal === 0)?.nativeVoteConsent).toBeNull();
+  expect(journey.openConfirm().stage).toBe('review');
+  expect(f.applies).toEqual([]);
+});
+
+test('AniList lost preview acknowledgement retries the retained key and upload before reading First', async () => {
+  const f = recordingPort(1);
+  const commands: Parameters<AniListImportPort['preview']>[0][] = [];
+  f.port.preview = async (command) => {
+    commands.push(structuredClone(command));
+    return commands.length === 1 ? { kind: 'unknown', command } : { kind: 'previewed', importId: id, count: 1 };
+  };
+  const journey = createAniListJourney({ port: f.port, visit: visit() });
+  await journey.preview(envelope(1), 'POINT_10');
+  await journey.firstPage();
+  expect(journey.cost().calls.page).toBe(0);
+  const snap = await journey.retryUnknown();
+  expect(commands[1]).toEqual(commands[0]);
+  expect(snap.after).toBe(-1);
+  expect(snap.stage).toBe('review');
+});
+
+test('AniList cancellation retires a pending independent question read', async () => {
+  const f = recordingPort(1);
+  const answer = await f.port.question();
+  let finish!: (value: Awaited<ReturnType<AniListImportPort['question']>>) => void;
+  f.port.question = () => new Promise((resolve) => { finish = resolve; });
+  const journey = createAniListJourney({ port: f.port, visit: visit() });
+  await journey.preview(envelope(1));
+  const pending = journey.readQuestion();
+  await journey.cancelAdmission();
+  finish(answer);
+  const snap = await pending;
+  expect(snap.question).toBeNull();
+  expect(snap.questionPending).toBe(false);
+  expect(snap.position.canFirst).toBe(false);
+});

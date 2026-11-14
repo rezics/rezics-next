@@ -5610,7 +5610,7 @@
   "library_import_page_navigation": "Páginas de importación",
   "library_import_first_page": "Primera",
   "library_import_previous_page": "Anterior",
-  "library_import_page_history_edge": "Ya no se conservan las posiciones de las páginas anteriores. Usa Primera para volver al inicio.",
+  "library_import_page_history_edge": "Esta es la primera página del historial reciente. Elige Primera para volver al inicio.",
   "library_import_page_retry": "Reintentar la página solicitada",
   "library_import_page_read_failed": "No se pudo cargar la página solicitada. Los elementos mostrados y las opciones revisadas no han cambiado.",
   "library_import_page_navigation_help": "Al cambiar de página se vuelven a leer los registros de origen. No se aplican opciones ni se da consentimiento para puntuar.",

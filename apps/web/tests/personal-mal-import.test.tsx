@@ -1135,3 +1135,152 @@ test('refused replacement cannot confirm a retained score review after page navi
   expect(button(m.library_mal_continue_confirm())?.disabled).toBe(true);
   expect(host.textContent).toContain('secret note');
 });
+
+function navigationFixture() {
+  const coordinates = [0, 3, 17, 28, 39, 50, 61, 72, 83, 94];
+  const reads: Extract<MalCommand, { kind: 'page' }>[] = [];
+  const applies: Extract<MalCommand, { kind: 'apply' }>[] = [];
+  const rows = new Map<number, MalPreviewRow>();
+  let failure: 'unavailable' | 'unknown' | null = null;
+  let canceled = false;
+  const port: MalImportPort = {
+    async preview() { return { kind: 'previewed', id }; },
+    async readQuestion() { return { kind: 'unavailable' }; },
+    async readVote() { return { kind: 'unavailable' }; },
+    async page(command) {
+      reads.push(structuredClone(command));
+      if (failure === 'unavailable') return { kind: 'unavailable' };
+      if (failure === 'unknown') return {
+        kind: 'unknown',
+        command: { ...command, custody: { viewer: 'alice', csrfToken: 'csrf-1', credential: 'original-reader' } },
+      };
+      const current = rows.get(command.after) ?? row({ index: command.after, title: `Item ${command.after}`, target: subject, match: 'matched' });
+      return { kind: 'page', page: pageOf(command.after === 17 ? [] : [structuredClone(current)], {
+        canceled, total: 100, next: coordinates[coordinates.indexOf(command.after) + 1] ?? null,
+      }) };
+    },
+    async review(command) {
+      rows.set(command.input.row, reviewedRow(row({ index: command.input.row, target: subject }), command));
+      return { kind: 'reviewed', id };
+    },
+    async apply(command) {
+      applies.push(structuredClone(command));
+      return { kind: 'applied', result: { id, stopped: false, remaining: [], outcomes: [] } };
+    },
+    async admitSource() { return { kind: 'admitted' }; },
+    async cancel() { canceled = true; return { kind: 'done', id }; },
+    async delete() { return { kind: 'done', id }; },
+  };
+  return { port, coordinates, reads, applies, rows, fail: (next: typeof failure) => { failure = next; } };
+}
+
+test('MAL retains eight observed predecessors, rereads sparse pages and confirms only the current page', async () => {
+  const f = navigationFixture();
+  await mount(f.port);
+  await uploadXml();
+  expect(button(m.library_import_previous_page())?.disabled).toBe(true);
+  await clickControlWithin(malRow(0), m.library_mal_select_status());
+  await click(m.library_mal_save_review());
+  for (let index = 1; index < f.coordinates.length; index += 1) await click(m.library_mal_next_page());
+  expect(f.reads.map((read) => read.after)).toEqual([0, 0, ...f.coordinates.slice(1)]);
+  expect(button(m.library_mal_continue_confirm())?.disabled).toBe(true);
+  for (let index = 0; index < 8; index += 1) await click(m.library_import_previous_page());
+  expect(host.textContent).toContain('Item 3');
+  expect(button(m.library_import_previous_page())?.disabled).toBe(true);
+  expect(host.textContent).toContain(m.library_import_page_history_edge());
+  await click(m.library_import_first_page());
+  expect(f.reads.at(-1)?.after).toBe(0);
+  expect(button(m.library_import_first_page())?.disabled).toBe(true);
+  expect(button(m.library_mal_continue_confirm())?.disabled).toBe(false);
+  expect(malRow(0).querySelector('[id$="-status"]')?.getAttribute('aria-checked')).toBe('false');
+  const status = host.querySelector('[data-mal-stage="review"] p[tabindex="-1"]');
+  expect(document.activeElement).toBe(status);
+  const navigation = host.querySelector('nav[aria-label]')!;
+  expect([...navigation.querySelectorAll('button')].map((item) => item.textContent)).toEqual([
+    m.library_import_first_page(), m.library_import_previous_page(), m.library_mal_next_page(),
+  ]);
+  expect([...navigation.querySelectorAll('button')].every((item) => item.className.includes('min-h-11'))).toBe(true);
+  await click(m.library_mal_continue_confirm());
+  expect(host.querySelector('[data-mal-stage="confirm"]')?.textContent).toContain(subject);
+  expect(f.applies).toEqual([]);
+});
+
+test('MAL failed movement keeps its page and exact retry custody, and cancellation retires recovery', async () => {
+  const f = navigationFixture();
+  await mount(f.port);
+  await uploadXml();
+  await click(m.library_mal_next_page());
+  f.fail('unknown');
+  await click(m.library_import_previous_page());
+  expect(host.textContent).toContain('Item 3');
+  expect(button(m.library_import_first_page())?.disabled).toBe(true);
+  f.fail(null);
+  await click(m.library_mal_retry_command());
+  expect(f.reads.slice(-2).map((read) => read.after)).toEqual([0, 0]);
+  expect(f.reads.at(-1)?.custody?.credential).toBe('original-reader');
+  expect(button(m.library_import_previous_page())?.disabled).toBe(true);
+  await click(m.library_mal_next_page());
+  f.fail('unavailable');
+  await click(m.library_import_first_page());
+  expect(host.textContent).toContain('Item 3');
+  expect(button(m.library_import_previous_page())?.disabled).toBe(false);
+  f.fail(null);
+  await click(m.library_import_page_retry());
+  expect(f.reads.slice(-2).map((read) => read.after)).toEqual([0, 0]);
+  await click(m.library_mal_next_page());
+  f.fail('unavailable');
+  await click(m.library_mal_label_cancel());
+  expect(button(m.library_import_previous_page())?.disabled).toBe(true);
+  expect(button(m.library_mal_next_page())?.disabled).toBe(true);
+  f.fail(null);
+  await click(m.library_import_page_retry());
+  expect(button(m.library_import_first_page())?.disabled).toBe(true);
+  expect(document.activeElement).toBe(host.querySelector('[data-mal-stage="review"] p[tabindex="-1"]'));
+  expect(f.applies).toEqual([]);
+});
+
+test('MAL reader replacement ignores a late moved page and starts with no predecessor', async () => {
+  const f = navigationFixture();
+  const current = visit();
+  await mount(f.port, current);
+  await uploadXml();
+  await click(m.library_mal_next_page());
+  await click(m.library_mal_discard());
+  await uploadXml();
+  expect(button(m.library_import_previous_page())?.disabled).toBe(true);
+  let finish!: (value: Awaited<ReturnType<MalImportPort['page']>>) => void;
+  f.port.page = () => new Promise((resolve) => { finish = resolve; });
+  await click(m.library_mal_next_page());
+  current.retire();
+  await mount(f.port, visit('bob', 'csrf-b'));
+  await act(async () => finish({ kind: 'page', page: pageOf([row({ title: 'Retired moved page' })]) }));
+  await settle();
+  expect(host.textContent).not.toContain('Retired moved page');
+  expect(host.textContent).toContain(m.library_mal_upload());
+  expect(host.querySelector('[data-mal-stage="review"]')).toBeNull();
+});
+
+test('MAL replacement upload and cancellation retire pending independent score reads', async () => {
+  const f = navigationFixture();
+  f.port.readQuestion = async () => ({ kind: 'question', question });
+  let finish!: (value: Awaited<ReturnType<NonNullable<MalImportPort['readVote']>>>) => void;
+  f.port.readVote = () => new Promise((resolve) => { finish = resolve; });
+  await mount(f.port);
+  await uploadXml();
+  await click(m.library_mal_read_question());
+  await click(m.library_mal_read_current_vote());
+  await click(m.library_mal_discard());
+  await uploadXml();
+  await click(m.library_mal_read_question());
+  const oldVote = { units: 19, revision: 99, at: '2026-11-05T12:00:00.000Z' };
+  await act(async () => finish({ kind: 'vote', value: { kind: 'current', ...oldVote } }));
+  await settle();
+  expect(host.textContent).not.toContain(m.library_mal_vote_present(oldVote));
+  expect(button(m.library_import_previous_page())?.disabled).toBe(true);
+  await click(m.library_mal_read_current_vote());
+  await click(m.library_mal_label_cancel());
+  await act(async () => finish({ kind: 'vote', value: { kind: 'current', ...oldVote } }));
+  await settle();
+  expect(host.textContent).not.toContain(m.library_mal_vote_present(oldVote));
+  expect(f.applies).toEqual([]);
+});

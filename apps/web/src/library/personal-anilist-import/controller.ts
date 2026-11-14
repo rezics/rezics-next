@@ -48,6 +48,7 @@ export type AniListJourneySnapshot = {
   next: number | null;
   position: ImportPagePosition;
   pageReadFailed: boolean;
+  pageRevision: number;
   cancelled: boolean;
   scoreFormat: AniListScoreFormat | null;
   completeness: AniListCompleteness | null;
@@ -232,6 +233,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   let count = 0;
   let after = -1;
   let next: number | null = null;
+  let pageRevision = 0;
   let cancelled = false;
   let scoreFormat: AniListScoreFormat | null = null;
   let completeness: AniListCompleteness | null = null;
@@ -306,6 +308,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       count,
       after,
       next,
+      pageRevision,
       position: coordinates.position(),
       pageReadFailed: pageRequest !== null && !busy && unknown === null,
       cancelled,
@@ -347,6 +350,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     count = 0;
     after = -1;
     next = null;
+    pageRevision = 0;
     cancelled = false;
     scoreFormat = null;
     completeness = null;
@@ -422,6 +426,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     const response = await run(command, () => port.page(command), retry);
     if (!response || response.kind !== 'page' || !live() || token !== generation) return snapshot();
     const current = response.page;
+    pageRevision += 1;
     importId = id;
     page = current.rows;
     after = cursor;
@@ -483,11 +488,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       return snapshot();
     }
     const previous = importId;
-    if (previous) clearPrivate();
-    else {
-      coordinates.retire();
-      pageRequest = null;
-    }
+    const token = ++generation;
+    coordinates.retire();
+    pageRequest = null;
     if (previous) {
       const remove: Extract<AniListCommand, { kind: 'cancel' }> = {
         kind: 'cancel',
@@ -495,9 +498,15 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
         key: newCommandKey(),
         remove: true,
       };
-      await port.cancel(remove);
+      busy = true;
+      try {
+        await port.cancel(remove);
+      } finally {
+        if (token === generation) busy = false;
+      }
       cost.recordCall('cancel');
-      if (!live()) return snapshot();
+      if (!live() || token !== generation) return snapshot();
+      clearPrivate();
     }
     uploadText = upload;
     const command: Extract<AniListCommand, { kind: 'preview' }> = {
@@ -858,6 +867,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     }
     await run(command, () => port.cancel(command), true);
     if (!notice) {
+      questionGeneration += 1;
+      questionPending = false;
       coordinates.retire();
       pageRequest = null;
       cancelled = true;
@@ -895,6 +906,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     };
     const response = await run(command, () => port.cancel(command));
     if (!response || response.kind !== 'cancelled' || !live()) return snapshot();
+    questionGeneration += 1;
+    questionPending = false;
     coordinates.retire();
     pageRequest = null;
     cancelled = true;

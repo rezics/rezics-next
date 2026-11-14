@@ -13,6 +13,8 @@ import type { BangumiVisit } from '../library/personal-bangumi-import/visit';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
+type NavigationState = 'observed' | 'failed-previous' | 'retained-edge';
+
 const uploadId = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb';
 const token = '0192f3a0-6c1e-7b2a-9d4e-00000000cccc';
@@ -46,11 +48,16 @@ const collections = [
   },
   { subject_id: 12346, subject_type: 2, type: 2, rate: 8, tags: [], subject: { name: 'Unmatched source title' } },
 ];
-function makePort(): BangumiImportPort {
+function makePort(navigation?: NavigationState): BangumiImportPort {
+  let lastAfter = -1;
+  let failPrevious = navigation === 'failed-previous';
   let firstApply = true;
   let cancelled = false;
   let labelState: BangumiLabelState | null = null;
-  const rows: BangumiRow[] = collections.map((source, ordinal) => ({
+  const supplied = navigation === 'retained-edge'
+    ? Array.from({ length: 11 }, (_, ordinal) => ({ ...collections[ordinal % collections.length]!, subject_id: 12345 + ordinal }))
+    : collections;
+  const rows: BangumiRow[] = supplied.map((source, ordinal) => ({
     ordinal,
     evidence: {
       source,
@@ -89,8 +96,18 @@ function makePort(): BangumiImportPort {
     async preview() {
       return { kind: 'previewed', uploadId, count: rows.length };
     },
-    async page() {
-      return { kind: 'page', page: { uploadId, cancelled, rows: structuredClone(rows), next: null } };
+    async page(command) {
+      if (failPrevious && command.after < lastAfter) {
+        failPrevious = false;
+        return { kind: 'unavailable' };
+      }
+      lastAfter = command.after;
+      const current = navigation ? rows.filter((row) => row.ordinal > command.after).slice(0, 1) : rows;
+      const last = current.at(-1)?.ordinal;
+      return { kind: 'page', page: {
+        uploadId, cancelled, rows: structuredClone(current),
+        next: navigation && last !== undefined && last < rows.length - 1 ? last : null,
+      } };
     },
     async review(command) {
       const row = rows[command.ordinal]!;
@@ -213,8 +230,8 @@ function makePort(): BangumiImportPort {
     },
   };
 }
-function BangumiImportStory() {
-  const port = useMemo(makePort, []);
+function BangumiImportStory({ navigation }: { navigation?: NavigationState } = {}) {
+  const port = useMemo(() => makePort(navigation), [navigation]);
   const visit = useMemo<BangumiVisit>(() => {
     const controller = new AbortController();
     return {
@@ -226,10 +243,19 @@ function BangumiImportStory() {
       current: () => !controller.signal.aborted,
       retire: () => controller.abort(),
     };
-  }, []);
+  }, [navigation]);
   return (
     <PatternStory path="/library/import-bangumi" visitor="Signed In">
       <aside className="mx-auto max-w-5xl space-y-2 border-b p-4 text-sm">
+        {navigation ? (
+          <p>
+            {navigation === 'retained-edge'
+              ? 'Upload or reopen, move Next ten times, then Previous eight times. At the retained edge, choose First explicitly.'
+              : navigation === 'failed-previous'
+                ? 'Upload or reopen, choose Next, then Previous. The first return read fails; retry the requested page or deliberately choose First.'
+                : 'Upload or reopen, review an item, then choose Next, Previous and First. Navigation sends page reads and preserves independent confirmation.'}
+          </p>
+        ) : null}
         <p>
           Illustrative contract-shaped fixtures. Upload the sample or reopen upload {uploadId}. Review the matched item,
           replace its Library state deliberately, and choose a target for the unmatched item. Source zero stays unrated;
@@ -240,13 +266,13 @@ function BangumiImportStory() {
         <a
           className="underline"
           download="bangumi-illustrative.json"
-          href={`data:application/json,${encodeURIComponent(JSON.stringify({ format: BANGUMI_FORMAT, collections }))}`}
+          href={`data:application/json,${encodeURIComponent(JSON.stringify({ format: BANGUMI_FORMAT, collections: navigation === 'retained-edge' ? Array.from({ length: 11 }, (_, ordinal) => ({ ...collections[ordinal % collections.length]!, subject_id: 12345 + ordinal })) : collections }))}`}
         >
           Download illustrative export
         </a>
       </aside>
       <BangumiImportPortContext.Provider value={port}>
-        <PersonalBangumiImportPage visit={visit} />
+        <PersonalBangumiImportPage key={navigation} visit={visit} />
       </BangumiImportPortContext.Provider>
     </PatternStory>
   );
@@ -260,3 +286,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const ReviewedSetNeedsConsent: Story = {};
+
+export const ObservedPreviousAndFirst: Story = { args: { navigation: 'observed' } };
+export const FailedPreviousExactRetry: Story = { args: { navigation: 'failed-previous' } };
+export const RetainedEdgeFirst: Story = { args: { navigation: 'retained-edge' } };

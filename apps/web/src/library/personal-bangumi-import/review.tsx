@@ -39,7 +39,7 @@ export function BangumiReviewPage({
   onFirst: () => void;
   onConfirm: () => void;
 }) {
-  const pageStatus = useImportPageFocus(snap.after);
+  const pageStatus = useImportPageFocus(snap.pageRevision);
   const metadata = new Map(snap.meta.map((row) => [row.ordinal, row]));
   const reviewed = snap.meta.filter((row) => row.reviewToken).length;
   return (

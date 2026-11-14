@@ -14,6 +14,7 @@ export function MalReviewPage({
   questionUnavailable,
   voteReadbacks,
   after,
+  pageRevision,
   position,
   busy,
   onReadQuestion,
@@ -32,6 +33,7 @@ export function MalReviewPage({
   questionUnavailable: boolean;
   voteReadbacks: Map<string, MalOwnVoteReadback>;
   after: number;
+  pageRevision: number;
   position: ImportPagePosition;
   busy: boolean;
   onReadQuestion: () => void;
@@ -43,7 +45,7 @@ export function MalReviewPage({
   onFirst: () => void;
   onConfirm: () => void;
 }) {
-  const pageStatus = useImportPageFocus(after);
+  const pageStatus = useImportPageFocus(pageRevision);
   const reviewed = page.rows.filter((row) => row.review).length;
   const hasUnsavedReview = page.rows.some((row) => {
     const draft = drafts[row.index];

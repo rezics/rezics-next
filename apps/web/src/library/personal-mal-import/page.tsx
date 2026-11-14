@@ -85,11 +85,13 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   const [stage, setStage] = useState<Stage>(() => commandStage(restored?.command ?? null));
   const [page, setPage] = useState<MalPage | null>(null);
   const [after, setAfter] = useState(0);
+  const [pageRevision, setPageRevision] = useState(0);
   const coordinates = useRef(new ImportPageCoordinates(0));
   const [position, setPosition] = useState(() => coordinates.current.position());
   const pageRequest = useRef<PageRequest | null>(null);
   const [pageFailure, setPageFailure] = useState<PageRequest | null>(null);
   const draftReviews = useRef(new Map<number, string | null>());
+  const reviewedFields = useRef(new Map<number, { version: string | null; fields: string[] }>());
   const generation = useRef(0);
   const sending = useRef(false);
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({});
@@ -122,7 +124,11 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     timestamps: restored?.sourceConsent.timestamps ?? false,
   });
 
-  useEffect(() => () => visit.retire(), [visit]);
+  useEffect(() => () => {
+    coordinates.current.retire();
+    pageRequest.current = null;
+    visit.retire();
+  }, [visit]);
 
   function live() {
     return visit.current() && sender.current.subject === visit.subject && sender.current.csrfToken === visit.csrfToken;
@@ -135,10 +141,18 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     setPosition(coordinates.current.position());
   }
 
+  function acceptCancellation() {
+    generation.current += 1;
+    setQuestionLoading(false);
+    retireCoordinates();
+    setPage((current) => current ? { ...current, canceled: true } : current);
+  }
+
   function resetPrivate() {
     generation.current += 1;
     retireCoordinates();
     draftReviews.current.clear();
+    reviewedFields.current.clear();
     delivery.current = null;
     if (unknownCommand) visit.resolveDelivery(unknownCommand);
     unknownRef.current = null;
@@ -152,9 +166,11 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     setPage(null);
     setDrafts({});
     setAfter(0);
+    setPageRevision(0);
     setResult(null);
     lastResult.current = null;
     setQuestion(null);
+    setQuestionLoading(false);
     setQuestionUnavailable(false);
     setVoteReadbacks(new Map());
     setAdmissions(new Map());
@@ -268,13 +284,22 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   }
 
   function acceptPage(nextPage: MalPage, cursor: number, switchToReview: boolean, preserveFields: boolean) {
-    const rows = withPreview(nextPage.rows).map((row) =>
-      row.review?.version === retiredReviews.current.get(row.index) ? { ...row, review: null } : row,
-    );
+    const rows = withPreview(nextPage.rows).map((row) => {
+      const review = row.review?.version === retiredReviews.current.get(row.index) ? null : row.review;
+      const fields = reviewedFields.current.get(row.index);
+      if (!review || (fields?.version && fields.version !== review.version)) {
+        reviewedFields.current.delete(row.index);
+      } else if (fields) {
+        fields.version = review.version;
+        return { ...row, review, selectedFields: [...fields.fields] };
+      }
+      return { ...row, review };
+    });
     uploadId.current = nextPage.id;
     for (const row of rows) titles.current.set(row.index, row.title);
     setPage({ ...nextPage, rows });
     setAfter(cursor);
+    setPageRevision((current) => current + 1);
     if (nextPage.canceled) retireCoordinates();
     else {
       coordinates.current.observe(cursor);
@@ -292,7 +317,11 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         const sameReview = priorVersions.has(row.index) && priorVersions.get(row.index) === (row.review?.version ?? null);
         next[row.index] = prior && sameReview
           ? prior
-          : { ...draftFromRow(row), ...(preserveFields && prior ? { fields: prior.fields } : {}) };
+          : {
+              ...draftFromRow(row),
+              ...(row.selectedFields ? { fields: [...row.selectedFields] } : {}),
+              ...(preserveFields && prior ? { fields: prior.fields } : {}),
+            };
       }
       return next;
     });
@@ -305,10 +334,11 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     switchToReview = true,
     preserveFields = false,
     retry = false,
+    originalCommand?: Extract<MalCommand, { kind: 'page' }>,
   ): Promise<MalPage | null> {
     if (!live() || sending.current || (unknownRef.current && !retry)) return null;
     const token = generation.current;
-    const command: Extract<MalCommand, { kind: 'page' }> = { kind: 'page', id, after: cursor };
+    const command: Extract<MalCommand, { kind: 'page' }> = originalCommand ?? { kind: 'page', id, after: cursor };
     const request = { command, switchToReview, preserveFields };
     pageRequest.current = request;
     setPageFailure(null);
@@ -360,6 +390,8 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     if (!live() || sending.current || unknownRef.current) return;
     const previous = uploadId.current;
     resetPrivate();
+    // Only the identifier remains while native replacement cleanup is unresolved.
+    uploadId.current = previous;
     if (previous) {
       const remove: Extract<MalCommand, { kind: 'delete' }> = {
         kind: 'delete',
@@ -368,6 +400,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       };
       const deleted = await run(remove, () => port.delete(remove));
       if (!deleted || deleted.kind !== 'done' || !live()) return;
+      uploadId.current = null;
     }
     const command: Extract<MalCommand, { kind: 'preview' }> = { kind: 'preview', key: newCommandKey(), xml };
     const response = await run(command, () => port.preview(command));
@@ -414,6 +447,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     );
     const response = await run(command, () => port.review(command));
     if (!response || response.kind !== 'reviewed' || !live()) return;
+    reviewedFields.current.set(draft.row, { version: null, fields: [...draft.fields] });
     if (command.input.score && command.input.target) {
       const key = malVoteReadKey(command.input.row, command.input.target, command.input.score.questionId);
       setVoteReadbacks((current) => {
@@ -424,16 +458,6 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     }
     const refreshed = await loadPage(id, after, true, true);
     if (!refreshed || !live()) return;
-    setPage((current) =>
-      current
-        ? {
-            ...current,
-            rows: current.rows.map((row) =>
-              row.index === draft.row ? { ...row, selectedFields: [...draft.fields] } : row,
-            ),
-          }
-        : current,
-    );
     setDrafts((current) => ({
       ...current,
       [draft.row]: { ...(current[draft.row] ?? draft), fields: [...draft.fields] },
@@ -521,10 +545,11 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
 
   async function readQuestion() {
     if (busy || unknownCommand || !live()) return;
+    const token = generation.current;
     setQuestionLoading(true);
     const response = await port.readQuestion();
+    if (!live() || token !== generation.current) return;
     setQuestionLoading(false);
-    if (!live()) return;
     if (response.kind === 'question') {
       setQuestion(response.question);
       setQuestionUnavailable(false);
@@ -538,9 +563,10 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     const targetId = targetOverride ?? row.review?.target ?? row.target;
     const questionId = question?.id ?? row.review?.score?.question.id;
     if (!targetId || !questionId || busy || unknownCommand || !live()) return;
+    const token = generation.current;
     const key = malVoteReadKey(row.index, targetId, questionId);
     const response = await port.readVote({ targetId, questionId });
-    if (!live()) return;
+    if (!live() || token !== generation.current) return;
     const value = response.kind === 'vote' ? response.value : { kind: 'unavailable' as const };
     setVoteReadbacks((current) => new Map(current).set(key, value));
   }
@@ -570,10 +596,16 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       }
     } else if (command.kind === 'page') {
       const request = pageRequest.current;
-      await loadPage(command.id, command.after, request?.switchToReview ?? true, request?.preserveFields ?? false, true);
+      await loadPage(command.id, command.after, request?.switchToReview ?? true, request?.preserveFields ?? false, true, command);
     } else if (command.kind === 'review') {
       const response = await run(command, () => port.review(command), sourceConsent, true);
-      if (response?.kind === 'reviewed' && live()) await loadPage(command.id, after, true, true);
+      if (response?.kind === 'reviewed' && live()) {
+        reviewedFields.current.set(command.input.row, {
+          version: null,
+          fields: [...(drafts[command.input.row]?.fields ?? [])],
+        });
+        await loadPage(command.id, after, true, true);
+      }
     } else if (command.kind === 'apply') {
       applyCommand.current = command;
       const response = await run(command, () => port.apply(command), sourceConsent, true);
@@ -602,7 +634,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     } else if (command.kind === 'cancel') {
       const response = await run(command, () => port.cancel(command), sourceConsent, true);
       if (response?.kind === 'done' && live()) {
-        retireCoordinates();
+        acceptCancellation();
         await loadPage(command.id, after);
       }
     } else {
@@ -622,6 +654,18 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   const locked = busy || unknownCommand !== null;
   const currentRows = page?.rows ?? [];
   const rowByIndex = new Map(currentRows.map((row) => [row.index, row]));
+
+  function movePage(cursor: number | null) {
+    const id = uploadId.current;
+    if (id && cursor !== null && !locked && !page?.canceled) void loadPage(id, cursor);
+  }
+
+  function retryPage() {
+    if (!pageFailure) return;
+    const { command, switchToReview, preserveFields } = pageFailure;
+    void loadPage(command.id, command.after, switchToReview, preserveFields, true, command);
+  }
+
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_mal_title()}</PageHeading>
@@ -636,10 +680,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         </div>
       ) : null}
       {pageFailure && !unknownCommand ? (
-        <ImportPageReadRecovery
-          busy={locked}
-          onRetry={() => void loadPage(pageFailure.command.id, pageFailure.command.after, pageFailure.switchToReview, pageFailure.preserveFields, true)}
-        />
+        <ImportPageReadRecovery busy={locked} onRetry={retryPage} />
       ) : null}
       {stage === 'upload' ? (
         <>
@@ -673,6 +714,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
           questionUnavailable={questionUnavailable}
           voteReadbacks={voteReadbacks}
           after={after}
+          pageRevision={pageRevision}
           position={position}
           busy={locked}
           onReadQuestion={() => void readQuestion()}
@@ -687,9 +729,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
             }
           }}
           onSave={(draft) => void saveReview(draft)}
-          onNext={() => !locked && !page.canceled && page.next !== null && uploadId.current && void loadPage(uploadId.current, page.next)}
-          onPrevious={() => !locked && !page.canceled && position.previous !== null && uploadId.current && void loadPage(uploadId.current, position.previous)}
-          onFirst={() => !locked && !page.canceled && position.canFirst && uploadId.current && void loadPage(uploadId.current, coordinates.current.first)}
+          onNext={() => movePage(page.next)}
+          onPrevious={() => movePage(position.previous)}
+          onFirst={() => movePage(position.canFirst ? coordinates.current.first : null)}
           onConfirm={() => {
             confirmFlags.current = { privacy: false, timestamps: false };
             setConfirmPrivacy(false);
@@ -781,7 +823,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
             };
             const response = await run(command, () => port.cancel(command));
             if (response?.kind === 'done' && live()) {
-              retireCoordinates();
+              acceptCancellation();
               await loadPage(id, after);
             }
           }}

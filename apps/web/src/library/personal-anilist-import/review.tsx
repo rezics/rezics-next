@@ -31,7 +31,7 @@ export function AniListReviewPage({
   onRefreshQuestion: () => void;
   renderLabels?: (row: AniListRow, meta: AniListRowMeta | undefined) => ReactNode;
 }) {
-  const pageStatus = useImportPageFocus(snap.after);
+  const pageStatus = useImportPageFocus(snap.pageRevision);
   const metadata = new Map(snap.meta.map((row) => [row.ordinal, row]));
   const reviewed = snap.meta.filter((row) => row.reviewId).length;
   return (

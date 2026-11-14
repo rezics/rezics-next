@@ -40,14 +40,14 @@ export class ImportPageCoordinates {
   }
 }
 
-/** Move keyboard orientation only after an acknowledged coordinate change. */
-export function useImportPageFocus(coordinate: number) {
+/** Orient the reader after an acknowledged read, including a same-coordinate recovery. */
+export function useImportPageFocus(revision: number) {
   const status = useRef<HTMLParagraphElement>(null);
-  const previous = useRef(coordinate);
+  const previous = useRef(0);
   useEffect(() => {
-    if (previous.current !== coordinate) status.current?.focus();
-    previous.current = coordinate;
-  }, [coordinate]);
+    if (revision !== 0 && previous.current !== revision) status.current?.focus();
+    previous.current = revision;
+  }, [revision]);
   return status;
 }
 
@@ -72,14 +72,26 @@ export function ImportPageNavigation({
   onNext: () => void;
 }) {
   return (
-    <nav className="space-y-2" aria-label={m.library_import_page_navigation()} aria-busy={busy}>
+    <nav className="space-y-2" aria-label={m.library_import_page_navigation()}>
       <p className="text-sm text-muted-foreground">{m.library_import_page_navigation_help()}</p>
       {position.atRetainedEdge ? <p role="status">{m.library_import_page_history_edge()}</p> : null}
       <div className="flex flex-wrap gap-3">
-        <Button type="button" variant="outline" className={actionClass} disabled={busy || !position.canFirst} onClick={onFirst}>
+        <Button
+          type="button"
+          variant="outline"
+          className={actionClass}
+          disabled={busy || !position.canFirst}
+          onClick={onFirst}
+        >
           {m.library_import_first_page()}
         </Button>
-        <Button type="button" variant="outline" className={actionClass} disabled={busy || position.previous === null} onClick={onPrevious}>
+        <Button
+          type="button"
+          variant="outline"
+          className={actionClass}
+          disabled={busy || position.previous === null}
+          onClick={onPrevious}
+        >
           {m.library_import_previous_page()}
         </Button>
         {hasNext ? (

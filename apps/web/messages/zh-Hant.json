@@ -5610,7 +5610,7 @@
   "library_import_page_navigation": "匯入分頁",
   "library_import_first_page": "首頁",
   "library_import_previous_page": "上一頁",
-  "library_import_page_history_edge": "更早的頁面位置已不再保留。可選擇「首頁」返回起點。",
+  "library_import_page_history_edge": "這是最近瀏覽紀錄中最早的一頁。可選擇「首頁」返回起點。",
   "library_import_page_retry": "重試要求的頁面",
   "library_import_page_read_failed": "無法載入要求的頁面。目前顯示的項目和已審核的選擇未變。",
   "library_import_page_navigation_help": "切換頁面會重新讀取來源紀錄，不會套用選擇或同意提交評分。",

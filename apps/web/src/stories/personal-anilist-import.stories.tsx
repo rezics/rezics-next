@@ -15,15 +15,12 @@ import type {
 import { QUESTION } from '../features/pages/subject-ratings';
 import { PatternStory } from './page';
 
+type NavigationState = 'observed' | 'failed-previous' | 'retained-edge';
+
 const owner = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
 const subject = '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb';
 const importId = '0192f3a0-6c1e-7b2a-9d4e-00000000cccc';
-const reviewIds = [
-  '0192f3a0-6c1e-7b2a-9d4e-000000000001',
-  '0192f3a0-6c1e-7b2a-9d4e-000000000002',
-  '0192f3a0-6c1e-7b2a-9d4e-000000000003',
-  '0192f3a0-6c1e-7b2a-9d4e-000000000004',
-];
+const reviewIds = Array.from({ length: 11 }, (_, index) => `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`);
 const titles = ['Zero means unrated', 'Clear the old vote', 'Guard unavailable', 'Unmatched source title'];
 const sourceScores = [0, 8, 6, 0];
 const existingVotes: (number | null)[] = [5, 9, null, null];
@@ -33,10 +30,10 @@ function makeSource(ordinal: number): AniListRow['source'] {
     evidence: {
       mediaId: ordinal + 1,
       status: 'CURRENT',
-      score: sourceScores[ordinal]!,
+      score: sourceScores[ordinal % sourceScores.length]!,
       progress: 0,
       customLists: { 'Private favourites': true },
-      media: { id: ordinal + 1, type: 'ANIME', title: { userPreferred: titles[ordinal]! } },
+      media: { id: ordinal + 1, type: 'ANIME', title: { userPreferred: titles[ordinal % titles.length]! } },
     },
     group: null,
     identifiers: [{ source: 'anilist', externalId: String(ordinal + 1) }],
@@ -95,7 +92,10 @@ function question(revision: number): AniListQuestion {
   };
 }
 
-function makeJourneyPort() {
+function makeJourneyPort(navigation?: NavigationState) {
+  const count = navigation === 'retained-edge' ? 11 : titles.length;
+  let lastAfter = -1;
+  let failPrevious = navigation === 'failed-previous';
   const reviews = new Map<number, AniListReview>();
   const readbacks = new Map<number, AniListJson>();
   let applyAttempts = 0;
@@ -153,32 +153,39 @@ function makeJourneyPort() {
       return { kind: 'label-targets', labels: [{ id: subject, name: 'Private favourites', revision: 1 }], next: null };
     },
     async preview() {
-      return { kind: 'previewed', importId, count: titles.length };
+      return { kind: 'previewed', importId, count };
     },
-    async page(): Promise<{ kind: 'page'; page: AniListPage }> {
-      return {
-        kind: 'page',
-        page: {
-          importId,
-          header: { document: null, rawUpload: '', scoreFormat: 'POINT_10', count: titles.length, cancelled: false },
-          completeness: { wrapper: 'array', hasNextChunk: false, listedGroups: 0 },
-          rows: titles.map((_, ordinal) => ({
-            ...row(ordinal, readbacks.get(ordinal)),
-            review: reviews.get(ordinal) ?? null,
-            ...(labelReviews.has(ordinal) ? { labelReview: labelReviews.get(ordinal)! } : {}),
-          })),
-          next: null,
-        },
+    async page(command) {
+      if (failPrevious && command.after < lastAfter) {
+        failPrevious = false;
+        return { kind: 'unavailable' };
+      }
+      lastAfter = command.after;
+      const ordinals = Array.from({ length: count }, (_, index) => index)
+        .filter((ordinal) => !navigation || ordinal > command.after)
+        .slice(0, navigation === 'retained-edge' ? 1 : navigation ? 2 : count);
+      const last = ordinals.at(-1);
+      const page: AniListPage = {
+        importId,
+        header: { document: null, rawUpload: '', scoreFormat: 'POINT_10', count, cancelled: false },
+        completeness: { wrapper: 'array', hasNextChunk: false, listedGroups: 0 },
+        rows: ordinals.map((ordinal) => ({
+          ...row(ordinal, readbacks.get(ordinal)),
+          review: reviews.get(ordinal) ?? null,
+          ...(labelReviews.has(ordinal) ? { labelReview: labelReviews.get(ordinal)! } : {}),
+        })),
+        next: navigation && last !== undefined && last < count - 1 ? last : null,
       };
+      return { kind: 'page', page };
     },
     async review(command) {
       const selectedSubject = command.subjectId ?? subject;
-      const existingVote = existingVotes[command.ordinal]!;
+      const existingVote = existingVotes[command.ordinal % existingVotes.length]!;
       const rawScore = command.score
         ? {
             source: {
               present: true,
-              value: sourceScores[command.ordinal]!,
+              value: sourceScores[command.ordinal % sourceScores.length]!,
               lexeme: command.ordinal === 0 ? '0.00' : null,
               scale: 'POINT_10',
               validity: 'valid',
@@ -288,8 +295,8 @@ function makeJourneyPort() {
   return { port };
 }
 
-function ScoreImportStory() {
-  const fixture = useMemo(makeJourneyPort, []);
+function ScoreImportStory({ navigation }: { navigation?: NavigationState } = {}) {
+  const fixture = useMemo(() => makeJourneyPort(navigation), [navigation]);
   const visit = useMemo(
     () => ({
       subject: owner,
@@ -302,11 +309,20 @@ function ScoreImportStory() {
         this.controller.abort();
       },
     }),
-    [],
+    [navigation],
   );
   return (
     <PatternStory path="/library/import-anilist" visitor="Signed In">
       <aside className="mx-auto max-w-5xl space-y-2 border-b p-4 text-sm">
+        {navigation ? (
+          <p>
+            {navigation === 'retained-edge'
+              ? 'Upload or reopen, move Next ten times, then Previous eight times. At the retained edge, choose First explicitly.'
+              : navigation === 'failed-previous'
+                ? 'Upload or reopen, choose Next, then Previous. The first return read fails; retry the requested page or deliberately choose First.'
+                : 'Upload or reopen, review an item, then choose Next, Previous and First. Navigation sends page reads and preserves independent confirmation.'}
+          </p>
+        ) : null}
         <p>
           Illustrative contract-shaped fixtures. Upload the sample, review a matched item or choose a target for the
           unmatched title, and review labels independently. The first confirmation loses its acknowledgement; retry
@@ -315,13 +331,13 @@ function ScoreImportStory() {
         <a
           className="underline"
           download="anilist-illustrative.json"
-          href={`data:application/json,${encodeURIComponent(JSON.stringify(titles.map((_, ordinal) => makeSource(ordinal).evidence)))}`}
+          href={`data:application/json,${encodeURIComponent(JSON.stringify(Array.from({ length: navigation === 'retained-edge' ? 11 : titles.length }, (_, ordinal) => makeSource(ordinal).evidence)))}`}
         >
           Download illustrative export
         </a>
       </aside>
       <AniListImportPortContext.Provider value={fixture.port}>
-        <PersonalAniListImportPage visit={visit} />
+        <PersonalAniListImportPage key={navigation} visit={visit} />
       </AniListImportPortContext.Provider>
     </PatternStory>
   );
@@ -337,3 +353,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const ScoreReviewConsentAndReadback: Story = {};
+
+export const ObservedPreviousAndFirst: Story = { args: { navigation: 'observed' } };
+export const FailedPreviousExactRetry: Story = { args: { navigation: 'failed-previous' } };
+export const RetainedEdgeFirst: Story = { args: { navigation: 'retained-edge' } };

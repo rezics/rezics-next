@@ -786,3 +786,117 @@ test('a retained cancelled Bangumi upload reopens one bounded page for read-only
   expect(button(m.library_bangumi_continue_confirm())?.disabled).toBe(true);
   expect(f.applies).toHaveLength(0);
 });
+
+test('observed sparse Bangumi coordinates bound Previous, retry exactly and retain off-page review', async () => {
+  const f = recordingPort(100);
+  const nativePage = f.port.page;
+  const coordinates = [-1, 2, 11, 23, 34, 45, 56, 67, 78, 89];
+  const reads: number[] = [];
+  let losePrevious = false;
+  f.port.page = async (command) => {
+    reads.push(command.after);
+    if (losePrevious) return { kind: 'unknown', command };
+    const response = await nativePage(command);
+    if (response.kind === 'page') {
+      response.page.next = coordinates[coordinates.indexOf(command.after) + 1] ?? null;
+      if (command.after === 23) response.page.rows = [];
+    }
+    return response;
+  };
+  const journey = createBangumiJourney({ port: f.port, visit: visit() });
+  await journey.preview(envelope(100));
+  await journey.review(0, subject);
+  const reviewToken = journey.snapshot().meta[0]!.reviewToken;
+  for (let index = 1; index < coordinates.length; index += 1) await journey.nextPage();
+  expect(reads).toEqual(coordinates);
+  expect(journey.snapshot().meta.find((item) => item.ordinal === 0)?.reviewToken).toBe(reviewToken);
+  losePrevious = true;
+  let snap = await journey.previousPage();
+  expect(snap.after).toBe(89);
+  expect(snap.position.previous).toBe(78);
+  expect(snap.notice?.kind).toBe('unknown');
+  const seen = reads.length;
+  await journey.firstPage();
+  expect(reads).toHaveLength(seen);
+  losePrevious = false;
+  snap = await journey.retryUnknown();
+  expect(reads.slice(-2)).toEqual([78, 78]);
+  for (let index = 0; index < 7; index += 1) snap = await journey.previousPage();
+  expect(snap.after).toBe(2);
+  expect(snap.position).toEqual({ previous: null, canFirst: true, atRetainedEdge: true });
+  snap = await journey.firstPage();
+  expect(reads.at(-1)).toBe(-1);
+  expect(snap.position.canFirst).toBe(false);
+  expect(f.applies).toEqual([]);
+  expect(f.reviews).toHaveLength(1);
+});
+
+test('Bangumi page rereads retire absent score authority and preserve the original uncertain write', async () => {
+  const f = recordingPort(30, { failApplyOnce: true });
+  const journey = createBangumiJourney({ port: f.port, visit: visit() });
+  await journey.preview(envelope(30));
+  await journey.review(0, subject, { action: 'set', units: 0 });
+  journey.openConfirm();
+  journey.confirmScore(0, true);
+  journey.backToReview();
+  await journey.nextPage();
+  await journey.firstPage();
+  expect(journey.snapshot().meta[0]?.scoreConsent).toBe(true);
+  journey.openConfirm();
+  journey.confirmSource({ privacy: true, timestamps: true });
+  await journey.confirm();
+  const original = structuredClone(f.applies[0]);
+  const reads = journey.cost().calls.page;
+  await journey.nextPage();
+  await journey.previousPage();
+  await journey.firstPage();
+  expect(journey.cost().calls.page).toBe(reads);
+  await journey.retryUnknown();
+  expect(f.applies[1]).toEqual(original);
+  expect(journey.snapshot().outcomes[0]?.status).toBe('applied');
+  journey.backToReview();
+  await journey.nextPage();
+  const nativePage = f.port.page;
+  f.port.page = async (command) => {
+    const response = await nativePage(command);
+    if (response.kind === 'page') response.page.rows = response.page.rows.map((item) => ({ ...item, review: null }));
+    return response;
+  };
+  const snap = await journey.firstPage();
+  expect(snap.meta[0]?.reviewToken).toBeNull();
+  expect(snap.meta[0]?.scoreReview).toBeNull();
+  expect(snap.meta[0]?.scoreConsent).toBe(false);
+  expect(snap.outcomes[0]?.status).toBe('applied');
+});
+
+test('Bangumi failed movement recovers and source, cancellation and reader retirement release coordinates', async () => {
+  const f = recordingPort(30);
+  const current = visit();
+  const journey = createBangumiJourney({ port: f.port, visit: current });
+  await journey.preview(envelope(30));
+  await journey.nextPage();
+  const nativePage = f.port.page;
+  f.port.page = async () => ({ kind: 'unavailable' });
+  const failed = await journey.firstPage();
+  expect(failed.after).not.toBe(-1);
+  expect(failed.pageReadFailed).toBe(true);
+  f.port.page = nativePage;
+  await journey.retryPage();
+  expect(journey.snapshot().after).toBe(-1);
+  await journey.nextPage();
+  await journey.preview(envelope(2));
+  expect(journey.snapshot().position.previous).toBeNull();
+  await journey.nextPage();
+  await journey.cancelAdmission();
+  expect(journey.snapshot().position.canFirst).toBe(false);
+  const fresh = createBangumiJourney({ port: f.port, visit: current });
+  await fresh.loadPage(id, -1);
+  let finish!: (value: Awaited<ReturnType<BangumiImportPort['page']>>) => void;
+  f.port.page = () => new Promise((resolve) => { finish = resolve; });
+  const late = fresh.nextPage();
+  current.retire();
+  finish({ kind: 'page', page: pageOf([row(20)], { next: 29 }) });
+  await late;
+  expect(fresh.snapshot().after).toBe(-1);
+  expect(fresh.snapshot().position.previous).toBeNull();
+});

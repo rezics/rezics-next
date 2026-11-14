@@ -5610,7 +5610,7 @@
   "library_import_page_navigation": "インポートのページ",
   "library_import_first_page": "最初",
   "library_import_previous_page": "前へ",
-  "library_import_page_history_edge": "これより前のページ位置は保持されていません。「最初」で先頭に戻れます。",
+  "library_import_page_history_edge": "最近の履歴では、これが最も前のページです。「最初」で先頭に戻れます。",
   "library_import_page_retry": "要求したページを再読み込み",
   "library_import_page_read_failed": "要求したページを読み込めませんでした。表示中の項目と確認済みの選択は変わっていません。",
   "library_import_page_navigation_help": "ページを移動すると元のレコードを再読み込みします。選択の適用や評価への同意は行いません。",
