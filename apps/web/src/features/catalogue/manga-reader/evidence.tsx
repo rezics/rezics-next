@@ -54,115 +54,140 @@ export function MangaOccurrenceEvidence({
       className="min-w-0 space-y-4 rounded-lg border border-border bg-muted/30 p-3 sm:p-4"
       data-slot="manga-occurrence-evidence"
     >
-      <div className="space-y-1">
+      <div className="min-w-0 space-y-1 border-b border-border pb-3">
         <h4 className="font-semibold">{m.manga_reader_inspection_title({}, o)}</h4>
-        <p className="text-sm text-muted-foreground">{m.manga_reader_inspection_scope({}, o)}</p>
+        <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          {m.manga_reader_inspection_scope({}, o)}
+        </p>
       </div>
       <dl className="grid min-w-0 gap-3 text-sm sm:grid-cols-2">
-        <div>
-          <dt className="font-medium">{m.manga_reader_selected_part({}, o)}</dt>
-          <dd lang={row.labelLanguage} className="[overflow-wrap:anywhere]">
+        <div className="min-w-0">
+          <dt className="font-medium [overflow-wrap:anywhere]">{m.manga_reader_selected_part({}, o)}</dt>
+          <dd lang={row.labelLanguage} className="min-w-0 [overflow-wrap:anywhere]">
             {row.label || m.subject_value_unlabelled({}, o)}
           </dd>
         </div>
-        <div>
-          <dt className="font-medium">{m.manga_reader_direction({}, o)}</dt>
-          <dd>
+        <div className="min-w-0">
+          <dt className="font-medium [overflow-wrap:anywhere]">{m.manga_reader_direction({}, o)}</dt>
+          <dd className="min-w-0 [overflow-wrap:anywhere]">
             {row.direction === 'forward' ? m.manga_reader_forward({}, o) : m.manga_reader_inverse({}, o)}
             {directed ? ` · ${directed}` : ''}
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="font-medium">{m.manga_reader_holder({}, o)}</dt>
-          <dd lang={holder.language} className="[overflow-wrap:anywhere]">
+          <dt className="font-medium [overflow-wrap:anywhere]">{m.manga_reader_holder({}, o)}</dt>
+          <dd lang={holder.language} className="min-w-0 [overflow-wrap:anywhere]">
             {holder.label || m.subject_value_unlabelled({}, o)}
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="font-medium" lang={relation.lang}>
+          <dt className="font-medium [overflow-wrap:anywhere]" lang={relation.lang}>
             {relation.text}
           </dt>
-          <dd className="[overflow-wrap:anywhere]">{value(assertion)}</dd>
+          <dd className="min-w-0 [overflow-wrap:anywhere]">{value(assertion)}</dd>
         </div>
       </dl>
-      <section className="space-y-2" aria-label={m.manga_reader_qualifiers({}, o)}>
-        <h5 className="text-sm font-semibold">{m.manga_reader_qualifiers({}, o)}</h5>
-        {assertion.qualifiers.length ? (
-          <dl className="space-y-3 text-sm">
-            {assertion.qualifiers.map((part, index) => {
-              const label = field(part.property.id);
-              return (
-                <div key={index} className="min-w-0">
-                  <dt className="font-medium [overflow-wrap:anywhere]" lang={label.lang}>
-                    {label.text}
-                  </dt>
-                  <dd className="[overflow-wrap:anywhere]">{value(part)}</dd>
-                </div>
-              );
-            })}
-          </dl>
-        ) : (
-          <p className="text-sm text-muted-foreground">{m.manga_reader_no_qualifiers({}, o)}</p>
-        )}
-      </section>
-      <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
-        <h5 className="text-sm font-semibold">{m.sources_citations({}, o)}</h5>
-        {assertion.references.length ? (
-          <ol className="space-y-3">
-            {assertion.references.map((reference, index) => (
-              <li key={index} data-reference={reference.hash} className="min-w-0 rounded-md border border-border p-3">
-                <h6 className="text-sm font-medium">{m.manga_reader_reference_group({ number: index + 1 }, o)}</h6>
-                <dl className="space-y-2 text-sm">
-                  {reference.parts.map((part, partIndex) => {
-                    const label = field(part.property.id);
-                    return (
-                      <div key={partIndex} className="min-w-0">
-                        <dt className="font-medium [overflow-wrap:anywhere]" lang={label.lang}>
-                          {label.text}
-                        </dt>
-                        <dd className="[overflow-wrap:anywhere]">{value(part)}</dd>
-                      </div>
-                    );
-                  })}
-                </dl>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="text-sm text-muted-foreground">{m.manga_reader_no_references({}, o)}</p>
-        )}
-      </section>
+      <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+        <section
+          className="min-w-0 space-y-2 rounded-md border border-border bg-background p-3"
+          aria-label={m.manga_reader_qualifiers({}, o)}
+        >
+          <h5 className="text-sm font-semibold [overflow-wrap:anywhere]">{m.manga_reader_qualifiers({}, o)}</h5>
+          {assertion.qualifiers.length ? (
+            <dl className="min-w-0 space-y-3 text-sm">
+              {assertion.qualifiers.map((part, index) => {
+                const label = field(part.property.id);
+                return (
+                  <div key={index} className="min-w-0">
+                    <dt className="font-medium [overflow-wrap:anywhere]" lang={label.lang}>
+                      {label.text}
+                    </dt>
+                    <dd className="min-w-0 [overflow-wrap:anywhere]">{value(part)}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+          ) : (
+            <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              {m.manga_reader_no_qualifiers({}, o)}
+            </p>
+          )}
+        </section>
+        <section
+          className="min-w-0 space-y-2 rounded-md border border-border bg-background p-3"
+          aria-label={m.sources_citations({}, o)}
+        >
+          <h5 className="text-sm font-semibold [overflow-wrap:anywhere]">{m.sources_citations({}, o)}</h5>
+          {assertion.references.length ? (
+            <ol className="min-w-0 space-y-3">
+              {assertion.references.map((reference, index) => (
+                <li key={index} data-reference={reference.hash} className="min-w-0 rounded-md border border-border p-3">
+                  <h6 className="text-sm font-medium [overflow-wrap:anywhere]">
+                    {m.manga_reader_reference_group({ number: index + 1 }, o)}
+                  </h6>
+                  <dl className="min-w-0 space-y-2 text-sm">
+                    {reference.parts.map((part, partIndex) => {
+                      const label = field(part.property.id);
+                      return (
+                        <div key={partIndex} className="min-w-0">
+                          <dt className="font-medium [overflow-wrap:anywhere]" lang={label.lang}>
+                            {label.text}
+                          </dt>
+                          <dd className="min-w-0 [overflow-wrap:anywhere]">{value(part)}</dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              {m.manga_reader_no_references({}, o)}
+            </p>
+          )}
+        </section>
+      </div>
       <details className="min-w-0 text-sm">
-        <summary className={`${action} cursor-pointer`}>{m.manga_reader_association({}, o)}</summary>
-        <dl className="space-y-2 [overflow-wrap:anywhere]">
-          <div>
+        <summary className={`${action} max-w-full cursor-pointer [overflow-wrap:anywhere]`}>
+          {m.manga_reader_association({}, o)}
+        </summary>
+        <dl className="mt-3 min-w-0 space-y-2 [overflow-wrap:anywhere]">
+          <div className="min-w-0">
             <dt className="font-medium">{m.manga_reader_node({}, o)}</dt>
-            <dd>{row.node}</dd>
+            <dd className="min-w-0">{row.node}</dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="font-medium">{m.manga_reader_holder({}, o)}</dt>
-            <dd>{holder.id}</dd>
+            <dd className="min-w-0">{holder.id}</dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="font-medium">{m.manga_reader_assertion({}, o)}</dt>
-            <dd>{assertion.id}</dd>
+            <dd className="min-w-0">{assertion.id}</dd>
           </div>
-          <div>
-            <dt className="font-medium">{relation.text}</dt>
-            <dd>{row.property}</dd>
+          <div className="min-w-0">
+            <dt className="font-medium [overflow-wrap:anywhere]">{relation.text}</dt>
+            <dd className="min-w-0">{row.property}</dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="font-medium">{m.manga_reader_release({}, o)}</dt>
-            <dd>
+            <dd className="min-w-0">
               {assertion.rezics.release} · {assertion.rezics.revision}
             </dd>
           </div>
         </dl>
       </details>
-      <p className="text-sm text-muted-foreground">{m.manga_reader_correction_scope({}, o)}</p>
-      <CorrectionLink href={mangaCorrectionAddress(holder, locale)} className={action}>
-        {m.correction_title({}, o)}
-      </CorrectionLink>
+      <div className="min-w-0 space-y-2 border-t border-border pt-4">
+        <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          {m.manga_reader_correction_scope({}, o)}
+        </p>
+        <CorrectionLink
+          href={mangaCorrectionAddress(holder, locale)}
+          className={`${action} max-w-full [overflow-wrap:anywhere]`}
+        >
+          {m.correction_title({}, o)}
+        </CorrectionLink>
+      </div>
     </div>
   );
 }
