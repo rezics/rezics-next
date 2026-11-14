@@ -670,12 +670,13 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
     if (server.listening) server.close();
   };
   const stop = () => {
+    if (stopRequested) return;
     stopRequested = true;
     closeServer();
     stopWhenIdle();
   };
-  process.once('SIGTERM', stop);
-  process.once('SIGINT', stop);
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
   let stopHeartbeat: (() => void) | undefined;
   let stateTimer: ReturnType<typeof setInterval> | undefined;
   let recoveryTimer: ReturnType<typeof setInterval> | undefined;
@@ -890,8 +891,13 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
       try {
         if (registrySafe && !handoff) await stopRecordedAppServers(registryPath, policy.appServer);
       } finally {
-        if (!handoff) rmSync(handoffPath, { force: true });
-        lease.release();
+        try {
+          if (!handoff) rmSync(handoffPath, { force: true });
+          lease.release();
+        } finally {
+          process.off('SIGTERM', stop);
+          process.off('SIGINT', stop);
+        }
       }
     }
   }

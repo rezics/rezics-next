@@ -70,7 +70,7 @@ function startHost(env: NodeJS.ProcessEnv): Hosted {
   child.stderr?.on('data', (chunk) => {
     diagnostics = `${diagnostics}${String(chunk)}`.slice(-4096);
   });
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  const exited = new Promise<void>((resolve) => child.once('close', () => resolve()));
   const ready = new Promise<void>((resolve, reject) => {
     const lines = createInterface({ input: child.stdout! });
     lines.once('line', (line) => {
@@ -96,7 +96,8 @@ function hostShutdownEvidence(stateDirectory: string, host: Hosted, identity: Pr
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') handoff = String(error);
   }
-  return `app-server ${identity.pid} remains alive; registry=${registry}; handoff=${handoff}; host=${host.diagnostics?.() ?? ''}`;
+  const termination = `${host.child.exitCode ?? 'running'}/${host.child.signalCode ?? 'no signal'}`;
+  return `app-server ${identity.pid} remains alive; registry=${registry}; handoff=${handoff}; host=${termination}; ${host.diagnostics?.() ?? ''}`;
 }
 
 function children(pid: number): ProcessIdentity[] {
@@ -168,10 +169,15 @@ function jsonLines(path: string): any[] {
     .map((line) => JSON.parse(line));
 }
 
-async function waitForJsonLine(path: string, predicate: (entry: any) => boolean, label: string): Promise<any> {
+async function waitForJsonLine(
+  path: string,
+  predicate: (entry: any) => boolean,
+  label: string,
+  afterLine = 0,
+): Promise<any> {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    const found = jsonLines(path).find(predicate);
+    const found = jsonLines(path).slice(afterLine).find(predicate);
     if (found) return found;
     await Bun.sleep(20);
   }
@@ -188,6 +194,21 @@ function appServerRegistryEntry(stateDirectory: string): {
   }[];
   const entry = records.find((record) => record.attachment?.poolId === 'fake');
   if (!entry?.attachment) throw new Error('Manager host did not record a complete pool app-server attachment');
+  expect(entry.attachment.identity).toEqual(entry.identity);
+  expect(entry.attachment).toMatchObject({
+    version: 1,
+    poolId: 'fake',
+    codexHome: expect.any(String),
+    executable: expect.any(String),
+    endpoint: expect.stringMatching(/^ws:\/\/127\.0\.0\.1:\d+$/),
+    environmentFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+    selectedExecutablePath: expect.any(String),
+    selectedExecutableDevice: expect.any(Number),
+    selectedExecutableInode: expect.any(Number),
+    processExecutablePath: expect.any(String),
+    processExecutableDevice: expect.any(Number),
+    processExecutableInode: expect.any(Number),
+  });
   return { identity: entry.identity, attachment: entry.attachment };
 }
 
@@ -528,6 +549,7 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
     first.child.kill('SIGTERM');
     await first.exited;
 
+    const replacementRpcOffset = jsonLines(rpcPath).length;
     second = startHost(f.env);
     await second.ready;
     await waitForJsonLine(
@@ -537,6 +559,13 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
         message.params.threadId === originalThreadId &&
         message.params.model === 'gpt-6.1-sol',
       'thread recovery after provider replacement',
+      replacementRpcOffset,
+    );
+    await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/goal/get' && message.params.threadId === originalThreadId,
+      'the replacement host to read the resumed thread state',
+      replacementRpcOffset,
     );
     const replacement = appServerRegistryEntry(f.path);
     expect(replacement.identity.pid).not.toBe(initial.identity.pid);
@@ -555,6 +584,7 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
     second.child.kill('SIGKILL');
     await second.exited;
 
+    const reconnectRpcOffset = jsonLines(rpcPath).length;
     third = startHost(f.env);
     await third.ready;
     await waitForJsonLine(
@@ -564,14 +594,31 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
         message.params.threadId === originalThreadId &&
         message.params.model === 'gpt-6.1-sol',
       'bounded clean rejoin after a failed private endpoint',
+      reconnectRpcOffset,
+    );
+    await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/goal/get' && message.params.threadId === originalThreadId,
+      'the reconnecting host to read the resumed thread state',
+      reconnectRpcOffset,
     );
     const recovered = appServerRegistryEntry(f.path);
     expect(recovered.identity.pid).not.toBe(replacement.identity.pid);
     expect(jsonLines(serverStartPath)).toHaveLength(3);
+    expect(
+      jsonLines(rpcPath).filter(
+        (message) =>
+          message.method === 'thread/resume' &&
+          message.params.threadId === originalThreadId &&
+          message.params.model === 'gpt-6.1-sol',
+      ),
+    ).toHaveLength(2);
     expect(jsonLines(rpcPath).filter((message) => message.method === 'thread/start')).toHaveLength(1);
     expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(1);
     third.child.kill('SIGTERM');
     await third.exited;
+    expect(third.child.exitCode).toBe(0);
+    expect(third.child.signalCode).toBeNull();
     if (sameProcess(recovered.identity)) throw new Error(hostShutdownEvidence(f.path, third, recovered.identity));
     expect(sameProcess(recovered.identity)).toBe(false);
   } finally {

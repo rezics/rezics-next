@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
+  appendFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -15,6 +16,7 @@ import { branchHead } from './attempt-progress.ts';
 import { beginTypingInputReceipt } from './worker-check-typing-inputs.ts';
 import type { LandingRequest } from './contracts.ts';
 import { newestWorktreeMtime, WorkerJob } from './job.ts';
+import { reconcileQueuedTypingFailureRetry } from './typing-recovery.ts';
 import { processIdentity, type ProcessIdentity } from './process.ts';
 import { harness, reading, tempDirectory } from './test-support.ts';
 import {
@@ -26,6 +28,7 @@ import {
 import {
   admitWorkerCheckHostRun,
   recordWorkerCheckTypingInputs,
+  readWorkerCheckHostStamp,
   settleWorkerCheckHostBudget,
   workerCheckBudgetDirectory,
   WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
@@ -35,11 +38,12 @@ import type { Attempt, RetryIntent } from './types.ts';
 function waitingResumeCli(checkId: string): string {
   const waiting = JSON.stringify({ status: 'waiting', summary: 'check is running', checks: [checkId] });
   return `#!/usr/bin/env bun
-import { writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const root = process.cwd();
 if (process.argv.includes('resume')) {
+  appendFileSync(join(root, '.temp/goal/resume-count'), 'resume\\n');
   writeFileSync(join(root, '.temp/goal/resume-args.json'), JSON.stringify(process.argv));
   writeFileSync(join(root, '.temp/goal/resume-started'), 'yes');
   writeFileSync('result.txt', 'accepted');
@@ -77,6 +81,8 @@ async function typingRetryFixture(
     exited?: boolean;
     kernelOutput?: boolean;
     setupFailure?: 'migration' | 'generic' | 'spoofed';
+    legacySourceRepair?: boolean;
+    staleProgress?: boolean;
     unknownCustody?: boolean;
     misclassified?: boolean;
     stale?: boolean;
@@ -136,6 +142,13 @@ async function typingRetryFixture(
       : ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
   const checkId = randomUUID();
   const physicalRunId = randomUUID();
+  const pendingCommand = options.legacySourceRepair
+    ? [
+        'sh',
+        '-c',
+        'bun run --cwd services/kernel typecheck && bun test services/kernel/test/commerce/post-benefit.test.ts services/kernel/test/commerce/acquisition.test.ts services/kernel/test/commerce/settlement.test.ts',
+      ]
+    : compiler;
   const outputRun = `client-output-${physicalRunId}`;
   const worktree = task.worktree;
   if (options.setupFailure) {
@@ -190,8 +203,12 @@ async function typingRetryFixture(
     ...(kernelOutput ? { REMOTE_CHECK_HOST: 'fixture-host', REZICS_CHECK_RUN: outputRun } : {}),
   };
   recordWorkerCheckTypingInputs(env, worktree, physicalRunId, compiler);
-  const complete = options.setupFailure ? undefined : beginTypingInputReceipt(worktree, env, compiler);
-  if (!options.setupFailure && !complete) throw new Error('Compiler fixture did not capture its inputs');
+  const complete =
+    options.setupFailure && !options.legacySourceRepair
+      ? undefined
+      : beginTypingInputReceipt(worktree, env, options.legacySourceRepair ? ['bun', 'scripts/typecheck.ts'] : compiler);
+  if ((!options.setupFailure || options.legacySourceRepair) && !complete)
+    throw new Error('Compiler fixture did not capture its inputs');
   if (kernelOutput) {
     mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
     const artifactStage = process.env.REZICS_CHECK_ARTIFACTS_DIR;
@@ -225,19 +242,21 @@ async function typingRetryFixture(
       bundleSha256: outputTreeDigest(bundle),
     });
   }
-  complete?.(1);
+  complete?.(options.legacySourceRepair ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1);
 
   const log = join(worktree, '.temp/goal/checks', `${checkId}.log`);
   mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
   writeFileSync(
     log,
-    options.setupFailure === 'generic'
-      ? 'remote-check: connection failed before a result\n'
-      : options.setupFailure
-        ? 'Migration version check failed:\n- db/commerce/migrations/20261113195649_post_benefit.sql: missing dbmate up marker; add `-- migrate:up` before the up SQL\nName migrations with `date -u +%Y%m%d%H%M%S`.\n'
-        : kernelOutput
-          ? 'packages/client/src/index.ts(1,1): error TS2322: route diagnostic\n'
-          : 'apps/web/src/reader.ts(1,1): error TS2322: required optional prop is missing\n',
+    options.legacySourceRepair
+      ? 'kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with \'-- migrate:up\'\nerror: script "typecheck" exited with code 75\n'
+      : options.setupFailure === 'generic'
+        ? 'remote-check: connection failed before a result\n'
+        : options.setupFailure
+          ? 'Migration version check failed:\n- db/commerce/migrations/20261113195649_post_benefit.sql: missing dbmate up marker; add `-- migrate:up` before the up SQL\nName migrations with `date -u +%Y%m%d%H%M%S`.\n'
+          : kernelOutput
+            ? 'packages/client/src/index.ts(1,1): error TS2322: route diagnostic\n'
+            : 'apps/web/src/reader.ts(1,1): error TS2322: required optional prop is missing\n',
   );
   const checkExitCode = options.setupFailure ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1;
   settleWorkerCheckHostBudget(env, checkExitCode, !options.setupFailure, {
@@ -246,6 +265,11 @@ async function typingRetryFixture(
     worktree,
     physicalRunId,
   });
+  if (options.legacySourceRepair) {
+    const stamp = readWorkerCheckHostStamp(budget, admitted.stamp);
+    delete stamp.setupFailure;
+    writeFileSync(join(budget, admitted.stamp), `${JSON.stringify(stamp)}\n`);
+  }
   if (options.stale && options.setupFailure)
     writeFileSync(
       join(worktree, 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql'),
@@ -287,6 +311,33 @@ async function typingRetryFixture(
       }),
     );
   }
+  const listedCheckId = options.legacySourceRepair ? randomUUID() : checkId;
+  if (options.legacySourceRepair) {
+    const originalPhysicalRunId = randomUUID();
+    const originalCommand = pendingCommand;
+    const originalLog = `.temp/goal/checks/${listedCheckId}.log`;
+    writeFileSync(join(worktree, originalLog), 'original check result remains failed\n');
+    const originalResult = {
+      id: listedCheckId,
+      cwd: worktree,
+      argv: originalCommand,
+      log: originalLog,
+      ownership: { taskId: task.id, attempt: ref.attempt },
+      status: 'finished',
+      exitCode: 1,
+      physicalRunId: originalPhysicalRunId,
+    };
+    writeFileSync(join(checks, 'results', `${listedCheckId}.json`), JSON.stringify(originalResult));
+    writeFileSync(
+      join(checks, 'custody/history', `${listedCheckId}.${originalPhysicalRunId}.json`),
+      JSON.stringify({
+        version: 1,
+        ...originalResult,
+        remoteExpected: false,
+        terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+      }),
+    );
+  }
   h.store.updateTask(ref, (current) => {
     current.state = exited ? 'ready' : 'stopped';
   });
@@ -296,8 +347,8 @@ async function typingRetryFixture(
     current.exitCode = 0;
     if (exited) current.failureKind = null;
     current.result = 'Compiler evidence is pending.';
-    current.typingEvidencePending = { result: current.result, command: compiler };
-    current.checks = [checkId];
+    current.typingEvidencePending = { result: current.result, command: pendingCommand };
+    current.checks = [listedCheckId];
     if (!exited)
       current.terminationIntent = {
         operation: 'stop',
@@ -310,14 +361,16 @@ async function typingRetryFixture(
       };
   });
   if (exited) {
-    const head = branchHead(h.store.task(task.id));
-    if (!head) throw new Error('Could not capture the task branch head');
-    h.store.event(ref, 'attempt-progress', {
-      startHead: head,
-      endHead: head,
-      uncommitted: false,
-      progress: false,
-    });
+    if (!options.legacySourceRepair) {
+      const head = branchHead(h.store.task(task.id));
+      if (!head) throw new Error('Could not capture the task branch head');
+      h.store.event(ref, 'attempt-progress', {
+        startHead: head,
+        endHead: options.staleProgress ? 'f'.repeat(40) : head,
+        uncommitted: false,
+        progress: false,
+      });
+    }
     const amendedBrief = join(h.settings.stateDirectory, `${task.id}-amended.md`);
     writeFileSync(amendedBrief, `${readFileSync(h.briefFile, 'utf8')}\nApply the focused route correction.\n`);
     h.tasks.queueRetry(task.id, { expectedAttempt: ref.attempt, brief: amendedBrief });
@@ -335,7 +388,7 @@ async function typingRetryFixture(
         current.nextAttempt = ref.attempt;
       });
   }
-  return { task: h.store.task(task.id), ref, checkId };
+  return { task: h.store.task(task.id), ref, checkId, listedCheckId, physicalRunId, pendingCommand, compiler };
 }
 test('newest worktree mtime ignores node_modules and .temp', async () => {
   const root = tempDirectory();
@@ -366,6 +419,7 @@ test('an amended retry reuses a current Kernel client-output failure only after 
     const landings: LandingRequest[] = [];
     const job = new WorkerJob(h.tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} });
 
+    expect(reconcileQueuedTypingFailureRetry(h.tasks, current.ref)).toBe(true);
     job.resumePendingRetries();
     await job.drain();
 
@@ -394,7 +448,16 @@ test('an amended retry reuses a current Kernel client-output failure only after 
 test('an accepted source amendment retries only for a retained terminal missing-migration-marker setup defect', async () => {
   const h = harness();
   try {
-    const proven = await typingRetryFixture(h, { exited: true, setupFailure: 'migration' });
+    const proven = await typingRetryFixture(h, {
+      exited: true,
+      setupFailure: 'migration',
+      legacySourceRepair: true,
+    });
+    const staleProgress = await typingRetryFixture(h, {
+      exited: true,
+      setupFailure: 'migration',
+      staleProgress: true,
+    });
     const generic = await typingRetryFixture(h, { exited: true, setupFailure: 'generic' });
     const spoofed = await typingRetryFixture(h, { exited: true, setupFailure: 'spoofed' });
     const changedSource = await typingRetryFixture(h, {
@@ -410,23 +473,67 @@ test('an accepted source amendment retries only for a retained terminal missing-
     const landings: LandingRequest[] = [];
     const job = new WorkerJob(h.tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} });
 
+    expect(h.store.events(proven.task.id, proven.ref.attempt).some((event) => event.kind === 'attempt-progress')).toBe(
+      false,
+    );
+    expect(proven.listedCheckId).not.toBe(proven.checkId);
+    const setupLogPath = join(proven.task.worktree, '.temp/goal/checks', `${proven.checkId}.log`);
+    const retainedSetupLog = readFileSync(setupLogPath, 'utf8');
+    writeFileSync(setupLogPath, 'error: script "typecheck" exited with code 75\n');
+    expect(reconcileQueuedTypingFailureRetry(h.tasks, proven.ref)).toBe(false);
+    writeFileSync(setupLogPath, retainedSetupLog);
+    expect(reconcileQueuedTypingFailureRetry(h.tasks, proven.ref)).toBe(true);
+    expect(reconcileQueuedTypingFailureRetry(h.tasks, proven.ref)).toBe(true);
+    expect(h.store.retryIntent(proven.ref)?.status).toBe('pending');
+
+    job.resumePendingRetries();
+    job.resumePendingRetries();
+    await job.drain();
     job.resumePendingRetries();
     await job.drain();
 
     expect(h.store.task(proven.task.id).currentAttempt).toBe(2);
     expect(h.store.retryIntent(proven.ref)).toMatchObject({ status: 'started', nextAttempt: 2 });
     expect(h.store.attempt(proven.ref).state).toBe('superseded');
-    expect(h.store.attempt(proven.ref).checks).toEqual([proven.checkId]);
-    expect(h.store.attempt(proven.ref).typingEvidencePending?.command).toEqual([
-      'bun',
-      'run',
-      '--cwd',
-      'services/kernel',
-      'typecheck',
-    ]);
+    expect(h.store.attempt(proven.ref).checks).toEqual([proven.listedCheckId]);
+    expect(h.store.attempt(proven.ref).typingEvidencePending?.command).toEqual(proven.pendingCommand);
+    const setupResult = JSON.parse(
+      readFileSync(join(proven.task.worktree, '.temp/goal/checks/results', `${proven.checkId}.json`), 'utf8'),
+    );
+    expect(setupResult).toMatchObject({
+      id: proven.checkId,
+      argv: proven.compiler,
+      status: 'finished',
+      exitCode: WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
+      physicalRunId: proven.physicalRunId,
+    });
+    expect(readFileSync(join(proven.task.worktree, setupResult.log), 'utf8')).toContain(
+      "phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'",
+    );
+    const setupStamp = readWorkerCheckHostStamp(
+      workerCheckBudgetDirectory(h.settings.stateDirectory, proven.task.id, proven.ref.attempt),
+      '1',
+    );
+    expect(setupStamp).toMatchObject({
+      exitCode: WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
+      includedTypecheck: true,
+      typecheckFailed: true,
+      typingInputs: {
+        physicalRunId: proven.physicalRunId,
+        sourceStable: true,
+        exitCode: WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
+        command: proven.compiler,
+      },
+    });
+    expect(setupStamp.setupFailure).toBeUndefined();
+    expect(
+      JSON.parse(
+        readFileSync(join(proven.task.worktree, '.temp/goal/checks/results', `${proven.listedCheckId}.json`), 'utf8'),
+      ),
+    ).toMatchObject({ status: 'finished', exitCode: 1 });
     expect(h.store.attempt({ taskId: proven.task.id, attempt: 2 }).checks ?? []).toEqual([]);
 
-    for (const retained of [generic, spoofed, changedSource, unresolved]) {
+    for (const retained of [staleProgress, generic, spoofed, changedSource, unresolved]) {
       expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
       expect(h.store.retryIntent(retained.ref)?.status).toBe('pending');
       expect(h.store.attempt(retained.ref).state).toBe('exited');
@@ -435,6 +542,9 @@ test('an accepted source amendment retries only for a retained terminal missing-
       ).toBe(false);
     }
     expect(landings).toHaveLength(1);
+    expect(
+      h.store.events(proven.task.id).filter((event) => event.kind === 'worker-run-started' && event.attempt === 2),
+    ).toHaveLength(1);
   } finally {
     await h.disposeAsync();
   }
@@ -584,8 +694,13 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
     let used = 50;
     let resetsAt = Date.now() + 8 * 60 * 60_000;
     let occupied = false;
+    const observedOriginalResets: number[] = [];
     Object.defineProperty(h.tasks, 'reader', {
-      value: (pool: (typeof h.settings.pools)[number]) => poolReading(pool, used, resetsAt),
+      value: (pool: (typeof h.settings.pools)[number]) => {
+        const reading = poolReading(pool, used, resetsAt);
+        if (pool.name === h.settings.pools[0]!.name) observedOriginalResets.push(reading.windows[0]!.resetsAt!);
+        return reading;
+      },
     });
     Object.defineProperty(h.store, 'runningAttemptsByPool', {
       value: () => (occupied ? { [h.settings.pools[0]!.name]: 1 } : {}),
@@ -598,10 +713,14 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
     const original = h.store.attempt(ref);
     expect(original.state).toBe('waiting');
     occupied = true;
+    const weeklyWindowMs = 10080 * 60_000;
 
     const results = join(task.worktree, '.temp/goal/checks/results');
     mkdirSync(results, { recursive: true });
-    writeFileSync(join(results, `${checkId}.json`), JSON.stringify({ status: 'finished', exitStatus: 0 }));
+    const checkResult = join(results, `${checkId}.json`);
+    const readCheckResult = () =>
+      JSON.parse(readFileSync(checkResult, 'utf8')) as { status: string; exitStatus: number };
+    writeFileSync(checkResult, JSON.stringify({ status: 'finished', exitStatus: 0 }));
     writeFileSync(capacityFile, JSON.stringify({ maxWorkers: 0, minAvailableMiB: 0 }));
     recovery = job.recoverOrphans();
     const queue = join(h.settings.stateDirectory, 'capacity-queue');
@@ -632,6 +751,7 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
     });
     expect(h.store.task(task.id).currentAttempt).toBe(1);
     expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+    expect(readCheckResult()).toEqual({ status: 'finished', exitStatus: 0 });
     expect(readdirSync(queue)).toHaveLength(0);
 
     occupied = false;
@@ -643,14 +763,29 @@ test('a queued check wake rechecks its original pool and resumes the same sessio
     recovery = undefined;
     expect(h.store.attempt(ref)).toMatchObject({ state: 'waiting', pool: original.pool, session: original.session });
     expect(existsSync(join(task.worktree, '.temp/goal/resume-started'))).toBe(false);
+    expect(readCheckResult()).toEqual({ status: 'finished', exitStatus: 0 });
 
-    resetsAt += 7 * 24 * 60 * 60_000;
+    // Advancing exactly one configured weekly window changes reset identity without changing the pool or attempt.
+    resetsAt += weeklyWindowMs;
     recovery = job.recoverOrphans();
     await recovery;
     recovery = undefined;
     const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
     expect(args).toContain(original.session!);
-    expect(h.store.attempt(ref).state).toBe('exited');
+    expect(observedOriginalResets.at(-1)).toBe(resetsAt);
+    expect(readCheckResult()).toEqual({ status: 'finished', exitStatus: 0 });
+    expect(h.store.attempt(ref)).toMatchObject({
+      state: 'exited',
+      attempt: 1,
+      pool: original.pool,
+      session: original.session,
+      checks: [checkId],
+    });
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+
+    // A repeated recovery sees the exited same attempt and cannot launch the retained session again.
+    await job.recoverOrphans();
+    expect(readFileSync(join(task.worktree, '.temp/goal/resume-count'), 'utf8')).toBe('resume\n');
     expect(h.store.task(task.id).currentAttempt).toBe(1);
   } finally {
     if (recovery) {
