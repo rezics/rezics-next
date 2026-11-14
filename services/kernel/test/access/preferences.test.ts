@@ -71,12 +71,7 @@ const preferenceReceipt = (accountId: string, key: string) =>
     [
       accountId,
       'access.account.preferences',
-      receiptKeyCandidates(
-        testReceiptKeys(),
-        'access.account.preferences',
-        { kind: 'account', id: accountId },
-        key,
-      ),
+      receiptKeyCandidates(testReceiptKeys(), 'access.account.preferences', { kind: 'account', id: accountId }, key),
     ],
   );
 
@@ -125,9 +120,7 @@ test('default and equal settings return durable eventless exact retries', async 
     expect(same.value).toEqual(read.value);
     expect(same.response.headers.get('rezics-session-token')).toBeTruthy();
     expect(replay.value).toEqual(same.value);
-    expect(replay.response.headers.get('rezics-session-token')).toBe(
-      same.response.headers.get('rezics-session-token'),
-    );
+    expect(replay.response.headers.get('rezics-session-token')).toBe(same.response.headers.get('rezics-session-token'));
     expect((await preferenceReceipt(owner.accountId, key)).rows).toHaveLength(1);
   }
   expect(await preferenceEventCount(owner.accountId)).toBe(events);
@@ -199,9 +192,11 @@ test('versioned partial writes replay once, reject stale versions and bind the i
   expect((await preferenceReceipt(owner.accountId, resetKey)).rows).toHaveLength(1);
   expect(await preferenceEventCount(owner.accountId)).toBe(events + 3);
   expect(
-    (await db.admin.query('SELECT version,xmin::text FROM access.account_preferences WHERE account_id=$1', [
-      owner.accountId,
-    ])).rows,
+    (
+      await db.admin.query('SELECT version,xmin::text FROM access.account_preferences WHERE account_id=$1', [
+        owner.accountId,
+      ])
+    ).rows,
   ).toEqual(storedAfterReset.rows);
 });
 
@@ -303,10 +298,10 @@ test('concurrent first writes compare the same expected version without losing a
 });
 
 const shelfRow = (accountId: string) =>
-  db.admin.query(
-    'SELECT shelf, version, xmin::text FROM access.account_preferences WHERE route=$1 AND account_id=$2',
-    [routeOf(accountId), accountId],
-  );
+  db.admin.query('SELECT shelf, version, xmin::text FROM access.account_preferences WHERE route=$1 AND account_id=$2', [
+    routeOf(accountId),
+    accountId,
+  ]);
 
 test('a shelf is empty until saved, merges by part and entry, and null removes', async () => {
   const person = await fixture.person('preferences-shelf');
@@ -372,9 +367,7 @@ test('a shelf is empty until saved, merges by part and entry, and null removes',
   const replay = await call(person.accountId, person.bearer, resetBody, resetKey);
   expect(reset.value).toEqual(cleared.value);
   expect(replay.value).toEqual(reset.value);
-  expect(replay.response.headers.get('rezics-session-token')).toBe(
-    reset.response.headers.get('rezics-session-token'),
-  );
+  expect(replay.response.headers.get('rezics-session-token')).toBe(reset.response.headers.get('rezics-session-token'));
   expect((await preferenceReceipt(person.accountId, resetKey)).rows).toHaveLength(1);
   expect(await preferenceEventCount(person.accountId)).toBe(events + 4);
   expect((await shelfRow(person.accountId)).rows).toEqual(stored);

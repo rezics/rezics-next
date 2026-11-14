@@ -73,12 +73,7 @@ const preferenceReceipt = (accountId: string, key: string) =>
     [
       accountId,
       'access.account.preferences',
-      receiptKeyCandidates(
-        testReceiptKeys(),
-        'access.account.preferences',
-        { kind: 'account', id: accountId },
-        key,
-      ),
+      receiptKeyCandidates(testReceiptKeys(), 'access.account.preferences', { kind: 'account', id: accountId }, key),
     ],
   );
 const stored = (accountId: string) =>
