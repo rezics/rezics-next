@@ -481,16 +481,13 @@ export async function recoverWorkerTyping(
       inspectUnbudgeted: sourceOnly,
     });
     const checkIds = workerCheckHostTypingCheckIds(directory, attempt.checks ?? []);
-    if (
-      !typing.ok &&
-      typing.kind === 'evidence-unavailable' &&
-      sourceOnly
-    ) {
+    if (!typing.ok && typing.kind === 'evidence-unavailable' && sourceOnly) {
       if (workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, checkIds) !== 'terminal')
         return {
           ...ref,
           status: 'pending' as const,
-          result: `${typing.result}\n` +
+          result:
+            `${typing.result}\n` +
             'Compiler evidence can be deferred under source-only policy, but same-attempt check custody is not terminal. ' +
             `Keep check ids ${checkIds.join(', ') || '(none)'}, original owners and grants unchanged; no compiler command was issued.`,
         };

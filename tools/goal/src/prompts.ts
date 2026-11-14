@@ -301,8 +301,7 @@ export function selectConditions(input: {
   const authorization = input.authorization ?? task.proofAuthorization;
   if (proofProtocolAuthorized(brief, proofRun)) selected.push('proof-run');
   else if (registeredProof(brief, authorization)) selected.push('registered-proof');
-  else if (sourceOnlyCompletionEligible({ ...input, task, proofRun, authorization }))
-    selected.push('source-only');
+  else if (sourceOnlyCompletionEligible({ ...input, task, proofRun, authorization })) selected.push('source-only');
   // A governed attempt must see the same typing-only boundary that its check wrapper enforces. Exempt briefs
   // keep their original acceptance; the local minimal setting still applies to otherwise unqualified work.
   else if (

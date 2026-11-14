@@ -2519,10 +2519,7 @@ export function workerCheckHostTypingSettlement(input: {
 }): WorkerCheckHostTypingSettlement {
   try {
     const directory = input.directory?.trim();
-    if (
-      !directory ||
-      ((input.limit === 'off' || input.limit === null) && !input.inspectUnbudgeted)
-    )
+    if (!directory || ((input.limit === 'off' || input.limit === null) && !input.inspectUnbudgeted))
       return { ok: true };
     let names: string[];
     try {

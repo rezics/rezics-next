@@ -678,7 +678,13 @@ function writeTypingInputDrift(budget: string, worktree: string, command: string
   const physicalRunId = randomUUID();
   const path = join(budget, '1');
   const stamp = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-  writeFileSync(path, JSON.stringify({ ...stamp, typingRequest: { physicalRunId, command, capture: 'physical-command', localPrepared: [] } }));
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...stamp,
+      typingRequest: { physicalRunId, command, capture: 'physical-command', localPrepared: [] },
+    }),
+  );
   mkdirSync(join(worktree, 'scripts'), { recursive: true });
   writeFileSync(join(worktree, 'scripts/typecheck.ts'), 'export {};\n');
   writeFileSync(join(worktree, 'deferred-source.ts'), 'export const current = true;\n');
@@ -698,15 +704,34 @@ function writeOwnedCheckResult(
   const argv = ['bun', 'test', 'custody.test.ts'];
   mkdirSync(join(root, 'results'), { recursive: true });
   mkdirSync(join(root, 'custody/history'), { recursive: true });
-  writeFileSync(join(root, 'results', `${checkId}.json`), JSON.stringify({
-    id: checkId, cwd: worktree, argv, ownership: { taskId, attempt }, status, physicalRunId,
-    ...(finished ? { exitCode: 0 } : {}),
-  }));
-  if (finished) writeFileSync(join(root, 'custody/history', `${checkId}.${physicalRunId}.json`), JSON.stringify({
-    version: 1, id: checkId, cwd: worktree, argv, ownership: { taskId, attempt }, physicalRunId,
-    status, exitCode: 0, remoteExpected: false,
-    terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
-  }));
+  writeFileSync(
+    join(root, 'results', `${checkId}.json`),
+    JSON.stringify({
+      id: checkId,
+      cwd: worktree,
+      argv,
+      ownership: { taskId, attempt },
+      status,
+      physicalRunId,
+      ...(finished ? { exitCode: 0 } : {}),
+    }),
+  );
+  if (finished)
+    writeFileSync(
+      join(root, 'custody/history', `${checkId}.${physicalRunId}.json`),
+      JSON.stringify({
+        version: 1,
+        id: checkId,
+        cwd: worktree,
+        argv,
+        ownership: { taskId, attempt },
+        physicalRunId,
+        status,
+        exitCode: 0,
+        remoteExpected: false,
+        terminalProof: { local: true, remote: null, resultKnown: true, observedAt: new Date().toISOString() },
+      }),
+    );
 }
 
 test('source-only recovery waits for check custody and preserves the unused grant through mode removal', async () => {
@@ -732,7 +757,8 @@ test('source-only recovery waits for check custody and preserves the unused gran
     );
     const actor = { id: 'operations', sessionId: 'operations-session' };
     const budget = workerCheckBudgetDirectory(h.settings.stateDirectory, retained.task.id, 1);
-    const receive = () => recoverWorkerTyping(h.tasks, { enqueue: (value) => landing.push(value) }, retained.ref, actor);
+    const receive = () =>
+      recoverWorkerTyping(h.tasks, { enqueue: (value) => landing.push(value) }, retained.ref, actor);
     const grant = recoveryProof(await receive());
     const grantPath = join(budget, 'typing-recovery', `${grant.env[TYPING_RECOVERY_ENV]}.json`);
     const grantBytes = readFileSync(grantPath, 'utf8');
