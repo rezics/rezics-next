@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type MouseEvent } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { Check, Search } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -34,8 +34,10 @@ function Resolution({ value, saved = false }: { value: ContextResolution; saved?
 export function SetupContextPickerField({ picker, disabled }: { picker: SetupContextPicker; disabled: boolean }) {
   const state = useSyncExternalStore(picker.subscribe, picker.getSnapshot, picker.getSnapshot);
   const id = useId();
+  const [referenceOpen, setReferenceOpen] = useState(true);
   const queryInput = useRef<HTMLInputElement>(null);
   const resultRegion = useRef<HTMLDivElement>(null);
+  const selectedRegion = useRef<HTMLDivElement>(null);
   const caller = useMemo(() => ({ active: false }), [picker, disabled]);
   const keyboardPosition = useRef<{
     picker: SetupContextPicker;
@@ -45,16 +47,27 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
     ownsFocus: () => boolean;
     cancel: () => void;
   } | null>(null);
+  const selectionPosition = useRef<{
+    picker: SetupContextPicker;
+    id: string | null;
+    destination: 'selected' | 'query';
+    version: number;
+    ownsFocus: () => boolean;
+    cancel: () => void;
+  } | null>(null);
   const { current, selected, page, reference } = state;
   const currentVersion = picker.currentVersion();
   const searchVersion = picker.searchVersion();
   const selectionVersion = picker.selectionVersion();
   const referenceVersion = picker.referenceVersion();
+  const referenceDraft = reference.trim();
+  const hasReferenceDraft = referenceDraft !== '' && reference !== (current?.id ?? '');
   useLayoutEffect(() => {
     caller.active = true;
     return () => {
       caller.active = false;
       keyboardPosition.current?.cancel();
+      selectionPosition.current?.cancel();
     };
   }, [caller]);
   useLayoutEffect(() => {
@@ -76,14 +89,37 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
       resultRegion.current?.focus();
     }
   }, [disabled, page, picker, state.query]);
+  useLayoutEffect(() => {
+    const pending = selectionPosition.current;
+    if (!pending) return;
+    const selected = picker.getSnapshot().selected;
+    if (
+      disabled ||
+      pending.picker !== picker ||
+      pending.version !== picker.selectionVersion() ||
+      !pending.ownsFocus() ||
+      (pending.destination === 'selected' && selected?.id !== pending.id) ||
+      (pending.destination === 'query' && selected !== null)
+    ) {
+      pending.cancel();
+      return;
+    }
+    if (pending.destination === 'selected' && selected?.phase !== 'loading') {
+      pending.cancel();
+      if (selectedRegion.current?.isConnected) selectedRegion.current.focus();
+    } else if (pending.destination === 'query') {
+      pending.cancel();
+      if (queryInput.current?.isConnected) queryInput.current.focus();
+    }
+  }, [disabled, picker, selectionVersion, selected]);
   const pageAction = (
     event: MouseEvent<HTMLButtonElement>,
     cursor: string | undefined,
     action: () => boolean | void,
-    mouseAccepted?: () => void,
   ) => {
     // A retained handler cannot regain ownership after a picker/disabled ABA visit or unmount.
     if (!caller.active || disabled || picker.searchVersion() !== searchVersion) return;
+    selectionPosition.current?.cancel();
     keyboardPosition.current?.cancel();
     if (event.detail === 0) {
       const document = event.currentTarget.ownerDocument;
@@ -94,13 +130,14 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
         document.removeEventListener('focusout', focusLeft, true);
         for (const type of ['pointerdown', 'mousedown', 'touchstart', 'click'])
           document.removeEventListener(type, cancel, true);
+        document.removeEventListener('keydown', cancel, true);
         document.defaultView?.removeEventListener('blur', cancel);
       };
       const focusMoved = (event: FocusEvent) => {
         if (event.target !== owner) cancel();
       };
       const focusLeft = (event: FocusEvent) => {
-        if (owner?.isConnected || event.relatedTarget !== null) cancel();
+        if ((owner?.isConnected && !owner.matches(':disabled')) || event.relatedTarget !== null) cancel();
       };
       const pending = {
         picker,
@@ -110,7 +147,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
         // Loading removes its button. The resulting body fallback is not a new focus choice.
         ownsFocus: () =>
           document.activeElement === owner ||
-          (!!owner && !owner.isConnected && document.activeElement === document.body),
+          (!!owner && (!owner.isConnected || owner.matches(':disabled')) && document.activeElement === document.body),
         cancel,
       };
       keyboardPosition.current = pending;
@@ -118,12 +155,69 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
       document.addEventListener('focusout', focusLeft, true);
       for (const type of ['pointerdown', 'mousedown', 'touchstart', 'click'])
         document.addEventListener(type, cancel, true);
+      document.addEventListener('keydown', cancel, true);
       document.defaultView?.addEventListener('blur', cancel);
     }
     const pending = keyboardPosition.current;
     const accepted = action();
     if (!caller.active || accepted === false || picker.searchVersion() !== searchVersion + 1) pending?.cancel();
-    else if (event.detail !== 0) mouseAccepted?.();
+  };
+  const selectionAction = (
+    event: MouseEvent<HTMLButtonElement>,
+    expectedId: string | null,
+    destination: 'selected' | 'query',
+    action: () => Promise<void> | void,
+  ) => {
+    if (!caller.active || disabled || picker.selectionVersion() !== selectionVersion) return;
+    keyboardPosition.current?.cancel();
+    selectionPosition.current?.cancel();
+    const before = picker.selectionVersion();
+    let pending: typeof selectionPosition.current = null;
+    if (event.detail === 0) {
+      const document = event.currentTarget.ownerDocument;
+      const owner = document.activeElement;
+      const cancel = () => {
+        if (selectionPosition.current === pending) selectionPosition.current = null;
+        document.removeEventListener('focusin', focusMoved, true);
+        document.removeEventListener('focusout', focusLeft, true);
+        for (const type of ['pointerdown', 'mousedown', 'touchstart', 'click'])
+          document.removeEventListener(type, cancel, true);
+        document.removeEventListener('keydown', cancel, true);
+        document.defaultView?.removeEventListener('blur', cancel);
+      };
+      const focusMoved = (event: FocusEvent) => {
+        if (event.target !== owner) cancel();
+      };
+      const focusLeft = (event: FocusEvent) => {
+        if ((owner?.isConnected && !owner.matches(':disabled')) || event.relatedTarget !== null) cancel();
+      };
+      pending = {
+        picker,
+        id: expectedId,
+        destination,
+        version: before + 1,
+        ownsFocus: () =>
+          document.activeElement === owner ||
+          (!!owner && (!owner.isConnected || owner.matches(':disabled')) && document.activeElement === document.body),
+        cancel,
+      };
+      selectionPosition.current = pending;
+      document.addEventListener('focusin', focusMoved, true);
+      document.addEventListener('focusout', focusLeft, true);
+      for (const type of ['pointerdown', 'mousedown', 'touchstart', 'click'])
+        document.addEventListener(type, cancel, true);
+      document.addEventListener('keydown', cancel, true);
+      document.defaultView?.addEventListener('blur', cancel);
+    }
+    void action();
+    const selected = picker.getSnapshot().selected;
+    if (
+      !caller.active ||
+      picker.selectionVersion() !== before + 1 ||
+      (destination === 'selected' && selected?.id !== expectedId) ||
+      (destination === 'query' && selected !== null)
+    )
+      pending?.cancel();
   };
   return (
     <Field className="min-w-0 max-w-full [overflow-wrap:anywhere]">
@@ -137,13 +231,16 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
       </div>
       {current ? (
         <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-border p-4">
-          <p className="text-xs font-medium text-muted-foreground">{m.setup_context_current()}</p>
-          <Resolution value={current} saved />
+          <div id={`${id}-current-reading`} className="flex min-w-0 flex-col gap-1">
+            <p className="text-xs font-medium text-muted-foreground">{m.setup_context_current()}</p>
+            <Resolution value={current} saved />
+          </div>
           <div className="flex min-w-0 flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              aria-describedby={`${id}-current-reading`}
               disabled={disabled || current.phase === 'loading'}
               onClick={() => void picker.retryCurrent(current.id, currentVersion)}
             >
@@ -154,8 +251,11 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                 type="button"
                 variant="ghost"
                 className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                aria-describedby={`${id}-current-reading`}
                 disabled={disabled}
-                onClick={() => void picker.chooseCurrent(current.id, currentVersion)}
+                onClick={(event) =>
+                  selectionAction(event, current.id, 'selected', () => picker.chooseCurrent(current.id, currentVersion))
+                }
               >
                 {m.setup_context_use_current()}
               </Button>
@@ -164,25 +264,39 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
         </div>
       ) : null}
       {selected ? (
-        <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <p className="flex min-w-0 items-start gap-2 text-sm font-medium">
+        <div
+          ref={selectedRegion}
+          id={`${id}-selected-reading`}
+          role="group"
+          aria-labelledby={`${id}-selected-label`}
+          tabIndex={-1}
+          className="flex min-w-0 flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <div id={`${id}-selected-label`} className="flex min-w-0 items-start gap-2 text-sm font-medium">
             {selected.phase === 'ready' ? (
               <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
             ) : null}
             {m.setup_context_selected()}
-          </p>
-          <Resolution value={selected} />
-          {current && current.id !== selected.id ? (
-            <p className="text-sm text-muted-foreground">{m.setup_context_changed()}</p>
-          ) : null}
+          </div>
+          <div id={`${id}-selected-description`} className="flex min-w-0 flex-col gap-1">
+            <Resolution value={selected} />
+            {current && current.id !== selected.id ? (
+              <p className="text-sm text-muted-foreground">{m.setup_context_changed()}</p>
+            ) : null}
+          </div>
           <div className="flex min-w-0 flex-wrap gap-2">
             {selected.phase === 'denied' || selected.phase === 'unavailable' ? (
               <Button
                 type="button"
                 variant="outline"
                 className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                aria-describedby={`${id}-selected-label ${id}-selected-description`}
                 disabled={disabled}
-                onClick={() => void picker.retrySelected(selected.id, selected.phase, selectionVersion)}
+                onClick={(event) =>
+                  selectionAction(event, selected.id, 'selected', () =>
+                    picker.retrySelected(selected.id, selected.phase, selectionVersion),
+                  )
+                }
               >
                 {m.space_setup_retry()}
               </Button>
@@ -191,8 +305,11 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
               type="button"
               variant="ghost"
               className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              aria-describedby={`${id}-selected-label ${id}-selected-description`}
               disabled={disabled}
-              onClick={() => picker.clear(selected.id, selectionVersion)}
+              onClick={(event) =>
+                selectionAction(event, null, 'query', () => picker.clear(selected.id, selectionVersion))
+              }
             >
               {m.setup_context_clear()}
             </Button>
@@ -228,7 +345,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           aria-live="polite"
           aria-busy={page.phase === 'loading'}
           tabIndex={-1}
-          className="flex min-w-0 flex-col items-start gap-3"
+          className="flex min-w-0 flex-col items-start gap-3 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {page.phase === 'loading' ? (
             <p role="status" className="text-sm text-muted-foreground">
@@ -237,7 +354,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           ) : null}
           {page.phase === 'ready' ? (
             <>
-              <p className="text-sm text-muted-foreground">
+              <p id={`${id}-results-reading`} className="text-sm text-muted-foreground">
                 {state.query.trim()
                   ? m.setup_context_results({ query: state.query.trim() })
                   : m.setup_context_results_all()}
@@ -252,12 +369,15 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                       <button
                         type="button"
                         disabled={disabled}
-                        onClick={() =>
-                          void picker.choosePage(choice.id, {
-                            query: state.query,
-                            ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
-                            version: searchVersion,
-                          })
+                        aria-describedby={`${id}-results-reading`}
+                        onClick={(event) =>
+                          selectionAction(event, choice.id, 'selected', () =>
+                            picker.choosePage(choice.id, {
+                              query: state.query,
+                              ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
+                              version: searchVersion,
+                            }),
+                          )
                         }
                         className="flex h-auto min-h-14 min-w-0 w-full max-w-full flex-col gap-1 rounded-lg px-4 py-3 text-start whitespace-normal hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
                       >
@@ -280,6 +400,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                   variant="outline"
                   className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={disabled}
+                  aria-describedby={`${id}-results-reading`}
                   onClick={(event) =>
                     pageAction(event, page.next!, () =>
                       picker.next({
@@ -298,7 +419,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           ) : null}
           {page.phase === 'unavailable' || page.phase === 'denied' ? (
             <div className="flex min-w-0 flex-col items-start gap-3 rounded-xl bg-muted p-4">
-              <p role="alert" className="text-sm">
+              <p id={`${id}-page-error-reading`} role="alert" className="text-sm">
                 {page.phase === 'denied' ? m.setup_context_denied() : m.setup_context_unavailable()}
               </p>
               <div className="flex min-w-0 flex-wrap gap-2">
@@ -306,6 +427,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                   type="button"
                   variant="outline"
                   className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  aria-describedby={`${id}-page-error-reading`}
                   disabled={disabled}
                   onClick={(event) =>
                     pageAction(event, page.cursor, () =>
@@ -324,14 +446,13 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                     type="button"
                     variant="outline"
                     className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    aria-describedby={`${id}-page-error-reading`}
                     disabled={disabled}
                     onClick={(event) =>
                       pageAction(
                         event,
                         undefined,
-                        () =>
-                          picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }),
-                        () => queryInput.current?.focus(),
+                        () => picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }),
                       )
                     }
                   >
@@ -343,7 +464,26 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           ) : null}
         </div>
       ) : null}
-      <details className="min-w-0 max-w-full rounded-xl border border-border p-3" open={selected?.phase !== 'ready'}>
+      {!referenceOpen && hasReferenceDraft ? (
+        <div
+          id={`${id}-reference-draft-reading`}
+          role="group"
+          aria-labelledby={`${id}-reference-draft-label`}
+          className="flex min-w-0 flex-col gap-1 rounded-xl border border-border p-3"
+        >
+          <p id={`${id}-reference-draft-label`} className="text-xs font-medium text-muted-foreground">
+            {m.space_setup_reference()}
+          </p>
+          <p className="break-all font-mono text-xs leading-relaxed text-muted-foreground">
+            <bdi dir="ltr">{reference}</bdi>
+          </p>
+        </div>
+      ) : null}
+      <details
+        className="min-w-0 max-w-full rounded-xl border border-border p-3"
+        open={referenceOpen}
+        onToggle={(event) => setReferenceOpen(event.currentTarget.open)}
+      >
         <summary className="min-h-11 min-w-11 max-w-full cursor-pointer content-center rounded-md py-2 text-start text-sm font-medium whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.space_setup_load_existing()}
         </summary>
@@ -369,12 +509,17 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
               type="button"
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              aria-describedby={`${id}-reference-hint`}
               disabled={
                 disabled ||
                 selected?.phase === 'loading' ||
                 !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reference.trim())
               }
-              onClick={() => void picker.chooseReference(reference.trim(), referenceVersion)}
+              onClick={(event) =>
+                selectionAction(event, reference.trim(), 'selected', () =>
+                  picker.chooseReference(reference.trim(), referenceVersion),
+                )
+              }
             >
               {selected?.phase === 'loading' ? m.space_setup_loading() : m.space_setup_resolve()}
             </Button>
