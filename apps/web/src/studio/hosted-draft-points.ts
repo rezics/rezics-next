@@ -45,8 +45,7 @@ export function draftPointReady(state: Extract<HostedDraftPointState, { kind: 'a
     );
   if (choice.kind === 'update') {
     const item = choice.update?.item;
-    if (!item || !current(choice.update) || !state.title.trim() || [...state.title.trim()].length > 256)
-      return false;
+    if (!item || !current(choice.update) || !state.title.trim() || [...state.title.trim()].length > 256) return false;
     if (item.kind === 'part') return true;
     return (
       choice.versionHead === head &&
@@ -144,7 +143,25 @@ export class HostedDraftPointVisit extends HostedDraftCommandVisit<HostedDraftPo
 
   private choose(change: (choice: DraftPointChoices) => DraftPointChoices) {
     if (!this.current() || !this.canEdit() || this.state.kind !== 'active') return;
-    this.update({ ...this.state, choice: change(this.state.choice), phase: 'idle', intent: null, error: null });
+    const choice = change(this.state.choice);
+    const placement = choice.kind === 'part' || choice.kind === 'chapter' || choice.kind === 'move';
+    const document = choice.kind === 'chapter' || choice.kind === 'update';
+    this.update({
+      ...this.state,
+      choice: {
+        ...choice,
+        move: choice.kind === 'move' ? choice.move : null,
+        update: choice.kind === 'update' ? choice.update : null,
+        removal: choice.kind === 'remove' ? choice.removal : null,
+        parent: placement ? choice.parent : null,
+        before: placement ? choice.before : null,
+        versionHead: document ? choice.versionHead : null,
+      },
+      selection: document ? this.state.selection : null,
+      phase: 'idle',
+      intent: null,
+      error: null,
+    });
   }
   setKind = (kind: DraftPointChoices['kind']) => this.choose((choice) => ({ ...choice, kind }));
   root = () => this.choose((choice) => ({ ...choice, parent: null, before: null }));

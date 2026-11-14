@@ -458,4 +458,217 @@ test('generated HTTP insert/remove/move methods send exact bounded operands and 
   expect(await native.writeDraftPoint(insert, signal)).toMatchObject({ ok: false, error: { kind: 'uncertain' } });
   status = 412;
   expect(await native.writeDraftPoint(remove, signal)).toMatchObject({ ok: false, error: { kind: 'stale' } });
+  status = 422;
+  expect(await native.writeDraftPoint(move, signal)).toMatchObject({ ok: false, error: { kind: 'invalid' } });
+});
+
+function movePages(f: Awaited<ReturnType<typeof fixture>>) {
+  f.native.readOutlineWindow.mockImplementation(
+    async ({ revision, cursor }): Promise<StudioResult<HostedOutlineWindowPage>> =>
+      ok({
+        ...revision,
+        items:
+          cursor === 'move-before+/='
+            ? [{ ...sibling, position: Number.MAX_SAFE_INTEGER }]
+            : cursor === 'move-parent+/='
+              ? [{ ...part, parentId: id(99), position: 600_000 }]
+              : [
+                  { ...chapter, position: 4_294_967_296 },
+                  { ...chapter, occurrenceId: id(40), title: 'Another occurrence of the same saved chapter' },
+                  {
+                    occurrenceId: id(41),
+                    parentId: null,
+                    position: 900_000,
+                    kind: 'part',
+                    availability: 'unavailable',
+                  },
+                ],
+        nextCursor:
+          cursor === 'move-before+/=' ? null : cursor === 'move-parent+/=' ? 'move-before+/=' : 'move-parent+/=',
+      }),
+  );
+}
+
+async function selectMove(f: Awaited<ReturnType<typeof fixture>>) {
+  movePages(f);
+  await active(f).outline.load();
+  f.visit.observe(chapter.occurrenceId, 'move');
+  await active(f).outline.next();
+  f.visit.observe(part.occurrenceId, 'parent');
+  await active(f).outline.next();
+  f.visit.observe(sibling.occurrenceId, 'before');
+}
+
+test('mounted move retains exact cross-page source and destination, displays supplied nesting and large positions, and offers root/end', async () => {
+  const f = await fixture();
+  movePages(f);
+  const ui = await mount(f);
+  try {
+    await act(async () => f.visit.observe(id(41), 'move'));
+    expect(active(f).choice.move).toBeNull();
+    await ui.click('Move Existing chapter');
+    await ui.click('Next outline page');
+    expect(getByRole(ui.host, 'list').textContent).not.toContain(chapter.title);
+    expect(ui.host.textContent).toContain(chapter.title);
+    expect(ui.host.textContent).toContain(id(99));
+    await ui.click('Use Part One as parent');
+    await ui.click('Next outline page');
+    expect(getByRole(ui.host, 'list').textContent).not.toContain(part.title);
+    expect(ui.host.textContent).toContain('9,007,199,254,740,991');
+    await ui.click('Move before Nested sibling');
+    expect(queryByRole(ui.host, 'textbox')).toBeNull();
+    await ui.click('Review edit');
+    const original = active(f).intent!.request;
+    expect(original).toMatchObject({
+      catalogueId: id(1),
+      kind: 'move',
+      expectedViewer: f.owner.viewer,
+      body: {
+        expectedRevisionId: id(4),
+        occurrenceId: chapter.occurrenceId,
+        parentId: part.occurrenceId,
+        beforeOccurrenceId: sibling.occurrenceId,
+      },
+    });
+    expect(Object.keys(original.body).sort()).toEqual([
+      'beforeOccurrenceId',
+      'expectedRevisionId',
+      'occurrenceId',
+      'parentId',
+    ]);
+    expect(active(f).choice.move!.item.title).toBe(chapter.title);
+    expect(active(f).choice.parent!.item.title).toBe(part.title);
+    expect(document.activeElement?.textContent).toBe('Review edit');
+    expect(f.native.readOutlineWindow).toHaveBeenCalledTimes(3);
+    expect(f.native.readOwn).not.toHaveBeenCalled();
+    expect(f.readDocument).not.toHaveBeenCalled();
+    expect(f.reader.list).not.toHaveBeenCalled();
+    await ui.click('Edit review');
+    expect(document.activeElement?.textContent).toBe('Choose an edit');
+    await ui.click('Book root');
+    await ui.click('At parent’s end');
+    await ui.click('Review edit');
+    expect(active(f).intent!.request).toMatchObject({
+      kind: 'move',
+      body: { occurrenceId: chapter.occurrenceId, parentId: null, beforeOccurrenceId: null },
+    });
+    expect(active(f).intent!.request.idempotencyKey).not.toBe(original.idempotencyKey);
+    expect(f.native.readOutlineWindow).toHaveBeenCalledTimes(3);
+  } finally {
+    await ui.close();
+  }
+});
+
+test('stale move retains all choices even at the same head and requires each current observation and a fresh review', async () => {
+  const f = await fixture();
+  await selectMove(f);
+  await f.visit.review();
+  const original = active(f).intent!.request;
+  f.native.writeDraftPoint.mockImplementationOnce(async () => hostedFailure('stale', 'Changed'));
+  f.native.readOwn.mockImplementationOnce(async () => ok(f.owner));
+  await f.visit.submit();
+  await f.visit.refreshHead();
+  expect(active(f)).toMatchObject({
+    head: id(4),
+    intent: null,
+    choice: {
+      kind: 'move',
+      move: { confirmed: false, revisionId: id(4), item: { occurrenceId: chapter.occurrenceId, title: chapter.title } },
+      parent: { confirmed: false, revisionId: id(4), item: { occurrenceId: part.occurrenceId, title: part.title } },
+      before: {
+        confirmed: false,
+        revisionId: id(4),
+        item: { occurrenceId: sibling.occurrenceId, title: sibling.title },
+      },
+    },
+  });
+  expect(draftPointReady(active(f))).toBe(false);
+  await f.visit.review();
+  expect(active(f).intent).toBeNull();
+  // A hidden ID cannot become observed just because it was retained from another page.
+  f.visit.observe(part.occurrenceId, 'parent');
+  expect(active(f).choice.parent!.confirmed).toBe(false);
+  f.visit.observe(chapter.occurrenceId, 'move');
+  await active(f).outline.next();
+  f.visit.observe(part.occurrenceId, 'parent');
+  expect(active(f).choice.before!.item.occurrenceId).toBe(sibling.occurrenceId);
+  expect(draftPointReady(active(f))).toBe(false);
+  await active(f).outline.next();
+  f.visit.observe(sibling.occurrenceId, 'before');
+  expect(draftPointReady(active(f))).toBe(true);
+  await f.visit.review();
+  expect(active(f).intent!.request.body).toEqual(original.body);
+  expect(active(f).intent!.request.idempotencyKey).not.toBe(original.idempotencyKey);
+  expect(f.native.writeDraftPoint).toHaveBeenCalledTimes(1);
+  expect(f.readVersion).not.toHaveBeenCalled();
+  f.visit.dispose();
+});
+
+test('unknown move replays the frozen sender, operands, key and credential; failed exact readback retries only the read', async () => {
+  const f = await fixture();
+  await selectMove(f);
+  await f.visit.review();
+  const intent = active(f).intent!;
+  const sender = f.native.writeDraftPoint;
+  sender.mockImplementationOnce(async () => hostedFailure('uncertain', 'Unknown'));
+  const replacement = mock(async (_request: HostedDraftPointRequest, _signal: AbortSignal, _csrf?: string) =>
+    ok(receipt),
+  );
+  f.native.writeDraftPoint = replacement;
+  await f.visit.submit();
+  f.visit.root();
+  f.visit.end();
+  f.visit.setKind('remove');
+  await f.visit.review();
+  expect(active(f).intent).toBe(intent);
+  f.native.readOutlineWindow.mockImplementationOnce(async () => hostedFailure('unavailable', 'Read failed'));
+  await f.visit.submit();
+  expect(sender.mock.calls.map(([request, , csrf]) => [request, csrf])).toEqual([
+    [intent.request, 'original-csrf'],
+    [intent.request, 'original-csrf'],
+  ]);
+  expect(sender.mock.calls[1]![0]).toBe(intent.request);
+  expect(replacement).not.toHaveBeenCalled();
+  expect(active(f)).toMatchObject({ phase: 'acknowledged', receipt, head: receipt.revisionId });
+  expect(active(f).outline.snapshot().kind).toBe('failed');
+  await active(f).outline.load();
+  expect(f.native.readOutlineWindow.mock.calls.slice(-2).map(([request]) => request)).toEqual([
+    { revision: { ...receipt, kind: 'structure', sourceRevisionId: null }, cursor: null },
+    { revision: { ...receipt, kind: 'structure', sourceRevisionId: null }, cursor: null },
+  ]);
+  await f.visit.submit();
+  expect(sender).toHaveBeenCalledTimes(2);
+  expect(f.native.readOwn).not.toHaveBeenCalled();
+  f.visit.dispose();
+});
+
+test('late move feedback respects focus elsewhere; session replacement retires a pending move and its retained anchors', async () => {
+  const f = await fixture();
+  const ui = await mount(f);
+  const elsewhere = document.body.appendChild(document.createElement('button'));
+  elsewhere.textContent = 'Elsewhere';
+  try {
+    await ui.click('Move Part One');
+    await ui.click('Review edit');
+    const pending = deferred<StudioResult<typeof receipt>>();
+    f.native.writeDraftPoint.mockImplementationOnce(() => pending.promise);
+    await ui.click('Save reviewed edit');
+    elsewhere.focus();
+    await act(async () => pending.resolve(hostedFailure('uncertain', 'Unknown')));
+    expect(document.activeElement).toBe(elsewhere);
+    const replay = deferred<StudioResult<typeof receipt>>();
+    f.native.writeDraftPoint.mockImplementationOnce(() => replay.promise);
+    await ui.click('Recover original edit');
+    const signal = f.native.writeDraftPoint.mock.calls.at(-1)![1];
+    await act(async () => f.change());
+    expect(signal.aborted).toBe(true);
+    await act(async () => replay.resolve(ok(receipt)));
+    expect(document.activeElement).toBe(elsewhere);
+    expect(f.visit.snapshot()).toEqual({ kind: 'ended' });
+    expect(ui.host.textContent).not.toContain(part.title);
+    expect(f.native.readOutlineWindow).toHaveBeenCalledTimes(1);
+  } finally {
+    elsewhere.remove();
+    await ui.close();
+  }
 });

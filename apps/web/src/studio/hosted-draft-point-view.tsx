@@ -10,13 +10,17 @@ import { draftPointReady, type DraftPointAnchor, type HostedDraftPointVisit } fr
 import type { HostedOutlineWindow } from './hosted-outline-window';
 import './studio.css';
 
-function Anchor({ anchor, fallback }: { anchor: DraftPointAnchor | null; fallback: string }) {
+function Anchor({ anchor, fallback, locale }: { anchor: DraftPointAnchor | null; fallback: string; locale: Locale }) {
+  const options = { locale };
   return anchor ? (
-    <span>
-      {anchor.item.title}
-      <br />
+    <div className="studio-stack gap-1">
+      <span>{anchor.item.title}</span>
       <span className="studio-help break-all">{anchor.item.occurrenceId}</span>
-    </span>
+      <span className="studio-help break-all">
+        {m.studio_draft_point_observed({ revisionId: anchor.revisionId }, options)}
+      </span>
+      {!anchor.confirmed ? <span>{m.studio_draft_point_reobserve({}, options)}</span> : null}
+    </div>
   ) : (
     <span>{fallback}</span>
   );
@@ -36,7 +40,9 @@ function Outline({
   const state = useSyncExternalStore(window.subscribe, window.snapshot, window.snapshot);
   const command = useSyncExternalStore(visit.subscribe, visit.snapshot, visit.snapshot);
   const options = { locale };
-  const parentId = command.kind === 'active' ? (command.choice.parent?.item.occurrenceId ?? null) : null;
+  const choice = command.kind === 'active' ? command.choice : null;
+  const parentId = choice?.parent?.item.occurrenceId ?? null;
+  const positions = new Intl.NumberFormat(locale);
   return (
     <section
       className="studio-stack"
@@ -61,19 +67,36 @@ function Outline({
           {!state.page.items.length ? <p>{m.studio_draft_point_empty({}, options)}</p> : null}
           <ol className="studio-draft-list">
             {state.page.items.map((item) => (
-              <li key={item.occurrenceId} className="studio-stack">
+              <li key={item.occurrenceId} className="studio-stack [overflow-wrap:anywhere]">
                 <p>{item.availability === 'available' ? item.title : m.studio_draft_point_unavailable({}, options)}</p>
+                <p className="studio-help">
+                  {item.kind === 'part'
+                    ? m.studio_draft_point_kind_part({}, options)
+                    : m.studio_draft_point_kind_chapter({}, options)}
+                  {' · '}
+                  {m.studio_draft_point_position({ position: positions.format(item.position) }, options)}
+                </p>
                 <p className="studio-help break-all">{item.occurrenceId}</p>
                 <p className="studio-help break-all">
                   {m.studio_draft_point_parent({}, options)}: {item.parentId ?? m.studio_draft_point_root({}, options)}
                 </p>
                 {item.availability === 'available' ? (
                   <div className="studio-action-row">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={locked}
+                      aria-pressed={choice?.kind === 'move' && choice.move?.item.occurrenceId === item.occurrenceId}
+                      onClick={() => visit.observe(item.occurrenceId, 'move')}
+                    >
+                      {m.studio_draft_point_use_move({ title: item.title }, options)}
+                    </Button>
                     {item.kind === 'part' ? (
                       <Button
                         type="button"
                         variant="outline"
                         disabled={locked}
+                        aria-pressed={choice?.parent?.item.occurrenceId === item.occurrenceId}
                         onClick={() => visit.observe(item.occurrenceId, 'parent')}
                       >
                         {m.studio_draft_point_use_parent({ title: item.title }, options)}
@@ -83,9 +106,12 @@ function Outline({
                       type="button"
                       variant="outline"
                       disabled={locked || item.parentId !== parentId}
+                      aria-pressed={choice?.before?.item.occurrenceId === item.occurrenceId}
                       onClick={() => visit.observe(item.occurrenceId, 'before')}
                     >
-                      {m.studio_draft_point_use_before({ title: item.title }, options)}
+                      {choice?.kind === 'move'
+                        ? m.studio_draft_point_move_before({ title: item.title }, options)
+                        : m.studio_draft_point_use_before({ title: item.title }, options)}
                     </Button>
                     <Button
                       type="button"
@@ -108,20 +134,18 @@ function Outline({
               </li>
             ))}
           </ol>
-          {state.page.nextCursor !== null ? (
-            <div className="studio-action-row">
+          <div className="studio-action-row">
+            {state.page.nextCursor !== null ? (
               <Button type="button" variant="outline" disabled={locked} onClick={() => void window.next()}>
                 {m.studio_draft_point_next({}, options)}
               </Button>
-            </div>
-          ) : null}
-          {state.cursor !== null ? (
-            <div className="studio-action-row">
+            ) : null}
+            {state.cursor !== null ? (
               <Button type="button" variant="outline" disabled={locked} onClick={() => void window.load(null)}>
                 {m.studio_draft_point_restart({}, options)}
               </Button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </>
       ) : null}
     </section>
@@ -142,12 +166,52 @@ export function HostedDraftPointView({
   const titleId = useId();
   const titleInput = useRef<HTMLInputElement>(null);
   const feedback = useRef<HTMLHeadingElement>(null);
+  const operation = useRef<HTMLHeadingElement>(null);
+  const focusRequest = useRef<{ origin: Element | null; target: 'feedback' | 'edit' } | null>(null);
   const phase = state.kind === 'active' ? state.phase : 'ended';
+  const titleEditable = state.kind === 'active' && state.choice.kind !== 'move' && state.choice.kind !== 'remove';
+  const refreshing = state.kind === 'active' && state.refreshing;
+
+  // Only an explicit review/recovery action requests focus. Any subsequent navigation cancels it.
   useEffect(() => {
-    if (!visit.isCurrent()) return;
-    if (['review', 'acknowledged', 'uncertain', 'stale', 'rejected'].includes(phase)) feedback.current?.focus();
-    else if (phase === 'idle') titleInput.current?.focus();
-  }, [visit, phase]);
+    const moved = () => {
+      focusRequest.current = null;
+    };
+    const keyed = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') moved();
+    };
+    document.addEventListener('focusin', moved);
+    document.addEventListener('pointerdown', moved);
+    document.addEventListener('keydown', keyed);
+    return () => {
+      document.removeEventListener('focusin', moved);
+      document.removeEventListener('pointerdown', moved);
+      document.removeEventListener('keydown', keyed);
+    };
+  }, []);
+  useEffect(() => {
+    const pending = focusRequest.current;
+    if (!pending || !visit.isCurrent()) return;
+    const ready =
+      pending.target === 'edit'
+        ? phase === 'idle' || (phase === 'stale' && !refreshing)
+        : ['review', 'acknowledged', 'uncertain', 'stale', 'rejected'].includes(phase);
+    if (!ready) return;
+    focusRequest.current = null;
+    const stillHere =
+      document.activeElement === pending.origin ||
+      (!pending.origin?.isConnected && document.activeElement === document.body);
+    if (stillHere) {
+      if (pending.target === 'feedback' || phase === 'stale') feedback.current?.focus();
+      else if (titleEditable) titleInput.current?.focus();
+      else operation.current?.focus();
+    }
+  }, [visit, phase, titleEditable, refreshing]);
+  const focusAfter = (action: () => void | Promise<void>, target: 'feedback' | 'edit' = 'feedback') => {
+    focusRequest.current = { origin: document.activeElement, target };
+    void action();
+  };
+
   if (state.kind === 'ended') return <p role="alert">{m.studio_draft_point_ended({}, options)}</p>;
   const editable = visit.canEdit();
   const locked = !editable || phase === 'review';
@@ -166,7 +230,7 @@ export function HostedDraftPointView({
             ? m.studio_draft_point_rejected({}, options)
             : m.studio_draft_point_review({}, options);
   return (
-    <main className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8">
+    <main className="studio-workspace mx-auto w-full max-w-4xl px-4 py-8 [overflow-wrap:anywhere]">
       <header className="studio-header">
         <h1>{m.studio_draft_point_heading({}, options)}</h1>
         <p className="studio-help max-w-prose">{m.studio_draft_point_help({}, options)}</p>
@@ -187,9 +251,11 @@ export function HostedDraftPointView({
       <div className="studio-stack gap-8">
         <p className="studio-help break-all">{m.studio_draft_point_head({ revisionId: state.head }, options)}</p>
         <section className="studio-stack" aria-label={m.studio_draft_point_operation({}, options)}>
-          <h2>{m.studio_draft_point_operation({}, options)}</h2>
+          <h2 ref={operation} tabIndex={-1}>
+            {m.studio_draft_point_operation({}, options)}
+          </h2>
           <div className="studio-action-row">
-            {(['part', 'chapter', 'update', 'remove'] as const).map((kind) => (
+            {(['part', 'chapter', 'move', 'update', 'remove'] as const).map((kind) => (
               <Button
                 key={kind}
                 type="button"
@@ -200,58 +266,94 @@ export function HostedDraftPointView({
               >
                 {kind === 'part'
                   ? m.studio_draft_point_part({}, options)
-                  : kind === 'update'
-                    ? m.studio_point_update({}, options)
-                    : kind === 'chapter'
-                      ? m.studio_draft_point_chapter({}, options)
-                      : m.studio_draft_point_remove({}, options)}
+                  : kind === 'move'
+                    ? m.studio_draft_point_move({}, options)
+                    : kind === 'update'
+                      ? m.studio_point_update({}, options)
+                      : kind === 'chapter'
+                        ? m.studio_draft_point_chapter({}, options)
+                        : m.studio_draft_point_remove({}, options)}
               </Button>
             ))}
           </div>
           {choice.kind === 'remove' ? (
             <>
               <p>{m.studio_draft_point_subtree({}, options)}</p>
-              <Anchor anchor={choice.removal} fallback={m.studio_draft_point_choose_remove({}, options)} />
+              <Anchor
+                anchor={choice.removal}
+                fallback={m.studio_draft_point_choose_remove({}, options)}
+                locale={locale}
+              />
             </>
           ) : (
             <>
-              {choice.kind === 'update' ? (
+              {choice.kind === 'move' ? (
                 <>
-                  <Anchor anchor={choice.update} fallback={m.studio_point_choose_update({}, options)} />
-                  <p>{m.studio_point_update_help({}, options)}</p>
+                  <h3>{m.studio_draft_point_source({}, options)}</h3>
+                  <Anchor
+                    anchor={choice.move}
+                    fallback={m.studio_draft_point_choose_move({}, options)}
+                    locale={locale}
+                  />
+                  <p className="studio-help">{m.studio_draft_point_move_help({}, options)}</p>
                 </>
               ) : null}
-              {choice.kind !== 'update' ? (
+              {choice.kind === 'update' ? (
+                <>
+                  <Anchor anchor={choice.update} fallback={m.studio_point_choose_update({}, options)} locale={locale} />
+                  <p>{m.studio_point_update_help({}, options)}</p>
+                </>
+              ) : (
                 <>
                   <dl className="grid min-w-0 gap-2 break-all sm:grid-cols-[auto_minmax(0,1fr)]">
                     <dt>{m.studio_draft_point_parent({}, options)}</dt>
                     <dd>
-                      <Anchor anchor={choice.parent} fallback={m.studio_draft_point_root({}, options)} />
+                      <Anchor
+                        anchor={choice.parent}
+                        fallback={m.studio_draft_point_root({}, options)}
+                        locale={locale}
+                      />
                     </dd>
-                    <dt>{m.studio_draft_point_before({}, options)}</dt>
+                    <dt>{m.studio_draft_point_destination_before({}, options)}</dt>
                     <dd>
-                      <Anchor anchor={choice.before} fallback={m.studio_draft_point_end({}, options)} />
+                      <Anchor anchor={choice.before} fallback={m.studio_draft_point_end({}, options)} locale={locale} />
                     </dd>
                   </dl>
                   <div className="studio-action-row">
-                    <Button type="button" variant="outline" disabled={locked} onClick={visit.root}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={locked}
+                      aria-pressed={choice.parent === null}
+                      onClick={visit.root}
+                    >
                       {m.studio_draft_point_root({}, options)}
                     </Button>
-                    <Button type="button" variant="outline" disabled={locked} onClick={visit.end}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={locked}
+                      aria-pressed={choice.before === null}
+                      onClick={visit.end}
+                    >
                       {m.studio_draft_point_end({}, options)}
                     </Button>
                   </div>
                 </>
+              )}
+              {choice.kind !== 'move' ? (
+                <>
+                  <Label htmlFor={titleId}>{m.studio_draft_point_title({}, options)}</Label>
+                  <Input
+                    ref={titleInput}
+                    id={titleId}
+                    value={state.title}
+                    disabled={locked}
+                    onChange={(event) => visit.setTitle(event.target.value)}
+                  />
+                  <p className="studio-help">{m.studio_draft_point_title_help({}, options)}</p>
+                </>
               ) : null}
-              <Label htmlFor={titleId}>{m.studio_draft_point_title({}, options)}</Label>
-              <Input
-                ref={titleInput}
-                id={titleId}
-                value={state.title}
-                disabled={locked}
-                onChange={(event) => visit.setTitle(event.target.value)}
-              />
-              <p className="studio-help">{m.studio_draft_point_title_help({}, options)}</p>
             </>
           )}
         </section>
@@ -314,7 +416,6 @@ export function HostedDraftPointView({
             ) : null}
           </section>
         ) : null}
-        <Outline visit={visit} window={state.outline} locale={locale} locked={locked} />
         <section
           className="studio-stack"
           aria-busy={phase === 'submitting' || phase === 'preparing' || state.refreshing}
@@ -324,14 +425,40 @@ export function HostedDraftPointView({
           </h2>
           {body ? (
             <dl className="grid min-w-0 gap-2 break-all sm:grid-cols-[auto_minmax(0,1fr)]">
+              <dt>{m.studio_draft_point_catalogue({}, options)}</dt>
+              <dd>{intent!.request.catalogueId}</dd>
               <dt>{m.studio_draft_point_head_label({}, options)}</dt>
               <dd>{body.expectedRevisionId}</dd>
               <dt>{m.studio_draft_point_occurrence({}, options)}</dt>
               <dd>{body.occurrenceId}</dd>
+              {intent!.request.kind === 'move' ? (
+                <>
+                  <dt>{m.studio_draft_point_source({}, options)}</dt>
+                  <dd>
+                    <Anchor
+                      anchor={choice.move}
+                      fallback={m.studio_draft_point_choose_move({}, options)}
+                      locale={locale}
+                    />
+                  </dd>
+                </>
+              ) : null}
               {'title' in body ? (
                 <>
                   <dt>{m.studio_draft_point_title({}, options)}</dt>
                   <dd>{body.title}</dd>
+                </>
+              ) : null}
+              {'parentId' in body ? (
+                <>
+                  <dt>{m.studio_draft_point_parent({}, options)}</dt>
+                  <dd>
+                    <Anchor anchor={choice.parent} fallback={m.studio_draft_point_root({}, options)} locale={locale} />
+                  </dd>
+                  <dt>{m.studio_draft_point_destination_before({}, options)}</dt>
+                  <dd>
+                    <Anchor anchor={choice.before} fallback={m.studio_draft_point_end({}, options)} locale={locale} />
+                  </dd>
                 </>
               ) : null}
             </dl>
@@ -351,23 +478,27 @@ export function HostedDraftPointView({
             <p role="alert">{m.studio_draft_point_refresh_failed({}, options)}</p>
           ) : null}
           {editable && phase !== 'review' && !draftPointReady(state) ? (
-            <p className="studio-help">{m.studio_draft_point_review_help({}, options)}</p>
+            <p className="studio-help">
+              {choice.kind === 'move'
+                ? m.studio_draft_point_move_review_help({}, options)
+                : m.studio_draft_point_review_help({}, options)}
+            </p>
           ) : null}
           <div className="studio-action-row">
             {editable && phase !== 'review' ? (
-              <Button type="button" disabled={!draftPointReady(state)} onClick={() => void visit.review()}>
+              <Button type="button" disabled={!draftPointReady(state)} onClick={() => focusAfter(visit.review)}>
                 {m.studio_draft_point_review({}, options)}
               </Button>
             ) : null}
             {phase === 'review' || phase === 'uncertain' ? (
-              <Button type="button" onClick={() => void visit.submit()}>
+              <Button type="button" onClick={() => focusAfter(visit.submit)}>
                 {phase === 'uncertain'
                   ? m.studio_draft_point_replay({}, options)
                   : m.studio_draft_point_submit({}, options)}
               </Button>
             ) : null}
             {phase === 'review' ? (
-              <Button type="button" variant="outline" onClick={visit.cancelReview}>
+              <Button type="button" variant="outline" onClick={() => focusAfter(visit.cancelReview, 'edit')}>
                 {m.studio_draft_point_edit({}, options)}
               </Button>
             ) : null}
@@ -376,13 +507,14 @@ export function HostedDraftPointView({
                 type="button"
                 variant="outline"
                 disabled={state.refreshing}
-                onClick={() => void visit.refreshHead()}
+                onClick={() => focusAfter(visit.refreshHead, 'edit')}
               >
                 {m.studio_draft_point_refresh({}, options)}
               </Button>
             ) : null}
           </div>
         </section>
+        <Outline visit={visit} window={state.outline} locale={locale} locked={locked} />
       </div>
     </main>
   );

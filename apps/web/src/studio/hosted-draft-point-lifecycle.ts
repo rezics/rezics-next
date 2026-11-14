@@ -68,6 +68,7 @@ export class HostedDraftCommandVisit<Request, Choice> {
   private readonly disconnectPicker: () => void;
   private readonly listeners = new Set<() => void>();
   protected request: AbortController | null = null;
+  private reviewedSend!: DraftCommandOptions<Request, Choice>['send'];
   private retired = false;
 
   constructor(protected readonly options: DraftCommandOptions<Request, Choice>) {
@@ -212,6 +213,7 @@ export class HostedDraftCommandVisit<Request, Choice> {
           locale: this.options.locale,
         },
       };
+      this.reviewedSend = this.options.send;
       this.picker.close();
       this.update({ ...state, title: state.title.trim(), phase: 'review', intent, error: null });
     } finally {
@@ -231,7 +233,7 @@ export class HostedDraftCommandVisit<Request, Choice> {
     this.request = request;
     this.update({ ...state, phase: 'submitting', error: null });
     try {
-      const result = await this.options.send(intent.request, request.signal, intent.csrfToken);
+      const result = await this.reviewedSend(intent.request, request.signal, intent.csrfToken);
       if (!this.current(request)) return;
       if (!result.ok) {
         this.update({

@@ -821,6 +821,7 @@ export function HostedBookInventory({ visit, locale }: { visit: HostedInventoryV
                     >
                       {m.studio_draft_point_entry({}, { locale })}
                     </a>
+                    <p className="studio-help">{m.studio_draft_point_entry_help({}, { locale })}</p>
                     <span className="studio-help">
                       {book.postVisibility === 'draft'
                         ? m.studio_books_draft({}, { locale })

@@ -163,54 +163,66 @@ promoted-commit acceptance remain separate verifier obligations.
 
 ## Stable draft outline anchors
 
-Decision: insert and move use the bounded point visit with one replacing page and explicitly observed source/parent/before anchors; native owns cycle, depth and admission. Exact updates and single-chapter publication keep their separate reviews;
-public anchors are observed only in the expected public snapshot and draft-only ancestor titles require explicit inclusion.
-Switching between draft changes and publication retires the previous selection and refreshes owner pointers.
+Decision: insert and move use the bounded point visit with one replacing page and explicitly observed
+source/parent/before anchors; native owns cycle, depth and admission. Exact updates and single-chapter publication
+keep their separate reviews. Switching between draft changes and publication retires the previous selection and
+refreshes owner pointers; batch activation remains separate.
 
 The owned Book inventory offers `/studio?catalogueId=…&points=1` with its native viewer comparison before any
 complete-tree read. The separate point visit uses the existing picker and one replacing outline page of at most
 20 body-free occurrences per explicit request. Opaque continuations, sparse pages, large sibling addresses and
-same-cursor retry retain the bounded window contract. Only an available, displayed part can become a parent;
-root is always available. An observed sibling under that parent can become the before anchor, or the author chooses
-parent end. Selected anchors retain their supplied human titles, stable IDs and exact draft revision across page
-replacement. Removal reviews the chosen occurrence and explicitly removes its whole subtree from the draft without
-scanning descendants, inventing a count or erasing saved Posts and historical versions.
+same-cursor retry retain the bounded window contract. Only an available, displayed occurrence can become a move
+source. Only an available, displayed part can become a parent; root is an explicit destination. An observed sibling
+under that parent can become the before anchor, or the author chooses parent end. Selected anchors retain their
+supplied human titles, stable IDs and exact draft revision across page replacement. Reobserving the same parent
+preserves a retained before choice, which still requires its own current observation. Changing parent clears it.
+The view shows the supplied parent ID, kind and zero-based sibling position without rounding, clamping or inferring
+hidden ancestors or depth. It never scans descendants, enumerates destinations or refills a sparse page.
+
+Move review freezes the catalogue, expected head, source occurrence, parent/before IDs, original sender,
+idempotency key, CSRF and session/locale intent. A move preserves the occurrence identity and saved chapter versions;
+it moves a part's subtree without loading its descendants. Native decides cycles, depth, admission and adjacent
+no-op behavior. Removal separately reviews the chosen occurrence and explicitly removes its whole subtree from the
+draft without inventing a count or erasing saved Posts and historical versions. Switching operations retains only
+the active source and placement anchors, rather than accumulating selections from previous tasks.
 
 The chapter picker reads only the deliberate selection through `post-document-port.ts`. The page displays its
-saved body, timestamp, revision and SHA-256. Insert review freezes command kind, catalogue, expected head, fresh
-route-bound occurrence, parent/before IDs, title and exact chapter target; removal freezes the selected occurrence.
-Both retain the original idempotency key, CSRF and session/locale intent. Unknown results replay those exact bytes.
-A stale result preserves all choices but requires an explicit owner-head refresh, new observation/review of retained
-anchors and an explicit exact-version reread through the Post port; the latest chapter head is never substituted.
-Only then can review create a fresh intent/key. The private authenticated CSRF/no-store BFF validates incoming
-operands and calls the installed `$insertDraftPoint.post` `$moveDraftPoint.post`, `$updateDraftPoint.post` or `$removeDraftPoint.post`; external receipts and pages
-are validated at the HTTP boundary. No Client declaration or generator changes are needed.
+saved body, timestamp, revision and SHA-256. Insert review freezes the fresh route-bound occurrence, title and exact
+chapter target as well as the destination anchors. Unknown results replay the original command, sender and credential
+with native current authorization. A stale result preserves the original identities, titles and observation revisions
+but marks each anchor unconfirmed, even when owner refresh returns the same head. Explicit owner-head refresh,
+current-page observations and fresh review precede any new intent/key. Insert/update chapters additionally require
+an explicit reread of their original exact saved version; the latest chapter head is never substituted.
+The private authenticated CSRF/no-store BFF validates the request union and calls the installed generated
+`$insertDraftPoint.post`, `$moveDraftPoint.post`, `$updateDraftPoint.post` or `$removeDraftPoint.post`. External
+receipts and pages retain HTTP validation; no Client declaration, complete-tree writer or native changes are needed.
 
-`hosted-draft-point-lifecycle.ts` owns the shared root-append/point replay, stale refresh, receipt and retirement
-lifecycle. An HTTP200 receipt acknowledges the write independently of observation. Its exact revision, including
-historical replay, selects a new bounded window; failed readback retries only that exact page. Account, session
-incarnation, source, credential, locale and departure retire private selection, abort pending requests and fence late
-results and focus. Shared wrapping 44px controls and eight-locale `studio_draft_point_*` messages retain the existing
-Studio appearance. Unmapped legacy drafts retain native recovery and the complete editor link; no browser migration
-or implicit whole-tree replacement is attempted. Batch activation remains separate work.
+`hosted-draft-point-lifecycle.ts` owns shared root-append/point replay, stale refresh, receipt and retirement.
+An HTTP200 receipt acknowledges the write independently of observation. Its exact revision, including historical
+replay, selects a new bounded window; failed readback retries only that exact page and never resubmits the command.
+Account, session incarnation, source, credential, locale and departure retire selections, abort pending requests and
+fence late results and focus. Shared wrapping 44px controls and eight-locale `studio_draft_point_*` messages retain
+the existing Studio appearance. Review/recovery requests keyboard focus only while the initiating focus remains;
+subsequent focus, pointer or Tab movement cancels that request. Legacy body editing, native recovery,
+remove/update and publication keep their existing entry paths.
 
-Sources read before design: this owner's bounded-root section, native
-[authoring and release](../../../../services/kernel/src/content/hosted-chapters.md#authoring-and-release),
-[Web acceptance](../../../../docs/goals/web.md#acceptance), installed `hosted-chapters-routes.d.ts`, declared module
-entries, the route/workspace, hosted contracts/native/BFF, picker/window/root-append callers and regressions,
-`post-document-port.ts`, Impeccable's craft floor and the read-only main checkout `.reference/INDEX.md`.
-The base provides mounted insert/remove and ordered readback; the missing outcome was the author interface.
+Sources read before design: this owner's Stable draft outline anchors and Native author outline window sections;
+`hosted-draft-points.ts`, `hosted-draft-point-lifecycle.ts`, `hosted-draft-point-view.tsx`, `hosted-native.ts`,
+`hosted-contract.ts` and `hosted-actions.ts`; Content's
+[point-command contract](../../../../services/kernel/src/content/hosted-chapters.md#versioned-outline-adoption);
+the installed `hosted-chapters-routes.d.ts` move declaration; entry/workspace/window/picker callers and existing point
+and update acceptance; [Web acceptance](../../../../docs/goals/web.md#acceptance); and the read-only main checkout
+`.reference/INDEX.md`. The base supplies the native move and bounded readers but lacks the move request/caller/UI.
 
-Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-draft-points.test.tsx
- tests/studio-hosted-draft-picker.test.tsx tests/studio-hosted-root-append.test.tsx tests/studio-hosted-outline-window.test.ts`.
-The focused mounted cases cover nested anchor/exact-version review, part/end insertion, subtree removal, original
-intent replay, stale refresh and exact-version reread, opaque paging/retry, acknowledged-write/readback failure,
-private retirement and late results. Six illustrative `/studio` owned-author stories show anchor/version review,
-stale recovery and acknowledged-write/readback failure at phone390 and desktop1280. Existing picker/root/window
-assertions remain unchanged. Continue the existing native author-to-reader witness lane with its journal intact and
-separate private-publication/prepublished-reader verdicts. Native, browser/visual, legacy parity, broader suites and
-promoted-commit acceptance remain independent verifier work. Source checks are changed-file formatting, locale
-key/argument parity, one changed-UI detector pass and one affected Web typecheck.
+Deferred acceptance: the verifier runs `bun run --cwd apps/web test tests/studio-hosted-draft-points.test.tsx
+ tests/studio-hosted-draft-picker.test.tsx tests/studio-hosted-root-append.test.tsx tests/studio-hosted-outline-window.test.ts
+ tests/studio-hosted-publication-point.test.tsx`. Point acceptance extends existing assertions with cross-page exact
+moves, supplied large positions/hidden-parent addresses, explicit root/end, unconfirmed same-head stale recovery,
+fresh review, original sender/key/credential replay, exact failed-readback retry and focus/session retirement.
+Existing insert/remove/update assertions and story IDs stay intact. Named illustrative move review, stale recovery
+and uncertain replay stories add three-page source/parent/before selection at phone390 and desktop1280, without
+claiming native proof. Native insert/move/replay, >512/deep Books, phone/desktop/keyboard/locale visual review,
+legacy parity, compilation and promoted-commit acceptance remain unverified, separate verifier obligations.
 
 ## Review and publish one exact chapter
 
