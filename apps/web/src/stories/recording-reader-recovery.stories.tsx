@@ -101,6 +101,21 @@ async function recoverRelease({ canvasElement }: { canvasElement: HTMLElement })
   const heading = await canvas.findByRole('heading', { name: 'recording' });
   await expect(document.activeElement).toBe(heading);
   await expect(canvas.getByText('Performer')).toBeVisible();
+  const row = [...canvasElement.querySelectorAll<HTMLElement>('[data-recording-statement]')].find((item) =>
+    item.textContent?.includes('Performer'),
+  )!;
+  const inspect = within(row).getByRole('button', { name: m.recording_reader_inspect() });
+  inspect.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect(document.activeElement).toBe(inspect);
+  const detail = canvas.getByRole('region', { name: m.recording_reader_fact_inspection() });
+  await expect(inspect.nextElementSibling).toBe(detail);
+  await userEvent.tab();
+  await expect(document.activeElement).toBe(
+    within(detail).getByRole('button', { name: m.recording_reader_close_inspection() }),
+  );
+  await userEvent.keyboard('{Escape}');
+  await expect(document.activeElement).toBe(inspect);
   await expect(canvas.getByRole('link', { name: m.subject_details() })).toBeVisible();
   await expect(canvas.getByRole('link', { name: m.subject_relations() })).toBeVisible();
   for (const control of canvasElement.querySelectorAll('a, button'))

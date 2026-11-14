@@ -275,6 +275,11 @@ controls retain 44px targets and wrapping. See [Subject pages](../../../../../do
 
 ## Recording reader
 
+Decision: keep one native fact inspector immediately after the selected statement's Inspect control in Details,
+Contributions or Associations, following the shared [local detail and focus rule](../../../../../packages/ui/src/components/list-presentation.mdx#member-reading).
+Opening preserves focus and viewport; the next Tab reaches Close before the supplied actions. Close and unhandled
+Escape return to the captured live opener with `preventScroll`. Replacement and unmount retire obsolete focus.
+
 The ordinary Subject overview may mount the Recording reader only for `schema:MusicRecording`. It reads the exact
 immutable release named by the current Subject read, and uses only that type's admitted properties and each
 relation property's admitted qualifiers. Property labels and direction come from that release; relation targets
@@ -286,6 +291,18 @@ If the exact release has no Recording definition, the overview gives an unsuppor
 existing facts/correction controls available. A missing or mismatched release gives an unavailable state. The reader
 does not infer predicates or hydrate private or historical evidence. A bounded association page links to the ordinary
 Relations view, and a validated single-hop `via` address provides the return to the source page.
+
+Selection names an immutable statement id, independently of equal scalar values or repeated target Subject ids.
+Evidence always comes from the current visit. Correction and related destinations carry that exact statement's
+current localized address, retaining the admitted context and single-hop return intent. A deliberate return selects
+the same current statement in place; it locates the statement only while focus is otherwise unowned. A removed
+statement offers restart after admission succeeds. Pending, failed and unsupported reads retain no evidence body.
+Viewer, credential, locale and source observation replacement retire the old selection without replaying its locator.
+
+The reader/recovery regressions and original Recording story IDs cover local placement in all three groups,
+keyboard/pointer opening, Close/Escape, repeated-target identity, exact correction/related return and retirement.
+Prepared supported responses remain illustrative; native installation and phone/desktop acceptance belong to the
+integrated RecordingOverview verification, including its unsupported and release recovery states.
 
 ### Cost
 

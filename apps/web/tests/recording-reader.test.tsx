@@ -26,7 +26,7 @@ function fixture(admitted: boolean) {
   return value;
 }
 
-test('the current release leaves Recording honest and unsupported', () => {
+test('a release without Recording leaves its reader honest and unsupported', () => {
   const value = fixture(false);
   const visit = recordingReaderVisit({
     locale: 'en',

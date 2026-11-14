@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { recordingStatementDomId, recordingStatementFromHref } from './navigation';
 
-type Selection = { scope: number; statement: string };
-type FocusIntent = { scope: number; statement: string; target: 'inspection' | 'statement' | 'trigger' };
+type Selection = { owner: string; statement: string };
+type Opener = Selection & { button: HTMLButtonElement };
 
 /** Keep only a current statement identity; its public body always comes from the current visit. */
 export function useRecordingFactSelection({
@@ -12,7 +12,7 @@ export function useRecordingFactSelection({
   subjectId,
   locale,
   hasStatement,
-  loading,
+  unresolved,
 }: {
   scope: number;
   active: () => boolean;
@@ -20,24 +20,36 @@ export function useRecordingFactSelection({
   subjectId: string;
   locale: string;
   hasStatement: (statement: string) => boolean;
-  loading: boolean;
+  unresolved: boolean;
 }) {
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [focusIntent, setFocusIntent] = useState<FocusIntent | null>(null);
+  const [focusIntent, setFocusIntent] = useState<Selection | null>(null);
   const seenHash = useRef<string | null>(null);
-  const previousScope = useRef(scope);
-  const trigger = useRef<HTMLButtonElement | null>(null);
-  const inspectionHeading = useRef<HTMLHeadingElement | null>(null);
+  const owner = JSON.stringify([scope, subjectId, locale]);
+  const previousOwner = useRef(owner);
+  const trigger = useRef<Opener | null>(null);
+  const inspection = useRef<HTMLElement | null>(null);
 
-  const selectedStatement = selection?.scope === scope ? selection.statement : undefined;
+  const selectedStatement = selection?.owner === owner ? selection.statement : undefined;
+
+  const retireFocus = useCallback(() => {
+    const focused = document.activeElement;
+    if (
+      focused instanceof HTMLElement &&
+      (focused === trigger.current?.button || inspection.current?.contains(focused))
+    )
+      focused.blur();
+    trigger.current = null;
+  }, []);
 
   useLayoutEffect(() => {
-    if (previousScope.current === scope) return;
-    previousScope.current = scope;
-    trigger.current = null;
-    setSelection(null);
-    setFocusIntent(null);
-  }, [scope]);
+    if (previousOwner.current !== owner) {
+      previousOwner.current = owner;
+      setSelection(null);
+      setFocusIntent(null);
+    }
+    return retireFocus;
+  }, [owner, retireFocus]);
 
   useEffect(() => {
     const hash = currentHref ? new URL(currentHref, 'https://rezics.invalid').hash : '';
@@ -45,59 +57,59 @@ export function useRecordingFactSelection({
     seenHash.current = hash;
     const statement = recordingStatementFromHref(currentHref, subjectId, locale);
     if (!statement) return;
-    setSelection({ scope, statement });
-    setFocusIntent({ scope, statement, target: 'statement' });
-  }, [currentHref, locale, scope, subjectId]);
+    setSelection({ owner, statement });
+    setFocusIntent({ owner, statement });
+  }, [currentHref, locale, owner, subjectId]);
 
   useLayoutEffect(() => {
-    if (!focusIntent || focusIntent.scope !== scope || !active()) return;
+    if (selectedStatement && !hasStatement(selectedStatement)) retireFocus();
+    if (!focusIntent || focusIntent.owner !== owner || !active()) return;
     if (!hasStatement(focusIntent.statement)) {
-      if (!loading) setFocusIntent(null);
+      if (!unresolved) setFocusIntent(null);
       return;
     }
 
-    const element =
-      focusIntent.target === 'inspection'
-        ? inspectionHeading.current
-        : focusIntent.target === 'trigger'
-          ? trigger.current
-          : document.getElementById(recordingStatementDomId(focusIntent.statement));
+    const element = document.getElementById(recordingStatementDomId(focusIntent.statement));
     if (!element) return;
-
-    if (focusIntent.target === 'statement') {
-      const passive = document.activeElement === document.body || document.activeElement === document.documentElement;
-      if (!passive) {
-        setFocusIntent(null);
-        return;
-      }
-    }
-    element.focus();
+    const button = element.querySelector('button');
+    if (button) trigger.current = { owner, statement: focusIntent.statement, button };
+    const passive = document.activeElement === document.body || document.activeElement === document.documentElement;
+    if (passive) element.focus();
     setFocusIntent(null);
-  }, [active, focusIntent, hasStatement, loading, scope]);
+  }, [active, focusIntent, hasStatement, unresolved, owner, retireFocus, selectedStatement]);
+
+  const close = useCallback(() => {
+    if (!selectedStatement || !active()) return;
+    const opener = trigger.current;
+    trigger.current = null;
+    setSelection(null);
+    setFocusIntent(null);
+    if (
+      opener?.owner === owner &&
+      opener.statement === selectedStatement &&
+      opener.button.isConnected &&
+      hasStatement(selectedStatement)
+    )
+      opener.button.focus({ preventScroll: true });
+  }, [active, hasStatement, owner, selectedStatement]);
 
   const inspect = useCallback(
     (statement: string, button: HTMLButtonElement) => {
       if (!active() || !hasStatement(statement)) return;
-      trigger.current = button;
       if (selectedStatement === statement) {
-        setSelection(null);
-        setFocusIntent({ scope, statement, target: 'trigger' });
+        close();
       } else {
-        setSelection({ scope, statement });
-        setFocusIntent({ scope, statement, target: 'inspection' });
+        trigger.current = { owner, statement, button };
+        setSelection({ owner, statement });
+        setFocusIntent(null);
       }
     },
-    [active, hasStatement, scope, selectedStatement],
+    [active, close, hasStatement, owner, selectedStatement],
   );
-
-  const close = useCallback(() => {
-    if (!selectedStatement || !active()) return;
-    setSelection(null);
-    setFocusIntent({ scope, statement: selectedStatement, target: 'trigger' });
-  }, [active, scope, selectedStatement]);
 
   const restart = useCallback(() => {
     if (!active()) return;
+    trigger.current = null;
     setSelection(null);
     setFocusIntent(null);
   }, [active]);
@@ -107,7 +119,6 @@ export function useRecordingFactSelection({
     inspect,
     close,
     restart,
-    inspectionHeading,
-    trigger,
+    inspection,
   };
 }

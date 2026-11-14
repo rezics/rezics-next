@@ -140,7 +140,9 @@ function FieldGroup({
   link,
   returnTo,
   selectedStatement,
+  inspection,
   onInspect,
+  onClose,
 }: {
   group: RecordingGroup;
   fields: readonly RecordingField[];
@@ -151,7 +153,9 @@ function FieldGroup({
   link: PageLink;
   returnTo?: string;
   selectedStatement?: string;
+  inspection: ReactNode;
   onInspect: (statement: string, button: HTMLButtonElement) => void;
+  onClose: () => void;
 }) {
   if (!fields.length) return null;
   return (
@@ -194,13 +198,21 @@ function FieldGroup({
                         type="button"
                         className={actionClass}
                         aria-expanded={selected}
-                        aria-controls="recording-fact-inspection"
+                        aria-controls={selected ? 'recording-fact-inspection' : undefined}
                         onClick={(event) => onInspect(fact.id, event.currentTarget)}
+                        onKeyDown={(event) => {
+                          if (selected && event.key === 'Escape') {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onClose();
+                          }
+                        }}
                       >
                         {selected
                           ? m.recording_reader_close_inspection({}, options(locale))
                           : m.recording_reader_inspect({}, options(locale))}
                       </button>
+                      {selected ? inspection : null}
                     </li>
                   );
                 })}
@@ -224,7 +236,7 @@ function FactInspection({
   link,
   statementReturn,
   onClose,
-  headingRef,
+  inspectionRef,
 }: {
   field: RecordingField;
   fact: RecordingFact;
@@ -236,26 +248,35 @@ function FactInspection({
   link: PageLink;
   statementReturn?: string;
   onClose: () => void;
-  headingRef: RefObject<HTMLHeadingElement | null>;
+  inspectionRef: RefObject<HTMLElement | null>;
 }) {
   const subjectTitle = pickText(read.subject.labels, locale).text;
   const returnValue = returnLink(link, statementReturn, locale);
   const groupLabel = fieldGroupTitle(group, locale);
   return (
     <section
+      ref={inspectionRef}
       id="recording-fact-inspection"
       aria-labelledby="recording-fact-inspection-heading"
-      className="min-w-0 space-y-4 rounded-md border border-border p-4"
+      tabIndex={-1}
+      className="min-w-0 space-y-4 focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !event.defaultPrevented) {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }
+      }}
     >
-      <div className="space-y-2">
-        <h3
-          id="recording-fact-inspection-heading"
-          ref={headingRef}
-          tabIndex={-1}
-          className="text-lg font-semibold focus:outline-2 focus:outline-offset-2 focus:outline-ring"
-        >
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <h3 id="recording-fact-inspection-heading" className="text-lg font-semibold">
           {m.recording_reader_fact_inspection({}, options(locale))}
         </h3>
+        <button type="button" className={actionClass} onClick={onClose}>
+          {m.recording_reader_close_inspection({}, options(locale))}
+        </button>
+      </div>
+      <div className="space-y-2">
         <p className="text-sm text-muted-foreground">{groupLabel}</p>
         <p className="text-sm [overflow-wrap:anywhere]">
           {m.recording_reader_direction({ field: field.label.text }, options(locale))}
@@ -291,10 +312,9 @@ function FactInspection({
           property={field.property}
           context={read.subject.context}
           locale={locale}
+          link={link}
+          returnTo={statementReturn}
         />
-        <button type="button" className={actionClass} onClick={onClose}>
-          {m.recording_reader_close_inspection({}, options(locale))}
-        </button>
       </div>
     </section>
   );
@@ -347,7 +367,7 @@ export function RecordingReader({
     subjectId: read.subject.id,
     locale,
     hasStatement,
-    loading: visit.state === 'loading',
+    unresolved: visit.state !== 'ready' && visit.state !== 'empty',
   });
   const selectedFact = selection.selectedStatement ? selected(selection.selectedStatement) : undefined;
   const details = subjectViewHref({ id: read.subject.id, label: subjectTitle }, locale, 'details');
@@ -371,6 +391,22 @@ export function RecordingReader({
   const directionReturn = (statement: string) =>
     recordingStatementReturnHref(currentAddress, read.subject.id, statement, locale) ?? currentAddress;
   const selectedStatementReturn = selectedFact ? directionReturn(selectedFact.fact.id) : undefined;
+  const inspection =
+    selectedFact && release ? (
+      <FactInspection
+        field={selectedFact.field}
+        fact={selectedFact.fact}
+        group={selectedFact.group}
+        read={read}
+        release={release}
+        locale={locale}
+        {...(context ? { context } : {})}
+        link={link}
+        {...(selectedStatementReturn ? { statementReturn: selectedStatementReturn } : {})}
+        onClose={selection.close}
+        inspectionRef={selection.inspection}
+      />
+    ) : null;
   const showRecovery = retryAvailable || retrying;
   const handleRetry = () => {
     if (!retryAvailable || retrying || !onRetry || !active()) return;
@@ -419,6 +455,8 @@ export function RecordingReader({
             {...(currentAddress ? { returnTo: currentAddress } : {})}
             {...(selection.selectedStatement ? { selectedStatement: selection.selectedStatement } : {})}
             onInspect={selection.inspect}
+            onClose={selection.close}
+            inspection={inspection}
           />
           <FieldGroup
             group="contributions"
@@ -431,6 +469,8 @@ export function RecordingReader({
             {...(currentAddress ? { returnTo: currentAddress } : {})}
             {...(selection.selectedStatement ? { selectedStatement: selection.selectedStatement } : {})}
             onInspect={selection.inspect}
+            onClose={selection.close}
+            inspection={inspection}
           />
           <FieldGroup
             group="associations"
@@ -443,26 +483,13 @@ export function RecordingReader({
             {...(currentAddress ? { returnTo: currentAddress } : {})}
             {...(selection.selectedStatement ? { selectedStatement: selection.selectedStatement } : {})}
             onInspect={selection.inspect}
+            onClose={selection.close}
+            inspection={inspection}
           />
         </>
       ) : null}
 
-      {selectedFact && release ? (
-        <FactInspection
-          field={selectedFact.field}
-          fact={selectedFact.fact}
-          group={selectedFact.group}
-          read={read}
-          release={release}
-          locale={locale}
-          {...(context ? { context } : {})}
-          link={link}
-          {...(selectedStatementReturn ? { statementReturn: selectedStatementReturn } : {})}
-          onClose={selection.close}
-          headingRef={selection.inspectionHeading}
-        />
-      ) : null}
-      {selection.selectedStatement && !selectedFact && visit.state !== 'loading' ? (
+      {selection.selectedStatement && !selectedFact && (visit.state === 'ready' || visit.state === 'empty') ? (
         <section aria-live="polite" className="space-y-2 rounded-md border border-border p-4">
           <p role="status">{m.recording_reader_fact_retired({}, options(locale))}</p>
           <button type="button" className={actionClass} onClick={selection.restart}>
