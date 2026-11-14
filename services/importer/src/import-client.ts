@@ -26,6 +26,7 @@ import {
   type MediaImportStatus,
 } from '@rezics/definitions/media-import';
 import { isDeepStrictEqual, types } from 'node:util';
+import { headFromInspection } from './source-observation.ts';
 import { Check } from 'typebox/schema';
 import { Type, type Static } from 'typebox';
 import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
@@ -1264,6 +1265,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         ensure(typeof scale.min === 'number' && typeof scale.max === 'number' && typeof payload.mean === 'number');
       }
     }
+    ensure(headFromInspection(input.subjectId, head as ImportSourceObservationHead).kind !== 'unavailable');
     return head as ImportSourceObservationHead;
   }
   function classifications(subjectId: string) {

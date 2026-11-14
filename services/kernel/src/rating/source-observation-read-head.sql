@@ -41,8 +41,5 @@ SELECT retained.*, input."subjectEpoch" AS "emptySubjectEpoch",
                     WHERE statistic.route = input.route AND statistic.subject_id = input.subject_id
                       AND statistic.source = input.source
                       AND statistic.observation_digest IS DISTINCT FROM retained.digest)
-       END OR EXISTS (SELECT 1 FROM rating.source_statistic_observation AS unkeyed
-                      WHERE unkeyed.route = input.route AND unkeyed.subject_id = input.subject_id
-                        AND unkeyed.source = input.source AND unkeyed.seek_order IS NULL)
-       AS "needsMaterialization"
+       END AS "inconsistent"
 FROM input LEFT JOIN retained ON true;

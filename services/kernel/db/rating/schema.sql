@@ -1547,8 +1547,6 @@ CREATE INDEX realm_rank_scored_canonical_idx ON rating.realm_rank USING btree (p
 -- Name: source_statistic_observation_seek_order_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
-CREATE INDEX source_statistic_observation_unkeyed_idx ON rating.source_statistic_observation USING btree (route, subject_id, source) WHERE (seek_order IS NULL);
-
 CREATE UNIQUE INDEX source_statistic_observation_seek_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, seek_order DESC);
 
 

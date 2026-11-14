@@ -52,11 +52,21 @@ test('canonical current inspection keeps empty and retained clear distinct', () 
   };
   const current = storedHead(subjectId, intendedPayload(intended));
   const digest = observationDigest(subjectId, intended);
-  expect(headFromInspection(storedHead(subjectId))).toEqual({ kind: 'absent' });
-  expect(headFromInspection(current)).toMatchObject({ kind: 'head', head: { digest, cleared: false } });
-  expect(headFromInspection({ ...current, digest: null })).toMatchObject({ kind: 'unavailable' });
+  expect(headFromInspection(subjectId, storedHead(subjectId))).toEqual({ kind: 'absent' });
+  expect(headFromInspection(subjectId, current)).toMatchObject({ kind: 'head', head: { digest, cleared: false } });
+  expect(headFromInspection('00000000-0000-4000-8000-000000000102', current))
+    .toMatchObject({ kind: 'unavailable' });
+  expect(headFromInspection(subjectId, {
+    ...current,
+    observation: { ...current.observation!, payload: { ...current.observation!.payload, count: 99 } },
+  })).toMatchObject({ kind: 'unavailable' });
+  expect(headFromInspection(subjectId, {
+    ...current,
+    observation: { ...current.observation!, sourceAlias: 'another-catalogue' },
+  })).toMatchObject({ kind: 'unavailable' });
+  expect(headFromInspection(subjectId, { ...current, digest: null })).toMatchObject({ kind: 'unavailable' });
   const clear = storedHead(subjectId, { sourceRecordId: 'v123', count: 0, asOf: intended.asOf });
-  expect(headFromInspection(clear)).toMatchObject({ kind: 'head', head: { count: 0, cleared: true } });
+  expect(headFromInspection(subjectId, clear)).toMatchObject({ kind: 'head', head: { count: 0, cleared: true } });
   expect(headFromAcknowledgedObservation(subjectId, intended).digest).toBe(digest);
   expect(
     headFromAcknowledgedObservation(subjectId, {
