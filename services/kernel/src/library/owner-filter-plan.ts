@@ -2,11 +2,15 @@ import type { Release } from '@rezics/definitions';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient } from './access-port.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  requireAccessDeadline,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import type { CommandAttempt } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { parseStrictJson } from '../http/strict-json.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -381,18 +385,24 @@ async function readWorkingOwnerFilterPage(
       transaction.dispatch();
       let match: RelationFacetMatch;
       try {
-        match = await withConnection(deps.pool, async (connection) => {
-          const client = deadlineClient(connection, input.deadline);
-          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          try {
-            const result = await readOwnerFilterCandidateNative(native, client, admission, closure.closure, work);
-            await client.query('COMMIT');
-            return result;
-          } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-          }
-        });
+        match = await withBoundedReadOnlyTransaction(
+          deps.pool,
+          input.deadline,
+          (client) => readOwnerFilterCandidateNative(native, client, admission, closure.closure, work),
+          {
+            deadlineError: () => new AccessUnavailableError('deadline'),
+            mapError(error) {
+              try {
+                throwAccessUnavailable(error);
+              } catch (mapped) {
+                return mapped;
+              }
+              return error;
+            },
+            isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+            isUncertainSettledQueryError: () => true,
+          },
+        );
       } finally {
         transaction.settle();
       }
