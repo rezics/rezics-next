@@ -21,10 +21,7 @@ export interface ContentShelfTitleNativeObserver {
     languages: readonly string[];
     viewer: AccountActor;
     subjects: readonly string[];
-  }): Promise<
-    | { status: 'unavailable' }
-    | { status: 'current'; version: string; entries: readonly ShelfTitleLabels[] }
-  >;
+  }): Promise<{ status: 'unavailable' } | { status: 'current'; version: string; entries: readonly ShelfTitleLabels[] }>;
 }
 
 /**
@@ -40,8 +37,7 @@ export interface ContentShelfTitleCurrentAccess {
     viewer: AccountActor;
     subjects: readonly string[];
   }): Promise<
-    | { status: 'unavailable' }
-    | { status: 'current'; version: string; decisions: readonly CurrentDecision[] }
+    { status: 'unavailable' } | { status: 'current'; version: string; decisions: readonly CurrentDecision[] }
   >;
 }
 
@@ -138,9 +134,7 @@ function exactRows(subjects: readonly string[], rows: readonly ShelfTitleLabels[
       typeof row.labels !== 'object' ||
       Array.isArray(row.labels) ||
       Object.values(row.labels).some((value) => typeof value !== 'string') ||
-      (row.originalLanguage !== undefined &&
-        row.originalLanguage !== null &&
-        typeof row.originalLanguage !== 'string')
+      (row.originalLanguage !== undefined && row.originalLanguage !== null && typeof row.originalLanguage !== 'string')
     )
       return undefined;
     const copy: ShelfTitleLabels = {
@@ -155,7 +149,10 @@ function exactRows(subjects: readonly string[], rows: readonly ShelfTitleLabels[
   return expected.size === 0 ? subjects.map((id) => bySubject.get(id)!) : undefined;
 }
 
-function exactDecisions(subjects: readonly string[], rows: readonly CurrentDecision[]): Map<string, boolean> | undefined {
+function exactDecisions(
+  subjects: readonly string[],
+  rows: readonly CurrentDecision[],
+): Map<string, boolean> | undefined {
   if (!Array.isArray(rows) || rows.length !== subjects.length) return undefined;
   const expected = new Set(subjects);
   const bySubject = new Map<string, boolean>();
