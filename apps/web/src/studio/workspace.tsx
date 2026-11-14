@@ -391,14 +391,6 @@ export function StudioWorkbench({
                   />
                 ) : null}
               </section>
-              {starter ? (
-                <HostedBookStartAction
-                  state={startState}
-                  eligible={Boolean(savedOpeningForBook(state)) && !unresolved && starter.isCurrent()}
-                  start={starter.start}
-                  retry={starter.retry}
-                />
-              ) : null}
               <details className="studio-technical">
                 <summary>{copy.workDetails}</summary>
                 <p>{m.studio_workspace_private_help({}, options)}</p>
@@ -625,6 +617,16 @@ export function StudioWorkbench({
           </div>
         </div>
       </fieldset>
+      {starter ? (
+        <div className="studio-book-start-region">
+          <HostedBookStartAction
+            state={startState}
+            eligible={Boolean(savedOpeningForBook(state)) && !unresolved && starter.isCurrent()}
+            start={starter.start}
+            retry={starter.retry}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }

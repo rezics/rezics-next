@@ -1,11 +1,12 @@
 .studio-workspace {
   color: var(--foreground);
   inline-size: 100%;
-  max-inline-size: 100rem;
+  max-inline-size: 92rem;
   margin-inline: auto;
   overflow-wrap: anywhere;
   --studio-gap: clamp(1rem, 2vw, 2rem);
 }
+
 .studio-workspace *,
 .studio-workspace *::before,
 .studio-workspace *::after {
@@ -27,11 +28,14 @@
 .studio-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding-block: 1rem 1.5rem;
+  padding-block: 0.5rem 1.5rem;
+  border-block-end: 1px solid var(--border);
+  margin-block-end: 1.5rem;
 }
+
 .studio-eyebrow {
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -46,10 +50,14 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
-    'document'
-    'sidebar';
+    'sidebar'
+    'document';
   gap: var(--studio-gap);
+  border: 0;
+  padding: 0;
+  margin: 0;
 }
+
 .studio-sidebar,
 .studio-document,
 .studio-stack,
@@ -58,10 +66,13 @@
 }
 .studio-sidebar {
   grid-area: sidebar;
-  border-block-start: 1px solid var(--border);
+  border-block-start: 0;
   padding-block-start: 0.75rem;
   align-self: start;
+  border-block-end: 1px solid var(--border);
+  padding-block: 0 0.75rem;
 }
+
 .studio-document {
   grid-area: document;
 }
@@ -69,7 +80,9 @@
   font-weight: 600;
   font-size: 0.9rem;
   padding-block: 0.5rem;
+  color: var(--foreground);
 }
+
 .studio-mobile-navigation > .studio-stack {
   margin-block-start: 0.75rem;
 }
@@ -161,12 +174,13 @@
 .studio-document {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 .studio-document-heading {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  padding-block: 0.5rem;
 }
 .studio-document-toolbar {
   position: sticky;
@@ -174,8 +188,10 @@
   z-index: 5;
   background: var(--background);
   border-block: 1px solid var(--border);
-  padding-block: 0.75rem;
+  padding-block: 0.5rem;
+  gap: 0.5rem;
 }
+
 .studio-rich-text {
   min-block-size: min(55vh, 35rem);
   min-inline-size: 0;
@@ -183,7 +199,11 @@
 .studio-rich-text .tiptap {
   min-block-size: 22rem;
   padding-block-end: 5rem;
+  max-inline-size: 72ch;
+  margin-inline: auto;
+  line-height: 1.75;
 }
+
 .studio-workspace [hidden] {
   display: none !important;
 }
@@ -193,10 +213,12 @@
   max-inline-size: 100%;
 }
 .studio-preview {
-  padding: clamp(0.75rem, 3vw, 2rem);
+  padding: clamp(1rem, 4vw, 3rem);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
+  min-block-size: 24rem;
 }
+
 .studio-preview-notice {
   border-inline-start: 2px solid var(--border);
   padding-inline-start: 0.75rem;
@@ -325,10 +347,14 @@
 .studio-version-list li {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: start;
   gap: 0.75rem;
   font-size: 0.8rem;
+  justify-content: space-between;
+  padding-block: 0.5rem;
+  border-block-end: 1px solid var(--border);
 }
+
 .studio-comparison {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -385,51 +411,6 @@
   white-space: nowrap;
   border: 0;
 }
-@media (min-width: 64rem) {
-  .studio-layout {
-    grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
-    grid-template-areas: 'sidebar document';
-  }
-  .studio-sidebar {
-    border-block-start: 0;
-    border-inline-end: 1px solid var(--border);
-    padding-block-start: 0;
-    padding-inline-end: 1.25rem;
-  }
-  .studio-mobile-navigation > summary {
-    display: none;
-  }
-  .studio-mobile-navigation:not([open]) > .studio-stack {
-    display: flex;
-  }
-  .studio-mobile-navigation > .studio-stack {
-    margin-block-start: 0;
-  }
-}
-@media (min-width: 85rem) {
-  .studio-comparison {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-}
-@media (max-width: 30rem) {
-  .studio-document-toolbar {
-    position: static;
-  }
-  .studio-action-row {
-    gap: 0.35rem;
-  }
-}
-
-/* Work identity, outline and the writing surface form one responsive workbench. */
-.studio-workspace {
-  max-inline-size: 92rem;
-}
-.studio-header {
-  align-items: center;
-  padding-block: 0.5rem 1.5rem;
-  border-block-end: 1px solid var(--border);
-  margin-block-end: 1.5rem;
-}
 .studio-work-heading {
   min-inline-size: 0;
   max-inline-size: 65ch;
@@ -441,22 +422,6 @@
 .studio-work-heading .studio-help {
   margin-block-start: 0.4rem;
 }
-.studio-layout {
-  grid-template-areas:
-    'sidebar'
-    'document';
-  border: 0;
-  padding: 0;
-  margin: 0;
-}
-.studio-sidebar {
-  border-block-start: 0;
-  border-block-end: 1px solid var(--border);
-  padding-block: 0 0.75rem;
-}
-.studio-mobile-navigation > summary {
-  color: var(--foreground);
-}
 .studio-sidebar h2 {
   font-size: 1rem;
 }
@@ -466,12 +431,6 @@
 .studio-sidebar .studio-toc > .studio-help,
 .studio-sidebar .studio-toc > .studio-section-heading {
   margin-block-end: 0.75rem;
-}
-.studio-document {
-  gap: 1rem;
-}
-.studio-document-heading {
-  padding-block: 0.5rem;
 }
 .studio-document-heading h2 {
   font-size: clamp(1.5rem, 2.6vw, 2.25rem);
@@ -484,10 +443,6 @@
 }
 .studio-document-heading > [role='status'] {
   font-variant-numeric: tabular-nums;
-}
-.studio-document-toolbar {
-  gap: 0.5rem;
-  padding-block: 0.5rem;
 }
 .studio-document-toolbar nav {
   gap: 0.25rem;
@@ -517,11 +472,6 @@
 }
 .studio-writing-canvas > input:hover {
   border-block-end-color: var(--border);
-}
-.studio-rich-text .tiptap {
-  max-inline-size: 72ch;
-  margin-inline: auto;
-  line-height: 1.75;
 }
 .studio-workbench-region {
   border-block-start: 1px solid var(--border);
@@ -566,22 +516,17 @@
 .studio-toc-actions > .studio-help {
   padding-inline: 0.25rem;
 }
-.studio-version-list li {
-  align-items: start;
-  justify-content: space-between;
-  padding-block: 0.5rem;
-  border-block-end: 1px solid var(--border);
-}
 .studio-version-list .studio-technical {
   flex: 1 1 12rem;
-}
-.studio-preview {
-  min-block-size: 24rem;
-  padding: clamp(1rem, 4vw, 3rem);
 }
 .studio-preview > :last-child {
   max-inline-size: 72ch;
   margin-inline: auto;
+}
+.studio-book-start-region {
+  margin-block-start: 1.5rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--border);
 }
 @media (min-width: 64rem) {
   .studio-layout {
@@ -590,16 +535,40 @@
     column-gap: clamp(1.5rem, 3vw, 3rem);
   }
   .studio-sidebar {
+    border-block-start: 0;
+    border-inline-end: 1px solid var(--border);
+    padding-block-start: 0;
+    padding-inline-end: 1.25rem;
     border-block-end: 0;
     padding-block-end: 0;
+  }
+
+  .studio-mobile-navigation > summary {
+    display: none;
+  }
+  .studio-mobile-navigation:not([open]) > .studio-stack {
+    display: flex;
+  }
+  .studio-mobile-navigation > .studio-stack {
+    margin-block-start: 0;
   }
   .studio-document-heading {
     padding-block-start: 0;
   }
 }
+
+@media (min-width: 85rem) {
+  .studio-comparison {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
 @media (max-width: 30rem) {
   .studio-document-toolbar {
     position: sticky;
+  }
+
+  .studio-action-row {
+    gap: 0.35rem;
   }
   .studio-document-toolbar > nav {
     flex: 1 1 100%;

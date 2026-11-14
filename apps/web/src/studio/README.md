@@ -44,7 +44,8 @@ wording, while the editable title remains empty. Exact Post, revision and digest
 Disclosure changes visibility, never controller or form lifetime. Editor undo/uploads, selected comparison and
 replacement confirmation survive view changes. Dirty text and discard confirmation keep draft actions visible;
 active publication review and receipt keep publication visible. Session failures, unknown results, same-intent retry,
-read-only access and publication unavailability remain visible outside collapsed secondary content. Preparation and
+read-only access and publication unavailability remain visible outside collapsed secondary content. Book-start
+recovery stays outside the disabled document fieldset so its frozen same-intent retry remains actionable. Preparation and
 legacy readiness links belong in the publication region, not above the work heading. Generated producer binding,
 held activation consumer, exact operands, source permission and money rules retain their existing owners.
 

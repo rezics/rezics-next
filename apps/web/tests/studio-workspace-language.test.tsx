@@ -8,6 +8,7 @@ import type {
   StudioResult,
   StudioSelection,
 } from '../src/studio/contract';
+import type { HostedBookStartBinding } from '../src/studio/hosted-book-start';
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
@@ -178,11 +179,11 @@ async function fixture(kind: StudioInput['profile']['kind'] = 'articles', editab
   };
 }
 
-async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input) {
+async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input, bookStart?: HostedBookStartBinding) {
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  await act(async () => root.render(<StudioWorkspace input={input} port={f.port} />));
+  await act(async () => root.render(<StudioWorkspace input={input} port={f.port} bookStart={bookStart} />));
   const button = (name: string) => getByRole(host, 'button', { name, exact: true }) as HTMLButtonElement;
   return {
     host,
@@ -212,6 +213,56 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input) {
     },
   };
 }
+
+test('uncertain Book-start retry remains reachable while document controls are locked', async () => {
+  setLocale('en', { reload: false });
+  const f = await fixture();
+  const attempts: Array<Parameters<HostedBookStartBinding['native']['create']>> = [];
+  const observation = {
+    sourceId: 'studio-session',
+    generation: 1,
+    dataUpdateCount: 1,
+    dataUpdatedAt: 1,
+    state: 'signed-in',
+    subject: 'author',
+    credentialMode: 'session',
+    healthy: true,
+    csrfReady: true,
+  } as const;
+  const bookStart: HostedBookStartBinding = {
+    native: {
+      create: mock(async (...args: Parameters<HostedBookStartBinding['native']['create']>) => {
+        attempts.push(args);
+        return failed('uncertain');
+      }),
+      readOwn: f.unused,
+    },
+    source: {
+      id: observation.sourceId,
+      read: () => observation,
+      revision: () => observation.generation,
+      subscribe: () => () => {},
+    },
+    viewer: { accountId: observation.subject, authnEpoch: 1 },
+    isCurrent: () => true,
+    navigate: () => {},
+  };
+  const v = await mount(f, f.input, bookStart);
+  try {
+    await v.click(m.studio_book_start_label());
+    expect(v.host.querySelector('fieldset')!.disabled).toBe(true);
+    const retry = v.button(m.studio_book_start_retry());
+    expect(retry.closest('fieldset:disabled')).toBeNull();
+    expect(retry.disabled).toBe(false);
+    expect(getByRole(v.host, 'alert').textContent).toContain(m.studio_book_start_uncertain());
+    await v.click(m.studio_book_start_retry());
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]!.slice(0, 2)).toEqual(attempts[0]!.slice(0, 2));
+    expect(f.unused).not.toHaveBeenCalled();
+  } finally {
+    await v.close();
+  }
+});
 
 test('workspace keys and named arguments match in all eight launch catalogues', async () => {
   const catalogues = await Promise.all(
