@@ -20,7 +20,6 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { PageHeading } from '../shell/page-heading';
 import type { MineFollowingPage } from './mine-following';
 import { FollowTargetControl } from './follow-target-control';
 import { personalRead } from '../session/reading-policy';
@@ -47,6 +46,7 @@ import {
   readFollowingReturn,
 } from './following-reading/return-context';
 import { FollowingReadingRow } from './following-reading/row';
+import { FollowingWorkspace } from './following-reading/workspace';
 import { createFollowIntent, type FollowIntentOwner } from './mine-following-intent';
 
 type ReviewFollow = (targetId: string) => Promise<FollowState | null>;
@@ -629,68 +629,16 @@ function MineFollowingPageState({
     else reading.close(false);
   };
 
-  return (
-    <article ref={article} className="max-w-6xl space-y-6 text-foreground sm:space-y-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 space-y-2">
-          <PageHeading ref={listHeading} tabIndex={-1}>
-            {m.library_following_heading()}
-          </PageHeading>
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{m.following_reading_intro()}</p>
-        </div>
-        {!addressRejected && page.signedIn && onRefresh ? (
-          <Button
-            className="min-h-11"
-            variant="outline"
-            disabled={!!status || navigationDisabled}
-            onClick={() => {
-              if (refreshCurrent ? !refreshCurrent() : page.forbidden ? !origin.isCurrent() : !reading.returnCurrent())
-                return;
-              reading.close(false);
-              onRefresh();
-            }}
-          >
-            {m.following_reading_refresh()}
-          </Button>
-        ) : null}
-      </header>
-      <nav aria-label={m.following_kind_label()} className="flex flex-wrap gap-2">
-        {(['all', 'subject', 'collection', 'space', 'zone'] as const).map((value) => {
-          const label =
-            value === 'all'
-              ? m.following_kind_all()
-              : value === 'subject'
-                ? m.following_kind_subject()
-                : value === 'collection'
-                  ? m.following_kind_collection()
-                  : value === 'space'
-                    ? m.following_kind_space()
-                    : m.following_kind_zone();
-          const variant = kind === value ? 'default' : 'outline';
-          return kindChangeDisabled ? (
-            <Button
-              key={value}
-              variant={variant}
-              className="min-h-11"
-              disabled
-              aria-current={kind === value ? 'page' : undefined}
-            >
-              {label}
-            </Button>
-          ) : (
-            <Link
-              key={value}
-              to="/library/following"
-              search={value === 'all' ? {} : { kind: value }}
-              aria-current={kind === value ? 'page' : undefined}
-              className={buttonVariants({ variant, className: 'min-h-11' })}
-              onClick={(event) => navigate(event, { cursor: null, kind: value }, 'kind')}
-            >
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
+  const refreshAction =
+    !addressRejected && page.signedIn && onRefresh
+      ? () => {
+          if (refreshCurrent ? !refreshCurrent() : page.forbidden ? !origin.isCurrent() : !reading.returnCurrent()) return;
+          reading.close(false);
+          onRefresh();
+        }
+      : undefined;
+  const windowStatus = (
+    <>
       {!addressRejected && page.forbidden ? <p role="status">{m.library_my_ratings_denied()}</p> : null}
       {navigation?.unsettledRemoval ? <p role="status">{m.following_navigation_recover_removal()}</p> : null}
       {!addressRejected && status ? (
@@ -723,167 +671,181 @@ function MineFollowingPageState({
         <p role="status">{m.library_follow_removed()}</p>
       ) : null}
       {reading.suspended ? <p role="status">{m.following_reading_return_preparing()}</p> : null}
-      <div
-        className={
-          reading.selection ? 'grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:gap-8' : 'max-w-4xl'
-        }
-      >
-        {reading.selection ? (
-          <aside className="min-w-0 xl:order-2">
-            <FollowingInspection
-              key={reading.selection.id}
-              selection={reading.selection}
-              subject={readingOrigin.subject}
-              locale={locale}
-              canReadCollection={canReadCollection}
-              close={reading.close}
-              readSpace={readSpace}
-              returnFrontier={
-                readingOrigin.subject
-                  ? followingReturnFrontier(
-                      locale,
-                      readingOrigin.subject,
-                      cursor,
-                      kind,
-                      reading.selection.row.follow.targetId,
-                    )
-                  : null
-              }
-            />
-          </aside>
-        ) : null}
-        {!addressRejected && !page.forbidden && active.length ? (
-          <ul className="min-w-0 list-none space-y-1 xl:order-1" aria-label={m.library_following_heading()}>
-            {active.map((row) => {
-              const { follow, title } = row;
-              return (
-                <FollowingReadingRow
-                  key={follow.targetId}
-                  row={row}
-                  selected={reading.selection?.row.follow.targetId === follow.targetId}
-                  suspended={reading.suspended}
-                  disabled={!!status}
-                  canReadCollection={canReadCollection}
-                  current={reading.current}
-                  frontier={
-                    readingOrigin.subject
-                      ? followingReturnFrontier(locale, readingOrigin.subject, cursor, kind, follow.targetId)
-                      : null
-                  }
-                  inspect={(trigger) => {
-                    const current = prepared.byId.get(follow.targetId);
-                    if (current) reading.select(current, trigger);
-                  }}
-                  controls={
-                    <span hidden={!canUnfollow}>
-                      <FollowTargetControl
-                        origin={origin}
-                        intentOwner={intentOwnerFor(follow.targetId)}
-                        targetId={follow.targetId}
-                        following
-                        disabled={!!status}
-                        idempotencyKey={follow.idempotencyKey}
-                        menuTitle={m.library_follow_more_actions({ title: title.text })}
-                        {...(navigation ? { onRemovalUnsettledChange: navigation.removalChanged } : {})}
-                        onReview={onReview ? () => onReview(follow.targetId) : undefined}
-                        onRemoved={() => {
-                          if (!origin.isCurrent()) return;
-                          if (reading.selection?.row.follow.targetId === follow.targetId) {
-                            reading.close(false);
-                            listHeading.current?.focus();
-                          }
-                          setFollows((items) => items.filter((item) => item.targetId !== follow.targetId));
-                          setRemoved(true);
-                        }}
-                      />
-                    </span>
-                  }
-                />
-              );
-            })}
-          </ul>
-        ) : !addressRejected && !page.forbidden && page.signedIn ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyDescription>
-                {firstPageEmpty ? m.library_following_empty() : m.library_following_page_empty()}
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <a
-                href={`/${getLocale()}/search`}
-                className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-              >
-                {m.search_heading()}
-              </a>
-            </EmptyContent>
-          </Empty>
-        ) : null}
-      </div>
       {nextUnavailable && !addressRejected && !page.forbidden ? (
         <p role="status">{m.following_navigation_unavailable()}</p>
       ) : null}
-      {!addressRejected && !page.forbidden && page.signedIn && (nextCursor || restart || navigation?.previous) ? (
-        <Exposure operation="follow.list">
-          <nav
-            aria-label={m.library_following_heading()}
-            className="flex flex-wrap items-center gap-3"
-            aria-busy={navigation?.busy || undefined}
-          >
-            {navigation?.previous ? (
-              navigationDisabled ? (
-                <Button className="min-h-11" variant="outline" disabled>
-                  {m.following_navigation_previous()}
-                </Button>
-              ) : (
-                <Link
-                  to="/library/following"
-                  search={{
-                    ...(navigation.previous.cursor === null ? {} : { cursor: navigation.previous.cursor }),
-                    ...(navigation.previous.kind === 'all' ? {} : { kind: navigation.previous.kind }),
+    </>
+  );
+  const directory = !addressRejected && !page.forbidden && active.length ? (
+    <ul className="min-w-0 list-none space-y-1" aria-label={m.library_following_heading()}>
+      {active.map((row) => {
+        const { follow, title } = row;
+        return (
+          <FollowingReadingRow
+            key={follow.targetId}
+            row={row}
+            selected={reading.selection?.row.follow.targetId === follow.targetId}
+            suspended={reading.suspended}
+            disabled={!!status}
+            canReadCollection={canReadCollection}
+            current={reading.current}
+            frontier={
+              readingOrigin.subject
+                ? followingReturnFrontier(locale, readingOrigin.subject, cursor, kind, follow.targetId)
+                : null
+            }
+            inspect={(trigger) => {
+              const current = prepared.byId.get(follow.targetId);
+              if (current) reading.select(current, trigger);
+            }}
+            controls={
+              <span hidden={!canUnfollow}>
+                <FollowTargetControl
+                  origin={origin}
+                  intentOwner={intentOwnerFor(follow.targetId)}
+                  targetId={follow.targetId}
+                  following
+                  disabled={!!status}
+                  idempotencyKey={follow.idempotencyKey}
+                  menuTitle={m.library_follow_more_actions({ title: title.text })}
+                  {...(navigation ? { onRemovalUnsettledChange: navigation.removalChanged } : {})}
+                  onReview={onReview ? () => onReview(follow.targetId) : undefined}
+                  onRemoved={() => {
+                    if (!origin.isCurrent()) return;
+                    if (reading.selection?.row.follow.targetId === follow.targetId) {
+                      reading.close(false);
+                      listHeading.current?.focus();
+                    }
+                    setFollows((items) => items.filter((item) => item.targetId !== follow.targetId));
+                    setRemoved(true);
                   }}
-                  onClick={(event) => navigate(event, navigation.previous!, 'previous')}
-                  className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-                >
-                  {m.following_navigation_previous()}
-                </Link>
-              )
-            ) : null}
-            {nextCursor ? (
-              navigationDisabled ? (
-                <Button className="min-h-11" disabled>
-                  {m.library_collection_more()}
-                </Button>
-              ) : (
-                <Link
-                  to="/library/following"
-                  search={{ cursor: nextCursor, ...(kind === 'all' ? {} : { kind }) }}
-                  onClick={(event) => navigate(event, { cursor: nextCursor, kind }, 'next')}
-                  className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-                >
-                  {m.library_collection_more()}
-                </Link>
-              )
-            ) : null}
-            {restart ? (
-              navigationDisabled ? (
-                <Button className="min-h-11" variant="outline" disabled>
-                  {m.library_collections_first_page()}
-                </Button>
-              ) : (
-                <Link
-                  to="/library/following"
-                  search={kind === 'all' ? {} : { kind }}
-                  onClick={(event) => navigate(event, { cursor: null, kind }, 'first')}
-                  className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-                >
-                  {m.library_collections_first_page()}
-                </Link>
-              )
-            ) : null}
-          </nav>
-        </Exposure>
-      ) : null}
-    </article>
+                />
+              </span>
+            }
+          />
+        );
+      })}
+    </ul>
+  ) : !addressRejected && !page.forbidden && page.signedIn ? (
+    <Empty>
+      <EmptyHeader>
+        <EmptyDescription>
+          {firstPageEmpty ? m.library_following_empty() : m.library_following_page_empty()}
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <a href={`/${getLocale()}/search`} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
+          {m.search_heading()}
+        </a>
+      </EmptyContent>
+    </Empty>
+  ) : null;
+  const windowNavigation =
+    !addressRejected && !page.forbidden && page.signedIn && (nextCursor || restart || navigation?.previous) ? (
+      <Exposure operation="follow.list">
+        <nav
+          aria-label={m.library_following_heading()}
+          className="flex flex-wrap items-center gap-3"
+          aria-busy={navigation?.busy || undefined}
+        >
+          {navigation?.previous ? (
+            navigationDisabled ? (
+              <Button className="min-h-11" variant="outline" disabled>
+                {m.following_navigation_previous()}
+              </Button>
+            ) : (
+              <Link
+                to="/library/following"
+                search={{
+                  ...(navigation.previous.cursor === null ? {} : { cursor: navigation.previous.cursor }),
+                  ...(navigation.previous.kind === 'all' ? {} : { kind: navigation.previous.kind }),
+                }}
+                onClick={(event) => navigate(event, navigation.previous!, 'previous')}
+                className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+              >
+                {m.following_navigation_previous()}
+              </Link>
+            )
+          ) : null}
+          {nextCursor ? (
+            navigationDisabled ? (
+              <Button className="min-h-11" disabled>
+                {m.library_collection_more()}
+              </Button>
+            ) : (
+              <Link
+                to="/library/following"
+                search={{ cursor: nextCursor, ...(kind === 'all' ? {} : { kind }) }}
+                onClick={(event) => navigate(event, { cursor: nextCursor, kind }, 'next')}
+                className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+              >
+                {m.library_collection_more()}
+              </Link>
+            )
+          ) : null}
+          {restart ? (
+            navigationDisabled ? (
+              <Button className="min-h-11" variant="outline" disabled>
+                {m.library_collections_first_page()}
+              </Button>
+            ) : (
+              <Link
+                to="/library/following"
+                search={kind === 'all' ? {} : { kind }}
+                onClick={(event) => navigate(event, { cursor: null, kind }, 'first')}
+                className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+              >
+                {m.library_collections_first_page()}
+              </Link>
+            )
+          ) : null}
+        </nav>
+      </Exposure>
+    ) : null;
+  const selected = reading.selection;
+  const selection = selected
+    ? {
+        title: selected.row.title.text,
+        titleLang: selected.row.title.lang,
+        close: () => reading.close(),
+        inspection: (
+          <FollowingInspection
+            key={selected.id}
+            selection={selected}
+            subject={readingOrigin.subject}
+            locale={locale}
+            canReadCollection={canReadCollection}
+            close={reading.close}
+            readSpace={readSpace}
+            returnFrontier={
+              readingOrigin.subject
+                ? followingReturnFrontier(
+                    locale,
+                    readingOrigin.subject,
+                    cursor,
+                    kind,
+                    selected.row.follow.targetId,
+                  )
+                : null
+            }
+          />
+        ),
+      }
+    : undefined;
+
+  return (
+    <FollowingWorkspace
+      articleRef={article}
+      headingRef={listHeading}
+      kind={kind}
+      kindChangeDisabled={kindChangeDisabled}
+      onMove={navigate}
+      onRefresh={refreshAction}
+      refreshDisabled={!!status || navigationDisabled}
+      windowStatus={windowStatus}
+      directory={directory}
+      windowNavigation={windowNavigation}
+      selection={selection}
+    />
   );
 }
