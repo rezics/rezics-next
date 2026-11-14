@@ -487,6 +487,71 @@ END; $$;
 
 
 --
+-- Name: capture_canonical_identity_generation(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_canonical_identity_generation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  originals uuid[] := ARRAY[]::uuid[];
+  controls integer[] := ARRAY[]::integer[];
+  previous_target uuid;
+  home integer;
+BEGIN
+  IF TG_TABLE_NAME='redirect' THEN
+    IF TG_OP<>'INSERT' THEN
+      originals := originals || ARRAY[OLD.subject_id,OLD.target];
+      -- After deletion/update, the newly selected redirect can restore another terminal.
+      SELECT target INTO previous_target FROM semantic.redirect
+        WHERE route=OLD.route AND subject_id=OLD.subject_id ORDER BY sequence DESC LIMIT 1;
+      originals := array_append(originals,previous_target);
+    END IF;
+    IF TG_OP<>'DELETE' THEN
+      originals := originals || ARRAY[NEW.subject_id,NEW.target];
+      -- An INSERT has no OLD row: retain the superseded selected target explicitly.
+      SELECT target INTO previous_target FROM semantic.redirect
+        WHERE route=NEW.route AND subject_id=NEW.subject_id AND sequence<>NEW.sequence
+        ORDER BY sequence DESC LIMIT 1;
+      originals := array_append(originals,previous_target);
+    END IF;
+  ELSE
+    IF TG_OP<>'INSERT' THEN
+      originals := originals || ARRAY[OLD.original,OLD.terminal];
+      controls := array_append(controls,OLD.control_partition);
+    END IF;
+    IF TG_OP<>'DELETE' THEN
+      originals := originals || ARRAY[NEW.original,NEW.terminal];
+      controls := array_append(controls,NEW.control_partition);
+    END IF;
+  END IF;
+  -- At most six distinct originals, six keyed terminal lookups and two control homes.
+  -- Sorting makes the added home-row locks deterministic. Native command contention retries
+  -- retain the original mutation's atomicity; neither generation nor delivery escapes rollback.
+  FOR home IN
+    WITH ids AS (SELECT DISTINCT id FROM unnest(originals) AS input(id) WHERE id IS NOT NULL),
+    affected AS (
+      SELECT id FROM ids
+      UNION
+      SELECT mapping.terminal FROM ids
+      JOIN semantic.identity_epoch_mapping AS mapping
+        ON mapping.route=get_byte(uuid_send(ids.id),10)*256+get_byte(uuid_send(ids.id),11)
+       AND mapping.original=ids.id
+    )
+    SELECT (get_byte(uuid_send(id),10)*256+get_byte(uuid_send(id),11))/16 FROM affected
+    UNION SELECT value FROM unnest(controls) AS input(value) WHERE value IS NOT NULL
+    ORDER BY 1
+  LOOP
+    INSERT INTO semantic.partition_subjects(partition_no,canonical_generation) VALUES(home,1)
+      ON CONFLICT(partition_no) DO UPDATE
+      SET canonical_generation=partition_subjects.canonical_generation+1;
+  END LOOP;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: capture_canonical_subject_name(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -8197,7 +8262,9 @@ CREATE TABLE semantic.partition_subjects (
     visible bigint DEFAULT 0 NOT NULL,
     canonical_count bigint DEFAULT 0 NOT NULL,
     canonical_generation bigint DEFAULT 1 NOT NULL,
+    canonical_delivered_generation bigint DEFAULT 0 NOT NULL,
     CONSTRAINT partition_subjects_canonical_count_check CHECK ((canonical_count >= 0)),
+    CONSTRAINT partition_subjects_canonical_delivery_check CHECK (((canonical_delivered_generation >= 0) AND (canonical_delivered_generation <= canonical_generation))),
     CONSTRAINT partition_subjects_canonical_generation_check CHECK ((canonical_generation > 0)),
     CONSTRAINT partition_subjects_partition_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT partition_subjects_visible_check CHECK ((visible >= 0))
@@ -12786,6 +12853,13 @@ CREATE INDEX outbound_link_statement ON semantic.outbound_link USING btree (rout
 
 
 --
+-- Name: partition_subjects_canonical_delivery; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX partition_subjects_canonical_delivery ON semantic.partition_subjects USING btree (partition_no) WHERE (canonical_delivered_generation < canonical_generation);
+
+
+--
 -- Name: partition_subjects_canonical_frontier; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -14867,6 +14941,13 @@ CREATE TRIGGER identity_public_writer AFTER INSERT OR DELETE OR UPDATE ON semant
 
 
 --
+-- Name: identity_epoch_mapping identity_mapping_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_mapping_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.identity_epoch_mapping FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_identity_generation();
+
+
+--
 -- Name: identity_epoch_mapping identity_rating_repair_mapping_later_change; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -15277,6 +15358,13 @@ CREATE TRIGGER record_source_set_member_immutable BEFORE INSERT OR DELETE OR UPD
 --
 
 CREATE CONSTRAINT TRIGGER redirect_erasure_capture AFTER INSERT OR UPDATE ON semantic.redirect DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_redirect_erasure();
+
+
+--
+-- Name: redirect redirect_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER redirect_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.capture_canonical_identity_generation();
 
 
 --
