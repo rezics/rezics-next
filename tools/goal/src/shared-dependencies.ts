@@ -20,33 +20,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { BoundedProcessError, runBoundedInstallProcess, type ProcessLimits } from './install-process.ts';
-import {
-  checkPinnedBunInstallation,
-  createBunExecutableValidationCache,
-  type BunExecutableValidationCache,
-} from './check-compatibility.ts';
-
-type DependencyPreparation = {
-  bunExecutables: BunExecutableValidationCache;
-  runtimeVersionRead: boolean;
-  runtimeVersion: string;
-};
-
-function dependencyPreparation(): DependencyPreparation {
-  return {
-    bunExecutables: createBunExecutableValidationCache(),
-    runtimeVersionRead: false,
-    runtimeVersion: '',
-  };
-}
-
-function preparationRuntimeVersion(preparation: DependencyPreparation): string {
-  if (!preparation.runtimeVersionRead) {
-    preparation.runtimeVersion = spawnSync('bun', ['--version'], { encoding: 'utf8' }).stdout.trim();
-    preparation.runtimeVersionRead = true;
-  }
-  return preparation.runtimeVersion;
-}
+import { checkPinnedBunInstallation } from './check-compatibility.ts';
 
 function manifestPaths(root: string): string[] {
   const packageFile = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
@@ -83,15 +57,8 @@ function patchInputs(root: string) {
     })
     .sort((left, right) => left.path.localeCompare(right.path));
 }
-function dependencyKeyWithPatches(
-  root: string,
-  patches: ReturnType<typeof patchInputs>,
-  preparation?: DependencyPreparation,
-): string {
-  const runtimeVersion = preparation
-    ? preparationRuntimeVersion(preparation)
-    : spawnSync('bun', ['--version'], { encoding: 'utf8' }).stdout.trim();
-  const hash = createHash('sha256').update(runtimeVersion);
+function dependencyKeyWithPatches(root: string, patches: ReturnType<typeof patchInputs>): string {
+  const hash = createHash('sha256').update(spawnSync('bun', ['--version'], { encoding: 'utf8' }).stdout.trim());
   for (const path of manifestPaths(root))
     hash
       .update(path)
@@ -290,59 +257,49 @@ function privateReceipt(worktree: string, key: string): string | null {
 }
 
 /** Use the consumer's artifact/installed-layout contract; never infer a declared pin from the old executable. */
-function bunInstallationFailure(root: string, preparation: DependencyPreparation): string | undefined {
+function bunInstallationFailure(root: string): string | undefined {
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     packageManager?: string;
     devDependencies?: { bun?: string };
   };
   if (!manifest.packageManager?.startsWith('bun@') && manifest.devDependencies?.bun === undefined) return;
-  const failures = checkPinnedBunInstallation(root, undefined, preparation.bunExecutables).filter(
-    (check) => check.status === 'incompatible',
-  );
+  const failures = checkPinnedBunInstallation(root).filter((check) => check.status === 'incompatible');
   if (failures.length)
     return failures
       .map((check) => `${check.field}: ${check.detail} ${JSON.stringify(check.evidence ?? {})}`)
       .join('\n');
 }
 
-function requireUsableInstallation(root: string, step: string, preparation: DependencyPreparation): void {
-  const failure = bunInstallationFailure(root, preparation);
+function requireUsableInstallation(root: string, step: string): void {
+  const failure = bunInstallationFailure(root);
   if (failure || !dependencyLinksMatch(root))
     throw new DependencyInstallError(root, step, failure ?? 'required direct dependency links are missing');
 }
 
 /** A receipt/key alone is insufficient: the consumer's direct dependency links must still be usable. */
-export function dependencyInstallationMatches(
-  worktree: string,
-  expectedKey?: string,
-  preparation = dependencyPreparation(),
-): boolean {
+export function dependencyInstallationMatches(worktree: string, expectedKey?: string): boolean {
   if (!existsSync(join(worktree, 'package.json'))) return true;
-  const key = expectedKey ?? dependencyKeyWithPatches(worktree, patchInputs(worktree), preparation);
+  const key = expectedKey ?? dependencyKey(worktree);
   const prior = readlinkStore(worktree);
   const marker = join(worktree, 'node_modules', '.goal-private-dependencies');
-  if (bunInstallationFailure(worktree, preparation)) return false;
+  if (bunInstallationFailure(worktree)) return false;
   if (existsSync(marker)) {
     const receipt = prior ? null : privateReceipt(worktree, key);
     return receipt !== null && readFileSync(marker, 'utf8') === receipt;
   }
   if (!prior || basename(dirname(dirname(prior))) !== key || !existsSync(prior)) return false;
   const template = dirname(dirname(prior));
-  return dependencyStoreMatches(template, key, preparation) && dependencyLinksMatch(worktree, template);
+  return dependencyStoreMatches(template, key) && dependencyLinksMatch(worktree, template);
 }
 
 /** Validate a published immutable dependency store itself, without accepting a consumer's receipt as proof. */
-export function dependencyStoreMatches(
-  store: string,
-  expectedKey: string,
-  preparation = dependencyPreparation(),
-): boolean {
+export function dependencyStoreMatches(store: string, expectedKey: string): boolean {
   try {
     return (
       basename(resolve(store)) === expectedKey &&
       existsSync(join(store, 'package.json')) &&
-      dependencyKeyWithPatches(store, patchInputs(store), preparation) === expectedKey &&
-      !bunInstallationFailure(store, preparation) &&
+      dependencyKey(store) === expectedKey &&
+      !bunInstallationFailure(store) &&
       dependencyLinksMatch(store)
     );
   } catch {
@@ -355,23 +312,15 @@ function removeWorkspaceSkeletons(worktree: string): void {
     rmSync(join(worktree, dir, 'node_modules'), { recursive: true, force: true });
 }
 
-export function installPrivate(
-  worktree: string,
-  limits?: Partial<ProcessLimits>,
-  policy = defaultPolicy,
-  preparation = dependencyPreparation(),
-): void {
+export function installPrivate(worktree: string, limits?: Partial<ProcessLimits>, policy = defaultPolicy): void {
   const nodeModules = join(worktree, 'node_modules');
   rmSync(nodeModules, { recursive: true, force: true });
   removeWorkspaceSkeletons(worktree);
   runInstall(worktree, false, limits, policy);
   localWorkspaceLinks(worktree);
   ignoreNodeModules(worktree);
-  requireUsableInstallation(worktree, 'validating installed dependency identity', preparation);
-  const receipt = privateReceipt(
-    worktree,
-    dependencyKeyWithPatches(worktree, patchInputs(worktree), preparation),
-  );
+  requireUsableInstallation(worktree, 'validating installed dependency identity');
+  const receipt = privateReceipt(worktree, dependencyKey(worktree));
   if (!receipt)
     throw new DependencyInstallError(
       worktree,
@@ -417,91 +366,86 @@ export function installShared(
   policy = defaultPolicy,
 ): void {
   if (!existsSync(join(worktree, 'package.json'))) return;
-  const preparation = dependencyPreparation();
   const patches = patchInputs(worktree);
-  const key = dependencyKeyWithPatches(worktree, patches, preparation);
-  if (dependencyInstallationMatches(worktree, key, preparation)) return;
+  const key = dependencyKeyWithPatches(worktree, patches);
+  if (dependencyInstallationMatches(worktree, key)) return;
   const prior = readlinkStore(worktree);
   const marker = join(worktree, 'node_modules', '.goal-private-dependencies');
   if (existsSync(marker)) {
-    installPrivate(worktree, processLimits, policy, preparation);
+    installPrivate(worktree, processLimits, policy);
     return;
   }
   if (prior && basename(dirname(dirname(prior))) !== key) {
-    installPrivate(worktree, processLimits, policy, preparation);
+    installPrivate(worktree, processLimits, policy);
     return;
   }
   const store = join(storeRoot, key);
   mkdirSync(storeRoot, { recursive: true });
-  let privateFallback = false;
-  if (!lstatSyncSafe(store)) {
-    const lease = acquireDirectoryLeaseWaiting(
-      join(storeRoot, '.leases', key),
-      policy.dependencies.storeLeaseWaitMs,
-      policy.leases,
-    );
-    try {
-      // The key lease owns only publication. A renamed store is complete before it becomes visible.
-      if (lstatSyncSafe(store)) {
-        privateFallback = !existsSync(join(store, 'node_modules', '.bun'));
-      } else if (prior) {
-        privateFallback = true;
-      } else {
-        const temp = join(storeRoot, `.building-${key}-${randomUUID()}`);
-        mkdirSync(temp, { recursive: true });
-        try {
-          for (const path of manifestPaths(worktree)) {
-            const dest = join(temp, path);
-            mkdirSync(dirname(dest), { recursive: true });
-            cpSync(join(worktree, path), dest);
-          }
-          for (const patch of patches) {
-            const dest = join(temp, patch.path);
-            mkdirSync(dirname(dest), { recursive: true });
-            writeFileSync(dest, patch.contents);
-          }
-          runInstall(temp, true, processLimits, policy);
-          if (!existsSync(join(temp, 'node_modules', '.bun'))) {
-            removeBuild(temp);
-            privateFallback = true;
-          } else {
-            localWorkspaceLinks(temp);
-            relativizeSkeletons(temp);
-            sealReadOnly(join(temp, 'node_modules', '.bun'));
-            requireUsableInstallation(temp, 'validating store dependency identity', preparation);
-            renameSync(temp, store);
-          }
-        } catch (error) {
-          removeBuild(temp);
-          throw error;
-        }
-      }
-    } finally {
-      lease.release();
+  const lease = acquireDirectoryLeaseWaiting(
+    join(storeRoot, '.leases', key),
+    policy.dependencies.storeLeaseWaitMs,
+    policy.leases,
+  );
+  try {
+    // Any published location belongs to its existing users, even when its skeleton is incomplete.
+    if (lstatSyncSafe(store) && !existsSync(join(store, 'node_modules', '.bun'))) {
+      installPrivate(worktree, processLimits, policy);
+      return;
     }
+    if (!lstatSyncSafe(store)) {
+      if (prior) {
+        installPrivate(worktree, processLimits, policy);
+        return;
+      }
+      const temp = join(storeRoot, `.building-${key}-${randomUUID()}`);
+      mkdirSync(temp, { recursive: true });
+      try {
+        for (const path of manifestPaths(worktree)) {
+          const dest = join(temp, path);
+          mkdirSync(dirname(dest), { recursive: true });
+          cpSync(join(worktree, path), dest);
+        }
+        for (const patch of patches) {
+          const dest = join(temp, patch.path);
+          mkdirSync(dirname(dest), { recursive: true });
+          writeFileSync(dest, patch.contents);
+        }
+        runInstall(temp, true, processLimits, policy);
+        if (!existsSync(join(temp, 'node_modules', '.bun'))) {
+          removeBuild(temp);
+          installPrivate(worktree, processLimits, policy);
+          return;
+        }
+        localWorkspaceLinks(temp);
+        relativizeSkeletons(temp);
+        requireUsableInstallation(temp, 'validating store dependency identity');
+        sealReadOnly(join(temp, 'node_modules', '.bun'));
+        renameSync(temp, store);
+      } catch (error) {
+        removeBuild(temp);
+        throw error;
+      }
+    }
+    // An incomplete old store is never repaired in place while peers may be using its sealed packages.
+    if (!dependencyStoreMatches(store, key)) {
+      installPrivate(worktree, processLimits, policy);
+      return;
+    }
+    if (!dependencyInstallationMatches(worktree)) {
+      rmSync(join(worktree, 'node_modules'), { recursive: true, force: true });
+      removeWorkspaceSkeletons(worktree);
+      copySkeleton(store, worktree);
+    }
+    ignoreNodeModules(worktree);
+    if (!dependencyInstallationMatches(worktree))
+      throw new DependencyInstallError(
+        worktree,
+        'validating installed dependency links',
+        'shared dependency links do not match final manifests',
+      );
+  } finally {
+    lease.release();
   }
-
-  // Published store validation and all private consumer work happen after publication custody is released.
-  if (privateFallback || !existsSync(join(store, 'node_modules', '.bun'))) {
-    installPrivate(worktree, processLimits, policy, preparation);
-    return;
-  }
-  if (!dependencyStoreMatches(store, key, preparation)) {
-    installPrivate(worktree, processLimits, policy, preparation);
-    return;
-  }
-  if (!dependencyInstallationMatches(worktree, key, preparation)) {
-    rmSync(join(worktree, 'node_modules'), { recursive: true, force: true });
-    removeWorkspaceSkeletons(worktree);
-    copySkeleton(store, worktree);
-  }
-  ignoreNodeModules(worktree);
-  if (!dependencyInstallationMatches(worktree, undefined, preparation))
-    throw new DependencyInstallError(
-      worktree,
-      'validating installed dependency links',
-      'shared dependency links do not match final manifests',
-    );
 }
 function readlinkStore(worktree: string): string | null {
   try {
