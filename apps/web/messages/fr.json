@@ -12679,5 +12679,13 @@
   "studio_article_acknowledged_help": "La commande de publication et la relecture exacte ont concordé. Les lectures et modifications du brouillon ultérieures sont des observations distinctes.",
   "studio_article_current": "État actuel lu ultérieurement",
   "studio_article_current_help": "Cette version enregistrée a été lue après le résultat de publication. Elle ne remplace pas ce résultat.",
-  "studio_article_current_matches": "La lecture actuelle correspond à la version confirmée."
+  "studio_article_current_matches": "La lecture actuelle correspond à la version confirmée.",
+  "studio_native_metadata": "Licence et références facultatives",
+  "studio_native_submitted": "Création envoyée",
+  "studio_native_replay_help": "Le résultat est inconnu. Réessayer envoie le document et les informations d’origine avec la même clé de création.",
+  "studio_native_later_edits": "Vos modifications ultérieures restent ici. Elles ne sont pas incluses dans cette nouvelle tentative.",
+  "studio_native_retry": "Réessayer la création envoyée",
+  "studio_native_failed": "La création a échoué. Votre document et ses informations restent ici. Consultez l’erreur avant de réessayer.",
+  "studio_native_retained": "Le brouillon envoyé a été créé. Vos modifications ultérieures restent ici dans un brouillon non envoyé.",
+  "studio_native_discard_prompt": "Abandonner ce brouillon non envoyé et toutes ses informations ?"
 }

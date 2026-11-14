@@ -12679,5 +12679,13 @@
   "studio_article_acknowledged_help": "公開コマンドと正確な再読み取りの結果が一致しました。その後の読み取りや下書きの変更は、別の観測です。",
   "studio_article_current": "その後に読み取った現在の状態",
   "studio_article_current_help": "この保存済みバージョンは公開結果の後に読み取られました。公開結果を置き換えるものではありません。",
-  "studio_article_current_matches": "現在の読み取り結果は、確認済みバージョンと一致しています。"
+  "studio_article_current_matches": "現在の読み取り結果は、確認済みバージョンと一致しています。",
+  "studio_native_metadata": "ライセンスと任意の参照情報",
+  "studio_native_submitted": "送信済みの作成内容",
+  "studio_native_replay_help": "結果はまだ不明です。再試行では、元の文書と詳細を同じ作成キーで送信します。",
+  "studio_native_later_edits": "送信後の編集内容はここに残ります。今回の再試行には含まれません。",
+  "studio_native_retry": "送信済みの作成を再試行",
+  "studio_native_failed": "作成に失敗しました。文書と詳細はここに残っています。エラーを確認してから再試行してください。",
+  "studio_native_retained": "送信した下書きを作成しました。その後の編集内容は未送信の下書きとしてここに残ります。",
+  "studio_native_discard_prompt": "この未送信の下書きとすべての詳細を破棄しますか？"
 }

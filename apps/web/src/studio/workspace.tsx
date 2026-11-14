@@ -102,6 +102,7 @@ export function StudioWorkbench({
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
   const [nativeDraftRisk, setNativeDraftRisk] = useState(false);
+  const [nativeCreationPending, setNativeCreationPending] = useState(false);
   const editorHeading = useRef<HTMLHeadingElement>(null);
   const previousPost = useRef<string | null>(
     state.historical ? (state.selected?.source.revision.exact.postId ?? null) : null,
@@ -294,7 +295,15 @@ export function StudioWorkbench({
           </div>
         </section>
       ) : null}
-      <fieldset className="studio-layout min-w-0" disabled={startingBook}>
+      <fieldset
+        className="studio-layout min-w-0"
+        disabled={startingBook}
+        style={
+          input.nativeDrafts && !selected
+            ? { gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateAreas: "'sidebar' 'document'" }
+            : undefined
+        }
+      >
         <aside className="studio-sidebar" aria-label={m.studio_workspace_navigation({}, options)}>
           <details
             open={navigation}
@@ -385,8 +394,13 @@ export function StudioWorkbench({
                   <NativeDraftComposer
                     key={`${input.visitKey}:${locale}`}
                     controller={controller}
-                    disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
+                    disabled={
+                      !input.canCreateDraft ||
+                      blocked ||
+                      Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)
+                    }
                     onDepartureRiskChange={setNativeDraftRisk}
+                    onCommandPendingChange={setNativeCreationPending}
                   />
                 ) : input.canCreateDraft ? (
                   <NewDraft
@@ -481,6 +495,7 @@ export function StudioWorkbench({
                   value={selected.title}
                   disabled={
                     !selected.source.permissions.edit ||
+                    nativeCreationPending ||
                     startingBook ||
                     state.operation === 'publish' ||
                     state.operation === 'withdraw' ||
@@ -503,6 +518,7 @@ export function StudioWorkbench({
                   toolbar="auto"
                   readOnly={!selected.source.permissions.edit || startingBook}
                   disabled={
+                    nativeCreationPending ||
                     startingBook ||
                     state.operation === 'publish' ||
                     state.operation === 'withdraw' ||

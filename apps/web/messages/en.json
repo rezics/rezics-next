@@ -12686,5 +12686,13 @@
   "studio_article_acknowledged_help": "The publication command and its exact readback agreed. Later reads and draft changes are separate observations.",
   "studio_article_current": "Later current observation",
   "studio_article_current_help": "This saved version was read after the publication result. It does not replace that result.",
-  "studio_article_current_matches": "The current observation matches the acknowledged version."
+  "studio_article_current_matches": "The current observation matches the acknowledged version.",
+  "studio_native_metadata": "Licence and optional references",
+  "studio_native_submitted": "Submitted creation",
+  "studio_native_replay_help": "The result is not known. Retry sends the original document and details with the same creation key.",
+  "studio_native_later_edits": "Your later edits stay here. They are not included in this retry.",
+  "studio_native_retry": "Retry submitted creation",
+  "studio_native_failed": "Creation failed. Your document and details are still here. Review the error before trying again.",
+  "studio_native_retained": "The submitted draft was created. Your later edits remain here as an unsent draft.",
+  "studio_native_discard_prompt": "Discard this unsent draft and all its details?"
 }

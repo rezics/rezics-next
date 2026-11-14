@@ -12679,5 +12679,13 @@
   "studio_article_acknowledged_help": "發布命令與精確回讀的結果一致。後續讀取與草稿修改屬於獨立的觀察結果。",
   "studio_article_current": "之後讀取的目前狀態",
   "studio_article_current_help": "此已儲存版本是在發布結果之後讀取的，不會取代該結果。",
-  "studio_article_current_matches": "目前讀取結果與已確認的版本一致。"
+  "studio_article_current_matches": "目前讀取結果與已確認的版本一致。",
+  "studio_native_metadata": "授權與選填參照",
+  "studio_native_submitted": "已提交的建立請求",
+  "studio_native_replay_help": "結果尚未確定。重試會以相同的建立金鑰傳送原始文件及其詳細資料。",
+  "studio_native_later_edits": "提交後的編輯內容會保留在此處，不會包含在這次重試中。",
+  "studio_native_retry": "重試已提交的建立請求",
+  "studio_native_failed": "建立失敗。文件及其詳細資料仍保留在此處，請查看錯誤後再試。",
+  "studio_native_retained": "已建立提交的草稿。之後的編輯內容會作為尚未提交的草稿保留在此處。",
+  "studio_native_discard_prompt": "捨棄這份尚未提交的草稿及其所有詳細資料？"
 }

@@ -12679,5 +12679,13 @@
   "studio_article_acknowledged_help": "发布命令与精确回读的结果一致。后续读取和草稿修改属于独立的观察结果。",
   "studio_article_current": "之后读取的当前状态",
   "studio_article_current_help": "此已保存版本是在发布结果之后读取的，不会取代该结果。",
-  "studio_article_current_matches": "当前读取结果与已确认的版本一致。"
+  "studio_article_current_matches": "当前读取结果与已确认的版本一致。",
+  "studio_native_metadata": "许可与可选引用",
+  "studio_native_submitted": "已提交的创建请求",
+  "studio_native_replay_help": "结果尚不确定。重试会使用相同的创建密钥发送原始文档及其详细信息。",
+  "studio_native_later_edits": "提交后的编辑内容会保留在此处，不会包含在本次重试中。",
+  "studio_native_retry": "重试已提交的创建请求",
+  "studio_native_failed": "创建失败。文档及其详细信息仍保留在此处，请查看错误后再试。",
+  "studio_native_retained": "已创建提交的草稿。之后的编辑内容会作为未提交的草稿保留在此处。",
+  "studio_native_discard_prompt": "丢弃这份未提交的草稿及其所有详细信息？"
 }

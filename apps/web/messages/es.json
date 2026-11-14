@@ -12679,5 +12679,13 @@
   "studio_article_acknowledged_help": "La orden de publicación y la lectura de comprobación exacta coincidieron. Las lecturas y los cambios de borrador posteriores son observaciones independientes.",
   "studio_article_current": "Estado actual leído después",
   "studio_article_current_help": "Esta versión guardada se leyó después del resultado de publicación. No sustituye ese resultado.",
-  "studio_article_current_matches": "La lectura actual coincide con la versión confirmada."
+  "studio_article_current_matches": "La lectura actual coincide con la versión confirmada.",
+  "studio_native_metadata": "Licencia y referencias opcionales",
+  "studio_native_submitted": "Creación enviada",
+  "studio_native_replay_help": "Se desconoce el resultado. El reintento envía el documento y los datos originales con la misma clave de creación.",
+  "studio_native_later_edits": "Tus cambios posteriores siguen aquí. No se incluyen en este reintento.",
+  "studio_native_retry": "Reintentar la creación enviada",
+  "studio_native_failed": "La creación falló. Tu documento y sus datos siguen aquí. Revisa el error antes de volver a intentarlo.",
+  "studio_native_retained": "Se creó el borrador enviado. Tus cambios posteriores siguen aquí como un borrador sin enviar.",
+  "studio_native_discard_prompt": "¿Descartar este borrador sin enviar y todos sus datos?"
 }

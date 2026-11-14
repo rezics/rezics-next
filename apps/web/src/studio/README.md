@@ -16,7 +16,9 @@ Decision: native creation uses the installed shared rich editor and its admitted
 keystroke. Write and private preview retain one editor lifetime; pending or invalid snapshots cannot create or preview
 an older body. The supplied destination ID stays explicit, with no inferred board choices or permission. Licence,
 Subject IDs and media IDs keep native admission and live in labelled disclosures. Saving remains private and
-publication requires its separate review.
+publication requires its separate review. Before the first selection, the creation canvas uses the available width;
+acknowledgement hands off to the existing document layout. Actions keep the workspace's wrapping, focus and minimum
+touch-target styles.
 
 The creation form contributes unsent edits to the workspace's existing departure protection. Cancel requires an
 explicit local discard choice. Sending and unknown recovery retain the controller's frozen command, credential and
@@ -31,7 +33,8 @@ Sources read before design: `workspace.tsx`'s native composer and shared editor 
 native-draft tests and stories, and the read-only main checkout's `.reference/INDEX.md`.
 Acceptance source covers structured first creation, preview, pending/invalid snapshots, failure and same-intent
 recovery, acknowledgement with newer edits, cancellation and visit replacement. Execution, native create/continue,
-keyboard and phone/desktop visual acceptance are deferred to the separate verifier.
+keyboard and phone/desktop visual acceptance are deferred to the separate verifier. The existing language-completion
+case now authors through the shared editor, and existing creation story plays wait for its admitted snapshot.
 
 Before account publication, Studio freezes the acknowledged Post revision and digest, body, board, licence, subjects
 and media IDs in a local review. Editing retires that review. Publication uses the installed conditional revision

@@ -12679,5 +12679,13 @@
   "studio_article_acknowledged_help": "Veröffentlichungsbefehl und exaktes Rücklesen stimmten überein. Spätere Lesevorgänge und Entwurfsänderungen sind gesonderte Beobachtungen.",
   "studio_article_current": "Später gelesener aktueller Stand",
   "studio_article_current_help": "Diese gespeicherte Version wurde nach dem Veröffentlichungsergebnis gelesen. Sie ersetzt dieses Ergebnis nicht.",
-  "studio_article_current_matches": "Der aktuell gelesene Stand entspricht der bestätigten Version."
+  "studio_article_current_matches": "Der aktuell gelesene Stand entspricht der bestätigten Version.",
+  "studio_native_metadata": "Lizenz und optionale Verweise",
+  "studio_native_submitted": "Gesendeter Erstellungsauftrag",
+  "studio_native_replay_help": "Das Ergebnis ist unbekannt. Ein erneuter Versuch sendet das ursprüngliche Dokument und seine Angaben mit demselben Erstellungsschlüssel.",
+  "studio_native_later_edits": "Deine späteren Änderungen bleiben hier. Sie werden bei diesem erneuten Versuch nicht gesendet.",
+  "studio_native_retry": "Gesendete Erstellung wiederholen",
+  "studio_native_failed": "Die Erstellung ist fehlgeschlagen. Dein Dokument und seine Angaben bleiben hier. Prüfe den Fehler vor einem erneuten Versuch.",
+  "studio_native_retained": "Der gesendete Entwurf wurde erstellt. Deine späteren Änderungen bleiben hier als ungesendeter Entwurf.",
+  "studio_native_discard_prompt": "Diesen ungesendeten Entwurf mit allen Angaben verwerfen?"
 }
