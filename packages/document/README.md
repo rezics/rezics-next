@@ -57,7 +57,10 @@ establishes the JSON shape, not profile conformance. The profile schemas reject
 undeclared node types, marks and attributes so editor deserialization cannot
 silently discard them. Runtime validation additionally checks ProseMirror
 content expressions, table spans, unique IDs and footnote reference resolution. Lists require a leading
-paragraph in each item; table cells contain blocks. An empty editable document
+paragraph in each item; table cells contain blocks. A row may have no physical cells only when valid
+rowspans from earlier rows cover its full width. Tables have a positive rectangular grid and at least one
+physical cell; uncovered positions and overlapping spans remain invalid. This additive row acceptance
+supports full-table merged cells under the existing document version. An empty editable document
 contains one empty paragraph. Empty paragraph content can be omitted.
 
 Decision: Blocks tables have a static per-table expanded-map bound of 65,536

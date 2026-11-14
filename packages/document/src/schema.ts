@@ -192,11 +192,11 @@ function block(spec: NodeSpec): NodeSpec {
       },
     };
   });
-  if (!original) return { ...spec, attrs, parseDOM };
+  if (!original) return { ...spec, attrs, ...(parseDOM ? { parseDOM } : {}) };
   return {
     ...spec,
     attrs,
-    parseDOM,
+    ...(parseDOM ? { parseDOM } : {}),
     toDOM: (node) => {
       const originalOutput = original(node);
       if (!Array.isArray(originalOutput)) return originalOutput;
@@ -312,6 +312,7 @@ function createSchema(profile: DocumentProfile): Schema {
       },
     });
     nodes.table = block(tables.table);
+    // A row fully covered by an earlier rowspan has no physical cells, as in the maintained schema.
     nodes.tableRow = block({ ...tables.table_row, content: '(tableCell | tableHeader)*' });
     nodes.table = { ...nodes.table, content: 'tableRow+' };
     nodes.tableCell = block(tables.table_cell);
@@ -487,7 +488,7 @@ function wireRules(profile: DocumentProfile): WireRules {
     ruby: rule(['text']),
     footnoteDefinition: rule(nestedBlockNames, 1),
     table: rule(['tableRow'], 1),
-    tableRow: rule(['tableCell', 'tableHeader'], 1),
+    tableRow: rule(['tableCell', 'tableHeader']),
     tableCell: rule(nestedBlockNames, 1),
     tableHeader: rule(nestedBlockNames, 1),
   };
