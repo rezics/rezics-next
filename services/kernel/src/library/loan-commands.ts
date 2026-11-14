@@ -2,13 +2,19 @@ import type { Pool, PoolClient } from 'pg';
 import { readAccount } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
+import {
   authoritativeTimeValue,
   commandAttemptDeadline,
   type CommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor, Access, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -126,19 +132,34 @@ async function admitAccount(client: Pick<PoolClient, 'query'>, owner: AccountAct
     throw new GrantDeniedError();
 }
 
-async function readOnly<T>(pool: Pool, owner: AccountActor, body: (client: PoolClient) => Promise<T>): Promise<T> {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+async function readOnly<T>(
+  pool: Pool,
+  owner: AccountActor,
+  deadline: number,
+  body: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
       await admitAccount(client, owner);
-      const value = await body(client);
-      await client.query('COMMIT');
-      return value;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
-  });
+      return body(client);
+    },
+    {
+      deadlineError: () => new AccessUnavailableError('deadline'),
+      mapError(error) {
+        if (error instanceof CommandUnavailableError) return error;
+        try {
+          throwAccessUnavailable(error);
+        } catch (mapped) {
+          return mapped;
+        }
+        return error;
+      },
+      isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+      isUncertainSettledQueryError: () => true,
+    },
+  );
 }
 
 function copyView(row: Record<string, unknown> | undefined): CopyRow | null {
@@ -299,8 +320,14 @@ async function updateLoan(
   if (result.rowCount !== 1) throw new LoanConflictError('stale_revision');
 }
 
-async function currentCopyForPreparation(pool: Pool, owner: AccountActor, route: number, copyId: string) {
-  return readOnly(pool, owner, (client) => readCopy(client, route, owner.accountId, copyId));
+async function currentCopyForPreparation(
+  pool: Pool,
+  owner: AccountActor,
+  route: number,
+  copyId: string,
+  deadline: number,
+) {
+  return readOnly(pool, owner, deadline, (client) => readCopy(client, route, owner.accountId, copyId));
 }
 
 async function personReferenceAdmitted(
@@ -313,7 +340,7 @@ async function personReferenceAdmitted(
   const personRoute = routeOf(personId);
   if (accountRoute === null || personRoute === null || partitionOf(personRoute) !== partitionOf(accountRoute))
     return false;
-  const before = await readIdentityMappings(deps.pool, [personId]);
+  const before = await withRequestDeadline(deadline, () => readIdentityMappings(deps.pool, [personId]));
   const mapping = before[0];
   if (mapping?.state !== 'mapped') return false;
   const summary = (
@@ -321,7 +348,7 @@ async function personReferenceAdmitted(
       mapping.terminal,
     ])
   ).get(mapping.terminal);
-  const after = await readIdentityMappings(deps.pool, [personId]);
+  const after = await withRequestDeadline(deadline, () => readIdentityMappings(deps.pool, [personId]));
   if (stableJson(before) !== stableJson(after)) return false;
   return Boolean(
     summary &&
@@ -346,7 +373,7 @@ export async function loanPeopleDisplay(
   if (!selected.length) return new Map();
   const concealed = () => new Map(selected.map((id) => [id, null]));
   try {
-    const before = await readIdentityMappings(deps.pool, selected);
+    const before = await withRequestDeadline(deadline, () => readIdentityMappings(deps.pool, selected));
     const mappings = new Map(selected.map((id, index) => [id, before[index]!]));
     const terminals = [...new Set(before.flatMap((mapping) => (mapping.state === 'mapped' ? [mapping.terminal] : [])))];
     const summaries = await readSubjectSummaries(
@@ -354,7 +381,7 @@ export async function loanPeopleDisplay(
       terminals,
       { languages },
     );
-    const after = await readIdentityMappings(deps.pool, selected);
+    const after = await withRequestDeadline(deadline, () => readIdentityMappings(deps.pool, selected));
     const stable = new Map(
       selected.map((id, index) => [id, stableJson(mappings.get(id)) === stableJson(after[index])]),
     );
@@ -397,7 +424,7 @@ export function createLoanCommands(config: Dependencies) {
           async prepare(attempt: CommandAttempt) {
             const deadline = commandAttemptDeadline(attempt);
             await admitEntryAttempt(config, owner, 'copy:create', attempt, deadline);
-            const copy = await currentCopyForPreparation(pool, owner, route, parsed.copyId);
+            const copy = await currentCopyForPreparation(pool, owner, route, parsed.copyId, deadline);
             if (!copy) return { copy: null, source: null, personAdmitted: false, error: null };
             try {
               const source = await readLibraryProfileSource(
@@ -526,7 +553,7 @@ export function createLoanCommands(config: Dependencies) {
     const cursor = input.cursor;
     const operationDeadline = deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
     return withRequestDeadline(operationDeadline, () =>
-      readOnly(pool, owner, async (client) => {
+      readOnly(pool, owner, operationDeadline, async (client) => {
         const generationRow = await executeLoanNative(
           client,
           loanGenerationPlan({ route, accountId: owner.accountId }),
@@ -585,7 +612,7 @@ export function createLoanCommands(config: Dependencies) {
   async function assertCurrentOwner(actor: Actor, deadline?: number): Promise<void> {
     const owner = requireActor(actor, 'copy:list');
     const operationDeadline = deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
-    await withRequestDeadline(operationDeadline, () => readOnly(pool, owner, async () => undefined));
+    await withRequestDeadline(operationDeadline, () => readOnly(pool, owner, operationDeadline, async () => undefined));
   }
 
   return { createLoan, extendLoan, returnLoan, listLoans, assertCurrentOwner };
