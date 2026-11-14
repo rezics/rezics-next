@@ -49,6 +49,9 @@ const REMOTE_PREPARATION_MARKERS = new Set([
   '.remote-check-supervisor',
   'preparation-install.json',
 ]);
+const KERNEL_MIGRATION_PATH = /^services\/kernel\/db\/[a-z][a-z0-9_]*\/migrations\/\d{14}_[a-z0-9_]+\.sql$/;
+const LEGACY_DBMATE_SETUP_DIAGNOSTIC =
+  /^kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with ['"]-- migrate:up['"]$/;
 const KERNEL_MIGRATION_HEADER_LIMIT_BYTES = 512;
 const DBMATE_UP_MARKER = /^-- migrate:up(?:[ \t]+transaction:(?:true|false))?[ \t]*\r?$/m;
 const DBMATE_DOWN_MARKER = /^-- migrate:down(?:[ \t]+transaction:(?:true|false))?[ \t]*\r?$/m;
@@ -60,46 +63,68 @@ const same = (left: unknown, right: unknown): boolean => JSON.stringify(left) ==
 
 export type KernelMigrationHeaderDiagnostic = { path: string; line: string };
 
-/** Revalidate the exact Kernel preflight diagnosis against the migration retained in this source tree. */
+/** The retained source must be an ordinary migration with a down block and no forward marker. */
+function retainedMigrationWithoutUpMarker(
+  root: string,
+  sourceRelativePath: string,
+  files: ReadonlySet<string>,
+): boolean {
+  if (!KERNEL_MIGRATION_PATH.test(sourceRelativePath) || !files.has(sourceRelativePath)) return false;
+  const sourcePath = join(root, sourceRelativePath);
+  const normalizedRoot = resolve(root);
+  const normalizedSource = resolve(sourcePath);
+  const withinKernel = relative(join(normalizedRoot, 'services/kernel'), normalizedSource).replaceAll('\\', '/');
+  if (!withinKernel || withinKernel === '..' || withinKernel.startsWith('../') || isAbsolute(withinKernel)) return false;
+  let info: ReturnType<typeof lstatSync>;
+  try {
+    info = lstatSync(normalizedSource);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  if (!info.isFile() || info.isSymbolicLink()) return false;
+
+  const contents = readFileSync(normalizedSource);
+  if (contents.byteLength > KERNEL_MIGRATION_HEADER_LIMIT_BYTES) return false;
+  const text = contents.toString('utf8');
+  return !DBMATE_UP_MARKER.test(text) && DBMATE_DOWN_MARKER.test(text);
+}
+
+/** Revalidate current preflight and retained legacy dbmate setup diagnostics against the source tree. */
 export function retainedKernelMigrationHeaderDefect(
   root: string,
   log: string,
 ): KernelMigrationHeaderDiagnostic | undefined {
   const lines = log.split(/\r?\n/);
+  let sourceFiles: Set<string> | undefined;
+  const files = () => (sourceFiles ??= new Set(gitFiles(root)));
   const starts = lines.flatMap((line, index) => (line === 'Migration version check failed:' ? [index] : []));
-  if (starts.length !== 1) return;
-  const start = starts[0]!;
-  const end = lines.indexOf('Name migrations with `date -u +%Y%m%d%H%M%S`.', start + 1);
-  if (end <= start + 1) return;
-  const issues = lines.slice(start + 1, end);
-  if (issues.length !== 1) return;
-  const match = issues[0]!.match(
-    /^- (db\/[a-z][a-z0-9_]*\/migrations\/\d{14}_[a-z0-9_]+\.sql): missing dbmate up marker; add `-- migrate:up` before the up SQL$/,
-  );
-  if (!match) return;
-
-  const relativePath = match[1]!;
-  const sourceRelativePath = `services/kernel/${relativePath}`;
-  if (!gitFiles(root).includes(sourceRelativePath)) return;
-  const sourcePath = join(root, 'services/kernel', relativePath);
-  const normalizedRoot = resolve(root);
-  const normalizedSource = resolve(sourcePath);
-  const withinKernel = relative(join(normalizedRoot, 'services/kernel'), normalizedSource).replaceAll('\\', '/');
-  if (!withinKernel || withinKernel === '..' || withinKernel.startsWith('../') || isAbsolute(withinKernel)) return;
-  let info: ReturnType<typeof lstatSync>;
-  try {
-    info = lstatSync(normalizedSource);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw error;
+  if (starts.length === 1) {
+    const start = starts[0]!;
+    const end = lines.indexOf('Name migrations with `date -u +%Y%m%d%H%M%S`.', start + 1);
+    if (end > start + 1) {
+      const issues = lines.slice(start + 1, end);
+      if (issues.length === 1) {
+        const match = issues[0]!.match(
+          /^- (db\/[a-z][a-z0-9_]*\/migrations\/\d{14}_[a-z0-9_]+\.sql): missing dbmate up marker; add `-- migrate:up` before the up SQL$/,
+        );
+        if (match) {
+          const sourceRelativePath = `services/kernel/${match[1]!}`;
+          if (retainedMigrationWithoutUpMarker(root, sourceRelativePath, files()))
+            return { path: sourceRelativePath, line: issues[0]! };
+        }
+      }
+    }
   }
-  if (!info.isFile() || info.isSymbolicLink()) return;
 
-  const contents = readFileSync(normalizedSource);
-  if (contents.byteLength > KERNEL_MIGRATION_HEADER_LIMIT_BYTES) return;
-  const text = contents.toString('utf8');
-  if (DBMATE_UP_MARKER.test(text) || !DBMATE_DOWN_MARKER.test(text)) return;
-  return { path: sourceRelativePath, line: issues[0]! };
+  const legacyLines = lines.filter((line) => LEGACY_DBMATE_SETUP_DIAGNOSTIC.test(line));
+  if (legacyLines.length !== 1) return;
+  const inventory = files();
+  const candidates = [...inventory]
+    .filter((file) => KERNEL_MIGRATION_PATH.test(file))
+    .filter((file) => retainedMigrationWithoutUpMarker(root, file, inventory));
+  if (candidates.length !== 1) return;
+  return { path: candidates[0]!, line: legacyLines[0]! };
 }
 
 function gitFiles(root: string): string[] {

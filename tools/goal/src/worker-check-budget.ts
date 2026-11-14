@@ -2294,7 +2294,64 @@ export function workerCheckHostTerminalTypingFailure(input: {
   return settled;
 }
 
-/** Admit only the exact retained migration preflight defect, without treating setup as a compiler result. */
+function ownedAttemptCheckIds(input: {
+  worktree: string;
+  taskId: string;
+  attempt: number;
+  checkIds: readonly string[];
+}): string[] | undefined {
+  const directory = join(input.worktree, '.temp', 'goal', 'checks', 'results');
+  let files: string[];
+  try {
+    files = readdirSync(directory).filter((file) => file.endsWith('.json'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      return input.checkIds.length === 0 ? [] : undefined;
+    throw error;
+  }
+  const ids = new Set(input.checkIds);
+  for (const file of files) {
+    const result = readCheckEvidence(join(directory, file));
+    if (!result) return;
+    if (result.ownership?.taskId !== input.taskId || result.ownership.attempt !== input.attempt) continue;
+    if (
+      typeof result.id !== 'string' ||
+      !isCheckId(result.id) ||
+      file !== `${result.id}.json` ||
+      result.cwd !== input.worktree
+    )
+      return;
+    ids.add(result.id);
+  }
+  return [...ids];
+}
+
+function originalAttemptCheckMatchesPendingCommand(input: {
+  worktree: string;
+  taskId: string;
+  attempt: number;
+  checkIds: readonly string[];
+  pendingCommand: readonly string[];
+}): boolean {
+  const directory = join(input.worktree, '.temp', 'goal', 'checks', 'results');
+  return input.checkIds.some((checkId) => {
+    if (!isCheckId(checkId)) return false;
+    const result = readCheckEvidence(join(directory, `${checkId}.json`));
+    return Boolean(
+      result &&
+      result.id === checkId &&
+      result.cwd === input.worktree &&
+      result.ownership?.taskId === input.taskId &&
+      result.ownership.attempt === input.attempt &&
+      result.status === 'finished' &&
+      isPhysicalRunId(result.physicalRunId) &&
+      checkEvidenceArgv(result.argv) &&
+      JSON.stringify(result.argv) === JSON.stringify(input.pendingCommand),
+    );
+  });
+}
+
+/** Admit only retained migration setup evidence from this attempt, without treating setup as a compiler result. */
 function terminalMigrationSetupDefect(
   input: {
     directory?: string;
@@ -2310,15 +2367,28 @@ function terminalMigrationSetupDefect(
   if (
     settled.ok ||
     settled.kind !== 'evidence-unavailable' ||
-    !input.pendingCommand ||
+    !input.pendingCommand?.length ||
+    !settled.command?.length ||
     workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) !== 'terminal'
   )
     return false;
   const directory = input.directory?.trim();
   if (!directory || input.limit === 'off' || input.limit === null) return false;
+  const checkIds = ownedAttemptCheckIds(input);
+  if (
+    !checkIds ||
+    !originalAttemptCheckMatchesPendingCommand({
+      worktree: input.worktree,
+      taskId: input.taskId,
+      attempt: input.attempt,
+      checkIds: input.checkIds,
+      pendingCommand: input.pendingCommand,
+    })
+  )
+    return false;
   const stamped = stampNames(directory).map((name) => readWorkerCheckHostStamp(directory, name));
   let matches = 0;
-  for (const checkId of new Set(input.checkIds)) {
+  for (const checkId of checkIds) {
     const result = readCheckEvidence(join(input.worktree, '.temp', 'goal', 'checks', 'results', `${checkId}.json`));
     if (
       !isCheckId(checkId) ||
@@ -2330,31 +2400,31 @@ function terminalMigrationSetupDefect(
       result.status !== 'finished' ||
       result.exitCode !== WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT ||
       !checkEvidenceArgv(result.argv) ||
-      !isPhysicalRunId(result.physicalRunId)
+      !isPhysicalRunId(result.physicalRunId) ||
+      JSON.stringify(result.argv) !== JSON.stringify(settled.command)
     )
       continue;
     const candidates = stamped.filter((record) => {
-      const failure = record.setupFailure;
       const request = record.typingRequest;
       return Boolean(
-        failure &&
         request &&
         record.exitCode === WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT &&
-        record.includedTypecheck === true &&
-        record.typecheckFailed === false &&
+        record.includedTypecheck !== false &&
+        record.typecheckFailed !== true &&
         record.typingInputs === undefined &&
-        failure.kind === 'missing-kernel-migration-up-marker' &&
-        failure.commandReached === false &&
-        failure.physicalRunId === result.physicalRunId &&
         request.physicalRunId === result.physicalRunId &&
-        JSON.stringify(failure.command) === JSON.stringify(input.pendingCommand) &&
-        JSON.stringify(request.command) === JSON.stringify(input.pendingCommand) &&
-        JSON.stringify(result.argv) === JSON.stringify(input.pendingCommand),
+        JSON.stringify(request.command) === JSON.stringify(settled.command) &&
+        JSON.stringify(request.command) === JSON.stringify(result.argv) &&
+        (record.setupFailure === undefined ||
+          (record.setupFailure !== null &&
+            record.setupFailure.kind === 'missing-kernel-migration-up-marker' &&
+            record.setupFailure.commandReached === false &&
+            record.setupFailure.physicalRunId === result.physicalRunId &&
+            JSON.stringify(record.setupFailure.command) === JSON.stringify(request.command)))
       );
     });
     if (candidates.length !== 1) continue;
     const record = candidates[0]!;
-    const failure = record.setupFailure!;
     const request = record.typingRequest!;
     const logPath = typeof result.log === 'string' ? resolve(input.worktree, result.log) : '';
     const stampLogPath = record.log ? resolve(record.log) : '';
@@ -2374,11 +2444,13 @@ function terminalMigrationSetupDefect(
       continue;
     const log = boundedLog(record.log);
     const defect = retainedKernelMigrationHeaderDefect(input.worktree, log);
+    if (!defect) continue;
+    const failure = record.setupFailure;
     if (
-      !defect ||
-      defect.path !== failure.path ||
-      defect.line !== failure.diagnostic ||
-      failure.logDigest !== createHash('sha256').update(log).digest('hex')
+      failure !== undefined &&
+      (failure.path !== defect.path ||
+        failure.diagnostic !== defect.line ||
+        failure.logDigest !== createHash('sha256').update(log).digest('hex'))
     )
       continue;
     const history = readCheckEvidence(

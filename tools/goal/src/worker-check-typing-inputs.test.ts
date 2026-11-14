@@ -16,6 +16,7 @@ import {
   resolveTypingCompilerCommand,
   typingInputsReceiptPath,
   typingFailureInputsMatch,
+  retainedKernelMigrationHeaderDefect,
   type TypingInputReceipt,
 } from './worker-check-typing-inputs.ts';
 import {
@@ -667,6 +668,26 @@ test('a retained conservative receipt qualifies for the installed direct Kernel 
 
   write(root, 'docs/ledger.md', '# Changed imported compiler input\n');
   expect(qualifyTypingInputs(root, receipt)).toBe('source-changed');
+});
+
+test('the retained legacy dbmate setup diagnostic identifies only one missing Kernel migration marker', () => {
+  const root = fixture();
+  const migration = 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql';
+  const line =
+    "kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'";
+  const log = `${line}\n`;
+  write(root, migration, '-- migrate:down\nselect 1;\n');
+
+  expect(retainedKernelMigrationHeaderDefect(root, log)).toEqual({ path: migration, line });
+  expect(retainedKernelMigrationHeaderDefect(root, log.replace('phase=database-setup', 'phase=compiler'))).toBeUndefined();
+
+  write(root, 'services/kernel/db/community/migrations/20261113195650_second.sql', '-- migrate:down\nselect 2;\n');
+  expect(retainedKernelMigrationHeaderDefect(root, log)).toBeUndefined();
+  write(root, 'services/kernel/db/community/migrations/20261113195650_second.sql', '-- migrate:up\nselect 2;\n');
+  expect(retainedKernelMigrationHeaderDefect(root, log)).toEqual({ path: migration, line });
+
+  write(root, migration, '-- migrate:up\nselect 1;\n-- migrate:down\n');
+  expect(retainedKernelMigrationHeaderDefect(root, log)).toBeUndefined();
 });
 
 test('the exact Kernel schema emitter settles only its selected output with stable physical inputs', () => {

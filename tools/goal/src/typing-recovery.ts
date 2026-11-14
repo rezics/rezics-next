@@ -45,8 +45,8 @@ const WITHDRAWN_WEB_COMPILER = ['bun', 'run', '--cwd', 'apps/web', 'typecheck'];
 
 /**
  * Release a queued source repair through the normal retry transaction only for a current retained compiler failure
- * or the exact supported setup defect, with terminal custody for every check. Stopped and exited attempts keep their
- * existing stop, accepted-brief and captured-head requirements.
+ * or the exact supported setup defect, with terminal custody for every check. Stopped attempts keep their stop proof;
+ * exited attempts use their captured branch head when recorded and retained source identity for legacy omissions.
  */
 export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: AttemptRef): boolean {
   const { store, settings } = tasks;
@@ -73,6 +73,9 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
     const attemptEvents = store.events(task.id, ref.attempt);
     let validStoppedRetry = false;
     let validExitedAmendment = false;
+    let exitedProgressEventRecorded = false;
+    let exitedCapturedHeadMatches = false;
+    let exitedCurrentHead: string | null = null;
     if (attempt.state === 'stopped') {
       const stop = attempt.terminationIntent;
       const endedAt = Date.parse(attempt.endedAt ?? '');
@@ -103,6 +106,7 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
       const acceptedAmendment = store.newestPendingBriefProposal(task.id);
       const acceptedAt = Date.parse(acceptedAmendment?.createdAt ?? '');
       const progressEvent = attemptEvents.findLast((event) => event.kind === 'attempt-progress');
+      exitedProgressEventRecorded = progressEvent !== undefined;
       let capturedHead: unknown;
       try {
         const progress: unknown = progressEvent ? JSON.parse(progressEvent.body) : undefined;
@@ -112,6 +116,12 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
         capturedHead = undefined;
       }
       const currentHead = branchHead(task);
+      exitedCurrentHead = currentHead;
+      exitedCapturedHeadMatches = Boolean(
+        typeof capturedHead === 'string' &&
+        /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(capturedHead) &&
+        currentHead === capturedHead,
+      );
       validExitedAmendment = Boolean(
         attempt.failureKind === null &&
         attempt.exitCode === 0 &&
@@ -135,9 +145,7 @@ export function reconcileQueuedTypingFailureRetry(tasks: WorkerTasks, ref: Attem
         /^[a-f0-9]{64}$/.test(amendment.newBriefHash) &&
         amendment.previousBriefHash !== amendment.newBriefHash &&
         amendment.newBriefHash === briefHash(task.brief.markdown) &&
-        typeof capturedHead === 'string' &&
-        /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(capturedHead) &&
-        currentHead === capturedHead &&
+        (exitedProgressEventRecorded ? exitedCapturedHeadMatches : exitedCurrentHead !== null) &&
         ![attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
           (identity) => identity !== null && sameProcess(identity),
         ),

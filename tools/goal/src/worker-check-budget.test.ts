@@ -48,6 +48,7 @@ import {
   workerCheckHostAttemptCheckCustody,
   workerCheckHostAttemptHasResultlessCleanup,
   workerCheckHostHasRetainedKernelTypingRun,
+  workerCheckHostTerminalSourceRepair,
   workerCheckHostTypingCheckIds,
   workerCheckHostCommandReached,
   workerCheckHostContentTree,
@@ -280,7 +281,7 @@ test('an infrastructure exit 75 before the check command ran gives its budget st
   }
 });
 
-test('an exact terminal setup candidate retains only a known compiler migration-header defect', () => {
+test('a retained setup receipt admits source repair through the original owned check set', () => {
   const controller = temporaryDirectory();
   const worktree = temporaryDirectory();
   try {
@@ -330,6 +331,84 @@ test('an exact terminal setup candidate retains only a known compiler migration-
       command,
       path: 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql',
     });
+
+    const checks = join(worktree.path, '.temp/goal/checks');
+    mkdirSync(join(checks, 'results'), { recursive: true });
+    mkdirSync(join(checks, 'custody/history'), { recursive: true });
+    const sourceCheckId = randomUUID();
+    const sourceLog = '.temp/goal/checks/setup.log';
+    const originalCheckId = randomUUID();
+    const originalPhysicalRunId = randomUUID();
+    const originalCommand = [
+      'sh',
+      '-c',
+      'bun run --cwd services/kernel typecheck && bun test services/kernel/test/commerce/post-benefit.test.ts',
+    ];
+    const writeTerminalResult = (
+      id: string,
+      physical: string,
+      argv: string[],
+      logPath: string,
+      exitCode: number,
+    ) => {
+      const result = {
+        id,
+        cwd: worktree.path,
+        argv,
+        log: logPath,
+        ownership: { taskId: 'task', attempt: 1 },
+        status: 'finished',
+        exitCode,
+        physicalRunId: physical,
+      };
+      writeFileSync(join(checks, 'results', `${id}.json`), JSON.stringify(result));
+      writeFileSync(
+        join(checks, 'custody/history', `${id}.${physical}.json`),
+        JSON.stringify({
+          version: 1,
+          ...result,
+          remoteExpected: false,
+          terminalProof: { local: true, resultKnown: true, observedAt: new Date().toISOString(), remote: null },
+        }),
+      );
+    };
+    writeTerminalResult(sourceCheckId, physicalRunId, command, sourceLog, WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT);
+    writeFileSync(join(checks, 'original.log'), 'original money checks retained their failed result\n');
+    writeTerminalResult(originalCheckId, originalPhysicalRunId, originalCommand, '.temp/goal/checks/original.log', 1);
+
+    expect(workerCheckHostTypingSettlement({ directory: budget, worktree: worktree.path, limit: 2 })).toMatchObject({
+      ok: false,
+      kind: 'evidence-unavailable',
+    });
+    expect(
+      workerCheckHostTerminalSourceRepair({
+        directory: budget,
+        worktree: worktree.path,
+        limit: 2,
+        taskId: 'task',
+        attempt: 1,
+        checkIds: [originalCheckId],
+        pendingCommand: originalCommand,
+      }),
+    ).toBe(true);
+    expect(JSON.parse(readFileSync(join(checks, 'results', `${originalCheckId}.json`), 'utf8'))).toMatchObject({
+      status: 'finished',
+      exitCode: 1,
+      physicalRunId: originalPhysicalRunId,
+    });
+    const unrelatedCommand = ['bun', 'test', 'unrelated.test.ts'];
+    writeTerminalResult(originalCheckId, originalPhysicalRunId, unrelatedCommand, '.temp/goal/checks/original.log', 1);
+    expect(
+      workerCheckHostTerminalSourceRepair({
+        directory: budget,
+        worktree: worktree.path,
+        limit: 2,
+        taskId: 'task',
+        attempt: 1,
+        checkIds: [originalCheckId],
+        pendingCommand: originalCommand,
+      }),
+    ).toBe(false);
   } finally {
     controller.close();
     worktree.close();
