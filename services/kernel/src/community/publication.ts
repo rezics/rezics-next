@@ -3,13 +3,17 @@ import canonicalize from 'canonicalize';
 import {
   resourceAuthorization,
   accessCommandAttempt,
-  deadlineClient,
-  within,
   accessCheck,
   subjectReadEligibility,
 } from './domain-ports.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  classifyUnavailability,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -17,7 +21,7 @@ import {
   runCommand,
   type AuthoritativeTime,
 } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccessClient, Actor, Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
@@ -122,6 +126,27 @@ function ring(routeKey: Uint8Array): KeyRing {
 function open(deadline: number, now: () => number): boolean {
   return Number.isFinite(deadline) && now() < deadline;
 }
+function boundedReadOptions() {
+  const uncertain = (error: unknown) => {
+    const reason = classifyUnavailability(error);
+    return reason === 'deadline' || reason === 'overloaded';
+  };
+  return {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    mapError(error: unknown) {
+      if (error instanceof CommandUnavailableError) return error;
+      try {
+        throwAccessUnavailable(error);
+      } catch (mapped) {
+        return mapped;
+      }
+      return error;
+    },
+    isUncertainError: uncertain,
+    isUncertainSettledQueryError: () => true,
+    isUncertainWorkError: uncertain,
+  };
+}
 async function rows<S extends Statement>(client: AccessClient, statement: S, input: S['~reylo']['input']) {
   const values = statement.params.map((name) => input[name as keyof typeof input]);
   const result = await client.query<S['~reylo']['element']>(statement.sql, values);
@@ -132,22 +157,16 @@ async function snapshot<T>(
   deadline: number,
   work: (client: AccessClient) => Promise<T>,
 ) {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (raw) => {
+      const client = raw as AccessClient;
       await client.query("SET LOCAL statement_timeout = '3000ms'");
-      const value = await work(deadlineClient(client, deadline));
-      await client.query('COMMIT');
-      return value;
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      throw error;
-    }
-  });
+      return work(client);
+    },
+    boundedReadOptions(),
+  );
 }
 
 /** Subject evidence is prepared before the snapshot. A held pool connection cannot
@@ -361,11 +380,16 @@ export async function readPublication(
   if (route === null || routeOf(subjectId) === null || !open(context.deadline, deps.deadlineNow)) return null;
   const realmCheck = await prepareRealm(deps, context.actor, realmId, context.deadline);
   if (!realmCheck) return null;
-  const before = await withConnection(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, context.deadline);
-    const at = await mintReadTime(bounded, deps.clock);
-    return readContainerBinding(bounded, { realmId, subjectId, at });
-  });
+  const before = await withBoundedReadConnection(
+    deps.pool,
+    context.deadline,
+    async (raw) => {
+      const client = raw as AccessClient;
+      const at = await mintReadTime(client, deps.clock);
+      return readContainerBinding(client, { realmId, subjectId, at });
+    },
+    boundedReadOptions(),
+  );
   if (!before || before.publicationId === null) return null;
   const subjectCheck = await prepareSubject(deps, context.actor, subjectId, context.deadline);
   const result = await snapshot(deps.pool, context.deadline, async (client) => {
@@ -376,13 +400,18 @@ export async function readPublication(
   });
   if (!result || result.publicationId !== before.publicationId) return null;
   // The earlier repeatable-read snapshot is released before the current disclosure fence.
-  return withConnection(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, context.deadline);
-    const at = await mintReadTime(bounded, deps.clock);
-    if (!(await allowRealmRead(realmCheck, bounded, at)) || !(await revalidateContainerBinding(bounded, before, at)))
-      return null;
-    return result;
-  });
+  return withBoundedReadConnection(
+    deps.pool,
+    context.deadline,
+    async (raw) => {
+      const client = raw as AccessClient;
+      const at = await mintReadTime(client, deps.clock);
+      if (!(await allowRealmRead(realmCheck, client, at)) || !(await revalidateContainerBinding(client, before, at)))
+        return null;
+      return result;
+    },
+    boundedReadOptions(),
+  );
 }
 
 export async function listPublications(
@@ -438,17 +467,23 @@ export async function preparePublicationPage(
   }
   const realmCheck = await prepareRealm(deps, context.actor, realmId, context.deadline);
   if (!realmCheck) return null;
-  const before = await withConnection(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, context.deadline);
-    const at = await mintReadTime(bounded, deps.clock);
-    return readContainerBinding(bounded, { realmId, at });
-  });
+  const before = await withBoundedReadConnection(
+    deps.pool,
+    context.deadline,
+    async (raw) => {
+      const client = raw as AccessClient;
+      const at = await mintReadTime(client, deps.clock);
+      return readContainerBinding(client, { realmId, at });
+    },
+    boundedReadOptions(),
+  );
   if (!before) return null;
   // One keyset seek chooses the window. Disclosure then revalidates each head at T.
-  const fetched = await withConnection(deps.pool, (client) =>
-    within(context.deadline, () =>
-      page(deadlineClient(client, context.deadline), route, realmId, afterAt, afterSubject, limit + 1),
-    ),
+  const fetched = await withBoundedReadConnection(
+    deps.pool,
+    context.deadline,
+    (client) => page(client as AccessClient, route, realmId, afterAt, afterSubject, limit + 1),
+    boundedReadOptions(),
   );
   const window = (fetched as PageRow[]).slice(0, limit);
   const more = fetched.length > limit;
@@ -493,22 +528,27 @@ export async function preparePublicationPage(
       const finalSubjects = new Map<string, AccessCheck>();
       for (const item of result.items)
         finalSubjects.set(item.subjectId, await prepareSubject(deps, context.actor, item.subjectId, context.deadline));
-      return withConnection(deps.pool, async (client) => {
-        const bounded = deadlineClient(client, context.deadline);
-        const at = await mintReadTime(bounded, deps.clock);
-        // Exact selected keys, never a second page or a publication-history scan.
-        for (const item of result.items) {
-          const head = await readHead.run(bounded, { route, realm: realmId, subject: item.subjectId });
-          if (
-            head?.publicationId !== item.publicationId ||
-            !(await allowRealmRead(finalSubjects.get(item.subjectId)!, bounded, at))
-          )
-            return false;
-        }
-        return (
-          (await allowRealmRead(finalRealm, bounded, at)) && (await revalidateContainerBinding(bounded, before, at))
-        );
-      });
+      return withBoundedReadConnection(
+        deps.pool,
+        context.deadline,
+        async (raw) => {
+          const client = raw as AccessClient;
+          const at = await mintReadTime(client, deps.clock);
+          // Exact selected keys, never a second page or a publication-history scan.
+          for (const item of result.items) {
+            const head = await readHead.run(client, { route, realm: realmId, subject: item.subjectId });
+            if (
+              head?.publicationId !== item.publicationId ||
+              !(await allowRealmRead(finalSubjects.get(item.subjectId)!, client, at))
+            )
+              return false;
+          }
+          return (
+            (await allowRealmRead(finalRealm, client, at)) && (await revalidateContainerBinding(client, before, at))
+          );
+        },
+        boundedReadOptions(),
+      );
     },
   };
 }
