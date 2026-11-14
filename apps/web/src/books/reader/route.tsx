@@ -1,5 +1,6 @@
 import { useCallback, useContext, useMemo } from 'react';
-import { QueryClientContext } from '@tanstack/react-query';
+import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
+import type { AnyRouter } from '@tanstack/react-router';
 import { readerSessionSource } from '../../reader/lifetime';
 import { createBookContentsNavigation } from './contents-navigation';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -74,6 +75,30 @@ export function createHostedBookNavigation() {
   };
 }
 export type HostedBookNavigation = ReturnType<typeof createHostedBookNavigation>;
+
+// One bounded visit per live Router survives loader/pending remounts. It is never history payload.
+const contentsVisits = new WeakMap<AnyRouter, HostedBookNavigation>();
+
+/** Bind the route's contents and focus memory to its existing Router and credential lifetime. */
+export function hostedBookNavigationForRouter(router: AnyRouter, client: QueryClient | undefined): HostedBookNavigation {
+  const existing = contentsVisits.get(router);
+  if (existing) return existing;
+
+  const navigation = createHostedBookNavigation();
+  contentsVisits.set(router, navigation);
+  const path = router.state.location.pathname;
+  const stopSession = readerSessionSource(client).subscribe(() => navigation.retire());
+  if (typeof window !== 'undefined') window.addEventListener('pagehide', navigation.retire);
+  const stopRoute = router.subscribe('onBeforeLoad', ({ toLocation }) => {
+    if (toLocation.pathname === path) return;
+    navigation.retire();
+    contentsVisits.delete(router);
+    stopSession();
+    if (typeof window !== 'undefined') window.removeEventListener('pagehide', navigation.retire);
+    stopRoute();
+  });
+  return navigation;
+}
 
 export type HostedBookVisitViewProps = {
   visit: HostedBookVisit;

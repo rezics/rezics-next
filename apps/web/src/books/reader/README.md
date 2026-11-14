@@ -11,6 +11,17 @@ view. The reader uses Library's native hosted-reading checkpoint with explicit s
 positions; no automatic write or ordinary Progress conversion occurs. Hosts use the declared `books/reader/route.tsx`
 composition entry.
 
+The entry's `hostedBookNavigationForRouter` owns the bounded contents/focus visit and its subscriptions. File routes
+supply their existing Router and QueryClient. Search-only loader replacement retains that Router's visit; successful
+session replacement and `pagehide` retire its coordinates and pending focus. A pathname departure also removes the
+session, page and route subscriptions and the Router entry, so returning starts empty. Frozen release, occurrence,
+contents return and Back/Forward rereads keep their existing meaning.
+
+Existing [reader stories](../../stories/hosted-book-reader.stories.tsx) cover `MultipleContentsPages`,
+`NestedLevelReturn`, `FailedPreviousRetry` and `RetiredReading`; these states need no additional variants for entry
+composition changes. The production route and subscription retirement witnesses remain in
+[hosted-book-reader.test.tsx](../../../tests/hosted-book-reader.test.tsx).
+
 ## Production admission and links
 
 `routes/books.$id.read.tsx` follows the existing file-route generator and locale rewrite. It has no public cache,

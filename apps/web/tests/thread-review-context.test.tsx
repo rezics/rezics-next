@@ -3,7 +3,7 @@ import { fromPlainText } from '@rezics/document';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ThreadPost } from '../src/threads/thread-page';
 import { m } from '../src/paraglide/messages.js';
-import { ThreadReviewContext, type ThreadReviewContextValue } from '../src/threads/thread-review-context';
+import { ThreadReviewContext, type ThreadReviewContextValue } from '../src/threads/thread-reading-context';
 
 const threadId = '11111111-1111-4111-8111-111111111111';
 const postId = '22222222-2222-4222-8222-222222222222';

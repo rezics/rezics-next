@@ -908,6 +908,69 @@ test('the default production route reads native contents and exact chapters, the
   }
 });
 
+test('the route entry retains one Router visit and releases contents and focus on session, page and path departure', async () => {
+  const { createRootRoute, createRoute, createRouter, createMemoryHistory } = await import('@tanstack/react-router');
+  const { hostedBookNavigationForRouter } = await import('../src/books/reader/route');
+  const parent = createRootRoute();
+  const reader = createRoute({ getParentRoute: () => parent, path: '/books/$id/read' });
+  const elsewhere = createRoute({ getParentRoute: () => parent, path: '/elsewhere' });
+  const path = `/books/${ids.catalogue}/read`;
+  const router = createRouter({
+    routeTree: parent.addChildren([reader, elsewhere]),
+    history: createMemoryHistory({ initialEntries: [path] }),
+  });
+  client = new QueryClient();
+  const anonymous = { state: 'signed-out', subject: null, csrfToken: null };
+  client.setQueryData(['session'], anonymous);
+  await router.load();
+  const navigation = hostedBookNavigationForRouter(router, client);
+  const book = createIllustrativeHostedBook();
+  await book.ready;
+  const page = book.contents(ids.nested, illustrativeBookCursor);
+  navigation.contents.observe(page);
+  navigation.captureFocus({ kind: 'heading' });
+
+  router.history.push(`${path}?cursor=next`);
+  await router.load();
+  expect(hostedBookNavigationForRouter(router, client)).toBe(navigation);
+  expect(navigation.contents.getSnapshot().current?.cursor).toBe(illustrativeBookCursor);
+  expect(navigation.focusOnRead()).toBeDefined();
+
+  // Even an equal successful credential observation retires the old visit synchronously.
+  client.setQueryData(['session'], anonymous);
+  expect(navigation.contents.getSnapshot().current).toBeNull();
+  expect(navigation.focusOnRead()).toBeUndefined();
+  navigation.contents.observe(page);
+  navigation.captureFocus({ kind: 'heading' });
+  window.dispatchEvent(new window.Event('pagehide'));
+  expect(navigation.contents.getSnapshot().current).toBeNull();
+  expect(navigation.focusOnRead()).toBeUndefined();
+  expect(hostedBookNavigationForRouter(router, client)).toBe(navigation);
+
+  navigation.contents.observe(page);
+  navigation.captureFocus({ kind: 'heading' });
+  router.history.push('/elsewhere');
+  await router.load();
+  expect(navigation.contents.getSnapshot().current).toBeNull();
+  expect(navigation.focusOnRead()).toBeUndefined();
+
+  router.history.push(path);
+  await router.load();
+  const reopened = hostedBookNavigationForRouter(router, client);
+  expect(reopened).not.toBe(navigation);
+  expect(reopened.contents.getSnapshot().current).toBeNull();
+  // The departed owner has released both subscriptions; subsequent events affect only the new owner.
+  navigation.contents.observe(page);
+  reopened.contents.observe(page);
+  client.setQueryData(['session'], anonymous);
+  expect(navigation.contents.getSnapshot().current?.cursor).toBe(illustrativeBookCursor);
+  expect(reopened.contents.getSnapshot().current).toBeNull();
+  window.dispatchEvent(new window.Event('pagehide'));
+  expect(navigation.contents.getSnapshot().current?.cursor).toBe(illustrativeBookCursor);
+  router.history.push('/elsewhere');
+  await router.load();
+});
+
 test('a new native host incarnation can reopen the same address after pagehide without reviving the retired visit', async () => {
   const book = createIllustrativeHostedBook();
   const chapter = await book.chapter();

@@ -360,3 +360,34 @@ test('the graph route rejects conflicting, foreign, recursive and encoded-overfl
   }
   expect(longOrigin?.kind).toBe('origin');
 });
+
+test('graph heading returns keep Subject path admission, selector casing and public address encoding', async () => {
+  const { candidateContext, graphPublicSourceReturnHref, graphGlobalVisitHref, base, parse } = await graphFixtures();
+  const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
+  for (const locale of ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'fr', 'de', 'es']) {
+    const path = `/${locale}/subjects/${subject}/%E9%9B%AA%3F`;
+    const expected = `${path}?context=${context}&realm=${realm}#subject-heading`;
+    expect(graphPublicSourceReturnHref({ path, id: subject, locale, context, realm })).toBe(expected);
+    expect(subjectVisitReturn(expected, locale)).toBe(expected);
+  }
+  for (const slug of ['bad%2Fslug', 'bad%5Cslug', '%252e', '%09', '%zz', '..', '%2E%2E', 'bad\\slug']) {
+    const path = `/en/subjects/${subject}/${slug}`;
+    const href = `${path}#subject-heading`;
+    expect(subjectVisitReturn(href, 'en')).toBeUndefined();
+    expect(graphPublicSourceReturnHref({ path, id: subject, locale: 'en', context: candidateContext })).toBeUndefined();
+    expect(parse(graphGlobalVisitHref(base, href))).toEqual({ kind: 'invalid' });
+  }
+  const path = `/en/subjects/${subject}/origin`;
+  expect(
+    graphPublicSourceReturnHref({ path, id: subject, locale: 'en', context, realm: realm.toUpperCase() }),
+  ).toBeUndefined();
+  expect(
+    graphPublicSourceReturnHref({ path: path.replace('/en/', '/pt/'), id: subject, locale: 'pt', context }),
+  ).toBeUndefined();
+
+  // Global public returns retain the broader Subject UUID grammar; origin intent keeps its stricter Context grammar.
+  const genericContext = '00000000-0000-0000-0000-000000000000';
+  const returnHref = `${path}?context=${genericContext}#subject-heading`;
+  expect(subjectVisitReturn(returnHref, 'en')).toBe(returnHref);
+  expect(parse(graphGlobalVisitHref(base, returnHref))).toEqual({ kind: 'global', returnHref });
+});

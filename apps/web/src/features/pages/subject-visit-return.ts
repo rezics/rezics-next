@@ -17,10 +17,9 @@ import {
   gameClassificationReturnLimit,
 } from '../catalogue/game-current-visit-descriptor';
 import type { WorkFranchiseReturn } from './semantic-render-port';
-import { parseGraphPublicVisit } from './graph-browser/public-visit';
+import { parseGraphPublicVisit, subjectDestination, subjectReturnPathAllowed } from './graph-browser/public-address';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const subjectDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+(?:/([^/?#]+))?$`);
 const musicContextDestination = new RegExp(
   `^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+/music-context$`,
 );
@@ -758,17 +757,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
   const catalogueReturn = realmCatalogueReturnHref(value, locale);
   if (catalogueReturn) return catalogueReturn;
   if (!value.startsWith('/') || value.startsWith('//')) return;
-  const rawPath = value.split(/[?#]/u, 1)[0] ?? '';
-  if (/%(?:2f|5c)/iu.test(rawPath)) return;
+  if (!subjectReturnPathAllowed(value)) return;
   try {
-    const decodedPath = decodeURIComponent(rawPath);
-    if (
-      decodedPath.includes('\\') ||
-      /[\u0000-\u001f\u007f]/u.test(decodedPath) ||
-      decodedPath.split('/').some((segment) => segment === '.' || segment === '..') ||
-      /%(?:25|2e|2f|5c|0[0-9a-f]|1[0-9a-f]|7f)/iu.test(decodedPath)
-    )
-      return;
     const url = new URL(value, 'https://rezics.invalid');
     const characterSearch = characterPersonSearchReturn(url, locale);
     if (url.origin === 'https://rezics.invalid' && characterSearch) return characterSearch;

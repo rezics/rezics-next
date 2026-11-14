@@ -4,7 +4,7 @@ import { draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/compos
 import { erasePost, restorePost as restorePostAction, revisePost, type WriteFailure } from '../../threads/actions';
 import type { ThreadSubject } from '../../threads/subjects';
 import type { VoteCitation } from '../../threads/post-writes';
-import { publishedCitationForPost } from '../../threads/thread-reading-context';
+import { ConversationKind, ThreadReviewContext, publishedCitationForPost } from '../../threads/thread-reading-context';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import { exactRevisionHref, exactRevisionRoute } from '../../threads/exact-revision-href';
 import { PostHistory } from '../../threads/post-history';
@@ -18,8 +18,6 @@ import type { ReactionKind } from '@rezics/ui/reactions';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
-import { ThreadReviewContext } from '../../threads/thread-review-context';
-import { ConversationKind } from '../../threads/conversation-presentation';
 import { PostReadingFrame } from '../../threads/post-reading-frame';
 import { ThreadPostReadingBody } from '../../threads/post-reading-body';
 import type { DocumentMentions } from '../../document-body';

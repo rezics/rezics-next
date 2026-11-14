@@ -1,13 +1,12 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import {
   HostedBookVisitView,
-  createHostedBookNavigation,
+  hostedBookNavigationForRouter,
   parseHostedBookSearch,
   readHostedBookVisit,
 } from '../books/reader/route';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext } from 'react';
-import { readerSessionSource } from '../reader/lifetime';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { pageHead } from '../shell/head';
@@ -44,33 +43,13 @@ function BookReaderPending() {
   );
 }
 
-// A WeakMap keeps one bounded visit per live Router across loader/pending component remounts.
-// It is not history payload: direct entry/reload starts empty, and Back/Forward still rereads the URL.
-const contentsVisits = new WeakMap<object, ReturnType<typeof createHostedBookNavigation>>();
-
 function BookReaderRoute() {
   const visit = Route.useLoaderData();
   const router = useRouter();
   const { id } = Route.useParams();
   const search = Route.useSearch();
   const client = useContext(QueryClientContext);
-  let navigation = contentsVisits.get(router);
-  if (!navigation) {
-    navigation = createHostedBookNavigation();
-    contentsVisits.set(router, navigation);
-    const owned = navigation;
-    const path = router.state.location.pathname;
-    const stopSession = readerSessionSource(client).subscribe(() => owned.retire());
-    if (typeof window !== 'undefined') window.addEventListener('pagehide', owned.retire);
-    const stopRoute = router.subscribe('onBeforeLoad', ({ toLocation }) => {
-      if (toLocation.pathname === path) return;
-      owned.retire();
-      contentsVisits.delete(router);
-      stopSession();
-      if (typeof window !== 'undefined') window.removeEventListener('pagehide', owned.retire);
-      stopRoute();
-    });
-  }
+  const navigation = hostedBookNavigationForRouter(router, client);
   return (
     <HostedBookVisitView
       visit={visit}

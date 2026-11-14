@@ -61,6 +61,15 @@ the reader boundary never reconstructs, retries or upgrades a command. Existing 
 `tests/thread-reader-boundary.test.tsx` adds cache replacement, synchronous abort, isolated host and navigation ABA
 coverage. Runtime acceptance runs after integration; workspace typing is the worker acceptance.
 
+## Reading route composition
+
+The existing public `thread-reading-context.ts` entry supplies `ConversationKind` and `ThreadReviewContext` to the file route.
+The owning components keep their admitted kind labels, current Subject target, exact source revision and citation
+inspection behavior. Route composition does not borrow private presentation leaves or create another global entry.
+The [review-context witness](../../tests/thread-review-context.test.tsx) exercises that entry with unchanged assertions.
+Existing [review-context stories](../stories/thread-review-context.stories.tsx) cover `AvailableCitation`,
+`WithheldTarget` and `UnavailableTarget`; entry changes need no additional states.
+
 ## Board pins
 
 The pin and unpin consumer contract, native-order presentation and pending Content binding are documented in
