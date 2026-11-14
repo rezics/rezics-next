@@ -423,7 +423,7 @@ function HistoryPage({
           <p>{m.library_entry_history_current_revision({ revision: page.currentRevision })}</p>
           <p>{coverageMessage(coverage)}</p>
           {page.changes.length === 0 ? <p>{m.library_entry_history_empty()}</p> : null}
-          <p className="text-sm text-muted-foreground">{m.library_entry_history_profile_unavailable()}</p>
+          <p className="text-sm text-muted-foreground">{m.library_entry_history_profile_note()}</p>
           <ol className="space-y-3">
             {page.changes.map((change) => (
               <li key={change.revision} className="space-y-2 rounded-md border p-3">
@@ -462,10 +462,7 @@ function HistoryPage({
             <p>{m.library_entry_history_current_state()}</p>
             <StateEvidence state={review.value.current.state} options={stateOptions} />
           </div>
-          <div>
-            <p>{m.library_entry_history_restore_target()}</p>
-            <StateEvidence state={review.value.change.beforeState} options={stateOptions} />
-          </div>
+          <ChangeEvidence change={review.value.change} options={stateOptions} beforeLabel={m.library_entry_history_restore_target()} />
           <p>{availabilityMessage(review.value.availability)}</p>
           {review.value.availability === 'available' && canRestore ? (
             <button
@@ -493,11 +490,48 @@ function StateEvidence({ state, options }: { state: string | null; options: read
   );
 }
 
-function ChangeEvidence({ change, options }: { change: EntryStateChange; options: readonly LibraryStateChoice[] }) {
+function ProfilePinEvidence({
+  pin,
+  missing,
+}: {
+  pin: EntryStateChange['beforeProfilePin'];
+  missing: 'no_prior' | 'unavailable';
+}) {
+  if (pin === null) return <p>{missing === 'no_prior' ? m.library_entry_history_pin_no_prior() : m.library_entry_history_pin_unavailable()}</p>;
+  const field = (label: string, value: string | null) => (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value === null
+        ? m.library_entry_history_pin_not_applicable()
+        : <code className="block max-h-24 overflow-auto break-all whitespace-pre-wrap">{value}</code>}</dd>
+    </div>
+  );
+  return (
+    <div className="min-w-0 rounded-md border p-2">
+      <p className="font-medium">{m.library_entry_history_pin_recorded()}</p>
+      <dl className="min-w-0 space-y-1">
+        {field(m.library_entry_history_pin_provenance(), pin.provenance)}
+        {field(m.library_entry_history_pin_release_digest(), pin.releaseDigest)}
+        {field(m.library_entry_history_pin_accepting_type(), pin.acceptingType)}
+        {field(m.library_entry_history_pin_profile_id(), pin.profileId)}
+      </dl>
+    </div>
+  );
+}
+
+function ChangeEvidence({
+  change,
+  options,
+  beforeLabel,
+}: {
+  change: EntryStateChange;
+  options: readonly LibraryStateChoice[];
+  beforeLabel?: string;
+}) {
   return (
     <dl className="grid min-w-0 gap-2 text-sm sm:grid-cols-2">
-      <div><dt>{m.library_entry_history_before()}</dt><dd><StateEvidence state={change.beforeState} options={options} /></dd></div>
-      <div><dt>{m.library_entry_history_after()}</dt><dd><StateEvidence state={change.afterState} options={options} /></dd></div>
+      <div><dt>{beforeLabel ?? m.library_entry_history_before()}</dt><dd className="space-y-2"><StateEvidence state={change.beforeState} options={options} /><ProfilePinEvidence pin={change.beforeProfilePin} missing={change.beforeState === null ? 'no_prior' : 'unavailable'} /></dd></div>
+      <div><dt>{m.library_entry_history_after()}</dt><dd className="space-y-2"><StateEvidence state={change.afterState} options={options} /><ProfilePinEvidence pin={change.afterProfilePin} missing="unavailable" /></dd></div>
       <div><dt>{m.library_entry_history_prior_revision()}</dt><dd>{change.priorRevision ?? m.library_entry_history_absent()}</dd></div>
       <div><dt>{m.library_entry_history_changed_at()}</dt><dd><time dateTime={change.changedAt}>{change.changedAt}</time></dd></div>
       <div><dt>{m.library_entry_history_command_kind()}</dt><dd><code className="break-all">{change.commandKind}</code></dd></div>

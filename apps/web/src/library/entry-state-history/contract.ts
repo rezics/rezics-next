@@ -3,12 +3,25 @@ import * as v from 'valibot';
 const revision = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(2_147_483_646));
 const incarnation = v.pipe(v.string(), v.uuid());
 const state = v.pipe(v.string(), v.minLength(1));
+const releaseDigest = v.pipe(v.string(), v.regex(/^sha256:[0-9a-f]{64}$/));
+const nonempty = v.pipe(v.string(), v.minLength(1));
+const profilePin = v.union([
+  v.object({ provenance: v.literal('profile'), releaseDigest, acceptingType: nonempty, profileId: nonempty }),
+  v.object({
+    provenance: v.literal('legacy'),
+    releaseDigest,
+    acceptingType: v.nullable(nonempty),
+    profileId: v.literal('legacy-fixed-v1'),
+  }),
+]);
 
 export const changeSchema = v.object({
   revision,
   priorRevision: v.nullable(revision),
   beforeState: v.nullable(state),
+  beforeProfilePin: v.nullable(profilePin),
   afterState: state,
+  afterProfilePin: profilePin,
   commandId: v.pipe(v.string(), v.uuid()),
   commandKind: v.union([v.literal('library.entry.put'), v.literal('library.entry.state.restore')]),
   changedAt: v.pipe(v.string(), v.minLength(1)),

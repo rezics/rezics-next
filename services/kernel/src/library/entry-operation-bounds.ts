@@ -30,13 +30,14 @@ const byteWork = (bytes: number): Bound =>
     engineRequests: 0,
   });
 
-// The state history SQL returns two 64-character states, two signed integer revisions,
-// one UUID, one fixed command kind, one PostgreSQL timestamp and one boolean.
+// Fixed state history fields; the two stored profile pins are budgeted separately.
 const projectedHistoryRow = {
   revision: -2147483648,
   priorRevision: -2147483648,
   beforeState: '\u0000'.repeat(64),
+  beforeProfilePin: null,
   afterState: '\u0000'.repeat(64),
+  afterProfilePin: null,
   commandId: 'f'.repeat(36),
   commandKind: '\u0000'.repeat('library.entry.state.restore'.length),
   changedAt: '\u0000'.repeat(64),
@@ -260,7 +261,7 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
           candidates: limit,
           points: 1,
           bindBytes: historyBindBytes,
-          outputBytes: rowBytes * Math.min(ENTRY_STATE_HISTORY_RETAINED_LIMIT, limit),
+          outputBytes: stateChangeProjectionBytes() * Math.min(ENTRY_STATE_HISTORY_RETAINED_LIMIT, limit),
         },
       ];
     case 'library.entry.state-review':
@@ -358,7 +359,7 @@ export function entryHistoryPagePlan(input: PageInput): EntryHistoryPagePlan {
     // Include the original serialized operands independently of the output. JSON
     // names/escaping overbound the positional PostgreSQL parameter payload.
     byteWork(Buffer.byteLength(JSON.stringify(original))),
-    repeatBound(byteWork(rowBytes), input.page_limit),
+    repeatBound(byteWork(stateChangeProjectionBytes()), input.page_limit),
     byteWork(2), // JSON array delimiters, including an empty result.
   );
   return Object.freeze({ kind: 'entry.state-history.page', input: original, total });

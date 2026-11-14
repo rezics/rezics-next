@@ -231,14 +231,26 @@ type EntryStateCommandKind = 'library.entry.put' | 'library.entry.state.restore'
 function stateChangeView(
   change: Pick<
     StoredEntryStateChange,
-    'revision' | 'priorRevision' | 'beforeState' | 'afterState' | 'commandId' | 'commandKind' | 'changedAt'
+    | 'revision'
+    | 'priorRevision'
+    | 'beforeState'
+    | 'beforeProfilePin'
+    | 'afterState'
+    | 'afterProfilePin'
+    | 'commandId'
+    | 'commandKind'
+    | 'changedAt'
   >,
 ) {
+  const afterProfilePin = decodeLibraryProfilePin(change.afterProfilePin);
+  if (afterProfilePin === null) throw new Error('Recorded entry state change is missing its after profile pin');
   return {
     revision: change.revision,
     priorRevision: change.priorRevision,
     beforeState: change.beforeState,
+    beforeProfilePin: decodeLibraryProfilePin(change.beforeProfilePin),
     afterState: change.afterState,
+    afterProfilePin,
     commandId: change.commandId,
     commandKind: change.commandKind as EntryStateCommandKind,
     changedAt: new Date(change.changedAt).toISOString(),

@@ -36,9 +36,10 @@ write. A creation is represented as an absent-to-state transition. A write with 
 change row; receipt replay returns the original result and writes no second row. Importers do not receive a separate
 capture adapter.
 
-Rows are indexed by account, subject, incarnation and revision. History pages examine at most `P+1` indexed rows for
-page size `P` (default 20, maximum 50). Continuations bind the owner, subject, incarnation, page size, current entry
-revision and partition epoch; a changed current entry makes the cursor stale. At most 64 changes are retained per
+Rows are indexed by account, subject, incarnation and revision. History pages return at most `P+1` rows for
+page size `P` (default 20, maximum 50), while the examined retained set is bounded by 64 rows. Continuations bind
+the owner, subject, incarnation, page size, current entry revision and partition epoch; a changed current entry makes
+the cursor stale. At most 64 changes are retained per
 account and subject across incarnations. An insert beyond that cap prunes the oldest row and marks any affected
 retained incarnation incomplete in the same transaction.
 
@@ -64,9 +65,10 @@ probes the history table before acknowledgement. History is not emitted in outbo
 error bodies.
 
 For one state transition, the writer adds at most one change row and prunes at most one row after the 64-row
-account/subject cap is reached. A page reads at most `P+1` indexed history rows plus the current owner entry and
-fixed authority checks. Review reads one selected change plus the current entry/profile; restore reads one selected
-change and the current entry/profile, then uses the ordinary native edit, owner sequence and support transition.
+account/subject cap is reached. A page returns at most `P+1` indexed history rows and examines at most 64 retained
+rows, plus the current owner entry and fixed authority checks. Review reads one selected change plus the current
+entry/profile; restore reads one selected change and the current entry/profile, then uses the ordinary native edit,
+owner sequence and support transition.
 Account cleanup examines bounded subject pages, with at most 64 retained changes per subject. These are derived
 storage bounds; native growth, buffers, bytes and cleanup remain controller acceptance work.
 
@@ -95,7 +97,9 @@ that exact command for an explicit retry. A recorded restore receipt remains dis
 readback, including when that readback is unavailable. Slot reader, source, entry basis and operation admission retire
 the page and review before late responses can disclose or act on them.
 
-The installed page and review HTTP schemas expose state IDs, revisions, command IDs, command kind and change time, but
-omit the stored before/after profile pins. Web displays the exact exposed evidence and marks historical profile pin
-evidence unavailable; any matching label from the current released profile is visibly presentation only. Exposing the
-stored pins requires a separate native route/schema and generated-client outcome before Web can render them.
+The installed page and review HTTP schemas expose the recorded before/after profile pins alongside state IDs,
+revisions, command IDs, command kind and change time. Each pin carries its stored provenance, release digest,
+accepting type and profile ID, including the admitted legacy form and a nullable before-pin. Web displays those
+exact fields as historical evidence and marks a missing before-pin honestly. A matching label from the current
+released profile is visibly presentation only; restore still uses current admission and its original reviewed key
+and operands.

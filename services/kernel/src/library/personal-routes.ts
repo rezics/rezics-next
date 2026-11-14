@@ -213,7 +213,9 @@ function entryStateChangeSchema() {
         revision,
         priorRevision: t.Union([revision, t.Null()]),
         beforeState: t.Union([libraryStoredVocabularySchema, t.Null()]),
+        beforeProfilePin: t.Union([entryStateProfilePinSchema(), t.Null()]),
         afterState: libraryStoredVocabularySchema,
+        afterProfilePin: entryStateProfilePinSchema(),
         commandId: t.String({ format: 'uuid' }),
         commandKind: t.Union([t.Literal('library.entry.put'), t.Literal('library.entry.state.restore')]),
         changedAt: id,
@@ -221,6 +223,27 @@ function entryStateChangeSchema() {
       closed,
     ),
   );
+}
+function entryStateProfilePinSchema() {
+  return memoizedValue(entryStateProfilePinSchema, () => {
+    const releaseDigest = t.String({ pattern: '^sha256:[0-9a-f]{64}$' });
+    const nonempty = t.String({ minLength: 1 });
+    return t.Union([
+      t.Object(
+        { provenance: t.Literal('profile'), releaseDigest, acceptingType: nonempty, profileId: nonempty },
+        closed,
+      ),
+      t.Object(
+        {
+          provenance: t.Literal('legacy'),
+          releaseDigest,
+          acceptingType: t.Union([nonempty, t.Null()]),
+          profileId: t.Literal('legacy-fixed-v1'),
+        },
+        closed,
+      ),
+    ]);
+  });
 }
 function entryStateHistorySchema() {
   return memoizedValue(entryStateHistorySchema, () =>

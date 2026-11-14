@@ -8514,7 +8514,29 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     revision: number;
                                     priorRevision: number | null;
                                     beforeState: string | null;
+                                    beforeProfilePin: {
+                                        provenance: "profile";
+                                        releaseDigest: string;
+                                        acceptingType: string;
+                                        profileId: string;
+                                    } | {
+                                        provenance: "legacy";
+                                        releaseDigest: string;
+                                        acceptingType: string | null;
+                                        profileId: "legacy-fixed-v1";
+                                    } | null;
                                     afterState: string;
+                                    afterProfilePin: {
+                                        provenance: "profile";
+                                        releaseDigest: string;
+                                        acceptingType: string;
+                                        profileId: string;
+                                    } | {
+                                        provenance: "legacy";
+                                        releaseDigest: string;
+                                        acceptingType: string | null;
+                                        profileId: "legacy-fixed-v1";
+                                    };
                                     commandId: string;
                                     commandKind: "library.entry.put" | "library.entry.state.restore";
                                     changedAt: string;
@@ -8626,7 +8648,29 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                         revision: number;
                                         priorRevision: number | null;
                                         beforeState: string | null;
+                                        beforeProfilePin: {
+                                            provenance: "profile";
+                                            releaseDigest: string;
+                                            acceptingType: string;
+                                            profileId: string;
+                                        } | {
+                                            provenance: "legacy";
+                                            releaseDigest: string;
+                                            acceptingType: string | null;
+                                            profileId: "legacy-fixed-v1";
+                                        } | null;
                                         afterState: string;
+                                        afterProfilePin: {
+                                            provenance: "profile";
+                                            releaseDigest: string;
+                                            acceptingType: string;
+                                            profileId: string;
+                                        } | {
+                                            provenance: "legacy";
+                                            releaseDigest: string;
+                                            acceptingType: string | null;
+                                            profileId: "legacy-fixed-v1";
+                                        };
                                         commandId: string;
                                         commandKind: "library.entry.put" | "library.entry.state.restore";
                                         changedAt: string;
