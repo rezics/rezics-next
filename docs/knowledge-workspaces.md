@@ -269,6 +269,11 @@ revision. Public export selections retain both with their exact publication ID; 
 canonical `sha256`. Exact managed citations use the source digest, while downloaded-byte verification uses the
 representation digest. Neither digest grants access or causes target bodies to be loaded during reference checks.
 
+An explicit re-selection of a revision already admitted in the current publication generation reuses that
+generation's immutable publication identity and binding. It may move the current selection but does not invent
+another origin identity for the same admitted revision. Withdrawal or lifecycle replacement closes the generation;
+later explicit publication requires a new binding. Receipt replay never moves a publication pointer.
+
 Decision: The Web editor retains each admitted reference manifest beside its compatible body and freezes both in
 create/revise intents, including exact uncertain retries. Inline reference editing requires explicit Apply or Cancel;
 body/manifest inconsistencies require explicit component restoration, unavailable-entry retention, duplicate removal,
