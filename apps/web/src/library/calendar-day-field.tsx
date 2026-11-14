@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Popover, PopoverContent, PopoverTrigger } from '@rezics/ui/shadcn/popover';
@@ -41,6 +41,53 @@ function addMonths(date: Date, delta: number): Date {
   const next = new Date(2000, 0, 1);
   next.setFullYear(date.getFullYear(), date.getMonth() + delta, 1);
   return next;
+}
+
+function monthStart(date: Date): Date {
+  const start = new Date(2000, 0, 1);
+  start.setFullYear(date.getFullYear(), date.getMonth(), 1);
+  return start;
+}
+
+function addDays(date: Date, delta: number): Date {
+  const next = new Date(2000, 0, 1);
+  next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate() + delta);
+  return next;
+}
+
+function daysInMonth(date: Date): number {
+  const next = addMonths(date, 1);
+  next.setDate(0);
+  return next.getDate();
+}
+
+function boundary(value: string | undefined): string | undefined {
+  return value && calendarDayDate(value) ? value : undefined;
+}
+
+function clampDay(value: string, min?: string, max?: string): string | undefined {
+  if (!calendarDayDate(value)) return;
+  const lower = boundary(min);
+  const upper = boundary(max);
+  if (lower && upper && lower > upper) return;
+  if (lower && value < lower) return lower;
+  if (upper && value > upper) return upper;
+  return value;
+}
+
+function initialDay(selected: Date | undefined, min?: string, max?: string): string {
+  const candidate = selected ? calendarDayText(selected) : calendarDayText(new Date());
+  return clampDay(candidate, min, max) ?? candidate;
+}
+
+function monthTarget(current: Date, delta: number, min?: string, max?: string): Date | undefined {
+  const month = addMonths(current, delta);
+  if (month.getFullYear() < 1 || month.getFullYear() > 9999) return;
+  const candidate = new Date(2000, 0, 1);
+  candidate.setFullYear(month.getFullYear(), month.getMonth(), Math.min(current.getDate(), daysInMonth(month)));
+  const target = clampDay(calendarDayText(candidate), min, max);
+  if (!target || target === calendarDayText(current)) return;
+  return calendarDayDate(target);
 }
 
 function weekStart(locale: string): number {
@@ -90,29 +137,93 @@ function DayGrid({
   required: boolean;
   onSelect: (value: string) => void;
 }) {
-  const [visible, setVisible] = useState(() => selected ?? new Date());
+  const [visit, setVisit] = useState(() => {
+    const focusDay = initialDay(selected, min, max);
+    const focusDate = calendarDayDate(focusDay) ?? new Date();
+    return { focusDay, visible: monthStart(focusDate) };
+  });
+  const activeDayButton = useRef<HTMLButtonElement>(null);
+  const focusDate = calendarDayDate(visit.focusDay) ?? new Date();
+  const visible = visit.visible;
   const start = weekStart(locale);
   const names = useMemo(() => weekdayNames(locale, start), [locale, start]);
   const caption = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(visible);
   const days = monthDays(visible, start);
   const selectedText = selected ? calendarDayText(selected) : '';
+  const previousTarget = monthTarget(focusDate, -1, min, max);
+  const nextTarget = monthTarget(focusDate, 1, min, max);
+
+  const focusDay = (target: Date) => {
+    const value = clampDay(calendarDayText(target), min, max);
+    if (!value) return;
+    const date = calendarDayDate(value);
+    if (!date) return;
+    setVisit({ focusDay: value, visible: monthStart(date) });
+  };
+
+  useLayoutEffect(() => {
+    activeDayButton.current?.focus();
+  }, [visit.focusDay]);
+
+  const handleDayKeyDown = (event: KeyboardEvent<HTMLButtonElement>, date: Date) => {
+    let target: Date | undefined;
+    switch (event.key) {
+      case 'ArrowLeft':
+        target = addDays(date, -1);
+        break;
+      case 'ArrowRight':
+        target = addDays(date, 1);
+        break;
+      case 'ArrowUp':
+        target = addDays(date, -7);
+        break;
+      case 'ArrowDown':
+        target = addDays(date, 7);
+        break;
+      case 'Home': {
+        const offset = (date.getDay() - start + 7) % 7;
+        target = addDays(date, -offset);
+        break;
+      }
+      case 'End': {
+        const offset = (date.getDay() - start + 7) % 7;
+        target = addDays(date, 6 - offset);
+        break;
+      }
+      case 'PageUp':
+        target = monthTarget(date, -1, min, max);
+        break;
+      case 'PageDown':
+        target = monthTarget(date, 1, min, max);
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    if (target) focusDay(target);
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
           className={navClass}
+          disabled={!previousTarget}
           aria-label={addMonths(visible, -1).toLocaleString(locale, { month: 'long', year: 'numeric' })}
-          onClick={() => setVisible(addMonths(visible, -1))}
+          onClick={() => previousTarget && focusDay(previousTarget)}
         >
           <ChevronLeftIcon aria-hidden="true" className="size-5" />
         </button>
-        <p className="min-w-0 text-center font-medium">{caption}</p>
+        <p aria-live="polite" aria-atomic="true" className="min-w-0 text-center font-medium">
+          {caption}
+        </p>
         <button
           type="button"
           className={navClass}
+          disabled={!nextTarget}
           aria-label={addMonths(visible, 1).toLocaleString(locale, { month: 'long', year: 'numeric' })}
-          onClick={() => setVisible(addMonths(visible, 1))}
+          onClick={() => nextTarget && focusDay(nextTarget)}
         >
           <ChevronRightIcon aria-hidden="true" className="size-5" />
         </button>
@@ -135,15 +246,21 @@ function DayGrid({
                 const day = calendarDayText(date);
                 const outside = date.getMonth() !== visible.getMonth();
                 const pressed = day === selectedText;
-                const blocked = (!!min && day < min) || (!!max && day > max);
+                const blocked = clampDay(day, min, max) !== day;
                 return (
                   <td key={day} role="gridcell" className="p-0">
                     <button
+                      ref={day === visit.focusDay ? activeDayButton : undefined}
                       type="button"
                       className={`${dayClass} ${pressed ? 'bg-primary text-primary-foreground' : outside ? 'text-muted-foreground' : ''} ${blocked ? '' : 'hover:bg-muted'}`}
                       aria-label={new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(date)}
                       aria-pressed={pressed}
+                      tabIndex={day === visit.focusDay && !blocked ? 0 : -1}
                       disabled={blocked}
+                      onFocus={() => {
+                        if (day !== visit.focusDay) focusDay(date);
+                      }}
+                      onKeyDown={(event) => handleDayKeyDown(event, date)}
                       onClick={() => {
                         if (pressed && !required) onSelect('');
                         else onSelect(day);
@@ -186,13 +303,23 @@ export function CalendarDayField({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const isOpen = open && !disabled;
   const locale = getLocale();
   const selected = calendarDayDate(value);
+  useLayoutEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       {name ? <input type="hidden" name={name} value={value} /> : null}
-      <Popover open={open} onOpenChange={(next) => !disabled && setOpen(next)}>
+      <Popover
+        open={isOpen}
+        onOpenChange={(next) => {
+          if (next && !disabled) setOpen(true);
+          else setOpen(false);
+        }}
+      >
         <PopoverTrigger
           disabled={disabled}
           render={
@@ -202,7 +329,7 @@ export function CalendarDayField({
               className={inputClass}
               aria-label={label}
               aria-describedby={describedBy}
-              aria-expanded={open}
+              aria-expanded={isOpen}
               aria-haspopup="dialog"
               disabled={disabled}
             />
@@ -211,7 +338,7 @@ export function CalendarDayField({
           {displayDay(value, locale)}
         </PopoverTrigger>
         <PopoverContent align="start" className="w-auto p-2" role="dialog" aria-label={label}>
-          {open ? (
+          {isOpen ? (
             <DayGrid
               locale={locale}
               selected={selected}
@@ -219,6 +346,7 @@ export function CalendarDayField({
               max={max}
               required={required}
               onSelect={(next) => {
+                if (disabled) return;
                 onChange(next);
                 setOpen(false);
               }}
