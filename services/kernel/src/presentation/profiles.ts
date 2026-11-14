@@ -1,8 +1,9 @@
 import { memoizedValue } from '../memoized.ts';
 import { jsonParameter } from '../database/json.ts';
 import { profileDigest, platformRegistry, validateProfileFilters, type PresentationProfile } from '@rezics/composition';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import { activeRelease } from '../semantic/definitions.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { ProfileInputError } from './profile-cache.ts';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import type { AccessCheck, AccountActor } from '../request/access.ts';
@@ -28,8 +29,10 @@ export class StaleProfileHeadError extends Error {}
 export async function readProfile(
   pool: Pool | CommandTransaction,
   digest: string,
+  deadline?: number,
 ): Promise<PresentationProfile | null> {
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
+  if (pool instanceof Pool) return withReadTransaction(pool, (client) => readProfile(client, digest), deadline);
   const row = await read.run(pool, { route: resource.route, digest });
   if (!row) return null;
   return profiles().read(digest, row.body);
@@ -37,12 +40,19 @@ export async function readProfile(
 
 export async function activeProfile(
   pool: Pool,
+  deadline?: number,
 ): Promise<{ digest: string; head: number; profile: PresentationProfile } | null> {
-  const active = await pointer.run(pool, { route: resource.route });
-  if (!active) return null;
-  const profile = await readProfile(pool, active.digest);
-  if (!profile) throw new Error('Active presentation profile is missing');
-  return { ...active, profile };
+  return withReadTransaction(
+    pool,
+    async (client) => {
+      const active = await pointer.run(client, { route: resource.route });
+      if (!active) return null;
+      const profile = await readProfile(client, active.digest);
+      if (!profile) throw new Error('Active presentation profile is missing');
+      return { ...active, profile };
+    },
+    deadline,
+  );
 }
 
 type WriteOptions = {
