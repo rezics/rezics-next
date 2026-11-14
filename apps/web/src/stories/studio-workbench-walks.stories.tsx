@@ -21,17 +21,17 @@ export const DirtySwitchKeepsWorkingText: Story = {
   args: { profile: 'book', scenario: 'dirty' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const title = await canvas.findByRole('textbox', { name: m.studio_workspace_title(), exact: true });
+    const title = await canvas.findByRole('textbox', { name: m.studio_workspace_title() });
     await openNavigation(canvasElement);
     const outline = canvas.getByRole('region', { name: m.studio_book_outline_label() });
-    await userEvent.click(within(outline).getByRole('button', { name: 'A map drawn from memory', exact: true }));
+    await userEvent.click(within(outline).getByRole('button', { name: 'A map drawn from memory' }));
     await expect(canvas.getByRole('region', { name: m.studio_workspace_switch_region() })).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_keep_editing(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_keep_editing() }));
     await expect(title).toHaveValue('The lighthouse before dawn · working draft');
     await openNavigation(canvasElement);
-    await userEvent.click(within(outline).getByRole('button', { name: 'A map drawn from memory', exact: true }));
-    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_save_switch(), exact: true }));
-    await expect(await canvas.findByRole('heading', { name: 'A map drawn from memory', exact: true })).toBeVisible();
+    await userEvent.click(within(outline).getByRole('button', { name: 'A map drawn from memory' }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_save_switch() }));
+    await expect(await canvas.findByRole('heading', { name: 'A map drawn from memory' })).toBeVisible();
   },
 };
 
@@ -39,13 +39,13 @@ export const ComparisonSurvivesPreview: Story = {
   args: { profile: 'column', scenario: 'comparison' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByRole('heading', { name: m.studio_revision_selected(), exact: true });
-    await userEvent.click(canvas.getByRole('button', { name: m.studio_revision_use(), exact: true }));
-    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_preview(), exact: true }));
+    await canvas.findByRole('heading', { name: m.studio_revision_selected() });
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_revision_use() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_preview() }));
     await expect(canvas.getByRole('region', { name: m.studio_workspace_preview_region() })).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_versions(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_versions() }));
     await expect(canvas.getByRole('group', { name: m.studio_revision_copy_review() })).toBeVisible();
-    await expect(canvas.getByRole('heading', { name: m.studio_revision_selected(), exact: true })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: m.studio_revision_selected() })).toBeVisible();
   },
 };
 
@@ -53,14 +53,14 @@ export const UnavailablePreparationKeepsWritingAvailable: Story = {
   args: { profile: 'book', scenario: 'preparation-unavailable' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const title = await canvas.findByRole('textbox', { name: m.studio_workspace_title(), exact: true });
+    const title = await canvas.findByRole('textbox', { name: m.studio_workspace_title() });
     await expect(canvasElement.querySelector('.studio-publication-region > [role="status"]')).toHaveTextContent(
       m.studio_release_unavailable(),
     );
     await expect(title).toBeEnabled();
-    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_preview(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_preview() }));
     await expect(canvas.getByRole('region', { name: m.studio_workspace_preview_region() })).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_write(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.studio_workspace_write() }));
     await expect(title).toBeEnabled();
   },
 };

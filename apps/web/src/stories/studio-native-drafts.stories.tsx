@@ -403,7 +403,7 @@ export const DesktopKeyboardRecovery: Story = {
     canvas.getByRole('link', { name: m.studio_workspace_skip() }).focus();
     await userEvent.keyboard('{Enter}');
     await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: m.studio_workspace_write(), exact: true })).toHaveFocus();
+    await expect(canvas.getByRole('button', { name: m.studio_workspace_write() })).toHaveFocus();
     await userEvent.tab();
     await userEvent.tab();
     await expect(canvas.getByRole('button', { name: m.studio_workspace_versions() })).toHaveFocus();
