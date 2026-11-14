@@ -1,6 +1,8 @@
 import * as SharedSelect from '@rezics/ui/shadcn/select';
 import type { DocumentSnapshot } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeUrl } from '../../paraglide/runtime.js';
@@ -68,24 +70,60 @@ function rulesReadLabel(read: RulesAuthoringRead): string {
   }
 }
 
-function CurrentRules({ current }: { current: RulesAuthoringResponse['current'] }) {
-  if (current.state !== 'available') return null;
+function sameReference(
+  left: { postId: string; revisionId: string } | null | undefined,
+  right: { postId: string; revisionId: string } | null | undefined,
+) {
+  return left?.postId === right?.postId && left?.revisionId === right?.revisionId;
+}
+
+function ReferenceIds({ reference }: { reference: { postId: string; revisionId: string } | null }) {
+  if (!reference) return <p>{m.realm_appearance_no_rules()}</p>;
   return (
-    <div className="space-y-3 rounded-xl bg-muted p-4" data-current-rules>
+    <dl className="grid min-w-0 gap-x-3 gap-y-1 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
+      <dt>{m.realm_rules_authoring_revision()}</dt>
+      <dd className="break-all">{reference.postId} / {reference.revisionId}</dd>
+    </dl>
+  );
+}
+
+function CurrentRules({
+  read,
+  reference,
+  appearanceRead,
+}: {
+  read: RulesAuthoringRead | null;
+  reference: { postId: string; revisionId: string } | null;
+  appearanceRead: RealmAppearanceState['read'];
+}) {
+  if (appearanceRead.kind === 'hidden') return <p role="alert">{m.community_management_denied()}</p>;
+  if (appearanceRead.kind === 'unavailable') return <p role="status">{m.realm_appearance_unavailable()}</p>;
+  if (!read || read.kind !== 'ready') return <p role="status">{rulesReadLabel(read ?? { kind: 'unavailable' })}</p>;
+
+  const current = read.value.current;
+  const currentReference = current.state === 'none' ? null : current.reference;
+  if (!sameReference(currentReference, reference))
+    return <p role="status">{m.realm_appearance_unavailable()}</p>;
+  if (current.state !== 'available') return <p role="status">{rulesReadLabel(read)}</p>;
+
+  return (
+    <div className="min-w-0 space-y-3 rounded-xl bg-muted p-4" data-current-rules>
       <h4 className="font-medium">{current.title ?? m.realm_rules_authoring_title_unknown()}</h4>
-      <dl className="grid gap-x-3 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
+      <ReferenceIds reference={current.reference} />
+      <dl className="grid min-w-0 gap-x-3 gap-y-1 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
         <dt>{m.realm_rules_authoring_board()}</dt>
         <dd className="break-words">{current.boardTitle ?? current.boardId}</dd>
         <dt>{m.realm_rules_authoring_author()}</dt>
         <dd className="break-all">{current.authorId}</dd>
-        <dt>{m.realm_rules_authoring_revision()}</dt>
-        <dd className="break-all">{current.reference.revisionId}</dd>
         <dt>{m.thread_history_licence()}</dt>
         <dd className="break-words">{current.licence}</dd>
         <dt>{m.realm_rules_authoring_language()}</dt>
         <dd>{current.language ?? m.realm_rules_authoring_language_unknown()}</dd>
       </dl>
-      <div lang={current.language ?? undefined} className="max-h-96 overflow-auto rounded-lg border bg-background p-3">
+      <div
+        lang={current.language ?? undefined}
+        className="max-h-96 min-w-0 overflow-auto break-words rounded-lg border bg-background p-3"
+      >
         <DocumentBody
           document={current.body}
           locale={getLocale()}
@@ -129,6 +167,7 @@ export function RealmRulesAuthoringPanel({
   const [licence, setLicence] = useState('');
   const [attribution, setAttribution] = useState(false);
   const [published, setPublished] = useState<PublishedRulesRevision | null>(null);
+  const [candidateReadingOpen, setCandidateReadingOpen] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [attachOutcome, setAttachOutcome] = useState<
     'none' | 'saved' | 'conflict' | 'uncertain' | 'denied' | 'unavailable'
@@ -138,6 +177,8 @@ export function RealmRulesAuthoringPanel({
   const activeRead = useRef<AbortController | null>(null);
   const readGeneration = useRef(0);
   const reviewHeading = useRef<HTMLHeadingElement | null>(null);
+  const focusGeneration = useRef(0);
+  const reviewFocusGeneration = useRef<number | null>(null);
   const current = prepared?.kind === 'ready' ? prepared.value.current : null;
   const destinationPage = prepared?.kind === 'ready' ? prepared.value.destinations : null;
   const destinations = destinationPage?.state === 'available' ? destinationPage.items : [];
@@ -145,6 +186,24 @@ export function RealmRulesAuthoringPanel({
   const canCreate = chosenDestination?.create.state === 'allowed';
   const canAttach = prepared?.kind === 'ready' && prepared.value.actions.attach.state === 'allowed';
   const editAdvice = prepared?.kind === 'ready' ? prepared.value.actions.edit.state : 'unavailable';
+  const attachedReference = state.read.kind === 'ready' ? state.read.snapshot.presentation.rules : null;
+  const candidateAttached = Boolean(
+    published &&
+      (attachOutcome === 'saved' ||
+        (attachedReference &&
+          attachedReference.postId === published.postId &&
+          attachedReference.revisionId === published.revisionId)),
+  );
+  const pendingCandidate = Boolean(
+    published &&
+      (!candidateAttached || attachOutcome === 'conflict' || attachOutcome === 'uncertain' || attachOutcome === 'unavailable'),
+  );
+  const createPermitted = Boolean(
+    prepared?.kind === 'ready' &&
+      prepared.value.actions.create.state === 'allowed' &&
+      destinationPage?.state === 'available' &&
+      destinations.some((item) => item.create.state === 'allowed'),
+  );
   const head = snapshot.head;
   const previousHead = useRef(head);
 
@@ -181,8 +240,17 @@ export function RealmRulesAuthoringPanel({
   }, [adapter, cursor, head, lifetime, realmId, reload]);
 
   useLayoutEffect(() => {
-    if (mode === 'review') reviewHeading.current?.focus();
+    if (mode !== 'review') return;
+    if (reviewFocusGeneration.current === focusGeneration.current) reviewHeading.current?.focus();
+    reviewFocusGeneration.current = null;
   }, [mode, published]);
+  useEffect(() => {
+    const recordFocus = () => {
+      focusGeneration.current++;
+    };
+    document.addEventListener('focusin', recordFocus, true);
+    return () => document.removeEventListener('focusin', recordFocus, true);
+  }, []);
   useEffect(() => onModeChange(mode !== 'closed'), [mode, onModeChange]);
   useEffect(() => {
     if (previousHead.current === head) return;
@@ -200,7 +268,9 @@ export function RealmRulesAuthoringPanel({
 
   function beginCreate() {
     if (!lifetime?.current() && lifetime) return;
+    reviewFocusGeneration.current = null;
     setPublished(null);
+    setCandidateReadingOpen(false);
     setAttachOutcome('none');
     setBoardId('');
     setLicence('');
@@ -211,7 +281,9 @@ export function RealmRulesAuthoringPanel({
 
   function beginEdit() {
     if (current?.state !== 'available' || editAdvice !== 'allowed' || (lifetime && !lifetime.current())) return;
+    reviewFocusGeneration.current = null;
     setPublished(null);
+    setCandidateReadingOpen(false);
     setAttachOutcome('none');
     setEditKey(crypto.randomUUID());
     setMode('edit');
@@ -287,414 +359,599 @@ export function RealmRulesAuthoringPanel({
     else setMode('closed');
   }
 
+  function openReview() {
+    reviewFocusGeneration.current = focusGeneration.current;
+    setMode('review');
+  }
+
   if (!snapshot.canManage || (lifetime && !lifetime.current())) return null;
   const noPostAdvice =
     prepared?.kind === 'ready' &&
     prepared.value.destinations.state === 'available' &&
     prepared.value.destinations.items.length > 0 &&
     prepared.value.destinations.items.every((item) => item.create.state === 'denied');
+  const preparedReference =
+    prepared?.kind === 'ready'
+      ? prepared.value.current.state === 'none'
+        ? null
+        : prepared.value.current.reference
+      : undefined;
+  const currentReadMatchesAttachment =
+    prepared?.kind === 'ready' && sameReference(preparedReference, attachedReference);
+  const attachedStatus = (() => {
+    if (state.read.kind === 'hidden') return m.community_management_denied();
+    if (state.read.kind === 'unavailable') return m.realm_appearance_unavailable();
+    if (!attachedReference) return m.realm_appearance_no_rules();
+    if (prepared?.kind === 'ready') {
+      if (!currentReadMatchesAttachment) return m.realm_appearance_unavailable();
+      const readLabel = rulesReadLabel(prepared);
+      if (readLabel) return readLabel;
+      return prepared.value.current.state === 'available'
+        ? prepared.value.current.title ?? m.realm_rules_authoring_title_unknown()
+        : m.realm_appearance_rules_unavailable();
+    }
+    return state.read.snapshot.rules.state === 'available'
+      ? state.read.snapshot.rules.value.title
+      : m.realm_appearance_rules_unavailable();
+  })();
+  const candidateReference = published ? { postId: published.postId, revisionId: published.revisionId } : null;
 
   return (
-    <section className="space-y-3 rounded-xl border p-4" aria-labelledby={`${ids}-heading`} data-rules-authoring>
-      <h3 id={`${ids}-heading`} className="font-medium">
+    <section className="space-y-3 rounded-xl border p-4" aria-labelledby={ids + '-heading'} data-rules-authoring>
+      <h3 id={ids + '-heading'} className="font-medium">
         {m.realm_rules_authoring_open()}
       </h3>
-      {prepared === null ? <p role="status">{m.realm_appearance_unavailable()}</p> : null}
-      {prepared?.kind === 'denied' ? <p role="alert">{m.community_management_denied()}</p> : null}
-      {prepared?.kind === 'unavailable' ? <p role="status">{m.realm_appearance_unavailable()}</p> : null}
-      {prepared?.kind === 'ready' ? (
-        <>
-          <CurrentRules current={prepared.value.current} />
-          {prepared.value.current.state !== 'available' ? <p role="status">{rulesReadLabel(prepared)}</p> : null}
-          {noPostAdvice ? <p role="status">{m.thread_write_forbidden()}</p> : null}
-          {destinationPage?.state === 'available' && destinations.length === 0 ? (
-            <p role="status">{m.realm_rules_authoring_no_destinations()}</p>
-          ) : null}
-          {destinationPage?.state === 'denied' ? <p role="alert">{m.thread_write_forbidden()}</p> : null}
-          {destinationPage?.state === 'unavailable' ? <p role="status">{m.realm_boards_unavailable()}</p> : null}
-          {destinationPage?.state === 'available' && destinationPage.next ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={mode !== 'closed'}
-              onClick={() => setCursor(destinationPage.next ?? undefined)}
-            >
-              {m.realm_boards_more()}
-            </Button>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={mode !== 'closed' || prepared.value.actions.create.state !== 'allowed'}
-              onClick={beginCreate}
-            >
-              {m.board_start_thread()}
-            </Button>
-            {prepared.value.current.state === 'available' ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={mode !== 'closed' || editAdvice !== 'allowed'}
-                onClick={beginEdit}
-              >
-                {m.thread_content_edit()}
-              </Button>
-            ) : null}
-          </div>
-          {editAdvice === 'stale' ? <p role="status">{m.realm_rules_authoring_stale()}</p> : null}
-          {prepared.value.current.state === 'available' && editAdvice === 'denied' ? (
-            <p role="status">{m.thread_edit_forbidden()}</p>
-          ) : null}
-          {prepared.value.current.state === 'available' && editAdvice === 'unavailable' ? (
-            <p role="status">{m.realm_appearance_unavailable()}</p>
-          ) : null}
-        </>
-      ) : null}
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <div className="min-w-0 space-y-4" data-primary-work>
+          <section className="min-w-0 space-y-2 rounded-xl bg-muted p-4" aria-labelledby={ids + '-current-title'}>
+            <h4 id={ids + '-current-title'} className="font-medium">
+              {m.realm_appearance_current()}
+            </h4>
+            <p role={state.read.kind === 'hidden' ? 'alert' : 'status'} className="break-words">
+              {attachedStatus}
+            </p>
+            {state.read.kind === 'ready' ? <ReferenceIds reference={attachedReference} /> : null}
+          </section>
 
-      {mode === 'create' ? (
-        <div className="space-y-3 rounded-xl border p-4">
-          <label htmlFor={`${ids}-board`} className="block font-medium">
-            {m.realm_rules_authoring_destination()}
-          </label>
-          <SharedSelect.Select
-            value={boardId || null}
-            items={[
-              { value: null, label: m.realm_rules_authoring_choose_destination() },
-              ...destinations.map((item) => ({
-                value: item.boardId,
-                label: `${item.title ?? item.boardId}${item.create.state === 'allowed' ? '' : ` (${m.thread_write_forbidden()})`}`,
-              })),
-            ]}
-            onValueChange={(value) => setBoardId(value ?? '')}
-          >
-            <SharedSelect.SelectTrigger
-              id={`${ids}-board`}
-              className="min-h-11 w-full rounded-md border bg-background px-3"
-            >
-              <SharedSelect.SelectValue />
-            </SharedSelect.SelectTrigger>
-            <SharedSelect.SelectContent>
-              <SharedSelect.SelectGroup>
-                <SharedSelect.SelectItem value={null}>
-                  {m.realm_rules_authoring_choose_destination()}
-                </SharedSelect.SelectItem>
-                {destinations.map((item) => (
-                  <SharedSelect.SelectItem key={item.boardId} value={item.boardId}>
-                    {item.title ?? item.boardId}
-                    {item.create.state === 'allowed' ? '' : ` (${m.thread_write_forbidden()})`}
-                  </SharedSelect.SelectItem>
-                ))}
-              </SharedSelect.SelectGroup>
-            </SharedSelect.SelectContent>
-          </SharedSelect.Select>
-          {chosenDestination && !canCreate ? <p role="status">{m.thread_write_forbidden()}</p> : null}
-          <label htmlFor={`${ids}-licence`} className="block font-medium">
-            {m.thread_history_licence()}
-          </label>
-          <SharedSelect.Select
-            value={licence || null}
-            items={[
-              { value: null, label: m.realm_appearance_choose() },
-              { value: nativeRuleLicence, label: nativeRuleLicence },
-            ]}
-            onValueChange={(value) => setLicence(value ?? '')}
-          >
-            <SharedSelect.SelectTrigger
-              id={`${ids}-licence`}
-              className="min-h-11 w-full rounded-md border bg-background px-3"
-            >
-              <SharedSelect.SelectValue />
-            </SharedSelect.SelectTrigger>
-            <SharedSelect.SelectContent>
-              <SharedSelect.SelectGroup>
-                <SharedSelect.SelectItem value={null}>{m.realm_appearance_choose()}</SharedSelect.SelectItem>
-                <SharedSelect.SelectItem value={nativeRuleLicence}>{nativeRuleLicence}</SharedSelect.SelectItem>
-              </SharedSelect.SelectGroup>
-            </SharedSelect.SelectContent>
-          </SharedSelect.Select>
-          <label className="flex min-h-11 items-start gap-3 text-sm leading-6">
-            <input
-              type="checkbox"
-              className="mt-1 size-5 shrink-0"
-              checked={attribution}
-              onChange={(event) => setAttribution(event.currentTarget.checked)}
-            />
-            {m.realm_rules_authoring_attribution()}
-          </label>
-          <p role="status">{m.realm_appearance_rules_help()}</p>
-          <PostComposer<PublishedRulesRevision, { boardId: string; licence: typeof nativeRuleLicence }>
-            key={JSON.stringify([realmId, createKey, snapshot.head, mode])}
-            initialKey={createKey}
-            titleRequired
-            localDraft={false}
-            canSubmit={Boolean(
-              canCreate && boardId && licence === nativeRuleLicence && attribution && lifetime?.current(),
-            )}
-            boardId={boardId}
-            submissionContext={{ boardId, licence: nativeRuleLicence }}
-            onSubmit={async ({ title, body, idempotencyKey, mediaIds, submissionContext }) => {
-              if (!lifetime?.current() || !lifetime.csrfToken || !submissionContext || !canCreate)
-                return { ok: false as const, reason: 'unavailable' as const };
-              const result = await startThread({
-                data: {
-                  kind: 'rules',
-                  boardId: submissionContext.boardId,
-                  title,
-                  body,
-                  licence: submissionContext.licence,
-                  idempotencyKey,
-                  ...(mediaIds.length ? { mediaIds } : {}),
-                },
-                headers: { 'X-CSRF-Token': lifetime.csrfToken },
-                fetch: draftFetch(body),
-              });
-              if (!lifetime.current()) return { ok: false as const, reason: 'unavailable' as const };
-              if (!result.ok) return result;
-              const post = result.thread.firstPost;
-              if (post.availability !== 'available' || !('revisionId' in post) || !post.body)
-                return { ok: false as const, reason: 'unavailable' as const };
-              if (result.thread.title === null) return { ok: false as const, reason: 'unavailable' as const };
-              const exact: PublishedRulesRevision = {
-                postId: post.id,
-                revisionId: post.revisionId,
-                title: result.thread.title,
-                authorId: result.thread.authorId,
-                boardId: result.thread.boardId,
-                boardTitle: chosenDestination?.title ?? null,
-                body: post.body,
-                language: primaryLanguage(post.body),
-                licence: result.thread.licence,
-                sha256: post.sha256,
-              };
-              return { ok: true as const, value: exact };
-            }}
-            onSuccess={(revision) => {
-              if (!lifetime?.current()) return;
-              setPublished(revision);
-              setMode('review');
-            }}
-          />
-          <Button type="button" variant="outline" onClick={leaveEditor}>
-            {m.thread_edit_cancel()}
-          </Button>
-        </div>
-      ) : null}
-
-      {mode === 'edit' && current?.state === 'available' ? (
-        <div className="space-y-3 rounded-xl border p-4">
-          <InlinePostEditor
-            key={JSON.stringify([realmId, current.reference.postId, current.reference.revisionId, editKey])}
-            initialBody={current.body}
-            initialMediaIds={current.mediaIds}
-            revisionId={current.reference.revisionId}
-            idempotencyKey={editKey}
-            containerId={current.threadId}
-            onSubmit={async (input) => {
-              if (!lifetime?.current() || !lifetime.csrfToken)
-                return { ok: false as const, reason: 'unavailable' as const };
-              const result = await revisePost({
-                data: {
-                  postId: current.reference.postId,
-                  revisionId: input.revisionId,
-                  body: input.body,
-                  idempotencyKey: input.idempotencyKey,
-                  licence: current.licence,
-                  ...(input.mediaIds.length ? { mediaIds: input.mediaIds } : {}),
-                },
-                headers: { 'X-CSRF-Token': lifetime.csrfToken },
-                fetch: draftFetch(input.body),
-              });
-              if (!lifetime.current()) return { ok: false as const, reason: 'unavailable' as const };
-              return result;
-            }}
-            onCancel={leaveEditor}
-            onRevisionReplacement={() => {
-              setMode('closed');
-              setEditKey('');
-              setReload((value) => value + 1);
-            }}
-            onSuccess={(post) => {
-              if (!lifetime?.current() || post.availability !== 'available' || !('revisionId' in post) || !post.body)
-                return;
-              setPublished({
-                postId: post.id,
-                revisionId: post.revisionId,
-                title: current.title,
-                authorId: current.authorId,
-                boardId: current.boardId,
-                boardTitle: current.boardTitle,
-                body: post.body,
-                language: primaryLanguage(post.body),
-                licence: post.licence,
-                sha256: post.sha256,
-              });
-              setMode('review');
-            }}
-          />
-        </div>
-      ) : null}
-
-      {confirmExit ? (
-        <div
-          role="alertdialog"
-          aria-labelledby={`${ids}-exit-title`}
-          aria-describedby={`${ids}-exit-copy`}
-          className="space-y-3 rounded-xl border p-4"
-        >
-          <h4 id={`${ids}-exit-title`} className="font-medium">
-            {m.thread_authoring_discard_title()}
-          </h4>
-          <p id={`${ids}-exit-copy`}>{m.realm_rules_authoring_exit()}</p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              onClick={() => {
-                setConfirmExit(false);
-                setMode('closed');
-              }}
-            >
-              {m.thread_authoring_discard()}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setConfirmExit(false)}>
-              {m.thread_authoring_stay()}
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {mode === 'review' && published ? (
-        <section className="space-y-3 rounded-xl border p-4" aria-labelledby={`${ids}-review-title`}>
-          <h4
-            ref={reviewHeading}
-            id={`${ids}-review-title`}
-            tabIndex={-1}
-            className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {m.realm_rules_authoring_review()}
-          </h4>
-          <p role="status">{m.realm_rules_authoring_published()}</p>
-          <h5 className="text-lg font-semibold">{published.title ?? m.realm_rules_authoring_title_unknown()}</h5>
-          <dl className="grid gap-x-3 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
-            <dt>{m.realm_rules_authoring_board()}</dt>
-            <dd className="break-words">{published.boardTitle ?? published.boardId}</dd>
-            <dt>{m.realm_rules_authoring_author()}</dt>
-            <dd className="break-all">{published.authorId}</dd>
-            <dt>{m.realm_rules_authoring_revision()}</dt>
-            <dd className="break-all">{published.revisionId}</dd>
-            <dt>{m.thread_history_licence()}</dt>
-            <dd className="break-words">{published.licence}</dd>
-            <dt>{m.realm_rules_authoring_language()}</dt>
-            <dd>{published.language ?? m.realm_rules_authoring_language_unknown()}</dd>
-          </dl>
-          <div
-            lang={published.language ?? undefined}
-            className="max-h-96 overflow-auto rounded-lg border bg-background p-3"
-          >
-            <DocumentBody
-              document={published.body}
-              locale={getLocale()}
-              renderImage={() => <span>{m.realm_rules_authoring_image_unavailable()}</span>}
-            />
-          </div>
-          <a className="text-sm text-primary underline" href={exactHref(published.postId, published.revisionId)}>
-            {m.realm_appearance_open_revision()}
-          </a>
-          {attachOutcome === 'conflict' ? (
-            <div role="alert" className="space-y-2">
-              <p>{m.realm_rules_authoring_attach_conflict()}</p>
-              {state.read.kind === 'ready' ? (
-                <details>
-                  <summary>{m.realm_appearance_current()}</summary>
-                  <p>
-                    {state.read.snapshot.rules.state === 'available'
-                      ? state.read.snapshot.rules.value.title
-                      : m.realm_appearance_rules_unavailable()}
-                  </p>
-                  <p className="break-all">{JSON.stringify(state.read.snapshot.presentation.rules)}</p>
-                </details>
+          {prepared === null ? <p role="status">{m.realm_appearance_unavailable()}</p> : null}
+          {prepared?.kind === 'denied' ? <p role="alert">{m.community_management_denied()}</p> : null}
+          {prepared?.kind === 'unavailable' ? <p role="status">{m.realm_appearance_unavailable()}</p> : null}
+          {prepared?.kind === 'ready' ? (
+            <>
+              {prepared.value.actions.create.state === 'denied' ? (
+                <p role="status">{m.thread_write_forbidden()}</p>
               ) : null}
-              <Button type="button" variant="outline" disabled={attaching} onClick={() => void reviewCurrentSettings()}>
-                {m.realm_appearance_refresh()}
-              </Button>
-              {state.reviewed && canAttach ? (
+              {prepared.value.actions.create.state === 'unavailable' ? (
+                <p role="status">{m.realm_appearance_unavailable()}</p>
+              ) : null}
+              {prepared.value.actions.create.state === 'stale' ? (
+                <p role="status">{m.realm_rules_authoring_stale()}</p>
+              ) : null}
+              {noPostAdvice ? <p role="status">{m.thread_write_forbidden()}</p> : null}
+              {destinationPage?.state === 'available' && destinations.length === 0 ? (
+                <p role="status">{m.realm_rules_authoring_no_destinations()}</p>
+              ) : null}
+              {destinationPage?.state === 'denied' ? <p role="alert">{m.thread_write_forbidden()}</p> : null}
+              {destinationPage?.state === 'unavailable' ? <p role="status">{m.realm_boards_unavailable()}</p> : null}
+              {destinationPage?.state === 'available' && destinationPage.next ? (
                 <Button
                   type="button"
-                  disabled={attaching || control.getSnapshot().phase === 'conflict'}
-                  onClick={() => void attachExactRevision()}
+                  variant="outline"
+                  disabled={mode !== 'closed'}
+                  onClick={() => setCursor(destinationPage.next ?? undefined)}
                 >
-                  {m.realm_rules_authoring_attach()}
+                  {m.realm_boards_more()}
                 </Button>
               ) : null}
-            </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={mode !== 'closed' || !createPermitted || pendingCandidate}
+                  onClick={beginCreate}
+                >
+                  {m.board_start_thread()}
+                </Button>
+                {prepared.value.current.state === 'available' ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={mode !== 'closed' || editAdvice !== 'allowed' || pendingCandidate}
+                    onClick={beginEdit}
+                  >
+                    {m.thread_content_edit()}
+                  </Button>
+                ) : null}
+              </div>
+              {editAdvice === 'stale' ? <p role="status">{m.realm_rules_authoring_stale()}</p> : null}
+              {prepared.value.current.state === 'available' && editAdvice === 'denied' ? (
+                <p role="status">{m.thread_edit_forbidden()}</p>
+              ) : null}
+              {prepared.value.current.state === 'available' && editAdvice === 'unavailable' ? (
+                <p role="status">{m.realm_appearance_unavailable()}</p>
+              ) : null}
+            </>
           ) : null}
-          {attachOutcome === 'uncertain' ? (
-            <div role="alert" className="space-y-2">
-              <p>{m.realm_appearance_uncertain()}</p>
-              <Button type="button" disabled={attaching} onClick={() => void retryOriginalAttach()}>
-                {m.realm_appearance_retry()}
-              </Button>
-            </div>
+
+          {mode === 'create' ? (
+            <section className="min-w-0 space-y-4 rounded-xl border p-4" aria-labelledby={ids + '-create-title'}>
+              <h4 id={ids + '-create-title'} className="font-medium">
+                {m.board_start_thread()}
+              </h4>
+              <Field className="space-y-2">
+                <FieldLabel htmlFor={ids + '-board'}>
+                  {m.realm_rules_authoring_destination()}
+                </FieldLabel>
+                <SharedSelect.Select
+                  value={boardId || null}
+                  required
+                  disabled={!destinations.length || destinationPage?.state !== 'available'}
+                  items={[
+                    { value: null, label: m.realm_rules_authoring_choose_destination() },
+                    ...destinations.map((item) => ({
+                      value: item.boardId,
+                      label:
+                        (item.title ?? item.boardId) +
+                        (item.create.state === 'allowed' ? '' : ' (' + m.thread_write_forbidden() + ')'),
+                    })),
+                  ]}
+                  onValueChange={(value) => setBoardId(value ?? '')}
+                >
+                  <SharedSelect.SelectTrigger
+                    id={ids + '-board'}
+                    aria-describedby={ids + '-destination-help'}
+                    className="min-h-11 w-full min-w-0 break-all rounded-md border bg-background px-3"
+                  >
+                    <SharedSelect.SelectValue />
+                  </SharedSelect.SelectTrigger>
+                  <SharedSelect.SelectContent>
+                    <SharedSelect.SelectGroup>
+                      <SharedSelect.SelectItem value={null}>
+                        {m.realm_rules_authoring_choose_destination()}
+                      </SharedSelect.SelectItem>
+                      {destinations.map((item) => (
+                        <SharedSelect.SelectItem key={item.boardId} value={item.boardId}>
+                          <span className="break-all">{item.title ?? item.boardId}</span>
+                          {item.create.state === 'allowed' ? '' : ' (' + m.thread_write_forbidden() + ')'}
+                        </SharedSelect.SelectItem>
+                      ))}
+                    </SharedSelect.SelectGroup>
+                  </SharedSelect.SelectContent>
+                </SharedSelect.Select>
+                <p id={ids + '-destination-help'} role={chosenDestination && !canCreate ? 'status' : undefined}>
+                  {chosenDestination && !canCreate ? m.thread_write_forbidden() : null}
+                </p>
+              </Field>
+              <fieldset className="min-w-0 space-y-3 rounded-lg border p-3" aria-describedby={ids + '-rules-help'}>
+                <legend className="px-1 font-medium">{m.thread_history_licence()}</legend>
+                <Field className="space-y-2">
+                  <FieldLabel htmlFor={ids + '-licence'}>{m.thread_history_licence()}</FieldLabel>
+                  <SharedSelect.Select
+                    value={licence || null}
+                    required
+                    items={[
+                      { value: null, label: m.realm_appearance_choose() },
+                      { value: nativeRuleLicence, label: nativeRuleLicence },
+                    ]}
+                    onValueChange={(value) => setLicence(value ?? '')}
+                  >
+                    <SharedSelect.SelectTrigger
+                      id={ids + '-licence'}
+                      aria-describedby={ids + '-rules-help'}
+                      className="min-h-11 w-full min-w-0 break-words rounded-md border bg-background px-3"
+                    >
+                      <SharedSelect.SelectValue />
+                    </SharedSelect.SelectTrigger>
+                    <SharedSelect.SelectContent>
+                      <SharedSelect.SelectGroup>
+                        <SharedSelect.SelectItem value={null}>{m.realm_appearance_choose()}</SharedSelect.SelectItem>
+                        <SharedSelect.SelectItem value={nativeRuleLicence}>{nativeRuleLicence}</SharedSelect.SelectItem>
+                      </SharedSelect.SelectGroup>
+                    </SharedSelect.SelectContent>
+                  </SharedSelect.Select>
+                </Field>
+                <Field className="flex min-h-11 flex-row items-start gap-3">
+                  <Checkbox
+                    id={ids + '-attribution'}
+                    className="mt-1 size-5 shrink-0"
+                    aria-required="true"
+                    aria-describedby={ids + '-rules-help'}
+                    checked={attribution}
+                    onCheckedChange={(checked) => setAttribution(checked === true)}
+                  />
+                  <FieldLabel
+                    htmlFor={ids + '-attribution'}
+                    className="flex min-h-11 flex-1 items-start py-2 text-sm leading-6"
+                  >
+                    {m.realm_rules_authoring_attribution()}
+                  </FieldLabel>
+                </Field>
+                <p id={ids + '-rules-help'} role="status">
+                  {m.realm_appearance_rules_help()}
+                </p>
+              </fieldset>
+              <PostComposer<PublishedRulesRevision, { boardId: string; licence: typeof nativeRuleLicence }>
+                key={JSON.stringify([realmId, createKey, snapshot.head])}
+                initialKey={createKey}
+                titleRequired
+                localDraft={false}
+                canSubmit={Boolean(
+                  canCreate && boardId && licence === nativeRuleLicence && attribution && lifetime?.current(),
+                )}
+                boardId={boardId}
+                submissionContext={{ boardId, licence: nativeRuleLicence }}
+                onSubmit={async ({ title, body, idempotencyKey, mediaIds, submissionContext }) => {
+                  reviewFocusGeneration.current = focusGeneration.current;
+                  if (!lifetime?.current() || !lifetime.csrfToken || !submissionContext || !canCreate)
+                    return { ok: false as const, reason: 'unavailable' as const };
+                  const result = await startThread({
+                    data: {
+                      kind: 'rules',
+                      boardId: submissionContext.boardId,
+                      title,
+                      body,
+                      licence: submissionContext.licence,
+                      idempotencyKey,
+                      ...(mediaIds.length ? { mediaIds } : {}),
+                    },
+                    headers: { 'X-CSRF-Token': lifetime.csrfToken },
+                    fetch: draftFetch(body),
+                  });
+                  if (!lifetime.current()) return { ok: false as const, reason: 'unavailable' as const };
+                  if (!result.ok) return result;
+                  const post = result.thread.firstPost;
+                  if (post.availability !== 'available' || !('revisionId' in post) || !post.body)
+                    return { ok: false as const, reason: 'unavailable' as const };
+                  if (result.thread.title === null) return { ok: false as const, reason: 'unavailable' as const };
+                  const exact: PublishedRulesRevision = {
+                    postId: post.id,
+                    revisionId: post.revisionId,
+                    title: result.thread.title,
+                    authorId: result.thread.authorId,
+                    boardId: result.thread.boardId,
+                    boardTitle: chosenDestination?.title ?? null,
+                    body: post.body,
+                    language: primaryLanguage(post.body),
+                    licence: result.thread.licence,
+                    sha256: post.sha256,
+                  };
+                  return { ok: true as const, value: exact };
+                }}
+                onSuccess={(revision) => {
+                  if (!lifetime?.current()) return;
+                  setPublished(revision);
+                  setCandidateReadingOpen(true);
+                  setMode('review');
+                }}
+              />
+            </section>
           ) : null}
-          {attachOutcome === 'denied' ? <p role="alert">{m.community_management_denied()}</p> : null}
-          {attachOutcome === 'unavailable' ? <p role="status">{m.realm_appearance_unavailable()}</p> : null}
-          {published && prepared?.kind === 'ready' && prepared.value.actions.attach.state === 'denied' ? (
-            <p role="status">{m.community_management_denied()}</p>
+
+          {mode === 'edit' && current?.state === 'available' ? (
+            <section className="min-w-0 space-y-3 rounded-xl border p-4" aria-labelledby={ids + '-edit-title'}>
+              <h4 id={ids + '-edit-title'} className="font-medium">
+                {m.thread_content_edit()}
+              </h4>
+              <InlinePostEditor
+                key={JSON.stringify([realmId, current.reference.postId, current.reference.revisionId, editKey])}
+                initialBody={current.body}
+                initialMediaIds={current.mediaIds}
+                revisionId={current.reference.revisionId}
+                idempotencyKey={editKey}
+                containerId={current.threadId}
+                onSubmit={async (input) => {
+                  reviewFocusGeneration.current = focusGeneration.current;
+                  if (!lifetime?.current() || !lifetime.csrfToken)
+                    return { ok: false as const, reason: 'unavailable' as const };
+                  const result = await revisePost({
+                    data: {
+                      postId: current.reference.postId,
+                      revisionId: input.revisionId,
+                      body: input.body,
+                      idempotencyKey: input.idempotencyKey,
+                      licence: current.licence,
+                      ...(input.mediaIds.length ? { mediaIds: input.mediaIds } : {}),
+                    },
+                    headers: { 'X-CSRF-Token': lifetime.csrfToken },
+                    fetch: draftFetch(input.body),
+                  });
+                  if (!lifetime.current()) return { ok: false as const, reason: 'unavailable' as const };
+                  return result;
+                }}
+                onCancel={leaveEditor}
+                onRevisionReplacement={() => {
+                  setMode('closed');
+                  setEditKey('');
+                  setReload((value) => value + 1);
+                }}
+                onSuccess={(post) => {
+                  if (!lifetime?.current() || post.availability !== 'available' || !('revisionId' in post) || !post.body)
+                    return;
+                  setPublished({
+                    postId: post.id,
+                    revisionId: post.revisionId,
+                    title: current.title,
+                    authorId: current.authorId,
+                    boardId: current.boardId,
+                    boardTitle: current.boardTitle,
+                    body: post.body,
+                    language: primaryLanguage(post.body),
+                    licence: post.licence,
+                    sha256: post.sha256,
+                  });
+                  setCandidateReadingOpen(true);
+                  setMode('review');
+                }}
+              />
+            </section>
           ) : null}
-          {published && prepared?.kind === 'ready' && prepared.value.actions.attach.state === 'unavailable' ? (
-            <p role="status">{m.realm_appearance_unavailable()}</p>
-          ) : null}
-          {attachOutcome === 'saved' ? <p role="status">{m.realm_appearance_saved()}</p> : null}
-          {attachOutcome === 'none' ? (
-            <Button
-              type="button"
-              disabled={
-                attaching ||
-                !canAttach ||
-                Boolean(lifetime && !lifetime.current()) ||
-                control.getSnapshot().phase === 'conflict'
-              }
-              onClick={() => void attachExactRevision()}
+
+          {confirmExit ? (
+            <div
+              role="alertdialog"
+              aria-labelledby={ids + '-exit-title'}
+              aria-describedby={ids + '-exit-copy'}
+              className="space-y-3 rounded-xl border p-4"
             >
-              {attaching ? m.realm_appearance_saving() : m.realm_rules_authoring_attach()}
+              <h4 id={ids + '-exit-title'} className="font-medium">
+                {m.thread_authoring_discard_title()}
+              </h4>
+              <p id={ids + '-exit-copy'}>{m.realm_rules_authoring_exit()}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setConfirmExit(false);
+                    setMode('closed');
+                  }}
+                >
+                  {m.thread_authoring_discard()}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setConfirmExit(false)}>
+                  {m.thread_authoring_stay()}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {mode === 'review' && published ? (
+            <section className="min-w-0 space-y-3 rounded-xl border p-4" aria-labelledby={ids + '-review-title'}>
+              <h4
+                ref={reviewHeading}
+                id={ids + '-review-title'}
+                tabIndex={-1}
+                className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {m.realm_rules_authoring_review()}
+              </h4>
+              <div className="min-w-0 space-y-2 rounded-lg bg-muted p-3">
+                <p role="status">
+                  {candidateAttached ? m.realm_appearance_saved() : m.realm_rules_authoring_published()}
+                </p>
+                <h5 className="break-words text-lg font-semibold">
+                  {published.title ?? m.realm_rules_authoring_title_unknown()}
+                </h5>
+                <ReferenceIds reference={candidateReference} />
+              </div>
+              {attachOutcome === 'conflict' ? (
+                <div role="alert" className="space-y-3">
+                  <p>{m.realm_rules_authoring_attach_conflict()}</p>
+                  <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                    <div className="min-w-0 rounded-lg border p-3">
+                      <h5 className="font-medium">{m.realm_appearance_current()}</h5>
+                      {state.read.kind === 'ready' ? (
+                        <ReferenceIds reference={attachedReference} />
+                      ) : (
+                        <p>
+                          {state.read.kind === 'hidden'
+                            ? m.community_management_denied()
+                            : m.realm_appearance_unavailable()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="min-w-0 rounded-lg border p-3">
+                      <h5 className="font-medium">{m.realm_rules_authoring_published()}</h5>
+                      <ReferenceIds reference={candidateReference} />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={attaching || state.busy}
+                      onClick={() => void reviewCurrentSettings()}
+                    >
+                      {m.realm_appearance_refresh()}
+                    </Button>
+                    {state.reviewed && canAttach ? (
+                      <Button
+                        type="button"
+                        disabled={attaching || control.getSnapshot().phase === 'conflict'}
+                        onClick={() => void attachExactRevision()}
+                      >
+                        {m.realm_rules_authoring_attach()}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+              {attachOutcome === 'uncertain' ? (
+                <div role="alert" className="space-y-2">
+                  <p>{m.realm_appearance_uncertain()}</p>
+                  <Button type="button" disabled={attaching} onClick={() => void retryOriginalAttach()}>
+                    {m.realm_appearance_retry()}
+                  </Button>
+                </div>
+              ) : null}
+              {attachOutcome === 'denied' ? (
+                <p role="alert">{m.community_management_denied()}</p>
+              ) : null}
+              {attachOutcome === 'unavailable' ? (
+                <p role="status">{m.realm_appearance_unavailable()}</p>
+              ) : null}
+              {prepared?.kind === 'ready' && prepared.value.actions.attach.state === 'denied' ? (
+                <p role="status">{m.community_management_denied()}</p>
+              ) : null}
+              {prepared?.kind === 'ready' && prepared.value.actions.attach.state === 'unavailable' ? (
+                <p role="status">{m.realm_appearance_unavailable()}</p>
+              ) : null}
+              {attachOutcome === 'none' && !candidateAttached ? (
+                <Button
+                  type="button"
+                  disabled={
+                    attaching ||
+                    !canAttach ||
+                    Boolean(lifetime && !lifetime.current()) ||
+                    control.getSnapshot().phase === 'conflict'
+                  }
+                  onClick={() => void attachExactRevision()}
+                >
+                  {attaching ? m.realm_appearance_saving() : m.realm_rules_authoring_attach()}
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" onClick={() => setMode('closed')}>
+                {m.editor_cancel()}
+              </Button>
+            </section>
+          ) : null}
+
+          {mode === 'closed' && published ? (
+            <section className="min-w-0 space-y-3 rounded-xl border p-4" aria-labelledby={ids + '-candidate-title'}>
+              <h4 id={ids + '-candidate-title'} className="font-medium">
+                {m.realm_rules_authoring_review()}
+              </h4>
+              <div className="min-w-0 space-y-2 rounded-lg bg-muted p-3">
+                <p role="status">
+                  {candidateAttached ? m.realm_appearance_saved() : m.realm_rules_authoring_published()}
+                </p>
+                <h5 className="break-words text-lg font-semibold">
+                  {published.title ?? m.realm_rules_authoring_title_unknown()}
+                </h5>
+                <ReferenceIds reference={candidateReference} />
+              </div>
+              {attachOutcome === 'conflict' ? (
+                <div role="alert" className="space-y-3">
+                  <p>{m.realm_rules_authoring_attach_conflict()}</p>
+                  <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                    <div className="min-w-0 rounded-lg border p-3">
+                      <h5 className="font-medium">{m.realm_appearance_current()}</h5>
+                      {state.read.kind === 'ready' ? (
+                        <ReferenceIds reference={attachedReference} />
+                      ) : (
+                        <p>
+                          {state.read.kind === 'hidden'
+                            ? m.community_management_denied()
+                            : m.realm_appearance_unavailable()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="min-w-0 rounded-lg border p-3">
+                      <h5 className="font-medium">{m.realm_rules_authoring_published()}</h5>
+                      <ReferenceIds reference={candidateReference} />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={attaching || state.busy}
+                      onClick={() => void reviewCurrentSettings()}
+                    >
+                      {m.realm_appearance_refresh()}
+                    </Button>
+                    {state.reviewed && canAttach ? (
+                      <Button
+                        type="button"
+                        disabled={attaching || control.getSnapshot().phase === 'conflict'}
+                        onClick={() => void attachExactRevision()}
+                      >
+                        {m.realm_rules_authoring_attach()}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+              {attachOutcome === 'uncertain' ? (
+                <div role="alert" className="space-y-2">
+                  <p>{m.realm_appearance_uncertain()}</p>
+                  <Button type="button" disabled={attaching} onClick={() => void retryOriginalAttach()}>
+                    {m.realm_appearance_retry()}
+                  </Button>
+                </div>
+              ) : null}
+              {attachOutcome === 'denied' ? (
+                <p role="alert">{m.community_management_denied()}</p>
+              ) : null}
+              {attachOutcome === 'unavailable' ? (
+                <p role="status">{m.realm_appearance_unavailable()}</p>
+              ) : null}
+              <Button type="button" variant="outline" onClick={openReview}>
+                {m.realm_rules_authoring_review()}
+              </Button>
+            </section>
+          ) : null}
+
+          {mode === 'create' && !confirmExit ? (
+            <Button type="button" variant="outline" onClick={leaveEditor}>
+              {m.thread_edit_cancel()}
             </Button>
           ) : null}
-          <Button type="button" variant="outline" onClick={() => setMode('closed')}>
-            {m.editor_cancel()}
-          </Button>
-        </section>
-      ) : null}
-
-      {mode === 'closed' && published ? (
-        <div
-          className="flex flex-wrap items-center gap-3"
-          role={attachOutcome === 'uncertain' || attachOutcome === 'conflict' ? 'alert' : 'status'}
-        >
-          <p>
-            {attachOutcome === 'saved'
-              ? m.realm_appearance_saved()
-              : attachOutcome === 'conflict'
-                ? m.realm_rules_authoring_attach_conflict()
-                : attachOutcome === 'uncertain'
-                  ? m.realm_appearance_uncertain()
-                  : m.realm_rules_authoring_published()}
-          </p>
-          <Button type="button" variant="outline" onClick={() => setMode('review')}>
-            {m.realm_rules_authoring_review()}
-          </Button>
+          {prepared?.kind === 'ready' && current?.state === 'available' && mode === 'closed' ? (
+            <div className="sr-only" aria-live="polite">
+              {current.currentRevision ? '' : m.thread_edit_stale()}
+            </div>
+          ) : null}
         </div>
-      ) : null}
 
-      {mode !== 'closed' && mode !== 'review' && !confirmExit ? (
-        <Button type="button" variant="outline" onClick={leaveEditor}>
-          {m.thread_edit_cancel()}
-        </Button>
-      ) : null}
-      {prepared?.kind === 'ready' && current?.state === 'available' && mode === 'closed' ? (
-        <div className="sr-only" aria-live="polite">
-          {current.currentRevision ? '' : m.thread_edit_stale()}
-        </div>
-      ) : null}
+        <aside className="min-w-0 space-y-3" data-supporting-reading>
+          <details className="min-w-0 rounded-xl border p-4">
+            <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.realm_appearance_current()}</summary>
+            <CurrentRules read={prepared} reference={attachedReference} appearanceRead={state.read} />
+          </details>
+          {published ? (
+            <details
+              className="min-w-0 rounded-xl border p-4"
+              open={candidateReadingOpen}
+              onToggle={(event) => setCandidateReadingOpen(event.currentTarget.open)}
+            >
+              <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.realm_rules_authoring_review()}</summary>
+              <div className="min-w-0 space-y-3 pt-2">
+                <h4 className="break-words font-medium">
+                  {published.title ?? m.realm_rules_authoring_title_unknown()}
+                </h4>
+                <dl className="grid min-w-0 gap-x-3 gap-y-1 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
+                  <dt>{m.realm_rules_authoring_board()}</dt>
+                  <dd className="break-words">{published.boardTitle ?? published.boardId}</dd>
+                  <dt>{m.realm_rules_authoring_author()}</dt>
+                  <dd className="break-all">{published.authorId}</dd>
+                  <dt>{m.realm_rules_authoring_revision()}</dt>
+                  <dd className="break-all">{published.postId} / {published.revisionId}</dd>
+                  <dt>{m.thread_history_licence()}</dt>
+                  <dd className="break-words">{published.licence}</dd>
+                  <dt>{m.realm_rules_authoring_language()}</dt>
+                  <dd className="break-words">{published.language ?? m.realm_rules_authoring_language_unknown()}</dd>
+                </dl>
+                <div
+                  lang={published.language ?? undefined}
+                    className="max-h-96 min-w-0 overflow-auto break-words rounded-lg border bg-background p-3"
+                >
+                  <DocumentBody
+                    document={published.body}
+                    locale={getLocale()}
+                    renderImage={() => <span>{m.realm_rules_authoring_image_unavailable()}</span>}
+                  />
+                </div>
+                <a
+                  className="break-all text-sm text-primary underline"
+                  href={exactHref(published.postId, published.revisionId)}
+                >
+                  {m.realm_appearance_open_revision()}
+                </a>
+              </div>
+            </details>
+          ) : null}
+        </aside>
+      </div>
     </section>
   );
 }
