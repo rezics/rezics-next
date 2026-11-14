@@ -4,13 +4,13 @@ import type { Pool } from 'pg';
 import { Compile } from 'typebox/compile';
 import type { Static, TSchema } from 'typebox';
 import { deadlineClient } from './deadline.ts';
+import { withViewerActionsReadSnapshot } from './viewer-actions-read-connection.ts';
 import { authorizePlatformGate, viewerActionReadTime } from './read-bindings.ts';
 import { GLOBAL_CONTEXT } from './gates/catalogue.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { parseExposure, type Exposure } from './gates/declaration.ts';
 import openGroups from './gates/open-groups.sql';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import type { createApp } from '../http/app.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../http/request.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -242,164 +242,156 @@ export async function readViewerActions(
         owner.prepare ? await owner.prepare({ pool: deps.pool, access: deps.access, actor, ids, deadline }) : owner,
       );
     }
-    return await withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const gates = new Map<string, boolean>();
-        for (const type of selected.keys())
-          for (const binding of bindings.get(type) ?? []) {
-            if (binding.exposure.kind !== 'gate') continue;
-            const group = binding.exposure.group;
-            for (const action of viewerActionBindingActions(binding)) {
-              const key = `${group}/${action}`;
-              if (actor.kind !== 'account' || !actor.scopes.includes(action)) continue;
-              if (!gates.has(key))
-                gates.set(
-                  key,
-                  open.has(group) ||
-                    (await authorizePlatformGate(
-                      deps.access,
-                      actor,
-                      [`gate:${group}`, 'gate:any'],
-                      action,
-                      GLOBAL_CONTEXT,
-                      context,
-                      at,
-                      client,
-                    )),
-                );
-            }
+    return await withViewerActionsReadSnapshot(deps.pool, deadline, async (client) => {
+      const gates = new Map<string, boolean>();
+      for (const type of selected.keys())
+        for (const binding of bindings.get(type) ?? []) {
+          if (binding.exposure.kind !== 'gate') continue;
+          const group = binding.exposure.group;
+          for (const action of viewerActionBindingActions(binding)) {
+            const key = `${group}/${action}`;
+            if (actor.kind !== 'account' || !actor.scopes.includes(action)) continue;
+            if (!gates.has(key))
+              gates.set(
+                key,
+                open.has(group) ||
+                  (await authorizePlatformGate(
+                    deps.access,
+                    actor,
+                    [`gate:${group}`, 'gate:any'],
+                    action,
+                    GLOBAL_CONTEXT,
+                    context,
+                    at,
+                    client,
+                  )),
+              );
           }
-        const results = new Map<
-          string,
-          { error: 'not_found' } | { viewerActions: { action: string; operations: string[] }[] }
-        >();
-        // Own-account decisions are shared across all displayed types and subjects,
-        // and are never retained past this request's authoritative instant.
-        const ownAllowed = new Map<string, boolean>();
-        if (actor.kind === 'account')
-          for (const action of new Set(
-            [...selected.keys()].flatMap((type) =>
-              (bindings.get(type) ?? [])
-                .filter((binding) => binding.authority === 'own-account')
-                .map((binding) => binding.action),
-            ),
-          )) {
-            const answer = await decisions.decide(
+        }
+      const results = new Map<
+        string,
+        { error: 'not_found' } | { viewerActions: { action: string; operations: string[] }[] }
+      >();
+      // Own-account decisions are shared across all displayed types and subjects,
+      // and are never retained past this request's authoritative instant.
+      const ownAllowed = new Map<string, boolean>();
+      if (actor.kind === 'account')
+        for (const action of new Set(
+          [...selected.keys()].flatMap((type) =>
+            (bindings.get(type) ?? [])
+              .filter((binding) => binding.authority === 'own-account')
+              .map((binding) => binding.action),
+          ),
+        )) {
+          const answer = await decisions.decide(
+            client,
+            {
+              action,
+              resourceType: 'access.account',
+              ids: [actor.accountId],
+            },
+            time,
+          );
+          ownAllowed.set(action, answer[actor.accountId]?.allowed === true);
+        }
+      for (const [type, ids] of selected) {
+        const owner = owners.get(type)!;
+        const eligibility = await owner.read(client, ids, at, time, deps.work);
+        const nativeActions = await owner.actionAvailability?.(client, ids, actor, time);
+        const candidates = [
+          ...new Set([
+            owner.readAction,
+            ...(bindings.get(type) ?? [])
+              .filter(({ authority, accountAuthority }) => authority === 'resource' && !accountAuthority)
+              .map(({ action }) => action),
+          ]),
+        ].sort();
+        const allowed = new Map<string, Readonly<Record<string, { allowed: boolean }>>>();
+        for (const action of candidates) {
+          const actionIds =
+            action === owner.readAction
+              ? ids
+              : ids.filter((id) =>
+                  (bindings.get(type) ?? []).some(
+                    (binding) =>
+                      binding.authority === 'resource' &&
+                      !binding.accountAuthority &&
+                      binding.action === action &&
+                      (binding.fixedResourceId === undefined || binding.fixedResourceId === id),
+                  ),
+                );
+          allowed.set(
+            action,
+            await decisions.decide(
               client,
               {
                 action,
-                resourceType: 'access.account',
-                ids: [actor.accountId],
+                resourceType: type,
+                ids: actionIds,
+                ...(action === owner.readAction
+                  ? { eligibility: async () => Object.fromEntries(ids.map((id) => [id, eligibility[id] === true])) }
+                  : {}),
               },
               time,
-            );
-            ownAllowed.set(action, answer[actor.accountId]?.allowed === true);
-          }
-        for (const [type, ids] of selected) {
-          const owner = owners.get(type)!;
-          const eligibility = await owner.read(client, ids, at, time, deps.work);
-          const nativeActions = await owner.actionAvailability?.(client, ids, actor, time);
-          const candidates = [
-            ...new Set([
-              owner.readAction,
-              ...(bindings.get(type) ?? [])
-                .filter(({ authority, accountAuthority }) => authority === 'resource' && !accountAuthority)
-                .map(({ action }) => action),
-            ]),
-          ].sort();
-          const allowed = new Map<string, Readonly<Record<string, { allowed: boolean }>>>();
-          for (const action of candidates) {
-            const actionIds =
-              action === owner.readAction
-                ? ids
-                : ids.filter((id) =>
-                    (bindings.get(type) ?? []).some(
-                      (binding) =>
-                        binding.authority === 'resource' &&
-                        !binding.accountAuthority &&
-                        binding.action === action &&
-                        (binding.fixedResourceId === undefined || binding.fixedResourceId === id),
-                    ),
-                  );
-            allowed.set(
-              action,
-              await decisions.decide(
+            ),
+          );
+        }
+        const nativeAccounts = new Map<string, Awaited<ReturnType<NonNullable<typeof accountAuthority>['decide']>>>();
+        for (const binding of bindings.get(type) ?? []) {
+          if (!binding.accountAuthority || !accountAuthority) continue;
+          const key = `${binding.accountAuthority}/${binding.action}`;
+          if (!nativeAccounts.has(key))
+            nativeAccounts.set(
+              key,
+              await accountAuthority.decide(
                 client,
                 {
-                  action,
-                  resourceType: type,
-                  ids: actionIds,
-                  ...(action === owner.readAction
-                    ? { eligibility: async () => Object.fromEntries(ids.map((id) => [id, eligibility[id] === true])) }
-                    : {}),
+                  kind: binding.accountAuthority,
+                  action: binding.action,
+                  ids,
                 },
                 time,
               ),
             );
-          }
-          const nativeAccounts = new Map<string, Awaited<ReturnType<NonNullable<typeof accountAuthority>['decide']>>>();
-          for (const binding of bindings.get(type) ?? []) {
-            if (!binding.accountAuthority || !accountAuthority) continue;
-            const key = `${binding.accountAuthority}/${binding.action}`;
-            if (!nativeAccounts.has(key))
-              nativeAccounts.set(
-                key,
-                await accountAuthority.decide(
-                  client,
-                  {
-                    kind: binding.accountAuthority,
-                    action: binding.action,
-                    ids,
-                  },
-                  time,
-                ),
-              );
-          }
-          for (const id of ids) {
-            if (!(id in eligibility) || !allowed.get(owner.readAction)?.[id]?.allowed) {
-              results.set(`${type}/${id}`, { error: 'not_found' });
-              continue;
-            }
-            const entries = new Map<string, Set<string>>();
-            for (const binding of bindings.get(type) ?? []) {
-              if (binding.fixedResourceId !== undefined && binding.fixedResourceId !== id) continue;
-              if (nativeActions?.[id]?.[binding.action] === false) continue;
-              const native = binding.accountAuthority
-                ? nativeAccounts.get(`${binding.accountAuthority}/${binding.action}`)?.[id]
-                : undefined;
-              const action = native?.action ?? binding.action;
-              if (
-                !(binding.accountAuthority
-                  ? native?.allowed
-                  : binding.authority === 'own-account'
-                    ? ownAllowed.get(binding.action)
-                    : allowed.get(binding.action)?.[id]?.allowed) ||
-                (binding.exposure.kind === 'gate' &&
-                  !open.has(binding.exposure.group) &&
-                  (actor.kind !== 'account' ||
-                    !actor.scopes.includes(action) ||
-                    !gates.get(`${binding.exposure.group}/${action}`)))
-              )
-                continue;
-              const operations = entries.get(action) ?? new Set<string>();
-              operations.add(binding.operationId);
-              entries.set(action, operations);
-            }
-            results.set(`${type}/${id}`, {
-              viewerActions: [...entries]
-                .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-                .map(([action, operations]) => ({ action, operations: [...operations].sort() })),
-            });
-          }
         }
-        await client.query('COMMIT');
-        return { resources: refs.map((ref) => ({ ...ref, ...results.get(`${ref.type}/${ref.id}`)! })) };
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
+        for (const id of ids) {
+          if (!(id in eligibility) || !allowed.get(owner.readAction)?.[id]?.allowed) {
+            results.set(`${type}/${id}`, { error: 'not_found' });
+            continue;
+          }
+          const entries = new Map<string, Set<string>>();
+          for (const binding of bindings.get(type) ?? []) {
+            if (binding.fixedResourceId !== undefined && binding.fixedResourceId !== id) continue;
+            if (nativeActions?.[id]?.[binding.action] === false) continue;
+            const native = binding.accountAuthority
+              ? nativeAccounts.get(`${binding.accountAuthority}/${binding.action}`)?.[id]
+              : undefined;
+            const action = native?.action ?? binding.action;
+            if (
+              !(binding.accountAuthority
+                ? native?.allowed
+                : binding.authority === 'own-account'
+                  ? ownAllowed.get(binding.action)
+                  : allowed.get(binding.action)?.[id]?.allowed) ||
+              (binding.exposure.kind === 'gate' &&
+                !open.has(binding.exposure.group) &&
+                (actor.kind !== 'account' ||
+                  !actor.scopes.includes(action) ||
+                  !gates.get(`${binding.exposure.group}/${action}`)))
+            )
+              continue;
+            const operations = entries.get(action) ?? new Set<string>();
+            operations.add(binding.operationId);
+            entries.set(action, operations);
+          }
+          results.set(`${type}/${id}`, {
+            viewerActions: [...entries]
+              .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+              .map(([action, operations]) => ({ action, operations: [...operations].sort() })),
+          });
+        }
       }
+      return { resources: refs.map((ref) => ({ ...ref, ...results.get(`${ref.type}/${ref.id}`)! })) };
     });
   } catch (error) {
     if (error instanceof ProblemError) throw error;

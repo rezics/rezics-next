@@ -49,6 +49,8 @@ contracts and production-default test composition.
 
 ## Acceptance
 
+Decision: batched viewer-action advice uses a request-bounded repeatable-read snapshot; mounted resource owners retain authority and disclosure.
+
 Use the [accounts capability acceptance manifest](accounts.capabilities.md) to map every scoped capability to its
 personas, released fixtures, surface evidence, frozen scenarios and native acceptance command.
 The [post-seed API capture](accounts.capabilities.md#post-seed-api-capture) defines the independent original recovery,
