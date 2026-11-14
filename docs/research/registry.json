@@ -1,6 +1,13 @@
 {
   "reports": [
     {
+      "path": "docs/research/editor-experience-gpt-6.md",
+      "topic": "editor-experience",
+      "researcher": "gpt-6",
+      "state": "adopted",
+      "decision": "docs/editor.md"
+    },
+    {
       "path": "docs/research/access-model-gpt-6-astra.md",
       "topic": "access-model",
       "researcher": "gpt-6-astra",
