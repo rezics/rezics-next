@@ -328,8 +328,7 @@ export function advanceHostedPublicationPreparation(
       const replay = await readHostedPublicationAdvanceReplay(tx as AccessClient, actor, stageLocator, stepId);
       if (replay?.kind === 'preparation')
         return preparationResult(replay.response as HostedPublicationPreparationProgress, false);
-      if (replay?.kind === 'staging')
-        return preparationResult(progress(catalogueId, replay.progress), false);
+      if (replay?.kind === 'staging') return preparationResult(progress(catalogueId, replay.progress), false);
 
       const stageRead = await readHostedPublicationStagingProgressWithExpiry(tx as AccessClient, actor, stageLocator);
       const stage = stageRead.progress;
