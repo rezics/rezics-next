@@ -179,8 +179,7 @@ export async function prepareHostedVersionDraftMovePlan(
   ]);
   const sourceSiblingRank = siblingRanks[0]!;
   const sourcePreorderRank = preorderRanks[0]!;
-  const destinationPreorderRank =
-    destinationParent === null ? null : preorderRanks[1]!;
+  const destinationPreorderRank = destinationParent === null ? null : preorderRanks[1]!;
   const preorderLength = await sequenceLength(indexes.preorder, selection.preorderRootId);
   if (sourcePreorderRank + source.subtreeSize > preorderLength) {
     throw new Error('Hosted version draft subtree exceeds the selected preorder');
@@ -195,8 +194,7 @@ export async function prepareHostedVersionDraftMovePlan(
 
   const destinationSiblingLength = await sequenceLength(indexes.siblings, selection.destinationSiblingRootId);
   const destinationSiblingRank = before === null ? destinationSiblingLength : siblingRanks[1]!;
-  const beforePreorderRank =
-    before === null ? null : preorderRanks[destinationParent === null ? 1 : 2]!;
+  const beforePreorderRank = before === null ? null : preorderRanks[destinationParent === null ? 1 : 2]!;
   if (
     beforePreorderRank !== null &&
     beforePreorderRank >= sourcePreorderRank &&

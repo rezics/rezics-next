@@ -232,8 +232,14 @@ test('ordinary and weighted selections share child frontiers without scanning la
     const access = batchWorkspace(snapshot, batches);
     const select = chapterOnly ? selectVersionedOutlineSequenceChapters : selectVersionedOutlineSequenceNodes;
     expect((await select(access, requests)).map((node) => node?.id ?? null)).toEqual([
-      values[0], values[1], values.at(-1), values[1], null, null,
-      chapterOnly ? null : emptyParts.ids[0], null,
+      values[0],
+      values[1],
+      values.at(-1),
+      values[1],
+      null,
+      null,
+      chapterOnly ? null : emptyParts.ids[0],
+      null,
     ]);
     expect(batches[0]).toEqual([seeded.rootId!, emptyParts.rootId!]);
     expect(batches.length).toBeLessThanOrEqual(seeded.nodes.get(seeded.rootId!)!.height + 1);
@@ -250,8 +256,11 @@ test('boundary selections retain exact historical roots and split physical front
   const seeded = seedBalanced(2047, 'select-history-', 3);
   const requests = seeded.ids.map((_, index) => ({ rootId: seeded.rootId, rank: BigInt(index) }));
   const batches: string[][] = [];
-  expect((await selectVersionedOutlineSequenceNodes(batchWorkspace(seeded.nodes, batches), requests)).map((node) => node!.id))
-    .toEqual(seeded.ids);
+  expect(
+    (await selectVersionedOutlineSequenceNodes(batchWorkspace(seeded.nodes, batches), requests)).map(
+      (node) => node!.id,
+    ),
+  ).toEqual(seeded.ids);
   expect(batches.some((batch) => batch.length === 512)).toBe(true);
   expect(batches.every((batch) => batch.length <= 512)).toBe(true);
   expect(batches.flat()).toHaveLength(seeded.nodes.size);
@@ -260,14 +269,25 @@ test('boundary selections retain exact historical roots and split physical front
   const moved = await moveVersionedOutlineSequenceRange(edit, seeded.rootId, 0n, 3n, 2047n);
   const next = commit(seeded.nodes, edit);
   const boundaries = [0n, 2046n].map((rank) => ({ rootId: moved.rootId, rank }));
-  expect((await selectVersionedOutlineSequenceNodes(batchWorkspace(next), boundaries)).map((node) => node!.id))
-    .toEqual([seeded.ids[3], seeded.ids[2]]);
-  expect((await selectVersionedOutlineSequenceNodes(batchWorkspace(seeded.nodes), boundaries.map(({ rank }) => ({ rootId: seeded.rootId, rank })))).map((node) => node!.id))
-    .toEqual([seeded.ids[0], seeded.ids[2046]]);
-  expect((await selectVersionedOutlineSequenceChapters(batchWorkspace(next), [{ rootId: moved.rootId, rank: 0n }]))[0]?.id)
-    .toBe(seeded.ids[3]);
-  expect((await selectVersionedOutlineSequenceChapters(batchWorkspace(seeded.nodes), [{ rootId: seeded.rootId, rank: 0n }]))[0]?.id)
-    .toBe(seeded.ids[0]);
+  expect((await selectVersionedOutlineSequenceNodes(batchWorkspace(next), boundaries)).map((node) => node!.id)).toEqual(
+    [seeded.ids[3], seeded.ids[2]],
+  );
+  expect(
+    (
+      await selectVersionedOutlineSequenceNodes(
+        batchWorkspace(seeded.nodes),
+        boundaries.map(({ rank }) => ({ rootId: seeded.rootId, rank })),
+      )
+    ).map((node) => node!.id),
+  ).toEqual([seeded.ids[0], seeded.ids[2046]]);
+  expect(
+    (await selectVersionedOutlineSequenceChapters(batchWorkspace(next), [{ rootId: moved.rootId, rank: 0n }]))[0]?.id,
+  ).toBe(seeded.ids[3]);
+  expect(
+    (
+      await selectVersionedOutlineSequenceChapters(batchWorkspace(seeded.nodes), [{ rootId: seeded.rootId, rank: 0n }])
+    )[0]?.id,
+  ).toBe(seeded.ids[0]);
 });
 
 test('selectors reject missing roots, missing children, inverse-parent corruption and child cycles', async () => {
@@ -277,8 +297,12 @@ test('selectors reject missing roots, missing children, inverse-parent corruptio
     const requests = [{ rootId: seeded.rootId, rank: 0n }];
     expect(await select(batchWorkspace(seeded.nodes), [])).toEqual([]);
     await expect(select(batchWorkspace(seeded.nodes), [{ rootId: null, rank: -1n }])).rejects.toThrow(RangeError);
-    await expect(select(batchWorkspace(seeded.nodes), [{ rootId: 'missing', rank: 0n }])).rejects.toThrow('missing node');
-    await expect(select(batchWorkspace(seeded.nodes), [{ rootId: root.leftId, rank: 0n }])).rejects.toThrow('selected root');
+    await expect(select(batchWorkspace(seeded.nodes), [{ rootId: 'missing', rank: 0n }])).rejects.toThrow(
+      'missing node',
+    );
+    await expect(select(batchWorkspace(seeded.nodes), [{ rootId: root.leftId, rank: 0n }])).rejects.toThrow(
+      'selected root',
+    );
     const missing = new Map(seeded.nodes);
     missing.delete(root.leftId!);
     await expect(select(batchWorkspace(missing), requests)).rejects.toThrow('missing node');

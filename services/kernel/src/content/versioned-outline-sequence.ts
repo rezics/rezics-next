@@ -813,7 +813,8 @@ async function selectInRoots<Value>(
       for (const child of [left, right]) {
         if (child === null) continue;
         if (candidate.visited.has(child.id)) throw new Error('Versioned outline sequence child links contain a cycle');
-        if (child.treeParentId !== node.id) throw new Error('Versioned outline sequence tree-parent link is inconsistent');
+        if (child.treeParentId !== node.id)
+          throw new Error('Versioned outline sequence tree-parent link is inconsistent');
       }
 
       const leftCount = chapterOnly ? (left?.chapterCount ?? 0n) : (left?.count ?? 0n);
