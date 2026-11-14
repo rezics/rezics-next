@@ -589,15 +589,19 @@ async function preparePublicSemanticPageMetadata(
         throw new CommandUnavailableError(owner.writeState === 'moved' ? 'moved' : 'fenced', home, owner.movedTo);
       return owner.epoch;
     };
-    const global = await ports.semantic.withReadTransaction(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deps.deadline);
-      const epoch = await anchor(client, 0);
-      let allowed = true;
-      for (const gate of gates) if (!(await gate(client))) allowed = false;
-      return { epoch, allowed };
-    });
-    const profile = await application.activeProfile(deps.pool);
-    const release = await ports.semantic.activeRelease(deps.pool);
+    const global = await ports.semantic.withReadTransaction(
+      deps.pool,
+      async (connection) => {
+        const client = deadlineClient(connection, deps.deadline);
+        const epoch = await anchor(client, 0);
+        let allowed = true;
+        for (const gate of gates) if (!(await gate(client))) allowed = false;
+        return { epoch, allowed };
+      },
+      deps.deadline,
+    );
+    const profile = await application.activeProfile(deps.pool, deps.deadline);
+    const release = await ports.semantic.activeRelease(deps.pool, deps.deadline);
     const rows = new Map<
       string,
       {
@@ -630,16 +634,20 @@ async function preparePublicSemanticPageMetadata(
             ),
           ),
         );
-        await ports.semantic.withReadTransaction(deps.pool, async (connection) => {
-          const client = deadlineClient({ query: connection.query.bind(connection) }, deps.deadline);
-          const epoch = await anchor(client, home);
-          const states = await ports.semantic.readSubjectPageStates(client, home, group);
-          const details = await ports.semantic.readItemDetails(client, group);
-          for (const state of states) {
-            const detail = details.get(state.id);
-            if (detail) rows.set(state.id, { state, detail, epoch, allowed: await checks.get(state.id)!(client) });
-          }
-        });
+        await ports.semantic.withReadTransaction(
+          deps.pool,
+          async (connection) => {
+            const client = deadlineClient({ query: connection.query.bind(connection) }, deps.deadline);
+            const epoch = await anchor(client, home);
+            const states = await ports.semantic.readSubjectPageStates(client, home, group);
+            const details = await ports.semantic.readItemDetails(client, group);
+            for (const state of states) {
+              const detail = details.get(state.id);
+              if (detail) rows.set(state.id, { state, detail, epoch, allowed: await checks.get(state.id)!(client) });
+            }
+          },
+          deps.deadline,
+        );
       }
     }
     requireAccessDeadline(deps.deadline);
@@ -1011,7 +1019,7 @@ async function readConfiguredPage(
       pageReadLifetimeOptions,
     );
     if (!admitted) throw new ProblemError(draftPreview ? 'forbidden' : 'not_found');
-    if (!captured) return application.activeProfile(pool);
+    if (!captured) return application.activeProfile(pool, execution.deadline);
     const readResource = {
       ...resource(),
       ...(includeEligibility
@@ -1031,7 +1039,7 @@ async function readConfiguredPage(
       );
       if (!allowed) throw new ProblemError('forbidden');
     }
-    const release = await ports.semantic.activeRelease(pool);
+    const release = await ports.semantic.activeRelease(pool, execution.deadline);
     const violations = validateProfileFilters(
       platformRegistry,
       captured,
@@ -1088,7 +1096,7 @@ async function readConfiguredPage(
   let account: PageAccount | null = null;
   let resolved: ResolvedTemplate;
   let views: View[] | null = null;
-  const definitionRelease = await ports.semantic.activeRelease(pool);
+  const definitionRelease = await ports.semantic.activeRelease(pool, execution.deadline);
   if ('route' in target) {
     resolved = resolveTemplate(active.profile, { route: target.route });
   } else {
@@ -1295,9 +1303,12 @@ export function createPageApplication(ports: PageApplicationPorts): PageApplicat
       deps: { pool: Pool; access: Access; deadline: number },
       ids: readonly string[],
     ) => preparePublicSemanticPageMetadata(application, ports, deps, ids),
-    activeProfile: (pool: Pool) => ports.profiles.activeProfile(pool),
-    readProfile: (pool: Parameters<PageApplicationPorts['profiles']['readProfile']>[0], digest: string) =>
-      ports.profiles.readProfile(pool, digest),
+    activeProfile: (pool: Pool, deadline?: number) => ports.profiles.activeProfile(pool, deadline),
+    readProfile: (
+      pool: Parameters<PageApplicationPorts['profiles']['readProfile']>[0],
+      digest: string,
+      deadline?: number,
+    ) => ports.profiles.readProfile(pool, digest, deadline),
     publishProfile: ports.profiles.publishProfile,
     activateProfile: ports.profiles.activateProfile,
     bootstrapProfile: (pool: Pool, profile: PresentationProfile) => ports.profiles.bootstrapProfile(pool, profile),
