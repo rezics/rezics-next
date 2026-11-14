@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { partitionReadClients } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { readPartitions, type Partition } from '../partition/partition.ts';
+import type { Partition } from '../partition/partition.ts';
 import { activeRelease } from './definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT } from './contract/subject-values.ts';
 import type { IdentityMapping } from './contract/identity-values.ts';
@@ -16,6 +16,7 @@ import {
 import { readIdentityMappings } from './identity-adapters/read.ts';
 import { withReadTransaction } from './read.ts';
 import { slotId } from './slots.ts';
+import readTitleBasis from './title-inputs-basis.sql';
 import readTitleInputs from './title-inputs-read.sql';
 
 const HOME_COUNT = 4096;
@@ -23,8 +24,13 @@ const MAX_HOME_NODE_BYTES = 128;
 const MAX_BASIS_METADATA_BYTES = 1_048_576;
 const HOME_IDS = Array.from({ length: HOME_COUNT }, (_, index) => index);
 const unavailable = { status: 'unavailable' as const };
+const missingTitleInputClock = (error: unknown): boolean =>
+  typeof error === 'object' && error !== null && 'code' in error && error.code === '42P01';
 
 type Basis = Readonly<{ version: string }>;
+type TitleBasisHome = Readonly<
+  Pick<Partition, 'partitionNo' | 'node' | 'writeState' | 'movedTo' | 'epoch'> & { titleRevision: string }
+>;
 type SourceRow = Readonly<{
   id: string;
   labels: unknown;
@@ -51,9 +57,9 @@ function validInputs(subjects: readonly string[], deadline: number): void {
   if (!Number.isFinite(deadline)) throw new TypeError('Semantic title inputs require a finite deadline');
 }
 
-/** Stable, ID-independent digest over every current native home and the active Definitions release. */
+/** Stable, ID-independent digest over every native title-source home and the active Definitions release. */
 export function semanticTitleBasisVersion(
-  homes: readonly Partition[],
+  homes: readonly TitleBasisHome[],
   release: { digest: string; head: number },
 ): string | null {
   if (
@@ -73,7 +79,7 @@ export function semanticTitleBasisVersion(
     digest.update(`${size}:`, 'utf8').update(value, 'utf8');
     return true;
   };
-  if (!field('semantic-title-inputs-v1') || !field(release.digest) || !field(String(release.head))) return null;
+  if (!field('semantic-title-inputs-v2') || !field(release.digest) || !field(String(release.head))) return null;
   for (let index = 0; index < HOME_COUNT; index++) {
     const home = homes[index];
     if (
@@ -86,7 +92,8 @@ export function semanticTitleBasisVersion(
       typeof home.node !== 'string' ||
       !home.node ||
       Buffer.byteLength(home.node, 'utf8') > MAX_HOME_NODE_BYTES ||
-      home.position < 0n
+      typeof home.titleRevision !== 'string' ||
+      !/^(0|[1-9][0-9]*)$/.test(home.titleRevision)
     )
       return null;
     if (
@@ -95,7 +102,7 @@ export function semanticTitleBasisVersion(
       !field(home.node) ||
       !field(home.writeState) ||
       !field(home.movedTo ?? '') ||
-      !field(home.position.toString())
+      !field(home.titleRevision)
     )
       return null;
   }
@@ -187,7 +194,7 @@ async function readNativeTitleBasis(pool: Pool, deadline: number): Promise<Basis
     pool,
     async (client) => {
       requireAccessDeadline(deadline);
-      const homes = await readPartitions(client, HOME_IDS);
+      const homes = (await readTitleBasis.run(client, { partitions: HOME_IDS })) as TitleBasisHome[];
       const active = await activeRelease(client);
       if (!active) return null;
       const version = semanticTitleBasisVersion(homes, active);
@@ -252,7 +259,7 @@ export function createNativeSemanticTitleInputs(pool: Pool): SemanticTitleInputs
       try {
         return await readNativeTitleBasis(pool, deadline);
       } catch (error) {
-        if (error instanceof CommandUnavailableError) return null;
+        if (error instanceof CommandUnavailableError || missingTitleInputClock(error)) return null;
         throw error;
       }
     },

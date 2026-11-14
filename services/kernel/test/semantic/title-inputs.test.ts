@@ -28,23 +28,26 @@ const row = (id: string, values: Partial<SourceRow> = {}): SourceRow => ({
   labelsComplete: true,
   ...values,
 });
-const basis = (version = 'whole-source-v1') => ({ version });
+const basis = (version = 'whole-source-v2') => ({ version });
 
-test('an unrequested title, identity or source-owner home commit retires the whole basis', () => {
+test('an unrequested Semantic title revision retires the basis while a Library-only position advance does not', () => {
   const homes = Array.from({ length: 4096 }, (_, partitionNo) => ({
     partitionNo,
     node: 'native',
     writeState: 'active' as const,
     movedTo: null,
     epoch: 1,
+    titleRevision: '0',
     position: BigInt(partitionNo + 1),
   }));
   const release = { digest: `sha256:${'a'.repeat(64)}`, head: 4 };
   const before = semanticTitleBasisVersion(homes, release);
+  const libraryPreparation = homes.map((home) => ({ ...home, position: home.position + 1n }));
   const changedElsewhere = homes.map((home) =>
-    home.partitionNo === 3711 ? { ...home, position: home.position + 1n } : home,
+    home.partitionNo === 3711 ? { ...home, titleRevision: '1' } : home,
   );
   expect(before).toMatch(/^[0-9a-f]{64}$/);
+  expect(semanticTitleBasisVersion(libraryPreparation, release)).toBe(before);
   expect(semanticTitleBasisVersion(changedElsewhere, release)).not.toBe(before);
   expect(semanticTitleBasisVersion(homes, { ...release, head: 5 })).not.toBe(before);
   expect(semanticTitleBasisVersion(homes.slice(1), release)).toBeNull();
@@ -70,7 +73,7 @@ test('empty input observes the same basis; missing and unsettled identity remain
   });
   expect(await observer.observe({ subjects: [], deadline: Date.now() + 10_000 })).toEqual({
     status: 'current',
-    basis: 'whole-source-v1',
+    basis: 'whole-source-v2',
     entries: [],
   });
   expect(batches).toBe(0);

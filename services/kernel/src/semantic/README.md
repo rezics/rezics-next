@@ -136,19 +136,28 @@ Definitions' public root owns pure `languageRanges`/`chooseLabel`, including bro
 
 ## Library whole-source title inputs
 
+Decision: Library title basis v2 hashes the active Global Definitions release and all 4,096 native owner tuples plus transactionally maintained per-home title-source revisions; Semantic source and identity writes advance those revisions, while Core commit positions and Library-only derivatives do not.
+
 `adapters/title-inputs.ts` exposes `createSemanticTitleInputsAdapter(pool)`, whose `observe({subjects, deadline})`
 returns a whole-source `basis` and at most 100 exact original-key entries. Empty `subjects` returns the same kind of
 basis with no entries. Content composes this observer with its current Access disclosure and Content-owned source
 evidence; Semantic makes no viewer allow decision. A visible original with no labels returns an empty label map. A
 missing, hidden, pending or unsettled subject, identity mapping, home or release returns `unavailable`.
 
-The basis is SHA-256 over the active Global Definitions release digest/head and the ordered native state of all 4,096
-homes: partition number, owner node, epoch, write state, moved owner and commit position. `core.partition.position`
-advances in the native `command/fence.sql` after accepted command writes; title labels, original-language facts,
-Subject revisions, redirects, identity mappings and source ownership are read from their authoritative home state.
-Identity changes that touch another control home are covered by that home in the same complete vector. The basis does
-not depend on requested IDs, and it uses no sampled maximum, process cache or relayed projection. Any incomplete or
-inactive home prevents a current observation.
+The v2 basis is SHA-256 over the active Global Definitions release digest/head and the ordered complete vector of all
+4,096 homes: partition number, owner node, epoch, write state, moved owner and the home’s Semantic title-input
+revision. It excludes `core.partition.position`, which advances for consumer-only Library commands as well as source
+commands. The `title_input_home_revision` clock is seeded for every home under writer locks by
+`20261114000100_title_inputs_revision.sql`; row triggers advance it in the same transaction as changes to Subject
+visibility, current term heads and facts, Subject revisions, redirects, original-language facts/adoption/candidates,
+candidate disclosure, retractions, lifecycle, and identity mappings, dirty state, control groups, original directory
+rows and only the native commit currently referenced by an original's closure registration. An identity mapping write
+advances both its source home and old/new control homes. This
+covers empty homes without scanning subjects or history. A failed source transaction rolls back its revision too;
+concurrent writes serialize on the affected revision row, so committed source changes cannot lose an increment.
+Truncation is covered by a bounded update of the fixed 4,096 revision rows. The basis is independent of requested
+IDs and uses no sampled maximum, process cache or relayed projection. Any missing or inactive owner or title clock
+prevents a current observation.
 
 Each observer takes two complete basis snapshots around its batch. The batch itself reads current identity mappings,
 visible Subject state, labels and `schema:inLanguage` facts in one shared repeatable-read snapshot. It preserves the
@@ -159,16 +168,13 @@ Global Context, adoption, candidate disclosure and lifecycle rules. Entries carr
 home revisions still retire the outer complete basis. Each per-terminal label map is limited to 8,192 returned bytes,
 and the complete batch to 1 MiB; an oversized map is unavailable rather than a partial label set.
 
-Cost is fixed at two read snapshots per observation, each with one 4,096-home metadata statement and one resolution
+Cost is fixed at two read snapshots per observation, each with one 4,096-home owner/revision statement and one resolution
 of the active release through the existing native reader (which verifies availability and reads an uncached body).
 Empty observations pay only this fixed cost. A nonempty batch adds one exact partition-metadata statement for at most
 200 original/terminal homes, one title
 statement per such home, and the existing identity reader's two evidence passes over at most 100 source and 100
 control homes. Returned semantic rows are at most 200 Subject states and 100 label maps, bounded to 1 MiB. All
 Semantic snapshots finish before the observer returns and before Library can open its transaction.
-
-Decision: Semantic publishes one native, ID-independent home-position basis and exact one-hop title batches; Content
-continues to own viewer disclosure and composes its own current source evidence.
 
 Import boundary: the adapter and native reader use title contracts through `contract/index.ts` and partition reads
 through `database/pool.ts`; the existing focused acceptance stays unchanged because this repair changes no behavior.
