@@ -194,15 +194,18 @@ function currentTypingRecoveryNeed(
     if (existing) existing.checkIds = [...new Set([...existing.checkIds, ...checkIds])];
     else add('physical-custody', 'control-plane-owner', [...new Set(checkIds)], { actionable });
   };
-  const structuredPending = Boolean(pendingEvidence && typeof pendingEvidence === 'object' && !Array.isArray(pendingEvidence));
+  const structuredPending = Boolean(
+    pendingEvidence && typeof pendingEvidence === 'object' && !Array.isArray(pendingEvidence),
+  );
   const pendingCommand =
     pendingEvidence && typeof pendingEvidence === 'object' && !Array.isArray(pendingEvidence)
       ? pendingEvidence.command
       : undefined;
   const validPendingCommand = Array.isArray(pendingCommand) && pendingCommand.every((part) => typeof part === 'string');
-  const checks = Array.isArray(attemptBody.checks) && attemptBody.checks.every((check) => typeof check === 'string')
-    ? (attemptBody.checks as string[])
-    : [];
+  const checks =
+    Array.isArray(attemptBody.checks) && attemptBody.checks.every((check) => typeof check === 'string')
+      ? (attemptBody.checks as string[])
+      : [];
   const authorization = db
     .query<{ kind: string; body: string }, [string, number]>(
       `SELECT kind,body FROM worker_events WHERE task_id=? AND attempt=?
@@ -234,7 +237,9 @@ function currentTypingRecoveryNeed(
     ...(token !== undefined ? { token } : {}),
   });
   const activeRecovery =
-    recovery.authorization === 'authenticated' && recovery.consumption === 'consumed' && recovery.resultState === 'running'
+    recovery.authorization === 'authenticated' &&
+    recovery.consumption === 'consumed' &&
+    recovery.resultState === 'running'
       ? workerCheckHostActiveTypingRecovery({
           db,
           stateDirectory: dirname(db.filename),
@@ -245,8 +250,8 @@ function currentTypingRecoveryNeed(
       : undefined;
   const exactActiveRecovery = Boolean(
     activeRecovery &&
-      activeRecovery.checkId === recovery.checkId &&
-      activeRecovery.physicalRunId === recovery.physicalRunId,
+    activeRecovery.checkId === recovery.checkId &&
+    activeRecovery.physicalRunId === recovery.physicalRunId,
   );
   const originalUnknownCheckIds = recovery.originalUnknownCheckIds.filter(
     (checkId) => !(exactActiveRecovery && checkId === recovery.checkId),
@@ -312,27 +317,26 @@ function currentTypingRecoveryNeed(
         const unresolvedGrantCheckIds = recovery.grantUnknownCheckIds.filter(
           (checkId) => !(exactActiveRecovery && checkId === recovery.checkId),
         );
-        if (unresolvedGrantCheckIds.length > 0)
-          addPhysicalCustody(unresolvedGrantCheckIds);
-        else if (exactActiveRecovery)
-          addPhysicalCustody([recovery.checkId!], false);
-        missingPredicate ||=
-          exactActiveRecovery
-            ? 'the terminal result and custody of the active exact compiler check'
-            : recovery.replacementOf !== undefined
+        if (unresolvedGrantCheckIds.length > 0) addPhysicalCustody(unresolvedGrantCheckIds);
+        else if (exactActiveRecovery) addPhysicalCustody([recovery.checkId!], false);
+        missingPredicate ||= exactActiveRecovery
+          ? 'the terminal result and custody of the active exact compiler check'
+          : recovery.replacementOf !== undefined
             ? 'terminal result and custody for the already authorized compiler-only replacement'
             : 'verified terminal custody for the exact authenticated compiler check';
       } else if (recovery.grantCustody === 'terminal') {
         const resultPath = join(task.worktree, '.temp/goal/checks/results', `${recovery.checkId}.json`);
-        let result: {
-          id?: unknown;
-          cwd?: unknown;
-          argv?: unknown;
-          status?: unknown;
-          exitCode?: unknown;
-          physicalRunId?: unknown;
-          ownership?: { taskId?: unknown; attempt?: unknown };
-        } | undefined;
+        let result:
+          | {
+              id?: unknown;
+              cwd?: unknown;
+              argv?: unknown;
+              status?: unknown;
+              exitCode?: unknown;
+              physicalRunId?: unknown;
+              ownership?: { taskId?: unknown; attempt?: unknown };
+            }
+          | undefined;
         try {
           const stat = lstatSync(resultPath);
           if (stat.isFile() && stat.size <= 256 * 1024)
@@ -342,14 +346,14 @@ function currentTypingRecoveryNeed(
         }
         const resultMatches = Boolean(
           result &&
-            result.id === recovery.checkId &&
-            result.cwd === task.worktree &&
-            result.physicalRunId === recovery.physicalRunId &&
-            result.ownership?.taskId === task.id &&
-            result.ownership.attempt === attempt &&
-            JSON.stringify(result.argv) === JSON.stringify(recovery.authorizedCommand) &&
-            result.status === 'finished' &&
-            Number.isInteger(result.exitCode),
+          result.id === recovery.checkId &&
+          result.cwd === task.worktree &&
+          result.physicalRunId === recovery.physicalRunId &&
+          result.ownership?.taskId === task.id &&
+          result.ownership.attempt === attempt &&
+          JSON.stringify(result.argv) === JSON.stringify(recovery.authorizedCommand) &&
+          result.status === 'finished' &&
+          Number.isInteger(result.exitCode),
         );
         add('result', 'task-owner', recovery.grantCheckIds, {
           command: 'typing-recover',
@@ -369,7 +373,10 @@ function currentTypingRecoveryNeed(
     }
   }
 
-  if ((!validPendingCommand || recovery.originalCheckIds.length === 0) && !actions.some((action) => action.kind === 'input')) {
+  if (
+    (!validPendingCommand || recovery.originalCheckIds.length === 0) &&
+    !actions.some((action) => action.kind === 'input')
+  ) {
     add('input', 'task-owner', [], { command: 'typing-recover', commandCoverage: 'unknown', inputMatch: 'unknown' });
     missingPredicate ||= !structuredPending
       ? 'the structured current compiler command or check identity is unavailable'

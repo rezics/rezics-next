@@ -477,7 +477,9 @@ function receivingActionText(
       ? `control-plane owner ${controlPlaneOwner ?? 'unresolved'}`
       : `task owner ${action.owner ?? 'unknown'}`;
   const checkIds = receiving.checkIds.length ? ` check ${receiving.checkIds.join(', ')}` : '';
-  const compiler = receiving.authorizedCommand ? ` for exact command ${JSON.stringify(receiving.authorizedCommand)}` : '';
+  const compiler = receiving.authorizedCommand
+    ? ` for exact command ${JSON.stringify(receiving.authorizedCommand)}`
+    : '';
   const recoverCommand = `bun tools/goal/src/cli.ts typing-recover ${action.taskId} --expected-attempt ${action.attempt}`;
   if (receiving.kind === 'physical-custody')
     return receiving.actionable
@@ -585,8 +587,9 @@ export async function sweepWidthGovernor(
       const physicalActions = goal.evidenceReceiverActions.flatMap((action) =>
         action.receivingActions
           .filter((receiving) => receiving.receiver === 'control-plane-owner' && receiving.actionable)
-          .map((receiving) =>
-            `${action.taskId} attempt ${action.attempt}, task owner ${action.owner ?? 'unknown'}: ${receivingActionText(action, receiving, resolvedControlPlaneOwner)}`,
+          .map(
+            (receiving) =>
+              `${action.taskId} attempt ${action.attempt}, task owner ${action.owner ?? 'unknown'}: ${receivingActionText(action, receiving, resolvedControlPlaneOwner)}`,
           ),
       );
       if (physicalActions.length) {

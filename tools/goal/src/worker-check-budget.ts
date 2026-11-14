@@ -1974,8 +1974,7 @@ export function workerCheckHostTypingRecoveryObservation(input: {
   if (!/^[0-9a-f-]{36}$/.test(input.token)) return { ...base, authorization: 'invalid' };
 
   const source = readBoundedRecoveryRecord(recoveryPath(input.directory, input.token));
-  if (source.state !== 'present')
-    return { ...base, authorization: source.state === 'absent' ? 'foreign' : 'invalid' };
+  if (source.state !== 'present') return { ...base, authorization: source.state === 'absent' ? 'foreign' : 'invalid' };
   const grant = source.value as CheckEvidence & TypingRecoveryGrant;
   if (
     grant.version !== 1 ||
@@ -2004,12 +2003,18 @@ export function workerCheckHostTypingRecoveryObservation(input: {
   const directoryMatches = input.directory === workerCheckBudgetDirectory(stateDirectory, input.taskId, input.attempt);
   const predecessor = directoryMatches
     ? validReplacementPredecessor(
-        { db: input.db, directory: input.directory, stateDirectory, worktree: input.worktree, taskId: input.taskId, attempt: input.attempt },
+        {
+          db: input.db,
+          directory: input.directory,
+          stateDirectory,
+          worktree: input.worktree,
+          taskId: input.taskId,
+          attempt: input.attempt,
+        },
         grant,
       )
     : undefined;
-  if (!directoryMatches || predecessor === undefined)
-    return { ...base, authorization: 'foreign' };
+  if (!directoryMatches || predecessor === undefined) return { ...base, authorization: 'foreign' };
 
   const commandCoverage =
     input.command === undefined
@@ -2042,11 +2047,7 @@ export function workerCheckHostTypingRecoveryObservation(input: {
     ...(consumption === 'consumed' && grantPhysicalCustody === 'unknown' ? [grant.checkId] : []),
   ];
   const grantCustody =
-    consumption !== 'consumed'
-      ? consumption === 'unconsumed'
-        ? 'not-consumed'
-        : 'unknown'
-      : grantPhysicalCustody;
+    consumption !== 'consumed' ? (consumption === 'unconsumed' ? 'not-consumed' : 'unknown') : grantPhysicalCustody;
 
   return {
     authorization: 'authenticated',

@@ -572,9 +572,19 @@ test('completed source with a separately registered recovery check stays with it
       )
       .get('consumed-owner', 1)!.body;
     prepareTypingRecovery(db, temp.path, 'consumed-operations', 'quiet-operations', 'operations', true, 2, old);
-    const awaitingGrant = prepareTypingRecovery(db, temp.path, 'grant-awaiting-run', 'pending-grant', 'pending-grant', false, 3, old, {
-      distinctRecoveryCheck: true,
-    });
+    const awaitingGrant = prepareTypingRecovery(
+      db,
+      temp.path,
+      'grant-awaiting-run',
+      'pending-grant',
+      'pending-grant',
+      false,
+      3,
+      old,
+      {
+        distinctRecoveryCheck: true,
+      },
+    );
     const foreignAuthorization = db
       .query<{ body: string }, [string, number]>(
         "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'",
@@ -582,9 +592,11 @@ test('completed source with a separately registered recovery check stays with it
       .get('grant-awaiting-run', 1)!;
     const foreignBody = JSON.parse(foreignAuthorization.body) as { actor: { sessionId: string } };
     foreignBody.actor.sessionId = 'different-session';
-    db.query(
-      "UPDATE worker_events SET body=? WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'",
-    ).run(JSON.stringify(foreignBody), 'grant-awaiting-run', 1);
+    db.query("UPDATE worker_events SET body=? WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'").run(
+      JSON.stringify(foreignBody),
+      'grant-awaiting-run',
+      1,
+    );
     expect(stoppedActionProjection(db, 'grant-awaiting-run', 1, 'typing-recovery')).toMatchObject({
       kind: 'evidence-receiver',
       receivingActions: [{ kind: 'authorization', receiver: 'task-owner', checkIds: [] }],
@@ -1014,7 +1026,8 @@ test('width keeps pending command coverage separate from original custody and ro
       ],
     });
     await sweepWidthGovernor(db, inbox, at);
-    const staleOwnerNotice = inbox.pending('retained-web-stale').find(({ event }) => event.kind === 'width')?.event.summary;
+    const staleOwnerNotice = inbox.pending('retained-web-stale').find(({ event }) => event.kind === 'width')
+      ?.event.summary;
     expect(staleOwnerNotice).toContain('pending command coverage is different');
     expect(staleOwnerNotice).toContain('input identity is stale');
     const staleCustodyNotice = inbox
@@ -1040,7 +1053,12 @@ test('width keeps pending command coverage separate from original custody and ro
         command: ['--local', '--', 'bun', 'services/kernel/scripts/typecheck.ts'],
         token: consumedStale.token,
       }),
-    ).toMatchObject({ authorization: 'authenticated', consumption: 'consumed', resultState: 'invalid', grantCustody: 'unknown' });
+    ).toMatchObject({
+      authorization: 'authenticated',
+      consumption: 'consumed',
+      resultState: 'invalid',
+      grantCustody: 'unknown',
+    });
   } finally {
     db.close();
     temp.close();
