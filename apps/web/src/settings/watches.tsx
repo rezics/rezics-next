@@ -20,6 +20,29 @@ import type { WatchManagementIO } from './watch-native';
 
 const controlClass = 'h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-5';
 
+type BoardPlace = Readonly<{ realmId: string; title: string }> | null;
+
+/** A missing place field is an older client shape, not evidence that a Board is Global. */
+function admittedBoardPlace(target: { title: string; href: string } | null): BoardPlace | undefined {
+  if (!target || !('place' in target)) return undefined;
+  const place = target.place;
+  if (place === null) return null;
+  if (
+    !place ||
+    typeof place !== 'object' ||
+    !('realmId' in place) ||
+    typeof place.realmId !== 'string' ||
+    !('title' in place) ||
+    typeof place.title !== 'string'
+  )
+    return undefined;
+  return { realmId: place.realmId, title: place.title };
+}
+
+function boardPlaceLabel(place: BoardPlace) {
+  return place === null ? m.board_directory_global() : m.game_visit_realm({ realm: place.title });
+}
+
 const nativeWatchManagement: WatchManagementIO = {
   read: ({ accountId, kind, limit, cursor, signal }) =>
     readWatchInventory({ data: { accountId, kind, limit, cursor }, signal }),
@@ -91,6 +114,7 @@ function OwnedWatches({
   const returnStop = useRef<HTMLButtonElement>(null);
   const retryOriginal = useRef<HTMLButtonElement>(null);
   const stopButtons = useRef(new Map<string, HTMLButtonElement>());
+  const boardConfirmation = useRef<{ title: string; place: BoardPlace } | null>(null);
   const focusMovement = useRef(0);
   const returnMovement = useRef(0);
   const ignoredFocus = useRef<EventTarget | null>(null);
@@ -120,6 +144,9 @@ function OwnedWatches({
       void controller.returnTo(initialReturn);
     } else void controller.first();
   }, [controller, initialReturn]);
+  useEffect(() => {
+    if (state.read !== 'ready') boardConfirmation.current = null;
+  }, [state.read]);
   useLayoutEffect(() => {
     const receipt = state.returnFocus;
     if (!receipt) return;
@@ -225,6 +252,11 @@ function OwnedWatches({
       : state.write === 'conflict'
         ? m.settings_watches_conflict()
         : m.settings_watches_rejected();
+  const confirmedBoard =
+    state.read === 'ready' && state.kind === 'board' &&
+    (state.write === 'removed' || state.write === 'removed_current')
+      ? boardConfirmation.current
+      : null;
   return (
     <section id="watches" aria-labelledby="settings-watches-heading" className="scroll-mt-6">
       <ContentSection>
@@ -285,8 +317,17 @@ function OwnedWatches({
               {m.settings_watches_stopping()}
             </p>
           ) : null}
-          {state.write === 'removed' ? <p role="status">{m.settings_watches_removed()}</p> : null}
-          {state.write === 'removed_current' ? <p role="status">{m.settings_watches_removed_current()}</p> : null}
+          {state.write === 'removed' || state.write === 'removed_current' ? (
+            <p role="status">
+              {state.write === 'removed' ? m.settings_watches_removed() : m.settings_watches_removed_current()}
+              {confirmedBoard ? (
+                <span className="block font-medium">
+                  {confirmedBoard.title}
+                  <span className="block text-sm text-muted-foreground">{boardPlaceLabel(confirmedBoard.place)}</span>
+                </span>
+              ) : null}
+            </p>
+          ) : null}
           {state.write === 'rejected' || state.write === 'conflict' || state.write === 'denied' ? (
             <Alert variant="destructive">
               <AlertDescription className="space-y-3">
@@ -320,7 +361,18 @@ function OwnedWatches({
                   disabled={!controller.canRetryOriginal()}
                   onClick={(event) => {
                     const command = state.command;
-                    if (command) rememberStopFocus(event, command.watchId);
+                    if (command) {
+                      rememberStopFocus(event, command.watchId);
+                      const row = state.rows.find(
+                        (candidate) =>
+                          candidate.subscriptionId === command.watchId &&
+                          candidate.kind === command.kind &&
+                          candidate.revision === command.expectedRevision,
+                      );
+                      const place = row?.kind === 'board' ? admittedBoardPlace(row.target) : undefined;
+                      boardConfirmation.current =
+                        row?.target && place !== undefined ? { title: row.target.title, place } : null;
+                    }
                     void controller.retryOriginal();
                   }}
                 >
@@ -402,6 +454,11 @@ function OwnedWatches({
                 <ul className="divide-y divide-border">
                   {state.rows.map((row) => {
                     const target = row.target;
+                    const place = row.kind === 'board' ? admittedBoardPlace(target) : undefined;
+                    const placeLabel = place === undefined ? null : boardPlaceLabel(place);
+                    const titleId = `watch-title-${row.subscriptionId}`;
+                    const placeId = `watch-place-${row.subscriptionId}`;
+                    const stopLabelId = `watch-stop-${row.subscriptionId}`;
                     return (
                       <li
                         key={row.subscriptionId}
@@ -412,38 +469,45 @@ function OwnedWatches({
                             {row.kind === 'thread' ? m.settings_watches_thread() : m.settings_watches_board()}
                           </p>
                           {target ? (
-                            onVisitTarget ? (
-                              <Link
-                                to={target.href as never}
-                                onClick={(event) => {
-                                  if (
-                                    event.defaultPrevented ||
-                                    event.button !== 0 ||
-                                    event.metaKey ||
-                                    event.ctrlKey ||
-                                    event.altKey ||
-                                    event.shiftKey ||
-                                    (event.currentTarget.target && event.currentTarget.target !== '_self')
-                                  )
-                                    return;
-                                  const receipt = controller.captureReturn(
-                                    row.subscriptionId,
-                                    event.detail === 0 && document.activeElement === event.currentTarget,
-                                  );
-                                  if (receipt && !onVisitTarget(receipt, target.href)) event.preventDefault();
-                                }}
-                                className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
-                              >
-                                {target.title}
-                              </Link>
-                            ) : (
-                              <a
-                                href={target.href}
-                                className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
-                              >
-                                {target.title}
-                              </a>
-                            )
+                            <div className="space-y-1">
+                              {onVisitTarget ? (
+                                <Link
+                                  to={target.href as never}
+                                  aria-labelledby={placeLabel === null ? undefined : `${titleId} ${placeId}`}
+                                  onClick={(event) => {
+                                    if (
+                                      event.defaultPrevented ||
+                                      event.button !== 0 ||
+                                      event.metaKey ||
+                                      event.ctrlKey ||
+                                      event.altKey ||
+                                      event.shiftKey ||
+                                      (event.currentTarget.target && event.currentTarget.target !== '_self')
+                                    )
+                                      return;
+                                    const receipt = controller.captureReturn(
+                                      row.subscriptionId,
+                                      event.detail === 0 && document.activeElement === event.currentTarget,
+                                    );
+                                    if (receipt && !onVisitTarget(receipt, target.href)) event.preventDefault();
+                                  }}
+                                  className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                                >
+                                  <span id={titleId}>{target.title}</span>
+                                </Link>
+                              ) : (
+                                <a
+                                  href={target.href}
+                                  aria-labelledby={placeLabel === null ? undefined : `${titleId} ${placeId}`}
+                                  className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                                >
+                                  <span id={titleId}>{target.title}</span>
+                                </a>
+                              )}
+                              {placeLabel !== null ? (
+                                <p id={placeId} className="text-sm text-muted-foreground">{placeLabel}</p>
+                              ) : null}
+                            </div>
                           ) : (
                             <>
                               <p className="font-medium">{m.settings_watches_target_unavailable()}</p>
@@ -465,13 +529,24 @@ function OwnedWatches({
                           }}
                           className={controlClass}
                           variant="outline"
+                          aria-labelledby={target && placeLabel !== null ? `${stopLabelId} ${titleId} ${placeId}` : undefined}
                           disabled={disabled}
                           onClick={(event) => {
                             rememberStopFocus(event, row.subscriptionId);
-                            void controller.stop(row.subscriptionId);
+                            const stopping = controller.stop(row.subscriptionId);
+                            const command = controller.snapshot().command;
+                            boardConfirmation.current =
+                              command?.watchId === row.subscriptionId &&
+                              command.kind === 'board' &&
+                              command.expectedRevision === row.revision &&
+                              target &&
+                              place !== undefined
+                                ? { title: target.title, place }
+                                : null;
+                            void stopping;
                           }}
                         >
-                          {m.settings_watches_stop()}
+                          <span id={stopLabelId}>{m.settings_watches_stop()}</span>
                         </Button>
                       </li>
                     );
