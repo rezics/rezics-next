@@ -49,7 +49,9 @@ commands only.
 
 Decision: pin the unmounted factory with one HTTP test for exact selection/readback, receipt replay,
 stale-authority retention of the old release and candidate, and authorization/boundary input, composed onto a
-candidate Kernel distinct from createKernel's served routes. KernelClient stays preparation-only until mount.
+candidate Kernel through createKernel modules before compile, distinct from createKernel's served routes.
+kernel.test.ts lists the three factory commands only on that candidate. KernelClient stays preparation-only until
+mount.
 
 Each placement supplies `occurrenceId`, nullable `parentId`, zero-based sibling `position`, `title` and `kind`.
 Parts have no target. Chapters supply a target containing `threadId`, `postId`, `revisionId` and lowercase SHA-256

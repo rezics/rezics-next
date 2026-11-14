@@ -3,15 +3,17 @@ import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import type { HostedPlacement } from '../../src/content/hosted-chapters-model.ts';
 import { hostedPublicationActivationRoutes } from '../../src/content/hosted-publication-preparation-routes.ts';
 import type { HostedPublicationPreparationDependencies } from '../../src/content/hosted-publication-preparation.ts';
+import { createKernel, type Kernel } from '../../src/http/kernel.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 
 setDefaultTimeout(240_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
-let candidate: ReturnType<typeof hostedPublicationActivationRoutes>;
+let candidate: Kernel;
 
 beforeAll(async () => {
   f = await hostedChaptersFixture();
-  const kernel = f.native.system.createKernelForPool(f.native.pool, f.native.system.access);
   const deps: HostedPublicationPreparationDependencies = {
     pool: f.native.pool,
     access: f.native.system.access,
@@ -19,11 +21,19 @@ beforeAll(async () => {
     clock: () => new Date(),
     routeKey: f.native.system.routeKey,
   };
-  candidate = hostedPublicationActivationRoutes(
-    kernel as Parameters<typeof hostedPublicationActivationRoutes>[0],
-    deps,
-  );
-  (candidate as typeof candidate & { compile?: () => void }).compile?.();
+  candidate = createKernel({
+    receiptKeys: testReceiptKeys(),
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
+    pool: f.native.pool,
+    routeKey: f.native.system.routeKey,
+    tokens: f.native.system.tokenKeys,
+    access: () => f.native.system.access,
+    modules: [
+      (app) => {
+        hostedPublicationActivationRoutes(app as Parameters<typeof hostedPublicationActivationRoutes>[0], deps);
+      },
+    ],
+  });
 });
 
 afterAll(async () => {

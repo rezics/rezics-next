@@ -70,7 +70,9 @@ whole-book publication consume exact selections in bounded resumable steps; the 
 the complete new selection is atomically published. Before a first release completes, preparation stays private.
 
 Decision: The kernel route inventory lists `prepareRelease` and all six installed preparation-stage methods using
-internal `/$method` paths; activation routes remain with their existing owner.
+internal `/$method` paths; activation routes remain with their existing owner. Pin that unmounted factory with the
+HTTP candidate composition and the Kernel inventory absence assertions; KernelClient stays preparation-only until
+mount.
 
 Decision: Hosted version write handles retain `Value` through an erased optional private unique-symbol member, so
 `hostedVersionSequence` infers node values without adding runtime state.
