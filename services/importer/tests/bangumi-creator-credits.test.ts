@@ -263,13 +263,14 @@ test('Bangumi BookSeries and Organization creator identities retain their source
     bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
     claim: ({ external_id }) => ({ state: 'bound', subject: identities[external_id as keyof typeof identities] }),
     batch: async () => ({ results: [] }) as BatchWriteResult,
-    read: async (subjectId) => ({
-      subject: {
-        id: subjectId,
-        type: subjectId === workId ? 'schema:BookSeries' : 'schema:Organization',
-        statements: {},
-      },
-    }) as unknown as Awaited<ReturnType<BangumiCreatorCreditPort['readReviewedSubject']>>,
+    read: async (subjectId) =>
+      ({
+        subject: {
+          id: subjectId,
+          type: subjectId === workId ? 'schema:BookSeries' : 'schema:Organization',
+          statements: {},
+        },
+      }) as unknown as Awaited<ReturnType<BangumiCreatorCreditPort['readReviewedSubject']>>,
     expectedNativeType: (externalId) => (externalId === '12' ? 'schema:BookSeries' : 'schema:Organization'),
     metadataFor: () => ({ digest: 'a'.repeat(64), recordRevision: null, recordUrl: 'https://bgm.tv/subject/12' }),
   });

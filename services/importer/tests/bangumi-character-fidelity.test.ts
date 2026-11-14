@@ -233,9 +233,7 @@ test('Character fidelity bounds the identity read burst before importing and pre
           id,
           type: 'wd:Q95074',
           statements: {
-            'wdt:P6296': [
-              { rank: 'normal', value: { type: 'value', content: String(Number(id.slice(-12)) - 99) } },
-            ],
+            'wdt:P6296': [{ rank: 'normal', value: { type: 'value', content: String(Number(id.slice(-12)) - 99) } }],
           },
         },
       } as unknown as ReviewedSubjectRead;
