@@ -19,6 +19,8 @@ import { subjectPageMessages, viewTabLabels } from '../src/features/pages/route-
 import { CandidateValue } from '../src/features/pages/scalar-value';
 import { ReadingOverviewContext } from '../src/features/pages/reading-overview';
 import { m } from '../src/paraglide/messages.js';
+import { PageVisitBinding } from '../src/subject/page-visit-binding';
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const [
@@ -48,42 +50,46 @@ async function renderPage(domain: ReadingExampleDomain, state: ReadingExampleSta
   client.setQueryData(['exposure', 'anonymous'], ['personal_library']);
   const rating = ratingsFixtures[state === 'sparse' ? 'subject-ratings-empty' : 'subject-ratings-global'].preview;
   const content: ReactNode = (
-    <RatingsPreviewContext.Provider value={rating}>
-      <SubjectPage
-        page={fixture.page}
-        view="overview"
-        locale="en"
-        messages={subjectPageMessages()}
-        tabs={subjectTabs(fixture.page)}
-        tabLabels={viewTabLabels()}
-        renderJsonLd={false}
-        actions={({ id, type }) => (
-          <SubjectHeaderActions
-            id={id}
-            reactions={null}
-            signedIn={false}
-            returnTo={`/en/subjects/${id}`}
-            verification={{ sitekey: '', scriptUrl: '' }}
-          >
-            <SubjectLibrarySlot
-              subject={{ id, type, label: fixture.identity.title }}
-              locale="en"
-              data={{
-                session: 'signed-out',
-                csrfToken: null,
-                entryAvailable: false,
-                entry: null,
-                publicCollections: null,
-                publicCollectionsNext: null,
-                collectionsLoaded: false,
-                collections: null,
-                labels: null,
-              }}
-            />
-          </SubjectHeaderActions>
-        )}
-      />
-    </RatingsPreviewContext.Provider>
+    <PageVisitBinding>
+      <LibraryApplicationBoundary>
+        <RatingsPreviewContext.Provider value={rating}>
+          <SubjectPage
+            page={fixture.page}
+            view="overview"
+            locale="en"
+            messages={subjectPageMessages()}
+            tabs={subjectTabs(fixture.page)}
+            tabLabels={viewTabLabels()}
+            renderJsonLd={false}
+            actions={({ id, type }) => (
+              <SubjectHeaderActions
+                id={id}
+                reactions={null}
+                signedIn={false}
+                returnTo={`/en/subjects/${id}`}
+                verification={{ sitekey: '', scriptUrl: '' }}
+              >
+                <SubjectLibrarySlot
+                  subject={{ id, type, label: fixture.identity.title }}
+                  locale="en"
+                  data={{
+                    session: 'signed-out',
+                    csrfToken: null,
+                    entryAvailable: false,
+                    entry: null,
+                    publicCollections: null,
+                    publicCollectionsNext: null,
+                    collectionsLoaded: false,
+                    collections: null,
+                    labels: null,
+                  }}
+                />
+              </SubjectHeaderActions>
+            )}
+          />
+        </RatingsPreviewContext.Provider>
+      </LibraryApplicationBoundary>
+    </PageVisitBinding>
   );
   const router = createRouter({
     routeTree: createRootRoute({ component: () => content }),
@@ -183,7 +189,11 @@ test('shelf links preserve admitted names and languages while both literary cons
     expect(html).toContain(fallback);
     expect(html.replace(/<[^>]+>/g, '')).not.toContain('schema:Book');
   }
-  expect(renderToStaticMarkup(<BookShelfLink locale="en" type="schema:Person" />)).toBe('');
+  // Shelf destinations accept the native public-Type grammar independently of profile-specific state controls.
+  expect(renderToStaticMarkup(<BookShelfLink locale="en" type="schema:Person" />)).toContain(
+    'href="/en/library?type=schema%3APerson"',
+  );
+  expect(renderToStaticMarkup(<BookShelfLink locale="en" type="not a Type" />)).toBe('');
 });
 
 test('compact Game and Anime readers keep their native facts, natural dates and detailed destinations', async () => {
@@ -236,6 +246,8 @@ test('compact Game and Anime readers keep their native facts, natural dates and 
                 language: 'en',
                 typeLabel: { text: 'Season', lang: 'en' },
                 membershipId: row.statement,
+                statement: row.assertion,
+                related: {},
                 holderId: row.subject,
                 parentId: anime.identity.id,
                 context: anime.publicRead.subject.context,
