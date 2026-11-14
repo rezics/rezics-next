@@ -25,7 +25,9 @@ function recoveryTransport(
   pending: (complete: () => void) => void,
 ): CheckpointTransport {
   const saved: CheckpointView = {
-    state: 'saved', subjectId: ids.post, revision: '7',
+    state: 'saved',
+    subjectId: ids.post,
+    revision: '7',
     address: {
       catalogueId: chapter.publication.id,
       publicationRevisionId: chapter.publication.releaseRevisionId!,
@@ -36,8 +38,8 @@ function recoveryTransport(
     },
     resume: { availability: 'available', title: 'Dawn / 黎明 · The observatory and the long journey home' },
   };
-  let value: CheckpointView = scenario === 'saved' || scenario === 'unknown-clear'
-    ? saved : { state: 'none', subjectId: ids.post };
+  let value: CheckpointView =
+    scenario === 'saved' || scenario === 'unknown-clear' ? saved : { state: 'none', subjectId: ids.post };
   let reads = 0;
   let writes = 0;
   return {
@@ -48,9 +50,14 @@ function recoveryTransport(
     write: async ({ data }) => {
       const result: CheckpointWrite = {
         state: 'ready',
-        value: data.command.kind === 'clear' ? { state: 'none', subjectId: ids.post } : {
-          ...saved, address: data.command.address, revision: '8',
-        },
+        value:
+          data.command.kind === 'clear'
+            ? { state: 'none', subjectId: ids.post }
+            : {
+                ...saved,
+                address: data.command.address,
+                revision: '8',
+              },
       };
       const first = writes++ === 0;
       if ((scenario === 'unknown-save' || scenario === 'unknown-clear') && first) {
@@ -68,8 +75,14 @@ function recoveryTransport(
 }
 
 function CheckpointVisit({
-  scenario, pending, reload,
-}: { scenario: Scenario; pending: (complete: () => void) => void; reload: () => void }) {
+  scenario,
+  pending,
+  reload,
+}: {
+  scenario: Scenario;
+  pending: (complete: () => void) => void;
+  reload: () => void;
+}) {
   const locale = getLocale();
   const [runtime, setRuntime] = useState<Runtime | null>(null);
   useEffect(() => {
@@ -78,22 +91,41 @@ function CheckpointVisit({
     void book.chapter().then((address) => {
       if (live) setRuntime({ book, address, transport: recoveryTransport(scenario, address, pending) });
     });
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [scenario, locale, pending]);
   if (!runtime) return <p role="status">{m.book_reader_loading({}, { locale })}</p>;
-  return <HostedBookReader
-    address={runtime.address} source={runtime.book.source} readingIdentity={runtime.book} locale={locale}
-    renderCheckpoint={(page, isCurrent, position) => <HostedBookCheckpoint
-      page={page} isCurrent={isCurrent} position={position} locale={locale}
-      viewer={ids.author} subjectId={ids.post} transport={runtime.transport} reload={reload}
-    />}
-  />;
+  return (
+    <HostedBookReader
+      address={runtime.address}
+      source={runtime.book.source}
+      readingIdentity={runtime.book}
+      locale={locale}
+      renderCheckpoint={(page, isCurrent, position) => (
+        <HostedBookCheckpoint
+          page={page}
+          isCurrent={isCurrent}
+          position={position}
+          locale={locale}
+          viewer={ids.author}
+          subjectId={ids.post}
+          transport={runtime.transport}
+          reload={reload}
+        />
+      )}
+    />
+  );
 }
 
 function BookCheckpointRecovery({ scenario = 'saved' }: { scenario?: Scenario }) {
   const [client] = useState(() => {
     const value = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-    value.setQueryData(['session'], { state: 'signed-in', subject: ids.author, csrfToken: 'illustrative-checkpoint-csrf' });
+    value.setQueryData(['session'], {
+      state: 'signed-in',
+      subject: ids.author,
+      csrfToken: 'illustrative-checkpoint-csrf',
+    });
     return value;
   });
   useEffect(() => () => client.clear(), [client]);
@@ -104,22 +136,44 @@ function BookCheckpointRecovery({ scenario = 'saved' }: { scenario?: Scenario })
     late.current = complete;
     setPending(true);
   });
-  return <QueryClientProvider client={client}>
-    <main className="mx-auto min-w-0 max-w-4xl space-y-4 p-4 sm:p-8">
-      <aside className="space-y-2 text-sm text-muted-foreground">
-        <p>Illustrative native checkpoint responses through the actual checkpoint and Book reader components.</p>
-        {scenario === 'replaced-visit' ? <div className="flex flex-wrap gap-2">
-          <Button className="min-h-11 min-w-11" variant="outline" disabled={!pending}
-            onClick={() => setGeneration((value) => value + 1)}>Replace reading visit</Button>
-          <Button className="min-h-11 min-w-11" variant="outline" disabled={!pending || generation === 0}
-            onClick={() => { late.current?.(); setPending(false); }}>Deliver retired response</Button>
-        </div> : null}
-      </aside>
-      <CheckpointVisit key={`${scenario}:${generation}:${getLocale()}`}
-        scenario={generation === 0 ? scenario : 'unknown-save'} pending={capturePending}
-        reload={() => setGeneration((value) => value + 1)} />
-    </main>
-  </QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <main className="mx-auto min-w-0 max-w-4xl space-y-4 p-4 sm:p-8">
+        <aside className="space-y-2 text-sm text-muted-foreground">
+          <p>Illustrative native checkpoint responses through the actual checkpoint and Book reader components.</p>
+          {scenario === 'replaced-visit' ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="min-h-11 min-w-11"
+                variant="outline"
+                disabled={!pending}
+                onClick={() => setGeneration((value) => value + 1)}
+              >
+                Replace reading visit
+              </Button>
+              <Button
+                className="min-h-11 min-w-11"
+                variant="outline"
+                disabled={!pending || generation === 0}
+                onClick={() => {
+                  late.current?.();
+                  setPending(false);
+                }}
+              >
+                Deliver retired response
+              </Button>
+            </div>
+          ) : null}
+        </aside>
+        <CheckpointVisit
+          key={`${scenario}:${generation}:${getLocale()}`}
+          scenario={generation === 0 ? scenario : 'unknown-save'}
+          pending={capturePending}
+          reload={() => setGeneration((value) => value + 1)}
+        />
+      </main>
+    </QueryClientProvider>
+  );
 }
 
 const meta = {
@@ -128,7 +182,12 @@ const meta = {
   component: BookCheckpointRecovery,
   parameters: {
     layout: 'fullscreen',
-    docs: { description: { component: 'Saved, unknown save/clear, failed observation and replaced visit. Native-format fixtures establish interface behavior only.' } },
+    docs: {
+      description: {
+        component:
+          'Saved, unknown save/clear, failed observation and replaced visit. Native-format fixtures establish interface behavior only.',
+      },
+    },
   },
 } satisfies Meta<typeof BookCheckpointRecovery>;
 export default meta;
@@ -140,9 +199,13 @@ export const Saved: Story = {
     const canvas = within(canvasElement);
     const resume = await canvas.findByRole('link', { name: m.book_reader_checkpoint_resume() });
     await expect(resume).toHaveAttribute('href', expect.stringContaining(`release=${ids.release}`));
-    await expect(canvas.getByText(m.book_reader_checkpoint_observed_saved({
-      chapter: 'Dawn / 黎明 · The observatory and the long journey home',
-    }))).toBeVisible();
+    await expect(
+      canvas.getByText(
+        m.book_reader_checkpoint_observed_saved({
+          chapter: 'Dawn / 黎明 · The observatory and the long journey home',
+        }),
+      ),
+    ).toBeVisible();
   },
 };
 export const UnknownSave: Story = {

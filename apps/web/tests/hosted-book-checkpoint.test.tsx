@@ -11,8 +11,12 @@ import type { BookChapterPage } from '../src/books/reader/source';
 
 const window = new Window({ url: 'https://reader.test/en/' });
 const globals = {
-  window, document: window.document, navigator: window.navigator,
-  HTMLElement: window.HTMLElement, Element: window.Element, Node: window.Node,
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  Element: window.Element,
+  Node: window.Node,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const prior = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -30,38 +34,68 @@ const { setLocale } = await import('../src/paraglide/runtime.js');
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const page: BookChapterPage = {
-  kind: 'chapter', title: 'Original chapter', publicationTitle: 'Book',
-  currentStructureRevisionId: id(2), ancestors: [], language: 'en', direction: 'ltr',
+  kind: 'chapter',
+  title: 'Original chapter',
+  publicationTitle: 'Book',
+  currentStructureRevisionId: id(2),
+  ancestors: [],
+  language: 'en',
+  direction: 'ltr',
   address: {
-    kind: 'chapter', publication: { id: id(1), structureRevisionId: id(2), releaseRevisionId: id(3) },
+    kind: 'chapter',
+    publication: { id: id(1), structureRevisionId: id(2), releaseRevisionId: id(3) },
     selection: { occurrenceId: id(4), body: { postId: id(5), revisionId: id(6), sha256: 'a'.repeat(64) } },
   },
   body: { document: { version: 'rezics-document-v1', profile: 'blocks', doc: { type: 'doc', content: [] } } },
   contents: {
-    kind: 'contents', publication: { id: id(1), structureRevisionId: id(2), releaseRevisionId: id(3) },
-    parentOccurrenceId: null, cursor: null, selection: null,
+    kind: 'contents',
+    publication: { id: id(1), structureRevisionId: id(2), releaseRevisionId: id(3) },
+    parentOccurrenceId: null,
+    cursor: null,
+    selection: null,
   },
-  previous: { state: 'end' }, next: { state: 'end' },
+  previous: { state: 'end' },
+  next: { state: 'end' },
 };
 const saved: Extract<CheckpointView, { state: 'saved' }> = {
-  state: 'saved', subjectId: id(7), revision: '7',
+  state: 'saved',
+  subjectId: id(7),
+  revision: '7',
   address: {
-    catalogueId: id(1), publicationRevisionId: id(3), occurrenceId: id(4),
-    targetRevisionId: id(6), targetSha256: 'a'.repeat(64), documentPosition: { blockId: 'before', offset: 73 },
+    catalogueId: id(1),
+    publicationRevisionId: id(3),
+    occurrenceId: id(4),
+    targetRevisionId: id(6),
+    targetSha256: 'a'.repeat(64),
+    documentPosition: { blockId: 'before', offset: 73 },
   },
   resume: { availability: 'available', title: 'Previously saved chapter' },
 };
 const none: CheckpointView = { state: 'none', subjectId: id(7) };
-const observation = (value: CheckpointView = saved): CheckpointObservation => ({ state: 'ready', value, csrfToken: 'original-csrf' });
+const observation = (value: CheckpointView = saved): CheckpointObservation => ({
+  state: 'ready',
+  value,
+  csrfToken: 'original-csrf',
+});
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => { resolve = complete; });
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
   return { promise, resolve };
 }
 function acknowledgement(request: CheckpointDispatch): CheckpointWrite {
-  return { state: 'ready', value: request.data.command.kind === 'clear' ? none : {
-    ...saved, revision: '8', address: request.data.command.address,
-  } };
+  return {
+    state: 'ready',
+    value:
+      request.data.command.kind === 'clear'
+        ? none
+        : {
+            ...saved,
+            revision: '8',
+            address: request.data.command.address,
+          },
+  };
 }
 let root: Root | undefined;
 let host: HTMLDivElement;
@@ -79,8 +113,13 @@ async function mount(transport: CheckpointTransport, strict = false) {
   document.body.append(host);
   root = createRoot(host);
   props = {
-    subjectId: id(7), viewer: id(8), page, locale: 'en', isCurrent: () => true,
-    reload: mock(() => {}), position: { capture: mock(() => ({ blockId: 'visible', offset: 0 })), restore: mock(() => {}) },
+    subjectId: id(7),
+    viewer: id(8),
+    page,
+    locale: 'en',
+    isCurrent: () => true,
+    reload: mock(() => {}),
+    position: { capture: mock(() => ({ blockId: 'visible', offset: 0 })), restore: mock(() => {}) },
     transport,
   };
   await render({}, strict);
@@ -91,7 +130,10 @@ function button(label: string) {
   return found!;
 }
 async function click(element: HTMLElement) {
-  await act(async () => { element.focus(); element.click(); });
+  await act(async () => {
+    element.focus();
+    element.click();
+  });
 }
 async function clearCheckpoint() {
   const disclosure = host.querySelector('details')!;
@@ -127,14 +169,23 @@ test('lost save replays its original sender, envelope, exact body, CAS and posit
   await click(button(m.book_reader_checkpoint_save()));
   expect(host.textContent).toContain(m.book_reader_checkpoint_uncertain());
   expect(host.textContent).toContain(m.book_reader_checkpoint_intent_save({ chapter: page.title }));
-  expect(host.textContent).toContain(m.book_reader_checkpoint_observed_saved({ chapter: saved.resume.availability === 'available' ? saved.resume.title : '' }));
+  expect(host.textContent).toContain(
+    m.book_reader_checkpoint_observed_saved({
+      chapter: saved.resume.availability === 'available' ? saved.resume.title : '',
+    }),
+  );
   expect(button(m.book_reader_checkpoint_save()).disabled).toBe(true);
   expect(button(m.book_reader_checkpoint_clear()).disabled).toBe(true);
   expect(props.position.restore).toHaveBeenCalledWith(saved, host.querySelector('section'));
   const first = write.mock.calls[0]![0];
   expect(first.data).toEqual({
-    viewer: id(8), locale: 'en', key: expect.any(String), command: {
-      kind: 'save', subjectId: id(7), expectedRevision: '7',
+    viewer: id(8),
+    locale: 'en',
+    key: expect.any(String),
+    command: {
+      kind: 'save',
+      subjectId: id(7),
+      expectedRevision: '7',
       address: { ...saved.address, documentPosition: { blockId: 'visible', offset: 0 } },
     },
   });
@@ -159,7 +210,8 @@ test('lost save replays its original sender, envelope, exact body, CAS and posit
 test('unknown clear retains its supplied saved chapter, replays CAS and confirms only native none', async () => {
   let attempts = 0;
   const write = mock(async (request: CheckpointDispatch): Promise<CheckpointWrite> =>
-    attempts++ === 0 ? { state: 'uncertain' } : acknowledgement(request));
+    attempts++ === 0 ? { state: 'uncertain' } : acknowledgement(request),
+  );
   await mount({ read: async () => observation(), write });
   await clearCheckpoint();
   expect(host.textContent).toContain(m.book_reader_checkpoint_intent_clear({ chapter: 'Previously saved chapter' }));
@@ -179,15 +231,25 @@ for (const variation of ['conflict', 'different-digest', 'different-position', '
   test(`${variation} requires explicit current-reading recovery and never claims the original action succeeded`, async () => {
     await mount({
       read: async () => observation(),
-      write: async (request) => variation === 'conflict' ? { state: 'conflict' } : {
-        state: 'ready', value: {
-          ...saved, resume: { availability: 'available', title: 'Independent current chapter' },
-          address: request.data.command.kind === 'save' ? {
-            ...request.data.command.address,
-            ...(variation === 'different-digest' ? { targetSha256: 'b'.repeat(64) } : { documentPosition: null }),
-          } : saved.address,
-        },
-      },
+      write: async (request) =>
+        variation === 'conflict'
+          ? { state: 'conflict' }
+          : {
+              state: 'ready',
+              value: {
+                ...saved,
+                resume: { availability: 'available', title: 'Independent current chapter' },
+                address:
+                  request.data.command.kind === 'save'
+                    ? {
+                        ...request.data.command.address,
+                        ...(variation === 'different-digest'
+                          ? { targetSha256: 'b'.repeat(64) }
+                          : { documentPosition: null }),
+                      }
+                    : saved.address,
+              },
+            },
     });
     if (variation === 'clear-still-saved') await clearCheckpoint();
     else await click(button(m.book_reader_checkpoint_save()));
@@ -195,7 +257,10 @@ for (const variation of ['conflict', 'different-digest', 'different-position', '
     expect(host.textContent).not.toContain(m.book_reader_checkpoint_saved());
     expect(host.textContent).not.toContain(m.book_reader_checkpoint_cleared());
     expect(button(m.book_reader_checkpoint_save()).disabled).toBe(true);
-    if (variation !== 'conflict') expect(host.textContent).toContain(m.book_reader_checkpoint_observed_saved({ chapter: 'Independent current chapter' }));
+    if (variation !== 'conflict')
+      expect(host.textContent).toContain(
+        m.book_reader_checkpoint_observed_saved({ chapter: 'Independent current chapter' }),
+      );
     await click(button(m.book_reader_checkpoint_recover_current()));
     expect(props.reload).toHaveBeenCalledTimes(1);
   });
@@ -204,7 +269,8 @@ for (const variation of ['conflict', 'different-digest', 'different-position', '
 test('failed checkpoint read retries only its original reading operands, preserves a Library edit and focuses its result', async () => {
   let reads = 0;
   const read = mock(async (_request: Parameters<CheckpointTransport['read']>[0]) =>
-    reads++ === 0 ? { state: 'unavailable' as const } : observation(none));
+    reads++ === 0 ? { state: 'unavailable' as const } : observation(none),
+  );
   const write = mock(async () => ({ state: 'uncertain' as const }));
   await mount({ read, write });
   const edit = document.createElement('input');
@@ -227,14 +293,26 @@ for (const replacement of ['viewer', 'locale', 'page', 'subject', 'credential', 
     const late = deferred<CheckpointWrite>();
     let sent!: CheckpointDispatch;
     const read = mock(async () => observation(none));
-    await mount({ read, write: async (request) => { sent = request; return late.promise; } });
+    await mount({
+      read,
+      write: async (request) => {
+        sent = request;
+        return late.promise;
+      },
+    });
     await click(button(m.book_reader_checkpoint_save()));
-    const patch: Partial<HostedBookCheckpointProps> = replacement === 'viewer' ? { viewer: id(9) }
-      : replacement === 'locale' ? { locale: 'fr' }
-      : replacement === 'subject' ? { subjectId: id(10) }
-      : replacement === 'credential' ? { isCurrent: () => true }
-      : replacement === 'position' ? { position: { capture: () => null, restore: mock(() => {}) } }
-      : { page: { ...page } };
+    const patch: Partial<HostedBookCheckpointProps> =
+      replacement === 'viewer'
+        ? { viewer: id(9) }
+        : replacement === 'locale'
+          ? { locale: 'fr' }
+          : replacement === 'subject'
+            ? { subjectId: id(10) }
+            : replacement === 'credential'
+              ? { isCurrent: () => true }
+              : replacement === 'position'
+                ? { position: { capture: () => null, restore: mock(() => {}) } }
+                : { page: { ...page } };
     await render(patch);
     expect(sent.signal.aborted).toBe(true);
     await act(async () => late.resolve(acknowledgement(sent)));
@@ -248,7 +326,7 @@ for (const replacement of ['viewer', 'locale', 'page', 'subject', 'credential', 
 test('equal-value A/B/A visits fence late reads and never restore a retired private checkpoint', async () => {
   const late = deferred<CheckpointObservation>();
   let calls = 0;
-  const read = mock(async () => calls++ === 0 ? late.promise : observation(none));
+  const read = mock(async () => (calls++ === 0 ? late.promise : observation(none)));
   await mount({ read, write: async () => ({ state: 'uncertain' }) });
   const original = props.page;
   await render({ page: { ...page } });
@@ -263,23 +341,40 @@ test('a fresh matching observation after replacement never confirms the uncertai
   let sent!: CheckpointDispatch;
   let reads = 0;
   await mount({
-    read: async () => observation(reads++ === 0 ? none : {
-      ...saved, address: sent.data.command.kind === 'save' ? sent.data.command.address : saved.address,
-    }),
-    write: async (request) => { sent = request; return { state: 'uncertain' }; },
+    read: async () =>
+      observation(
+        reads++ === 0
+          ? none
+          : {
+              ...saved,
+              address: sent.data.command.kind === 'save' ? sent.data.command.address : saved.address,
+            },
+      ),
+    write: async (request) => {
+      sent = request;
+      return { state: 'uncertain' };
+    },
   });
   await click(button(m.book_reader_checkpoint_save()));
   expect(button(m.book_reader_checkpoint_save()).disabled).toBe(true);
   await render({ page: { ...page } });
   expect(host.textContent).toContain('Previously saved chapter');
   expect(host.textContent).not.toContain(m.book_reader_checkpoint_saved());
-  expect([...host.querySelectorAll('button')].some((entry) => entry.textContent === m.book_reader_checkpoint_retry_save())).toBe(false);
+  expect(
+    [...host.querySelectorAll('button')].some((entry) => entry.textContent === m.book_reader_checkpoint_retry_save()),
+  ).toBe(false);
 });
 
 test('moving focus during an active request cancels result focus even when focus returns to the reading controls', async () => {
   const late = deferred<CheckpointWrite>();
   let sent!: CheckpointDispatch;
-  await mount({ read: async () => observation(), write: async (request) => { sent = request; return late.promise; } });
+  await mount({
+    read: async () => observation(),
+    write: async (request) => {
+      sent = request;
+      return late.promise;
+    },
+  });
   await click(button(m.book_reader_checkpoint_save()));
   const elsewhere = document.createElement('button');
   document.body.append(elsewhere);
@@ -321,10 +416,16 @@ test('withheld saved destination retains Clear without a resume link, and denial
 test('Strict Mode replacement setup owns a fresh signal and rejects the retired setup response', async () => {
   const late = deferred<CheckpointObservation>();
   const requests: Parameters<CheckpointTransport['read']>[0][] = [];
-  await mount({
-    read: async (request) => { requests.push(request); return requests.length === 1 ? late.promise : observation(none); },
-    write: async () => ({ state: 'uncertain' }),
-  }, true);
+  await mount(
+    {
+      read: async (request) => {
+        requests.push(request);
+        return requests.length === 1 ? late.promise : observation(none);
+      },
+      write: async () => ({ state: 'uncertain' }),
+    },
+    true,
+  );
   expect(requests).toHaveLength(2);
   expect(requests[0]!.signal.aborted).toBe(true);
   expect(requests[1]!.signal.aborted).toBe(false);

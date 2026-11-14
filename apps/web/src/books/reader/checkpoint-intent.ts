@@ -27,9 +27,7 @@ export type CheckpointLifetime = {
 };
 
 /** Only the original action's supplied label is retained, not a cached checkpoint observation. */
-export type CheckpointIntentContext =
-  | { kind: 'save'; title: string }
-  | { kind: 'clear'; title: string | null };
+export type CheckpointIntentContext = { kind: 'save'; title: string } | { kind: 'clear'; title: string | null };
 
 export type CheckpointIntent = Readonly<{
   owner: CheckpointLifetime;
