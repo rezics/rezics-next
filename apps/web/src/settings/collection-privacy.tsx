@@ -59,6 +59,23 @@ import {
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
 const noPagerSubscribe = () => () => {};
 const noPagerSnapshot = () => null;
+type PagerActivationKind = 'keyboard' | 'pointer';
+type PagerAction = 'retry' | 'refresh' | 'load-more';
+type PagerFocusIntent = { action: PagerAction; activation: PagerActivationKind; opener: HTMLButtonElement };
+
+function canReceivePagerFocus(target: HTMLElement | null): target is HTMLElement {
+  if (
+    !target?.isConnected ||
+    target.matches(':disabled') ||
+    target.getAttribute('aria-disabled') === 'true' ||
+    target.closest('[hidden], [inert], [aria-hidden="true"]')
+  )
+    return false;
+  const style = target.ownerDocument.defaultView?.getComputedStyle(target);
+  if (style?.display === 'none' || style?.visibility === 'hidden' || style?.visibility === 'collapse') return false;
+  const rect = target.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
 
 function visibilityOptions(collection: OwnedCollection): CollectionVisibility[] {
   return [...new Set([collection.visibility, ...collection.allowedVisibilityActions])];
@@ -467,21 +484,99 @@ export function CollectionPrivacyView({
   const retryButton = useRef<HTMLButtonElement>(null);
   const refreshButton = useRef<HTMLButtonElement>(null);
   const loadMoreButton = useRef<HTMLButtonElement>(null);
-  const focusAfterPage = useRef(false);
+  const section = useRef<HTMLElement>(null);
+  const listBoundary = useRef<HTMLUListElement>(null);
+  const focusIntent = useRef<PagerFocusIntent | null>(null);
+  const activatePager = (
+    action: PagerAction,
+    activation: PagerActivationKind,
+    opener: HTMLButtonElement,
+    request: () => Promise<void>,
+  ) => {
+    const wasLoading = pager.snapshot().loading;
+    const intent = { action, activation, opener };
+    focusIntent.current = intent;
+    void request();
+    if (wasLoading || !pager.snapshot().loading) {
+      if (focusIntent.current === intent) focusIntent.current = null;
+    }
+  };
+  useEffect(() => {
+    const doc = section.current?.ownerDocument;
+    if (!doc) return;
+    const retireIntent = () => {
+      focusIntent.current = null;
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      const intent = focusIntent.current;
+      if (!intent || event.target === intent.opener || event.target === doc.body || event.target === doc.documentElement)
+        return;
+      retireIntent();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') retireIntent();
+    };
+    doc.addEventListener('focusin', onFocusIn, true);
+    doc.addEventListener('keydown', onKeyDown, true);
+    doc.addEventListener('pointerdown', retireIntent, true);
+    doc.addEventListener('pointermove', retireIntent, true);
+    return () => {
+      focusIntent.current = null;
+      doc.removeEventListener('focusin', onFocusIn, true);
+      doc.removeEventListener('keydown', onKeyDown, true);
+      doc.removeEventListener('pointerdown', retireIntent, true);
+      doc.removeEventListener('pointermove', retireIntent, true);
+    };
+  }, []);
   useEffect(() => {
     void pager.load();
   }, [pager]);
   useEffect(() => {
-    if (!focusAfterPage.current || state.loading) return;
-    focusAfterPage.current = false;
-    if (state.failure) {
-      if (state.nativeFailure?.code === 'invalid_cursor') refreshButton.current?.focus();
-      else retryButton.current?.focus();
-    } else if (state.next !== null) loadMoreButton.current?.focus();
-    else refreshButton.current?.focus();
-  }, [state.failure, state.loading, state.nativeFailure, state.next]);
+    const intent = focusIntent.current;
+    if (!intent || state.loading) return;
+    focusIntent.current = null;
+    if (intent.activation !== 'keyboard') return;
+
+    const doc = intent.opener.ownerDocument;
+    const active = doc.activeElement;
+    if (active !== intent.opener && active !== doc.body && active !== doc.documentElement) return;
+    if (canReceivePagerFocus(intent.opener)) {
+      if (active !== intent.opener) intent.opener.focus();
+      return;
+    }
+
+    const failed = state.failure !== null;
+    const invalidCursor = state.nativeFailure?.code === 'invalid_cursor';
+    const candidates = failed
+      ? invalidCursor || intent.action === 'refresh'
+        ? [refreshButton.current, retryButton.current, listBoundary.current]
+        : [retryButton.current, refreshButton.current, listBoundary.current]
+      : state.collections.length > 0
+        ? [listBoundary.current, refreshButton.current, loadMoreButton.current]
+        : [refreshButton.current, listBoundary.current, loadMoreButton.current];
+    for (const target of candidates) {
+      if (!canReceivePagerFocus(target)) continue;
+      target.focus();
+      break;
+    }
+  }, [state.collections.length, state.failure, state.loading, state.nativeFailure, state.next, state.window]);
+  const failureTitle = state.loaded && state.next !== null && !pager.retryStartsAtFirstPage()
+    ? m.settings_privacy_page_load_failed()
+    : m.settings_privacy_list_load_failed();
+  const failureAnnouncement = state.failure
+    ? [
+        failureTitle,
+        state.failure === 'unavailable' && !state.loaded ? m.settings_privacy_list_retry() : failureText(state.failure),
+        ...(state.nativeFailure?.code === 'invalid_cursor' ? [m.settings_privacy_list_restart()] : []),
+      ].join(' ')
+    : '';
+  const resultAnnouncement = failureAnnouncement || (state.loaded && !state.loading
+    ? state.collections.length === 0 && state.next === null
+      ? m.settings_privacy_empty()
+      : `${m.settings_privacy_heading()}: ${state.collections.length}`
+    : '');
   return (
-    <section id="privacy" aria-labelledby="settings-privacy-heading" className="scroll-mt-6">
+    <section ref={section} id="privacy" aria-labelledby="settings-privacy-heading" className="scroll-mt-6">
       <ContentSection className="min-w-0 max-w-full">
         <ContentSectionHeader>
           <ContentSectionTitle>
@@ -494,12 +589,13 @@ export function CollectionPrivacyView({
         </ContentSectionHeader>
         <ContentSectionBody className="min-w-0 space-y-4">
           {state.loading ? <p role="status">{m.settings_privacy_loading()}</p> : null}
+          <p key={state.window} role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+            {resultAnnouncement}
+          </p>
           {state.failure ? (
             <Alert variant="destructive">
               <AlertTitle>
-                {state.loaded && state.next !== null && !pager.retryStartsAtFirstPage()
-                  ? m.settings_privacy_page_load_failed()
-                  : m.settings_privacy_list_load_failed()}
+                {failureTitle}
               </AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>
@@ -515,9 +611,10 @@ export function CollectionPrivacyView({
                   type="button"
                   variant="outline"
                   disabled={state.loading || retryWaiting || (state.restartBlocked && pager.retryReplacesRows())}
-                  onClick={() => {
-                    focusAfterPage.current = true;
-                    void pager.load();
+                  onClick={(event) => {
+                    activatePager('retry', event.detail === 0 ? 'keyboard' : 'pointer', event.currentTarget, () =>
+                      pager.load(),
+                    );
                   }}
                 >
                   {m.settings_retry()}
@@ -529,7 +626,11 @@ export function CollectionPrivacyView({
             <p className="text-sm text-muted-foreground">{m.settings_privacy_empty()}</p>
           ) : null}
           <ListRestartContext.Provider value={pager}>
-            <ul className="space-y-3">
+            <ul
+              ref={listBoundary}
+              tabIndex={-1}
+              className="min-h-1 space-y-3 focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+            >
               {state.collections.map((collection) => (
                 <CollectionRow
                   key={`${state.window}:${collection.id}`}
@@ -548,9 +649,10 @@ export function CollectionPrivacyView({
                 variant="outline"
                 disabled={state.loading || restartWaiting || state.restartBlocked}
                 aria-describedby={state.restartBlocked ? 'settings-privacy-refresh-blocked' : undefined}
-                onClick={() => {
-                  focusAfterPage.current = true;
-                  void pager.restart();
+                onClick={(event) => {
+                  activatePager('refresh', event.detail === 0 ? 'keyboard' : 'pointer', event.currentTarget, () =>
+                    pager.restart(),
+                  );
                 }}
               >
                 {m.settings_privacy_refresh_list()}
@@ -570,9 +672,10 @@ export function CollectionPrivacyView({
               variant="outline"
               disabled={state.loading || waiting || state.restartBlocked}
               aria-describedby={state.restartBlocked ? 'settings-privacy-refresh-blocked' : undefined}
-              onClick={() => {
-                focusAfterPage.current = true;
-                void pager.load();
+              onClick={(event) => {
+                activatePager('load-more', event.detail === 0 ? 'keyboard' : 'pointer', event.currentTarget, () =>
+                  pager.load(),
+                );
               }}
             >
               {state.loading ? m.settings_privacy_loading() : m.settings_privacy_load_more()}
