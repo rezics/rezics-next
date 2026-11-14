@@ -5,7 +5,8 @@ import { withBoundedReadOnlyTransaction } from '../../database/pool.ts';
 import { relatedReadDecisionEligibility } from '../../semantic/eligibility.ts';
 import { routeOf } from '../../route/route.ts';
 import { prepareReadDecisions, type Access, type AccountActor } from '../check.ts';
-import { deadlineClient, requireAccessDeadline, within } from '../deadline.ts';
+import { deadlineClient, within } from '../deadline.ts';
+import { requireAccessDeadline } from '../unavailable.ts';
 import type { ContentShelfTitleCurrentAccess } from '../../library/shelf-title-inputs-composition.ts';
 
 const AUTHORITY_HOME_COUNT = 4096;
