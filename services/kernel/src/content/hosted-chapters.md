@@ -813,7 +813,8 @@ Every read retains native catalogue disclosure and repeats it before returning. 
 retains the exact native target Post, Board, Realm and ancestor checks. Erased, concealed, missing or changed
 targets return an unavailable slot containing only occurrence ID, parent, position, kind and availability. Titles,
 target references, digests, attribution and bytes are withheld. Dependency failures remain failures, not evidence
-that a target is absent. Parts disclose their titles under catalogue authority.
+that a target is absent. Parts disclose their titles under catalogue authority. Book page target preparation and
+finalization use the shared `database/bounded-read-window.ts` ordered concurrency utility.
 
 Library checkpoint pages resolve the saved publication revision and occurrence through the same current catalogue
 and target Access checks. Their metadata-only Content binding returns the available title and exact target reference

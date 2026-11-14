@@ -106,6 +106,8 @@ dev verifier.
 
 Decision: `hosted_reading.list` orders checkpoints by a per-mutation activity sequence descending and Subject ID ascending, uses a sealed keyset cursor bound to the current account credentials and partition epoch, and asks Content for exact-publication metadata without chapter bodies; current Access controls metadata while the saved address remains unchanged.
 
+Decision: checkpoint pages hydrate independent saved addresses through the shared database ordered read window, with at most four active Content metadata reads. The page limit, raw cursor, saved coordinates, item order, body-free disclosure and final owner/partition authorization stay unchanged; cancellation or dependency failure stops queued reads and propagates after active reads settle.
+
 Decision: `GET /v1/libraryHostedReading/metadata?subjectId={id}` reads one owner-private checkpoint and returns either `{state: 'none', subjectId}` or `{state: 'saved', subjectId, revision, address, metadata}`. It reuses the exact point read and Content metadata port, preserves the saved address when current authority withholds metadata, and never resolves chapter bytes. The original `GET /v1/libraryHostedReading` remains the exact byte-bearing resume operation; Web consumes this additive response in its receiving brief.
 
 Decision: Hosted Book checkpoint save binds the selected Subject and requires its current native association with the catalogue: an indexed `subject_thread` row or the eligible same-home published opening Post's current Subject reference, with a nonempty current public release. Content still validates the exact supplied historical publication and target without requiring that publication to equal the current release pointer.

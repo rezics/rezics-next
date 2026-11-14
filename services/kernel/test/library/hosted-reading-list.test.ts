@@ -22,6 +22,16 @@ let restorePositionProjection: (() => void) | undefined;
 const ownerCall = (method: 'GET' | 'POST' | 'PUT', path: string, body: unknown, key?: string) =>
   f.native.call(method, path, body, { other: true, ...(key ? { key } : {}) });
 
+async function mountedHostedReadingList(signal?: AbortSignal) {
+  const response = await f.native.system.kernel.handle(
+    new Request('https://content.test/v1/libraryHostedReading/checkpoints?limit=5', {
+      headers: { authorization: `Bearer ${f.native.system.actors.other.bearer}` },
+      ...(signal === undefined ? {} : { signal }),
+    }),
+  );
+  return { status: response.status, value: (await response.json()) as Record<string, any> };
+}
+
 async function subjectOnRoute(route: number): Promise<string> {
   let key = crypto.randomUUID();
   while (anchorRoute(f.native.system.routeKey, `${f.native.author.actor.accountId}\nsubject.create\n${key}`) !== route)
@@ -98,6 +108,69 @@ function watchHostedReadingPort() {
     restore() {
       mutablePort.readMetadata = originalMetadata;
       mutablePort.resolveExact = originalExact;
+    },
+  };
+}
+
+function controlHostedReadingPort() {
+  const port = peekHostedReadingPort();
+  if (!port) throw new Error('Hosted reading Content port is not composed');
+  const mutablePort = port as unknown as { readMetadata: HostedReadingPort['readMetadata'] };
+  const originalMetadata = port.readMetadata;
+  const calls: Array<{
+    address: Parameters<HostedReadingPort['readMetadata']>[1];
+    finish(beforeResolve?: () => Promise<void>): Promise<void>;
+    fail(error: unknown): void;
+  }> = [];
+  const waiters: Array<{ count: number; resolve(): void }> = [];
+  let active = 0;
+  let maximumActive = 0;
+  const notify = () => {
+    for (let index = waiters.length - 1; index >= 0; index--) {
+      if (calls.length < waiters[index]!.count) continue;
+      const [waiter] = waiters.splice(index, 1);
+      waiter!.resolve();
+    }
+  };
+  mutablePort.readMetadata = (...args) =>
+    new Promise<Awaited<ReturnType<HostedReadingPort['readMetadata']>>>((resolve, reject) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      let settled = false;
+      calls.push({
+        address: args[1],
+        async finish(beforeResolve?: () => Promise<void>) {
+          if (settled) return;
+          settled = true;
+          try {
+            const metadata = await originalMetadata(...args);
+            await beforeResolve?.();
+            resolve(metadata);
+          } catch (error) {
+            reject(error);
+          } finally {
+            active -= 1;
+          }
+        },
+        fail(error) {
+          if (settled) return;
+          settled = true;
+          active -= 1;
+          reject(error);
+        },
+      });
+      notify();
+    });
+  return {
+    calls,
+    active: () => active,
+    maximumActive: () => maximumActive,
+    waitForCalls(count: number) {
+      if (calls.length >= count) return Promise.resolve();
+      return new Promise<void>((resolve) => waiters.push({ count, resolve }));
+    },
+    restore() {
+      mutablePort.readMetadata = originalMetadata;
     },
   };
 }
@@ -182,12 +255,13 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
   const ownerId = f.native.system.actors.other.actor.accountId;
   const ownerRoute = routeOf(ownerId)!;
   const catalogueRoute = routeOf(f.catalogueId)!;
-  const subjectRoutes = [ownerRoute, ownerRoute ^ 0x10, ownerRoute ^ 0x20, ownerRoute ^ 0x30];
+  const subjectRoutes = [ownerRoute, ownerRoute ^ 0x10, ownerRoute ^ 0x20, ownerRoute ^ 0x30, ownerRoute ^ 0x40];
   const subjectOne = await subjectOnRoute(subjectRoutes[0]!);
   const subjectTwo = await subjectOnRoute(subjectRoutes[1]!);
   const subjectThree = await subjectOnRoute(subjectRoutes[2]!);
   const subjectFour = await subjectOnRoute(subjectRoutes[3]!);
-  const subjects = [subjectOne, subjectTwo, subjectThree, subjectFour];
+  const subjectFive = await subjectOnRoute(subjectRoutes[4]!);
+  const subjects = [subjectOne, subjectTwo, subjectThree, subjectFour, subjectFive];
   expect(subjects.map((subjectId) => routeOf(subjectId))).toEqual(subjectRoutes);
   expect(new Set(subjects.map((subjectId) => partitionOf(routeOf(subjectId)!))).size).toBe(subjects.length);
   const catalogueState = await f.native.state(f.catalogueId);
@@ -241,19 +315,155 @@ test('owner checkpoint pages keep exact history, current disclosure and body-fre
     key: 'hosted-reading-save-two',
   });
   expect(savedTwo.status, JSON.stringify(savedTwo.value)).toBe(200);
-  const saveThree = { ...saveOne, subjectId: subjectThree };
+  const saveThree = {
+    ...saveOne,
+    subjectId: subjectThree,
+    documentPosition: { blockId: 'third-checkpoint', offset: 31 },
+  };
   const savedThree = await f.native.call('PUT', '/v1/libraryHostedReading', saveThree, {
     other: true,
     key: 'hosted-reading-save-three',
   });
   expect(savedThree.status, JSON.stringify(savedThree.value)).toBe(200);
-  const saveFour = { ...saveTwo, subjectId: subjectFour };
+  const saveFour = {
+    ...saveTwo,
+    subjectId: subjectFour,
+    documentPosition: { blockId: 'fourth-checkpoint', offset: 41 },
+  };
   const savedFour = await f.native.call('PUT', '/v1/libraryHostedReading', saveFour, {
     other: true,
     key: 'hosted-reading-save-four',
   });
   expect(savedFour.status, JSON.stringify(savedFour.value)).toBe(200);
+  const saveFive = {
+    ...saveOne,
+    subjectId: subjectFive,
+    documentPosition: { blockId: 'fifth-checkpoint', offset: 51 },
+  };
+  const savedFive = await f.native.call('PUT', '/v1/libraryHostedReading', saveFive, {
+    other: true,
+    key: 'hosted-reading-save-five',
+  });
+  expect(savedFive.status, JSON.stringify(savedFive.value)).toBe(200);
   restorePositionProjection = projectHostedReadingPosition(firstOccurrence, 512);
+
+  const listBodyReads = watchChapterBodyReads(f.native.pool);
+  const orderedReads = controlHostedReadingPort();
+  try {
+    listBodyReads.reset();
+    const response = mountedHostedReadingList();
+    await orderedReads.waitForCalls(4);
+    expect(orderedReads.maximumActive()).toBe(4);
+    await orderedReads.calls[2]!.finish();
+    await orderedReads.waitForCalls(5);
+    await orderedReads.calls[4]!.finish();
+    await orderedReads.calls[0]!.finish();
+    await orderedReads.calls[3]!.finish();
+    await orderedReads.calls[1]!.finish();
+    const page = await response;
+    expect(page.status).toBe(200);
+    expect(page.value.items.map((item: { subjectId: string }) => item.subjectId)).toEqual([
+      subjectFive,
+      subjectFour,
+      subjectThree,
+      subjectTwo,
+      subjectOne,
+    ]);
+    expect(page.value.items.map((item: { address: unknown }) => item.address)).toEqual([
+      savedFive.value.address,
+      savedFour.value.address,
+      savedThree.value.address,
+      savedTwo.value.address,
+      savedOne.value.address,
+    ]);
+    expect(orderedReads.calls.map(({ address }) => address)).toEqual([
+      savedFive.value.address,
+      savedFour.value.address,
+      savedThree.value.address,
+      savedTwo.value.address,
+      savedOne.value.address,
+    ]);
+    expect(page.value.nextCursor).toBeNull();
+    expect(orderedReads.calls).toHaveLength(5);
+    expect(orderedReads.maximumActive()).toBe(4);
+    expect(orderedReads.active()).toBe(0);
+    expect(listBodyReads.count()).toBe(0);
+  } finally {
+    orderedReads.restore();
+    listBodyReads.restore();
+  }
+
+  const dependencyReads = controlHostedReadingPort();
+  try {
+    const response = mountedHostedReadingList();
+    await dependencyReads.waitForCalls(4);
+    dependencyReads.calls[1]!.fail(new Error('Content metadata dependency failed'));
+    await dependencyReads.calls[3]!.finish();
+    await dependencyReads.calls[0]!.finish();
+    await dependencyReads.calls[2]!.finish();
+    const failure = await response;
+    expect(failure.status).toBe(500);
+    expect(failure.value).not.toHaveProperty('items');
+    expect(dependencyReads.calls).toHaveLength(4);
+    expect(dependencyReads.active()).toBe(0);
+  } finally {
+    dependencyReads.restore();
+  }
+
+  const cancellationReads = controlHostedReadingPort();
+  try {
+    const cancellation = new AbortController();
+    const response = mountedHostedReadingList(cancellation.signal);
+    await cancellationReads.waitForCalls(4);
+    cancellation.abort();
+    await cancellationReads.calls[2]!.finish();
+    await cancellationReads.calls[0]!.finish();
+    await cancellationReads.calls[3]!.finish();
+    await cancellationReads.calls[1]!.finish();
+    const cancelled = await response;
+    expect(cancelled.status).toBe(503);
+    expect(cancelled.value).not.toHaveProperty('items');
+    expect(cancellationReads.calls).toHaveLength(4);
+    expect(cancellationReads.active()).toBe(0);
+  } finally {
+    cancellationReads.restore();
+  }
+
+  const revocationReads = controlHostedReadingPort();
+  try {
+    const response = mountedHostedReadingList();
+    await revocationReads.waitForCalls(4);
+    await revocationReads.calls[2]!.finish();
+    await revocationReads.waitForCalls(5);
+    await revocationReads.calls[0]!.finish();
+    await revocationReads.calls[3]!.finish();
+    await revocationReads.calls[1]!.finish();
+    await revocationReads.calls[4]!.finish(async () => {
+      const revoked = await f.native.pool.query(
+        `UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2`,
+        [ownerRoute, ownerId],
+      );
+      expect(revoked.rowCount).toBe(1);
+    });
+    const denied = await response;
+    expect(denied.status).toBe(403);
+    expect(denied.value).not.toHaveProperty('items');
+    expect(revocationReads.calls).toHaveLength(5);
+    expect(revocationReads.active()).toBe(0);
+  } finally {
+    await f.native.pool.query(`UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2`, [
+      ownerRoute,
+      ownerId,
+    ]);
+    revocationReads.restore();
+  }
+  const clearedFive = await f.native.call(
+    'POST',
+    '/v1/libraryHostedReading/$clear',
+    { subjectId: subjectFive, expectedRevision: savedFive.value.revision },
+    { other: true, key: 'hosted-reading-clear-five' },
+  );
+  expect(clearedFive.status, JSON.stringify(clearedFive.value)).toBe(200);
 
   const readingPort = watchHostedReadingPort();
   const metadataBodyReads = watchChapterBodyReads(f.native.pool);

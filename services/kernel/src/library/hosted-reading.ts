@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readAccount, deadlineClient, within } from './access-port.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import type { CommandResult } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { boundedReadWindow, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -109,6 +109,8 @@ function listBinding(owner: AccountActor, route: number, limit: number): CursorB
 function hostedReadingRequestAlive(deadline: number, signal?: AbortSignal): void {
   if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
 }
+
+const HOSTED_READING_METADATA_CONCURRENCY = 4;
 
 async function readHostedReadingCheckpoint(
   dependencies: HostedReadingDependencies,
@@ -251,19 +253,22 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
       );
 
       const shown = selected.rows.slice(0, limit);
-      const items = [];
-      for (const row of shown) {
-        alive();
-        const address = storedAddress(row);
-        const metadata = await dependencies.content.readMetadata(owner, address, deadline);
-        items.push({
-          subjectId: row.subject_id,
-          revision: row.revision,
-          address,
-          activityAt: row.activity_at,
-          metadata,
-        });
-      }
+      const items = await boundedReadWindow(
+        shown,
+        HOSTED_READING_METADATA_CONCURRENCY,
+        async (row) => {
+          const address = storedAddress(row);
+          const metadata = await dependencies.content.readMetadata(owner, address, deadline);
+          return {
+            subjectId: row.subject_id,
+            revision: row.revision,
+            address,
+            activityAt: row.activity_at,
+            metadata,
+          };
+        },
+        alive,
+      );
       alive();
       await within(deadline, () =>
         withConnection(dependencies.pool, async (connection) => {

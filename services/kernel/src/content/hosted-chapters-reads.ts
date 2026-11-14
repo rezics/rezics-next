@@ -1,4 +1,5 @@
 import { accessCheck } from './access-port.ts';
+import { boundedReadWindow } from '../database/pool.ts';
 import { AuthenticationError } from '../access/contract/authentication.ts';
 import { routeOf } from '../route/route.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
@@ -494,36 +495,6 @@ type HostedPageTargetGuard = Readonly<{
   final(): Promise<Readonly<{ anchor: AnchoredPosition }> | null>;
 }>;
 
-/** Run independent target work in a local window. A rejection stops new work
- * immediately; already active operations settle before the original error is
- * rethrown. Results retain input order regardless of completion order. */
-async function withinHostedPageWindow<T, R>(values: readonly T[], work: (value: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(values.length);
-  let next = 0;
-  let rejected = false;
-  let failure: unknown;
-  const worker = async () => {
-    while (!rejected) {
-      const index = next++;
-      if (index >= values.length) return;
-      try {
-        results[index] = await work(values[index]!);
-      } catch (error) {
-        if (!rejected) {
-          rejected = true;
-          failure = error;
-        }
-        return;
-      }
-    }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(HOSTED_PAGE_DISCLOSURE_CONCURRENCY, values.length) }, () => worker()),
-  );
-  if (rejected) throw failure;
-  return results;
-}
-
 /** Prepare and close a page's target observations while keeping the I/O
  * strategy injectable for focused bounded-work tests. Ordinary targets share
  * one observation by full identity; private fallback remains occurrence-bound. */
@@ -537,8 +508,9 @@ export async function discloseHostedPageTargets(
     if (placement.kind === 'chapter') targetGroups.set(hostedTargetKey(placement.target), placement.target);
   }
   const ordinary = new Map(
-    await withinHostedPageWindow(
+    await boundedReadWindow(
       [...targetGroups],
+      HOSTED_PAGE_DISCLOSURE_CONCURRENCY,
       async ([key, target]) => [key, await prepareOrdinary(target)] as const,
     ),
   );
@@ -550,8 +522,9 @@ export async function discloseHostedPageTargets(
       )
     : [];
   const scoped = new Map(
-    await withinHostedPageWindow(
+    await boundedReadWindow(
       scopedPlacements,
+      HOSTED_PAGE_DISCLOSURE_CONCURRENCY,
       async (placement) => [placement.occurrenceId, await prepareScoped!(placement)] as const,
     ),
   );
@@ -566,7 +539,11 @@ export async function discloseHostedPageTargets(
   for (const [identity, guard] of scoped) {
     if (guard) finalEntries.push({ kind: 'scoped', identity, guard });
   }
-  const finalized = await withinHostedPageWindow(finalEntries, async ({ guard }) => guard.final());
+  const finalized = await boundedReadWindow(
+    finalEntries,
+    HOSTED_PAGE_DISCLOSURE_CONCURRENCY,
+    async ({ guard }) => guard.final(),
+  );
   const ordinaryAnchors = new Map<string, AnchoredPosition | null>();
   const scopedAnchors = new Map<string, AnchoredPosition | null>();
   finalEntries.forEach(({ kind, identity }, index) => {
