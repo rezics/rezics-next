@@ -1,8 +1,13 @@
 import type { Pool } from 'pg';
+import { readAccountCommandState } from './access-port.ts';
 import { createConsumptionStatisticsReads, type ConsumptionSummary } from './consumption-statistics.ts';
 import { createReportedYearSummaryReads, type ReportedYearSummary } from './reported-year-summary.ts';
+import { withReadingDashboardReadConnection } from './reading-dashboard-read-connection.ts';
+import { boundedReadWindow, partitionReadClient } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Actor } from '../request/access.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import {
   createReadingInsightsAssessmentReads,
   type ReadingInsightsAssessments,
@@ -99,13 +104,35 @@ export function createReadingInsightsOverviewReads(deps: { pool: Pool }): Readin
       deliver?: (value: ReadingInsightsOverview, encoded: string) => T,
     ): Promise<T> {
       if (!Number.isInteger(year) || year < 1 || year > 9999) throw new ProblemError('invalid_request');
-      const settled = await Promise.allSettled([
-        readPanel(() => allTimeReads.summary(actor, deadline, signal)),
-        readPanel<ReportedYearSummary>(() => yearReads.summary(actor, year, deadline, signal)),
-        readPanel(() => profileReads.profiles(actor, year, deadline, signal)),
-        readPanel<ReadingInsightsCurrentProgress>(() => currentProgressReads.currentProgress(actor, deadline, signal)),
-        readPanel(() => assessmentReads.assessments(actor, deadline, signal)),
+      if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+      const route = routeOf(actor.accountId);
+      if (route === null || !actor.scopes.includes('progress_session:list')) throw new ProblemError('forbidden');
+      const alive = () => {
+        if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
+      };
+      alive();
+      const pending: (() => Promise<void>)[] = [];
+      const schedule = <T>(read: () => Promise<T>): Promise<ReadingInsightsPanel<T>> =>
+        new Promise((resolve, reject) => {
+          pending.push(async () => {
+            try {
+              resolve(await readPanel(read));
+            } catch (error) {
+              reject(error);
+            }
+          });
+        });
+      const settlement = Promise.allSettled([
+        schedule(() => allTimeReads.summary(actor, deadline, signal)),
+        schedule<ReportedYearSummary>(() => yearReads.summary(actor, year, deadline, signal)),
+        schedule(() => profileReads.profiles(actor, year, deadline, signal)),
+        schedule<ReadingInsightsCurrentProgress>(() => currentProgressReads.currentProgress(actor, deadline, signal)),
+        schedule(() => assessmentReads.assessments(actor, deadline, signal)),
       ] as const);
+      // Each panel retains its own checkout and revision; queueing spends the
+      // original deadline and settles failures in the original panel order.
+      await boundedReadWindow(pending, 2, (read) => read());
+      const settled = await settlement;
       const unwrap = <T>(result: PromiseSettledResult<T>): T => {
         if (result.status === 'rejected') throw result.reason;
         return result.value;
@@ -115,7 +142,7 @@ export function createReadingInsightsOverviewReads(deps: { pool: Pool }): Readin
       const profiles = unwrap(settled[2]);
       const currentProgress = unwrap(settled[3]);
       const assessments = unwrap(settled[4]);
-      if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
+      alive();
       const value: ReadingInsightsOverview = {
         scope: 'private_reading_insights',
         year,
@@ -135,10 +162,37 @@ export function createReadingInsightsOverviewReads(deps: { pool: Pool }): Readin
           unallocatedMonth: { operationId: 'library_diary.list', query: { year, month: 'unallocated' } },
         },
       };
-      const encoded = JSON.stringify(value);
-      if (new TextEncoder().encode(encoded).byteLength > MAX_READING_INSIGHTS_OVERVIEW_BYTES)
-        throw new ProblemError('dependency_unavailable');
-      return deliver ? deliver(value, encoded) : (value as T);
+      const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
+      return withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
+        // Earlier panels can outlive their admission while siblings finish.
+        // Re-admit the composition outside every panel's source snapshot.
+        await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+          route,
+          actor.accountId,
+        ]);
+        const owner = await readAccountCommandState(client, route, actor.accountId);
+        if (
+          !owner ||
+          owner.kind !== 'actor' ||
+          owner.state !== 'active' ||
+          owner.fenced ||
+          !Number.isSafeInteger(actor.authnEpoch) ||
+          actor.authnEpoch < 1 ||
+          owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+        )
+          throw new ProblemError('forbidden');
+        await partitionReadClient(client, partitionOf(route));
+        alive();
+        await client.query('COMMIT');
+        alive();
+        const encoded = JSON.stringify(value);
+        if (new TextEncoder().encode(encoded).byteLength > MAX_READING_INSIGHTS_OVERVIEW_BYTES)
+          throw new ProblemError('dependency_unavailable');
+        // Encoding consumes the same budget; delivery cannot await more work.
+        alive();
+        return deliver ? deliver(value, encoded) : (value as T);
+      });
     },
   };
 }
