@@ -273,4 +273,3 @@ export function graphPublicVisitSearch(visit: GraphPublicVisit | undefined): Rec
   if (visit?.kind === 'global') return { publicReturn: visit.returnHref };
   return {};
 }
-

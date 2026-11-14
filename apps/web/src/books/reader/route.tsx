@@ -80,7 +80,10 @@ export type HostedBookNavigation = ReturnType<typeof createHostedBookNavigation>
 const contentsVisits = new WeakMap<AnyRouter, HostedBookNavigation>();
 
 /** Bind the route's contents and focus memory to its existing Router and credential lifetime. */
-export function hostedBookNavigationForRouter(router: AnyRouter, client: QueryClient | undefined): HostedBookNavigation {
+export function hostedBookNavigationForRouter(
+  router: AnyRouter,
+  client: QueryClient | undefined,
+): HostedBookNavigation {
   const existing = contentsVisits.get(router);
   if (existing) return existing;
 
