@@ -3,6 +3,7 @@ import { m } from '../../../../paraglide/messages.js';
 import type { WorkReadingLink } from '../../work-reading-port';
 import type { GameReaderReady } from '../model';
 import { GameFact } from './evidence';
+import { action } from './controls';
 
 type WorkReleaseCardView = Extract<
   NonNullable<GameReaderReady['workReleaseCards']>,
@@ -16,7 +17,7 @@ export function WorkReleaseComparison({
   page,
   locale,
   link,
-  compact = false,
+  compact = true,
 }: {
   card: WorkReleaseCardView;
   page: GameReaderReady;
@@ -46,8 +47,10 @@ export function WorkReleaseComparison({
     { id: 'developer', label: m.game_reader_compare_developer_label({}, o), properties: ['wdt:P178'] },
   ];
   return (
-    <section className="mt-3 space-y-2" data-slot="work-release-comparison">
-      <h4 className="font-semibold">{m.game_reader_compare_title({}, o)}</h4>
+    <details className="mt-3 min-w-0 space-y-2" data-slot="work-release-comparison">
+      <summary className={`${action} cursor-pointer font-medium text-primary`}>
+        {m.game_reader_compare_title({}, o)}
+      </summary>
       <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
         {groups.map((group) => {
           const fields = group.properties.map((property) => card.fields[property]);
@@ -97,6 +100,6 @@ export function WorkReleaseComparison({
           );
         })}
       </dl>
-    </section>
+    </details>
   );
 }

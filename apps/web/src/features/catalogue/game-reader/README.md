@@ -105,17 +105,31 @@ The wrapping, theme-token layout and existing controls apply at phone390/desktop
 
 ## Routed product visit
 
-`pages-library-games--main` is the canonical Game review entry. It mounts `PageStory`'s generated application
-route tree and existing providers, with a signed-in reader and ordinary native loaders. Harbour Lights, its people,
-six software releases, story acts, characters, related games, reviews and collections are explicitly synthetic.
+`pages-library-games--main` and the retained `pages-catalogue-game-reader--work-and-exact-release` review entry mount
+`PageStory`'s generated application route tree and existing providers, with a signed-in reader and ordinary native
+loaders. Both show the admitted Subject identity, cover, synopsis and actions before compact Game facts. The separate
+`pages-catalogue-game-reader--reader-work-facts` and explicitly named Reader states isolate the typed reader examples.
+Harbour Lights, its people, six software releases, story acts, characters, related games, reviews and collections are explicitly synthetic.
 Game identities and media use a UUID namespace distinct from the other routed fixture families.
 Original CC0 cover illustrations and their WebP variants live in `.storybook/media/`; no provider recording is claimed.
 All installed tabs remain reachable. Native references use the reserved `north-quay.example` catalogue address.
 
-Compact work facts use a two-column rhythm where space permits. Qualifiers and references remain available in each
-fact's evidence disclosure; native date values retain calendar, signed time, precision, timezone and uncertainty.
-Comparison groups with an available value omit redundant missing/unsupported alternative properties in compact mode;
-withheld and unavailable alternatives remain explicit. The standalone reader retains its full comparison states.
+Decision: every Game reader opens with compact admitted work facts; Credits, Relations, Editions, release comparison
+and each fact's qualifiers/citations are labelled native disclosures, closed until deliberately opened. The optional
+`compact` identity prop only suppresses identity text already supplied by the Subject frame; it never selects a long
+fact/evidence mode. Historical meaning and unavailable/withheld field states stay beside their affected values.
+An explicit current-assertion return may reveal its containing group without opening Editions or comparison.
+
+Facts use a two-column rhythm where space permits and retain released property and related-Subject labels. Ordinary
+Gregorian dates use natural language at the supplied year/month/day precision; uncertainty, unsupported calendars and
+long signed years retain native presentation. Evidence retains the unchanged native date, accepting digest, statement,
+rank, qualifier and reference parts. A missing released evidence label retains its native property ID as code inside
+the disclosure.
+Comparison groups with an available value omit redundant missing/unsupported alternative properties;
+withheld and unavailable alternatives remain explicit. Comparison failure and its exact native retry belong inside
+Editions, as does release-window failure when work facts survive. Neither opens that disclosure automatically.
+Deliberate Editions disclosure survives native continuation/retry while its replaced rows, inspection and spoiler
+consent retire; source/reader replacement retires the entire reader as before.
 
 Named entries are `pages-library-games--exact-release-return`, `--sparse`, `--release-section-failure` and
 `--reviews-section-failure` (each uses the same prefix). They stay at their named state, without automatic tab or
@@ -127,7 +141,9 @@ Design sources: [reading-first Overview](../../../../../../docs/subject-pages.md
 [page composition](../../pages/README.md#reading-first-overview), this reader's admission/recovery contract and
 [Storybook ownership](../../../../README.md#storybook-and-page-recordings).
 
-Regression source in `tests/game-showcase.test.ts` pins shared HTTP admission, retained work facts and release-section
-failure through `gameOverviewInitial`; `tests/game-reader-view.test.tsx` covers mounted comparison and recovery.
-During source-only delivery, test, typing, build, native and browser/capture execution belongs to the integrated
-verifier. Earlier checks do not establish acceptance of later promoted source; source completion is not a runtime pass.
+Malformed edition data is repaired at the shared HTTP receiver. Regression source in `tests/game-showcase.test.ts`
+pins shared HTTP and comparison-envelope admission, retained work facts and release-section failure through
+`gameOverviewInitial`, and natural date precision. `tests/game-reader-view.test.tsx` pins useful initial reading,
+closed optional sections, deliberate evidence and native comparison recovery, exact return focus and retirement.
+Source-only delivery defers test, typing, build, native and browser/capture acceptance to the integrated verifier.
+Earlier checks do not establish acceptance of later promoted source; source completion is not a runtime pass.

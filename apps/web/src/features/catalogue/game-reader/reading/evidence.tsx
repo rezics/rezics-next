@@ -3,7 +3,7 @@ import { pickText } from '@rezics/composition';
 import { m } from '../../../../paraglide/messages.js';
 import { historicalStatement } from '../../release-fidelity/model';
 import { useWorkReading, type WorkReadingLink } from '../../work-reading-port';
-import { gameDatePresentation } from '../date';
+import { gameDateLabel, gameDatePresentation } from '../date';
 import type { GameReaderReady, GameStatement } from '../model';
 import { action } from './controls';
 
@@ -26,21 +26,10 @@ export function GameFact(props: FactProps & { date: boolean; compact?: boolean }
     <div className="space-y-2">
       {date ? (
         <p data-date-kind={date.kind}>
-          {props.compact && date.structuredDate ? (
-            reading.renderValue({
-              snak: {
-                ...statement,
-                value: {
-                  type: 'value',
-                  content: { ...(content as object), calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
-                },
-              },
-              related,
-              locale,
-              link: Link,
-            })
-          ) : date.structuredDate ? (
-            <time dateTime={date.structuredDate}>{date.text}</time>
+          {date.structuredDate ? (
+            <time dateTime={date.structuredDate} title={date.text}>
+              {gameDateLabel(date, locale)}
+            </time>
           ) : (
             date.text
           )}
@@ -52,7 +41,7 @@ export function GameFact(props: FactProps & { date: boolean; compact?: boolean }
       ) : (
         value()
       )}
-      <GameEvidence {...props} compact={props.compact} />
+      <GameEvidence {...props} />
     </div>
   );
 }
@@ -63,7 +52,6 @@ export function GameEvidence({
   related,
   locale,
   link: Link,
-  compact = false,
 }: FactProps & { compact?: boolean | undefined }) {
   const reading = useWorkReading();
   const o = { locale: locale as never };
@@ -74,7 +62,9 @@ export function GameEvidence({
       {statement.qualifiers.map((part, index) => (
         <div key={index}>
           <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
-            {page.labels[part.property.id]?.text || m.subject_value_unlabelled({}, o)}
+            {page.labels[part.property.id]?.text || (
+              <code className="font-mono text-xs">{part.property.id}</code>
+            )}
           </dt>
           <dd>{value(part)}</dd>
         </div>
@@ -83,16 +73,15 @@ export function GameEvidence({
   ) : null;
   return (
     <div className="space-y-2">
-      {!compact ? qualifiers : null}
       {historicalStatement(statement, page.digest) ? (
         <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
       ) : null}
-      <details className={compact ? 'min-w-0 text-sm' : 'rounded-lg border border-border p-3'}>
+      <details data-slot="game-fact-evidence" className="min-w-0 text-sm">
         <summary className={`${action} cursor-pointer text-primary`}>
-          {compact ? m.game_reader_evidence({}, o) : m.sources_citations({}, o)}
+          {m.game_reader_evidence({}, o)}
         </summary>
         <div className="min-w-0 space-y-3 pt-2">
-          {compact ? qualifiers : null}
+          {qualifiers}
           {statement.property.data_type === 'time' ? (
             <dl>
               <dt className="font-medium">{m.game_reader_native_value({}, o)}</dt>
@@ -103,7 +92,11 @@ export function GameEvidence({
             <dl key={index} data-reference={reference.hash} className="space-y-1">
               {reference.parts.map((part, n) => (
                 <div key={n}>
-                  <dt className="font-medium">{page.labels[part.property.id]?.text || part.property.id}</dt>
+                  <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
+                    {page.labels[part.property.id]?.text || (
+                      <code className="font-mono text-xs">{part.property.id}</code>
+                    )}
+                  </dt>
                   <dd>{value(part)}</dd>
                 </div>
               ))}

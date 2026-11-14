@@ -39,3 +39,17 @@ export function gameDatePresentation(statement: GameStatement, digest: string, l
     ...(presentation.structuredDate ? { structuredDate: presentation.structuredDate } : {}),
   };
 }
+
+/** Natural language at the admitted precision; long signed years keep the native presentation. */
+export function gameDateLabel(date: GameDatePresentation, locale: string): string {
+  if (!date.structuredDate || !/^\d{4}(?:-\d{2}){0,2}$/.test(date.structuredDate)) return date.text;
+  const [year, month, day] = date.structuredDate.split('-');
+  const value = new Date(0);
+  value.setUTCFullYear(Number(year), Number(month ?? 1) - 1, Number(day ?? 1));
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: 'UTC',
+    year: 'numeric',
+    ...(month ? { month: 'long' as const } : {}),
+    ...(day ? { day: 'numeric' as const } : {}),
+  }).format(value);
+}

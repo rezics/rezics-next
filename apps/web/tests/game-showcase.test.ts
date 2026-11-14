@@ -20,7 +20,7 @@ import {
   readGameReader,
   type GameReaderReady,
 } from '../src/features/catalogue/game-reader/model';
-import { gameDatePresentation } from '../src/features/catalogue/game-reader/date';
+import { gameDateLabel, gameDatePresentation } from '../src/features/catalogue/game-reader/date';
 import { subjectTabs } from '../src/features/pages/views';
 import { QUESTION } from '../src/kernel/fake/ratings';
 
@@ -99,6 +99,8 @@ test('each disclosed release has an exact destination, comparison, native date a
   const dates = gameReleases.map((item) => item.statements['schema:datePublished']![0]!);
   expect(gameDatePresentation(dates[0]!, gameDigest, 'en').kind).toBe('exact');
   expect(gameDatePresentation(dates[2]!, gameDigest, 'en').kind).toBe('partial');
+  expect(gameDateLabel(gameDatePresentation(dates[0]!, gameDigest, 'en'), 'en')).toBe('October 12, 2023');
+  expect(gameDateLabel(gameDatePresentation(dates[2]!, gameDigest, 'en'), 'en')).toBe('August 2024');
   expect(gameDatePresentation(dates[4]!, gameDigest, 'en').kind).toBe('tba');
   const initial = gameOverviewInitial(gameShowcasePage(), { ...reading, editions: [], editionsAdmitted: false });
   expect(initial?.ok && initial.editions).toEqual(reading.editions);
