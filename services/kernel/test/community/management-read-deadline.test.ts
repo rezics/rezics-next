@@ -12,7 +12,7 @@ function fakeConnection(run: (sql: string) => Promise<unknown>) {
   const released = new Promise<void>((resolve) => (signalRelease = resolve));
   const client = {
     query(query: QueryConfig | string) {
-      const sql = typeof query === 'string' ? query : query.text ?? '';
+      const sql = typeof query === 'string' ? query : (query.text ?? '');
       statements.push(sql);
       return run(sql);
     },
@@ -52,19 +52,11 @@ test('a successful source read keeps repeatable-read isolation and commits befor
   await withManagementReadSnapshot(fake.pool, Date.now() + 1_000, (client) => client.query('SELECT source'));
   await fake.released;
 
-  expect(fake.statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT source',
-    'COMMIT',
-  ]);
+  expect(fake.statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT source', 'COMMIT']);
   expect(fake.releasedError()).toBeUndefined();
 });
 
-for (const blocked of [
-  'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-  'SELECT source',
-  'COMMIT',
-]) {
+for (const blocked of ['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT source', 'COMMIT']) {
   test(`a blocked ${blocked} read discards its client without queuing rollback`, async () => {
     const fake = fakeConnection((sql) =>
       sql === blocked ? new Promise<never>(() => {}) : Promise.resolve({ rows: [] }),
@@ -102,10 +94,6 @@ test('a read failure remains primary when rollback does not finish before the de
   ).rejects.toBe(primary);
   await fake.released;
 
-  expect(fake.statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT source',
-    'ROLLBACK',
-  ]);
+  expect(fake.statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT source', 'ROLLBACK']);
   expect(fake.releasedError()).toBeInstanceOf(Error);
 });
