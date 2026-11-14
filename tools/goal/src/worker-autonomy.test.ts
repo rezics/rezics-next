@@ -49,15 +49,7 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   const sourceOnlyState = temporaryDirectory();
   writeFileSync(join(sourceOnlyState.path, 'verification-mode'), 'source-only\n');
   const sourceTask = promptTask('web');
-  const sourceOnly = workerPrompt(
-    sourceTask,
-    undefined,
-    undefined,
-    [],
-    '/repo/main',
-    undefined,
-    sourceOnlyState.path,
-  );
+  const sourceOnly = workerPrompt(sourceTask, undefined, undefined, [], '/repo/main', undefined, sourceOnlyState.path);
   const boundary =
     'Continue only for real source; separate scope names actual paths and only real dependencies. For no source, proof or an owner referral, use `handoff: review` and a blank line.';
   for (const rendered of [prompt, sourceOnly]) expect(rendered).toContain(boundary);
