@@ -103,10 +103,7 @@ export function OwnClassificationsWorkspace({
     moving.current = { generation, token };
     const returnOpener = opener.current;
     // The existing departure owner distinguishes selection from leaving the private visit.
-    const decision:
-      | ((movement: { kind: 'selection'; returnFocus: HTMLElement | null }) => Promise<boolean>)
-      | null
-      | undefined = selected ? commands?.confirmMovement?.current : null;
+    const decision = selected ? commands?.confirmMovement?.current : null;
     const leave = decision
       ? await decision({
           kind: 'selection',

@@ -74,6 +74,11 @@ same surviving opener with `preventScroll`. Page/visit replacement fences pendin
 focus; retired openers cannot receive it. Deliberate keyboard page-heading orientation and frontier navigation
 keep their existing meanings.
 
+Decision: the mounted route binds the shared departure owner to the current private reading episode and loader
+source identity, preserving that object across rerenders and local selection. The editor reuses the shared confirm
+signature; approved selection unmounts only that editor, while full departure retains reader retirement. A new
+account, credential/exposure epoch, address, locale or source gets a new owner and cannot inherit a pending review.
+
 Decision: unsent drafts and uncertain commands protect departure; settled commands remain locked for fresh inspection
 but do not count as unsaved work, and confirmed Leave retires the current reader before route admission.
 

@@ -81,9 +81,14 @@ function ClassificationAssessmentsRoute() {
       : admission.rejected || (origin.authoritative && origin.retained[0] && !admission.allowed[0])
         ? 'denied'
         : null;
+  const readerKey = JSON.stringify([origin.lifetime(0), origin.epoch(0)]);
+  const episode = JSON.stringify([readerKey, owner, address.key, state]);
+  const departureOwner = useRef({ episode, initial });
+  if (departureOwner.current.episode !== episode || departureOwner.current.initial !== initial)
+    departureOwner.current = { episode, initial };
   return (
     <ClassificationsReader
-      key={JSON.stringify([origin.lifetime(0), origin.epoch(0)])}
+      key={readerKey}
       initial={initial}
       windows={windows}
       frontier={frontier ?? { cursor: null, selected: null }}
@@ -119,6 +124,7 @@ function ClassificationAssessmentsRoute() {
           reviewClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
         departure: (dirty, locked, current, retire) => (
           <OwnVotesDeparture
+            owner={departureOwner.current}
             dirty={dirty}
             locked={locked}
             isCurrent={current}

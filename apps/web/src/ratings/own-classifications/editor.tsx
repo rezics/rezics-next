@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
+import type { OwnVotesDepartureControl } from '../own-votes/departure';
 import { captureClassificationIntent, classificationActionAllowed, type ClassificationIntent } from './intent';
 import type {
   ClassificationCommandResult,
@@ -14,7 +15,7 @@ import type {
 export type ClassificationCommands = {
   read: Extract<OwnClassificationsRead, { state: 'ready' }>;
   retire?: () => void;
-  confirmMovement?: { current: (() => Promise<boolean>) | null };
+  confirmMovement?: { current: OwnVotesDepartureControl['confirm'] | null };
   csrfToken: () => string | null;
   send: (intent: ClassificationIntent, signal: AbortSignal) => Promise<ClassificationCommandResult>;
   review: (intent: ClassificationIntent, signal: AbortSignal) => Promise<ClassificationReview>;
