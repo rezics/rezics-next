@@ -3,15 +3,18 @@ import * as start from '../.storybook/react-start';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { RatingQuestion, SubjectOwnRating } from '../src/features/pages/subject-ratings';
+import type { RatingQuestion, RatingSources, SubjectOwnRating } from '../src/features/pages/subject-ratings';
 import type { SubjectPersonalLease, SubjectRatingWriteOperation } from '../src/features/pages/subject-personal-reader';
 import type { RatingControlState } from '../src/features/pages/rating-control';
 
-const { QUESTION, preparedRatingReader, readOwnRating } = await import('../src/features/pages/subject-ratings');
-const { applyOptimisticRatingChange, RatingControlView } = await import('../src/features/pages/rating-control');
+const { GLOBAL, QUESTION, preparedRatingReader, readOwnRating } = await import('../src/features/pages/subject-ratings');
+const { applyOptimisticRatingChange, RatingControlView, RatingRecoveryView } =
+  await import('../src/features/pages/rating-control');
+const { BookOverviewRating, RatingsSection, RatingsContext, RatingControlContext } =
+  await import('../src/features/pages/subject-ratings-view');
 const { subjectOwnRatingQuery, subjectRatingQuery } = await import('../src/features/pages/subject-queries');
 const { m } = await import('../src/paraglide/messages.js');
 
@@ -260,12 +263,66 @@ test('ready, signed-out and pending actions keep comfortable wrapping targets an
   }
 });
 
-test('a forbidden own-vote read leaves its reserved space without a control', () => {
-  const html = view({ kind: 'unavailable' });
-  expect(html).toContain('data-slot="rating-control-reserved"');
-  expect(html).not.toContain('role="slider"');
-  expect(html).not.toContain('<form');
-  expect(html).not.toContain('Sign in');
+test('personal availability explains preparation, sign-in and unavailable answers in every launch locale', () => {
+  for (const locale of ['en', 'ja', 'ko', 'zh-Hans', 'zh-Hant', 'de', 'es', 'fr'] as const) {
+    const options = { locale };
+    for (const kind of ['unknown', 'signed-out', 'unavailable'] as const) {
+      const html = view({ kind }, { locale }).split('<noscript>')[0]!;
+      const message =
+        kind === 'unknown'
+          ? m.subject_rating_control_preparing
+          : kind === 'signed-out'
+            ? m.subject_rating_control_signed_out
+            : m.subject_rating_control_unavailable;
+      expect(html).toContain(message({}, options));
+      expect(html).toContain('role="status"');
+      expect(html.includes('aria-busy="true"')).toBe(kind === 'unknown');
+      expect(html.includes('/auth/sign-in?return_to=')).toBe(kind === 'signed-out');
+      expect(html).not.toMatch(/aria-hidden="true"|<form|<button|type="range"|rating-control-value/);
+      expect(html).not.toContain(m.subject_rating_control_unrated({}, options));
+    }
+    expect(view({ kind: 'unavailable' }, { locale })).not.toContain('<noscript>');
+  }
+});
+
+test('both personal rating consumers keep their public figure and question when the session or own answer is unavailable', () => {
+  const client = new QueryClient();
+  const sources: RatingSources = {
+    question: { kind: 'ready', value: ratingQuestion },
+    figure: {
+      kind: 'ready',
+      value: {
+        questionId: QUESTION,
+        populationId: GLOBAL,
+        scale: ratingQuestion.scale,
+        count: 1234,
+        state: 'ready',
+        mean: 8.4,
+        score: 7.9,
+      },
+    },
+    global: { kind: 'absent' },
+    statistics: { kind: 'absent' },
+  };
+  const binding = personalLease();
+  for (const session of ['unavailable', 'signed-in'] as const)
+    for (const consumer of [
+      createElement(BookOverviewRating, { subject: subjectId, locale: 'en' }),
+      createElement(RatingsSection, { id: 'ratings', subject: subjectId, locale: 'en' }),
+    ]) {
+      const own = { reader: binding.reader, kind: 'unavailable' } as const;
+      const control = { subjectId, locale: 'en', returnTo, session, own, binding };
+      const personal = createElement(RatingControlContext.Provider, { value: control }, consumer);
+      const ratings = createElement(RatingsContext.Provider, { value: sources }, personal);
+      const html = renderToStaticMarkup(createElement(QueryClientProvider, { client }, ratings));
+      expect(html).toContain(m.subject_rating_control_unavailable({}, { locale: 'en' }));
+      expect(html).toContain(ratingQuestion.label);
+      expect(html).toContain('data-slot="public-rating-figure"');
+      expect(html).toContain('1,234');
+      expect(html).not.toMatch(/rating-control-value|type="range"|<button|<form|auth\/sign-in/);
+    }
+  expect(client.getQueryCache().getAll()).toHaveLength(0);
+  client.clear();
 });
 
 test('a missing own vote is unrated while denied own-vote reads hide the control', async () => {
@@ -407,25 +464,24 @@ test('a stale review restores the previous value and does not reuse that command
   await client.cancelQueries();
 });
 
-test('an uncertain saved value keeps Save enabled for the same units', () => {
+test('matching current readback keeps original-command recovery separate from ordinary Save', () => {
   const html = renderToStaticMarkup(
-    createElement(RatingControlView, {
-      question: ratingQuestion,
-      subjectId,
+    createElement(RatingRecoveryView, {
+      original: { units: 15, question: { ...ratingQuestion, meaning: ratingQuestion.label } },
+      currentScale: ratingQuestion.scale,
       locale: 'en',
-      returnTo,
-      state: { kind: 'ready', units: 15 },
       pending: false,
-      failure: m.subject_rating_control_uncertain({}, { locale: 'en' }),
-      retryable: true,
-      onSet: () => {},
-      onClear: () => {},
+      reading: { kind: 'ready', units: 15 },
+      onRetry: () => {},
+      onRead: () => {},
     }),
   );
-  const [interactive] = html.split('<noscript>') as [string, string];
-  const actions = interactive.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) ?? [];
-  expect(actions[0]).not.toContain('disabled=""');
-  expect(interactive).toContain(m.subject_rating_control_uncertain({}, { locale: 'en' }));
+  const actions = html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) ?? [];
+  expect(actions).toHaveLength(2);
+  for (const action of actions) expect(action).toMatch(/min-h-11.*min-w-11.*wrap-anywhere.*focus-visible:outline-2/);
+  expect(actions[0]).toContain(m.subject_rating_control_retry_save({}, { locale: 'en' }));
+  expect(html).toContain(m.subject_rating_control_uncertain({}, { locale: 'en' }));
+  expect(html).toContain(m.subject_rating_control_read_separate({}, { locale: 'en' }));
 });
 
 test('setting, changing and clearing each issue one bounded write', async () => {

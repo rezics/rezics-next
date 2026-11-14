@@ -70,8 +70,12 @@ is public only; `RatingRecoveryView` retry/read belong to the captured uncertain
 recovery capability is an independent follow-up, not a prerequisite for this explanation. Original intent, sender,
 key and CSRF stay captured; even matching current readback does not confirm delivery. Source, reader, credential,
 exposure and locale retirement keep their existing authority; question/scale changes never rewrite original intent.
-The focused rating-control and form-identity tests pin these states and retained recovery; execution, the ordinary
-mounted failure/recovery visit, native phone/desktop review and promoted acceptance remain verifier obligations.
+The [rating-control tests](../../../tests/rating-control.test.ts) assert visible availability and independent public
+figures while retaining native zero/null assertions. The [form-identity regression](../../../tests/rating-control-form-identity.test.tsx)
+now expects original-command retry/readback instead of obsolete same-value Save/discard recovery, and pins retained
+intent through unavailable answers and question/scale changes, plus binding/locale retirement. Test execution, the
+ordinary mounted failure/recovery visit, native acceptance, phone/desktop review and promoted acceptance remain
+verifier obligations.
 
 ## Subject purchase entry slot
 

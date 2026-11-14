@@ -163,6 +163,7 @@ export function RatingControlView({
         className="min-h-12 min-w-0 space-y-2"
         data-slot="rating-control-reserved"
       >
+        {!hideQuestionLabel && <p className="text-sm font-medium wrap-anywhere">{question.label}</p>}
         <p className="text-sm text-muted-foreground wrap-anywhere" role="status">
           {state.kind === 'unknown'
             ? m.subject_rating_control_preparing({}, options)

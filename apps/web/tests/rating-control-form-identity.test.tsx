@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,7 +7,7 @@ import type { RatingWriteInput } from '../src/features/pages/rating-control';
 import { sessionQueryKey } from '../src/session/browser-state';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as start from '../.storybook/react-start';
-import { QUESTION, type RatingQuestion } from '../src/features/pages/subject-ratings';
+import { QUESTION, type RatingQuestion, type SubjectOwnRating } from '../src/features/pages/subject-ratings';
 
 test('composed rating controls label and submit their own question, value and return address independently', async () => {
   const { Window } = await import(
@@ -40,6 +40,7 @@ test('composed rating controls label and submit their own question, value and re
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { RatingControlView, SubjectRatingControl } = await import('../src/features/pages/rating-control');
+  const { m } = await import('../src/paraglide/messages.js');
   const questions: RatingQuestion[] = [
     { id: QUESTION, revision: 1, label: 'Your rating', grain: 'work', scale: { min: 0, max: 20, displayStep: 1 } },
     {
@@ -154,18 +155,23 @@ test('composed rating controls label and submit their own question, value and re
       }),
     };
     const commands: RatingWriteInput[] = [];
-    const renderRecovery = async (question = questions[0]!) =>
+    const renderRecovery = async (
+      question = questions[0]!,
+      own: SubjectOwnRating = { reader: 'reader', kind: 'ready', units: 10 },
+      lease = binding,
+      locale = 'en',
+    ) =>
       act(async () =>
         root.render(
           <QueryClientProvider client={client}>
             <SubjectRatingControl
               question={question}
               subjectId="subject-0"
-              locale="en"
+              locale={locale}
               returnTo="/en/original#rating"
               session="signed-in"
-              own={{ reader: 'reader', kind: 'ready', units: 10 }}
-              binding={binding}
+              own={own}
+              binding={lease}
               write={async (input) => {
                 commands.push(input);
                 return 'uncertain';
@@ -184,24 +190,34 @@ test('composed rating controls label and submit their own question, value and re
       question: { id: questions[0]!.id, revision: 1, meaning: 'Your rating' },
     });
     expect(Object.isFrozen(commands[0])).toBe(true);
+    const unavailable = { reader: 'reader', kind: 'unavailable' } as const;
+    await renderRecovery({ ...questions[0]!, revision: 2, scale: questions[1]!.scale }, unavailable);
+    expect(host.textContent).toContain(m.subject_rating_control_unavailable({}, { locale: 'en' }));
+    expect(host.querySelector('form')).toBeNull();
+    expect(host.querySelector('[data-slot="rating-recovery"]')).not.toBeNull();
+    expect(commands).toHaveLength(1);
     client.setQueryData(sessionQueryKey, {
       state: 'signed-in',
       subject: 'reader',
       csrfToken: 'replacement-credential',
     });
-    await act(async () => host.querySelector<HTMLButtonElement>('[data-slot="rating-uncertain"] button')!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-slot="rating-recovery"] button')!.click());
     expect(commands).toHaveLength(2);
     expect(commands[1]).toBe(commands[0]);
-    await act(async () =>
-      host.querySelectorAll<HTMLButtonElement>('[data-slot="rating-uncertain"] button')[1]!.click(),
-    );
-    expect(host.querySelector('[data-slot="rating-uncertain"]')).toBeNull();
-    await act(async () => host.querySelector('form')!.querySelectorAll('button')[1]!.click());
-    expect(commands[2]!.idempotencyKey).not.toBe(commands[0]!.idempotencyKey);
-    expect(commands[2]).toMatchObject({ expectedCredential: 'replacement-credential' });
-    await renderRecovery({ ...questions[0]!, revision: 2 });
-    expect(host.querySelector('[data-slot="rating-uncertain"]')).toBeNull();
+    const read = spyOn(client, 'fetchQuery').mockResolvedValue({ reader: 'reader', kind: 'ready', units: null });
+    await act(async () => host.querySelectorAll<HTMLButtonElement>('[data-slot="rating-recovery"] button')[1]!.click());
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-slot="rating-recovery"]')).not.toBeNull();
+    expect(host.textContent).toContain(m.subject_rating_control_read_separate({}, { locale: 'en' }));
+    expect(commands).toHaveLength(2);
+    read.mockRestore();
+    await renderRecovery(questions[0]!, undefined, { ...binding });
+    expect(host.querySelector('[data-slot="rating-recovery"]')).toBeNull();
     expect(host.querySelector('form')!.getAttribute('action')).toBe('/en/original#rating');
+    await act(async () => host.querySelector('form')!.querySelectorAll('button')[1]!.click());
+    await renderRecovery(questions[0]!, unavailable, binding, 'ja');
+    expect(host.querySelector('[data-slot="rating-recovery"]')).toBeNull();
+    expect(host.textContent).toContain(m.subject_rating_control_unavailable({}, { locale: 'ja' }));
     client.clear();
   } finally {
     await act(async () => root.unmount());
