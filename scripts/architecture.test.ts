@@ -350,8 +350,7 @@ describe('architecture boundaries', () => {
       .split('\n')
       .slice(1, -1)
       .map((row) => row.split('|', 1)[0]!);
-    const expectedRowIds = searchModules
-      .map(({ id }) => id.replace(/^kernel-/, 'k').replace(/^web-/, 'w'));
+    const expectedRowIds = searchModules.map(({ id }) => id.replace(/^kernel-/, 'k').replace(/^web-/, 'w'));
     const searchRow = selected.split('\n').find((row) => row.startsWith('ksearch|'))!;
     expect(searchRow).toMatch(/^ksearch\|d\|/);
     expect(searchRow).toContain('search:{');
