@@ -303,6 +303,31 @@ test('delivery steers an active turn with expectedTurnId and starts an idle turn
   }
 });
 
+test('an oversized legacy diagnostic reaches the existing turn only as an inbox pointer', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.managers.flush();
+    const diagnostic = 'R'.repeat(1_100_000);
+    const taskId = 'task-with-retained-proof';
+    s.inbox.deliver({ managerId: manager.id, taskId, kind: 'round-limit', summary: diagnostic });
+    const id = s.inbox.pending(manager.id)[0]!.id;
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Continue independent source' });
+    await s.managers.wake(manager.id);
+    await s.managers.flush();
+    const texts = s.requests().filter((r) => r.method === 'turn/steer').map((r) => r.params.input[0].text);
+    expect(texts).toHaveLength(2);
+    expect(texts[0]).toContain(`Inbox #${id}: round-limit.`);
+    expect(texts[0]).toContain(taskId);
+    expect(texts[0].length).toBeLessThan(300);
+    expect(texts[1]).toBe('Continue independent source');
+    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
+    expect(s.inbox.pending(manager.id)[0]?.event.summary).toBe(diagnostic);
+  } finally {
+    await s.close();
+  }
+});
+
 test('a steer racing a completed turn rejoins and starts a turn without losing the event', async () => {
   const s = await setup();
   try {
