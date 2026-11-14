@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
@@ -25,6 +25,7 @@ import {
   type VerificationFailure,
   type VerificationInput,
   type VerificationRecoveryIO,
+  type VerificationRecoveryState,
   type VerificationSnapshot,
 } from './contract/verification';
 import { usePreferenceRetry } from './preference-failure-retry';
@@ -63,6 +64,33 @@ const verificationActionClassName =
   'h-auto min-h-11 min-w-11 w-full max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] sm:w-auto';
 const verificationSummaryClassName =
   'min-h-11 min-w-11 max-w-full cursor-pointer py-3 whitespace-normal [overflow-wrap:anywhere]';
+
+type VerificationPresentationFocusIntent = {
+  id: number;
+  kind: 'confirmation-open' | 'confirmation-cancel' | 'result';
+  accountId: string;
+  observation: string | null;
+  snapshot: VerificationRecoveryState;
+  ready: boolean;
+};
+
+function visibleFocusTarget(target: HTMLElement | null) {
+  if (!target?.isConnected || !target.getClientRects().length) return false;
+  for (let current: HTMLElement | null = target; current; current = current.parentElement) {
+    const style = current.ownerDocument.defaultView?.getComputedStyle(current);
+    if (
+      current.hasAttribute('hidden') ||
+      current.hasAttribute('inert') ||
+      current.getAttribute('aria-hidden') === 'true' ||
+      style?.display === 'none' ||
+      style?.visibility === 'hidden' ||
+      style?.visibility === 'collapse' ||
+      Number(style?.opacity ?? 1) === 0
+    )
+      return false;
+  }
+  return true;
+}
 
 function subjectLabel(title: string | null | undefined, subjectId: string | undefined) {
   return title?.trim() && title !== subjectId ? title : m.settings_verification_generic_subject();
@@ -327,6 +355,10 @@ export function VerificationCard({
   const [showValidation, setShowValidation] = useState(false);
   // Confirmation belongs to this request identity, state, and advice; a newer observation needs a fresh decision.
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [focusIntent, setFocusIntent] = useState<VerificationPresentationFocusIntent | null>(null);
+  const focusIntentRef = useRef<VerificationPresentationFocusIntent | null>(null);
+  const nextFocusIntent = useRef(0);
+  const currentOutcome = useRef<HTMLDivElement>(null);
   // Capture the genuine label in the action handler, before a send clears current status or the draft changes.
   const [action, setAction] = useState<{ kind: 'request' | 'withdraw'; subject: string } | null>(null);
   const [acknowledged, setAcknowledged] = useState<Omit<VerificationInput, 'idempotencyKey'> | null>(null);
@@ -348,6 +380,113 @@ export function VerificationCard({
     !commandWaiting &&
     !!csrfToken;
   const hasDraft = !!selected || !!statement || links.some((link) => link.label || link.url);
+
+  function cancelFocusIntent(id?: number) {
+    const active = focusIntentRef.current;
+    if (!active || (id !== undefined && active.id !== id)) return;
+    focusIntentRef.current = null;
+    setFocusIntent(null);
+  }
+
+  function beginFocusIntent(
+    kind: VerificationPresentationFocusIntent['kind'],
+    snapshot: VerificationRecoveryState,
+    currentObservation: string | null,
+    ready: boolean,
+  ) {
+    cancelFocusIntent();
+    const intent: VerificationPresentationFocusIntent = {
+      id: ++nextFocusIntent.current,
+      kind,
+      accountId: controller.accountId,
+      observation: currentObservation,
+      snapshot,
+      ready,
+    };
+    focusIntentRef.current = intent;
+    setFocusIntent(intent);
+    return intent.id;
+  }
+
+  function completeFocusIntent(id: number, snapshot: VerificationRecoveryState) {
+    const active = focusIntentRef.current;
+    if (!active || active.id !== id) return;
+    if (!isCurrent() || active.accountId !== controller.accountId) {
+      cancelFocusIntent(id);
+      return;
+    }
+    const completed = {
+      ...active,
+      ready: true,
+      snapshot,
+      observation: verificationWithdrawalObservation(snapshot.current),
+    };
+    focusIntentRef.current = completed;
+    setFocusIntent(completed);
+  }
+
+  useLayoutEffect(() => {
+    if (!focusIntent || focusIntent.ready) return;
+    const doc = currentOutcome.current?.ownerDocument;
+    if (!doc) {
+      cancelFocusIntent(focusIntent.id);
+      return;
+    }
+    const cancelForManualChoice = () => cancelFocusIntent(focusIntent.id);
+    doc.addEventListener('pointerdown', cancelForManualChoice, true);
+    doc.addEventListener('keydown', cancelForManualChoice, true);
+    doc.addEventListener('focusin', cancelForManualChoice, true);
+    return () => {
+      doc.removeEventListener('pointerdown', cancelForManualChoice, true);
+      doc.removeEventListener('keydown', cancelForManualChoice, true);
+      doc.removeEventListener('focusin', cancelForManualChoice, true);
+    };
+  }, [focusIntent]);
+
+  useLayoutEffect(() => {
+    if (!focusIntent?.ready || focusIntentRef.current?.id !== focusIntent.id) return;
+    const latest = controller.snapshot();
+    const latestObservation = verificationWithdrawalObservation(latest.current);
+    const currentBelongsToAccount =
+      (!latest.current || latest.current.accountId === focusIntent.accountId) &&
+      (!latest.current?.verificationRequest || latest.current.verificationRequest.accountId === focusIntent.accountId);
+    const currentIntent =
+      isCurrent() &&
+      controller.accountId === focusIntent.accountId &&
+      latest === state &&
+      latest === focusIntent.snapshot &&
+      currentBelongsToAccount &&
+      latestObservation === focusIntent.observation;
+    const doc = currentOutcome.current?.ownerDocument;
+    const target = (name: string) => doc?.getElementById(`${id}-verification-${name}`) ?? null;
+    let destination: HTMLElement | null = null;
+
+    if (currentIntent) {
+      if (focusIntent.kind === 'confirmation-open') {
+        if (confirmation === focusIntent.observation && observation === focusIntent.observation && canWithdraw)
+          destination = target('confirmation-heading');
+      } else if (focusIntent.kind === 'confirmation-cancel') {
+        if (confirmation === null && observation === focusIntent.observation && canWithdraw)
+          destination = target('withdraw');
+      } else if (state.attempt) {
+        const retry = target('retry');
+        if (
+          !state.attempt.receipt &&
+          retry &&
+          'disabled' in retry &&
+          !retry.disabled &&
+          visibleFocusTarget(retry)
+        )
+          destination = retry;
+        else destination = target('recovery-heading');
+      } else if (state.phase === 'refused') destination = target('refused-outcome');
+      else if (state.readStatus === 'error') destination = target('read-outcome');
+      else destination = target('current-outcome');
+    }
+
+    cancelFocusIntent(focusIntent.id);
+    if (currentIntent && visibleFocusTarget(destination)) destination?.focus();
+  }, [focusIntent, state, confirmation, observation, canWithdraw, controller, id, isCurrent]);
 
   // Wholly empty optional rows remain editable placeholders, as before. Every populated byte stays in order.
   const populated = links.filter((link) => link.label || link.url);
@@ -373,13 +512,43 @@ export function VerificationCard({
     else form.current?.ownerDocument.getElementById(target)?.focus();
   }
 
-  async function recover(action: () => Promise<void>) {
+  async function recover(kind: 'request' | 'withdraw' | 'retry' | 'read-current', action: () => Promise<void>) {
     if (!isCurrent()) return;
+    const before = controller.snapshot();
+    const focusId = beginFocusIntent('result', before, verificationWithdrawalObservation(before.current), false);
     const command = action();
-    const original = controller.snapshot().attempt;
+    const started = controller.snapshot();
+    const original = started.attempt;
+    const originalKey = original?.input.idempotencyKey;
+    const dispatched =
+      kind === 'read-current'
+        ? started !== before && started.phase === 'reading' && started.readStatus === 'reading'
+        : started.phase === 'sending' &&
+          !!original &&
+          (kind === 'request'
+            ? original.kind === 'request'
+            : kind === 'withdraw'
+              ? original.kind === 'withdraw'
+              : before.attempt?.input.idempotencyKey === originalKey);
+    if (!dispatched) {
+      cancelFocusIntent(focusId);
+      await command;
+      return;
+    }
     await command;
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      cancelFocusIntent(focusId);
+      return;
+    }
     const current = controller.snapshot();
+    const terminal = current !== started && current.phase !== 'sending' && current.phase !== 'reading';
+    const sameAttempt = !!originalKey && current.attempt?.input.idempotencyKey === originalKey;
+    const replacement =
+      kind === 'read-current'
+        ? current.readStatus === 'success' || current.readStatus === 'error'
+        : sameAttempt || (!current.attempt && (current.phase === 'review' || current.phase === 'refused'));
+    if (terminal && replacement) completeFocusIntent(focusId, current);
+    else cancelFocusIntent(focusId);
     if (original?.kind === 'request' && !current.attempt && current.phase === 'review') setAcknowledged(original.input);
   }
 
@@ -392,14 +561,46 @@ export function VerificationCard({
       return;
     }
     setAction({ kind: 'request', subject: subjectLabel(selected?.title, selected?.id) });
-    await recover(() => controller.submit(draft));
+    await recover('request', () => controller.submit(draft));
   }
 
   async function withdraw() {
     if (!isCurrent() || !csrfToken || confirmation === null || confirmation !== observation || !canWithdraw) return;
     setAction({ kind: 'withdraw', subject: subjectLabel(subjectTitle, verification?.catalogueSubjectId) });
-    await controller.withdraw(true);
+    await recover('withdraw', () => controller.withdraw(true));
     if (isCurrent()) setConfirmation(null);
+  }
+
+  function openConfirmation() {
+    const latest = controller.snapshot();
+    if (
+      !isCurrent() ||
+      latest !== state ||
+      !observation ||
+      verificationWithdrawalObservation(latest.current) !== observation ||
+      !canWithdraw
+    )
+      return;
+    beginFocusIntent('confirmation-open', latest, observation, true);
+    setConfirmation(observation);
+  }
+
+  function cancelConfirmation() {
+    const latest = controller.snapshot();
+    if (
+      !isCurrent() ||
+      latest !== state ||
+      confirmation === null ||
+      confirmation !== observation ||
+      verificationWithdrawalObservation(latest.current) !== observation ||
+      !canWithdraw
+    ) {
+      cancelFocusIntent();
+      setConfirmation(null);
+      return;
+    }
+    beginFocusIntent('confirmation-cancel', latest, observation, true);
+    setConfirmation(null);
   }
 
   return (
@@ -411,7 +612,15 @@ export function VerificationCard({
         <ContentSectionDescription>{m.settings_verification_intro()}</ContentSectionDescription>
       </ContentSectionHeader>
       <ContentSectionBody className="min-w-0 space-y-4">
-        <div role="status" aria-live="polite" aria-atomic="true">
+        <div
+          ref={currentOutcome}
+          id={`${id}-verification-current-outcome`}
+          tabIndex={-1}
+          className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {state.phase === 'loading' || state.readStatus === 'reading' ? (
             <p>{m.settings_verification_loading()}</p>
           ) : state.readStatus === 'success' && !verification ? (
@@ -443,7 +652,11 @@ export function VerificationCard({
             data-request-id={boundedDiagnosticId(state.failure?.requestId)}
             data-retry-after={diagnosticRetryAfter(state.failure?.retryAfter)}
           >
-            <p>
+            <p
+              id={`${id}-verification-read-outcome`}
+              tabIndex={-1}
+              className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               {m.settings_verification_load_failed()}{' '}
               {state.failure?.code === 'platform_closed' || state.failure?.message === 'rezics-platform-closed'
                 ? m.settings_verification_read_closed()
@@ -503,6 +716,7 @@ export function VerificationCard({
                 selected={selected}
                 onSelect={(subject) => {
                   setSelected(subject);
+                  cancelFocusIntent();
                   setConfirmation(null);
                 }}
                 disabled={pending || !csrfToken}
@@ -540,12 +754,19 @@ export function VerificationCard({
         {canWithdraw ? (
           confirmation !== null && confirmation === observation ? (
             <Alert>
-              <AlertTitle>{m.settings_verification_confirm_title()}</AlertTitle>
+              <AlertTitle
+                id={`${id}-verification-confirmation-heading`}
+                tabIndex={-1}
+                className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {m.settings_verification_confirm_title()}
+              </AlertTitle>
               <AlertDescription className="flex min-w-0 max-w-full flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="destructive"
                   className={verificationActionClassName}
+                  id={`${id}-verification-confirm`}
                   disabled={pending || !csrfToken}
                   onClick={() => void withdraw()}
                 >
@@ -555,7 +776,8 @@ export function VerificationCard({
                   type="button"
                   variant="outline"
                   className={verificationActionClassName}
-                  onClick={() => setConfirmation(null)}
+                  id={`${id}-verification-cancel`}
+                  onClick={cancelConfirmation}
                 >
                   {m.settings_verification_cancel()}
                 </Button>
@@ -566,7 +788,8 @@ export function VerificationCard({
               type="button"
               variant="outline"
               className={verificationActionClassName}
-              onClick={() => setConfirmation(observation)}
+              id={`${id}-verification-withdraw`}
+              onClick={openConfirmation}
             >
               {m.settings_verification_withdraw()}
             </Button>
@@ -574,7 +797,11 @@ export function VerificationCard({
         ) : null}
         {state.attempt && !pending ? (
           <Alert>
-            <AlertTitle>
+            <AlertTitle
+              id={`${id}-verification-recovery-heading`}
+              tabIndex={-1}
+              className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               {state.attempt.receipt
                 ? state.attempt.kind === 'request'
                   ? m.settings_verification_request_received()
@@ -637,8 +864,9 @@ export function VerificationCard({
                 <Button
                   type="button"
                   className={verificationActionClassName}
+                  id={`${id}-verification-retry`}
                   disabled={!canRetryVerification(state.attempt, state.current) || commandWaiting || !csrfToken}
-                  onClick={() => void recover(() => controller.retry())}
+                  onClick={() => void recover('retry', () => controller.retry())}
                 >
                   {state.attempt.kind === 'request'
                     ? m.settings_verification_retry_original()
@@ -650,7 +878,11 @@ export function VerificationCard({
         ) : null}
         {state.phase === 'refused' ? (
           <Alert>
-            <AlertTitle>
+            <AlertTitle
+              id={`${id}-verification-refused-outcome`}
+              tabIndex={-1}
+              className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               {action?.kind === 'withdraw'
                 ? m.settings_verification_withdraw_refused()
                 : m.settings_verification_request_refused()}
@@ -675,8 +907,9 @@ export function VerificationCard({
           type="button"
           variant="outline"
           className={verificationActionClassName}
+          id={`${id}-verification-read-current`}
           disabled={pending || readWaiting}
-          onClick={() => void recover(() => controller.reload())}
+          onClick={() => void recover('read-current', () => controller.reload())}
         >
           {m.settings_verification_read_current()}
         </Button>
