@@ -881,10 +881,7 @@ export class WorkerTasks {
           current.workspace = { module, taskName: basename(briefFile, '.md') };
           if (current.state === 'ready' && !this.dependenciesMet(current)) current.state = 'held';
         });
-        if (
-          firstUse &&
-          !sourceOnlyDependencyInstallCanBeSkipped(this.settings, this.store.task(id))
-        )
+        if (firstUse && !sourceOnlyDependencyInstallCanBeSkipped(this.settings, this.store.task(id)))
           installWorktreeDependencies(workspace.worktree, this.settings);
         prepareSharedFrozen(this.settings, this.store, this.store.task(id));
         return this.store.task(id);
@@ -893,7 +890,7 @@ export class WorkerTasks {
       const base = brief.proof?.sourceCommit ?? taskBaseHead(this.settings, brief);
       const files = parseFrozenFiles(brief.markdown, brief.paths, this.settings.policy?.brief);
       const initialInstallInput = {
-        task: { brief, base, worktree, proofAuthorization: authorization },
+        task: { brief, base, worktree, ...(authorization === undefined ? {} : { proofAuthorization: authorization }) },
         proofCapture: override?.proofCapture !== undefined,
         pendingPaths: files.map(({ path }) => path),
       };
@@ -2474,11 +2471,7 @@ export class WorkerTasks {
             .split('\0')
             .filter(Boolean);
         if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
-        if (
-          !files.length &&
-          !rebasing &&
-          !sourceOnlyDependencyInstallCanBeSkipped(this.settings, task)
-        ) {
+        if (!files.length && !rebasing && !sourceOnlyDependencyInstallCanBeSkipped(this.settings, task)) {
           setupStep = 'installing worktree dependencies';
           installWorktreeDependencies(task.worktree, this.settings);
         }
