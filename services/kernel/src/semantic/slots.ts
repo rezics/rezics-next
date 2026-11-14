@@ -235,11 +235,8 @@ export async function slotView(
   return { ...view, facts };
 }
 
-/** Current Global authority only: rejected display candidates never enter this view.
- * Compact slots contain only their admitted creation facts; subsequent editorial
- * writes expand the slot. Expanded selection is admitted at at most 32 entries.
- */
-export async function effectiveGlobalSlotFacts(
+/** Resolve the current Global selection before display-only rejected candidates are added. */
+async function currentGlobalSelection(
   tx: CommandTransaction,
   subject: string,
   property: string,
@@ -265,12 +262,72 @@ export async function effectiveGlobalSlotFacts(
     ? await selectionFacts(tx, subject, property, selection)
     : state.compact.map((candidate) => candidateFact(property, candidate));
   if (state.expanded && facts.length !== selection.length) throw new AccessUnavailableError('contention');
+  return { facts, basis: state.expanded ? state.adoption : state.compact };
+}
+
+/** Current Global authority only: rejected display candidates never enter this view.
+ * Compact slots contain only their admitted creation facts; subsequent editorial
+ * writes expand the slot. Expanded selection is admitted at at most 32 entries.
+ */
+export async function effectiveGlobalSlotFacts(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+  slot = slotId(subject, property),
+  lockSelected = false,
+): Promise<{ facts: FactRow[]; basis: unknown }> {
+  const { facts, basis } = await currentGlobalSelection(tx, subject, property, slot, lockSelected);
   const visible = await omitHidden(tx, subject, facts);
   await collectSemanticRecordFacts(tx, subject, visible);
-  return {
-    facts: visible,
-    basis: state.expanded ? state.adoption : state.compact,
-  };
+  return { facts: visible, basis };
+}
+
+/** Current selection with the existing Context replacement, suppression and inheritance rules. */
+export async function effectiveSlotFacts(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+  context = GLOBAL_CONTEXT,
+  defaults: Readonly<Record<string, 'inherit' | 'suppress'>> = {},
+  slot = slotId(subject, property),
+): Promise<{ facts: FactRow[]; resolution?: 'unresolved' | 'suppressed' }> {
+  if (context === GLOBAL_CONTEXT) {
+    const { facts } = await effectiveGlobalSlotFacts(tx, subject, property, slot);
+    return { facts };
+  }
+
+  const state = await resolveSlot(tx, subject, property, context, slot);
+  let facts: FactRow[];
+  let resolution: 'unresolved' | 'suppressed' | undefined;
+  if (!state.expanded) {
+    if (defaults[property] === 'suppress') {
+      facts = [];
+      resolution = 'suppressed';
+    } else {
+      facts = state.compact.map((candidate) => candidateFact(property, candidate));
+    }
+  } else if (state.adoption?.mode === 'suppress' || (!state.adoption && defaults[property] === 'suppress')) {
+    facts = [];
+    resolution = 'suppressed';
+  } else if (state.adoption?.mode === 'replace') {
+    facts = await selectionFacts(tx, subject, property, state.adoption.selection);
+  } else {
+    const global = (await currentGlobalSelection(tx, subject, property, slot)).facts;
+    if (!global.length) {
+      facts = global;
+    } else {
+      facts = [];
+      for (const fact of global) {
+        const decision = await currentAcceptance(tx, subject, fact.statement_id!, context);
+        if (decision?.verdict !== 'reject') facts.push(fact);
+      }
+      if (!facts.length) resolution = 'unresolved';
+    }
+  }
+
+  const visible = await omitHidden(tx, subject, facts);
+  await collectSemanticRecordFacts(tx, subject, visible);
+  return { facts: visible, ...(resolution === undefined ? {} : { resolution }) };
 }
 
 /** Insert-CAS: collision with an already written head never overwrites history. */

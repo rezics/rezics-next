@@ -4,7 +4,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { currentRelationFacts, currentRelationKey, type CurrentRelationCandidate } from './current-relations.ts';
 import { readSubjectSummaries, type SubjectSummary } from './summaries.ts';
-import { slotView } from './slots.ts';
+import { effectiveSlotFacts } from './slots.ts';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { factDataTypes, isRelationProperty, resolveItem, type FactRow, type Statement } from './item.ts';
@@ -255,7 +255,7 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
               relationCandidatesByPartition.set(home, candidates);
               continue;
             }
-            const view = await slotView(local, id, property, context, defaults);
+            const view = await effectiveSlotFacts(local, id, property, context, defaults);
             const facts = view.facts.filter((fact) => fact.kind === 'statement');
             fields.set(property, { facts: [...facts], withheld: !!view.resolution });
           }
