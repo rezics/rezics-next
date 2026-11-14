@@ -123,7 +123,8 @@ export function IdentityIntakePanel({
   createHref?: string;
 }) {
   const options = { locale: locale as never };
-  const headingId = useId();
+  const panelId = useId();
+  const headingId = `${panelId}-heading`;
   const onAuthorityRef = useRef(onAuthority);
   onAuthorityRef.current = onAuthority;
   const intentKey = identityIntentKey(intent, version, viewerKey);
@@ -201,12 +202,11 @@ export function IdentityIntakePanel({
   const retry = failedLocally || page?.actions.retry === true;
   const continueWithResults = page?.actions.continueWithResults === true;
   const continueUnverified = failedLocally || page?.actions.continueUnverified === true;
-  const primaryLabel = (hit: IdentityIntakePage['results'][number]) =>
-    hit.labels.find((label) => label.language === intent?.language.trim())?.value ??
-    hit.labels.find((label) => label.language === locale)?.value ??
-    hit.summary?.label?.value ??
-    hit.labels[0]?.value ??
-    m.identity_intake_metadata_unavailable({}, options);
+  const primaryLabel = (hit: IdentityIntakePage['results'][number]): { language?: string; value: string } =>
+    hit.labels.find((label) => label.language === intent?.language.trim()) ??
+    hit.labels.find((label) => label.language === locale) ??
+    hit.summary?.label ??
+    hit.labels[0] ?? { value: m.identity_intake_metadata_unavailable({}, options) };
 
   return (
     <section
@@ -279,9 +279,14 @@ export function IdentityIntakePanel({
           <ul className="grid min-w-0 gap-3">
             {page.results.map((hit) => {
               const label = primaryLabel(hit);
-              const alternateLabels = hit.labels.filter((entry) => entry.value !== label);
+              const alternateLabels = hit.labels.filter(
+                (entry) => entry.value !== label.value || entry.language !== label.language,
+              );
               const typeLabel = hit.typeLabel ?? m.identity_intake_metadata_unavailable({}, options);
               const linkLabel = hit.labels[0]?.value ?? hit.summary?.label?.value ?? hit.id;
+              const candidateId = `${panelId}-candidate-${encodeURIComponent(hit.id)}`;
+              const openActionId = `${candidateId}-open-action`;
+              const newTabId = `${candidateId}-new-tab`;
               const grain = hit.summary
                 ? hit.summary.creativeWork
                   ? m.identity_intake_grain_work({}, options)
@@ -290,14 +295,14 @@ export function IdentityIntakePanel({
               const href = subjectHref({ id: hit.id, label: linkLabel }, locale).href;
               return (
                 <li key={hit.id} className="min-w-0 rounded-lg border border-border bg-background p-3 sm:p-4">
-                  <article aria-labelledby={`identity-hit-${hit.id}`} className="min-w-0 space-y-3">
+                  <article aria-labelledby={candidateId} className="min-w-0 space-y-3">
                     <div className="min-w-0 space-y-1">
                       <h4
-                        id={`identity-hit-${hit.id}`}
-                        lang={hit.labels[0]?.language}
+                        id={candidateId}
+                        lang={label.language}
                         className="break-words font-medium"
                       >
-                        {label}
+                        {label.value}
                       </h4>
                       <p className="break-words text-sm text-muted-foreground">
                         {m.catalogue_create_type({}, options)}: {typeLabel} · {grain}
@@ -339,11 +344,15 @@ export function IdentityIntakePanel({
                     <a
                       className={buttonVariants({ variant: 'outline', size: 'lg' })}
                       href={href}
+                      aria-labelledby={`${candidateId} ${openActionId} ${newTabId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {m.identity_intake_open({}, options)}
-                      <span className="sr-only"> · {m.guide_new_tab({}, options)}</span>
+                      <span id={openActionId}>{m.identity_intake_open({}, options)}</span>
+                      <span id={newTabId} className="sr-only">
+                        {' · '}
+                        {m.guide_new_tab({}, options)}
+                      </span>
                     </a>
                   </article>
                 </li>
