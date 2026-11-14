@@ -64,10 +64,10 @@ payloads. Schedule the Document prerequisite before briefing the dependent Own d
 
 ## Footnote prerequisite
 
-[Document ownership](../../../../../packages/document/README.md) adopts the public snapshot representation and shared
-reading disclosure port. That independent outcome includes profile validation and public schema artifacts, preservation
-through editor changes and Markdown import, accessible reading disclosure and retirement of its state when the supplied
-document or reading visit changes. Its focused acceptance belongs in:
+[Document ownership](../../../../../packages/document/README.md) must define the public snapshot representation and
+shared reading disclosure port before consumer integration. That independent outcome includes profile validation and
+public schema artifacts, preservation through editor changes and Markdown import, accessible reading disclosure and
+retirement of its state when the supplied document or reading visit changes. Its focused acceptance belongs in:
 
 - [Document behaviour](../../../../../packages/document/tests/document.test.ts) and
   [public contract](../../../../../packages/document/tests/contract.test.ts).
@@ -76,8 +76,10 @@ document or reading visit changes. Its focused acceptance belongs in:
   [disclosure lifetime](../../../../../packages/ui/tests/document-disclosure-lifetime.test.tsx).
 
 Decision: Consume footnotes unchanged through the existing private `PostReadingBody` caller after Document adopts
-and delivers its snapshot format and public reading disclosure port. Scheduling completion alone does not supply
-those contracts; consumer fixtures and stories require the producer's supported representation and controls.
+and delivers its snapshot format and public reading disclosure port. Delivery requires the Document profile schemas,
+editor and Markdown preservation, and shared accessible reading controls; scheduling completion or consumer
+documentation alone cannot supply those contracts. The integration brief must identify the supported representation,
+controls and named story states before consumer fixtures and stories are written.
 
 The integration preserves separate server, browser and current-readback source and visit identities:
 
