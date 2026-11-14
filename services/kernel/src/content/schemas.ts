@@ -92,6 +92,10 @@ export const WatchManagementItemSchema = t.Union([
       state: t.Literal('available'),
       resourceId: ContentIdSchema,
       title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
+      place: t.Union([
+        t.Object({ realmId: ContentIdSchema, title: t.String({ maxLength: 1024 }) }, closed),
+        t.Null(),
+      ]),
       command: WatchManagementCommandSchema,
     },
     closed,

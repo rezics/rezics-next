@@ -1,12 +1,13 @@
 import { noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
+import { readRealm } from '../community/realm-read.ts';
 import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
-import type { RequestContext } from './model.ts';
-import { ContentNotFoundError, readBoard, readThread } from './reads.ts';
+import type { Anchored, BoardRecord, RequestContext } from './model.ts';
+import { ContentNotFoundError, observeBoardRecords, readBoard, readThread } from './reads.ts';
 import type { WatchManagementItem, WatchManagementPage } from './schemas.ts';
 import {
   declareWatchHistory,
@@ -35,9 +36,15 @@ type TargetObservation = Readonly<{
         title: string | null;
         place: Readonly<{ boardId: string; title: string | null }>;
       }>
-    | Readonly<{ kind: 'board'; resourceId: string; title: string | null }>
+    | Readonly<{
+        kind: 'board';
+        resourceId: string;
+        title: string | null;
+        place: Readonly<{ realmId: string; title: string }> | null;
+      }>
     | null;
   witness: string | null;
+  current?: () => Promise<boolean>;
 }>;
 
 function selection(kind: WatchKind) {
@@ -145,6 +152,7 @@ export async function listWatches(
     if (initial.witness === null && final.witness !== null) throw new ProblemError('dependency_unavailable');
     if (initial.witness !== null && final.witness !== null && initial.witness !== final.witness)
       throw new ProblemError('dependency_unavailable');
+    const presentation = final.current && !(await final.current()) ? null : final.presentation;
     const current = await readActiveWatch(deps, source, owner.route, owner.id, row.watch_id, deadline);
     if (!current) continue;
     if (!sameWatchEpisode(row, current)) throw new ProblemError('dependency_unavailable');
@@ -156,8 +164,8 @@ export async function listWatches(
     };
     const command = { watchId: identity.id, kind: identity.kind, expectedRevision: identity.revision };
     finalItems.push(
-      final.presentation
-        ? { ...identity, state: 'available', ...final.presentation, command }
+      presentation
+        ? { ...identity, state: 'available', ...presentation, command }
         : { ...identity, state: 'unavailable', command },
     );
   }
@@ -272,12 +280,36 @@ async function observeTarget(
       // Both page rounds compare these originals; the finalizer never replaces their anchors.
       return { presentation, witness: JSON.stringify([targetWitness, placeWitness]) };
     }
-    const result = await readBoard(deps, resourceId, { actor, deadline });
+    const board = await observeBoardRecords(deps, [resourceId], { actor, deadline });
+    const result = board.records[0]!;
     if (!result.value) return { presentation: null, witness: null };
+    const target = result.value;
+    const realm = target.realmId === null ? null : await readRealm(deps, actor, target.realmId, { deadline });
+    if (target.realmId !== null && !realm) return { presentation: null, witness: null };
+    const realmWitness = JSON.stringify(realm);
+    // Realm disclosure runs outside the native checkout; keep the original Board across that await.
+    if (!(await board.current())) return { presentation: null, witness: null };
     return {
-      presentation: { kind, resourceId: result.value.id, title: result.value.title },
-      // The native view and its partition epoch are the observation. A refreshed boolean cannot replace it.
-      witness: nativeTargetWitness(kind, result),
+      presentation: {
+        kind,
+        resourceId: target.id,
+        title: target.title,
+        place: realm ? { realmId: realm.realmId, title: realm.title } : null,
+      },
+      // Both page rounds keep the disclosed Realm source and the Board's original partition/epoch.
+      witness: JSON.stringify([nativeTargetWitness(kind, result), realmWitness]),
+      async current() {
+        try {
+          const currentRealm =
+            target.realmId === null ? null : await readRealm(deps, actor, target.realmId, { deadline });
+          if (target.realmId !== null && !currentRealm) return false;
+          if (JSON.stringify(currentRealm) !== realmWitness) throw new ProblemError('dependency_unavailable');
+          return await board.current();
+        } catch (error) {
+          if (!(error instanceof ContentNotFoundError)) throw error;
+          return false;
+        }
+      },
     };
   } catch (error) {
     if (!(error instanceof ContentNotFoundError)) throw error;
@@ -287,7 +319,7 @@ async function observeTarget(
 
 function nativeTargetWitness(
   kind: WatchKind,
-  result: Awaited<ReturnType<typeof readThread>> | Awaited<ReturnType<typeof readBoard>>,
+  result: Awaited<ReturnType<typeof readThread>> | Anchored<BoardRecord | null>,
 ): string {
   const value = result.value!;
   return JSON.stringify([
