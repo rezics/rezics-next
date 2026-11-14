@@ -18,7 +18,7 @@ import {
   type Actor,
 } from './dependencies.ts';
 
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError } from '../http/problem-error.ts';
 
@@ -164,7 +164,9 @@ export function sourceClassificationRoutes(
       { route: 0, id: GLOBAL_CONTEXT },
       { pool: dependencies.pool, deadline },
     );
-    const allowed = await withConnection(dependencies.pool, (client) => check(deadlineClient(client, deadline)));
+    const allowed = await withBoundedReadConnection(dependencies.pool, deadline, (client) =>
+      check(deadlineClient(client, deadline)),
+    );
     return allowed ? ['put', 'clear'] : [];
   }
   return app
