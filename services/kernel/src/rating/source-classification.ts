@@ -210,31 +210,36 @@ export function createSourceClassificationProducer(config: SourceClassificationC
     );
   }
   async function readBatch(input: ReadSourceClassificationBatch): Promise<readonly SourceClassificationRead[]> {
+    const actor = input.actor;
+    const subjectId = input.subjectId;
+    const limit = input.limit;
+    const deadline = input.deadline;
+    const suppliedAssociations = [...input.associations];
     if (
-      !Number.isInteger(input.limit) ||
-      input.limit < 1 ||
-      input.limit > MAX_SOURCE_CLASSIFICATION_BATCH ||
-      input.associations.length > input.limit
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > MAX_SOURCE_CLASSIFICATION_BATCH ||
+      suppliedAssociations.length > limit
     )
       throw new RangeError('Invalid supplied-association batch limit');
-    const associations = input.associations.map((a) => {
+    const associations = suppliedAssociations.map((a) => {
       classificationAssociationKey(a);
-      if (a.subjectId !== input.subjectId) throw new TypeError('Association belongs to another Subject');
+      if (a.subjectId !== subjectId) throw new TypeError('Association belongs to another Subject');
       return { ...a };
     });
     if (!associations.length) return [];
-    return within(input.deadline, async () => {
+    return within(deadline, async () => {
       const keys = associations.map(classificationAssociationKey);
-      const before = await observe(input.actor, associations, input.deadline);
+      const before = await observe(actor, associations, deadline);
       // Denied/unknown keys are never used to probe a retained observation slot.
       const permitted = [...new Set(keys.filter((key) => classificationEvidence(before.get(key))))];
-      const first = await heads(input.subjectId, permitted, input.deadline);
+      const first = await heads(subjectId, permitted, deadline);
       const tuples = [...first.values()].flatMap((head) => ('cleared' in head.payload ? [] : [tuple(head.payload)]));
-      const fenceBefore = await fences(tuples, input.deadline);
+      const fenceBefore = await fences(tuples, deadline);
       const now = ratingCapabilities(config).clock();
-      const after = await observe(input.actor, associations, input.deadline);
-      const last = await heads(input.subjectId, permitted, input.deadline);
-      const fenceAfter = await fences(tuples, input.deadline);
+      const after = await observe(actor, associations, deadline);
+      const last = await heads(subjectId, permitted, deadline);
+      const fenceAfter = await fences(tuples, deadline);
       return keys.map((key, index): SourceClassificationRead => {
         const head = first.get(key);
         const fenceKey = head && !('cleared' in head.payload) ? tupleKey(tuple(head.payload)) : null;
@@ -256,7 +261,11 @@ export function createSourceClassificationProducer(config: SourceClassificationC
       association: ClassificationAssociation;
     },
   ): Promise<SourceClassificationRead> {
-    return (await readBatch({ ...input, associations: [input.association], limit: 1 }))[0]!;
+    const actor = input.actor;
+    const subjectId = input.subjectId;
+    const association = { ...input.association };
+    const deadline = input.deadline;
+    return (await readBatch({ actor, subjectId, associations: [association], limit: 1, deadline }))[0]!;
   }
   async function mutate(intent: CapturedSourceClassificationMutation) {
     const { actor, association, expectedObservation, idempotencyKey, deadline, next, key, route, cleared } = intent;
