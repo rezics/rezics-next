@@ -410,10 +410,12 @@ test('selection advance replays acknowledged steps and fences stale settlement a
     const stageId = started.value.stageId as string;
     const stagePath = prepPath(book.path, stageId);
     expect(
-      (await f.native.call('POST', `${stagePath}:appendSelectionBatch`, {
-        batchId: book.newId(),
-        occurrenceIds,
-      })).status,
+      (
+        await f.native.call('POST', `${stagePath}:appendSelectionBatch`, {
+          batchId: book.newId(),
+          occurrenceIds,
+        })
+      ).status,
     ).toBe(200);
     expect((await f.native.call('POST', `${stagePath}:freezeSelection`, {})).status).toBe(200);
     return { stageId, stagePath };
@@ -459,8 +461,9 @@ test('selection advance replays acknowledged steps and fences stale settlement a
   );
   expect(settledReplay.status).toBe(200);
   expect(settledReplay.value).toEqual(settled.value);
-  expect((await f.native.call('POST', `${settlement.stagePath}:advance`, { stepId: settlementBook.newId() })).status)
-    .toBe(412);
+  expect(
+    (await f.native.call('POST', `${settlement.stagePath}:advance`, { stepId: settlementBook.newId() })).status,
+  ).toBe(412);
   expect((await f.native.call('POST', `${settlement.stagePath}:progress`, {})).value.stage).toMatchObject({
     state: 'building',
     settledInputCount: '20',
