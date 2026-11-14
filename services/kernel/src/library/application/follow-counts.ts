@@ -32,9 +32,9 @@ export function createFollowCountReadApplication<Time, Admission>(
     return ports.within(deadline, async () => {
       const selectedAt = await ports.admit(actor, deadline);
       const time = await ports.time(deadline);
-      await ports.health();
+      await ports.health(deadline);
       const result = await body(actor, time);
-      await ports.health();
+      await ports.health(deadline);
       let absent: FollowCountTargetAbsentError | undefined;
       try {
         if (result.current) await result.current(await ports.time(deadline));

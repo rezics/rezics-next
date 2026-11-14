@@ -106,7 +106,7 @@ export function createFollowActivitySource(deps: {
           ? cursor.after[2]
           : '00000000-0000-0000-0000-000000000000';
       // Readiness is owner-maintained constant metadata, never a recipient/partition census.
-      await within(deadline, () => requireFollowCountHealth(deps.pool));
+      await requireFollowCountHealth(deps.pool, deadline);
       const rows = await feedSnapshot(
         deps.pool,
         destination.route,

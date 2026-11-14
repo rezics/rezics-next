@@ -1,7 +1,8 @@
 import type { Pool } from 'pg';
 import type { AccessClient } from '../../request/access.ts';
-import { withConnection } from '../../database/pool.ts';
+import { discardConnection, withConnection } from '../../database/pool.ts';
 import { readConsumerLag } from '../../events/consumer-lag.ts';
+import { deadlineClient, within } from '../access-port.ts';
 import { followCountHealthCurrent } from '../core/index.ts';
 import { FollowCountUnavailableError, type FollowCountHealthObservation } from '../contract/index.ts';
 export type { FollowCountHealthObservation } from '../contract/index.ts';
@@ -41,7 +42,20 @@ export async function readFollowCountHealthObservation(tx: AccessClient): Promis
   };
 }
 
-/** Constant root metadata at each end of a private read. No partition/follower scan. */
-export async function requireFollowCountHealth(pool: Pool): Promise<FollowCountHealthObservation> {
-  return withConnection(pool, readFollowCountHealthObservation);
+/** Both samples use the request's original deadline, including checkout wait.
+ * A late checkout checks expiry before SQL; a timed-out query discards its socket
+ * rather than returning potentially in-flight native IO to the pool. */
+export async function requireFollowCountHealth(pool: Pool, deadline: number): Promise<FollowCountHealthObservation> {
+  return within(deadline, () =>
+    withConnection(pool, async (connection) => {
+      try {
+        return await readFollowCountHealthObservation(deadlineClient(connection, deadline));
+      } catch (error) {
+        // pg's query_timeout can reject before the server has finished the query.
+        // Health uses autocommit reads, so discard without queuing a rollback.
+        discardConnection(connection, error as Error);
+        throw error;
+      }
+    }),
+  );
 }

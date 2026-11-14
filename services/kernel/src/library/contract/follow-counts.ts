@@ -34,7 +34,7 @@ export interface FollowCountReadPorts<Time, Admission> {
   route(id: string): number | null;
   admit(owner: LibraryAccountActor, deadline: number, expected?: Admission): Promise<Admission>;
   time(deadline: number): Promise<Time>;
-  health(): Promise<FollowCountHealthObservation>;
+  health(deadline: number): Promise<FollowCountHealthObservation>;
   within<T>(deadline: number, work: () => Promise<T>): Promise<T>;
   destination(target: FollowCountTarget): Promise<CountDestination>;
   subjectReadable(owner: LibraryAccountActor, id: string, time: Time): Promise<boolean>;

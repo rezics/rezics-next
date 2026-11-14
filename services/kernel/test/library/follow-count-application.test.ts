@@ -49,7 +49,8 @@ function reads(overrides: Partial<FollowCountReadPorts<typeof time, typeof home>
       expect(deadline).toBe(123);
       return time;
     },
-    async health() {
+    async health(deadline) {
+      expect(deadline).toBe(123);
       calls.push('health');
       return health;
     },
@@ -142,7 +143,8 @@ test('private counts admit current authority, retain native time and distinguish
 test('final health, identity epoch and agent binding can each withhold a provisional scalar', async () => {
   let samples = 0;
   const unhealthy = reads({
-    async health() {
+    async health(deadline) {
+      expect(deadline).toBe(123);
       if (++samples === 2) throw new FollowCountUnavailableError();
       return health;
     },

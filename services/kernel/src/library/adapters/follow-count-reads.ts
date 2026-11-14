@@ -54,7 +54,7 @@ export function createNativeFollowCountReads(
     route: routeOf,
     admit: (owner, deadline, expected) => admitPrivateFollowRead(pool, owner, deadline, expected),
     time: (deadline) => withConnection(pool, (client) => mintReadTime(ports.deadlineClient(client, deadline))),
-    health: () => requireFollowCountHealth(pool),
+    health: (deadline) => requireFollowCountHealth(pool, deadline),
     within: ports.within,
     destination: (target) => ports.destination(pool, target),
     async subjectReadable(owner, id, time) {
