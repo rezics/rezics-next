@@ -737,19 +737,15 @@ export class ManagerSessions {
       this.hasUserMessageTurn(state, state.threadId, state.activeTurnId!)
     )
       this.admitParkedOperatorTurn(state, state.threadId, state.activeTurnId!);
+    if (
+      method === 'thread/goal/updated' &&
+      state.goalState?.status === 'active' &&
+      state.waitingForInbox &&
+      state.activeTurnId === null
+    )
+      state.waitingForInbox = false;
     this.save(state);
     if (state.status === 'running') {
-      if (
-        method === 'thread/goal/updated' &&
-        state.waitingForInbox &&
-        state.goalState?.status === 'active' &&
-        !this.isParkedTurnInProgress(state, state.threadId, state.activeTurnId)
-      ) {
-        // An idle Goal should stay parked. This catches provider or external reactivation before another
-        // goal-generated continuation can replace the event-driven wait.
-        await this.pauseRemote(state, 'automatic');
-        return;
-      }
       if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
       if (await this.checkLimits(state)) return;
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
@@ -1458,6 +1454,13 @@ export class ManagerSessions {
     const goal = await this.transport.getGoal(client, state.threadId);
     state.goalState = goal;
     if (goal?.status === 'active') {
+      if (this.hasActiveNativeRefillDuty(state, goal)) {
+        // This bounded, explicitly assigned refill duty treats native continuations as work. Leaving
+        // inbox-wait clear avoids classifying and interrupting them as controller-park turns.
+        state.waitingForInbox = false;
+        this.save(state);
+        return;
+      }
       await this.pauseRemote(state, 'automatic');
       return;
     }
@@ -1474,6 +1477,39 @@ export class ManagerSessions {
     // A user or guard status is not the controller's idle park and must not be reactivated on inbox wake.
     state.waitingForInbox = false;
     this.save(state);
+  }
+  private hasActiveNativeRefillDuty(state: ManagedManagerState, goal: GoalState): boolean {
+    const objective = state.objective;
+    const turn = state.turnDisposition;
+    // Keep automatic renewals inside the original objective's finite manager window.
+    const refillWindowEndsAt = (state.history ?? [])
+      .filter((session) => session.objective === objective)
+      .reduce(
+        (end, session) => Math.min(end, session.startedAt + session.limits.wallMs),
+        state.startedAt + state.limits.wallMs,
+      );
+    return (
+      state.status === 'running' &&
+      state.engine === 'codex' &&
+      /\b(?:keep|maintain|continue|leave)\b/i.test(objective) &&
+      /\bactive\b/i.test(objective) &&
+      /\bnative\b/i.test(objective) &&
+      /\bgoal\b/i.test(objective) &&
+      /\brefill\b/i.test(objective) &&
+      goal.status === 'active' &&
+      goal.tokenBudget !== null &&
+      goal.tokenBudget > 0 &&
+      goal.tokensUsed < goal.tokenBudget &&
+      turn !== undefined &&
+      turn.threadId === state.threadId &&
+      turn.intent === 'work' &&
+      turn.status === 'completed' &&
+      state.activeTurnId === null &&
+      state.turns > 0 &&
+      state.turns <= state.limits.turns &&
+      state.turnsWithoutDecision <= state.limits.turnsWithoutDecision &&
+      this.now() <= refillWindowEndsAt
+    );
   }
   private async pauseRemote(state: ManagerState, origin: GoalMutationOrigin): Promise<void> {
     assertManagedManager(state);

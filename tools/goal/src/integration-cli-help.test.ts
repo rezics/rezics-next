@@ -37,3 +37,21 @@ test('verify and promote help and invalid arguments never call runtime hooks', a
     console.log = originalLog;
   }
 });
+
+test('retired managed-manager entrypoints cannot access runtime state or services', async () => {
+  const runtime = new Proxy({} as IntegrationRuntime, {
+    get(_target, property) {
+      throw new Error(`Unexpected runtime access: ${String(property)}`);
+    },
+  });
+  for (const args of [
+    ['manager', 'start', 'web', '--engine', 'codex', '--budget', '20000'],
+    ['manager', 'renew', 'web', '--engine', 'claude'],
+    ['manager', 'assign', 'web', 'old-domain'],
+    ['manager', 'start'],
+    ['manager', 'renew'],
+    ['manager', 'assign'],
+  ]) {
+    await expect(runIntegration(args, runtime)).rejects.toThrow('Managed manager launches and assignments are retired');
+  }
+});

@@ -2,19 +2,44 @@
 
 ## Catalogue and ownership
 
-Storybook has three tiers: **Pages** in `apps/web` show route level states in the full site shell; **Patterns** in
-`apps/web` show connected compositions from the same recorded or fake data without the shell; **Components** in
-`packages/ui` show shared UI. A state confined to one region belongs to a pattern. Page stories cover populated states
-when the page frame differs by viewer, plus empty, unavailable and error outcomes.
+The Web sidebar is organized by product area, with Library, Subjects, Discovery, Community, Commerce and Account
+first, followed by Catalogue, Zones, Imports, Content, Moderation and Site Shell. Use area and feature names, such
+as `Library/Collections/Collection Editor`. Group full pages and their connected compositions under the same area;
+when they would have the same title, distinguish the page from the workflow in the folder name. Shared primitives
+remain in the composed UI catalogue.
 
-Use `<Tier>/<Area>/<Name>` titles with user facing nouns. Pages and Patterns use the areas Library, Subjects, Discovery,
-Community, Commerce and Account, in that order. Name stories for persona and outcome (`Signed out`, `Owner, empty`,
-`Filter sheet open`), not viewport, theme or locale. Keep about six visible states per title. Regression only stories
-carry the `!dev` tag. Cross cutting exposure views use the `exposure` tag in the page they cover.
+Pages still show route level states in the full site shell. Connected compositions show regional states from the
+same recorded or fake data without the shell. Page stories cover populated states when the page frame differs by
+viewer, plus empty, unavailable and error outcomes. Preserve explicit meta IDs and story export names when
+renaming a folder so existing story and docs links keep working, except when retiring a display-only ID. Name stories for persona
+and outcome (`Signed out`, `Owner, empty`, `Filter sheet open`), not preview settings. Keep the hierarchy
+compact and include every required behavior state, even when a folder needs more than eight. Regression stories carry the `!dev` tag; every distinct required state stays visible. Cross cutting exposure views use the `exposure` tag in
+the page they cover.
 
-Locale and theme are Storybook globals. Use the viewport toolbar for responsive review; a phone only state can set
-`globals.viewport` at story level. Browser coverage runs at desktop and phone widths. Do not use the removed
-`parameters.viewport.defaultViewport` setting.
+Locale and theme are Storybook globals. Review the same canonical IDs at `phone390` and `desktop1280` using the
+viewport toolbar, with locale and theme globals; do not create width or theme behavior variants. Keep a locale fixture only when its admitted data or authored interaction differs,
+and name that distinction explicitly. Stories
+must leave viewport and theme free for the toolbar. Use Controls for behavior or layout options independent of device
+width. Run browser coverage at desktop and phone widths by selecting viewport globals in the runner.
+Do not encode a viewport in a story ID or retain a size-only export as a hidden alias. Keep distinct behavior
+under an outcome name and exercise it at supported widths on the same URL. Do not use the removed
+`parameters.viewport.defaultViewport` setting. The preview canvas uses white in light mode and black in dark mode;
+shared application colors remain unchanged. Project defaults belong in `initialGlobals`, so reviewers can override them.
+
+Decision: publish one behavior URL per admitted fixture outcome, including recovery, language and viewer differences;
+retire every display-only URL and hidden size alias. The recovered comparison is
+`pages-library-collection-comparison--recovered-comparison` at both toolbar sizes. Preserve Current Book editor's
+`pages-catalogue-book-and-book-series-work-editor--current-book` identity. The responsive navigation family uses
+`patterns-shell-navigation`; product phone navigation and credential-device labels retain their semantic meaning.
+An explicit sheet presentation is a component behavior fixture, independent of preview width. Shared `PageStory`
+and `PatternStory` remain the production composition owners; story wrappers must inherit theme and available width.
+Source identity coverage is in `apps/web/tests/storybook-identities.test.ts`; publication coverage checks both built
+indexes in `apps/web/tests/storybook-catalogue.test.ts`. A source delivery does not establish built-index, browser,
+smoke-scenario or physical-image acceptance; the combined catalogue verifier owns those checks.
+
+Group ordinary content with headings, spacing, and a horizontal divider where adjacent sections need separation.
+Do not frame ordinary sections with an outline, raised surface, or decorative card. Controls and focus indicators
+retain their own boundaries.
 
 The title and story name rules follow [Storybook naming](https://storybook.js.org/docs/writing-stories/naming-components-and-hierarchy),
 [tags](https://storybook.js.org/docs/writing-stories/tags), [globals](https://storybook.js.org/docs/essentials/toolbars-and-globals),
@@ -30,3 +55,111 @@ bun test apps/web/tests/library-page-smoke.test.ts
 
 The Web landing integration check selects this command for changes under `apps/web`, `packages/ui`, and
 `packages/document`.
+
+## Review publication cadence
+
+Publish a buildable, committed development snapshot promptly so reviewers can use it. The publisher owns one build
+and deployment at a time, returns the complete static artifact, and checks the public build revision and canonical
+story index after deployment. Report the deployed revision, changed canonical links and known missing or broken
+paths. A successful build alone is not a published result.
+
+Run the six smoke scenarios, interaction, accessibility, visual and native journey checks asynchronously against
+their exact source or deployed revision. Retain their existing owners and report failures into the next repair;
+do not wait for the complete browser matrix, all fixtures or native activation to publish a useful review snapshot.
+Unfinished verification remains explicit. Development Storybook publication is not product release approval or
+completion of the Goal's acceptance. Private data and money authorization retain their existing boundaries.
+
+For complete-page review, mount the application's actual route tree, shell and providers with fixed, coherent data
+at existing request or provider seams. Tab links, nested destinations, query state and return navigation use the
+application router; do not replace them with decorative tabs or a second story-only routing implementation.
+Populate each reachable fixture destination, including covers and domain relationships. Contract-shaped synthetic
+fixtures are allowed and labelled; recorded responses and native execution remain different evidence.
+
+Ordinary review entries open in their named state and leave navigation, viewport and theme to the reviewer.
+Keep automated multi-tab, history and viewport walks in separately named interaction stories or the verifier;
+loading a review entry must not run through other pages before settling. The same canonical review URL supports
+manual phone/desktop and theme changes.
+
+## Agent access
+
+Start an isolated local catalogue from the worktree root with an unused exact loopback port:
+
+Both launchers bind only to loopback addresses, defaulting to `127.0.0.1`, and create no tunnel. Web composes the UI
+catalogue from the worktree's `STORYBOOK_UI_URL`.
+
+```sh
+CACHE_DIR="$PWD/.temp/storybook-cache/web" bun run --cwd apps/web storybook --host 127.0.0.1 --port 16497 --exact-port --ci
+# Or inspect the shared UI catalogue, using its own unused port:
+CACHE_DIR="$PWD/.temp/storybook-cache/ui" bun run --cwd packages/ui storybook --host 127.0.0.1 --port 16498 --exact-port --ci
+```
+
+Connect an MCP client using Streamable HTTP to that catalogue's `/mcp` endpoint, for example
+`http://127.0.0.1:16497/mcp`. Initialize the session, list tools and read their installed descriptions before choosing
+a tool. The CLI's startup message means the server is listening; a successful `/index.json` read establishes index
+readiness. Neither startup nor MCP initialization establishes component metadata readiness. Read the component
+manifest from the same server with:
+
+```sh
+curl --fail --show-error --max-time 120 http://127.0.0.1:16497/manifests/components.json
+```
+
+The canonical story index is at `http://127.0.0.1:16497/index.json`. A successful JSON manifest response with local
+components, props and canonical stories establishes manifest readiness. Then call `docs-list` with
+`withStoryIds: true`, select a returned component ID with `docs-show`, and select a returned story ID with
+`docs-show-story`. When the installed schema exposes `storybookId`, use `"local"` for local component/story reads.
+These tools
+read metadata; they do not require opening a preview or running browser story tests.
+
+Both configurations enable `componentsManifest` and `docgenServer: false`.
+This alpha deliberately returns 404 for the dev JSON manifest with server-side docgen. With that service off, the
+React manifest preset uses synchronous React docgen. The pinned renderer is patched to resolve JSX imports first,
+then extract props only for the selected component and declared subcomponents. Other JSX imports remain available
+for source examples without generating unused API payloads. This retains the complete catalogue, source imports,
+stories and docs. The JSON manifest reports `meta.docgen: "react-docgen"`.
+When multiple files share a canonical component ID, its API still comes from Storybook's selected file; the patch
+also merges the other files' story examples under that ID instead of dropping them. Canonical IDs stay unchanged.
+The patch is registered in the root `patchedDependencies`; remove it when upstream defers incidental JSX prop
+extraction and retains every source file's stories for shared IDs. The focused default-composition regression is
+`apps/web/tests/storybook-local-manifest.test.ts`.
+Do not enable `experimentalReactComponentMeta` with the pinned TypeScript 7 package: it lacks the legacy compiler
+API (`ts.sys`) required by this alpha's component-meta generator, which otherwise returns component errors without
+props. Neither server-side docgen nor that experimental flag provides a working substitute with these pins.
+The static Web preview reuses those extracted props for its declared components rather than traversing all
+Vite modules with builder-side docgen. Development retains its existing docgen behavior. Builder-side docgen is
+deprecated for Storybook 12; revisit these flags when upgrading.
+
+Keep one server per catalogue and one outstanding request per endpoint. Retain the owned server/request handles,
+logs, endpoint and terminal results under `.temp/`. If a read times out, inspect its terminal error and the existing
+server log before making any further request; an empty response is unknown readiness, not a missing route. A JSON-RPC
+error or tool result with `isError: true` is a tool failure even when HTTP returns 200.
+
+Select different unused ports for another worktree; keep MCP, manifest and source identity on that worktree's server.
+Web retains its UI composition ref: when running both catalogues, set `STORYBOOK_UI_URL` to the own-worktree UI
+server's origin before starting Web. The local catalogue remains usable when that ref is unavailable. The addon is
+already configured in both catalogues. Neither a shared dev server nor a public MCP service is required.
+
+The default web preview uses `connectedStoryProviders` from `apps/web/src/stories/connected-story.tsx`.
+It supplies a missing QueryClient for connected regions such as local search history and imported subject scores.
+Each selected story owns its fallback client, retains it during rerenders and clears it on unmount or story change.
+Existing ancestor providers are reused; nested providers such as `PageStory`, `PatternStory` and per-story clients
+keep control of their prepared data and deliberate error states. The fallback does not catch errors or replace
+kernel responses. Locale, theme and viewport remain globals on the same canonical story IDs.
+
+The focused provider regression composes the actual named stories with these default providers, without a native
+service: `bun test apps/web/tests/story-provider-composition.test.tsx`. This covers rendered local history and
+imported score content, independent story clients and preservation of story-owned clients.
+
+The pinned Vitest `5.1.0-beta.1` remains outside addon-vitest's declared peer range. Local MCP initialization and
+manifest reads do not establish compatibility of browser story tests; do not override the peer range or waive tests.
+
+Storybook 11 is used for its agent interface. An agent developing interface work uses the local one: the Storybook
+dev server started from its own worktree serves the MCP endpoint (`@storybook/addon-mcp`, `/mcp`) and the component
+manifest (`manifests/components.json`, enabled in both configurations), so the agent
+reads components, stories and documentation, previews stories and runs their tests against its own uncommitted changes.
+The published catalogue may also serve a read-only documentation MCP (`@storybook/mcp`) from its manifest for reading
+the released catalogue; development never depends on it.
+
+Browsers are not forbidden, they are unnecessary for this work. The local MCP already reads, previews and tests
+stories, so opening Storybook through the Chrome plugin, Playwright MCP or a script against `iframe.html` only adds
+time and tokens. Use a browser when a question needs real browser behaviour the MCP does not cover, and prefer the
+headless `apps/web/scripts/screenshots.ts` for visual review captures.

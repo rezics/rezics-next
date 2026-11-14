@@ -25,6 +25,36 @@ investigation. Resolve disagreement by checking evidence.
 Maintain a capability matrix with separate columns for specified, backend implemented, interface exposed and tested.
 Classify competitor capabilities as existing configuration, a missing generic capability or an explicit scope boundary.
 
+Design at the upper bound. Push every quantity the design depends on to its realistic limit before choosing it: a
+person in hundreds of Realms and Spaces, 200,000 kinds, thousands of follows, millions of items in one Collection,
+every Context a page could be scored in. A layout with one block, tab or section per Realm, kind or Context fails at
+those numbers; so does ranking that only works for a handful of Contexts. Show what the design renders and costs at
+the limit, not only in the fixture.
+
+Before implementation, the product owner records data cardinalities, distinguishing product limits from step bounds,
+and exact indexes (keys and ordering). State point/page cost and total work, including preparation, maintenance,
+disclosure, migration and cleanup, under the [architecture's step and total-size rules](../architecture.md).
+Include seeded growth witnesses that exceed one request's bounds and grow unrelated siblings and descendants;
+show the ordinary journey still completes and the stated costs hold.
+
+## Information placement
+
+Use the default overview for the information or actions that help almost everyone complete the primary job
+(roughly 90 percent). Use a tab for a distinct, recurring journey that helps a large majority (roughly 70
+percent). These are design heuristics, not measured thresholds. Give less frequent material a single link to
+its owning page, or an inline disclosure when it still supports the current job. Do not duplicate a complete
+secondary list in an overview. For a Book, identity, synopsis, ratings and a small review sample help readers
+decide what to read; related works belong in their own view.
+
+Keep the global sidebar to a few essential destinations and a compact list of the user's actual subscriptions.
+A task-specific tool belongs in its owning view or menu. Read current destinations from the shared native
+follow contract; the shell neither creates another subscription model nor infers destinations from ownership.
+Treat future personalization as an extension of these placement policies, not a prerequisite for useful defaults.
+
+For all content, one of the core designs is that it is easy to extend and iterate: what content declares has a
+versioned specification, so it can be extended and changed without breaking what already exists. A kind's filter
+conditions and presentation are one example.
+
 Write acceptance in user terms. For Collections, examples include light novels tagged harem, books over one million
 words and combined filters. Name missing properties, indexes and owner ports before claiming support.
 

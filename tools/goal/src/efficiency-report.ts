@@ -24,6 +24,7 @@ import { WorkerStore, workerRecordEndedAtExpression, workerRecordEndedAtMigratio
 import { guardEndingCounts } from './guards.ts';
 import type { AttemptRecord } from './types.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import { nativeUnitReportLines } from './native-unit-report.ts';
 type ReportPolicy = ControlPolicy['hourlyReport'];
 
 export const PRODUCT_LINE_FILTER_VERSION = 'rezics-product-code-v3';
@@ -63,21 +64,11 @@ export type ProductLineMeasurement = {
   filterVersion: string;
 };
 
-export type HourlyPrivateDutyContext = {
-  label: string;
-  runningTasks: number;
-  stoppedTasks: number;
-  readyBriefs: string;
-  allowance: string;
-  alarms: string[];
-};
-
 export type ReportOptions = {
   policy?: ControlPolicy | undefined;
   bucket?: string;
   now?: Date | number;
   productLineMeasurement?: ProductLineMeasurement;
-  privateDuty?: HourlyPrivateDutyContext;
 };
 
 type LandingRow = {
@@ -408,11 +399,10 @@ function observationData(
   db: Database,
   bucket: UtcHour,
   measurement: ProductLineMeasurement,
-  privateDuty: HourlyPrivateDutyContext | undefined,
   capturedAt: string,
 ): HourlyObservationData {
   const rolling = storedRollingLines(db, bucket, measurement);
-  const alerts = [...(privateDuty?.alarms ?? [])];
+  const alerts: string[] = [];
   const webTarget = WEB_PRODUCT_LINE_TARGET.toLocaleString('en-US');
   if (
     measurement.webAttribution === 'measured' &&
@@ -470,27 +460,6 @@ function productLineLines(bucket: UtcHour, data: HourlyObservationData): string[
     `Aggregate product lines across this and the previous completed UTC hour: ${total}.`,
     `Aggregate late integration backfill in this bucket: ${backfill}; excluded from measured throughput.`,
     'Late integrations remain visible in their integration bucket and do not revise a frozen bucket or its measured throughput.',
-  ];
-}
-
-function privateDutyLines(context: HourlyPrivateDutyContext, data: HourlyObservationData): string[] {
-  const productLines = data.productLines === null ? 'unknown' : String(data.productLines);
-  const webProductLines = data.webProductLines === null ? 'unknown' : String(data.webProductLines);
-  const webTarget = WEB_PRODUCT_LINE_TARGET.toLocaleString('en-US');
-  const rolling =
-    data.rollingAttribution === 'measured' && data.rollingProductLines !== null
-      ? String(data.rollingProductLines)
-      : 'unknown';
-  return [
-    `Private hourly duty — ${context.label} UTC.`,
-    `New product code: ${productLines} lines (aggregate).`,
-    `New Web product code: ${webProductLines} lines (hourly campaign target ${webTarget}).`,
-    `Product code across two completed hours: ${rolling}.`,
-    `Late integration backfill: ${data.backfillAttribution === 'measured' ? data.backfillProductLines : 'unknown'} lines (excluded from throughput).`,
-    `Running tasks: ${context.runningTasks}; stopped or held: ${context.stoppedTasks}.`,
-    `Ready briefs:${context.readyBriefs}.`,
-    `Allowance: ${context.allowance}.`,
-    `Alerts: ${data.alerts.length ? data.alerts.join('; ') : 'none'}.`,
   ];
 }
 
@@ -1009,7 +978,6 @@ function buildHourlyEfficiencyReport(
   const lines = [
     `Hourly operations report — ${bucket.start} to ${bucket.end} UTC`,
     ...productLineLines(bucket, observation),
-    ...(options.privateDuty ? privateDutyLines(options.privateDuty, observation) : []),
     ...landed,
     latestUsefulLanding(db, bucket.end, flowAvailable, policy),
     backlogReturnsLine(db, bucket, flowAvailable),
@@ -1020,6 +988,7 @@ function buildHourlyEfficiencyReport(
       ? `Urgent worker starts / finishes in bucket (excluded from throughput): ${bucketSummary.urgentStarts} / ${bucketSummary.urgentFinishes}.`
       : 'Urgent worker starts / finishes in bucket: unknown (task or flow history unavailable).',
     workSummary(db, openWorkAvailable, policy),
+    ...nativeUnitReportLines(db, bucket),
     landingQueueAge(metrics, landingQueueAvailable),
     waitIdentities(metrics, waitsAvailable, policy),
     checkWaitLine,
@@ -1073,7 +1042,7 @@ export function captureHourlyEfficiencyObservation(db: Database, options: Report
     candidate,
     () => {
       const measurement = options.productLineMeasurement ?? unknownMeasurement();
-      const observation = observationData(db, bucket, measurement, options.privateDuty, capturedAt);
+      const observation = observationData(db, bucket, measurement, capturedAt);
       if (
         observation.attribution === 'measured' &&
         (!Number.isSafeInteger(observation.productLines) ||
@@ -1094,13 +1063,7 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
 
   const asOf = options.now ?? Date.now();
   const capturedAt = (asOf instanceof Date ? asOf : new Date(asOf)).toISOString();
-  const observation = observationData(
-    db,
-    bucket,
-    options.productLineMeasurement ?? unknownMeasurement(),
-    options.privateDuty,
-    capturedAt,
-  );
+  const observation = observationData(db, bucket, options.productLineMeasurement ?? unknownMeasurement(), capturedAt);
   return buildHourlyEfficiencyReport(db, options, bucket, observation);
 }
 

@@ -19,9 +19,10 @@ import {
   symlinkSync,
   writeSync,
 } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   Aborted,
+  EMPTY_DIRECTORY_DIGEST,
   executionCancellation,
   executionCancellationFromEnvironment,
   parseRemotePhysicalRunReceipt,
@@ -52,6 +53,7 @@ import {
 } from './check-artifacts.ts';
 import {
   KERNEL_CLIENT_OUTPUT,
+  hasOutputTreeReturn,
   outputTreeInputExclusions,
   outputTreeProfile,
   outputTreeTransportCandidates,
@@ -60,13 +62,17 @@ import {
   type OutputTreeBinding,
 } from './check-output-tree.ts';
 import { environmentCommandIsSafe, performanceHosts } from './check-placement.ts';
+import { nativeUnitContext } from '../tools/goal/src/native-unit-context.ts';
+import { observeNativeUnitContext } from '../tools/goal/src/native-units.ts';
 import {
+  acceptCheckRunPhysicalCleanup,
   allocateCheckRunPhysical,
   beginCheckRunAllocation,
   bindCheckRunWorkspace,
   cancelCheckRunInvocation,
   claimCheckRunPreparedInvocation,
   checkRunBindingHash,
+  checkRunSnapshotReleaseKind,
   checkRunSettlementStateDirectory,
   createCheckRunFinalSettlement,
   createCheckRunNativeTerminalMessage,
@@ -84,6 +90,8 @@ import {
   readCheckRunCancellation,
   readCheckRunPreparationIntentReference,
   reconcileCheckRunInvocation,
+  listCheckRunInvocationIds,
+  releaseCheckRunSnapshot,
   registerCheckRunInvocation,
   setCheckRunUnknown,
   checkRunPreparationIntentFile,
@@ -100,7 +108,10 @@ import {
   type CheckRunPreparedInputs,
   type CheckRunReturnDisposition,
   type CheckRunStateOptions,
+  type CheckRunSnapshotReleaseKind,
   type CheckRunTransportChildIdentity,
+  type CheckRunTransportIdentityState,
+  type CheckRunReconciliation,
 } from './check-run-settlement.ts';
 
 export type CheckRunArguments = {
@@ -240,20 +251,46 @@ function candidateDirectory(root: string, value: string, name: string): string {
   return path;
 }
 
-function git(root: string, args: string[]): string {
-  const result = Bun.spawnSync(['git', '-c', 'core.hooksPath=/dev/null', '-C', root, ...args], {
+function gitResult(root: string, args: string[], environment: NodeJS.ProcessEnv = {}) {
+  return Bun.spawnSync(['git', '-c', 'core.hooksPath=/dev/null', '-C', root, ...args], {
     cwd: root,
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' },
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1', ...environment },
     timeout: 30_000,
   });
+}
+
+function git(root: string, args: string[], environment?: NodeJS.ProcessEnv): string {
+  const result = gitResult(root, args, environment);
   if (result.exitCode !== 0)
     throw new CheckRunUnavailable(
       `check-run: Git ${args[0] ?? 'operation'} failed: ${result.stderr.toString().trim()}`,
     );
   return result.stdout.toString().trim();
+}
+
+/** Snapshot the exact staged tree without locking or refreshing another check's candidate index. */
+function candidateIndexTree(root: string, head = git(root, ['rev-parse', '--verify', 'HEAD^{commit}'])): string {
+  const comparison = gitResult(root, ['diff-index', '--cached', '--quiet', '--ignore-submodules=none', head, '--'], {
+    GIT_OPTIONAL_LOCKS: '0',
+  });
+  if (comparison.exitCode === 0) return git(root, ['rev-parse', `${head}^{tree}`]);
+  if (comparison.exitCode !== 1)
+    throw new CheckRunUnavailable(`check-run: Git diff-index failed: ${comparison.stderr.toString().trim()}`);
+
+  const source = git(root, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+  const scratchParent = join(root, '.temp');
+  mkdirSync(scratchParent, { recursive: true, mode: 0o700 });
+  const scratch = mkdtempSync(join(scratchParent, 'check-index-'));
+  try {
+    const index = join(scratch, 'index');
+    if (existsSync(source)) copyFileSync(source, index);
+    return git(root, ['write-tree'], { GIT_INDEX_FILE: index });
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 function gitList(root: string, args: string[]): string[] {
@@ -358,6 +395,11 @@ async function hashFile(file: string): Promise<string> {
   return hash.digest('hex');
 }
 
+/** Published kernel-client files are compiler outputs after restore; freeze still hashes them as inputs. */
+function postRestoreSourceExclusions(returns: readonly string[]): readonly string[] {
+  return hasOutputTreeReturn(returns) ? [...returns, KERNEL_CLIENT_OUTPUT.root] : returns;
+}
+
 async function inputFingerprint(
   root: string,
   files = workspaceFiles(root),
@@ -383,6 +425,8 @@ async function inputFingerprint(
       assertContainedSymlink(root, absolute, target);
       hash.update(`link\0${target}\0`);
     } else if (stat.isFile()) hash.update(`file\0${await hashFile(absolute)}\0`);
+    else if (stat.isDirectory() && readdirSync(absolute).length === 0)
+      hash.update(`directory\0${EMPTY_DIRECTORY_DIGEST}\0`);
     else throw new CheckRunUnavailable(`check-run: unsupported source input type: ${file}`);
   }
   for (const file of gitList(root, ['ls-files', '--deleted', '-z'])) {
@@ -391,7 +435,7 @@ async function inputFingerprint(
     hash.update(`deleted\0${file}\0`);
   }
   const head = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
-  const indexTree = git(root, ['write-tree']);
+  const indexTree = candidateIndexTree(root, head);
   hash.update(`HEAD\0${head}\0index\0${indexTree}\0`);
   return hash.digest('hex');
 }
@@ -491,6 +535,7 @@ export async function prepareCandidateSnapshot(
   scratchParent?: string,
   excludedInputs: readonly string[] = [],
   allocation?: { workspace: string; scratch: string },
+  mode: 'working' | 'committed' = 'working',
 ): Promise<CandidateSnapshot> {
   excludedInputs = outputTreeInputExclusions(excludedInputs);
   const root = resolve(workspace);
@@ -498,15 +543,20 @@ export async function prepareCandidateSnapshot(
   if (repositoryRoot !== root)
     throw new CheckRunUnavailable(`check-run: --workspace must be the candidate Git root (received ${root})`);
   const head = git(root, ['rev-parse', '--verify', 'HEAD^{commit}']);
-  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(sourceRevision) || head !== sourceRevision)
+  const revisionMatches =
+    mode === 'committed'
+      ? Bun.spawnSync(['git', '-C', root, 'merge-base', '--is-ancestor', sourceRevision, head]).exitCode === 0
+      : head === sourceRevision;
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(sourceRevision) || !revisionMatches)
     throw new CheckRunUnavailable(
       `check-run: source revision mismatch (requested ${sourceRevision}, candidate ${head})`,
     );
-  assertCandidateInputs(root, excludedInputs);
-  const files = workspaceFiles(root);
-  const beforeFingerprint = await inputFingerprint(root, files, excludedInputs);
-  const indexTree = git(root, ['write-tree']);
-  const baseFiles = gitList(root, ['ls-tree', '-rz', '--name-only', head]);
+  if (mode === 'working') assertCandidateInputs(root, excludedInputs);
+  let files = mode === 'working' ? workspaceFiles(root) : [];
+  const beforeFingerprint = mode === 'working' ? await inputFingerprint(root, files, excludedInputs) : null;
+  const indexTree =
+    mode === 'working' ? candidateIndexTree(root, head) : git(root, ['rev-parse', `${sourceRevision}^{tree}`]);
+  const baseFiles = gitList(root, ['ls-tree', '-rz', '--name-only', sourceRevision]);
   const scratchBase = scratchParent ?? join(root, '.temp');
   mkdirSync(scratchBase, { recursive: true, mode: 0o700 });
   const scratch = allocation
@@ -526,7 +576,7 @@ export async function prepareCandidateSnapshot(
   let worktreeRegistered = false;
   try {
     const add = Bun.spawnSync(
-      ['git', '-c', 'core.hooksPath=/dev/null', '-C', root, 'worktree', 'add', '--detach', frozen, head],
+      ['git', '-c', 'core.hooksPath=/dev/null', '-C', root, 'worktree', 'add', '--detach', frozen, sourceRevision],
       { cwd: root, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: 60_000 },
     );
     if (add.exitCode !== 0)
@@ -534,10 +584,11 @@ export async function prepareCandidateSnapshot(
         `check-run: candidate worktree preparation failed: ${add.stderr.toString().trim()}`,
       );
     worktreeRegistered = true;
+    if (mode === 'committed') files = workspaceFiles(frozen);
     const selected = new Set(files);
     for (const tracked of baseFiles) if (!selected.has(tracked)) removeCandidateFile(frozen, tracked);
     for (const excluded of excludedInputs) removeCandidateFile(frozen, excluded);
-    for (const file of files) {
+    for (const file of mode === 'working' ? files : []) {
       if (excludedInputs.some((excluded) => file === excluded || file.startsWith(`${excluded}/`))) continue;
       await copyFrozenInput(root, frozen, file);
     }
@@ -554,9 +605,10 @@ export async function prepareCandidateSnapshot(
         `check-run: candidate index snapshot could not be prepared: ${readTree.stderr.toString().trim()}`,
       );
     if (!existsSync(frozenIndex)) throw new CheckRunUnavailable('check-run: frozen native index is missing');
-    const afterFingerprint = await inputFingerprint(root, files, excludedInputs);
+    assertCandidateInputs(frozen, excludedInputs);
+    const afterFingerprint = mode === 'working' ? await inputFingerprint(root, files, excludedInputs) : null;
     const frozenFingerprint = await inputFingerprint(frozen, workspaceFiles(frozen), excludedInputs);
-    if (beforeFingerprint !== afterFingerprint || beforeFingerprint !== frozenFingerprint)
+    if (mode === 'working' && (beforeFingerprint !== afterFingerprint || beforeFingerprint !== frozenFingerprint))
       throw new CheckRunUnavailable('check-run: candidate source changed while preparing its frozen snapshot');
     return { workspace: frozen, sourceHash: frozenFingerprint, inputFiles: files, indexTree, scratch };
   } catch (error) {
@@ -754,6 +806,350 @@ function cleanupWorktree(workspace: string, worktree: string, scratch: string): 
   rmSync(scratch, { recursive: true, force: true });
 }
 
+export const CHECK_RUN_MAINTENANCE_IO_PRESSURE_LIMIT = 20;
+export const CHECK_RUN_MAINTENANCE_MAX_REMOVALS = 2;
+
+export type CheckRunSnapshotMaintenanceItem = {
+  invocationId: string;
+  phase?: string;
+  snapshotWorkspace?: string;
+  disposition: 'ready' | 'removed' | 'retained' | 'already-released' | 'missing';
+  releaseKind?: CheckRunSnapshotReleaseKind;
+  reason: string;
+  nextObservation: string;
+};
+
+export type CheckRunSnapshotMaintenanceReport = {
+  schema: 1;
+  apply: boolean;
+  cursor: { input: string | null; output: string | null; hasMore: boolean | null };
+  accounting: {
+    directoryEntriesListed: number;
+    recordsSelected: number;
+    recordsChecked: number;
+    ready: number;
+    removed: number;
+  };
+  ioPressure: { avg10: number | null; limit: number; paused: boolean };
+  items: CheckRunSnapshotMaintenanceItem[];
+};
+
+type CheckRunSnapshotMaintenanceOptions = CheckRunStateOptions & {
+  cursor?: string | null;
+  limit?: number;
+  apply?: boolean;
+  maxRemovals?: number;
+  /** Injectable only for focused tests; production reads the host's PSI sample. */
+  readIoPressure?: () => number | null;
+};
+
+function readCheckRunIoPressure(): number | null {
+  try {
+    const line = readFileSync('/proc/pressure/io', 'utf8')
+      .split('\n')
+      .find((row) => row.startsWith('some '));
+    const value = /(?:^| )avg10=([\d.]+)/.exec(line ?? '')?.[1];
+    if (value === undefined) return null;
+    const pressure = Number(value);
+    return Number.isFinite(pressure) && pressure >= 0 ? pressure : null;
+  } catch {
+    return null;
+  }
+}
+
+function snapshotRemovalHold(record: CheckRunInvocationRecord): { reason: string; nextObservation: string } {
+  if (record.snapshotCustody === 'removed')
+    return { reason: 'record already marks the frozen snapshot removed', nextObservation: 'none' };
+  if (!record.snapshot || !record.candidateWorkspace)
+    return {
+      reason: 'snapshot or candidate identity is missing',
+      nextObservation: 'recover the exact snapshot and candidate paths from the preparation record',
+    };
+  if (record.snapshotCustody !== 'owned')
+    return {
+      reason: `snapshot custody is ${record.snapshotCustody ?? 'unknown'}`,
+      nextObservation: 'reconcile the exact invocation and snapshot custody',
+    };
+  if (
+    record.phase === 'running' ||
+    record.phase === 'uploading' ||
+    record.phase === 'queued' ||
+    record.phase === 'claimed' ||
+    record.phase === 'prepared' ||
+    record.phase === 'cancel-requested'
+  )
+    return {
+      reason: `invocation is still ${record.phase} or has no terminal start fence`,
+      nextObservation: 'observe the original invocation through its durable cancellation or terminal receipt',
+    };
+  if (record.final?.returns.status !== undefined && record.final.returns.status !== 'empty')
+    return {
+      reason: 'the final settlement still references returned artifacts',
+      nextObservation: 'complete artifact delivery or repair before releasing the frozen source',
+    };
+  if (record.physical && !record.final)
+    return {
+      reason: record.physicalCleanup
+        ? 'physical cleanup is recorded but the command result remains unresolved'
+        : 'the original physical result or cleanup is unresolved',
+      nextObservation: record.physicalCleanup
+        ? 'recover the original native/final result or close its repair disposition'
+        : `reconcile exact host ${record.physical.host} run ${record.physical.run} and local transport identity`,
+    };
+  if (record.final && record.final.native?.exitCode !== 0)
+    return {
+      reason: 'the original command did not complete successfully',
+      nextObservation: 'retain the frozen source until the original failure is no longer needed for repair',
+    };
+  if (
+    record.final &&
+    (record.final.cleanup.remote !== 'verified' ||
+      record.final.cleanup.transportChild !== 'reaped' ||
+      record.final.cleanup.source !== 'verified')
+  )
+    return {
+      reason: 'remote, transport, or frozen-source cleanup is not positively verified',
+      nextObservation: 'reconcile the exact original physical host/run and transport identity',
+    };
+  if (record.phase === 'unknown')
+    return {
+      reason: 'invocation custody is unknown',
+      nextObservation: record.physical
+        ? `reconcile exact host ${record.physical.host} run ${record.physical.run}`
+        : 'establish the original invocation start fence and source custody',
+    };
+  return {
+    reason: 'no durable release evidence matches this invocation',
+    nextObservation: 'retain the snapshot until the original invocation reaches a provable terminal state',
+  };
+}
+
+function assertExactSnapshotWorktree(record: CheckRunInvocationRecord): void {
+  const candidate = record.candidateWorkspace;
+  const snapshot = record.snapshot;
+  if (!candidate || !snapshot || resolve(candidate) !== candidate)
+    throw new CheckRunUnavailable('check-run: retained candidate identity is not canonical');
+  const scratch = resolve(snapshot.scratch);
+  const worktree = resolve(snapshot.workspace);
+  const tempRoot = dirname(scratch);
+  const snapshotRepository = dirname(tempRoot);
+  if (
+    scratch !== snapshot.scratch ||
+    worktree !== snapshot.workspace ||
+    basename(tempRoot) !== '.temp' ||
+    worktree !== join(scratch, 'workspace') ||
+    !/^check-run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-?$/i.test(basename(scratch))
+  )
+    throw new CheckRunUnavailable('check-run: retained snapshot path does not match an exact check-run worktree');
+  if (
+    realpathSync(candidate) !== candidate ||
+    realpathSync(snapshotRepository) !== snapshotRepository ||
+    realpathSync(tempRoot) !== tempRoot
+  )
+    throw new CheckRunUnavailable('check-run: retained candidate or snapshot parent is not canonical');
+  const tempStats = lstatSync(tempRoot);
+  if (!tempStats.isDirectory() || tempStats.isSymbolicLink())
+    throw new CheckRunUnavailable('check-run: snapshot parent is not a real .temp directory');
+  for (const [path, label, privateDirectory] of [
+    [scratch, 'snapshot scratch', true],
+    [worktree, 'snapshot worktree', false],
+  ] as const) {
+    const stats = lstatSync(path);
+    if (!stats.isDirectory() || stats.isSymbolicLink() || (privateDirectory && (stats.mode & 0o077) !== 0))
+      throw new CheckRunUnavailable(`check-run: ${label} is not the recorded real directory`);
+    if (typeof process.getuid === 'function' && stats.uid !== process.getuid())
+      throw new CheckRunUnavailable(`check-run: ${label} is owned by another user`);
+    if (realpathSync(path) !== path) throw new CheckRunUnavailable(`check-run: ${label} path changed`);
+  }
+  if (resolve(git(candidate, ['rev-parse', '--show-toplevel'])) !== candidate)
+    throw new CheckRunUnavailable('check-run: retained candidate is no longer the recorded Git root');
+  if (
+    resolve(git(snapshotRepository, ['rev-parse', '--show-toplevel'])) !== snapshotRepository ||
+    git(candidate, ['rev-parse', '--path-format=absolute', '--git-common-dir']) !==
+      git(snapshotRepository, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
+  )
+    throw new CheckRunUnavailable('check-run: snapshot directory is outside the recorded candidate Git repository');
+  if (
+    resolve(git(worktree, ['rev-parse', '--show-toplevel'])) !== worktree ||
+    git(worktree, ['rev-parse', '--verify', 'HEAD^{commit}']) !== record.binding.sourceRevision ||
+    snapshot.sourceSha256 !== record.binding.sourceSha256
+  )
+    throw new CheckRunUnavailable(
+      'check-run: exact frozen worktree revision or source identity differs from its record',
+    );
+}
+
+/** Bounded, resumable inventory and release pass for check-run snapshots. */
+export async function maintainCheckRunSnapshots(
+  options: CheckRunSnapshotMaintenanceOptions = {},
+): Promise<CheckRunSnapshotMaintenanceReport> {
+  const apply = options.apply ?? false;
+  const limit = options.limit ?? 32;
+  const maxRemovals = options.maxRemovals ?? CHECK_RUN_MAINTENANCE_MAX_REMOVALS;
+  if (!Number.isSafeInteger(maxRemovals) || maxRemovals < 0 || maxRemovals > CHECK_RUN_MAINTENANCE_MAX_REMOVALS)
+    throw new Error(`check-run: maintenance removals must be between 0 and ${CHECK_RUN_MAINTENANCE_MAX_REMOVALS}`);
+  const pressureSource = options.readIoPressure ?? readCheckRunIoPressure;
+  const initialPressure = pressureSource();
+  const pressurePaused = initialPressure !== null && initialPressure > CHECK_RUN_MAINTENANCE_IO_PRESSURE_LIMIT;
+  const page = listCheckRunInvocationIds({
+    ...(options.stateDirectory ? { stateDirectory: options.stateDirectory } : {}),
+    after: options.cursor ?? null,
+    limit,
+  });
+  const report: CheckRunSnapshotMaintenanceReport = {
+    schema: 1,
+    apply,
+    cursor: {
+      input: page.after,
+      output: pressurePaused ? page.after : page.nextCursor,
+      hasMore: pressurePaused ? null : page.hasMore,
+    },
+    accounting: {
+      directoryEntriesListed: page.directoryEntriesListed,
+      recordsSelected: pressurePaused ? 0 : page.ids.length,
+      recordsChecked: 0,
+      ready: 0,
+      removed: 0,
+    },
+    ioPressure: { avg10: initialPressure, limit: CHECK_RUN_MAINTENANCE_IO_PRESSURE_LIMIT, paused: pressurePaused },
+    items: [],
+  };
+  if (pressurePaused) return report;
+
+  let removalsPaused = false;
+  let resumeBefore: string | null | undefined;
+  for (const [pageIndex, invocationId] of page.ids.entries()) {
+    let record: CheckRunInvocationRecord;
+    try {
+      record = await getCheckRunStatus(invocationId, options);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && !(error instanceof Error && error.message.startsWith('check-run-settlement:')))
+        throw error;
+      report.accounting.recordsChecked++;
+      report.items.push({
+        invocationId,
+        disposition: code === 'ENOENT' ? 'missing' : 'retained',
+        reason:
+          code === 'ENOENT' ? 'invocation record disappeared during this page' : (error as Error).message.slice(0, 512),
+        nextObservation: 'restore or validate this exact invocation record before any cleanup',
+      });
+      continue;
+    }
+    report.accounting.recordsChecked++;
+    if (record.invocationId !== invocationId) {
+      report.items.push({
+        invocationId,
+        phase: record.phase,
+        disposition: 'retained',
+        reason: 'record contents identify a different invocation than its filename',
+        nextObservation: 'repair the record identity under its original check-custody lock',
+      });
+      continue;
+    }
+    const common = {
+      invocationId,
+      phase: record.phase,
+      ...(record.snapshot ? { snapshotWorkspace: record.snapshot.workspace } : {}),
+    };
+    const releaseKind = checkRunSnapshotReleaseKind(record);
+    if (!releaseKind) {
+      if (record.snapshotCustody === 'removed') {
+        report.items.push({
+          ...common,
+          disposition: 'already-released',
+          reason: 'durable record already marks this snapshot removed',
+          nextObservation: 'none',
+        });
+      } else {
+        const hold = snapshotRemovalHold(record);
+        report.items.push({ ...common, disposition: 'retained', ...hold });
+      }
+      continue;
+    }
+    if (!apply) {
+      report.accounting.ready++;
+      report.items.push({
+        ...common,
+        disposition: 'ready',
+        releaseKind,
+        reason:
+          releaseKind === 'cancelled-before-start'
+            ? 'durable cancellation phase and absent physical identity prove the command never launched'
+            : 'successful final delivery, empty returns, verified remote cleanup, reaped transport, and verified source permit release',
+        nextObservation: 'apply this exact snapshot through the bounded Git worktree cleanup pass',
+      });
+      continue;
+    }
+    if (report.accounting.removed >= maxRemovals || removalsPaused) {
+      resumeBefore ??= pageIndex === 0 ? page.after : page.ids[pageIndex - 1]!;
+      report.accounting.ready++;
+      report.items.push({
+        ...common,
+        disposition: 'ready',
+        releaseKind,
+        reason: removalsPaused
+          ? 'measured I/O pressure rose above the maintenance threshold'
+          : 'per-pass removal bound reached',
+        nextObservation: 'resume with this page cursor when cleanup capacity is available',
+      });
+      continue;
+    }
+    const currentPressure = pressureSource();
+    report.ioPressure.avg10 = currentPressure;
+    if (currentPressure !== null && currentPressure > CHECK_RUN_MAINTENANCE_IO_PRESSURE_LIMIT) {
+      report.ioPressure.paused = true;
+      removalsPaused = true;
+      resumeBefore ??= pageIndex === 0 ? page.after : page.ids[pageIndex - 1]!;
+      report.accounting.ready++;
+      report.items.push({
+        ...common,
+        disposition: 'ready',
+        releaseKind,
+        reason: 'measured I/O pressure rose above the maintenance threshold',
+        nextObservation: 'resume this page after measured I/O pressure falls to the threshold or below',
+      });
+      continue;
+    }
+    try {
+      await releaseCheckRunSnapshot(
+        invocationId,
+        record.nonce,
+        releaseKind,
+        (current) => {
+          const snapshot = current.snapshot;
+          const candidateWorkspace = current.candidateWorkspace;
+          if (!snapshot || !candidateWorkspace)
+            throw new CheckRunUnavailable('check-run: releasable snapshot identity disappeared');
+          assertExactSnapshotWorktree(current);
+          cleanupWorktree(candidateWorkspace, snapshot.workspace, snapshot.scratch);
+          if (existsSync(snapshot.workspace) || existsSync(snapshot.scratch))
+            throw new CheckRunUnavailable('check-run: maintenance worktree removal was not verified');
+        },
+        options,
+      );
+      report.accounting.removed++;
+      report.items.push({
+        ...common,
+        disposition: 'removed',
+        releaseKind,
+        reason: 'exact Git worktree cleanup completed and durable snapshot custody was updated',
+        nextObservation: 'none',
+      });
+    } catch (error) {
+      report.items.push({
+        ...common,
+        disposition: 'retained',
+        releaseKind,
+        reason: error instanceof Error ? error.message.slice(0, 512) : String(error).slice(0, 512),
+        nextObservation: 'recheck this exact worktree and record after the reported cleanup condition is repaired',
+      });
+    }
+  }
+  if (resumeBefore !== undefined) report.cursor = { input: page.after, output: resumeBefore, hasMore: true };
+  return report;
+}
+
 type ReturnedOutputResult = {
   missing: string[];
   rejected: string[];
@@ -807,7 +1203,7 @@ async function copyReturnedOutputs(
         result.entries.push({
           path: stagePath,
           size: 0,
-          sha256: createHash('sha256').update('directory\0').digest('hex'),
+          sha256: EMPTY_DIRECTORY_DIGEST,
           kind: 'directory',
         });
       }
@@ -989,6 +1385,8 @@ async function buildCandidateSourceManifest(
       });
     } else if (stats.isFile()) {
       entries.push({ path, mode, kind: 'file', sha256: await hashFile(absolute), target: null });
+    } else if (stats.isDirectory() && readdirSync(absolute).length === 0) {
+      entries.push({ path, mode, kind: 'directory', sha256: EMPTY_DIRECTORY_DIGEST, target: null });
     } else {
       throw new CheckRunUnavailable(`check-run: unsupported source manifest input type: ${path}`);
     }
@@ -998,13 +1396,14 @@ async function buildCandidateSourceManifest(
     .filter((path) => !excludedTransferPath(path) && !isDeclaredOutput(path, returns))
     .sort();
   const head = git(snapshot.workspace, ['rev-parse', '--verify', 'HEAD^{commit}']);
-  const indexTree = git(snapshot.workspace, ['write-tree']);
+  const indexTree = candidateIndexTree(snapshot.workspace, head);
   if (indexTree !== snapshot.indexTree)
     throw new CheckRunUnavailable('check-run: frozen candidate index changed before transfer');
   const hash = createHash('sha256');
   for (const entry of entries) {
     hash.update(`${entry.path}\0${entry.mode}\0`);
     if (entry.kind === 'file') hash.update(`file\0${entry.sha256}\0`);
+    else if (entry.kind === 'directory') hash.update(`directory\0${entry.sha256}\0`);
     else hash.update(`link\0${entry.target}\0`);
   }
   for (const path of deleted) hash.update(`deleted\0${path}\0`);
@@ -1026,7 +1425,7 @@ export async function currentCheckSourceManifest(
   const inputFiles = workspaceFiles(root);
   const sourceHash = await inputFingerprint(root, inputFiles, returns);
   return buildCandidateSourceManifest(
-    { workspace: root, inputFiles, sourceHash, indexTree: git(root, ['write-tree']), scratch: '' },
+    { workspace: root, inputFiles, sourceHash, indexTree: candidateIndexTree(root), scratch: '' },
     returns,
   );
 }
@@ -1182,6 +1581,35 @@ function remoteCleanupIsVerified(remote: RemoteCheckSettlement | undefined): boo
   );
 }
 
+/** Preserve a bound remote cleanup result even when pre-command failure left no native receipt. */
+export function reconcileCheckRunPhysicalCleanup(
+  physical: { host: string; run: string },
+  record: CheckRunInvocationRecord,
+  remote: RemoteCheckSettlement,
+  transportIdentity: CheckRunTransportIdentityState,
+): CheckRunReconciliation {
+  if (remote.host !== physical.host || remote.run !== physical.run || !remoteCleanupIsVerified(remote))
+    return {
+      disposition: 'unknown',
+      reason: 'original physical cleanup is incomplete or mismatched; no replacement was started',
+      transportIdentity,
+    };
+  return {
+    disposition: 'physical-cleanup',
+    observation: {
+      schema: 1,
+      invocationId: record.invocationId,
+      nonce: record.nonce,
+      binding: record.binding,
+      physical,
+      remote: remote.cleanup,
+      reconciliationTransportChildReaped: remote.transportChildReaped,
+      transportIdentity,
+      transportChildReaped: remote.transportChildReaped && transportIdentity === 'gone-or-replaced',
+    },
+  };
+}
+
 type PreparedCheckRunState = {
   schema: 1;
   args: CheckRunArguments;
@@ -1213,8 +1641,11 @@ async function prepareFinalRun(
   snapshotAllocation?: { workspace: string; scratch: string },
 ): Promise<PreparedFinalRun> {
   const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
-  if (candidateRoot === trustedRoot)
-    throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  if (candidateRoot === trustedRoot) {
+    const unit = observeNativeUnitContext(readEnvironmentFile(args.envFile, candidateRoot));
+    if (!unit || realpathSync(unit.worktree) !== realpathSync(candidateRoot))
+      throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  }
   if (!isAbsolute(args.hosts)) throw new Error('--hosts must name an absolute JSON file');
   const hostsFile = resolve(args.hosts);
   const hostsStats = lstatSync(hostsFile);
@@ -1240,6 +1671,9 @@ async function prepareFinalRun(
     throw new CheckRunUnavailable('check-run: original env prefix changes remote runtime or placement authority');
   const sourceRevision = args.sourceRevision;
   const originalEnvironment = readEnvironmentFile(args.envFile, candidateRoot);
+  const unit = nativeUnitContext(originalEnvironment);
+  if (unit && unit.sourceRevision !== sourceRevision)
+    throw new CheckRunUnavailable('check-run: native unit source revision differs from its registered checkpoint');
   const frozenArgs = [...args.command];
   const receiptChannel = includeReceiptChannel ? parseReceiptChannel(processEnvironment) : undefined;
   if (receiptChannel && !receiptChannel.invocationId)
@@ -1253,6 +1687,7 @@ async function prepareFinalRun(
     join(trustedRoot, '.temp'),
     returns,
     snapshotAllocation,
+    unit ? 'committed' : 'working',
   );
   try {
     const overlay = resolveEnvironmentFileSettings(originalEnvironment, candidateRoot, snapshot.workspace, cwd);
@@ -1278,6 +1713,7 @@ async function prepareFinalRun(
       )
       .digest('hex');
     const binding: CheckRunInvocationBinding = {
+      ...(unit ? { sourceMode: 'committed' as const } : {}),
       sourceRevision,
       indexTree: snapshot.indexTree,
       sourceSha256: snapshot.sourceHash,
@@ -1329,8 +1765,11 @@ async function runCheckLegacy(
 ): Promise<number> {
   const trustedRoot = resolve(import.meta.dir, '..');
   const candidateRoot = absoluteDirectory(args.workspace, '--workspace');
-  if (resolve(candidateRoot) === trustedRoot)
-    throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  if (resolve(candidateRoot) === trustedRoot) {
+    const unit = observeNativeUnitContext(readEnvironmentFile(args.envFile, candidateRoot));
+    if (!unit || realpathSync(unit.worktree) !== realpathSync(candidateRoot))
+      throw new CheckRunUnavailable('check-run: trusted driver root and candidate workspace must be separate');
+  }
   if (!isAbsolute(args.hosts)) throw new Error('--hosts must name an absolute JSON file');
   const hostsFile = resolve(args.hosts);
   if (!existsSync(hostsFile) || !lstatSync(hostsFile).isFile())
@@ -1356,6 +1795,7 @@ async function runCheckLegacy(
     throw new CheckRunUnavailable('check-run: original env prefix changes remote runtime or placement authority');
   const sourceRevision = args.sourceRevision;
   const originalEnvironment = readEnvironmentFile(args.envFile, candidateRoot);
+  const unit = nativeUnitContext(originalEnvironment);
   const frozenArgs = [...args.command];
   const cancellation: ExecutionCancellation | undefined = executionCancellationFromEnvironment(processEnvironment);
   const receiptChannel = parseReceiptChannel(processEnvironment);
@@ -1363,7 +1803,14 @@ async function runCheckLegacy(
   if (requestedPriority !== undefined && requestedPriority !== 'landing' && requestedPriority !== 'critical')
     throw new CheckRunUnavailable('check-run: invalid REMOTE_CHECK_PRIORITY');
   if (signal.aborted) return 130;
-  const snapshot = await prepareCandidateSnapshot(candidateRoot, sourceRevision, join(trustedRoot, '.temp'), returns);
+  const snapshot = await prepareCandidateSnapshot(
+    candidateRoot,
+    sourceRevision,
+    join(trustedRoot, '.temp'),
+    returns,
+    undefined,
+    unit ? 'committed' : 'working',
+  );
   const receiptNonce = receiptChannel?.nonce;
   const writeReceipt = dependencies.receiptWriter ?? receiptChannel?.write;
   let receivedReceipt: RemotePhysicalRunReceipt | undefined;
@@ -1477,10 +1924,10 @@ async function runCheckLegacy(
                   exitCode: receivedReceipt.exitCode,
                 },
                 validateSource: async () => {
+                  const ignore = postRestoreSourceExclusions(returns);
                   if (
-                    (await inputFingerprint(candidateRoot, workspaceFiles(candidateRoot), returns)) !==
-                      snapshot.sourceHash ||
-                    (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, returns)) !== snapshot.sourceHash
+                    (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore)) !==
+                    (await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore))
                   )
                     throw new CheckRunUnavailable('check-run: source changed before tree receiving');
                 },
@@ -1515,12 +1962,13 @@ async function runCheckLegacy(
     else outcome = 1;
   } finally {
     try {
-      const frozenFingerprint = await inputFingerprint(snapshot.workspace, workspaceFiles(snapshot.workspace), returns);
-      if (frozenFingerprint !== snapshot.sourceHash)
-        throw new CheckRunUnavailable('check-run: frozen candidate inputs changed while the remote run was active');
-      const currentFingerprint = await inputFingerprint(candidateRoot, workspaceFiles(candidateRoot), returns);
-      if (currentFingerprint !== snapshot.sourceHash)
+      const ignore = postRestoreSourceExclusions(returns);
+      const frozenFingerprint = await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore);
+      const currentFingerprint = await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore);
+      if ((!unit || hasOutputTreeReturn(returns)) && frozenFingerprint !== currentFingerprint)
         throw new CheckRunUnavailable('check-run: candidate inputs changed while the remote run was active');
+      if (!hasOutputTreeReturn(returns) && frozenFingerprint !== snapshot.sourceHash)
+        throw new CheckRunUnavailable('check-run: frozen candidate inputs changed while the remote run was active');
     } catch (error) {
       runFailure ??= error;
       if (outcome === 0) outcome = error instanceof CheckRunUnavailable ? error.exitCode : 1;
@@ -1656,8 +2104,6 @@ async function runCheckWithFinalSettlement(
       const record = await getCheckRunStatus(callerInvocationId, stateOptions);
       if (record.nonce !== receiptChannel?.nonce)
         throw new CheckRunUnavailable('check-run: caller invocation nonce does not match private producer state');
-      if (checkRunBindingHash(record.binding) !== checkRunBindingHash(binding))
-        throw new CheckRunUnavailable('check-run: caller invocation binding does not match this candidate and command');
       registration = {
         invocationId: record.invocationId,
         nonce: record.nonce,
@@ -1671,6 +2117,8 @@ async function runCheckWithFinalSettlement(
         if (nativeExitCode !== undefined && nativeExitCode !== 0) return nativeExitCode;
         return record.finalCustody?.aggregate === 'settled' ? 0 : REMOTE_TRANSPORT_FAILURE;
       }
+      if (checkRunBindingHash(record.binding) !== checkRunBindingHash(binding))
+        throw new CheckRunUnavailable('check-run: caller invocation binding does not match this candidate and command');
       if (record.phase !== 'registered') {
         cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
         snapshotBound = true;
@@ -2040,12 +2488,14 @@ async function runCheckWithFinalSettlement(
           exitCode: receivedReceipt.exitCode,
         },
         validateSource: async () => {
+          const ignore = postRestoreSourceExclusions(returns);
           if (
             preparedInputs.status !== 'verified' ||
             preparedInputs.sourceSha256 !== snapshot.sourceHash ||
             runFailure ||
-            (await inputFingerprint(candidateRoot, workspaceFiles(candidateRoot), returns)) !== snapshot.sourceHash ||
-            (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, returns)) !== snapshot.sourceHash
+            ((!binding.sourceMode || hasOutputTreeReturn(returns)) &&
+              (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore)) !==
+                (await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore)))
           )
             throw new CheckRunUnavailable('check-run: source or physical custody changed before publication');
         },
@@ -2070,14 +2520,24 @@ async function runCheckWithFinalSettlement(
   }
 
   try {
-    const frozenFingerprint = await inputFingerprint(snapshot.workspace, snapshot.inputFiles, returns);
-    const candidateFingerprint = await inputFingerprint(candidateRoot, workspaceFiles(candidateRoot), returns);
-    if (frozenFingerprint !== snapshot.sourceHash || candidateFingerprint !== snapshot.sourceHash) {
+    const ignore = postRestoreSourceExclusions(returns);
+    const frozenFingerprint = await inputFingerprint(snapshot.workspace, snapshot.inputFiles, ignore);
+    const candidateFingerprint = await inputFingerprint(candidateRoot, snapshot.inputFiles, ignore);
+    if (
+      ((!binding.sourceMode || hasOutputTreeReturn(returns)) && frozenFingerprint !== candidateFingerprint) ||
+      (!hasOutputTreeReturn(returns) && frozenFingerprint !== snapshot.sourceHash)
+    ) {
       sourceState = 'changed';
       runFailure ??= new CheckRunUnavailable(
         'check-run: candidate or frozen source changed while the remote run was active',
       );
-    } else sourceState = 'verified';
+    } else {
+      sourceState = 'verified';
+      if (binding.sourceMode && frozenFingerprint !== candidateFingerprint)
+        process.stderr.write(
+          `check-run: captured revision ${binding.sourceRevision} source ${snapshot.sourceHash} completed; current candidate advanced and remains unverified.\n`,
+        );
+    }
   } catch (error) {
     sourceState = 'unknown';
     runFailure ??= error;
@@ -2336,7 +2796,7 @@ async function validatePreparedAuthorities(
   if (
     !isAbsolute(state.hostsFile) ||
     !isAbsolute(state.args.envFile) ||
-    state.candidateRoot === trustedRoot ||
+    (state.candidateRoot === trustedRoot && !observeNativeUnitContext(state.originalEnvironment)) ||
     !record.snapshot ||
     !record.candidateWorkspace
   )
@@ -2359,7 +2819,10 @@ async function validatePreparedAuthorities(
     throw new CheckRunUnavailable('check-run: host configuration changed after preparation');
   if (closureHash !== record.binding.producerClosureSha256)
     throw new CheckRunUnavailable('check-run: trusted producer closure changed after preparation');
-  if (currentFingerprint !== record.binding.sourceSha256 || frozenFingerprint !== record.binding.sourceSha256)
+  if (
+    (!record.binding.sourceMode && currentFingerprint !== record.binding.sourceSha256) ||
+    frozenFingerprint !== record.binding.sourceSha256
+  )
     throw new CheckRunUnavailable('check-run: candidate or frozen input changed after preparation');
   const currentEnvironment = readEnvironmentFile(state.args.envFile, state.candidateRoot);
   const semanticEnvironmentSha256 = createHash('sha256')
@@ -2578,13 +3041,57 @@ export async function runPreparedCheckRunInvocation(
   }
 }
 
+export type CheckRunPhysicalCleanupDependencies = {
+  reconcileRemote?: typeof reconcileRemoteRun;
+  reapTransport?: typeof reapRetainedTransportChild;
+};
+
+/** Cleanup authority is the retained invocation and host configuration, never a mutable candidate or producer tree. */
+async function reconcileRegisteredPhysicalCleanup(
+  initial: CheckRunInvocationRecord,
+  hostsFile: string | undefined,
+  stateOptions: CheckRunStateOptions,
+  dependencies: CheckRunPhysicalCleanupDependencies,
+): Promise<CheckRunInvocationRecord> {
+  if (!initial.physical) throw new Error('cleanup-only reconciliation needs an original physical host and run');
+  if (!hostsFile || !isAbsolute(hostsFile)) throw new Error('cleanup-only reconciliation needs an absolute hosts file');
+  const stats = lstatSync(hostsFile);
+  if (!stats.isFile() || stats.isSymbolicLink() || (await hashFile(hostsFile)) !== initial.binding.hostsSha256)
+    throw new Error('cleanup-only host configuration differs from the retained invocation binding');
+  const hosts = performanceHosts(readHosts(hostsFile));
+  if (!hosts.some(({ name }) => name === initial.physical!.host))
+    throw new Error('cleanup-only original host is absent from the bound performance host set');
+  const remote = await (dependencies.reconcileRemote ?? reconcileRemoteRun)({
+    hosts,
+    physical: initial.physical,
+    workspace: checkRunSettlementStateDirectory(stateOptions),
+    returns: [], // The existing transport returns immediately without any artifact probe or restoration.
+    expectedSourceSha256: initial.binding.sourceSha256,
+    allowedHosts: [initial.physical.host],
+    cleanupOnly: true,
+  });
+  const identity = initial.transportChild
+    ? await (dependencies.reapTransport ?? reapRetainedTransportChild)(initial.transportChild)
+    : 'unknown';
+  const observed = reconcileCheckRunPhysicalCleanup(initial.physical, initial, remote, identity);
+  if (observed.disposition !== 'physical-cleanup') return getCheckRunStatus(initial.invocationId, stateOptions);
+  return acceptCheckRunPhysicalCleanup(initial.invocationId, observed.observation, stateOptions);
+}
+
 /** Reconcile one retained invocation by host/run identity; this path never allocates another run. */
 export async function reconcileRegisteredCheckRun(
   invocationId: string,
   hostsFile?: string,
-  stateOptions: CheckRunStateOptions = {},
+  stateOptions: CheckRunStateOptions & { cleanupOnly?: boolean } = {},
+  dependencies: CheckRunPhysicalCleanupDependencies = {},
 ): Promise<CheckRunInvocationRecord> {
   let initial = await getCheckRunStatus(invocationId, stateOptions);
+  if (initial.physicalCleanup && (stateOptions.cleanupOnly || (!initial.native && !initial.final))) return initial;
+  if (stateOptions.cleanupOnly) {
+    if (initial.final?.cleanup.disposition === 'settled' || initial.finalCustody?.reconciliation === 'settled')
+      return initial;
+    return reconcileRegisteredPhysicalCleanup(initial, hostsFile, stateOptions, dependencies);
+  }
   if (
     initial.final &&
     (initial.final.cleanup.disposition === 'settled' || initial.finalCustody?.reconciliation === 'settled')
@@ -2676,11 +3183,7 @@ export async function reconcileRegisteredCheckRun(
         ...remote,
         transportChildReaped: remote.transportChildReaped && originalTransportReaped,
       };
-      if (!remote.native)
-        return {
-          ...unknown('original physical run has no retained native terminal receipt; no replacement was started'),
-          transportIdentity: originalTransportIdentity,
-        };
+      if (!remote.native) return reconcileCheckRunPhysicalCleanup(physical, record, remote, originalTransportIdentity);
       const remoteNativeDigest = checkRunNativeReceiptDigest(remote.native);
       if (
         record.native &&
@@ -2693,7 +3196,10 @@ export async function reconcileRegisteredCheckRun(
 
       let local: ReturnedOutputResult | undefined;
       let returnFailure: unknown;
-      if (candidateSourceBefore && frozenSourceBefore) {
+      if (
+        (candidateSourceBefore || (record.binding.sourceMode && !hasOutputTreeReturn(record.returns))) &&
+        frozenSourceBefore
+      ) {
         try {
           clearDeclaredArtifacts(candidateRoot, record.returns);
           const stage = join(record.snapshot.scratch, 'reconciled-returns');
@@ -2729,10 +3235,12 @@ export async function reconcileRegisteredCheckRun(
       const returnDisposition = finalReturns(remote.returns, record.binding.returnsSha256, local, record.returns);
       let source: CheckRunCleanupDisposition['source'] = 'unknown';
       try {
-        const frozenNow = await inputFingerprint(record.snapshot.workspace, record.snapshot.inputFiles, record.returns);
-        const candidateNow = await inputFingerprint(candidateRoot, workspaceFiles(candidateRoot), record.returns);
+        const ignore = postRestoreSourceExclusions(record.returns);
+        const frozenNow = await inputFingerprint(record.snapshot.workspace, record.snapshot.inputFiles, ignore);
+        const candidateNow = await inputFingerprint(candidateRoot, record.snapshot.inputFiles, ignore);
         source =
-          frozenNow === record.snapshot.sourceSha256 && candidateNow === record.snapshot.sourceSha256
+          (frozenNow === candidateNow || (record.binding.sourceMode && !hasOutputTreeReturn(record.returns))) &&
+          (hasOutputTreeReturn(record.returns) || frozenNow === record.snapshot.sourceSha256)
             ? 'verified'
             : 'changed';
       } catch {

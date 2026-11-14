@@ -51,6 +51,7 @@ import {
   workerCheckHostHasRetainedKernelTypingRun,
   workerCheckHostTerminalSourceRepair,
   workerCheckHostTypingCheckIds,
+  workerCheckHostTypingRecoveryObservation,
   workerCheckHostCommandReached,
   workerCheckHostContentTree,
   workerCheckHostRunsUsed,
@@ -923,9 +924,29 @@ test('source-only recovery waits for check custody and preserves the unused gran
     const receive = () =>
       recoverWorkerTyping(h.tasks, { enqueue: (value) => landing.push(value) }, retained.ref, actor);
     const grant = recoveryProof(await receive());
-    const grantPath = join(budget, 'typing-recovery', `${grant.env[TYPING_RECOVERY_ENV]}.json`);
+    const token = grant.env[TYPING_RECOVERY_ENV];
+    if (token === undefined) throw new Error('Typing recovery grant did not include its token');
+    const grantPath = join(budget, 'typing-recovery', `${token}.json`);
     const grantBytes = readFileSync(grantPath, 'utf8');
     expect(JSON.parse(grantBytes)).toMatchObject({ command });
+    expect(
+      workerCheckHostTypingRecoveryObservation({
+        db: h.store.db,
+        directory: budget,
+        worktree: retained.task.worktree,
+        taskId: retained.task.id,
+        attempt: 1,
+        attemptCheckIds: h.store.attempt(retained.ref).checks ?? [],
+        command,
+        token,
+      }),
+    ).toMatchObject({
+      authorization: 'authenticated',
+      commandCoverage: 'exact',
+      inputMatch: 'current',
+      consumption: 'unconsumed',
+      grantCustody: 'not-consumed',
+    });
     const checkId = randomUUID();
     const checkRun = randomUUID();
     writeOwnedCheckResult(retained.task.worktree, retained.task.id, 1, checkId, checkRun, 'running');

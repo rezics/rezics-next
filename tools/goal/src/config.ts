@@ -441,7 +441,10 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       return delivered;
     },
     sweepWidth: async () => {
-      await sweepWidthGovernor(db, inbox, new Date(), { policy: settings.policy });
+      await sweepWidthGovernor(db, inbox, new Date(), {
+        policy: settings.policy,
+        stateDirectory: settings.stateDirectory,
+      });
     },
     // Runs in the host's single-flight `backlog dispatch` child: dispatch is synchronous Git and install work.
     backlog: () =>
@@ -525,6 +528,16 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       );
     },
     dispatchDailyStepAudit() {
+      try {
+        const marker = JSON.parse(readFileSync(join(settings.stateDirectory, 'code-only-window.json'), 'utf8')) as {
+          version?: unknown;
+          until?: unknown;
+        };
+        const until = marker.version === 1 && typeof marker.until === 'string' ? Date.parse(marker.until) : NaN;
+        if (Number.isFinite(until) && until > Date.now()) return;
+      } catch {
+        // Preserve the ordinary audit path and its diagnostics if the optional marker cannot be read.
+      }
       const template = join(import.meta.dir, '../templates/daily-step-audit.md');
       // The host tick checks for an open audit every minute: read only unsettled tasks, not every task body.
       dispatchDailyStepAudit(

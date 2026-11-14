@@ -27,7 +27,7 @@ export const KERNEL_CLIENT_OUTPUT = Object.freeze({
   profile: 'kernel-client-v1',
   root: 'packages/client/src/kernel',
   transport: '.temp/check-output-tree/kernel-client-v1.bin',
-  maxMembers: 512,
+  maxMembers: 1024,
   maxBytes: 32 * 1024 * 1024,
   maxMemberBytes: 2 * 1024 * 1024,
   maxDepth: 16,
@@ -53,6 +53,8 @@ export type OutputTreeHeader = OutputTreeBinding & {
   profile: typeof KERNEL_CLIENT_OUTPUT.profile;
   root: typeof KERNEL_CLIENT_OUTPUT.root;
   status: 'complete';
+  /** Official producer completed; a later consumer may still fail the containing command. */
+  producerExitCode?: 0;
   count: number;
   totalBytes: number;
   catalogueSha256: string;
@@ -238,7 +240,7 @@ export function collectOutputTree(root: string): { members: OutputTreeMember[]; 
   ordered(collected.map((item) => item.member));
   return { members: collected.map((item) => item.member), contents: collected.map((item) => item.bytes) };
 }
-export function encodeOutputTree(root: string, source: OutputTreeBinding): Buffer {
+export function encodeOutputTree(root: string, source: OutputTreeBinding, producerExitCode?: 0): Buffer {
   binding(source);
   const { members, contents } = collectOutputTree(root);
   const catalogue = Buffer.from(members.map((member) => `${JSON.stringify(member)}\n`).join(''));
@@ -251,6 +253,7 @@ export function encodeOutputTree(root: string, source: OutputTreeBinding): Buffe
     root: KERNEL_CLIENT_OUTPUT.root,
     ...source,
     status: 'complete',
+    ...(producerExitCode === 0 ? { producerExitCode } : {}),
     count: members.length,
     totalBytes: contents.reduce((sum, bytes) => sum + bytes.length, 0),
     catalogueSha256: outputTreeDigest(catalogue),
@@ -263,11 +266,7 @@ export function encodeOutputTree(root: string, source: OutputTreeBinding): Buffe
 export function validateOutputTree(bytes: Buffer, authority: OutputTreeAuthority): ValidatedOutputTree {
   binding(authority);
   if (bytes.length > OUTPUT_TREE_TRANSPORT_BYTES) fail('encoded byte bound');
-  if (
-    authority.exitCode !== 0 ||
-    !HASH.test(authority.bundleSha256) ||
-    outputTreeDigest(bytes) !== authority.bundleSha256
-  )
+  if (!HASH.test(authority.bundleSha256) || outputTreeDigest(bytes) !== authority.bundleSha256)
     fail('failed command or unauthenticated transport bytes');
   if (bytes.length > OUTPUT_TREE_TRANSPORT_BYTES || !bytes.subarray(0, MAGIC.length).equals(MAGIC))
     fail('unknown tree version or encoded byte bound');
@@ -281,7 +280,15 @@ export function validateOutputTree(bytes: Buffer, authority: OutputTreeAuthority
     return record;
   }
   const header = JSON.parse(line(OUTPUT_TREE_HEADER_BYTES).toString('utf8')) as OutputTreeHeader;
-  keys(header, 'catalogueSha256,count,host,profile,root,run,sourceSha256,status,totalBytes,version');
+  keys(
+    header,
+    `catalogueSha256,count,host,${Object.hasOwn(header, 'producerExitCode') ? 'producerExitCode,' : ''}profile,root,run,sourceSha256,status,totalBytes,version`,
+  );
+  if (
+    (header.producerExitCode !== undefined && header.producerExitCode !== 0) ||
+    (authority.exitCode !== 0 && header.producerExitCode !== 0)
+  )
+    fail('failed command lacks a completed producer receipt');
   if (header.version !== 1) fail('unknown tree version');
   if (
     header.profile !== KERNEL_CLIENT_OUTPUT.profile ||
@@ -463,6 +470,66 @@ export function verifyPublishedOutputTree(root: string, bytes: Buffer): void {
   if (JSON.stringify(collectOutputTree(root).members) !== JSON.stringify(tree.members)) fail('published tree changed');
 }
 
+type AdmittedCheckHostRun = Extract<ReturnType<typeof recognizeCheckHostRun>, { outcome: 'admitted' }>;
+
+function readPreparedSourceBinding(
+  workspaceRoot: string,
+  recognized: AdmittedCheckHostRun,
+  receiptRoot: string,
+): OutputTreeBinding {
+  const receipt = JSON.parse(
+    readOutputTreeFile(receiptRoot, `${recognized.runId}/prepared-inputs.json`, 4096).toString('utf8'),
+  ) as unknown;
+  keys(receipt, 'fileCount,host,manifestSha256,run,schema,sourceSha256,totalBytes');
+  if (
+    receipt.schema !== 1 ||
+    typeof receipt.host !== 'string' ||
+    typeof receipt.run !== 'string' ||
+    typeof receipt.sourceSha256 !== 'string' ||
+    typeof receipt.manifestSha256 !== 'string' ||
+    !HASH.test(receipt.manifestSha256) ||
+    !Number.isSafeInteger(receipt.fileCount) ||
+    (receipt.fileCount as number) < 0 ||
+    (receipt.fileCount as number) > 50_000 ||
+    !Number.isSafeInteger(receipt.totalBytes) ||
+    (receipt.totalBytes as number) < 0 ||
+    (receipt.totalBytes as number) > 1024 * 1024 * 1024
+  )
+    fail('prepared source receipt is invalid');
+  const source = {
+    host: receipt.host,
+    run: receipt.run,
+    sourceSha256: receipt.sourceSha256,
+  };
+  binding(source);
+  if (source.run !== recognized.runId) fail('prepared source receipt is stale');
+
+  const marker = JSON.parse(
+    readOutputTreeFile(workspaceRoot, '.remote-check-supervisor', 4096).toString('utf8'),
+  ) as unknown;
+  keys(marker, 'group,host,pid,run,schema,started,uid');
+  if (
+    marker.schema !== 1 ||
+    typeof marker.host !== 'string' ||
+    typeof marker.run !== 'string' ||
+    typeof marker.pid !== 'number' ||
+    typeof marker.started !== 'string' ||
+    typeof marker.group !== 'number' ||
+    typeof marker.uid !== 'number' ||
+    !Number.isSafeInteger(marker.uid) ||
+    marker.uid < 0 ||
+    !/^\d{1,20}$/.test(marker.started) ||
+    !new RegExp(CHECK_HOST_NAME_PATTERN).test(marker.host) ||
+    marker.run !== recognized.runId ||
+    marker.pid !== recognized.supervisor.pid ||
+    marker.started !== recognized.supervisor.started ||
+    marker.group !== recognized.supervisor.group
+  )
+    fail('physical supervisor marker changed after recognition');
+  if (marker.host !== source.host || marker.run !== source.run) fail('prepared source and physical marker disagree');
+  return source;
+}
+
 /** The official command is called once, after physical admission and prepared-source receipt verification. */
 export async function withKernelClientOutput(
   root: string,
@@ -470,6 +537,8 @@ export async function withKernelClientOutput(
   dependencies: {
     recognize?: typeof recognizeCheckHostRun;
     prepared?: (root: string, run: string) => OutputTreeBinding;
+    /** Alternate receipt root for filesystem-backed unit fixtures; production uses the installed host root. */
+    preparedReceiptRoot?: string;
     /** Additional already-declared ordinary outputs, such as a schema dump in combined emission. */
     returns?: readonly string[];
   } = {},
@@ -478,20 +547,7 @@ export async function withKernelClientOutput(
   if (recognized.outcome !== 'admitted') fail('capture requires admitted physical custody');
   const source = dependencies.prepared
     ? dependencies.prepared(root, recognized.runId)
-    : (() => {
-        const receiptRoot = '/srv/rezics-check/receipts';
-        const receipt = JSON.parse(
-          readOutputTreeFile(receiptRoot, `${recognized.runId}/prepared-inputs.json`, 4096).toString('utf8'),
-        ) as OutputTreeBinding & { schema: number };
-        if (receipt.schema !== 1) fail('prepared source receipt is missing or stale');
-        const marker = JSON.parse(readOutputTreeFile(root, '.remote-check-supervisor', 4096).toString('utf8')) as {
-          host: string;
-          run: string;
-        };
-        if (marker.host !== receipt.host || marker.run !== receipt.run)
-          fail('prepared source and physical marker disagree');
-        return { host: receipt.host, run: receipt.run, sourceSha256: receipt.sourceSha256 };
-      })();
+    : readPreparedSourceBinding(root, recognized, dependencies.preparedReceiptRoot ?? '/srv/rezics-check/receipts');
   binding(source);
   if (source.run !== recognized.runId) fail('prepared source receipt is stale');
   const transport = safeOutputTreePath(root, KERNEL_CLIENT_OUTPUT.transport, true);
@@ -515,7 +571,7 @@ export async function withKernelClientOutput(
     if (code !== 0) return code; // failed output can never become a successful tree receipt
     if (existsSync(safeOutputTreePath(root, generationMarker)))
       fail('client generation did not replace previous declarations');
-    const bytes = encodeOutputTree(root, source);
+    const bytes = encodeOutputTree(root, source, 0);
     atomic(root, KERNEL_CLIENT_OUTPUT.transport, bytes);
     return code;
   } finally {
@@ -530,7 +586,7 @@ export async function withKernelClientOutput(
   }
 }
 
-/** Normal transport inventory stays schema 1: the tree is one real bounded regular file, not 512 generic returns. */
+/** Normal transport inventory stays schema 1: the tree is one real bounded regular file. */
 export type OutputTreeTransportManifest = {
   status: string;
   entries: Array<{ path: string; size: number; sha256: string; kind: 'file' | 'directory' }>;
@@ -639,7 +695,7 @@ export function receiveOutputTrees(
 ): void {
   const candidates = outputTreeTransportCandidates(sourceRoot, manifest, declarations);
   if (!candidates.length) return;
-  if (manifest.status !== 'complete' || terminal.exitCode !== 0) fail('incomplete or failed physical output');
+  if (manifest.status !== 'complete') fail('incomplete physical output');
   if (candidates.length !== 1) fail('duplicate physical output tree');
   const contains = (declaration: string, path: string) => path === declaration || path.startsWith(`${declaration}/`);
   if (

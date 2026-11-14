@@ -9,6 +9,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   linkSync,
@@ -24,6 +25,7 @@ import {
   parseRemotePhysicalRunReceipt,
   requestExecutionCancellation,
   type RemotePhysicalRunReceipt,
+  type RemoteCleanupReceipt,
 } from './remote-check.ts';
 
 export const CHECK_RUN_SETTLEMENT_SCHEMA = 1 as const;
@@ -45,6 +47,8 @@ const PHYSICAL_RUN = /^[a-zA-Z0-9-]{1,96}$/;
 const CHECK_RUN_CUSTODY_OBSERVATION_MAX = 16;
 
 export type CheckRunInvocationBinding = {
+  /** Shared native units observe an immutable committed checkpoint while local writing continues. */
+  sourceMode?: 'committed';
   sourceRevision: string;
   indexTree: string;
   sourceSha256: string;
@@ -134,6 +138,19 @@ export type CheckRunInvocationPhase =
   | 'cancel-requested'
   | 'cancelled';
 
+/** Physical cleanup does not establish a command result or release the frozen input custody. */
+export type CheckRunPhysicalCleanup = {
+  schema: 1;
+  invocationId: string;
+  nonce: string;
+  binding: CheckRunInvocationBinding;
+  physical: CheckRunPhysicalIdentity;
+  remote: RemoteCleanupReceipt;
+  reconciliationTransportChildReaped: boolean;
+  transportIdentity: CheckRunTransportIdentityState;
+  transportChildReaped: boolean;
+};
+
 export type CheckRunInvocationRecord = {
   schema: 1;
   invocationId: string;
@@ -156,6 +173,7 @@ export type CheckRunInvocationRecord = {
   final: CheckRunFinalSettlement | null;
   finalCustody: CheckRunFinalCustody | null;
   failure: string | null;
+  physicalCleanup?: CheckRunPhysicalCleanup;
 };
 
 export type CheckRunFinalCustodyObservation = {
@@ -237,6 +255,16 @@ export type CheckRunStateOptions = {
   removePrivateFile?: (path: string) => void;
 };
 
+export type CheckRunSnapshotReleaseKind = 'cancelled-before-start' | 'successful-delivered-no-artifacts';
+
+export type CheckRunInvocationPage = {
+  ids: string[];
+  after: string | null;
+  nextCursor: string | null;
+  hasMore: boolean;
+  directoryEntriesListed: number;
+};
+
 export type CheckRunMessageExpectation = {
   invocationId: string;
   nonce: string;
@@ -247,6 +275,7 @@ export type CheckRunMessageExpectation = {
 };
 
 export type CheckRunReconciliation =
+  | { disposition: 'physical-cleanup'; observation: CheckRunPhysicalCleanup }
   | { disposition: 'settled'; final: CheckRunFinalSettlement; transportIdentity?: CheckRunTransportIdentityState }
   | { disposition: 'unknown'; reason: string; transportIdentity?: CheckRunTransportIdentityState };
 
@@ -313,7 +342,7 @@ function boundedCount(value: unknown, label: string, maximum = Number.MAX_SAFE_I
 }
 
 export function validateCheckRunInvocationBinding(value: unknown): CheckRunInvocationBinding {
-  const item = closedObject(
+  const item = closedObjectWithOptional(
     value,
     [
       'sourceRevision',
@@ -328,8 +357,11 @@ export function validateCheckRunInvocationBinding(value: unknown): CheckRunInvoc
       'preparationCommandsSha256',
       'returnsSha256',
     ],
+    ['sourceMode'],
     'invocation binding',
   );
+  if (item.sourceMode !== undefined && item.sourceMode !== 'committed')
+    throw new Error('check-run-settlement: invalid source capture mode');
   if (typeof item.sourceRevision !== 'string' || !REVISION.test(item.sourceRevision))
     throw new Error('check-run-settlement: invalid candidate revision');
   if (typeof item.indexTree !== 'string' || !REVISION.test(item.indexTree))
@@ -347,6 +379,7 @@ export function validateCheckRunInvocationBinding(value: unknown): CheckRunInvoc
   )
     throw new Error('check-run-settlement: cwd must be workspace-relative');
   return {
+    ...(item.sourceMode === 'committed' ? { sourceMode: 'committed' as const } : {}),
     sourceRevision: item.sourceRevision,
     indexTree: item.indexTree,
     sourceSha256: boundedHash(item.sourceSha256, 'candidate source hash'),
@@ -1117,6 +1150,37 @@ export function checkRunSettlementStateDirectory(options: CheckRunStateOptions =
   return directory;
 }
 
+/** Read one shallow page of invocation identities; callers inspect at most the returned record files. */
+export function listCheckRunInvocationIds(
+  options: CheckRunStateOptions & { after?: string | null; limit?: number } = {},
+): CheckRunInvocationPage {
+  const after = options.after ?? null;
+  if (after !== null && !UUID.test(after)) throw new Error('check-run-settlement: invalid maintenance cursor');
+  const limit = options.limit ?? 32;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > CHECK_RUN_SETTLEMENT_MAX_ITEMS)
+    throw new Error(`check-run-settlement: maintenance page size must be 1-${CHECK_RUN_SETTLEMENT_MAX_ITEMS}`);
+  const directory = checkRunSettlementStateDirectory(options);
+  const entries = readdirSync(directory, { withFileTypes: true });
+  const ids = [
+    ...new Set(
+      entries
+        .map(({ name }) => name.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/i)?.[1])
+        .filter((id): id is string => id !== undefined)
+        .map((id) => id.toLowerCase()),
+    ),
+  ].sort();
+  const cursor = after?.toLowerCase() ?? null;
+  const remaining = ids.filter((id) => cursor === null || id > cursor);
+  const page = remaining.slice(0, limit);
+  return {
+    ids: page,
+    after: cursor,
+    nextCursor: page.at(-1) ?? cursor,
+    hasMore: remaining.length > page.length,
+    directoryEntriesListed: entries.length,
+  };
+}
+
 function assertOutsideCandidate(stateDirectory: string, workspace?: string): void {
   if (!workspace) return;
   const root = realpathSync(workspace);
@@ -1424,6 +1488,57 @@ function validateFinalCustodyIdentity(record: CheckRunInvocationRecord, custody:
   return '';
 }
 
+/** Return the only durable states that release a frozen snapshot without another remote observation. */
+export function checkRunSnapshotReleaseKind(record: CheckRunInvocationRecord): CheckRunSnapshotReleaseKind | null {
+  if (
+    record.snapshotCustody !== 'owned' ||
+    !record.snapshot ||
+    !record.candidateWorkspace ||
+    record.snapshot.sourceSha256 !== record.binding.sourceSha256
+  )
+    return null;
+  if (
+    record.phase === 'cancelled' &&
+    record.cancellation.requested &&
+    record.physical === null &&
+    record.transportChild === null &&
+    record.native === null &&
+    record.final === null &&
+    record.failure === null
+  )
+    return 'cancelled-before-start';
+
+  const final = record.final;
+  const custody = record.finalCustody;
+  if (!final || !custody || record.failure !== null || !record.physical) return null;
+  if (
+    final.invocationId !== record.invocationId ||
+    final.nonce !== record.nonce ||
+    checkRunBindingHash(final.binding) !== checkRunBindingHash(record.binding) ||
+    final.physical.host !== record.physical.host ||
+    final.physical.run !== record.physical.run ||
+    final.native?.exitCode !== 0 ||
+    final.native.lifetimeFailure ||
+    final.preparedInputs.status !== 'verified' ||
+    final.preparedInputs.sourceSha256 !== record.binding.sourceSha256 ||
+    final.returns.status !== 'empty' ||
+    final.returns.entries.length !== 0 ||
+    final.returns.missing.length !== 0 ||
+    final.returns.failures.length !== 0 ||
+    final.failures.primary.length !== 0 ||
+    final.cleanup.disposition !== 'unknown' ||
+    final.cleanup.remote !== 'verified' ||
+    final.cleanup.transportChild !== 'reaped' ||
+    final.cleanup.source !== 'verified' ||
+    final.cleanup.localWorktree !== 'retained' ||
+    !['delivered', 'received', 'reconciled', 'not-required'].includes(custody.delivery) ||
+    custody.privateFiles !== 'settled' ||
+    validateFinalCustodyIdentity(record, custody) !== ''
+  )
+    return null;
+  return 'successful-delivered-no-artifacts';
+}
+
 function validateReconciliationCandidate(
   record: CheckRunInvocationRecord,
   custody: CheckRunFinalCustody,
@@ -1514,6 +1629,115 @@ function validateFreshReconciliationCandidate(
   return '';
 }
 
+function validatePhysicalCleanup(value: unknown): CheckRunPhysicalCleanup {
+  const item = closedObject(
+    value,
+    [
+      'schema',
+      'invocationId',
+      'nonce',
+      'binding',
+      'physical',
+      'remote',
+      'reconciliationTransportChildReaped',
+      'transportIdentity',
+      'transportChildReaped',
+    ],
+    'physical cleanup',
+  );
+  const physical = validatePhysical(item.physical);
+  const remote = closedObject(
+    item.remote,
+    [
+      'schema',
+      'host',
+      'run',
+      'status',
+      'supervisorStopped',
+      'commandGroupTerminal',
+      'containersRemoved',
+      'runDirectoryRemoved',
+      'failures',
+    ],
+    'remote physical cleanup',
+  );
+  if (
+    item.schema !== 1 ||
+    typeof item.invocationId !== 'string' ||
+    !UUID.test(item.invocationId) ||
+    typeof item.nonce !== 'string' ||
+    !HASH.test(item.nonce) ||
+    remote.schema !== 1 ||
+    remote.host !== physical.host ||
+    remote.run !== physical.run ||
+    remote.status !== 'verified' ||
+    remote.supervisorStopped !== true ||
+    remote.commandGroupTerminal !== true ||
+    remote.containersRemoved !== true ||
+    remote.runDirectoryRemoved !== true ||
+    !Array.isArray(remote.failures) ||
+    remote.failures.length !== 0 ||
+    typeof item.reconciliationTransportChildReaped !== 'boolean' ||
+    !['live-same', 'gone-or-replaced', 'unknown'].includes(String(item.transportIdentity)) ||
+    item.transportChildReaped !==
+      (item.reconciliationTransportChildReaped && item.transportIdentity === 'gone-or-replaced')
+  )
+    throw new Error('check-run-settlement: invalid verified physical cleanup');
+  return {
+    schema: 1,
+    invocationId: item.invocationId,
+    nonce: item.nonce,
+    binding: validateCheckRunInvocationBinding(item.binding),
+    physical,
+    remote: {
+      schema: 1,
+      host: physical.host,
+      run: physical.run,
+      status: 'verified',
+      supervisorStopped: true,
+      commandGroupTerminal: true,
+      containersRemoved: true,
+      runDirectoryRemoved: true,
+      failures: [],
+    },
+    reconciliationTransportChildReaped: item.reconciliationTransportChildReaped,
+    transportIdentity: item.transportIdentity as CheckRunTransportIdentityState,
+    transportChildReaped: item.transportChildReaped as boolean,
+  };
+}
+
+function assertPhysicalCleanupBinding(
+  record: Pick<CheckRunInvocationRecord, 'invocationId' | 'nonce' | 'binding' | 'physical'>,
+  observation: CheckRunPhysicalCleanup,
+): void {
+  if (
+    observation.invocationId !== record.invocationId ||
+    observation.nonce !== record.nonce ||
+    checkRunBindingHash(observation.binding) !== checkRunBindingHash(record.binding) ||
+    !record.physical ||
+    observation.physical.host !== record.physical.host ||
+    observation.physical.run !== record.physical.run
+  )
+    throw new Error('check-run-settlement: physical cleanup differs from the original invocation binding');
+}
+
+/** Receive exact physical cleanup independently of native result acceptance and return restoration. */
+export async function acceptCheckRunPhysicalCleanup(
+  invocationId: string,
+  value: CheckRunPhysicalCleanup,
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  const observation = validatePhysicalCleanup(value);
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    assertPhysicalCleanupBinding(record, observation);
+    if (record.physicalCleanup) return record;
+    return updateRecord(directory, record, {
+      physicalCleanup: observation,
+      phase: record.final ? record.phase : 'unknown',
+    });
+  });
+}
+
 function validateRecord(value: unknown): CheckRunInvocationRecord {
   const item = closedObjectWithOptional(
     value,
@@ -1535,7 +1759,7 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
       'final',
       'failure',
     ],
-    ['preparedExecution', 'descriptor', 'preparationIntent', 'snapshotCustody', 'finalCustody'],
+    ['preparedExecution', 'descriptor', 'preparationIntent', 'snapshotCustody', 'finalCustody', 'physicalCleanup'],
     'invocation record',
   );
   if (item.schema !== 1 || typeof item.invocationId !== 'string' || !UUID.test(item.invocationId))
@@ -1613,6 +1837,18 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
   const failure = item.failure === null ? null : boundedText(item.failure, 'failure detail');
   const final = item.final === null ? null : validateCheckRunFinalSettlement(item.final);
   const finalCustody = item.finalCustody == null ? null : validateFinalCustody(item.finalCustody);
+  const physicalCleanup =
+    item.physicalCleanup === undefined ? undefined : validatePhysicalCleanup(item.physicalCleanup);
+  if (physicalCleanup)
+    assertPhysicalCleanupBinding(
+      {
+        invocationId: item.invocationId,
+        nonce,
+        binding: validateCheckRunInvocationBinding(item.binding),
+        physical: item.physical === null ? null : validatePhysical(item.physical),
+      },
+      physicalCleanup,
+    );
   const phase =
     item.phase === 'settled' && finalCustody?.aggregate !== 'settled'
       ? 'unknown'
@@ -1642,6 +1878,7 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
     final,
     finalCustody,
     failure,
+    ...(physicalCleanup ? { physicalCleanup } : {}),
   };
 }
 
@@ -2225,8 +2462,10 @@ export async function allocateCheckRunPhysical(
     if (record.phase !== 'queued' && record.phase !== 'uploading')
       throw new Error(`check-run-settlement: cannot allocate a run from ${record.phase}`);
     const physical = validatePhysical({ host, run });
-    if (record.physical && (record.physical.host !== physical.host || record.physical.run !== physical.run))
-      throw new Error('check-run-settlement: invocation already owns a different physical run');
+    if (record.physical && (record.physical.host !== physical.host || record.physical.run !== physical.run)) {
+      if (record.phase !== 'uploading')
+        throw new Error('check-run-settlement: invocation already owns a different physical run');
+    }
     return updateRecord(directory, record, { phase: 'uploading', physical });
   });
 }
@@ -2443,6 +2682,7 @@ export async function reconcileCheckRunInvocation(
   options: CheckRunReconcileOptions = {},
 ): Promise<CheckRunInvocationRecord> {
   const before = await getCheckRunStatus(invocationId, options);
+  if (before.physicalCleanup && !before.native && !before.final) return before;
   if (before.final) {
     const custody = before.finalCustody ?? makeFinalCustody(before, before.final, 'unknown');
     const identityFailure = validateFinalCustodyIdentity(before, custody);
@@ -2525,7 +2765,10 @@ export async function reconcileCheckRunInvocation(
     let reconciliationFailure = 'reconciliation did not return exact custody evidence';
     try {
       const observed = await options.reconcilePhysical(before.physical, before);
-      observedTransportIdentity = observed.transportIdentity ?? null;
+      observedTransportIdentity =
+        observed.disposition === 'physical-cleanup' ? null : (observed.transportIdentity ?? null);
+      if (observed.disposition === 'physical-cleanup')
+        throw new Error('cleanup-only evidence cannot replace an immutable native final');
       if (observed.disposition === 'settled') observedFinal = validateCheckRunFinalSettlement(observed.final);
       else reconciliationFailure = boundedText(observed.reason, 'reconciliation failure');
       if (observedFinal)
@@ -2594,7 +2837,16 @@ export async function reconcileCheckRunInvocation(
       return (await cleanupPrivateReferencesUnderLock(directory, next, options)).record;
     });
   }
-  if (before.phase === 'unknown' && !options.force) return before;
+  if (before.phase === 'unknown' && !options.force) {
+    // Unknown earlier runs are not a result. Clean leftover private files; never start a replacement.
+    return mutateRecord(invocationId, options, async (directory, record) => {
+      try {
+        return (await cleanupPrivateReferencesUnderLock(directory, record, options)).record;
+      } catch {
+        return record;
+      }
+    });
+  }
   if (!before.physical) {
     if (before.cancellation.requested) {
       return mutateRecord(invocationId, options, async (directory, record) => {
@@ -2618,11 +2870,26 @@ export async function reconcileCheckRunInvocation(
     );
   try {
     const observed = await options.reconcilePhysical(before.physical, before);
+    if (observed.disposition === 'physical-cleanup') {
+      const observation = validatePhysicalCleanup(observed.observation);
+      assertPhysicalCleanupBinding(before, observation);
+      return mutateRecord(invocationId, options, async (directory, record) => {
+        if (record.physicalCleanup || record.final) return record;
+        assertPhysicalCleanupBinding(record, observation);
+        if (record.native) throw new Error('cleanup-only reconciliation cannot replace a native command result');
+        return updateRecord(directory, record, {
+          phase: 'unknown',
+          physicalCleanup: observation,
+          failure:
+            record.failure ?? 'original native command outcome is unavailable; verified physical cleanup retained',
+        });
+      });
+    }
     if (observed.disposition === 'unknown') {
       return mutateRecord(invocationId, options, async (directory, record) =>
         updateRecord(directory, record, {
           phase: 'unknown',
-          failure: boundedText(observed.reason, 'reconciliation failure'),
+          failure: record.failure ?? boundedText(observed.reason, 'reconciliation failure'),
         }),
       );
     }
@@ -2652,7 +2919,7 @@ export async function reconcileCheckRunInvocation(
     return mutateRecord(invocationId, options, async (directory, record) => {
       const reason = `reconciliation failed for the original physical run: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`;
       if (record.final) return record;
-      return updateRecord(directory, record, { phase: 'unknown', failure: reason });
+      return updateRecord(directory, record, { phase: 'unknown', failure: record.failure ?? reason });
     });
   }
 }
@@ -2673,6 +2940,26 @@ export async function markCheckRunPreparedSnapshotCustody(
     const next = await updateRecord(directory, record, { snapshotCustody: disposition });
     if (disposition === 'unknown') return next;
     return (await cleanupPrivateReferencesUnderLock(directory, next, options)).record;
+  });
+}
+
+/** Remove a snapshot only while its invocation fence still proves one of the releasable terminal states. */
+export async function releaseCheckRunSnapshot(
+  invocationId: string,
+  nonce: string,
+  kind: CheckRunSnapshotReleaseKind,
+  remove: (record: CheckRunInvocationRecord) => void | Promise<void>,
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
+    if (checkRunSnapshotReleaseKind(record) !== kind)
+      throw new Error('check-run-settlement: frozen snapshot no longer has releasable terminal evidence');
+    if (!record.snapshot || !record.candidateWorkspace)
+      throw new Error('check-run-settlement: releasable snapshot identity is unavailable');
+    await remove(record);
+    const updated = await updateRecord(directory, record, { snapshotCustody: 'removed' });
+    return (await cleanupPrivateReferencesUnderLock(directory, updated, options)).record;
   });
 }
 
@@ -2782,8 +3069,9 @@ function usage(): string {
     '  bun scripts/check-run-settlement.ts register --binding <private-json> [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts status <invocation-id> [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts cancel <invocation-id> [--signal 1|2|15] [--state-dir <absolute-dir>]',
-    '  bun scripts/check-run-settlement.ts reconcile <invocation-id> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
+    '  bun scripts/check-run-settlement.ts reconcile <invocation-id> [--cleanup-only] [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
+    '  bun scripts/check-run-settlement.ts maintain [--cursor <invocation-id>] [--limit 1-64] [--apply] [--max-removals 0-2] [--state-dir <absolute-dir>]',
   ].join('\n');
 }
 
@@ -2829,11 +3117,38 @@ if (import.meta.main) {
         (hostsFile !== undefined && !isAbsolute(hostsFile))
       )
         throw new Error('reconcile needs an id and, for a physical run, an absolute --hosts file');
+      const cleanupOnly = args.includes('--cleanup-only');
+      if (cleanupOnly && descriptorFile) throw new Error('cleanup-only reconciliation requires an invocation id');
       const checkRun = await import('./check-run.ts');
       const reconciled = descriptorFile
         ? await checkRun.reconcileCheckRunPreparationIntent(descriptorFile, hostsFile, stateOptions)
-        : await checkRun.reconcileRegisteredCheckRun(id!, hostsFile, stateOptions);
+        : await checkRun.reconcileRegisteredCheckRun(id!, hostsFile, {
+            ...stateOptions,
+            ...(cleanupOnly ? { cleanupOnly: true } : {}),
+          });
       process.stdout.write(`${JSON.stringify(reconciled)}\n`);
+    } else if (operation === 'maintain') {
+      const cursorAt = args.indexOf('--cursor');
+      const limitAt = args.indexOf('--limit');
+      const removalsAt = args.indexOf('--max-removals');
+      const cursor = cursorAt < 0 ? null : args[cursorAt + 1]!;
+      const limit = limitAt < 0 ? 32 : Number(args[limitAt + 1]);
+      const maxRemovals = removalsAt < 0 ? 2 : Number(args[removalsAt + 1]);
+      if (
+        (cursorAt >= 0 && !cursor) ||
+        (limitAt >= 0 && (!Number.isSafeInteger(limit) || limit < 1 || limit > CHECK_RUN_SETTLEMENT_MAX_ITEMS)) ||
+        (removalsAt >= 0 && (!Number.isSafeInteger(maxRemovals) || maxRemovals < 0 || maxRemovals > 2))
+      )
+        throw new Error('maintain needs a valid cursor, a page limit from 1-64, and a removal limit from 0-2');
+      const checkRun = await import('./check-run.ts');
+      const report = await checkRun.maintainCheckRunSnapshots({
+        ...stateOptions,
+        cursor,
+        limit,
+        maxRemovals,
+        apply: args.includes('--apply'),
+      });
+      process.stdout.write(`${JSON.stringify(report)}\n`);
     } else {
       throw new Error(usage());
     }

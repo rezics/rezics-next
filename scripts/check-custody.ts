@@ -10,11 +10,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { hostname } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 
 export const CHECK_RECORD_CUSTODY_VERSION = 1 as const;
 export const CHECK_HISTORY_VERSION = 1 as const;
+export const CHECK_CUSTODY_RECORD_MAX_CHARACTERS = 64 * 1024;
+export const CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS = 12 * 1024;
 
 export type ControllerProofBindingV1 = Readonly<{
   version: 1;
@@ -80,16 +82,54 @@ export type CheckCleanupReceipt = {
   remoteTerminal: boolean | null;
   resultTerminal: boolean;
   remoteRun?: { host: string; id: string };
+  /** Verified remote process cleanup is independent of native/compiler result custody. */
+  physicalCleanup?: CheckRemotePhysicalCleanup;
   reason?: string;
   completedAt: string;
+};
+
+export type CheckRemotePhysicalCleanup = {
+  schema: 1;
+  host: string;
+  run: string;
+  status: 'verified' | 'unknown';
+  supervisorStopped: boolean;
+  commandGroupTerminal: boolean;
+  containersRemoved: boolean;
+  runDirectoryRemoved: boolean;
+  failures: string[];
 };
 
 export type CheckRemoteAttempt = {
   host: string;
   id: string;
-  status: 'running' | 'terminal' | 'uncertain';
+  status: 'running' | 'terminal' | 'uncertain' | 'not-started';
   startedAt: string;
   endedAt?: string;
+  native?: unknown;
+  settlement?: unknown;
+  nativeReference?: CheckRemoteEvidenceReference;
+  settlementReference?: CheckRemoteEvidenceReference;
+  cleanup?: unknown;
+  /** Cleanup-only recovery never fills native or settlement evidence. */
+  physicalCleanup?: CheckRemotePhysicalCleanup;
+  reason?: string;
+};
+
+export type CheckRemoteEvidenceKind = 'native' | 'settlement';
+
+export type CheckRemoteEvidenceIdentity = {
+  checkId: string;
+  physicalRunId: string;
+  host: string;
+  run: string;
+};
+
+export type CheckRemoteEvidenceReference = CheckRemoteEvidenceIdentity & {
+  version: 1;
+  kind: CheckRemoteEvidenceKind;
+  sha256: string;
+  bytes: number;
 };
 
 export type CheckRemoteObservation = {
@@ -102,6 +142,15 @@ export type CheckRemoteObservation = {
 export type CheckRemoteRunCustody = {
   version: 1;
   physicalRunId: string;
+  binding?: {
+    checkId: string;
+    ownership?: CheckOwnership;
+    argv: string[];
+    remoteArgv: string[];
+    hostsFile?: string;
+    returns?: string[];
+    expectedSourceSha256?: string;
+  };
   status: 'running' | 'terminal' | 'uncertain';
   attempts: CheckRemoteAttempt[];
   observations?: CheckRemoteObservation[];
@@ -119,6 +168,19 @@ export type CheckRegistration = {
   registeredAt: string;
   controllerProof?: ControllerProofBindingV1;
 };
+
+function serializeCustodyJson(value: unknown): string {
+  return `${JSON.stringify(value)}\n`;
+}
+
+export function custodyJsonCharacters(value: unknown): number {
+  return serializeCustodyJson(value).length;
+}
+
+/** Terminal settlement retains the native resource samples and adds return and cleanup evidence. */
+export function remoteRunCustodyUpdateLimit(): number {
+  return CHECK_CUSTODY_RECORD_MAX_CHARACTERS;
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -644,21 +706,217 @@ export function remoteRunCustodyPath(root: string, physicalRunId: string): strin
   return join(custodyDirectory(root), 'remote', `${physicalRunId}.json`);
 }
 
+function remoteEvidenceIdentity(value: unknown): CheckRemoteEvidenceIdentity | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const item = value as Record<string, unknown>;
+  if (
+    !isCheckId(item.checkId) ||
+    !isPhysicalRunId(item.physicalRunId) ||
+    typeof item.host !== 'string' ||
+    !/^[a-z][a-z0-9-]{0,62}$/.test(item.host) ||
+    typeof item.run !== 'string' ||
+    !/^[a-zA-Z0-9-]{1,96}$/.test(item.run)
+  )
+    return undefined;
+  return { checkId: item.checkId, physicalRunId: item.physicalRunId, host: item.host, run: item.run };
+}
+
+function remoteEvidencePath(custodyFile: string, reference: CheckRemoteEvidenceReference): string {
+  const remoteDirectory = dirname(custodyFile);
+  if (
+    resolve(custodyFile) !== custodyFile ||
+    basename(remoteDirectory) !== 'remote' ||
+    basename(custodyFile) !== `${reference.physicalRunId}.json`
+  )
+    throw new Error('worker-check: invalid remote evidence custody path');
+  const name = [
+    reference.checkId,
+    reference.physicalRunId,
+    reference.host,
+    reference.run,
+    reference.kind,
+    reference.sha256,
+  ].join('.');
+  return join(dirname(remoteDirectory), 'remote-evidence', `${name}.json`);
+}
+
+function remoteEvidenceReference(value: unknown): CheckRemoteEvidenceReference | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const item = value as Record<string, unknown>;
+  const identity = remoteEvidenceIdentity(item);
+  if (
+    !identity ||
+    item.version !== 1 ||
+    (item.kind !== 'native' && item.kind !== 'settlement') ||
+    typeof item.sha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(item.sha256) ||
+    !Number.isSafeInteger(item.bytes) ||
+    Number(item.bytes) < 1
+  )
+    return undefined;
+  return {
+    version: 1,
+    kind: item.kind,
+    ...identity,
+    sha256: item.sha256,
+    bytes: Number(item.bytes),
+  };
+}
+
+/** Publish one immutable evidence payload before writing its bounded custody reference. */
+export function publishRemoteRunEvidence(
+  custodyFile: string,
+  identityValue: CheckRemoteEvidenceIdentity,
+  kind: CheckRemoteEvidenceKind,
+  value: unknown,
+): CheckRemoteEvidenceReference {
+  const identity = remoteEvidenceIdentity(identityValue);
+  if (!identity || (kind !== 'native' && kind !== 'settlement'))
+    throw new Error('worker-check: invalid remote evidence identity');
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    (value as Record<string, unknown>).host !== identity.host ||
+    (value as Record<string, unknown>).run !== identity.run
+  )
+    throw new Error('worker-check: remote evidence content identity mismatch');
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new Error('worker-check: remote evidence is not serializable');
+  const bytes = Buffer.from(`${serialized}\n`, 'utf8');
+  const reference: CheckRemoteEvidenceReference = {
+    version: 1,
+    kind,
+    ...identity,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    bytes: bytes.byteLength,
+  };
+  const file = remoteEvidencePath(custodyFile, reference);
+  mkdirSync(dirname(file), { recursive: true });
+  if (existsSync(file)) {
+    const existing = readFileSync(file);
+    if (!existing.equals(bytes)) throw new Error('worker-check: conflicting remote evidence artifact');
+    return reference;
+  }
+  const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(temporary, bytes, { mode: 0o600, flag: 'wx' });
+  renameSync(temporary, file);
+  return reference;
+}
+
+/** Resolve only an exact, intact artifact for the known logical and physical run identity. */
+export function readRemoteRunEvidence<T = unknown>(
+  custodyFile: string,
+  referenceValue: unknown,
+  expectedValue: CheckRemoteEvidenceIdentity,
+  kind: CheckRemoteEvidenceKind,
+): T | undefined {
+  try {
+    const reference = remoteEvidenceReference(referenceValue);
+    const expected = remoteEvidenceIdentity(expectedValue);
+    if (
+      !reference ||
+      !expected ||
+      reference.kind !== kind ||
+      reference.checkId !== expected.checkId ||
+      reference.physicalRunId !== expected.physicalRunId ||
+      reference.host !== expected.host ||
+      reference.run !== expected.run
+    )
+      return undefined;
+    const bytes = readFileSync(remoteEvidencePath(custodyFile, reference));
+    if (bytes.byteLength !== reference.bytes || createHash('sha256').update(bytes).digest('hex') !== reference.sha256)
+      return undefined;
+    const value = JSON.parse(bytes.toString('utf8')) as unknown;
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      (value as Record<string, unknown>).host !== reference.host ||
+      (value as Record<string, unknown>).run !== reference.run
+    )
+      return undefined;
+    return value as T;
+  } catch {
+    return undefined;
+  }
+}
+
+const REMOTE_CUSTODY_ARGUMENT_BYTES = 48 * 1024;
+const REMOTE_CUSTODY_ARGUMENTS_BYTES = 56 * 1024;
+const REMOTE_CUSTODY_ARGUMENT_COUNT = 1024;
+
+function validRemoteCustodyArguments(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= REMOTE_CUSTODY_ARGUMENT_COUNT &&
+    value.every(
+      (argument) =>
+        typeof argument === 'string' &&
+        Buffer.byteLength(argument) <= REMOTE_CUSTODY_ARGUMENT_BYTES &&
+        !argument.includes('\0'),
+    ) &&
+    Buffer.byteLength(JSON.stringify(value)) <= REMOTE_CUSTODY_ARGUMENTS_BYTES
+  );
+}
+
+export function initializeRemoteRunCustody(
+  root: string,
+  physicalRunId: string,
+  binding: NonNullable<CheckRemoteRunCustody['binding']>,
+): void {
+  if (
+    !isPhysicalRunId(physicalRunId) ||
+    !isCheckId(binding.checkId) ||
+    !validRemoteCustodyArguments(binding.argv) ||
+    binding.argv.some((argument) => argument.length > 4096) ||
+    !validRemoteCustodyArguments(binding.remoteArgv) ||
+    Buffer.byteLength(JSON.stringify([binding.argv, binding.remoteArgv])) > REMOTE_CUSTODY_ARGUMENTS_BYTES
+  )
+    throw new Error('worker-check: invalid remote custody binding');
+  if (binding.ownership !== undefined) validateOwnership(binding.ownership);
+  const file = remoteRunCustodyPath(root, physicalRunId);
+  if (existsSync(file)) throw new Error('worker-check: remote custody already exists for physical run');
+  writeAtomicJson(
+    file,
+    {
+      version: 1,
+      physicalRunId,
+      binding: {
+        checkId: binding.checkId,
+        ...(binding.ownership === undefined ? {} : { ownership: validateOwnership(binding.ownership) }),
+        argv: [...binding.argv],
+        remoteArgv: [...binding.remoteArgv],
+      },
+      status: 'running',
+      attempts: [],
+      updatedAt: new Date().toISOString(),
+    } satisfies CheckRemoteRunCustody,
+    true,
+    CHECK_CUSTODY_RECORD_MAX_CHARACTERS - CHECK_REMOTE_CUSTODY_INITIAL_RECORD_RESERVE_CHARACTERS,
+  );
+}
+
 export function runnerReadyPath(root: string, checkId: string, physicalRunId: string): string {
   return join(custodyDirectory(root), 'ready', `${checkId}.${physicalRunId}.json`);
 }
 
-export function writeAtomicJson(file: string, value: unknown, createParent = true): void {
+export function writeAtomicJson(file: string, value: unknown, createParent = true, maxCharacters?: number): void {
+  const serialized = serializeCustodyJson(value);
+  if (maxCharacters !== undefined && serialized.length > maxCharacters) {
+    throw new Error(`worker-check: serialized custody record exceeds ${maxCharacters}-character bound`);
+  }
   if (createParent) mkdirSync(dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600, flag: 'wx' });
+  writeFileSync(temporary, serialized, { mode: 0o600, flag: 'wx' });
   renameSync(temporary, file);
 }
 
 export function readJsonFile<T>(file: string): T | undefined {
   try {
     const raw = readFileSync(file, 'utf8');
-    if (raw.length > 64 * 1024) return undefined;
+    if (raw.length > CHECK_CUSTODY_RECORD_MAX_CHARACTERS) return undefined;
     return JSON.parse(raw) as T;
   } catch {
     return undefined;

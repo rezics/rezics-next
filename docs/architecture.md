@@ -6,12 +6,51 @@ configuration. Add backend capability only when the existing abstractions cannot
 Choose the simplest design that meets the requirement. Prefer mature engines, extensions, libraries and standards.
 A custom mechanism needs evidence of the gap it fills and a comparison with the existing alternatives.
 
-Every operation addresses a bounded neighbourhood. State its anchors, examined keys, expansion limits and indexed
-cost. Bound reads, writes, authorization, validation, projections and cleanup. A response limit does not bound a scan,
-sort, join, history walk or dependency fanout.
+Repository-owned models, contracts, formats and protocols have one canonical v1 baseline while the product remains
+unreleased. Remove superseded readers, writers, version selectors, compatibility adapters and duplicate models
+instead of preserving compatibility with versions that never shipped. Update producers, consumers and owner documents
+together. A cleanup is a model repair, not a blind renaming of version constants or loss of current behavior.
 
-Large jobs make bounded, resumable progress. Their total work may follow their finite input; individual steps may
-not discover work through unrestricted scans or recomputation.
+When existing development state needs conversion or rebuilding, perform a bounded one-time operational migration,
+preserving records and evidence that remain useful. Do not make a permanent runtime compatibility path for that
+maintenance. Database migration history and operational evidence are not redundant model versions. Third-party
+protocols, provider APIs and standards retain their defined versions. The legacy reference stays read-only.
+
+Every synchronous operation or resumable step addresses a bounded neighbourhood. State its anchors, examined keys,
+expansion limits and indexed cost. Bound reads, writes, authorization, validation, projections and cleanup. A response
+limit does not bound a scan, sort, join, history walk or dependency fanout.
+
+The bound applies to the rows a design reads through its own keys, fanout and expansion limits. Physical work the
+database engine does for multiversion visibility, such as skipping versions from concurrent uncommitted transactions or
+versions not yet vacuumed, belongs to the engine and its maintenance. Do not build product-level budgets or custom
+primitives to meter it; use ordinary indexed SQL and keep the engine's maintenance healthy.
+
+A composed step's ceiling is the derived sum of its parts' finite bounds. Owners set and record the numbers. When an
+ordinary journey needs more input than one bounded request, provide an indexed point operation or a resumable staged
+path. Raising the constant or routing a full scan to the client does not supply that path.
+
+Derive bounds on paper, enforce them with structural limits (full-key seeks, `LIMIT`, page and fan-out caps) and prove
+them with growth checks. Do not build runtime price protocols between owners: no pre-I/O quotes, prepaid funding,
+no-refill ledgers or per-profile dispatch allowances. When a contract needs a producer's cost, use the producer's
+documented static bound as a constant.
+
+Large jobs make bounded, resumable progress. Bound each step's examined work, expanded representation and output
+bytes independently of the total logical set. A page, batch, input envelope or synchronous work budget bounds a step,
+not the lifetime size of a logically unbounded collection, ordered structure or complete release. A step must not
+require rewriting the accumulated result. Partial evidence must not prove absence; an accelerator preserves the exact
+contract.
+
+Indexed local edits must not grow linearly with unrelated siblings or descendants. Work that consumes all n items
+must take O(n) or O(n log n) total work in bounded steps, without repeated full-prefix scans. Exceptions require an
+explicit product reason and measured proof.
+
+Share coverage, progress and byte-limit contracts across owners. Each domain keeps authority over its state,
+transaction, completion and effects. Reuse execution machinery only when those invariants and lifecycle agree.
+
+Decision: adopt the distinction between step bounds and supported data size above from the
+[pinned universal scalability audit](research/universal-scalability-audit.md) and its
+[follow-up](research/universal-scalability-follow-up.md). Use them as an owner-review queue and evidence index;
+adoption does not establish implementation.
 
 A capability must hold wherever its abstraction appears. Inclusion in public scope means the complete architectural
 capability across its surfaces, rather than one working example.
@@ -19,15 +58,283 @@ capability across its surfaces, rather than one working example.
 One capability has one authority. Verticals, Realms, Zones and clients consume shared contracts rather than copying
 their storage, query, permission or lifecycle mechanisms. Derived indexes and views do not become another authority.
 
-Product writes, including imports, use the ordinary API and permission model. Fix an inadequate API rather than
-creating a privileged parallel write path. Test fixtures are not product write paths.
+The product API is the authority for business rules, permissions and state transitions. Every supported product
+operation, including imports, uses the ordinary API and permission model. Fix a missing or incorrect operation at
+its backend owner; do not implement it in a client or create a privileged parallel write path. Test fixtures are
+not product write paths.
 
-Definitions own semantic vocabulary. Product modules own generic behaviour. Presentation configures how those
-capabilities appear. A value's representation does not determine its semantic meaning or authority.
+Definitions own semantic vocabulary. Product modules own generic behaviour. Clients compose API results into
+interactions and presentation. When the same API operation works with the same inputs and persona but fails in
+multiple interfaces, trace the shared client boundary first. Fix the earliest shared transport, state adapter,
+interaction or component that causes the failure, and verify representative consumers. Use a page-local fix only
+when the failure is specific to that page. Representation does not determine semantic meaning or authority.
+
+### First-release growth
+
+Decision: the first release is designed for several billion logical records. Evaluate 1 billion and 3 billion as
+scenarios, not cardinality limits, production measurements, an assumed object mix or permission to seed production.
+
+Use each owner's existing Cost entry, with distinct variables: global population `N`; largest relevant partition or
+hot key `H`; actually selected or changed population `n`; page count `k_rows` and admitted bytes `k_bytes` (the two
+units of `k`); query fanout `p`. Vary `N` and `H` independently of `n` and `k`. Name the indexed relations and key
+prefixes: a seek costs `O(log N)` in a global index or `O(log H)` in a partition-local index, not a constant probe.
+For each operation, record concrete ceilings or admitted inputs for candidate keys, reads including nested
+authorization, index probes, locks and lock duration, writes, events, peak heap, transferred/stored bytes and retries.
+Include indirect effects, cascades, projections and cleanup. Set finite page, byte, fanout and per-step ceilings;
+response size alone does not bound any of these costs.
+
+- **Point operations:** use exact full-key indexed access. Bound the number of candidate keys and nested reads,
+  authorization operands, probes, locks, changed rows and events independently of `N` and `H`, plus their index
+  descent and admitted body bytes. Denial and absence obey the same bound.
+- **Ordinary cursor pages:** where the filter/order/disclosure contract admits a merged indexed range, examine
+  at most `k_rows + p` candidates, including source lookahead. With at most `a` nested indexed reads/authorization
+  probes per candidate, charge up to `p + a (k_rows + p)` probes plus the range reads. Derive their global/local
+  descent costs separately; without nested probes the range costs `O(p log N + k_rows)` in a global index.
+  Heap and transfer grow only with the admitted page representation and `k_bytes`. Cap `p` and `a`; cursor depth
+  adds no prefix scan. A plan fetching a page per source must instead charge up to `p k_rows` candidates.
+  Reads take no mutation locks and produce no writes/events unless the owner names and bounds those effects.
+  Named exceptions such as residual disclosure filtering, exact counts or unindexed sorting state their actual
+  candidate, scan, sort and authorization cost in `N`, `H`, `n` and `p`. Bound the next step and persist continuation,
+  or supply an indexed point/staged alternative; a short or denied page cannot hide discarded candidates.
+- **Local changes:** changing one chapter touches only that chapter and bounded affected index paths, independent
+  of book size except indexed seeks. One status step updates bounded progress/frontier state without reading or
+  rewriting accumulated progress. Charge affected index entries, history and events explicitly; a small response
+  does not make a whole-book validation or progress rewrite local.
+- **Whole-scope work:** enumerate the actual scope `n` in total `O(n)` or `O(n log n)` logical work, with the
+  separately derived indexed-seek costs. Keep a persistent frontier committed with each step's effects, finite
+  examined keys, writes, events, bytes, heap and lock duration, and no repeated full-prefix scans. Schedule fairly
+  across scopes/homes so a large or hot scope cannot starve others. State the admitted concurrent-change and restart
+  semantics. Sum all steps: for `w` row writes and `i` maintained index entries per row, charge `O(w i)` index
+  mutations plus their seek costs, emitted events and serialized bytes separately from page size. Count every
+  failed/replayed attempt's reads, locks, writes and bytes; bound retries per invocation, persist resumable work on
+  exhaustion and make replay effects idempotent. State total retry assumptions instead of claiming a finite
+  completion bound under unlimited contention.
+
+Prove logical work with the existing [three-scale native counters](../services/kernel/performance-contract.md#growth-checks)
+and Cost entries, using the audit and follow-up above as the existing review queue. Grow unrelated population and
+history independently, and exercise skew/hot homes, deep cursors, denied and empty results. Compare native access
+plans across scales, including candidate removal and nested authorization/index probes; measure request/response,
+stored and expanded bytes and peak heap where meaningful. Small fixtures test the derivation, not billion-row
+capacity. Keep native evidence distinct from portable/source evidence; no new checklist or whole-site gate follows.
+
+Derive physical capacity separately for both population scenarios under named workload and storage assumptions:
+object/relationship/history mix, size distributions, retention, request mix, concurrency, arrival rates and skew.
+Estimate primary bytes as the sum of each population times its measured per-record bytes, then itemize index and
+search amplification, WAL rate/retention, replicas, temporary space and free-space headroom. State active partition
+placement, working-set memory and I/O, hot-key lock contention and serialized service rates; sharding does not split
+a required write order. Compare measured service rates with foreground arrivals and background maintenance demand.
+For a backlog `B`, arrival rate `lambda` and sustainable drain rate `mu` in the same work units, catch-up takes
+`B / (mu - lambda)` only when `mu > lambda`; otherwise it cannot drain under those assumptions. Include index,
+event and retry amplification in those rates. Report estimates and their assumptions separately from measured
+deployment results: neither a small fixture, a shard count nor a Big-O derivation proves deployed capacity.
+
+### Release selection and retention
+
+A release selects an exact immutable version under its owner's current publication authority. A point publish
+changes only the selected item and affected index paths. A large selection is prepared and sealed in bounded
+steps, then made current by one atomic compare-and-set under current source authority. Until activation the
+previous selection remains current. Reuse this lifecycle across content; an ordinary article can publish in one
+step, and a Book adds ordered membership and source rules through its
+[Content contract](../services/kernel/src/content/hosted-chapters.md#book-publication-contract).
+
+Publication selects a version. [Access](../services/kernel/src/access/README.md) and the target owner decide
+what the reader may see now. [Commerce](../services/kernel/src/commerce/README.md) owns offers, payment and
+eligibility for the exact paid benefit; neither an active release nor a receipt alone authorizes use. Public
+metadata and protected bodies may have different visibility. An authorization proof used at activation must
+remain current through that commit under the authoritative owners; a prior successful check or later read
+withholding does not close the activation race.
+
+The storage owner may reclaim an unpublished candidate only after proving terminal state and the absence of
+retained references, then fencing new writes and references before bounded, resumable keyset deletion. An expired
+deadline starts eligibility review. Withdrawal alone cannot establish absence of references. Preserve reachable
+versions and shared storage, including exact releases, current pointers, active work and retention holds; if
+retention cannot be determined, keep the data. Historical deletion and legal retention still follow the
+[deletion policy](deletion.md). Reuse the lifecycle contract across owners; share an implementation only where
+transaction, authority and retention invariants match.
+
+## Modules and boundaries
+
+Decision: a dev candidate that adds boundary violations lands; the architecture check does not hold it. The train
+records each Goal's net-new violations, and the same day an urgent repair brief per Goal, owned by its manager, removes
+them as one batch. Development continues while the boundary baseline cannot drift.
+
+Decision: Hosted Reading uses Semantic's type-only DefinitionRoutes contract and Platform's route-metadata entry;
+Kernel Platform resolves Zone labels through the Zones public entry; Hosted Subject schema factories memoize the
+shared UUID schema and the subject limit re-exports the literal leaf.
+
+Capabilities are modules with one owner and a declared public surface. Their structure is checked by tools, not by
+convention. The evidence is in [engineering modularity (Opus 5.5)](research/engineering-modularity-opus-5-5.md) and
+[(GPT-6 Astra)](research/engineering-modularity-gpt-6-astra.md).
+
+**The module manifest.** Every production file belongs to one module of one kind, recorded in a machine-readable
+manifest. The manifest gives each module's paths, owner Goal, public entries, allowed dependencies and the
+capabilities it registers. The kinds are:
+
+- **contract:** vocabulary, schemas and values;
+- **core:** pure rules;
+- **application:** use cases over ports;
+- **adapter:** Elysia, Postgres, DBOS or Web runtime code;
+- **composition root:** the code that wires a process together;
+- **UI or transport library.**
+
+**The rules.**
+
+1. Each capability has exactly one registered mechanism and one owner. A second registry or ledger for the same
+   concept is refused.
+2. Cross-module imports go through declared public entries only, including type-only and generated imports.
+3. The module graph is acyclic, and dependencies point from adapters and applications toward cores and contracts. No
+   new value-import cycle is admitted anywhere. Shared numeric limits used across runtime dependency cycles live in
+   a leaf module with no runtime imports; implementation modules import or re-export those values.
+4. Cores and contracts are pure: no Elysia, `pg`, SQL, DBOS, React, runtime modules, environment, network, filesystem,
+   clock or randomness. Time, IDs and facts arrive as values.
+5. Adapters own effects, applications own use cases, and only composition roots choose implementations.
+6. Each operation's wire and security metadata comes from one declarative operation descriptor, checked statically.
+7. Shared code becomes a package under `packages/<capability>` only with a complete contract, conformance tests and
+   two production consumers, or a recorded standalone requirement. A package never imports a service or an app.
+8. Existing violations are listed in a ratchet baseline with an owner and a reason. The baseline may only shrink.
+9. Importing a Kernel source file never evaluates values from another repository module, including workspace
+   packages. Module initializers defer imported reads and calls behind functions or memoized getters; callers obtain
+   the value at use. Shared literal data may be imported from a literal-only leaf with no runtime imports. Function
+   bodies and instance fields are deferred; class inheritance, static fields, local initializer calls and registry
+   construction are eager. Third-party packages are outside this repository graph. Process entry points run only
+   when explicitly launched. Composition roots collect declared registrations before starting their resources.
+
+Decision: Access consumers import request checks and app-local read/gate bindings from their defining leaves.
+Authentication errors belong to the Access contract; factory, deadline, delegation-read and credential-floor bindings
+have defining leaves. Search account-context reads use the publication binding without importing its constructor.
+Compatibility barrels preserve export identity. This import-only migration keeps behavior assertions unchanged and
+uses workspace typing as worker acceptance.
+
+Decision: Auth retention's contract, core and application modules form an inward-only graph.
+The application owns preparation/checkpoint and maintenance admission over ports; the Auth adapter
+binds SQL, supported SDK scan and the existing native retirement capability. The cursor store has
+no orchestration import. Dispatch pricing is pure Auth-owned vocabulary; SDK retirement APIs,
+permanent fences and independent signing/request stores keep their existing owners.
+
+Decision: Kernel computed values use memoized getters that retain value identity; literal-only leaves remain eager.
+The syntax-tree architecture check enforces this at file boundaries, including within an architecture module.
+Access account-fence SQL is the `agent-verification-identity-literals.ts` public entry; Community UUID and
+log-position strings are `community/contract/literals.ts`; Rating identity page size is
+`identity-work-frame-limits.ts`. Callers import those leaves. They do not evaluate identity work, the contract
+barrel or the native work-frame at load. Repair vectors keep local arithmetic from the page-size leaf.
+
+Decision: Semantic subject facts, item projection and canonical identity run through registered contract, core,
+application and adapter modules. Inward code uses Semantic-owned ports for Library custody, Search currentness,
+Rating review, Content lifecycle, hashing and routing; composition binds the native adapters. Subject, summaries
+and bulk HTTP resolve Content lifecycle through `adapters/ports.ts` and the composed registry; they do not
+value-import `adapters/content-lifecycle.ts`, so native cover-reference stays out of that inward value graph.
+A fake-port application loads without those implementations. Native authority and opaque proofs keep their owners.
+Compact landing tests pin a fake-port domain and ordinary native composition; rating-review numeric bounds live in
+the literal-only identity-core leaf `rating-review-bounds.ts`. After wiring, kernel-semantic baseline rule 2/3 is
+361/383 (from 521/384); Kernel files in value cycles 398; largest value SCC 381.
+Identity receiving publishes Library listing counts and Semantic read, subject source, receiving effects and the
+production declaration as public entries; Search and composition import those ports. Accounts resume/wait stay on
+`identity-epoch-coordinator.ts` so the Semantic barrel does not close a coordinator value cycle. Search and Library
+import Source maintenance from `identity-source-consumer-maintenance.ts`; identity-adapters does not re-export those
+values, because that edge closed a maintenance cycle.
+Access public account identity and native Access ports import Semantic mapping from `semantic/agents.ts`. Original
+recovery, read snapshots, Source custody and maintenance stay on those public entries; Semantic `access-capabilities.ts`
+re-exports only mapping, so Access reads do not close a value-import cycle through recovery or Source maintenance.
+Public identity subject overlay uses optional `IdentitySemanticPort.readPublicSubject`; native Access implements it from
+`semantic/public-subject-facts.ts`. A missing binding keeps that overlay null rather than granting a subject or inventing
+a history declaration. `public-identity.ts` does not value-import Semantic `subject.ts` or `link-keys.ts`. Grant denial
+and unavailability errors are the Access public entries `resource-access-errors.ts` and `unavailable.ts`.
+Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Source custody imports Library
+`collection-native-work.ts`; composition binds Kind raw input so Access `access-capabilities.ts` is not a Kind/Source hub.
+
+Decision: Community readers, record projection and governance observations are leaves separate from container writes.
+Shared input errors, continuity vocabulary, discovery descriptions and platform-work identity live in Community's
+contract. Cross-domain behavior uses Community-owned typed bindings in `community/domain-ports.ts`; process
+composition, contract construction and the native test preload install the original owner values before use, preserving overloads,
+constructor identity and native evidence. Type queries do not load providers. Exact provider leaves are public entries
+for those type references and composition; Community never value-imports their implementation barrels.
+
+Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
+
+Decision: Web routes compose concrete domain-owned page, navigation and reader adapters through their declared
+leaf entries. Register the defining leaf in `modules.json`; do not collect unrelated route APIs in a barrel or widen
+allowed dependencies. Existing Session observation/cache compatibility leaves remain Web adapter entries over the
+browser reader owner. Candidate context comes directly from the page visit port. Reaction command recovery vocabulary
+lives in the Threads contract; its session observer is a separate adapter shared by Home and Threads, so Home does not
+load the reaction widget to observe a session. Album identity syntax and summary property vocabulary live in domain
+contract leaves; release byte measurement is an independent leaf, keeping route intake out of editor/read models.
+
+Decision: Web Semantic, Search and Library readers import shared candidate advice from the subject contract leaf and
+page identity from the visit-host port. Page selectors and type inheritance are independent of page rendering and
+graph loading. Reusable read adapters expose their defining leaves explicitly; browser lifetime consumers use the
+public session adapter. These entries add no dependency allowances. This import-only migration uses workspace typing
+as acceptance; product behavior and existing assertions remain unchanged.
+
+Decision: Boundary repairs reuse existing public entries and extract shared CandidateValue and change explanation leaves;
+Semantic Source receives its identity store through the existing composition port. Native Character bindings keep concrete
+page adapters at composition, while transaction, actor, deadline, work and dependency allowances stay unchanged.
+
+Decision: Collection comparison owns its labels-only definition projection and keeps its structurally compatible type
+local, rather than importing Search's private fact metadata helper; no runtime behavior changes.
+
+Decision: configured Presentation pages and scoped Search consume Library runtime, Source and public-output contracts
+through declared entries; composition binds the existing producers, while Platform session and Kernel HTTP hosts are
+public entries. Existing authorization and nested page/source budgets stay unchanged.
+
+**Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
+landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
+before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
+an alias edge or an allowance. Every worker prompt carries the compact module-map rows for the modules that own the
+brief's paths, plus those modules' allowed dependencies, and a one-line pointer to `docs/architecture/modules.json` for
+the rest. The shared formatter groups public entries by directory and enforces the 6,800-character bound on full and
+path-selected maps; an overflowing selected map keeps the owned module's public entries and allowed dependencies.
+
+The production Kernel has one `createKernel` composition for module, route, event and resource registrations. Queue
+registration completes before DBOS launch, and the composition injects one clock. Exposure, initializer and event
+commit checks use their owner manifests; governance stays closed, including `read_reports`.
+
+Library's contract, core and application modules are registered separately from the Source adapter. Contract
+entries own work dimensions, Source, membership, ordering, capability ports and application results. Core owns
+pure grant, page, ledger, identity-matching, publication-admission and catalogue/owner filter-leaf arithmetic.
+Applications run against Library-owned ports; `composition/library.ts` binds native SQL catalogs and Access/Search/Semantic/Content
+adapters during ordinary `createKernelRuntimeDefaults`, server and worker construction. Search filter-leaf
+classification is a composition port, so the Search preparation adapter does not value-import Search.
+
+Collection mutation contracts own metadata/history and cleanup ports. Pure core plans use measured SQL sizes;
+the application orders create, metadata/rule, publication-phase and retention effects. Native adapters preserve the
+original command transaction and existing SQL. Composition binds Access rule admission, publication begin and Source
+retirement, so episode readers and history storage do not import those native command implementations. Mechanical
+work/deadline helpers are a leaf shared with command support. Library imports error identities, response schemas,
+structured idempotency headers and evaluator-backed Access checks from their defining platform leaves; HTTP and
+request orchestration retain compatibility re-exports. Header names come directly from the operation contract.
+Export and archive merge commands use the existing Library command-authorization capability, with the native
+fallback retained for standalone consumers. This dependency-only migration preserves behaviour. The Library adapter
+declares its inward application dependency, and Access exposes its existing command-admission/error leaves for process composition.
+
+Content's `community-projection/index.ts` is a registered pure core with no dependencies. Board and Realm adapters
+supply selected native activity values and actor identity through that public entry, including its contract types;
+`realm-board-home.ts` is the registered effectful Realm Board entry. DB reads, source selection/confirmation,
+Access and schema mounting stay in adapters. The native conversation activity producer remains the one authority.
+
+**Access.** The access model is a small pure policy core in `packages/access`. It compiles the permission catalogue
+and plans the facts a decision needs. It decides with a per-operand explanation, and it partially evaluates list
+requests into a closed filter that compiles to SQL over a bounded neighbourhood. Conformance vectors specify it
+across languages. The Kernel keeps fact acquisition, temporal storage, revocation fences and command admission as
+adapters. The catalogue is independent of HTTP routing. Cedar is the formal reference, not the engine; if the core
+ever needs general recursion, host functions or a solver, adoption is reopened. Evidence:
+[access model (Opus 5.5)](research/access-model-opus-5-5.md) and [(GPT-6 Astra)](research/access-model-gpt-6-astra.md).
+
+The public `packages/access` permission-core APIs remain zero-runtime-dependency contracts. Their admission result
+does not establish native, browser or finite-execution acceptance.
+
+The Collection directory binds its qualified owner full-view result or the existing public floor; per-Collection
+management grants do not widen another account's directory. The account's public face keeps public-floor semantics
+even when its owner is viewing it. Library owns the list-filter capability; Access adapters implement the residual
+and publish the collection-update authorization preparation bound. Shared Collection policy literals live in the
+Access and Library contract leaves so adapters do not evaluate membership-inverse or barrel re-exports at import.
 
 ## Data access
 
-Writes are single-partition commands. A read may not join rows across partitions.
+Pure bounds arithmetic and operation descriptors belong in contracts or cores, outside service handlers and
+transport adapters. Native adapters bind through service composition roots.
+
+Writes are single-partition commands. A read may not join rows across partitions; related reads start from an
+authorized native anchor and use route-first indexed keys.
 
 A batched key read is not a join and is admitted for reads. It uses one statement per row kind, selecting by full
 keys with `(route, id) = ANY(keys)`, with no join between partitions. All of a read's batched statements run in one

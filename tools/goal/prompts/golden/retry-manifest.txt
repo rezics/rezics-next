@@ -9,7 +9,7 @@ Other modules: docs/architecture/modules.json
 
 The retry manifest records a failure from an earlier attempt. Hosts and tools may have been fixed since then. Rerun the failing command once before reporting any blocker about that failure; report a `tool` blocker only if it fails again.
 
-Build the whole outcome in this attempt and continue until it is built and its checks pass: a session that ends with work it could still do costs a new attempt. Write a continuation only for a part that needs another Goal's undelivered work: commit a coherent, type-checking part and write that part as a continuation brief at `.temp/continuation/<short-name>.md` (goal web, manager web). Such a remainder is not a blocker: return success and name the continuation.
+Build the whole outcome in this attempt and continue until it is built and its checks pass: a session that ends with work it could still do costs a new attempt. Continue only for real source; separate scope names actual paths and only real dependencies. For no source, proof or an owner referral, use `handoff: review` and a blank line. Commit a coherent, type-checking part and write the continuation or review note at `.temp/continuation/<short-name>.md` (goal web, manager web); return success and name the file.
 
 The task contract follows:
 
@@ -21,7 +21,7 @@ Check premises against your base first.
 
 Write missing acceptance tests the contract names or implies. Update and list tests if a contract change alters asserted behaviour; keep unchanged assertions. Use the fewest tests that pin user-visible behaviour and edge cases (fewer test lines than product lines); add stories only for named states.
 
-Record this choice in one summary line and the owner doc, send `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.
+Fixture-only choices get one summary line and a manager inbox handoff through `bun tools/goal/src/cli.ts inbox send web info "<decision>"`; continue the declared source without an owner-doc edit. For adopted contract changes, record one summary line and edit the owner doc if its path is in your brief; otherwise send the owner the exact proposed change through that inbox and continue independent source.
 
 On dev, for a completed and committed product after the wrapper's own rerun, source success is allowed only when every remaining check failure is explicitly shared transport or infrastructure. Name each failed check and its exact error, and each skipped or unreached check as unverified; never label any of them passed. Do not retry source solely for infrastructure. Type, test and product failures remain non-success; the dev verifier completes deferred checks after merge.
 

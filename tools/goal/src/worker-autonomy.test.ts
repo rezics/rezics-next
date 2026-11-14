@@ -36,9 +36,9 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   expect(prompt).toContain('Check premises against your base first.');
   expect(prompt).toContain('Write missing acceptance tests the contract names or implies');
   expect(prompt).toContain(
-    'Record this choice in one summary line and the owner doc, send `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.',
+    'Fixture-only choices get one summary line and a manager inbox handoff through `bun tools/goal/src/cli.ts inbox send web info "<decision>"`; continue the declared source without an owner-doc edit.',
   );
-  expect(prompt).toContain('Such a remainder is not a blocker');
+  expect(prompt).toContain('return success and name the file.');
   expect(prompt).not.toContain('receipt');
   expect(prompt).not.toContain('when the work needs a product decision the contract does not make');
   expect(prompt).toContain('Large surveys are `spec-conflict` blockers starting "Research needed:"');
@@ -46,6 +46,13 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   expect(prompt).toContain('goal web, manager web');
   expect(prompt).toContain('The task contract follows:');
   expect(prompt).not.toContain('goal status');
+  const sourceOnlyState = temporaryDirectory();
+  writeFileSync(join(sourceOnlyState.path, 'verification-mode'), 'source-only\n');
+  const sourceTask = promptTask('web');
+  const sourceOnly = workerPrompt(sourceTask, undefined, undefined, [], '/repo/main', undefined, sourceOnlyState.path);
+  const boundary =
+    'Continue only for real source; separate scope names actual paths and only real dependencies. For no source, proof or an owner referral, use `handoff: review` and a blank line.';
+  for (const rendered of [prompt, sourceOnly]) expect(rendered).toContain(boundary);
   // A control-plane release keeps manager preflight and no continuation, but shares the conduct rules.
   const release = promptTask('control-plane');
   const controlPlane = workerPrompt(

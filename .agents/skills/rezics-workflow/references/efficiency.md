@@ -2,7 +2,8 @@
 
 Read [efficiency rules](../../../../docs/development/efficiency.md) and
 [measurement mechanics](../../../../tools/goal/README.md#measurements-and-historical-imports).
-Managers use this stage at checkpoints and the cadence defined by those rules; workers provide evidence without
+The resident manager uses this stage at checkpoints and the defined cadence; units provide native session, source
+and acceptance evidence without
 starting a second monitoring loop.
 
 ```sh
@@ -14,10 +15,12 @@ Run controller commands only against authorized controller state. Exported attem
 private account readings or configuration into tracked documents.
 
 - [ ] Compare allowance per accepted landing and accepted outcomes per time, by Goal, task class and model profile.
-- [ ] Include lost attempts and resumed usage deltas once. Separate measured durations from estimates.
+- [ ] Include lost attempts and native unit/subagent usage deltas once. Exclude child totals already included in a
+      parent aggregate; never invent managed starts. Separate measured durations from estimates and mark unknowns.
 - [ ] Inspect the hourly ledger and preceding twelve-hour window at the required cadence. Find the largest avoidable
       cost: unready contracts, replacement input, rereads, polling, checks, conflicts or idle capacity.
-- [ ] Before a third attempt, classify losses and repair their cause. Preserve independent ready work while doing so.
+- [ ] When a task needs a third attempt, classify its losses and repair their cause. Product work on dev keeps
+      retrying meanwhile; other work waits for the repair. Preserve independent ready work while doing so.
 - [ ] Apply the [incident method](../../../../docs/development/efficiency.md#incident-method) to every evidenced cause;
       record before/after evidence on comparable accepted work and inspect post-landing defects.
       A retry cap or a cheaper token price alone does not demonstrate savings.
@@ -31,10 +34,10 @@ their existing owner document/tool, then update briefs to link them; do not accu
 ## Incident analysis
 
 Use the [owning incident rule](../../../../docs/development/efficiency.md#incident-method) for the evidence, class
-repair, manager notification and next-hour verification requirements. Build a cause-to-fix record from the named
+repair, resident notification and next-hour verification requirements. Build a cause-to-fix record from the named
 artifacts; attach their paths and measured times to the operating report, keeping private state outside Git.
 
-### Worked example: 2026-10-28 Storybook delay
+### Example: Storybook delay
 
 The delay illustrates five cause groups. The check group includes both check sizing and delayed observation; keep
 those classes distinct when choosing repairs. This qualitative example does not supply measured durations or proof
@@ -49,5 +52,5 @@ that a repair has taken effect.
 | A control-plane fix had not reached the branch where it runs.                 | Branch or propagation gap                 | Split and land control-plane work under [landing discipline](../../../../docs/development/delivery.md#checkout-and-landing-discipline).           | The running control plane contains the checked main revision.                               |
 
 In an incident report, link the evidence for every row, the class repair and its owning rule. Record notification to
-every manager and compare the next hourly report with the incident window under the owning rule; an intended repair
+the resident and affected units, and compare the next hourly report with the incident window under the owning rule; an intended repair
 is still pending until that comparison supports its effect.

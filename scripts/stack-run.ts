@@ -12,7 +12,16 @@
  * A host runs the same command in a copy of the workspace, with the caller's environment left behind. Stderr says
  * where the run went, and when it is waiting.
  */
-import { accessSync, constants, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   Aborted,
@@ -21,6 +30,7 @@ import {
   observeExecutionCancellation,
   ownedLocalCommand,
   type ExecutionCancellation,
+  type RemoteCheckPhaseEvent,
   readHosts,
   remoteCheck,
   RemoteTransportError,
@@ -29,7 +39,7 @@ import {
   validateEstimateMs,
 } from './remote-check.ts';
 import { hasOutputTreeReturn, outputTreeProfile, withKernelClientOutput } from './check-output-tree.ts';
-import { withStackSlot } from './stack-lease.ts';
+import { busy, withStackSlot } from './stack-lease.ts';
 import {
   captureArtifactReturns,
   clearDeclaredArtifacts,
@@ -44,6 +54,8 @@ import {
   recognizeCheckHostRun,
   type CheckHostRecognitionDisposition,
 } from './check-placement.ts';
+import { nativeUnitContext, NATIVE_UNIT_CONTEXT_VARIABLE } from '../tools/goal/src/native-unit-context.ts';
+import { observeNativeUnitContext } from '../tools/goal/src/native-units.ts';
 
 export type StackRun = {
   label: string;
@@ -58,6 +70,10 @@ export type StackRun = {
   estimateMs?: number;
   /** Called after the host slot is acquired and the remote command is about to start. */
   started?: (host: string) => void;
+  /** Physical custodian settlement, separate from compiler stdout and wrapper status. */
+  settled?: RemoteCheck['settled'];
+  /** Optional caller-bound phase events from the remote command-start marker and terminal receipt. */
+  phaseEvent?: (event: RemoteCheckPhaseEvent) => void;
   /** The run writes files the caller keeps; remote placement requires declared return paths. */
   keepsFiles?: boolean;
   /**
@@ -88,7 +104,12 @@ const SHARED_HOSTS = join('.temp', 'goal', 'remote-check-hosts.json');
 
 /** A worker carries a task id. An unset or empty id is a person, who may still opt out of a remote run. */
 export function isWorker(env: Environment): boolean {
-  return Boolean(env.GOAL_TASK_ID);
+  return Boolean(env.GOAL_TASK_ID || nativeCheckContext(env));
+}
+
+/** The approved check transport retains the original unit context; local starts re-observe registration. */
+export function nativeCheckContext(env: Environment) {
+  return isCheckHostRun(process.cwd()) ? nativeUnitContext(env) : observeNativeUnitContext(env);
 }
 
 /** The working directory is inside a check host's run directory. Environment variables do not count. */
@@ -137,11 +158,57 @@ export const LOCAL_CONTAINER_REFUSAL =
   'Hand the run to `bun run --cwd services/kernel check <files>`, ' +
   '`bun run --cwd services/auth check <files>`, or root `bun test`.';
 
+/** Whether this worker's brief lists a native or browser acceptance check, so it may run one walk stack. */
+export function walkStackRequired(env: Environment): boolean {
+  if (!isWorker(env)) return false;
+  const requires = nativeCheckContext(env)?.requires ?? (env.GOAL_ACCEPTANCE_REQUIRES ?? '').split(',');
+  return requires.some((item) => item === 'native' || item === 'browser');
+}
+
+/** Host-wide walk admission, including concurrent remote-check checkouts. `TMPDIR` does not override it. */
+export const WALK_STACK_DIRECTORY = '/tmp/rezics-walk-stacks';
+
+/** Create or repair the shared host namespace before a walk starts its FIFO lease. */
+export function ensureWalkStackDirectory(directory = WALK_STACK_DIRECTORY): void {
+  mkdirSync(dirname(directory), { recursive: true });
+  const previousUmask = process.umask(0);
+  try {
+    try {
+      mkdirSync(directory, { mode: 0o1777 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+  } finally {
+    process.umask(previousUmask);
+  }
+  const metadata = lstatSync(directory);
+  if (!metadata.isDirectory()) throw new Error(`walk-stack directory must be a real directory: ${directory}`);
+  if ((metadata.mode & 0o7777) !== 0o1777) chmodSync(directory, 0o1777);
+}
+
+/** The host-wide admission directory: every worktree and check-host run on this host shares one queue. */
+export function walkStackDirectory(_root: string, env: Environment): string {
+  if (env.REZICS_WALK_STACK_DIR) return env.REZICS_WALK_STACK_DIR;
+  return WALK_STACK_DIRECTORY;
+}
+
 /**
- * The error a worker must see instead of starting a local stack container outside an approved remote-check run.
+ * A walk stack is admitted while the slot lock its launch took is held. The environment names the slot; the name
+ * alone proves nothing.
+ */
+function walkStackAdmitted(env: Environment, root: string): boolean {
+  const slot = env.REZICS_WALK_STACK_SLOT;
+  if (slot === undefined || !/^[1-9]\d*$/.test(slot) || !walkStackRequired(env)) return false;
+  return busy(join(walkStackDirectory(root, env), `slot-${slot}.lock`));
+}
+
+/**
+ * The error a worker must see instead of starting a local stack container outside an approved remote-check run or an
+ * admitted walk stack.
  */
 export async function workerLocalContainerError(env: Environment, cwd: string): Promise<string | null> {
   if (!isWorker(env) || onCheckHost(cwd)) return null;
+  if (walkStackAdmitted(env, cwd)) return null;
   return LOCAL_CONTAINER_REFUSAL;
 }
 
@@ -178,7 +245,9 @@ export async function runOnCheckHost(
     console.error(`stack-run: ${run.label} already on an approved remote-check run`);
     return null;
   }
-  const checkHostCandidate = isCheckHostRunCandidate(run.cwd);
+  // Nested-candidate refusal applies only to the real remote. Injected remotes still compose hosts
+  // and argv when the suite itself is running inside an admitted checkout.
+  const checkHostCandidate = runRemote === remoteCheck && isCheckHostRunCandidate(run.cwd);
   if (checkHostCandidate)
     console.error(`stack-run: ${run.label} physical run recognition refused (${recognition.reason})`);
   const cancellation = run.cancellation ?? executionCancellationFromEnvironment(env);
@@ -251,7 +320,13 @@ export async function runOnCheckHost(
           hostsFile: reason.hostsFile,
           workspace: run.root,
           cwd: relative(resolve(run.root), resolve(run.cwd)) || '.',
-          command: profile ? ['env', `GROWTH_PROFILE=${profile}`, ...run.command] : run.command,
+          command: [
+            ...(env[NATIVE_UNIT_CONTEXT_VARIABLE]
+              ? ['env', `${NATIVE_UNIT_CONTEXT_VARIABLE}=${JSON.stringify(nativeCheckContext(env))}`]
+              : []),
+            ...(profile ? ['env', `GROWTH_PROFILE=${profile}`] : []),
+            ...run.command,
+          ],
           ...(run.slots === undefined ? {} : { slots: run.slots }),
           ...(run.estimateMs === undefined ? {} : { estimateMs: run.estimateMs }),
           ...(priority === undefined ? {} : { priority }),
@@ -259,6 +334,8 @@ export async function runOnCheckHost(
           ...(run.returns === undefined && profile === undefined && env.GROWTH_PROFILE === undefined
             ? {}
             : { returns: [...(run.returns ?? []), ...(profile === undefined ? [] : [profile])] }),
+          ...(run.settled === undefined ? {} : { settled: run.settled }),
+          ...(run.phaseEvent === undefined ? {} : { phaseEvent: run.phaseEvent }),
           started: (host) => {
             run.started?.(host);
             console.error(`stack-run: ${run.label}${priority ? ` priority ${priority}` : ''} on ${host}`);

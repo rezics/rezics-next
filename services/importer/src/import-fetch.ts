@@ -1,3 +1,5 @@
+import { types } from 'node:util';
+
 export const MAX_IMPORT_BODY_BYTES = 2097152;
 export const MAX_IMPORT_RESPONSE_BYTES = 1048576;
 export const MAX_IMPORT_WAIT_MS = 30000;
@@ -13,6 +15,130 @@ export type ImportRetryState = Readonly<{
 }>;
 const retryStates = new WeakMap<Response, ImportRetryState>();
 export const importRetryState = (response: Response): ImportRetryState | undefined => retryStates.get(response);
+const requestStartObservers = new WeakMap<AbortSignal, (startedAt: number) => void>();
+
+export function observeImportRequestStart(signal: AbortSignal, observer: (startedAt: number) => void): () => void {
+  requestStartObservers.set(signal, observer);
+  return () => {
+    if (requestStartObservers.get(signal) === observer) requestStartObservers.delete(signal);
+  };
+}
+
+export function forwardImportRequestStart(
+  source: AbortSignal | undefined,
+  target: AbortSignal | undefined,
+): () => void {
+  if (!source || !target) return () => {};
+  const observer = requestStartObservers.get(source);
+  if (!observer) return () => {};
+  requestStartObservers.set(target, observer);
+  return () => {
+    if (requestStartObservers.get(target) === observer) requestStartObservers.delete(target);
+  };
+}
+
+export function notifyImportRequestStart(signal: AbortSignal | undefined, startedAt: number): void {
+  if (signal) requestStartObservers.get(signal)?.(startedAt);
+}
+
+export type ImportFailurePhase = 'network' | 'token' | 'deadline' | 'http' | 'response' | 'integrity';
+export type ImportOperation = 'dump-download' | 'dump-index';
+export type ImportRequestDiagnostics = Readonly<{
+  method: string;
+  origin: string;
+  path: string;
+  phase: ImportFailurePhase;
+  operation?: ImportOperation;
+  status?: number;
+  code?: string;
+  networkCode?: string;
+  correlationId?: string;
+}>;
+
+const responseDiagnostics = new WeakMap<Response, Omit<ImportRequestDiagnostics, 'phase'>>();
+const requestFailures = new WeakMap<object, ImportRequestDiagnostics>();
+export const importResponseDiagnostics = (response: Response): Omit<ImportRequestDiagnostics, 'phase'> | undefined =>
+  responseDiagnostics.get(response);
+export const importRequestFailure = (error: unknown): ImportRequestDiagnostics | undefined =>
+  (typeof error === 'object' && error !== null) || typeof error === 'function'
+    ? requestFailures.get(error as object)
+    : undefined;
+
+export function importNetworkCode(error: unknown): string | undefined {
+  let value: unknown = error;
+  for (let depth = 0; depth < 3; depth++) {
+    if (typeof value !== 'object' || value === null || types.isProxy(value)) return undefined;
+    const code = Object.getOwnPropertyDescriptor(value, 'code')?.value;
+    if (
+      typeof code === 'string' &&
+      code.length <= 72 &&
+      /^(?:E[A-Z0-9_]{1,64}|ERR_[A-Z0-9_]{1,64}|UND_ERR_[A-Z0-9_]{1,64})$/.test(code)
+    )
+      return code;
+    value = Object.getOwnPropertyDescriptor(value, 'cause')?.value;
+  }
+  return undefined;
+}
+
+export function importCorrelationId(response: Response): string | undefined {
+  for (const name of ['x-request-id', 'x-correlation-id', 'traceparent']) {
+    const value = response.headers.get(name);
+    if (value && value.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(value)) return value;
+  }
+  return undefined;
+}
+
+function requestDiagnostics(request: Request, phase: ImportFailurePhase, error: unknown): ImportRequestDiagnostics {
+  const url = new URL(request.url);
+  const networkCode = phase === 'network' ? importNetworkCode(error) : undefined;
+  return {
+    method: request.method,
+    origin: url.origin.slice(0, 256),
+    path: url.pathname.slice(0, 512),
+    phase,
+    ...(networkCode === undefined ? {} : { networkCode }),
+  };
+}
+
+function rememberRequestFailure(error: unknown, diagnostics: ImportRequestDiagnostics): void {
+  if ((typeof error === 'object' && error !== null) || typeof error === 'function')
+    requestFailures.set(error as object, diagnostics);
+}
+
+/** Construct an operator-safe error for a source operation while retaining its private cause. */
+export function importOperationError(input: {
+  operation: ImportOperation;
+  phase: ImportFailurePhase;
+  source: string;
+  message: string;
+  status?: number;
+  code?: string;
+  networkCode?: string;
+  cause?: unknown;
+}): Error {
+  let origin = '';
+  let path = '';
+  try {
+    const source = new URL(input.source);
+    origin = source.origin.slice(0, 256);
+    path = source.pathname.slice(0, 512);
+  } catch {
+    /* Invalid source locations remain unknown in operator diagnostics. */
+  }
+  const error = new Error(input.message, { cause: input.cause });
+  error.name = 'ImportOperationError';
+  rememberRequestFailure(error, {
+    operation: input.operation,
+    method: 'GET',
+    origin,
+    path,
+    phase: input.phase,
+    ...(input.status === undefined ? {} : { status: input.status }),
+    ...(input.code === undefined ? {} : { code: input.code }),
+    ...(input.networkCode === undefined ? {} : { networkCode: input.networkCode }),
+  });
+  return error;
+}
 
 export type ImportHttpOptions = {
   origin: string;
@@ -286,6 +412,135 @@ async function boundedResponse(response: Response, limit: number, signal: AbortS
   }
 }
 
+/** Public, read-only JSON transport sharing the importer's response and retry bounds. */
+export function createBoundedPublicGet(options: {
+  origin: string;
+  pathPrefix: string;
+  fetch?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+  schedule?: (callback: () => void, ms: number) => () => void;
+  maxAttempts?: number;
+  maxResponseBytes?: number;
+  maxWaitMs?: number;
+  maxTotalWaitMs?: number;
+  deadlineMs?: number;
+}): (url: string, signal?: AbortSignal) => Promise<Response> {
+  const origin = new URL(options.origin);
+  if (
+    origin.protocol !== 'https:' ||
+    origin.username ||
+    origin.password ||
+    origin.pathname !== '/' ||
+    origin.search ||
+    origin.hash ||
+    !options.pathPrefix.startsWith('/') ||
+    options.pathPrefix.includes('..')
+  )
+    throw new TypeError('Expected a bounded HTTPS read origin and path');
+  const maxAttempts = boundedSetting(options.maxAttempts, MAX_IMPORT_ATTEMPTS, MAX_IMPORT_ATTEMPTS, 1);
+  const maxResponseBytes = boundedSetting(
+    options.maxResponseBytes,
+    MAX_IMPORT_RESPONSE_BYTES,
+    MAX_IMPORT_RESPONSE_BYTES,
+  );
+  const maxWaitMs = boundedSetting(options.maxWaitMs, MAX_IMPORT_WAIT_MS, MAX_IMPORT_WAIT_MS);
+  const maxTotalWaitMs = boundedSetting(options.maxTotalWaitMs, MAX_IMPORT_TOTAL_WAIT_MS, MAX_IMPORT_TOTAL_WAIT_MS);
+  const deadlineMs = boundedSetting(options.deadlineMs, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_DEADLINE_MS, 1);
+  const upstream = options.fetch ?? globalThis.fetch;
+  const now = options.now ?? Date.now;
+  const schedule = options.schedule ?? nativeSchedule;
+  const sleep = (ms: number, signal: AbortSignal) =>
+    abortable(signal, () => (options.sleep ? options.sleep(ms) : timerSleep(ms, signal, schedule)));
+
+  return async (input, caller) => {
+    const url = new URL(input);
+    if (
+      url.origin !== origin.origin ||
+      !url.pathname.startsWith(options.pathPrefix) ||
+      url.username ||
+      url.password ||
+      url.hash
+    )
+      throw new TypeError('Public reads must target the configured origin and path');
+    caller?.throwIfAborted();
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const aborted = () => controller.abort(caller?.reason);
+    caller?.addEventListener('abort', aborted, { once: true });
+    const deadline = now() + deadlineMs;
+    let clearDeadline: (() => void) | undefined;
+    try {
+      clearDeadline = schedule(
+        () => controller.abort(new DOMException('Public read deadline exceeded', 'TimeoutError')),
+        deadlineMs,
+      );
+      let scheduledWait = 0;
+      for (let attempt = 1; ; attempt++) {
+        signal.throwIfAborted();
+        let response: Response;
+        try {
+          response = await abortable(signal, () =>
+            upstream(url.href, {
+              method: 'GET',
+              headers: { accept: 'application/json' },
+              credentials: 'omit',
+              referrerPolicy: 'no-referrer',
+              redirect: 'error',
+              signal,
+            }),
+          );
+        } catch (error) {
+          signal.throwIfAborted();
+          const delay = backoff(attempt);
+          if (attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait) throw error;
+          scheduledWait += delay;
+          await sleep(delay, signal);
+          continue;
+        }
+        const receivedAt = now();
+        const adaptable = response.status === 429 || response.status === 503;
+        const hint = adaptable ? retryAfter(response, receivedAt) : undefined;
+        let buffered = false;
+        let overload = response.status === 429;
+        if (response.status === 503 && hint !== undefined) {
+          response = await boundedResponse(response, maxResponseBytes, signal);
+          buffered = true;
+          const problem: unknown = await abortable(signal, () =>
+            response
+              .clone()
+              .json()
+              .catch(() => null),
+          );
+          overload =
+            typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true;
+        }
+        const notBefore = overload ? hint : undefined;
+        const delay =
+          notBefore === null ? null : notBefore === undefined ? backoff(attempt) : Math.max(0, notBefore - now());
+        const stopped = (): boolean =>
+          delay === null ||
+          delay > maxWaitMs ||
+          delay > maxTotalWaitMs - scheduledWait ||
+          (notBefore !== undefined && now() + delay >= deadline);
+        if (
+          attempt === maxAttempts ||
+          !(response.status === 429 || (response.status >= 500 && response.status <= 599)) ||
+          stopped()
+        )
+          return buffered ? response : boundedResponse(response, maxResponseBytes, signal);
+        if (delay === null) return buffered ? response : boundedResponse(response, maxResponseBytes, signal);
+        scheduledWait += delay;
+        await abortable(signal, () => cancel(response.body));
+        await sleep(delay, signal);
+      }
+    } finally {
+      caller?.removeEventListener('abort', aborted);
+      clearDeadline?.();
+    }
+  };
+}
+
 /** Transport for createKernelClient; session state and write validation remain with the client/server. */
 export function createImportFetch(options: ImportHttpOptions): typeof fetch {
   const origin = new URL(options.origin);
@@ -324,13 +579,11 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
     const signal = controller.signal;
     const aborted = () => controller.abort(caller?.reason);
     caller?.addEventListener('abort', aborted, { once: true });
-    const deadline = now() + deadlineMs;
+    let deadline = 0;
+    let requestStarted = false;
     let clearDeadline: (() => void) | undefined;
+    let activeRequest: Request | undefined;
     try {
-      clearDeadline = schedule(
-        () => controller.abort(new DOMException('Import request deadline exceeded', 'TimeoutError')),
-        deadlineMs,
-      );
       signal.throwIfAborted();
       checkBodySize(init?.body, maxBodyBytes);
       // Copy metadata without cloning/teeing a supplied Request's stream: teeing can
@@ -352,6 +605,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
               redirect: 'manual',
             })
           : new Request(url.href, { ...init, signal, redirect: 'manual' });
+      activeRequest = request;
       const source = input instanceof Request && init?.body == null ? input.body : request.body;
       if (source !== null && (request.method === 'GET' || request.method === 'HEAD'))
         throw new TypeError('GET/HEAD import requests cannot have a body');
@@ -361,7 +615,16 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
       request.signal.throwIfAborted();
       const retryable = mayRetry(request, body);
       const headers = new Headers(request.headers);
-      headers.set('authorization', `Bearer ${await abortable(request.signal, options.token)}`);
+      const accessToken = async (fresh?: boolean): Promise<string> => {
+        try {
+          return await abortable(request.signal, () => options.token(fresh));
+        } catch (error) {
+          request.signal.throwIfAborted();
+          rememberRequestFailure(error, requestDiagnostics(request, 'token', error));
+          throw error;
+        }
+      };
+      headers.set('authorization', `Bearer ${await accessToken()}`);
       let scheduledWait = 0;
       let renewedAfterDenial = false;
       for (let attempt = 1; ; attempt++) {
@@ -370,6 +633,16 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         let response: Response;
         try {
           response = await abortable(request.signal, async () => {
+            if (!requestStarted) {
+              requestStarted = true;
+              const startedAt = now();
+              deadline = startedAt + deadlineMs;
+              clearDeadline = schedule(
+                () => controller.abort(new DOMException('Import request deadline exceeded', 'TimeoutError')),
+                Math.max(0, deadline - now()),
+              );
+              notifyImportRequestStart(caller ?? signal, startedAt);
+            }
             const result = await upstream(next);
             if (request.signal.aborted) {
               void cancel(result.body);
@@ -380,16 +653,18 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         } catch (error) {
           request.signal.throwIfAborted();
           const delay = backoff(attempt);
-          if (!retryable || attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait)
+          if (!retryable || attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait) {
+            rememberRequestFailure(error, requestDiagnostics(request, 'network', error));
             throw error;
+          }
           scheduledWait += delay;
           await sleep(delay, request.signal);
           continue;
         }
-        if (response.status === 401 && !renewedAfterDenial && options.token.length > 0) {
+        if (response.status === 401 && !renewedAfterDenial) {
           renewedAfterDenial = true;
           await abortable(request.signal, () => cancel(response.body));
-          headers.set('authorization', `Bearer ${await abortable(request.signal, () => options.token(true))}`);
+          headers.set('authorization', `Bearer ${await accessToken(true)}`);
           attempt--;
           continue;
         }
@@ -427,6 +702,13 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
                   : undefined;
         const finish = async (refused = false) => {
           const result = buffered ? response : await boundedResponse(response, maxResponseBytes, signal);
+          const correlationId = importCorrelationId(response);
+          responseDiagnostics.set(result, {
+            method: request.method,
+            origin: url.origin.slice(0, 256),
+            path: url.pathname.slice(0, 512),
+            ...(correlationId === undefined ? {} : { correlationId }),
+          });
           if (adaptable && (notBefore !== undefined || refused)) {
             const reason = stopped();
             retryStates.set(
@@ -453,6 +735,10 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         await abortable(request.signal, () => cancel(response.body));
         await sleep(delay, request.signal);
       }
+    } catch (error) {
+      if (activeRequest && signal.aborted && !caller?.aborted)
+        rememberRequestFailure(error, requestDiagnostics(activeRequest, 'deadline', error));
+      throw error;
     } finally {
       caller?.removeEventListener('abort', aborted);
       clearDeadline?.();

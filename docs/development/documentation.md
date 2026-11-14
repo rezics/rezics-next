@@ -1,0 +1,172 @@
+# Instructions and documentation
+
+This document owns how agent instructions are organized and how documents stay small and authoritative. Agents act on
+what they receive at session start, so every instruction has one authority and every layer has a size budget.
+Long, append-only documents dilute the current rules.
+
+## Instruction layers
+
+| Layer      | Holds                                                                                           | Single authority                                | Delivered                                                                    | Budget as received                                                |
+| ---------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Global     | Precedence, language, one authority, legacy, temporary files, IDs, where each role's text lives | `AGENTS.md`                                     | Loaded natively by Codex, Claude Code and Cursor                             | 3,000 bytes                                                       |
+| Role       | Worker, execution-unit and research procedure; resident responsibilities | Active `tools/goal/prompts/` templates; `supermanager.md` for the resident | Only the assigned role; no domain-manager bundle | worker 3,500; researcher 2,500; resident 8,000 |
+| Condition  | Text for one mode: retry, rebase, proof run, shared workspace, deferred checks                  | `tools/goal/prompts/conditions/<id>.md`         | Added by the control plane when the condition holds                          | 1,500 in total                                                    |
+| Goal       | Outcome, Done when, scope, ownership, links to adopted decisions                                | `docs/goals/<goal>.md`                          | Goal authoring and native unit consumption                                    | 12,000                                                            |
+| Goal state | Native Goal progress, open decisions and next actions; no rules                                | Native session and short local continuation     | Unit continuation and resident scheduling                                    | 8,000                                                             |
+| Task       | Outcome, paths, acceptance, decisions made for this task, owner sections                        | The brief                                       | Worker prompt                                                                | 12,288                                                            |
+| Reference  | Owner documents, module READMEs, runbooks, skill stages                                         | Tracked files                                   | Read on demand, by section                                                   | [Budgets](#budgets)                                               |
+| Local state | Runtime identities, panes, worktrees, allowances and credential pointers; no rules             | Private controller configuration and state      | Read only for the assigned operation                                         | No default context loading                                        |
+
+Session-start totals: worker or execution unit 20,000 bytes, researcher 15,000, resident manager 30,000. These numbers are
+starting values for removing contradictions, history and repetition. They are not a claim about current models'
+context limits. Prompt manifests calibrate them on the models REZICS runs: a budget changes when measured outcomes
+say so. Budgets bound what loads at session start. An agent may read further when its question needs it; nothing mandates a whole-file read
+of a reference.
+
+Active templates in `tools/goal/prompts/` supply worker, unit and research role text;
+[supermanager](supermanager.md) owns the resident role. Remove retired manager templates from active loading. Condition byte budgets count filled condition template
+bodies; check-condition footers are appended once and counted in the session total. Minimal verification omits the
+open-session wait footer, asks for a typecheck-only wrapper check after the outcome is written (plus money-path tests
+when those paths changed), and routes that check-host command through the wrapper; other check conditions keep the wait
+footer. Runtime command argv and wrapper-result lines are extras, not condition-template bytes.
+
+### Rules
+
+- **One authority per instruction.** Other layers link it; they never restate it. Numbers such as limits and caps live
+  in `tools/goal/defaults.json` and fill the templates and documentation tables.
+- **No silent overrides.** The control plane resolves conflicts before dispatch, so no rendered prompt holds two
+  contradictory instructions. Which checks run, where, and whether they are required or deferred is a typed check plan
+  in the task. A condition fragment cannot override the brief.
+- **No history in instructions.** Local working files are not an instruction layer. Durable decisions go to owner
+  documents, Done when goes to the Goal and live state stays with the native session or short continuation. Rewrite
+  changed rules and remove obsolete prompts, instructions and broken references in the same change; Git keeps history.
+  A unit loads its Goal and linked owner sections, not former domain-manager prompts, inboxes or backlog duties.
+- **Prose becomes a check.** When the input, the violation and the recovery can be stated without judgment, the rule
+  becomes a check at the boundary nearest the effect: dispatch, launch or landing. The prose is then deleted.
+  A hook gives early feedback, but it cannot be the only enforcement, because other engines bypass it.
+- **Visible rollout.** A long-lived process reports the configuration and prompt revision it runs. Writing a file
+  does not prove a change is live.
+
+### Measuring instruction changes
+
+Every attempt records a prompt manifest: each layer's source path, hash and rendered size, plus the model, effort
+and tier. Prompt sources are versioned in Git and tested on their rendered output. Each week, compare bundles on
+comparable work:
+
+- accepted attempts per attempt;
+- landed product lines per allowance;
+- questions whose answer was in the supplied context;
+- policy failures: stale authority, a conflicting check plan, a lost requirement, or false completion.
+
+Roll a template back when the accepted-attempt rate falls by more than 5 points, or landed lines per allowance fall by
+more than 10%.
+
+## Documents
+
+### Owner documents
+
+Owner documents are authoritative, tracked and budgeted:
+
+- `AGENTS.md`;
+- `docs/architecture.md` and `docs/scope.md`;
+- product owner documents `docs/<capability>.md`;
+- Goal definitions `docs/goals/<goal>.md`;
+- development workflow documents in this directory;
+- role prompts under `tools/goal/prompts/`;
+- the control-plane runbook `tools/goal/README.md`;
+- module READMEs, which hold current contracts and cost bounds;
+- the workflow skill, which holds procedures that link the rules.
+
+Research reports, `tools/goal/reports/`, `.temp/` and memory are not owners.
+
+Owner documents state current rules and contracts only. They hold no dated headings, history or superseded
+sections, no receipts of past attempts, no task IDs and no `.temp/` paths. A brief cites owner documents as authority.
+It may link research only as background.
+
+During closeout or incident review, keep a lesson only if it changes what someone should do in a future case.
+Write the rule, when it applies, and how to recognize success in the existing owner document. Replace obsolete
+guidance. The rule must make sense without the incident's date, participants or transcript; retain any useful
+evidence separately. Do not turn a pending task or a past result into policy.
+
+Source-mapping and value-fidelity contracts belong in the conversion module
+README. When a mapping also needs selected-record acquisition, native proposals,
+current vocabulary publication or independent native reads, the importer README
+owns that path and its separate cost. The capability document owns the acceptance
+story and evidence limits; other owners link these contracts instead of repeating
+them.
+
+### Research
+
+[Agent conduct](agent-conduct.md#research) says when research is commissioned.
+
+- **Records.** Each report is `docs/research/<topic>-<researcher>.md`. The report stays unchanged: a valuable report
+  is kept exactly as written, and nothing loads it by default. Its state lives in `docs/research/registry.json`:
+  path, topic, researcher, state (`open`, `adopted` or `rejected`) and the owner section that records the decision.
+- **Adoption.** The owner records the decision in the owner document and links the reports, in one change.
+- **Deletion.** A rejected or superseded report, or one with no lasting value, is deleted in the change that decides
+  it. Never delete by file-name suffix. For the existing `-current`, `-deep` and `-independent` families, the topic
+  owner compares the findings, keeps every report that holds independent evidence, and deletes the rest.
+- **Living specifications.** A report that briefs use as a specification is converted: its decisions move into the
+  owner document, and briefs link that document.
+- **Size.** A new report is at most 100,000 bytes. Bulk data goes in structured files beside it, not in prose tables.
+  Existing reports keep their size.
+
+### Task notes and state
+
+Continuations, working notes, screenshots and raw run results are local state. Keep `.temp/` untracked, including
+continuations. Preserve historical evidence separately; curate decisions into owner documents instead of moving
+the notes. Workers read the owning document or the necessary text in their brief, not main-checkout private state.
+
+Untracking local state changes the Git index only; preserve existing working files.
+
+### Budgets
+
+Budget rules use versioned path, kind and byte entries; the baseline maps those exact file paths or directory globs to observed bytes. Existing research decisions keep their state while newly indexed reports start open. Generated blocks use `<!-- generated: path -->` and `<!-- /generated -->` markers and must match the source bytes.
+
+Budgets are bytes. A file or directory already over its cap is recorded in the baseline. It may not grow, and
+shrinking it lowers the baseline. Raising a baseline requires a `Budget-Raise:` commit trailer giving the reason.
+
+| Path                                       |                           Per file | Per directory |
+| ------------------------------------------ | ---------------------------------: | ------------: |
+| `AGENTS.md`                                |                              3,000 |               |
+| `docs/development/*.md`                    |                             16,000 |       120,000 |
+| `docs/goals/<goal>.md`                     |                             12,000 |               |
+| `docs/goals/*.capabilities.*`              |                             40,000 |       300,000 |
+| `docs/*.md` product owners                 |                             40,000 |               |
+| Module `README.md` and its contract leaves |                             40,000 |               |
+| `tools/goal/README.md`                     |                             80,000 |               |
+| `tools/goal/prompts/**`                    |                 Role budgets above |        30,000 |
+| New `docs/research/*.md`                   |                            100,000 |               |
+| `.agents/skills/**`                        | `SKILL.md` 5,000; references 6,000 |        30,000 |
+| Tracked `.temp/**`                         |                                  0 |             0 |
+
+### The documentation check
+
+`bun scripts/docs-check.ts [--changed <base>]` is advisory. It reports, in about two seconds, on changes that touch
+`**/*.md`, `tools/goal/prompts/**` or `tools/goal/defaults.json`; it never blocks a landing, and workers do not trim
+or rewrite documents to satisfy it. The supermanager reads its report daily and briefs fixes worth making. It checks:
+
+- the caps and the baseline;
+- a valid research registry;
+- owner-document hygiene: no dated headings, task IDs or `.temp/` paths;
+- relative links that resolve, including links into a deleted file;
+- generated blocks that equal their render;
+- no tracked `.temp/` files.
+
+The same module checks briefs at dispatch:
+
+- at most 12,288 bytes;
+- no reads of `.temp/goal/` or of absolute main-checkout paths;
+- no research cited as authority.
+
+### Local operating state
+
+Runtime sessions, termspaces panes, unit worktrees, allowance readings and private account configuration stay in
+untracked controller state. A native unit identity is not a managed-task record. Do not place rules, lessons or
+product decisions in agent memory; record them in the existing repository owner. Keep only the local facts needed
+for the current operation, and do not load historical manager continuations by default.
+
+## Research behind this decision
+
+- [GPT-6 Astra report](../research/prompt-and-docs-architecture-gpt-6-astra.md)
+- [Claude Opus 5.5 report](../research/prompt-and-docs-architecture-opus-5-5.md)
