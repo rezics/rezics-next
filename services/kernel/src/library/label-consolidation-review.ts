@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount, deadlineClient, admitGroup } from './access-port.ts';
-import { GrantDeniedError } from '../access/contract/errors.ts';
+import { readAccount, admitGroup } from './access-port.ts';
+import { AccessUnavailableError, GrantDeniedError } from '../access/contract/errors.ts';
+import { throwAccessUnavailable } from '../access/unavailable.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -134,11 +135,11 @@ export function createLabelConsolidationReview(deps: {
     deadline: number,
     body: (client: Client, route: number) => Promise<T>,
   ) {
-    return withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline),
-        route = routeOf(actor.accountId)!;
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
+    return withBoundedReadOnlyTransaction(
+      deps.pool,
+      deadline,
+      async (client) => {
+        const route = routeOf(actor.accountId)!;
         const current = await readAccount(client, route, actor.accountId);
         if (
           !current ||
@@ -150,14 +151,17 @@ export function createLabelConsolidationReview(deps: {
           current.minimumAuthnEpoch > BigInt(actor.authnEpoch)
         )
           throw new GrantDeniedError();
-        const value = await body(client, route);
-        await client.query('COMMIT');
-        return value;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
-    });
+        return body(client, route);
+      },
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError: (error) => {
+          throwAccessUnavailable(error);
+          return error;
+        },
+        isUncertainSettledQueryError: () => true,
+      },
+    );
   }
   return async function review(
     actor: Actor,
