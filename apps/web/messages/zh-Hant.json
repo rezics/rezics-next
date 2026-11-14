@@ -11974,6 +11974,7 @@
   "book_reader_checkpoint_cleared": "已清除閱讀位置。",
   "book_reader_checkpoint_uncertain": "無法確認儲存或清除結果。請重試相同請求。",
   "book_reader_checkpoint_withheld": "目前無法閱讀已儲存的章節。閱讀位置仍會保留。",
+  "book_reader_checkpoint_unavailable": "暫時無法讀取閱讀位置，你仍可繼續閱讀。",
   "book_reader_checkpoint_retry_save": "重試這次儲存",
   "book_reader_checkpoint_retry_clear": "重試這次清除",
   "book_reader_checkpoint_retry_read": "重新讀取閱讀位置",

@@ -59,7 +59,7 @@ function recoveryTransport(
         return { state: 'uncertain' };
       }
       if (scenario === 'replaced-visit' && first) {
-        return new Promise((resolve) => pending(() => resolve(result)));
+        return new Promise<CheckpointWrite>((resolve) => pending(() => resolve(result)));
       }
       value = result.value;
       return result;

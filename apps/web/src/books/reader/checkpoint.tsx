@@ -62,6 +62,9 @@ export function HostedBookCheckpoint({
   const visit = useMemo(() => ({}), [subjectId, viewer, locale, page, isCurrent, position, transport]);
   const renderedVisit = useRef(visit);
   renderedVisit.current = visit;
+  const controlVisit = useRef({ visit, key: 0 });
+  if (controlVisit.current.visit !== visit)
+    controlVisit.current = { visit, key: controlVisit.current.key + 1 };
   const options = { locale };
 
   const read = async (owner: CheckpointLifetime, restore: boolean) => {
@@ -104,16 +107,15 @@ export function HostedBookCheckpoint({
   }, [visit]);
 
   const current = () => reading?.owner.current() === true;
-  // Remove private controls before replacement setup, including equal-value A/B/A visits.
-  // A public loading shell keeps the control inset available to the existing initial position restore.
+  // A replacement gets a fresh control instance, discarding old focus intentions. Within one visit,
+  // the loading and ready section stay mounted so the existing restore frame keeps its live inset.
   if (!reading || !current()) {
     if (!isCurrent()) return null;
-    return <section ref={controls} aria-label={m.book_reader_checkpoint_title({}, options)}
-      className={`${page.kind === 'chapter' ? 'sticky top-0 z-20' : ''} min-w-0 border-y bg-background/95 px-1 py-2`}>
-      <p role="status" className="max-w-prose px-2 py-1 text-sm text-muted-foreground">
-        {m.book_reader_loading({}, options)}
-      </p>
-    </section>;
+    return <HostedBookCheckpointControls
+      key={controlVisit.current.key} controlsRef={controls} locale={locale} chapter={page.kind === 'chapter'}
+      message={m.book_reader_loading({}, options)} saved={false} withheld={false} resume={null}
+      busy blocked isCurrent={() => false}
+    />;
   }
   const { owner, observation, outcome } = reading;
   const value = observation?.state === 'ready' ? observation.value : null;
@@ -200,7 +202,7 @@ export function HostedBookCheckpoint({
     : outcome?.state === 'uncertain' ? m.book_reader_checkpoint_uncertain({}, options)
     : needsRecovery ? m.book_reader_changed({}, options)
     : observation === null ? m.book_reader_loading({}, options)
-    : observation.state !== 'ready' ? m.book_reader_progress_unavailable({}, options)
+    : observation.state !== 'ready' ? m.book_reader_checkpoint_unavailable({}, options)
     : value?.state === 'none' ? m.book_reader_checkpoint_none({}, options) : null;
   const context = outcome && (outcome.state === 'sending' || outcome.state === 'uncertain' || needsRecovery)
     ? outcome.intent.context : null;
@@ -222,7 +224,7 @@ export function HostedBookCheckpoint({
   const recoverCurrent = needsRecovery ? () => { if (owner.current()) reload(); } : undefined;
 
   return <HostedBookCheckpointControls
-    controlsRef={controls} locale={locale} chapter={page.kind === 'chapter'} message={message}
+    key={controlVisit.current.key} controlsRef={controls} locale={locale} chapter={page.kind === 'chapter'} message={message}
     saved={value?.state === 'saved'} withheld={value?.state === 'saved' && value.resume.availability === 'unavailable'}
     resume={resume} busy={busy} blocked={blocked} isCurrent={current}
     originalAction={originalAction} observed={observed}

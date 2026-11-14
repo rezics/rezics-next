@@ -11974,6 +11974,7 @@
   "book_reader_checkpoint_cleared": "しおりを削除しました。",
   "book_reader_checkpoint_uncertain": "保存または削除の結果を確認できません。同じリクエストを再試行してください。",
   "book_reader_checkpoint_withheld": "保存した章は現在閲覧できません。しおりは保持されます。",
+  "book_reader_checkpoint_unavailable": "読書位置を読み込めません。読書は続けられます。",
   "book_reader_checkpoint_retry_save": "この保存を再試行",
   "book_reader_checkpoint_retry_clear": "この削除を再試行",
   "book_reader_checkpoint_retry_read": "読書位置の読み込みを再試行",

@@ -11974,6 +11974,7 @@
   "book_reader_checkpoint_cleared": "책갈피를 삭제했습니다.",
   "book_reader_checkpoint_uncertain": "저장 또는 삭제 결과를 확인할 수 없습니다. 같은 요청을 다시 시도하세요.",
   "book_reader_checkpoint_withheld": "저장한 장을 현재 읽을 수 없습니다. 책갈피는 유지됩니다.",
+  "book_reader_checkpoint_unavailable": "읽기 위치를 불러올 수 없습니다. 계속 읽을 수 있습니다.",
   "book_reader_checkpoint_retry_save": "이 저장 다시 시도",
   "book_reader_checkpoint_retry_clear": "이 삭제 다시 시도",
   "book_reader_checkpoint_retry_read": "읽기 위치 불러오기 재시도",

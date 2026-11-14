@@ -130,6 +130,7 @@ test('lost save replays its original sender, envelope, exact body, CAS and posit
   expect(host.textContent).toContain(m.book_reader_checkpoint_observed_saved({ chapter: saved.resume.availability === 'available' ? saved.resume.title : '' }));
   expect(button(m.book_reader_checkpoint_save()).disabled).toBe(true);
   expect(button(m.book_reader_checkpoint_clear()).disabled).toBe(true);
+  expect(props.position.restore).toHaveBeenCalledWith(saved, host.querySelector('section'));
   const first = write.mock.calls[0]![0];
   expect(first.data).toEqual({
     viewer: id(8), locale: 'en', key: expect.any(String), command: {
@@ -210,6 +211,7 @@ test('failed checkpoint read retries only its original reading operands, preserv
   edit.value = 'independent Library progress draft';
   host.prepend(edit);
   expect(host.textContent).not.toContain(m.book_reader_checkpoint_none());
+  expect(host.textContent).toContain(m.book_reader_checkpoint_unavailable());
   expect(host.querySelector('a')).toBeNull();
   await click(button(m.book_reader_checkpoint_retry_read()));
   expect(read.mock.calls[1]![0]).toEqual(read.mock.calls[0]![0]);

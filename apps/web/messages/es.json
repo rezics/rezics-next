@@ -11974,6 +11974,7 @@
   "book_reader_checkpoint_cleared": "Marcador borrado.",
   "book_reader_checkpoint_uncertain": "No se pudo confirmar el guardado o el borrado. Reintenta la misma solicitud.",
   "book_reader_checkpoint_withheld": "El capítulo guardado no está disponible actualmente. Se conserva el marcador.",
+  "book_reader_checkpoint_unavailable": "No se pudo consultar la posición guardada. Puedes seguir leyendo.",
   "book_reader_checkpoint_retry_save": "Reintentar este guardado",
   "book_reader_checkpoint_retry_clear": "Reintentar este borrado",
   "book_reader_checkpoint_retry_read": "Volver a consultar la posición",

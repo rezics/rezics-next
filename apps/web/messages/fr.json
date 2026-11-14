@@ -11974,6 +11974,7 @@
   "book_reader_checkpoint_cleared": "Signet effacé.",
   "book_reader_checkpoint_uncertain": "L’enregistrement ou la suppression n’a pas pu être confirmé. Réessayez la même demande.",
   "book_reader_checkpoint_withheld": "Le chapitre enregistré est actuellement indisponible. Le signet est conservé.",
+  "book_reader_checkpoint_unavailable": "La position enregistrée n’a pas pu être lue. Vous pouvez continuer à lire.",
   "book_reader_checkpoint_retry_save": "Réessayer cet enregistrement",
   "book_reader_checkpoint_retry_clear": "Réessayer cet effacement",
   "book_reader_checkpoint_retry_read": "Relire la position enregistrée",

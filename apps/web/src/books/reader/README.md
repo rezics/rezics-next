@@ -208,7 +208,9 @@ Progress, page units and Continue remain independent, as owned by [Library](../.
 
 Keyboard checkpoint actions focus their result only while the initiating control still owns focus; moving focus or
 choosing another control cancels the transfer. Pointer actions retain pointer focus. Read retry preserves the original
-observation operands and the existing once-only position restoration. Clearing affects only the native checkpoint;
+observation operands and the existing once-only position restoration. Within a visit the controls keep their live
+section through loading/readback, preserving the restore frame's control inset; replacement discards pending result
+focus. An unavailable checkpoint observation is labelled separately from Library progress. Clearing affects only the native checkpoint;
 Library progress and membership remain unchanged.
 
 The independent `renderProgress(page, isCurrent)` extension remains available for an admitted Commerce region;
