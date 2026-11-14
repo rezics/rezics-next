@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/app-shell';
+import { ShellContextNavigation } from '../shell/contextual-navigation';
 import { PageHeading } from '../shell/page-heading';
 import { SideNav } from '../shell/side-nav';
 import { NotificationsLink } from '../shell/top-bar';
@@ -28,12 +29,19 @@ type PreviewProps = {
   count?: boolean;
   session?: NavigationSession;
   longLabels?: boolean;
+  workspace?: boolean;
 };
 const previewPath = '/books?q=Prince&cursor=next%2Fpage';
 const compactPhone = () => window.matchMedia('(max-width: 767px)').matches;
 const longCreationLabel = () => `${m.ctxw_create()} · ${m.ctxw_title()} · ${m.nav_library()}`;
 
-function PreparedShellPreview({ visitor = 'Signed In', count = false, session, longLabels = false }: PreviewProps) {
+function PreparedShellPreview({
+  visitor = 'Signed In',
+  count = false,
+  session,
+  longLabels = false,
+  workspace = false,
+}: PreviewProps) {
   const client = useQueryClient();
   // Each PatternStory owns this cache. Pending has no timer, global fixture or network completion.
   useState(() => {
@@ -107,6 +115,7 @@ function PreparedShellPreview({ visitor = 'Signed In', count = false, session, l
           : m.books_catalogue_title()}
       </PageHeading>
       <p className="mt-3 max-w-prose text-muted-foreground">Your reading, collections and communities in one place.</p>
+      {workspace && <WorkspacePreview />}
       <div className="mt-8 space-y-6 border-t border-border/60 pt-6">
         {[m.nav_home(), m.nav_library(), m.realms_heading()].map((heading) => (
           <section key={heading} className="space-y-2">
@@ -118,6 +127,45 @@ function PreparedShellPreview({ visitor = 'Signed In', count = false, session, l
         ))}
       </div>
     </AppShell>
+  );
+}
+function WorkspacePreview() {
+  const [selected, setSelected] = useState(0);
+  const [draft, setDraft] = useState('An unsaved chapter title');
+  return (
+    <>
+      <ShellContextNavigation label={m.studio_workspace_book_navigation()}>
+        <ul className="grid min-w-0 gap-1">
+          {[m.book_reader_root(), m.book_reader_contents()].map((label, index) => (
+            <li key={index}>
+              <a
+                href="#shell-workspace-canvas"
+                aria-current={selected === index ? 'location' : undefined}
+                className="flex min-w-0 items-center rounded-xl px-2 py-2 text-sm wrap-anywhere hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=location]:bg-accent"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setSelected(index);
+                }}
+              >
+                {label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </ShellContextNavigation>
+      <div id="shell-workspace-canvas" className="mt-6 grid gap-2">
+        <label htmlFor="shell-workspace-title" className="text-sm font-medium">
+          {m.studio_workspace_title()}
+        </label>
+        <input
+          id="shell-workspace-title"
+          className="min-h-11 rounded-xl border px-3"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        <p className="text-sm text-muted-foreground">{m.studio_workspace_unsaved()}</p>
+      </div>
+    </>
   );
 }
 function ShellPreview(props: PreviewProps) {
@@ -317,5 +365,75 @@ export const PhoneNavigationOpen: Story = {
     await expect(menu.getByRole('link', { name: m.nav_search() })).toHaveAttribute('href', `/${getLocale()}/search`);
     await expect(menu.getByRole('link', { name: m.shell_manage_following() })).toBeVisible();
     await closeToTrigger(trigger);
+  },
+};
+
+export const CurrentWorkspaceNavigation: Story = {
+  render: () => <ShellPreview workspace />,
+  play: async (context) => {
+    const { canvas, header, main } = await shellReady(context);
+    if (compactPhone()) await userEvent.click(canvas.getByRole('button', { name: m.shell_open_navigation() }));
+    else {
+      const expand = header.queryByRole('button', { name: m.shell_expand_navigation() });
+      if (expand) await userEvent.click(expand);
+    }
+    const region = await within(document.body).findByRole('region', { name: m.studio_workspace_book_navigation() });
+    await expect(region).toBeVisible();
+    expect(document.querySelectorAll('[data-shell-context-navigation]')).toHaveLength(1);
+    expect(main.queryByRole('region', { name: m.studio_workspace_book_navigation() })).toBeNull();
+    await expect(within(region).getByRole('link', { name: m.book_reader_root() })).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+    if (compactPhone()) await userEvent.keyboard('{Escape}');
+  },
+};
+
+export const CollapsedWorkspaceNavigation: Story = {
+  render: () => <ShellPreview workspace />,
+  play: async (context) => {
+    const { header, main } = await shellReady(context);
+    if (compactPhone()) return;
+    const expand = header.queryByRole('button', { name: m.shell_expand_navigation() });
+    if (expand) await userEvent.click(expand);
+    const editor = main.getByRole('textbox', { name: m.studio_workspace_title() });
+    await userEvent.clear(editor);
+    await userEvent.type(editor, 'Keep this unsaved title');
+    await userEvent.click(header.getByRole('button', { name: m.shell_collapse_navigation() }));
+    await waitFor(() => expect(document.querySelector('[data-shell-context-navigation]')).toBeNull());
+    await expect(editor).toHaveValue('Keep this unsaved title');
+    await userEvent.click(header.getByRole('button', { name: m.shell_expand_navigation() }));
+    const region = await within(document.body).findByRole('region', { name: m.studio_workspace_book_navigation() });
+    await expect(region).toBeVisible();
+    await expect(editor).toHaveValue('Keep this unsaved title');
+  },
+};
+
+export const PhoneWorkspaceNavigation: Story = {
+  render: () => <ShellPreview workspace />,
+  play: async (context) => {
+    const { canvas, main } = await shellReady(context);
+    if (!compactPhone()) return;
+    const editor = main.getByRole('textbox', { name: m.studio_workspace_title() });
+    await userEvent.clear(editor);
+    await userEvent.type(editor, 'Keep this unsaved title');
+    const trigger = canvas.getByRole('button', { name: m.shell_open_navigation() });
+    const open = async () => {
+      trigger.focus();
+      await userEvent.keyboard('{Enter}');
+      const dialog = await within(document.body).findByRole('dialog', { name: m.shell_navigation() });
+      const region = await within(dialog).findByRole('region', { name: m.studio_workspace_book_navigation() });
+      expect(document.querySelectorAll('[data-shell-context-navigation]')).toHaveLength(1);
+      return within(region);
+    };
+    await open();
+    await closeToTrigger(trigger);
+    await waitFor(() => expect(document.querySelector('[data-shell-context-navigation]')).toBeNull());
+    const contents = await open();
+    contents.getByRole('link', { name: m.book_reader_contents() }).focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await waitFor(() => expect(document.querySelector('[data-shell-context-navigation]')).toBeNull());
+    await expect(editor).toHaveValue('Keep this unsaved title');
   },
 };

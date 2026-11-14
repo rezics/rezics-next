@@ -517,9 +517,11 @@ export function AppShell({ children, navigation, subjectPurchase, search, commun
             <Toaster>
               <AppearancePreferenceSync />
               <SideNavProvider communities={communities}>
-                <ShellContent search={search} notifications={notifications}>
-                  {children}
-                </ShellContent>
+                <ShellContextNavigationProvider>
+                  <ShellContent search={search} notifications={notifications}>
+                    {children}
+                  </ShellContent>
+                </ShellContextNavigationProvider>
               </SideNavProvider>
             </Toaster>
           </FeatureSlotsProvider>
@@ -573,72 +575,70 @@ function ShellContent({
                 });
               }}
             >
-              <ShellContextNavigationProvider routeKey={location.pathname}>
-                <a href="#main-content" className={skipLink}>
-                  {m.shell_skip_to_content()}
-                </a>
-                <link rel="preload" href={manropeFontUrl} as="font" type="font/woff2" crossOrigin="anonymous" />
-                <TopBar
-                  navigation={
-                    <NavigationToggle
-                      collapsed={railCollapsed}
-                      onToggle={() => setCollapsed(!railCollapsed)}
-                      pathname={location.pathname}
-                      session={session}
-                    />
-                  }
-                  logo={<Logo />}
-                  search={search ?? <ShellSearch />}
-                  actions={
-                    <ShellTopActions
-                      notifications={notifications}
-                      session={session}
-                      pathname={location.pathname}
-                      returnTo={location.publicHref.split('#')[0]!}
-                      account={<AccountMenu session={session} csrfToken={csrfToken} />}
-                    />
-                  }
-                />
-                <ScriptFreeNavigation pathname={location.pathname} session={session} />
-                <div className="flex min-w-0 flex-1">
-                  <NavigationColumn pathname={location.pathname} session={session} />
-                  <SidebarInset
-                    id="main-content"
-                    tabIndex={-1}
-                    className="min-w-0 scroll-mt-[calc(var(--shell-header-height)+1rem)] px-3 py-6 pb-[calc(var(--bottom-nav-height)+1.5rem)] outline-none md:p-6"
-                  >
-                    <div className="mx-auto w-full max-w-5xl">
-                      {children}
-                      {session === 'signed-in' &&
-                        navigationPathname({ locale: getLocale(), pathname: location.pathname }) === '/settings' && (
-                          <section
-                            id="account-tools"
-                            aria-labelledby="account-tools-heading"
-                            className="mt-8 scroll-mt-[calc(var(--shell-header-height)+1rem)] border-t border-border/60 pt-6"
-                          >
-                            <h2 id="account-tools-heading" className="mb-3 text-lg font-semibold">
-                              {m.shell_account_tools()}
-                            </h2>
-                            <NavigationLinks
-                              context={{ locale: getLocale(), pathname: location.pathname }}
-                              session={session}
-                              placement="account-tools"
-                              label={m.shell_account_tools()}
-                              className="grid min-w-0 gap-1 sm:grid-cols-2"
-                            />
-                          </section>
-                        )}
-                    </div>
-                  </SidebarInset>
-                </div>
-                <PhoneNavigation
-                  session={session}
-                  csrfToken={csrfToken}
-                  pathname={location.pathname}
-                  returnTo={location.publicHref.split('#')[0]!}
-                  account={<AccountMenu session={session} csrfToken={csrfToken} phone />}
-                />
-              </ShellContextNavigationProvider>
+              <a href="#main-content" className={skipLink}>
+                {m.shell_skip_to_content()}
+              </a>
+              <link rel="preload" href={manropeFontUrl} as="font" type="font/woff2" crossOrigin="anonymous" />
+              <TopBar
+                navigation={
+                  <NavigationToggle
+                    collapsed={railCollapsed}
+                    onToggle={() => setCollapsed(!railCollapsed)}
+                    pathname={location.pathname}
+                    session={session}
+                  />
+                }
+                logo={<Logo />}
+                search={search ?? <ShellSearch />}
+                actions={
+                  <ShellTopActions
+                    notifications={notifications}
+                    session={session}
+                    pathname={location.pathname}
+                    returnTo={location.publicHref.split('#')[0]!}
+                    account={<AccountMenu session={session} csrfToken={csrfToken} />}
+                  />
+                }
+              />
+              <ScriptFreeNavigation pathname={location.pathname} session={session} />
+              <div className="flex min-w-0 flex-1">
+                <NavigationColumn pathname={location.pathname} session={session} />
+                <SidebarInset
+                  id="main-content"
+                  tabIndex={-1}
+                  className="min-w-0 scroll-mt-[calc(var(--shell-header-height)+1rem)] px-3 py-6 pb-[calc(var(--bottom-nav-height)+1.5rem)] outline-none md:p-6"
+                >
+                  <div className="mx-auto w-full max-w-5xl">
+                    {children}
+                    {session === 'signed-in' &&
+                      navigationPathname({ locale: getLocale(), pathname: location.pathname }) === '/settings' && (
+                        <section
+                          id="account-tools"
+                          aria-labelledby="account-tools-heading"
+                          className="mt-8 scroll-mt-[calc(var(--shell-header-height)+1rem)] border-t border-border/60 pt-6"
+                        >
+                          <h2 id="account-tools-heading" className="mb-3 text-lg font-semibold">
+                            {m.shell_account_tools()}
+                          </h2>
+                          <NavigationLinks
+                            context={{ locale: getLocale(), pathname: location.pathname }}
+                            session={session}
+                            placement="account-tools"
+                            label={m.shell_account_tools()}
+                            className="grid min-w-0 gap-1 sm:grid-cols-2"
+                          />
+                        </section>
+                      )}
+                  </div>
+                </SidebarInset>
+              </div>
+              <PhoneNavigation
+                session={session}
+                csrfToken={csrfToken}
+                pathname={location.pathname}
+                returnTo={location.publicHref.split('#')[0]!}
+                account={<AccountMenu session={session} csrfToken={csrfToken} phone />}
+              />
             </SidebarProvider>
           </HeaderSearchFilterProvider>
         </PhoneCreationProvider>

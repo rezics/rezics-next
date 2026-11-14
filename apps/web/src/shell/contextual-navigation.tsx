@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useMatch, useRouterState } from '@tanstack/react-router';
+import { useLocation, useMatch, useRouterState } from '@tanstack/react-router';
 
 type Owner = {
   identity: object;
@@ -26,7 +26,8 @@ type ContextNavigation = {
 const ContextNavigation = createContext<ContextNavigation | null>(null);
 
 /** Shell-owned placement, scoped to the current path without remounting the route's editor. */
-export function ShellContextNavigationProvider({ children, routeKey }: { children: ReactNode; routeKey: string }) {
+export function ShellContextNavigationProvider({ children }: { children: ReactNode }) {
+  const routeKey = useLocation({ select: (location) => location.pathname });
   const scope = useMemo(() => ({}), [routeKey]);
   const [owners, setOwners] = useState<readonly Owner[]>([]);
   const [target, setTarget] = useState<HTMLDivElement | null>(null);
