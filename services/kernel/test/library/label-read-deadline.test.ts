@@ -91,10 +91,15 @@ test('uncertain phases discard clients, preserve primary failures, and allow the
   expect(cleanup.releases).toEqual([rollback]);
 
   const next = connection();
-  const result = await withLabelReadConnection(pool(next.client), Date.now() + 5_000, 'REPEATABLE READ', async (client) => {
-    await client.query('SELECT current private catalogue');
-    return ['current private label'];
-  });
+  const result = await withLabelReadConnection(
+    pool(next.client),
+    Date.now() + 5_000,
+    'REPEATABLE READ',
+    async (client) => {
+      await client.query('SELECT current private catalogue');
+      return ['current private label'];
+    },
+  );
   expect(result).toEqual(['current private label']);
   expect(next.statements[0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ');
   expect(next.statements.at(-1)).toBe('COMMIT');
