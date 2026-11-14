@@ -89,15 +89,14 @@ test('Copy read deadlines reject blocked checkout and discard an in-flight query
   const lateReleased = new Promise<Error | undefined>((resolve) => {
     releaseLate = resolve;
   });
-  const lateClient = copyReadClient(
-    (statement) => {
-      lateStatements.push(statementText(statement));
-      return Promise.resolve({ rows: [] });
-    },
-    releaseLate,
-  );
-  const lateRead = withCopyReadConnection(copyReadPool(() => checkout), Date.now() + 50, (client) =>
-    client.query('SELECT 1'),
+  const lateClient = copyReadClient((statement) => {
+    lateStatements.push(statementText(statement));
+    return Promise.resolve({ rows: [] });
+  }, releaseLate);
+  const lateRead = withCopyReadConnection(
+    copyReadPool(() => checkout),
+    Date.now() + 50,
+    (client) => client.query('SELECT 1'),
   );
   await expect(lateRead).rejects.toThrow();
   resolveCheckout(lateClient);
@@ -109,13 +108,10 @@ test('Copy read deadlines reject blocked checkout and discard an in-flight query
   const blockedReleased = new Promise<Error | undefined>((resolve) => {
     releaseBlocked = resolve;
   });
-  const blockedClient = copyReadClient(
-    (statement) => {
-      blockedStatements.push(statementText(statement));
-      return new Promise(() => {});
-    },
-    releaseBlocked,
-  );
+  const blockedClient = copyReadClient((statement) => {
+    blockedStatements.push(statementText(statement));
+    return new Promise(() => {});
+  }, releaseBlocked);
   const blockedRead = withCopyReadConnection(
     copyReadPool(async () => blockedClient),
     Date.now() + 50,
@@ -149,11 +145,7 @@ test('successful Copy detail read keeps its read-only transaction', async () => 
     { transaction: true },
   );
   expect(result).toBe('read');
-  expect(statements).toEqual([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'SELECT 1',
-    'COMMIT',
-  ]);
+  expect(statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'SELECT 1', 'COMMIT']);
   expect(releaseError).toBeUndefined();
 });
 
