@@ -1,6 +1,7 @@
 import {
   currentCommand,
   currentCommandResources,
+  DEFAULT_REQUEST_DEADLINE_MS,
   IdempotencyConflictError,
   noEffect,
   registerCommandCallback,
@@ -18,6 +19,7 @@ import {
   AccessUnavailableError,
   classifyUnavailability as classifyAccessUnavailability,
 } from '../access/unavailable.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { withReadTransaction } from './read.ts';
 import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { nativeRatingReview } from './adapters/rating-review.ts';
@@ -38,7 +40,10 @@ import { createIdentityRatingCommitParticipant } from './identity-rating-commit-
 
 function nativeLeaves(): Omit<NativeIdentityCapabilities, 'reviewedPerson' | 'admission'> {
   return {
-    read: Object.freeze({ withReadTransaction }),
+    read: Object.freeze({
+      requestDeadline: () => deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
+      withReadTransaction,
+    }),
     command: Object.freeze({
       currentCommand,
       currentCommandResources,

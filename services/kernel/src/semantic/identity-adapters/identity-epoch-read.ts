@@ -399,6 +399,7 @@ async function readIdentityMappingsWith(
     if (route === null) throw new TypeError('Identity original must be a native routed ID');
     return route;
   });
+  const deadline = capabilities.read.requestDeadline();
   // Keep every source/control snapshot local to one home. Double collection
   // detects changes while releasing homes; unrelated partition positions do not
   // invalidate exact mapping evidence.
@@ -420,7 +421,7 @@ async function readIdentityMappingsWith(
             ])
           ).rows,
         );
-      });
+      }, deadline);
     }
     const available = sourceRows.filter((row) => row.original && row.control_partition !== null && row.control_group);
     for (const home of new Set(available.map((row) => row.control_partition!))) {
@@ -441,7 +442,7 @@ async function readIdentityMappingsWith(
             ])
           ).rows,
         );
-      });
+      }, deadline);
     }
     return { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows };
   }
