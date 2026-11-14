@@ -7,10 +7,12 @@ import {
   type DocumentSnapshot,
 } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Editor } from '@tiptap/core';
+import { CellSelection } from '@tiptap/pm/tables';
 import { useState } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { RichTextEditor } from './rich-text-editor.tsx';
-import { placeEditorCaret } from '../test/editor-selection.ts';
+import { placeEditorCaret, selectEditorText } from '../test/editor-selection.ts';
 import { waitForFocus } from '../../../ui/src/test/focus.ts';
 
 const paragraph = (id: string, text: string): DocumentNode => ({
@@ -107,6 +109,47 @@ const lastBlock = demo(
     doc: { type: 'doc', content: [paragraph('only', 'Only block')] },
   }),
 );
+const selectionPaint = demo(
+  normalizeDocument({
+    version: documentVersion,
+    profile: 'blocks',
+    doc: {
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          attrs: { id: 'paint-table' },
+          content: [
+            {
+              type: 'tableRow',
+              attrs: { id: 'paint-row' },
+              content: [
+                { type: 'tableCell', attrs: { id: 'plain-cell' }, content: [paragraph('plain-body', 'Leading cell')] },
+                {
+                  type: 'tableCell',
+                  attrs: { id: 'colored-cell' },
+                  content: [
+                    {
+                      type: 'paragraph',
+                      attrs: { id: 'colored-body' },
+                      content: [
+                        {
+                          type: 'text',
+                          text: 'Authored red',
+                          marks: [{ type: 'textStyle', attrs: { color: '#b4321e' } }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  }),
+);
 const meta = { title: 'Editor/Structural editing', parameters: { layout: 'padded' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -135,12 +178,12 @@ export const StructuralEditing: Story = {
       colspan: 2,
     });
     assertUniqueIds(structural.latest.current);
-    await userEvent.click(canvas.getByRole('button', { name: 'Undo', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(nodes(structural.latest.current, 'tableCell')).toHaveLength(4));
     expect(nodes(structural.latest.current, 'tableRow').map((node) => node.attrs?.id)).toEqual(['row-0', 'row-1']);
 
     await placeEditorCaret(textbox, within(textbox).getByText('A movable quotation'));
-    await waitFor(() => expect(canvas.queryByRole('toolbar', { name: 'Table', exact: true })).toBeNull());
+    await waitFor(() => expect(canvas.queryByRole('toolbar', { name: 'Table' })).toBeNull());
     await userEvent.click(canvas.getByRole('button', { name: 'Block actions' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate block' }));
     await waitFor(() => expect(nodes(structural.latest.current, 'blockquote')).toHaveLength(2));
@@ -183,5 +226,34 @@ export const FinalBlockKeyboard: Story = {
     expect(lastBlock.latest.current.doc.content?.[0]?.type).toBe('paragraph');
     await waitForFocus(textbox);
     assertUniqueIds(lastBlock.latest.current);
+  },
+};
+
+export const SelectionPaint: Story = {
+  tags: ['!dev'],
+  render: () => <selectionPaint.Demo />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole('textbox', { name: 'Structural document' });
+    const authored = within(textbox).getByText('Authored red', { exact: true });
+    const authoredColor = getComputedStyle(authored).color;
+    const normal = getComputedStyle(authored, '::selection');
+    const normalColor = normal.color;
+    const normalBackground = normal.backgroundColor;
+    expect(normalColor).toBe(getComputedStyle(document.body, '::selection').color);
+    await userEvent.click(within(textbox).getByText('Leading cell', { exact: true }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'Select all cells' }));
+    await waitFor(() =>
+      expect((textbox as HTMLElement & { editor: Editor }).editor.state.selection).toBeInstanceOf(CellSelection),
+    );
+    expect(window.getSelection()?.toString()).toBe('Authored red');
+    expect(getComputedStyle(authored, '::selection').backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(authored, '::selection').color).not.toBe(normalColor);
+    expect(getComputedStyle(authored).color).toBe(authoredColor);
+    expect(authored).toBeVisible();
+    await selectEditorText(textbox, 'Authored red');
+    await waitFor(() => expect(textbox).not.toHaveClass('ProseMirror-hideselection'));
+    expect(getComputedStyle(authored, '::selection').color).toBe(normalColor);
+    expect(getComputedStyle(authored, '::selection').backgroundColor).toBe(normalBackground);
   },
 };

@@ -57,12 +57,15 @@ img.ProseMirror-separator {
   }
 }
 
+/* currentColor keeps authored run colors; inherit would reuse the highlight's contrast color. */
 .ProseMirror-hideselection *::selection {
   background: transparent;
+  color: currentColor;
 }
 
 .ProseMirror-hideselection *::-moz-selection {
   background: transparent;
+  color: currentColor;
 }
 
 .ProseMirror-hideselection * {
