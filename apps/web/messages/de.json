@@ -8739,7 +8739,6 @@
   "realm_members_retry_page": "Seite erneut laden",
   "realm_members_retry_selected": "Konto erneut laden",
   "realm_members_selected_account_in_realm": "Ausgewähltes Konto {account} im Realm {realm}.",
-  "realm_members_selected_denied": "Du darfst dieses Konto in diesem Realm nicht prüfen.",
   "realm_members_selected_failed": "Das ausgewählte Konto konnte nicht gelesen werden. Versuche es erneut.",
   "realm_members_selected_review": "Prüfe {action} für {account} im Realm {realm}.",
   "realm_members_selected_unavailable": "Das ausgewählte Konto ist nicht verfügbar.",

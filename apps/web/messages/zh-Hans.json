@@ -8739,7 +8739,6 @@
   "realm_members_retry_page": "重试此页",
   "realm_members_retry_selected": "重试所选账号",
   "realm_members_selected_account_in_realm": "Realm {realm} 中的已选账号 {account}。",
-  "realm_members_selected_denied": "你无权在此 Realm 中查看该账号。",
   "realm_members_selected_failed": "无法读取所选账号。请重试该账号。",
   "realm_members_selected_review": "请确认在 Realm {realm} 对 {account} 执行 {action}。",
   "realm_members_selected_unavailable": "所选账号不可用。",

@@ -8739,7 +8739,6 @@
   "realm_members_retry_page": "Réessayer la page",
   "realm_members_retry_selected": "Réessayer ce compte",
   "realm_members_selected_account_in_realm": "Compte sélectionné {account} dans le Realm {realm}.",
-  "realm_members_selected_denied": "Vous ne pouvez pas consulter ce compte dans ce Realm.",
   "realm_members_selected_failed": "Le compte sélectionné n’a pas pu être lu. Réessayez ce compte.",
   "realm_members_selected_review": "Vérifiez {action} pour {account} dans le Realm {realm}.",
   "realm_members_selected_unavailable": "Le compte sélectionné est indisponible.",

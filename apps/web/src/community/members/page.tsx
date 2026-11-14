@@ -304,7 +304,7 @@ export function RealmMembersPage({
                 : selected.kind === 'concealed'
                   ? m.realm_members_concealed()
                   : selected.kind === 'denied'
-                    ? m.realm_members_selected_denied()
+                    ? m.realm_members_denied()
                     : selected.kind === 'changed'
                       ? m.realm_members_changed()
                       : selected.kind === 'failed'

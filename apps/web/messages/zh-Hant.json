@@ -8739,7 +8739,6 @@
   "realm_members_retry_page": "重試此頁",
   "realm_members_retry_selected": "重試所選帳號",
   "realm_members_selected_account_in_realm": "Realm {realm} 中的已選帳號 {account}。",
-  "realm_members_selected_denied": "你無權在此 Realm 中查看該帳號。",
   "realm_members_selected_failed": "無法讀取所選帳號。請重試該帳號。",
   "realm_members_selected_review": "檢視在 Realm {realm} 對 {account} 執行 {action} 的操作。",
   "realm_members_selected_unavailable": "所選帳號無法使用。",

@@ -150,10 +150,11 @@ Decision: keep the native member, ban and claim readers and writers separate; us
 fields, reference disclosures and inline action reviews. Selection preserves the bounded roster coordinate.
 The admitted Realm label leads page identity, supplied account labels lead rows, and exact account/Realm operands
 remain inspectable before a command. Missing producer fields stay unavailable; membership never grants moderation.
-Explicit selected-account denial has its own explanation, separate from failed or unavailable inspection.
+Native inspection denial revokes the roster and removes selection; failed and unavailable inspections retain their
+separate explanations without borrowing roster identity.
 Action receipts and retry controls remain owned by their original episodes, independently of page/readback errors.
 Controls wrap at phone widths; cancelling a review returns focus only inside its still-current selection.
-All eight message catalogues supply the added bounded-page guidance and selected-denial explanation.
+All eight message catalogues supply the added bounded-page guidance.
 
 Source orientation: this document, `../realm-ban-lifetime.md`, `../realm-claim-current-review.md`, their current
 consumers and regression sources, and the read-only main checkout `.reference/INDEX.md`. Impeccable references were

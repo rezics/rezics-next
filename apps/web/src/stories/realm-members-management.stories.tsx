@@ -289,11 +289,12 @@ export const RevokedWhileOpen: Story = {
 export const SelectedDenied: Story = {
   args: { source: fixture('selected-denied') },
   play: async ({ canvasElement }) => {
-    await inspect(canvasElement);
     const canvas = within(canvasElement);
-    await expect(canvas.getByText(m.realm_members_selected_denied())).toBeVisible();
+    await userEvent.click((await canvas.findAllByRole('button', { name: /account-01/ }))[0]!);
+    await expect(await canvas.findByText(m.realm_members_denied())).toBeVisible();
     await expect(canvas.queryByText('account-01', { exact: true })).toBeNull();
     await expect(canvas.queryByRole('button', { name: m.realm_members_add_member() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.realm_members_back() })).toBeNull();
   },
 };
 
