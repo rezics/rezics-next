@@ -1,17 +1,23 @@
 #!/usr/bin/env bun
 import { resolve, join } from 'node:path';
 import { openDb } from '../src/db.ts';
-import { completedUtcHour, parseUtcHour, previousUtcHours } from '../src/efficiency-report-time.ts';
+import { completedUtcHour, parseUtcHour, previousUtcHours, type UtcHour } from '../src/efficiency-report-time.ts';
 import { sendHourlyEfficiencyReport } from '../src/efficiency-report-delivery.ts';
 import {
   captureHourlyEfficiencyObservation,
   measureProductLineObservation,
   readFrozenHourlyEfficiencyReport,
+  renderHourlyEfficiencyReport,
   type HourlyPrivateDutyContext,
 } from '../src/efficiency-report.ts';
 import { loadSettings } from '../src/config.ts';
 
 type Arguments = { send: boolean; scheduled: boolean; privateDuty: boolean; json: boolean; bucket?: string };
+
+export function assertHourlyEfficiencyBucketEnded(bucket: UtcHour, now: Date): void {
+  if (Date.parse(bucket.end) > now.getTime())
+    throw new Error(`cannot send an hourly efficiency report for unfinished UTC bucket ${bucket.start}`);
+}
 
 function parseArguments(args: string[]): Arguments {
   const result: Arguments = { send: false, scheduled: false, privateDuty: false, json: false };
@@ -67,25 +73,31 @@ function parsePrivateDutyContext(value: unknown): HourlyPrivateDutyContext {
 
 async function main(args: string[]): Promise<void> {
   const parsed = parseArguments(args);
+  const now = new Date();
+  const bucket = parsed.bucket ? parseUtcHour(parsed.bucket) : completedUtcHour(now);
+  if (parsed.send) assertHourlyEfficiencyBucketEnded(bucket, now);
+
   const settings = loadSettings();
   const db = openDb(join(settings.stateDirectory, 'goal.sqlite'), settings.policy?.storage);
   try {
-    const now = new Date();
-    const bucket = parsed.bucket ? parseUtcHour(parsed.bucket) : completedUtcHour(now);
     const existing = readFrozenHourlyEfficiencyReport(db, bucket.start);
-    let capture: ReturnType<typeof captureHourlyEfficiencyObservation>;
+    let capture: ReturnType<typeof captureHourlyEfficiencyObservation> | undefined;
     let report: string;
     if (existing) {
-      capture = captureHourlyEfficiencyObservation(db, { bucket: bucket.start, policy: settings.policy, now });
       report = existing.report;
-    } else if (parsed.privateDuty) {
-      let input: unknown;
-      try {
-        input = JSON.parse(await Bun.stdin.text());
-      } catch {
-        throw new Error('private-duty context must be JSON on standard input');
+      if (parsed.send && parsed.privateDuty)
+        capture = captureHourlyEfficiencyObservation(db, { bucket: bucket.start, policy: settings.policy, now });
+    } else if (parsed.send) {
+      let privateDuty: HourlyPrivateDutyContext | undefined;
+      if (parsed.privateDuty) {
+        let input: unknown;
+        try {
+          input = JSON.parse(await Bun.stdin.text());
+        } catch {
+          throw new Error('private-duty context must be JSON on standard input');
+        }
+        privateDuty = parsePrivateDutyContext(input);
       }
-      const privateDuty = parsePrivateDutyContext(input);
       const previous = readFrozenHourlyEfficiencyReport(db, previousUtcHours(bucket.start, 1)[0]!.start);
       const productLineMeasurement = measureProductLineObservation(
         process.cwd(),
@@ -109,13 +121,12 @@ async function main(args: string[]): Promise<void> {
         now,
         previous?.observation.sourceRevision,
       );
-      capture = captureHourlyEfficiencyObservation(db, {
+      report = await renderHourlyEfficiencyReport(db, {
         bucket: bucket.start,
         policy: settings.policy,
         now,
         productLineMeasurement,
       });
-      report = capture.snapshot.report;
     }
 
     if (!parsed.send) {
@@ -136,16 +147,17 @@ async function main(args: string[]): Promise<void> {
       settings.policy,
     );
     if (parsed.privateDuty) {
+      const privateDutyCapture = capture!;
       console.log(
         JSON.stringify({
           bucket: bucket.start,
-          capture: capture.disposition,
-          attribution: capture.attribution,
+          capture: privateDutyCapture.disposition,
+          attribution: privateDutyCapture.attribution,
           report,
-          reportRef: capture.snapshot.reportRef,
-          observation: capture.snapshot.observation,
-          rolling: capture.snapshot.rolling,
-          alerts: capture.snapshot.alerts,
+          reportRef: privateDutyCapture.snapshot.reportRef,
+          observation: privateDutyCapture.snapshot.observation,
+          rolling: privateDutyCapture.snapshot.rolling,
+          alerts: privateDutyCapture.snapshot.alerts,
           delivery,
         }),
       );

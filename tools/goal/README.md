@@ -1363,6 +1363,8 @@ as a child and continues serving commands while it runs. Without a configured no
 as a local command and the host sends nothing. Add `--send` to deliver a report manually; the default command only
 prints it.
 
+Decision: a plain preview formats current evidence without freezing a row; only a send may capture, sends reject buckets that have not ended, and frozen report bytes and attribution remain stable.
+
 The manager host evaluates absolute flow targets each hour and sends one `environment` event to the configured
 supermanager for each breached threshold: efficiency below 40%, any queue older than 60 minutes, landing p90 above
 30 minutes, or more than 1.5 attempts per integrated task. `flow` in local settings can override `efficiencyBelow`,
