@@ -276,6 +276,16 @@ test('worker and manager prompts trust repository callers and let dev repair con
     'Validate only where outside input enters: HTTP requests, imported records, external files and third-party responses.',
   );
   expect(rendered.prompt).toContain('Large surveys are `spec-conflict` blockers starting "Research needed:"');
+  const checkpoint = rendered.prompt.indexOf('Checkpoint coherent source');
+  const ongoingProposal = rendered.prompt.indexOf('While implementing, fixing or reviewing');
+  expect(ongoingProposal).toBeGreaterThan(checkpoint);
+  expect(ongoingProposal).toBeLessThan(rendered.prompt.indexOf('When only a check or dependent change remains blocked'));
+  expect(rendered.prompt).toContain('immediately propose each distinct valuable gap concisely: outcome, source evidence');
+  expect(rendered.prompt).toContain('first editable boundary, true prerequisite if any');
+  expect(rendered.prompt).toContain('Keep useful in-scope work with you');
+  expect(rendered.prompt).toContain('ready independent work to its manager as a short inbox handoff');
+  expect(rendered.prompt).toContain('delivery ownership](delivery.md#delivery-ownership)');
+  expect(rendered.prompt).not.toContain('Before finishing, propose the next evidenced independent outcome');
   expect(rendered.prompt).not.toContain('must not be edited');
   expect(rendered.prompt).not.toContain('never edit a frozen file');
   expect(rendered.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.workerRoleBytes);
