@@ -499,10 +499,15 @@ export async function readHostedReadingExportPage(
   afterId: string,
   limit: number,
 ) {
-  return exportPage.run(client, {
+  const rows = await exportPage.run(client, {
     route,
     account_id: accountId,
     after_id: afterId,
     limit,
+  });
+  return rows.map((row) => {
+    const changedAt = row.changed_at;
+    if (changedAt === null) throw new ProblemError('partition_unavailable');
+    return { ...row, changed_at: changedAt };
   });
 }
