@@ -1,13 +1,13 @@
 import type { Pool } from 'pg';
 import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
 import { AccessUnavailableError } from '../access/contract/errors.ts';
-import { deadlineClient } from './access-port.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import type { Fact } from '../search/hits.ts';
 import { routeOf } from '../route/route.ts';
 import { nativeCopyListContext, type NativeCopyListContext } from '../semantic/adapters/index.ts';
+import { withCopyReadConnection } from './copy-read-connection.ts';
 import { peekLibraryDomain } from './domain-binding.ts';
 type SubjectSummary = NonNullable<
   Awaited<ReturnType<NativeCopyListContext['summaries']>> extends Map<string, infer Summary> ? Summary : never
@@ -95,6 +95,22 @@ export async function attachCopyListContext<T extends ContextCopy>(
 ): Promise<ContextRow<T>[]> {
   if (copies.length > COPY_LIST_CONTEXT_MAX_ROWS)
     throw new ProblemError('content_too_large', { detail: 'Copy list context accepts at most 100 raw copies' });
+  const now = Date.now();
+  // Pool-only identity readers inherit this scope; explicit readers receive the same
+  // deadline. An enclosing request can shorten the page budget, never extend it.
+  const deadline = Math.min(deps.deadline, deadlineFor(Math.max(1, deps.deadline - now), () => now));
+  return withRequestDeadline(deadline, async () => {
+    const rows = await attachCopyListContextWithinDeadline({ ...deps, deadline }, copies, options);
+    requireAccessDeadline(deadline);
+    return rows;
+  });
+}
+
+async function attachCopyListContextWithinDeadline<T extends ContextCopy>(
+  deps: CopyListContextDependencies,
+  copies: readonly T[],
+  options: { languages?: readonly string[]; revalidate: () => Promise<void> },
+): Promise<ContextRow<T>[]> {
   requireAccessDeadline(deps.deadline);
   const semantic = peekLibraryDomain()?.copyContext ?? nativeCopyListContext();
   if (!copies.length) return [];
@@ -109,7 +125,7 @@ export async function attachCopyListContext<T extends ContextCopy>(
   let releaseBefore: { digest: string; head: number } | null = null;
 
   try {
-    const active = await withConnection(deps.pool, (client) => semantic.active(deadlineClient(client, deps.deadline)));
+    const active = await withCopyReadConnection(deps.pool, deps.deadline, (client) => semantic.active(client));
     if (active) releaseBefore = { digest: active.digest, head: active.head };
     else semanticUnavailable = true;
     before = await semantic.mappings(deps.pool, validOriginals);
@@ -138,7 +154,7 @@ export async function attachCopyListContext<T extends ContextCopy>(
   }
 
   try {
-    const active = await withConnection(deps.pool, (client) => semantic.active(deadlineClient(client, deps.deadline)));
+    const active = await withCopyReadConnection(deps.pool, deps.deadline, (client) => semantic.active(client));
     if (!active || !releaseBefore || active.digest !== releaseBefore.digest || active.head !== releaseBefore.head)
       semanticUnavailable = true;
   } catch (error) {
