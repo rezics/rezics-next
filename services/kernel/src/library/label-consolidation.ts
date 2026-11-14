@@ -12,7 +12,7 @@ import {
   releaseOperationalTime,
   runCommand,
 } from '../command/command.ts';
-import { boundedReadWindow, withBoundedReadOnlyTransaction } from '../database/pool.ts';
+import { boundedReadWindow, withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -1270,25 +1270,27 @@ export async function purgeExpiredLabelConsolidations(
     removed = 0;
   while (cursor.route < (partition + 1) * 16 && examined < limit && Date.now() < deadline - 100) {
     const requested = limit - examined;
-    const page = await pool.query<{
-      route: number;
-      accountId: string;
-      confirmationId: string;
-      expiresAt: string;
-    }>(
-      `SELECT route,account_id AS "accountId",consolidation_id AS "confirmationId",expires_at::text AS "expiresAt"
-       FROM library.label_consolidation
-       WHERE route=$1 AND expires_at <= $2::timestamptz
-         AND ($3::timestamptz IS NULL OR (expires_at,account_id,consolidation_id) > ($3::timestamptz,$4::uuid,$5::uuid))
-       ORDER BY expires_at,account_id,consolidation_id LIMIT $6`,
-      [
-        cursor.route,
-        cursor.cutoff,
-        cursor.last?.expiresAt ?? null,
-        cursor.last?.accountId ?? null,
-        cursor.last?.confirmationId ?? null,
-        requested,
-      ],
+    const page = await withBoundedReadConnection(pool, deadline, (client) =>
+      client.query<{
+        route: number;
+        accountId: string;
+        confirmationId: string;
+        expiresAt: string;
+      }>(
+        `SELECT route,account_id AS "accountId",consolidation_id AS "confirmationId",expires_at::text AS "expiresAt"
+         FROM library.label_consolidation
+         WHERE route=$1 AND expires_at <= $2::timestamptz
+           AND ($3::timestamptz IS NULL OR (expires_at,account_id,consolidation_id) > ($3::timestamptz,$4::uuid,$5::uuid))
+         ORDER BY expires_at,account_id,consolidation_id LIMIT $6`,
+        [
+          cursor.route,
+          cursor.cutoff,
+          cursor.last?.expiresAt ?? null,
+          cursor.last?.accountId ?? null,
+          cursor.last?.confirmationId ?? null,
+          requested,
+        ],
+      ),
     );
     if (page.rows.length === 0) {
       cursor.route++;
