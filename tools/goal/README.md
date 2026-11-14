@@ -3764,6 +3764,8 @@ diagnostics, releases its capacity ticket after the Git process settles, and fol
 action through the existing recovery pass.
 
 A later admission keeps the original intent options and resume identity.
+Each affected task retains its full Git setup diagnostic alongside the shared operations action.
+An inspection timeout stays in the existing generation and pending retry; it never records a launch attempt.
 
 To pause:
 

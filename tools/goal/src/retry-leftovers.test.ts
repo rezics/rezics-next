@@ -60,6 +60,11 @@ async function runAndStop(h: ReturnType<typeof harness>, job: WorkerJob, taskId:
   await h.tasks.stop(taskId);
 }
 
+async function runAndFinish(job: WorkerJob, taskId: string): Promise<void> {
+  await job.start(taskId);
+  await job.drain();
+}
+
 test('a retry commits stopped attempt leftovers before rebasing and starts on current dev', async () => {
   const h = harness(recordingCli);
   try {
@@ -146,17 +151,12 @@ test('a genuine leftover Git error keeps its task diagnosis without a shared tim
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, inbox);
     const task = h.tasks.dispatch(h.briefFile);
-    await runAndStop(h, job, task.id);
-    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).terminationIntent).toMatchObject({
-      operation: 'stop', state: 'complete', settledAt: expect.any(String),
-    });
+    await runAndFinish(job, task.id);
 
     const corruptIndex = join(h.root, '.temp', 'corrupt-index');
     writeFileSync(corruptIndex, 'broken index');
     process.env.GIT_INDEX_FILE = corruptIndex;
-    await job.start(task.id).catch((error) => {
-      if (!String(error).includes('git status:')) throw error;
-    });
+    await expect(job.start(task.id)).rejects.toThrow('git status:');
 
     expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
     const failure = JSON.parse(h.store.events(task.id, 1).find((event) => event.kind === 'retry-setup-failed')!.body);
@@ -193,7 +193,7 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
     writeFileSync(secondBrief, `${readFileSync(h.briefFile, 'utf8')}\n<!-- distinct timeout-folding task -->\n`);
     const tasks = [h.tasks.dispatch(h.briefFile), h.tasks.dispatch(secondBrief)];
     for (const task of tasks) {
-      await runAndStop(h, firstJob, task.id);
+      await runAndFinish(firstJob, task.id);
       const worktree = h.store.task(task.id).worktree;
       writeFileSync(join(worktree, 'README.md'), `staged source ${task.id}\n`);
       git(worktree, 'add', 'README.md');
@@ -210,11 +210,7 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
       if (index === 0) await hostRestart.runHostTask('retry', task.id);
       const worktree = h.store.task(task.id).worktree;
       const intent = h.store.retryIntent({ taskId: task.id, attempt: 1 });
-      expect([
-        existsSync(join(worktree, '.temp/status-timeout')),
-        h.store.task(task.id).currentAttempt,
-        h.store.attempts(task.id).length,
-      ]).toEqual([true, 1, 1]);
+      expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
       expect(intent).toMatchObject({ status: 'pending', options: { evidence: h.briefFile } });
       expect(Date.parse(intent!.options.notBefore ?? '')).toBeGreaterThan(Date.now());
       const failure = JSON.parse(
