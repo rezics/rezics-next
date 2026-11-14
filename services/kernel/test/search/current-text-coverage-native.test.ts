@@ -5,7 +5,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { checkHits } from '../../src/search/disclosure/check.ts';
 import { createCurrentTextMatcher, CURRENT_TEXT_LIMITS } from '../../src/search/disclosure/current-text.ts';
-import { analyzeInstalled, requireDevelopmentAnalyzer } from '../../src/search/engine-analysis.ts';
+import { analyzeInstalledMany, requireDevelopmentAnalyzer } from '../../src/search/engine-analysis.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { subjectPartition } from '../../src/search/source.ts';
@@ -126,9 +126,9 @@ test('native current text keeps cap-plus-one uncertainty through disclosure, Sea
   const index = subjectIndexName(prefix, active);
   const source = subjectSource(pool);
   const observed: string[] = [];
-  const matcher = createCurrentTextMatcher(async (analyzer, text) => {
-    observed.push(text);
-    return analyzeInstalled(search, index, { analyzer, text });
+  const matcher = createCurrentTextMatcher(async (analyzer, texts) => {
+    observed.push(...texts);
+    return analyzeInstalledMany(search, index, { analyzer, text: texts });
   });
   const current = async (subject: CreatedSubject) => {
     const snapshot = await source.read(subjectPartition(subject.id), [subject.id]);

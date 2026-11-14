@@ -535,6 +535,8 @@ Decision: the existing engine-analysis, current-text and disclosure-application 
 for multi-value grouping, local offsets and positions, duplicate/empty values, batching and the invocation cache; no
 story is added because this interface change introduces no public state. Engine fixtures use OpenSearch's one-unit
 offset gap between array values.
+Decision: client declarations expose the same readonly text batches, positional token groups and batch limits;
+native current-text coverage uses `analyzeInstalledMany` directly, retaining native source ownership and disclosure assertions.
 `cjk_bigram_v2` and `name_prefix` omit empty terms: an empty returned token is unavailable, since accepting it
 would let an empty prefix match every current name. This boundary rule does not reject empty normalized keys.
 The native CJK case independently re-reads current source text before the writer catches up, checks that retired

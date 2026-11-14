@@ -2,9 +2,11 @@ import type { IndexedSubject, RelationFacetMatch } from '../source.ts';
 import type { TextNode } from '../text.ts';
 import { CJK_ANALYZER, NAME_PREFIX_ANALYZER, type EngineToken } from './admission.ts';
 export type CurrentTextAnalyzer = typeof CJK_ANALYZER | typeof NAME_PREFIX_ANALYZER;
-export type CurrentTextAnalysis = (analyzer: CurrentTextAnalyzer, text: string) => Promise<readonly EngineToken[]>;
+export type CurrentTextAnalysis = (analyzer: CurrentTextAnalyzer, texts: readonly string[]) => Promise<readonly (readonly EngineToken[])[]>;
 export declare const CURRENT_TEXT_LIMITS: Readonly<{
     scanBytes: number;
+    batchBytes: number;
+    batchesPerSubject: 9;
     concurrency: 16;
 }>;
 /** Analyze current native text with the same analyzer installed on the queried Search generation. */
