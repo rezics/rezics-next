@@ -1,8 +1,9 @@
+import { useMemo } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { RealmBansControl } from '../community/realm-bans-control';
-import type { BanReadState, InstalledRealmBanPage } from '../community/realm-bans';
+import type { BanReadState, BanWriteInput, BanWriteResult, InstalledRealmBanPage } from '../community/realm-bans';
 import { PatternStory } from './page';
 import { AppShell } from '../shell/shell';
 import { communityCurrentClaimStory } from './community-current-claim';
@@ -210,3 +211,65 @@ const windowRead = async (cursor?: string): Promise<BanReadState> => ({
     items: page.page.items.map((ban) => ({ ...ban, reason: cursor ? 'Later window episode' : 'First window episode' })),
   },
 });
+
+function IndependentUnbanRecovery() {
+  const boundary = useMemo(() => {
+    let original: BanWriteInput | null = null;
+    let applied = false;
+    return {
+      read: async (): Promise<BanReadState> => (applied ? { state: 'unavailable' } : page),
+      write: async (input: BanWriteInput): Promise<BanWriteResult> => {
+        if (!original) {
+          original = input;
+          return { ok: false, reason: 'unavailable' };
+        }
+        if (JSON.stringify(original) !== JSON.stringify(input)) throw new Error('The uncertain command changed');
+        applied = true;
+        return { ok: true, action: 'unban', accountId: input.accountId };
+      },
+    };
+  }, []);
+  return (
+    <PatternStory visitor="Signed In" path="/spaces/quiet-novel-club">
+      <AppShell>
+        <RealmBansControl realmId={realmId} initial={page} ready {...boundary} />
+      </AppShell>
+    </PatternStory>
+  );
+}
+export const UncertainUnbanThenUnavailableList: Story = {
+  render: () => <IndependentUnbanRecovery />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const list = canvas.getByRole('list', { name: m.realm_bans_current() });
+    await userEvent.click(within(list).getAllByRole('button', { name: m.realm_bans_unban() })[0]!);
+    const review = canvas.getByRole('group', { name: m.realm_bans_unban_confirm() });
+    await userEvent.click(within(review).getByRole('button', { name: m.realm_bans_confirm() }));
+    await expect(canvas.getByRole('button', { name: m.realm_bans_refresh() })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_retry() }));
+    await expect(await canvas.findByRole('status', { name: m.realm_bans_details_lifted_heading() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.realm_bans_read_retry() })).toBeEnabled();
+    await expect(canvas.queryByRole('button', { name: m.realm_bans_retry() })).toBeNull();
+  },
+};
+
+export const SparseBanWindow: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/spaces/quiet-novel-club">
+      <AppShell>
+        <RealmBansControl
+          realmId={realmId}
+          initial={{ ...page, page: { ...page.page, items: [], next: 'opaque-sparse-window' } }}
+          ready
+          read={read}
+          write={write}
+        />
+      </AppShell>
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.realm_bans_empty())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.realm_bans_next() })).toBeEnabled();
+  },
+};

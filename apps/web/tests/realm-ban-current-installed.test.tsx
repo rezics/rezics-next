@@ -265,7 +265,7 @@ test('1/10/20 installed composition retains every row, exact retry/frontier and 
     await mount();
     expect(requests.length).toBe(1);
     expect(host.querySelectorAll('li').length).toBe(count);
-    expect(host.textContent).toContain('Native Space / Native Realm');
+    expect(host.textContent).toContain('Native Realm · Native Space');
     expect(host.textContent).toContain('Disclosed river');
     expect(host.textContent).toContain('Disclosed moderator');
     expect(host.querySelector('a[href$="/@river"]')).not.toBeNull();

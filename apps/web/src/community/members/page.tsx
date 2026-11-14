@@ -193,7 +193,7 @@ export function RealmMembersPage({
           className="flex max-w-2xl flex-wrap items-end gap-3 rounded-xl border bg-muted/20 p-4"
           onSubmit={inspectAccount}
         >
-          <div className="min-w-0 flex-1 space-y-2">
+          <div className="min-w-0 flex-1 basis-64 space-y-2">
             <label htmlFor={`${id}-account`} className="text-sm font-medium">
               {m.realm_bans_inspect_account()}
             </label>

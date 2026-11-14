@@ -464,7 +464,7 @@ function RealmClaimReviewContent({
               <div
                 ref={state.outcome === 'conflict' ? undefined : setRecoveryBoundary}
                 tabIndex={-1}
-                className="space-y-3 p-2 text-sm leading-7 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="space-y-3 rounded-xl border bg-muted/20 p-4 text-sm leading-7 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 <p>
                   {state.busy

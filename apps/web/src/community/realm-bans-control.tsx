@@ -915,7 +915,7 @@ function RealmBansVisit({
         </div>
       </div>
       {view.state !== 'ready' ? (
-        <div className="space-y-3">
+        <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
           <p role="status" className="text-sm text-muted-foreground">
             {readMessage(view.state)}
           </p>
@@ -1448,7 +1448,7 @@ function RealmBansVisit({
           ))
         : null}
       {result && !result.ok ? (
-        <div role="alert" className="space-y-3 text-sm">
+        <div role="alert" className="space-y-3 rounded-xl border border-destructive/30 p-4 text-sm">
           <p>{writeMessage(result.reason)}</p>
           {retry ? (
             <Button

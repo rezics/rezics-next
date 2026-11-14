@@ -167,9 +167,8 @@ test('Realm claim review prioritizes the human request and preserves visible app
           expect(queue.getAttribute('aria-labelledby')).toBe(queueHeading.id);
           expect(queue.querySelectorAll('li')).toHaveLength(1);
           const row = queue.querySelector('li')!;
-          expect(row.dataset.slot).toBe('list-row');
-          expect(row.querySelector('h3')?.textContent).toBe(m.realm_review_details_request_heading());
-          expect(row.className).toContain('[&_h3]:line-clamp-none');
+          expect(row.querySelector('h3')?.textContent).toBe(reviewRequest.claimant!.label);
+          expect(row.querySelector('h3')?.className).not.toMatch(/truncate|line-clamp/u);
           expect(host.querySelector('article')?.className).toContain('[overflow-wrap:anywhere]');
           expect(host.textContent).toContain(m.realm_review_guidance_dates());
           expect(host.textContent).toContain(m.realm_review_guidance_authority());

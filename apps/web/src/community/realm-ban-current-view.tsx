@@ -11,16 +11,17 @@ type Identity = InstalledRealmBanPage['items'][number]['account'];
 export function RealmBanIdentity({
   accountId,
   identity,
-  reference = true,
+  fallbackLabel = true,
 }: {
   accountId: string;
   identity?: Identity | null | undefined;
-  reference?: boolean;
+  fallbackLabel?: boolean;
 }) {
   if (!identity || identity.accountId !== accountId || identity.state !== 'available')
     return (
       <span className="min-w-0 [overflow-wrap:anywhere]">
-        {m.realm_bans_details_account()} <ManagementReference>{accountId}</ManagementReference>
+        {fallbackLabel ? <>{m.realm_bans_details_account()} </> : null}
+        <ManagementReference>{accountId}</ManagementReference>
       </span>
     );
   const destination =
@@ -40,7 +41,7 @@ export function RealmBanIdentity({
         <bdi className="font-medium">{identity.label}</bdi>
       )}
       {identity.handle ? <bdi className="text-sm text-muted-foreground">@{identity.handle}</bdi> : null}
-      {reference ? <ManagementReference>{accountId}</ManagementReference> : null}
+      <ManagementReference>{accountId}</ManagementReference>
     </span>
   );
 }
@@ -56,12 +57,12 @@ export function RealmBanEpisodeView({
     <dl className="grid min-w-0 gap-x-6 gap-y-4 sm:grid-cols-2">
       {includeAccount ? (
         <ManagementField label={m.realm_bans_details_account()}>
-          <RealmBanIdentity accountId={ban.accountId} identity={ban.account} />
+          <RealmBanIdentity accountId={ban.accountId} identity={ban.account} fallbackLabel={false} />
         </ManagementField>
       ) : null}
       <ManagementField label={m.realm_bans_details_moderator()}>
         {ban.actor ? (
-          <RealmBanIdentity accountId={ban.actor} identity={ban.moderator} />
+          <RealmBanIdentity accountId={ban.actor} identity={ban.moderator} fallbackLabel={false} />
         ) : (
           m.realm_bans_moderator_erased()
         )}
