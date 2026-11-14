@@ -77,7 +77,11 @@ const discussionTitles = [
   'The lamp-room puzzle: hints before answers',
   'Our next community replay',
 ];
-function threads(kind: 'review' | 'discussion', subjectId: string, member: boolean) {
+function threads(
+  kind: 'review' | 'discussion',
+  subjectId: string,
+  member: boolean,
+): ReturnType<typeof communityThread>[] {
   const item = gameSubjectMap.get(subjectId)!;
   if (!['schema:VideoGame', 'wd:Q20631656', 'wd:Q209163'].includes(item.type) || subjectId === gameSparse.id) return [];
   const primary = subjectId === game.id;
@@ -96,9 +100,18 @@ function threads(kind: 'review' | 'discussion', subjectId: string, member: boole
       title,
       licence: 'CC0-1.0',
       firstPost: {
-        ...base.firstPost,
         id: gameId(identity + 200 + index),
         threadId: id,
+        route: 1,
+        authorId: communityAuthor.id,
+        boardId: base.boardId,
+        parentId: null,
+        subjectIds: [subjectId],
+        visibility: 'published',
+        securityRevision: '1',
+        createdAt: base.createdAt,
+        revisedAt: null,
+        mediaIds: [],
         revisionId: gameId(identity + 400 + index),
         licence: 'CC0-1.0',
         body: fromPlainText(
@@ -109,6 +122,8 @@ function threads(kind: 'review' | 'discussion', subjectId: string, member: boole
             : `${title} Please name your exact release and language when comparing versions. Keep story spoilers marked so new players can join the conversation.`,
           'blocks',
         ),
+        sha256: 'a'.repeat(64),
+        availability: 'available',
         voteCitation: kind === 'review' ? { questionId: QUESTION, units: 15 + (index % 5), revision: 1 } : null,
       },
       reactions: { like: 12 + index, insightful: 3 + index },
@@ -244,7 +259,7 @@ export function gameShowcasePage(id = game.id, view: View = 'overview', options:
         body: communityThreadPage(read.threadKind, { id, label: item.labels.en! }, page.rows, page.next, read.place),
       };
     } else if (read.kind === 'collections') {
-      const page = windowOf(subjectCollections(id), read.limit, node, read.cursor);
+      const page = windowOf(subjectCollections(id), read.limit, node);
       reads[key] = { status: 200, body: { collections: page.rows, count: page.count, next: page.next } };
     }
   }
