@@ -2129,11 +2129,13 @@ Entry-list authority and idempotency header, returning `{installation:'pending'|
 Content can install complete-input observations through `content.shelfTitleInputs`; `createContentShelfTitleSource`
 adapts that producer to the exact native port for both preparation and reads. It rejects partial/duplicate/foreign
 batches, undisclosed identities and changed source bases; a disclosed identity with no label remains missing coverage.
-Decision: Content supplies one released whole-source/batch observation; Library binds its version to owner, language
-policy and viewer lifetime without deriving currentness from loaded labels. The native Content producer remains an
-unimplemented integration seam; the adapter itself cannot establish complete-source currentness.
-Content still owns installation of that native producer and root client publication. Their absence
-is explicit preparation, including on a retained Web title URL; no default source or saved preference claims readiness.
+Decision: bracket each exact native title batch and max-64 current Access decision batches with complete Access and
+title-basis versions; any drift or denial retires the whole observation.
+
+`composeContentShelfTitleInputs` is the receiving implementation: it combines injected title observations and Access
+decisions into `ContentShelfTitleInputs`, checking both original and resolved identities and preserving visible empty
+label maps. The actual Semantic callable and its installation through `content.shelfTitleInputs` remain unimplemented;
+their absence keeps preparation pending and does not claim native readiness.
 Decision: keep the retained title URL in preparation until Content delivers its complete-source callable and official
 root client; Library reports whether producer installation, whole-source observation, exact disclosed batch or stable
 post-batch basis is missing. A version string alone is not a substitute for the producer's complete observation.

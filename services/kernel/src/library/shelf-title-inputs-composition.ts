@@ -10,9 +10,10 @@ type CurrentDecision = { subjectId: string; allowed: boolean };
 
 /**
  * Released native Semantic observation. Its bounded whole-source version covers labels, original languages,
- * identities, redirects and source ownership independently of requested IDs. Empty subjects reads only that basis;
- * exact subjects returns every requested original with its resolved source identity. Each call releases its native
- * snapshots before resolving, and never scans or reads one Subject per requested ID.
+ * identities, redirects and source ownership independently of requested IDs, and stays stable across Library-only
+ * writes. An empty subjects list reads only that basis; an exact subjects list returns every requested original with
+ * its resolved source identity. Each call releases its native snapshots before resolving, and never scans or reads
+ * one Subject per requested ID.
  */
 export interface ContentShelfTitleNativeObserver {
   observe(input: {
@@ -28,9 +29,9 @@ export interface ContentShelfTitleNativeObserver {
 
 /**
  * Current Access observation for one owner and viewer. `readVersion` covers disclosure for the complete
- * title source regardless of requested IDs. Each decision batch applies current `subject:read` authority and
- * returns that same complete version; callers may pass at most 64 exact IDs per batch. Every method releases its
- * native snapshots before resolving.
+ * title source regardless of requested IDs, and stays stable across Library-only writes. Each decision batch
+ * applies current `subject:read` authority and returns that same complete version; callers may pass at most 64 exact
+ * IDs per batch. Every method releases its native snapshots before resolving.
  */
 export interface ContentShelfTitleCurrentAccess {
   readVersion(input: { owner: ShelfOwner; viewer: AccountActor }): Promise<CurrentVersion>;
@@ -56,6 +57,21 @@ type Request = {
   viewer: AccountActor;
   subjects: string[];
 };
+
+function ownerAndViewer(input: Request) {
+  return {
+    owner: { ...input.owner },
+    viewer: { ...input.viewer, scopes: [...input.viewer.scopes] },
+  };
+}
+
+function titleInput(input: Request, subjects = input.subjects) {
+  return {
+    ...ownerAndViewer(input),
+    languages: [...input.languages],
+    subjects: [...subjects],
+  };
+}
 
 function request(input: {
   owner: ShelfOwner;
@@ -166,10 +182,10 @@ export function composeContentShelfTitleInputs(
       const input = request(untrustedInput);
       try {
         // The Access interval starts before the native title read and remains open through all batched decisions.
-        const accessStart = await access.readVersion({ owner: input.owner, viewer: input.viewer });
+        const accessStart = await access.readVersion(ownerAndViewer(input));
         if (accessStart.status !== 'current' || !validVersion(accessStart.version)) return unavailable;
 
-        const title = await titles.observe(input);
+        const title = await titles.observe(titleInput(input));
         if (title.status !== 'current' || !validVersion(title.version)) return unavailable;
         const rows = exactRows(input.subjects, title.entries);
         if (!rows) return unavailable;
@@ -177,7 +193,7 @@ export function composeContentShelfTitleInputs(
         const decisionSubjects = [...new Set(rows.flatMap((row) => [row.subjectId, row.sourceId]))];
         for (let offset = 0; offset < decisionSubjects.length; offset += accessBatchSize) {
           const batch = decisionSubjects.slice(offset, offset + accessBatchSize);
-          const observed = await access.decide({ owner: input.owner, viewer: input.viewer, subjects: batch });
+          const observed = await access.decide({ ...ownerAndViewer(input), subjects: [...batch] });
           if (
             observed.status !== 'current' ||
             !validVersion(observed.version) ||
@@ -189,9 +205,9 @@ export function composeContentShelfTitleInputs(
         }
 
         // These serial rechecks overlap the title and Access observations at a common stable version.
-        const accessEnd = await access.readVersion({ owner: input.owner, viewer: input.viewer });
+        const accessEnd = await access.readVersion(ownerAndViewer(input));
         if (accessEnd.status !== 'current' || accessEnd.version !== accessStart.version) return unavailable;
-        const titleEnd = await titles.observe({ ...input, subjects: [] });
+        const titleEnd = await titles.observe(titleInput(input, []));
         if (
           titleEnd.status !== 'current' ||
           !validVersion(titleEnd.version) ||
