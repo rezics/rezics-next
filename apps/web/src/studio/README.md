@@ -163,7 +163,7 @@ promoted-commit acceptance remain separate verifier obligations.
 
 ## Stable draft outline anchors
 
-Decision: extend the bounded point visit with exact draft updates and a separate single-chapter publication review;
+Decision: insert and move use the bounded point visit with one replacing page and explicitly observed source/parent/before anchors; native owns cycle, depth and admission. Exact updates and single-chapter publication keep their separate reviews;
 public anchors are observed only in the expected public snapshot and draft-only ancestor titles require explicit inclusion.
 Switching between draft changes and publication retires the previous selection and refreshes owner pointers.
 
@@ -183,7 +183,7 @@ Both retain the original idempotency key, CSRF and session/locale intent. Unknow
 A stale result preserves all choices but requires an explicit owner-head refresh, new observation/review of retained
 anchors and an explicit exact-version reread through the Post port; the latest chapter head is never substituted.
 Only then can review create a fresh intent/key. The private authenticated CSRF/no-store BFF validates incoming
-operands and calls the installed `$insertDraftPoint.post` or `$removeDraftPoint.post`; external receipts and pages
+operands and calls the installed `$insertDraftPoint.post` `$moveDraftPoint.post`, `$updateDraftPoint.post` or `$removeDraftPoint.post`; external receipts and pages
 are validated at the HTTP boundary. No Client declaration or generator changes are needed.
 
 `hosted-draft-point-lifecycle.ts` owns the shared root-append/point replay, stale refresh, receipt and retirement
@@ -192,7 +192,7 @@ historical replay, selects a new bounded window; failed readback retries only th
 incarnation, source, credential, locale and departure retire private selection, abort pending requests and fence late
 results and focus. Shared wrapping 44px controls and eight-locale `studio_draft_point_*` messages retain the existing
 Studio appearance. Unmapped legacy drafts retain native recovery and the complete editor link; no browser migration
-or implicit whole-tree replacement is attempted. Move, point publication and batch activation remain separate work.
+or implicit whole-tree replacement is attempted. Batch activation remains separate work.
 
 Sources read before design: this owner's bounded-root section, native
 [authoring and release](../../../../services/kernel/src/content/hosted-chapters.md#authoring-and-release),

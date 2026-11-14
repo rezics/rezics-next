@@ -14,9 +14,10 @@ import {
 import { hostedOccurrenceId } from './hosted-structure';
 
 type AvailableOccurrence = Extract<HostedOutlineWindowPage['items'][number], { availability: 'available' }>;
-export type DraftPointAnchor = Readonly<{ revisionId: string; item: AvailableOccurrence }>;
+export type DraftPointAnchor = Readonly<{ revisionId: string; confirmed: boolean; item: AvailableOccurrence }>;
 export type DraftPointChoices = Readonly<{
-  kind: 'part' | 'chapter' | 'remove' | 'update';
+  kind: 'part' | 'chapter' | 'remove' | 'update' | 'move';
+  move: DraftPointAnchor | null;
   update: DraftPointAnchor | null;
   parent: DraftPointAnchor | null;
   before: DraftPointAnchor | null;
@@ -36,10 +37,15 @@ type Options = Omit<
 
 export function draftPointReady(state: Extract<HostedDraftPointState, { kind: 'active' }>): boolean {
   const { choice, head } = state;
-  if (choice.kind === 'remove') return choice.removal?.revisionId === head;
+  const current = (anchor: DraftPointAnchor | null) => anchor?.confirmed && anchor.revisionId === head;
+  if (choice.kind === 'remove') return Boolean(current(choice.removal));
+  if (choice.kind === 'move')
+    return Boolean(
+      current(choice.move) && (!choice.parent || current(choice.parent)) && (!choice.before || current(choice.before)),
+    );
   if (choice.kind === 'update') {
     const item = choice.update?.item;
-    if (!item || choice.update?.revisionId !== head || !state.title.trim() || [...state.title.trim()].length > 256)
+    if (!item || !current(choice.update) || !state.title.trim() || [...state.title.trim()].length > 256)
       return false;
     if (item.kind === 'part') return true;
     return (
@@ -51,8 +57,8 @@ export function draftPointReady(state: Extract<HostedDraftPointState, { kind: 'a
     );
   }
   if (!state.title.trim() || [...state.title.trim()].length > 256) return false;
-  if (choice.parent && choice.parent.revisionId !== head) return false;
-  if (choice.before && choice.before.revisionId !== head) return false;
+  if (choice.parent && !current(choice.parent)) return false;
+  if (choice.before && !current(choice.before)) return false;
   if (choice.kind === 'chapter') return state.selection !== null && choice.versionHead === head;
   return true;
 }
@@ -60,17 +66,19 @@ export function draftPointReady(state: Extract<HostedDraftPointState, { kind: 'a
 /** A few reviewed occurrences, never a cache of pages or a replacement outline. */
 export class HostedDraftPointVisit extends HostedDraftCommandVisit<HostedDraftPointRequest, DraftPointChoices> {
   constructor(private readonly pointOptions: Options) {
+    const send = pointOptions.native.writeDraftPoint.bind(pointOptions.native);
     super({
       ...pointOptions,
-      choice: { kind: 'part', update: null, parent: null, before: null, removal: null, versionHead: null },
+      choice: { kind: 'part', move: null, update: null, parent: null, before: null, removal: null, versionHead: null },
       selected: (choice, _selection, head) => ({ ...choice, versionHead: head }),
       refreshed: (choice) => ({
         ...choice,
         versionHead: null,
-        parent: choice.parent && { ...choice.parent, revisionId: '' },
-        before: choice.before && { ...choice.before, revisionId: '' },
-        removal: choice.removal && { ...choice.removal, revisionId: '' },
-        update: choice.update && { ...choice.update, revisionId: '' },
+        move: choice.move && { ...choice.move, confirmed: false },
+        parent: choice.parent && { ...choice.parent, confirmed: false },
+        before: choice.before && { ...choice.before, confirmed: false },
+        removal: choice.removal && { ...choice.removal, confirmed: false },
+        update: choice.update && { ...choice.update, confirmed: false },
       }),
       async prepare(state, key) {
         if (!draftPointReady(state)) return null;
@@ -85,6 +93,17 @@ export class HostedDraftPointVisit extends HostedDraftCommandVisit<HostedDraftPo
             ...envelope,
             kind: 'remove',
             body: { expectedRevisionId: state.head, occurrenceId: choice.removal!.item.occurrenceId },
+          };
+        if (choice.kind === 'move')
+          return {
+            ...envelope,
+            kind: 'move',
+            body: {
+              expectedRevisionId: state.head,
+              occurrenceId: choice.move!.item.occurrenceId,
+              parentId: choice.parent?.item.occurrenceId ?? null,
+              beforeOccurrenceId: choice.before?.item.occurrenceId ?? null,
+            },
           };
         if (choice.kind === 'update')
           return {
@@ -119,7 +138,7 @@ export class HostedDraftPointVisit extends HostedDraftCommandVisit<HostedDraftPo
           },
         };
       },
-      send: (request, signal, csrf) => pointOptions.native.writeDraftPoint(request, signal, csrf),
+      send,
     });
   }
 
@@ -132,16 +151,24 @@ export class HostedDraftPointVisit extends HostedDraftCommandVisit<HostedDraftPo
   end = () => this.choose((choice) => ({ ...choice, before: null }));
 
   /** Only a row in the currently displayed exact page can become a new reviewed anchor. */
-  observe = (occurrenceId: string, role: 'parent' | 'before' | 'removal' | 'update') => {
+  observe = (occurrenceId: string, role: 'parent' | 'before' | 'removal' | 'update' | 'move') => {
     if (this.state.kind !== 'active') return;
     const page = this.state.outline.snapshot();
     if (page.kind !== 'ready') return;
     const item = page.page.items.find((row) => row.occurrenceId === occurrenceId);
     if (!item || item.availability !== 'available') return;
-    const anchor: DraftPointAnchor = { revisionId: this.state.head, item: { ...item } };
+    const anchor: DraftPointAnchor = { revisionId: this.state.head, confirmed: true, item: { ...item } };
     this.choose((choice) => {
+      if (role === 'move') return { ...choice, move: anchor, kind: 'move' };
       if (role === 'update') return { ...choice, update: anchor, kind: 'update', versionHead: null };
-      if (role === 'parent') return item.kind === 'part' ? { ...choice, parent: anchor, before: null } : choice;
+      if (role === 'parent')
+        return item.kind === 'part'
+          ? {
+              ...choice,
+              parent: anchor,
+              before: choice.parent?.item.occurrenceId === item.occurrenceId ? choice.before : null,
+            }
+          : choice;
       if (role === 'before')
         return item.parentId === (choice.parent?.item.occurrenceId ?? null) ? { ...choice, before: anchor } : choice;
       return { ...choice, removal: anchor, kind: 'remove' };

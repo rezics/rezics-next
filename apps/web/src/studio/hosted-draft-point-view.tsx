@@ -328,10 +328,10 @@ export function HostedDraftPointView({
               <dd>{body.expectedRevisionId}</dd>
               <dt>{m.studio_draft_point_occurrence({}, options)}</dt>
               <dd>{body.occurrenceId}</dd>
-              {intent!.request.kind !== 'remove' ? (
+              {'title' in body ? (
                 <>
                   <dt>{m.studio_draft_point_title({}, options)}</dt>
-                  <dd>{intent!.request.body.title}</dd>
+                  <dd>{body.title}</dd>
                 </>
               ) : null}
             </dl>

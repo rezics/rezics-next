@@ -394,7 +394,7 @@ test('same-cursor retry never drains or refills sparse pages; chapters cannot pa
   expect(g.visit.snapshot()).toEqual({ kind: 'ended' });
 });
 
-test('generated HTTP insert/remove methods send exact bounded operands and validate external receipts without outline reads', async () => {
+test('generated HTTP insert/remove/move methods send exact bounded operands and validate external receipts without outline reads', async () => {
   const calls: { url: string; init?: RequestInit }[] = [];
   let response: unknown = receipt;
   let status = 200;
@@ -434,7 +434,18 @@ test('generated HTTP insert/remove methods send exact bounded operands and valid
     body: { expectedRevisionId: id(4), occurrenceId: id(20) },
   };
   const signal = new AbortController().signal;
-  for (const request of [insert, remove]) {
+  const move: HostedDraftPointRequest = {
+    ...base,
+    idempotencyKey: crypto.randomUUID(),
+    kind: 'move',
+    body: {
+      expectedRevisionId: id(4),
+      occurrenceId: chapter.occurrenceId,
+      parentId: null,
+      beforeOccurrenceId: part.occurrenceId,
+    },
+  };
+  for (const request of [insert, remove, move]) {
     expect(await native.writeDraftPoint(request, signal)).toEqual(ok(receipt));
     const call = calls.at(-1)!;
     expect(new URL(call.url).pathname).toBe(`/v1/hostedCatalogues/${id(1)}:${request.kind}DraftPoint`);
@@ -442,7 +453,7 @@ test('generated HTTP insert/remove methods send exact bounded operands and valid
     expect(new Headers(call.init?.headers).get('idempotency-key')).toBe(JSON.stringify(request.idempotencyKey));
     expect(call.init).toMatchObject({ cache: 'no-store', redirect: 'manual', signal });
   }
-  expect(calls).toHaveLength(2);
+  expect(calls).toHaveLength(3);
   response = { ...receipt, catalogueId: id(99) };
   expect(await native.writeDraftPoint(insert, signal)).toMatchObject({ ok: false, error: { kind: 'uncertain' } });
   status = 412;
