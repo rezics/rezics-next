@@ -937,6 +937,7 @@ export function StudioWorkbench({
                     active={canvas === 'document' && historyOpen}
                     headingRef={historyHeading}
                     workingHelp={copy.historyHelp}
+                    returnToEditing={{ label: copy.closeHistory, onClick: closeHistory }}
                   />
                 ) : null}
               </section>
