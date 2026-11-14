@@ -3264,8 +3264,10 @@ setting the initial defaults therefore leaves storage absent. Returning to the d
 and its advancing version. Stale expected versions answer 409; reusing a key with different input answers 422.
 Replaying a successful key returns its original values/version after current authorization, even if later commands
 changed the preferences. Every successful response includes both settings, the shelf, notifications, the version,
-`page`, the Reading viewer/actions envelope and `shelfAdvice`, and PATCH carries the session token for its command receipt. Each successful command emits the existing `account-updated` event with only
-the account ID, keeping preference values out of the event data. Invalid values and unknown fields answer 400.
+`page`, the Reading viewer/actions envelope and `shelfAdvice`, and PATCH carries the session token for its command
+receipt. Decision: each changed PATCH emits the existing `account-updated` event once with only the account ID;
+an equal effective patch or repeated reset keeps its exact receipt without an event, using its observed session
+position even when zero. Invalid values and unknown fields answer 400.
 
 Read cost: one exact `(route, account_id)` primary-key seek, at most one row and one statement, plus the existing
 `account:read` authorization and one `account:update` authorization on the same account resource so Reading and shelf

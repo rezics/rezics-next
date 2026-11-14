@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { clientDeclarations, committedDeclarations } from '../../scripts/client.ts';
 import { notificationAllowed } from '../../src/access/index.ts';
 import { createPreferenceCommands, withReadingPreferencePage } from '../../src/access/preferences.ts';
+import { receiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import {
   DEFAULT_NOTIFICATIONS,
   NOTIFICATION_KINDS,
@@ -40,20 +41,46 @@ afterAll(async () => {
   }
 });
 
-async function call(person: { accountId: string; bearer: string }, body?: unknown) {
+async function call(person: { accountId: string; bearer: string }, body?: unknown, key = Bun.randomUUIDv7()) {
   const response = await kernel.handle(
     new Request(`http://kernel.test/v1/accounts/${person.accountId}/preferences`, {
       method: body === undefined ? 'GET' : 'PATCH',
       headers: {
         authorization: `Bearer ${person.bearer}`,
         'content-type': 'application/json',
-        'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
+        'idempotency-key': JSON.stringify(key),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
-  return { status: response.status, value: await response.json() };
+  return {
+    status: response.status,
+    value: await response.json(),
+    sessionToken: response.headers.get('rezics-session-token'),
+  };
 }
+const accountUpdated = 'com.rezics.access.account-updated.v1';
+const preferenceEventCount = async (accountId: string) =>
+  (
+    await db.admin.query('SELECT count(*)::int AS count FROM core.outbox WHERE subject=$1 AND type=$2', [
+      accountId,
+      accountUpdated,
+    ])
+  ).rows[0].count;
+const preferenceReceipt = (accountId: string, key: string) =>
+  db.admin.query(
+    'SELECT 1 FROM core.receipt WHERE principal_id=$1 AND command_kind=$2 AND idempotency_key=ANY($3::text[])',
+    [
+      accountId,
+      'access.account.preferences',
+      receiptKeyCandidates(
+        testReceiptKeys(),
+        'access.account.preferences',
+        { kind: 'account', id: accountId },
+        key,
+      ),
+    ],
+  );
 const stored = (accountId: string) =>
   db.admin.query(
     'SELECT notifications, version, xmin::text FROM access.account_preferences WHERE route=$1 AND account_id=$2',
@@ -81,6 +108,7 @@ test('preferences return every optional notification kind as enabled until the a
 
 test("a notifications patch merges per kind and null restores a kind's default", async () => {
   const person = await fixture.person('notifications-merge');
+  const events = await preferenceEventCount(person.accountId);
   expect((await call(person, { expectedVersion: 0, notifications: { reply: false } })).status).toBe(200);
   const merged = await call(person, {
     expectedVersion: 1,
@@ -101,6 +129,17 @@ test("a notifications patch merges per kind and null restores a kind's default",
   expect(cleared.value.shelf).toEqual({ gridSize: 'large' });
   expect(cleared.value.version).toBe(4);
   expect((await stored(person.accountId)).rows[0].notifications).toEqual({});
+  const storedBeforeRepeat = (await stored(person.accountId)).rows;
+  const resetBody = { expectedVersion: 4, notifications: null };
+  const resetKey = Bun.randomUUIDv7();
+  const reset = await call(person, resetBody, resetKey);
+  const replay = await call(person, resetBody, resetKey);
+  expect(reset.value).toEqual(cleared.value);
+  expect(replay.value).toEqual(reset.value);
+  expect(replay.sessionToken).toBe(reset.sessionToken);
+  expect((await preferenceReceipt(person.accountId, resetKey)).rows).toHaveLength(1);
+  expect(await preferenceEventCount(person.accountId)).toBe(events + 4);
+  expect((await stored(person.accountId)).rows).toEqual(storedBeforeRepeat);
 });
 
 test('a mandatory or unknown kind in a patch is refused with 400 and changes nothing', async () => {
@@ -145,10 +184,21 @@ test('a mandatory or unknown kind in a patch is refused with 400 and changes not
 
 test('a patch that leaves notifications unchanged keeps the version and writes no row', async () => {
   const person = await fixture.person('notifications-noop');
+  const events = await preferenceEventCount(person.accountId);
+  const key = Bun.randomUUIDv7();
+  const body = { expectedVersion: 0, notifications: null };
+  const unchanged = await call(person, body, key);
+  const replay = await call(person, body, key);
+  expect(unchanged.status).toBe(200);
+  expect(unchanged.value.version).toBe(0);
+  expect(unchanged.sessionToken).toBeTruthy();
+  expect(replay.value).toEqual(unchanged.value);
+  expect(replay.sessionToken).toBe(unchanged.sessionToken);
+  expect((await preferenceReceipt(person.accountId, key)).rows).toHaveLength(1);
   for (const notifications of [{}, DEFAULT_NOTIFICATIONS, { reply: null }, null]) {
-    const unchanged = await call(person, { expectedVersion: 0, notifications });
-    expect(unchanged.status).toBe(200);
-    expect(unchanged.value.version).toBe(0);
+    const same = await call(person, { expectedVersion: 0, notifications });
+    expect(same.status).toBe(200);
+    expect(same.value.version).toBe(0);
     expect((await stored(person.accountId)).rows).toHaveLength(0);
   }
   await call(person, { expectedVersion: 0, notifications: allOff });
@@ -157,6 +207,7 @@ test('a patch that leaves notifications unchanged keeps the version and writes n
   expect(unchanged.status).toBe(200);
   expect(unchanged.value.version).toBe(1);
   expect((await stored(person.accountId)).rows).toEqual(before);
+  expect(await preferenceEventCount(person.accountId)).toBe(events + 1);
 });
 
 test('the command refuses invalid notification patches before any write', async () => {

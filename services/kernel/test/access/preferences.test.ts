@@ -57,6 +57,28 @@ async function call(accountId: string, bearer?: string, body?: unknown, key = Bu
   );
   return { response, value: await response.json() };
 }
+const accountUpdated = 'com.rezics.access.account-updated.v1';
+const preferenceEventCount = async (accountId: string) =>
+  (
+    await db.admin.query('SELECT count(*)::int AS count FROM core.outbox WHERE subject=$1 AND type=$2', [
+      accountId,
+      accountUpdated,
+    ])
+  ).rows[0].count;
+const preferenceReceipt = (accountId: string, key: string) =>
+  db.admin.query(
+    'SELECT 1 FROM core.receipt WHERE principal_id=$1 AND command_kind=$2 AND idempotency_key=ANY($3::text[])',
+    [
+      accountId,
+      'access.account.preferences',
+      receiptKeyCandidates(
+        testReceiptKeys(),
+        'access.account.preferences',
+        { kind: 'account', id: accountId },
+        key,
+      ),
+    ],
+  );
 
 beforeAll(async () => {
   scopes.push('account:read', 'account:update');
@@ -82,7 +104,7 @@ afterAll(async () => {
   }
 });
 
-test('defaults require no preference row, and unchanged writes keep version zero', async () => {
+test('default and equal settings return durable eventless exact retries', async () => {
   const read = await call(owner.accountId, owner.bearer);
   expect(read.response.status).toBe(200);
   expect(read.value).toEqual(shown({ version: 0 }));
@@ -90,9 +112,25 @@ test('defaults require no preference row, and unchanged writes keep version zero
   expect(read.value.shelfAdvice.effective).toEqual({});
   expect(read.value.shelfAdvice.limits.maxLayouts).toBe(32);
   expect(read.value.shelfAdvice.supported.layouts).toEqual(['grid', 'list', 'table']);
-  const same = await call(owner.accountId, owner.bearer, { expectedVersion: 0, spoilerLevel: 0, suitability: 'blur' });
-  expect(same.response.status).toBe(200);
-  expect(same.value).toEqual(read.value);
+  const events = await preferenceEventCount(owner.accountId);
+  for (const patch of [
+    { expectedVersion: 0, spoilerLevel: 0, suitability: 'blur' },
+    { expectedVersion: 0, shelf: {} },
+    { expectedVersion: 0, notifications: DEFAULT_NOTIFICATIONS },
+  ]) {
+    const key = Bun.randomUUIDv7();
+    const same = await call(owner.accountId, owner.bearer, patch, key);
+    const replay = await call(owner.accountId, owner.bearer, patch, key);
+    expect(same.response.status).toBe(200);
+    expect(same.value).toEqual(read.value);
+    expect(same.response.headers.get('rezics-session-token')).toBeTruthy();
+    expect(replay.value).toEqual(same.value);
+    expect(replay.response.headers.get('rezics-session-token')).toBe(
+      same.response.headers.get('rezics-session-token'),
+    );
+    expect((await preferenceReceipt(owner.accountId, key)).rows).toHaveLength(1);
+  }
+  expect(await preferenceEventCount(owner.accountId)).toBe(events);
   expect(
     (
       await db.admin.query('SELECT * FROM access.account_preferences WHERE route=$1 AND account_id=$2', [
@@ -104,6 +142,7 @@ test('defaults require no preference row, and unchanged writes keep version zero
 });
 
 test('versioned partial writes replay once, reject stale versions and bind the idempotency key', async () => {
+  const events = await preferenceEventCount(owner.accountId);
   const key = Bun.randomUUIDv7();
   const body = { expectedVersion: 0, spoilerLevel: 2 };
   const first = await call(owner.accountId, owner.bearer, body, key);
@@ -141,6 +180,29 @@ test('versioned partial writes replay once, reject stale versions and bind the i
   );
   expect(stored.rows[0].count).toBe(1);
   expect((await call(owner.accountId, owner.bearer)).value).toEqual(unchanged.value);
+  const resetBody = { expectedVersion: 2, spoilerLevel: 0, suitability: 'blur' };
+  const reset = await call(owner.accountId, owner.bearer, resetBody);
+  expect(reset.value).toEqual(shown({ version: 3 }));
+  const storedAfterReset = await db.admin.query(
+    'SELECT version,xmin::text FROM access.account_preferences WHERE account_id=$1',
+    [owner.accountId],
+  );
+  const resetKey = Bun.randomUUIDv7();
+  const resetAgainBody = { ...resetBody, expectedVersion: 3 };
+  const resetAgain = await call(owner.accountId, owner.bearer, resetAgainBody, resetKey);
+  const replay = await call(owner.accountId, owner.bearer, resetAgainBody, resetKey);
+  expect(resetAgain.value).toEqual(reset.value);
+  expect(replay.value).toEqual(resetAgain.value);
+  expect(replay.response.headers.get('rezics-session-token')).toBe(
+    resetAgain.response.headers.get('rezics-session-token'),
+  );
+  expect((await preferenceReceipt(owner.accountId, resetKey)).rows).toHaveLength(1);
+  expect(await preferenceEventCount(owner.accountId)).toBe(events + 3);
+  expect(
+    (await db.admin.query('SELECT version,xmin::text FROM access.account_preferences WHERE account_id=$1', [
+      owner.accountId,
+    ])).rows,
+  ).toEqual(storedAfterReset.rows);
 });
 
 test('another account and anonymous callers cannot read or set preferences', async () => {
@@ -241,13 +303,14 @@ test('concurrent first writes compare the same expected version without losing a
 });
 
 const shelfRow = (accountId: string) =>
-  db.admin.query('SELECT shelf, version FROM access.account_preferences WHERE route=$1 AND account_id=$2', [
-    routeOf(accountId),
-    accountId,
-  ]);
+  db.admin.query(
+    'SELECT shelf, version, xmin::text FROM access.account_preferences WHERE route=$1 AND account_id=$2',
+    [routeOf(accountId), accountId],
+  );
 
 test('a shelf is empty until saved, merges by part and entry, and null removes', async () => {
   const person = await fixture.person('preferences-shelf');
+  const events = await preferenceEventCount(person.accountId);
   expect((await call(person.accountId, person.bearer)).value.shelf).toEqual({});
   const empty = await call(person.accountId, person.bearer, { expectedVersion: 0, shelf: {} });
   expect(empty.value).toEqual(shown({ version: 0 }));
@@ -302,6 +365,19 @@ test('a shelf is empty until saved, merges by part and entry, and null removes',
   expect(cleared.value).toEqual(shown({ version: 4 }));
   expect(cleared.value.shelfAdvice.effective).toEqual({});
   expect((await shelfRow(person.accountId)).rows[0].shelf).toEqual({});
+  const stored = (await shelfRow(person.accountId)).rows;
+  const resetBody = { expectedVersion: 4, shelf: null };
+  const resetKey = Bun.randomUUIDv7();
+  const reset = await call(person.accountId, person.bearer, resetBody, resetKey);
+  const replay = await call(person.accountId, person.bearer, resetBody, resetKey);
+  expect(reset.value).toEqual(cleared.value);
+  expect(replay.value).toEqual(reset.value);
+  expect(replay.response.headers.get('rezics-session-token')).toBe(
+    reset.response.headers.get('rezics-session-token'),
+  );
+  expect((await preferenceReceipt(person.accountId, resetKey)).rows).toHaveLength(1);
+  expect(await preferenceEventCount(person.accountId)).toBe(events + 4);
+  expect((await shelfRow(person.accountId)).rows).toEqual(stored);
 });
 
 test('a patch that leaves the shelf unchanged keeps the version and writes no row', async () => {

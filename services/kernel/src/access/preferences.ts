@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand } from '../command/command.ts';
+import { noEffect, runCommand } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { requestDigest } from '../http/request.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
@@ -464,24 +464,23 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
                       {}) as NotificationsPatch,
                   ),
           };
-          if (
+          const hasChanges =
             next.spoilerLevel !== current.spoilerLevel ||
             next.suitability !== current.suitability ||
             canonical(next.shelf) !== canonical(current.shelf) ||
-            canonical(next.notifications) !== canonical(current.notifications)
-          ) {
-            const changed = await set.run(tx, {
-              route,
-              account_id: input.accountId,
-              spoiler_level: next.spoilerLevel,
-              suitability: next.suitability,
-              shelf: next.shelf,
-              notifications: notificationOverrides(next.notifications),
-              expected_version: input.expectedVersion,
-            });
-            if (!changed) throw new ProblemError('conflict');
-            next.version = changed.version;
-          }
+            canonical(next.notifications) !== canonical(current.notifications);
+          if (!hasChanges) return noEffect(next);
+          const changed = await set.run(tx, {
+            route,
+            account_id: input.accountId,
+            spoiler_level: next.spoilerLevel,
+            suitability: next.suitability,
+            shelf: next.shelf,
+            notifications: notificationOverrides(next.notifications),
+            expected_version: input.expectedVersion,
+          });
+          if (!changed) throw new ProblemError('conflict');
+          next.version = changed.version;
           return {
             value: next,
             events: [
