@@ -10,9 +10,10 @@ import {
   admitGroup,
   deadlineClient,
   commandAccessContext,
+  shareAccount,
 } from './access-port.ts';
 import { createInitiatorRestorer } from './access-port.ts';
-import { DurableInitiatorUnavailableError } from '../access/contract/errors.ts';
+import { DurableInitiatorUnavailableError, LifecycleDeniedError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
   currentCommand,
@@ -61,6 +62,10 @@ import outputCommitQuery from './collection-publication-final-output-commit.sql'
 import completeEpisodeQuery from './collection-publication-final-episode-complete.sql';
 import currentCollectionQuery from './collection-publication-final-state.sql';
 import anchorQuery from './collection-publication-final-anchor.sql';
+import {
+  declareCollectionPublicationHistory,
+  guardCollectionPublicationHistory,
+} from './collection-publication-history.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type FinalAttempt = Readonly<{
@@ -315,7 +320,19 @@ export function createCollectionPublicationFinalCommand(
       if (typeof evidence === 'object' && evidence !== null) proofs.delete(evidence);
       if (!prepared || prepared.attempt !== attempt) throw denied();
       if ((await prepared.current.authorize(tx, attempt, prepared.proof)) !== 'execute') throw denied();
+      try {
+        await shareAccount(tx, ownerAccountId);
+      } catch (error) {
+        if (error instanceof LifecycleDeniedError) throw denied();
+        throw error;
+      }
       await authorizeCollectionRule(tx, attempt, prepared.checks);
+      await guardCollectionPublicationHistory(
+        tx,
+        partition,
+        { accountRoute: route, accountId: ownerAccountId },
+        2,
+      );
       return 'execute';
     },
   });
@@ -371,6 +388,12 @@ export function createCollectionPublicationFinalActivation(
         async (tx, context) => {
           const prepared = attempts.get(context.time);
           if (!prepared || prepared.attempt.time !== context.time) throw unavailable();
+          await declareCollectionPublicationHistory(
+            tx,
+            finalCommandKind,
+            { accountRoute: route, accountId: ownerAccountId },
+            2,
+          );
           const work = prepared.work;
           const before = await bounded(work, metadataFootprint(), async () => {
             const episode = await readFinalEpisode(tx, locator);

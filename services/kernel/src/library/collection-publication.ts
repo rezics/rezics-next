@@ -20,6 +20,10 @@ import type { Access, AccessCheck, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
+import {
+  declareCollectionPublicationHistory,
+  guardCollectionPublicationHistory,
+} from './collection-publication-history.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import {
@@ -426,6 +430,12 @@ export function createCollectionPublications(deps: Dependencies) {
                 if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
                 throw error;
               }
+              await guardCollectionPublicationHistory(
+                tx,
+                partitionOf(route),
+                { accountRoute: route, accountId: actor.accountId },
+                2,
+              );
               const prepared = attempts.get(attempt.time);
               if (!prepared) throw unavailable();
               await withNativeCollectionWorkAllowance(
@@ -455,6 +465,12 @@ export function createCollectionPublications(deps: Dependencies) {
         async (tx, command) => {
           const prepared = attempts.get(command.time);
           if (!prepared) throw unavailable();
+          await declareCollectionPublicationHistory(
+            tx,
+            kind,
+            { accountRoute: route, accountId: actor.accountId },
+            2,
+          );
           if (prepared.header.revision !== input.revision) throw conflict();
           prepared.output.dispatch();
           try {

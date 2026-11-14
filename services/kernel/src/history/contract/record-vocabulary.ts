@@ -38,6 +38,9 @@ export const COMMAND_HISTORY_KINDS = Object.freeze({
   'subject.batch_propose': 3025,
   'subject.batch_retract': 3026,
   'subject.terms': 3027,
+  'library.collection.publication.begin': 4001,
+  'library.collection.publish-selected': 4002,
+  'library.collection.publication.activate': 4003,
 });
 export type CommandHistoryKind = string;
 export type CommandHistoryScopes = Readonly<{ response: HistoryScope; events: readonly HistoryScope[] }>;

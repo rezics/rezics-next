@@ -43,6 +43,10 @@ import type { WorkAllowance } from '../contract/work-dimensions.ts';
 import type { NativeSourceIdentity } from '../native-source-custody.ts';
 import { commandHistoryIdentityAccounts } from '../../history/application/index.ts';
 import { encodeRoles, unionHistoryScope } from '../../history/contract/index.ts';
+import {
+  declareCollectionPublicationHistory,
+  guardCollectionPublicationHistory,
+} from '../collection-publication-history.ts';
 
 import { COLLECTION_PUBLICATION_COMMAND, COLLECTION_PUBLICATION_WORKFLOW } from '../contract/index.ts';
 import {
@@ -234,6 +238,12 @@ export function createNativeCollectionPublicationEpisodes(
           const mode = await ordinary.authorize(tx, attempt, prepared.proof);
           await authorizeCollectionRule(tx, attempt, prepared.checks);
           await shareAccount(tx, actor.accountId);
+          await guardCollectionPublicationHistory(
+            tx,
+            partitionOf(route),
+            { accountRoute: route, accountId: actor.accountId },
+            1,
+          );
           const prior = (
             await tx.query<{ sourceId: string; publicationId: string }>(
               `SELECT source_id::text AS "sourceId",publication_id::text AS "publicationId"
@@ -333,6 +343,12 @@ export function createNativeCollectionPublicationEpisodes(
         },
         async (tx, command) => {
           if (!prepared || currentCommand(tx).time !== command.time) throw unavailable();
+          await declareCollectionPublicationHistory(
+            tx,
+            COLLECTION_PUBLICATION_COMMAND,
+            { accountRoute: route, accountId: actor.accountId },
+            1,
+          );
           const collection = creation ? await creation.materialize(tx) : undefined;
           if (materialization) {
             if (!creation) await materialization.materialize(tx);

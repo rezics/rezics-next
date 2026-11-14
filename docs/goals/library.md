@@ -94,3 +94,5 @@ covers. Use the Web runner and [verification workflow](../development/verificati
 typing or a local integrated task is not review or Goal completion.
 
 Decision: Hosted Reading cursors keep the owner account, caller, limit and owner partition epoch binding while keyset-paging Subject UUIDs from any home route.
+
+Decision: Collection publication History records the actual owner and only identities proved for the current or restored initiator on each copied receipt, event and staged workflow, with the History erasure fence held in the same command transaction; later cleanup remains pending.
