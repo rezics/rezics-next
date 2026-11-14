@@ -29,33 +29,19 @@ Report overall landed product additions across `apps/`, `services/` and `package
 output, alongside accepted journeys and quality. Exclude tests, stories, fixtures, recordings, JSON, snapshots and
 generated files, including emitted declarations. Count additions without subtracting deletions; never pad output.
 
-During the current Web reconstruction campaign, target at least 50,000 high-quality landed product additions from
-Web campaign source per completed hour. This Web-only target is not a target for overall product throughput, and is
-not a claim about measured output. Apply the exclusions above; duplicated implementations, unnecessary abstractions,
-formatting churn and artificial expansion do not qualify. Prefer removing bad code when that produces the better
-product, even when it lowers measured additions. Report the actual shortfall instead of weakening quality or changing
-the denominator.
+During the current Web reconstruction campaign, target at least 50,000 high-quality landed product additions per
+completed UTC hour. The Web boundary is the `web-app`, `auth-pages` and `ui` paths in
+[`docs/architecture/modules.json`](../architecture/modules.json): `apps/web/src/**`, `apps/auth/src/**` and
+`packages/ui/src/**`. Apply the exclusions above; also exclude docs and formatting-only changes from the campaign.
+Keep overall product additions separate, with no comparison to the Web target.
 
-Decision: The current Web-only campaign target is 50,000 high-quality product additions per completed hour; overall
-product throughput remains a separate measure.
-Outside an active scoped reconstruction campaign, target 20,000 landed product lines per hour, aiming for 40,000,
-alongside accepted journeys and quality. Count additions under `apps/`, `services/` and `packages/` excluding tests,
-stories, fixtures, recordings, JSON, snapshots and generated files, including emitted declarations. Never pad output
-or subtract deletions.
+The line count does not certify usefulness or quality. Changed workflows, integrated source and published visual
+review are part of every delivery assessment. Duplicated implementations, unnecessary abstractions and artificial
+expansion do not qualify. Remove bad code when it improves the product, even if doing so lowers measured additions.
+Report actual shortfalls without changing the measure.
 
-During the active Web reconstruction campaign, target at least 50,000 useful added product source lines in each
-completed UTC hour. The measured Web boundary is the existing `web-app`, `auth-pages` and `ui` paths in
-`docs/architecture/modules.json`: `apps/web/src/**`, `apps/auth/src/**` and `packages/ui/src/**`. Exclude tests,
-stories, fixtures, docs, JSON, snapshots, generated output and formatting-only commits; count additions without
-offsetting deletions. Keep all-product hourly throughput as a separate observation and do not compare it with the
-campaign target or the former two-hour threshold.
-The line count does not certify usefulness or quality: changed workflows, integrated source and published visual
-review remain part of every delivery assessment. Duplicated implementations, unnecessary abstractions and artificial
-expansion do not qualify. Prefer removing bad code when that produces the better product, even when it lowers the
-measured additions. Report the actual shortfall instead of weakening quality or changing the denominator.
-
-Decision: The frozen hourly report measures Web source additions from the pinned `dev` revision against the 50,000
-per-hour campaign target, preserves all-product throughput separately, and leaves unavailable Web attribution unknown.
+Decision: The frozen report measures Web additions from the pinned `dev` revision, preserves all-product
+throughput separately, and labels unavailable Web attribution unknown.
 
 The Web manager owns assignment, priority, independent refill, actual worker starts and integration follow-through
 without waiting for another maintainer prompt. Use up to the authorized 32 concurrent Web workers when independent
