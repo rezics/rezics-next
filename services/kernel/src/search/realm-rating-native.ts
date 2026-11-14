@@ -4,7 +4,11 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem-error.ts';
-import { createRealmRankOrderSource, type RealmRankOrderObservation } from '../rating/realm-rank.ts';
+import {
+  createRealmRankOrderSource,
+  type RealmRankOrderObservation,
+  type RealmRankScoredCanonicalKey,
+} from '../rating/realm-rank.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
@@ -13,6 +17,7 @@ import { subjectGenerations } from './indices.ts';
 import type { OpenSearch, SearchRequestOptions } from './opensearch.ts';
 import { SearchOperationError } from './operation-outcomes.ts';
 import {
+  createRealmRatingScoredReader,
   discloseRealmRatingWindow,
   readRealmRatingCanonical,
   readRealmRatingRelease,
@@ -102,7 +107,7 @@ function assertContext(expected: RealmRatingContext, current: RealmRatingContext
   if (!isDeepStrictEqual(before, after)) throw new ProblemError('search_restart_required');
 }
 
-function scoredRequest(request: SearchFrontier & { size: number }): void {
+function scoredRequest(request: SearchFrontier & { size: number }): RealmRankScoredCanonicalKey | null {
   if (
     !Number.isInteger(request.size) ||
     request.size < 1 ||
@@ -110,7 +115,7 @@ function scoredRequest(request: SearchFrontier & { size: number }): void {
     (request.ratingPhase !== undefined && request.ratingPhase !== 'scored')
   )
     throw notReady();
-  if (request.after === undefined) return;
+  if (request.after === undefined) return null;
   const [score, name, id] = request.after;
   if (
     request.ratingPhase !== 'scored' ||
@@ -124,6 +129,9 @@ function scoredRequest(request: SearchFrontier & { size: number }): void {
     routeOf(id) === null
   )
     throw notReady();
+  const stored = String(score);
+  if (!/^(?:[0-9](?:\.[0-9]{1,4})?|10(?:\.0{1,4})?)$/.test(stored)) throw notReady();
+  return { score: stored, name, subjectId: id };
 }
 
 /** Live request authority is mandatory; native observations never constitute a cached grant. */
@@ -245,45 +253,48 @@ export function createRealmRatingNativeSource(deps: Dependencies): RealmRatingSo
     }),
     readScoredFrontiers: (query, context, request) => run(query, async () => {
       const { native, observed } = await current(query, context);
-      scoredRequest(request);
+      const after = scoredRequest(request);
       predicateReady(query);
       const budget = work(query, context, 'scored', request.size);
+      const hits: RealmRatingHit[] = [];
       if (observed.priorActive) {
-        const selected = { realmId: query.populationId, questionId: context.questionId };
-        const partitions = await native.listScoredPartitions(query.authority!.actor, selected, observed, {
-          deadline: query.deadline,
+        const read = createRealmRatingScoredReader({
+          native,
+          observed,
+          query,
+          context,
+          after,
+          size: request.size,
+          prefix: deps.prefix,
+          reserve: budget.reserve,
         });
-        // Generation rows survive removal of their last rank. Inventory alone is
-        // not evidence of a remaining scored candidate or of exhaustion.
-        for (const partition of partitions) {
-          budget.reserve(1);
-          const page = await native.readScoredPartition(
-            query.authority!.actor,
-            { ...selected, partition, after: null, limit: 1 },
+        while (hits.length < request.size) {
+          const raw = await read(budget.window(request.size - hits.length));
+          budget.consume(raw.length);
+          if (raw.length === 0) break;
+          hits.push(...(await discloseRealmRatingWindow({
+            pool: deps.pool,
+            search: requestSearch(deps.search, query),
+            source: deps.source,
+            prefix: deps.prefix,
+            query,
+            context,
             observed,
-            { deadline: query.deadline },
-          );
-          if (page.candidates.length > 0) {
-            /** Dependent operation, Content's existing RealmRankOrderSource owner:
-             * add a partition-local bounded scored canonical seek under THIS
-             * RealmRankOrderObservation and live actor/deadline. Input is selected
-             * Realm/question, partition, limit <= 200 and nullable strict key
-             * { score: number, name: string | null, id: string }; order is score
-             * DESC, name ASC (missing last, C collation), ID ASC. The key may
-             * originate in another home. Return epoch/position, generation and
-             * canonical name/security revision plus complete figure proof for
-             * every raw row. Reobserve even empty reads; pending/changed evidence
-             * is unavailable/restart. Cost must bound ordered work without scanning
-             * a whole tie or Subject population. Keep the compatibility port and
-             * the current sole Rating publication writer. This is a consumer
-             * requirement, not an assumed method on the delivered API.
-             */
-            throw notReady();
-          }
+            hits: raw,
+          })));
         }
       }
+      const partitions = new Map<number, RealmRatingHit[]>();
+      for (const hit of hits) {
+        const partition = partitions.get(hit.partition) ?? [];
+        partition.push(hit);
+        partitions.set(hit.partition, partition);
+      }
       const refreshed = await current(query, context);
-      return { context: refreshed.context, partitions: [] };
+      return {
+        context: refreshed.context,
+        partitions: [...partitions].map(([partition, hits]) => ({ partition, hits })),
+      };
     }),
     readUnscored: (query, context, request) => run(query, async () => {
       const { native, observed } = await current(query, context);

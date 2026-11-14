@@ -13,6 +13,22 @@ generation and current release digest/head. These observations and the admitted 
 text and filter bind the continuation. Internal before/after observations retain the original
 request and do not renew its work allowance or grant authority.
 
+The native `readScoredCanonicalPartition` supplies score descending, canonical name ascending
+(missing last, C collation), Subject ID ascending seeks. Search opens the union of canonical
+and scored homes under the complete observation, including `scoredHomes` and
+`canonicalPopulation`. Canonical-only homes must pass the native coverage gate; retained
+scored-only homes must prove their scored set empty. Missing or stale canonical publication
+remains `index_not_ready`, even on an empty continuation.
+
+Each scored head must match the observed native generation, epoch and position and carry a
+current security revision and complete figure. Stored standard-question scores stay on the
+0–10 scale, including zero. Search merges one head per home with numeric score and UTF-8 byte
+name/ID comparisons. It preserves each returned `candidate.key` verbatim through internal
+refills, including the decimal score string. Full predicate and live Access rejects spend the
+same raw allowance before the next head is read. Accepted rows return as partition frontiers
+to the existing outer merge and three-round useful-page collector. A short scored window
+permits the unscored complement only after complete empty seeks retire every scored frontier.
+
 The native `readCanonicalPartition` supplies bounded name/ID seeks across the complete
 canonical Subject population, independent of Realm membership, threads and Spaces. Each raw
 row carries native figure eligibility, including proven absence. Search validates the complete
@@ -56,37 +72,39 @@ unbounded `withConnection`; propagating the ambient deadline does not retrofit p
 checkout/query/cleanup bounds there. Bounding that existing owner is a separate dependency;
 Search must preserve the configured source rather than substitute a new one.
 
-## Remaining scored dependency
+## Native continuation and publication
 
-Content's existing `RealmRankOrderSource` owns the indexed scored canonical seek. The retained
-`readScoredPartition` orders by score descending and ID descending, without a canonical name.
-Search uses it only to distinguish an empty scored population from unavailable complete order.
-A returned scored candidate still produces typed `index_not_ready` with Retry-After. No active
-prior, or complete empty native scored seeks, permits the current unscored traversal.
+The signed Search cursor carries the last consumed global score/name/ID tuple. Its Subject ID
+can belong to a different home from the next native seek. Search passes that ID unchanged;
+only the public cursor's numeric score is converted back to its stored decimal representation.
+Subsequent native seeks use the exact returned key. The producer's
+`copyScoredCanonicalRequest` must validate the key's score, name and routable Subject ID without
+requiring `partitionOf(routeOf(after.subjectId)) === request.partition`. Returned candidates
+still must belong to the requested home. That seek-validator amendment belongs to Content.
 
-The required scored key is score descending, canonical name ascending (missing last, C
-collation), then ID ascending. The delivered callable must accept strict cross-home keys and
-bounded limits under the same observation, live actor and deadline; return native generation,
-epoch/position, name/security revision and complete figure proofs; and reobserve empty reads.
-The existing scored-only compatibility API and sole Rating publication writer remain owned
-by Content. Search's consumer update must use the exact committed API when delivered. No
-callable is assumed here, and no local tie sort or filtered prefix replaces the native seek.
+Search does not use the score/UUID compatibility port, sort a compatibility prefix, scan a
+whole tie or rebuild a generation during a read. Rating retains canonical publication and
+its durable startup/resume binding; complete Semantic canonical-generation delivery remains
+with the existing Content owner. The callable alone does not establish publication coverage.
 
 ## Cost and deferred acceptance
 
-For P occupied canonical homes and raw window B, the merge retains at most 16 rows per home
-plus B selected rows. Each call reserves at most P+B seeks and 16P+16B rows, with P <= 4096
-and B <= 200; native reobservations add O(P*(P+B)) frontier metadata work. The request permits
-at most three calls per phase, 6*4096+600 seeks, 51*4096+9600 reserved rows, and
+For P homes in the canonical/scored union and R selected raw scored rows, the scored merge
+retains one head per home plus the requested window and reserves at most P+R seeks and rows.
+It keeps these frontiers through predicate refills. The unscored merge retains at most 16 rows
+per canonical home plus raw window B, reserving at most P+B seeks and 16P+16B rows per raw
+window. P <= 4096 and B <= 200; native reobservations add O(P) metadata work per seek. The
+unchanged request caps permit at most three outer calls per phase, 6*4096+600 seeks,
+51*4096+9600 reserved rows, and
 min(600, 3*B0) selected raw candidates, where B0 is its first requested window. Empty seeks,
 unused buffered candidates, suppressed rows and predicate rejects do not refund work. A cap
 hit is unavailable, never successful exhaustion. Current source, relation and analyzer work
 retain their existing bounded batches and share the request deadline.
 
 Installed runtime acceptance and 1x/4x/16x growth remain deferred and unmeasured. The smallest
-next check is installed Realm discovery with current text plus an advanced filter, a changed
-source cut/Access and a finite expiry. Final acceptance still requires the existing
-Realm/default-worker discovery with complete scored/unscored order after the sole Rating
-callable is received, including first/next/empty pages, sparse rejection and currentness
-invalidation. Record native statements, examined/returned rows, seeks and retained candidates;
-source inspection or refusal alone does not prove installed complete order.
+next check covers multiple scored homes, equal scores/names, rejected predicates and a
+cross-home continuation. Final acceptance still requires complete scored/unscored discovery
+on the existing native Realm/default-worker journey, including first/next/empty pages, current
+text and advanced filters, changed source cuts/Access and finite expiry. Record native
+statements, examined/returned rows, seeks and retained candidates; source changes alone do
+not prove installed complete order.
