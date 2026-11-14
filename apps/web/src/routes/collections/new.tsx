@@ -169,6 +169,7 @@ export function NewCollectionForm({
 
   return (
     <form
+      method="post"
       noValidate
       className="min-w-0 space-y-5"
       onSubmit={(event) => void create(event)}

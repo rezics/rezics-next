@@ -47,8 +47,10 @@ export function useCollectionDraftNavigation(options: CollectionDraftNavigationO
         return;
       }
       if (live.current.locked && !live.current.creation) return;
-      leaving.current = true;
-      live.current.creation?.discard();
+      if (live.current.creation) {
+        leaving.current = true;
+        live.current.creation.discard();
+      }
     }
     settle(leave);
   }

@@ -1,10 +1,10 @@
 import { afterAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode } from 'react';
+import { act, StrictMode, useState, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { CollectionWriteResult, readNewCollection } from '../src/library/collection-edit';
 
-// UNRUN: mounted deferred-result regressions for integration, using the installed DOM fixture.
+// Mounted deferred-result regressions for integration; execution belongs to the verifier.
 // Controlled BFF responses establish neither native authority/receipt nor browser/visual proof.
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -51,8 +51,19 @@ async function mountForm(hydrate = false) {
     window,
     document: window.document,
     navigator: window.navigator,
+    scrollTo: window.scrollTo.bind(window),
     HTMLElement: window.HTMLElement,
     HTMLInputElement: window.HTMLInputElement,
+    HTMLAnchorElement: window.HTMLAnchorElement,
+    HTMLFormElement: window.HTMLFormElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    ShadowRoot: window.ShadowRoot,
+    NodeFilter: window.NodeFilter,
+    Event: window.Event,
+    FocusEvent: window.FocusEvent,
+    MouseEvent: window.MouseEvent,
+    KeyboardEvent: window.KeyboardEvent,
+    PointerEvent: window.PointerEvent,
     HTMLTextAreaElement: window.HTMLTextAreaElement,
     HTMLSelectElement: window.HTMLSelectElement,
     Element: window.Element,
@@ -72,6 +83,8 @@ async function mountForm(hydrate = false) {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot, hydrateRoot } = await import('react-dom/client');
   const { renderToString } = await import('react-dom/server');
+  const { createRouter, createRootRoute, createRoute, createMemoryHistory, RouterProvider, Outlet } =
+    await import('@tanstack/react-router');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const edits = await import('../src/library/collection-edit');
   const { NewCollectionForm, Route } = await import('../src/routes/collections/new');
@@ -106,12 +119,36 @@ async function mountForm(hydrate = false) {
     sender = (input) => record(sender, input);
     return sender;
   };
+  const unload = () => {
+    const event = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
   const navigation: string[] = [];
-  const navigate = spyOn(window.location, 'assign').mockImplementation((url) => navigation.push(String(url)));
+  const navigationBlocked: boolean[] = [];
+  const navigate = spyOn(window.location, 'assign').mockImplementation((url) => {
+    navigationBlocked.push(unload());
+    navigation.push(String(url));
+  });
   const host = document.createElement('div');
   document.body.append(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   let root: ReturnType<typeof createRoot> | undefined;
+  let content: ReactNode = null;
+  let refreshScreen = () => {};
+  function Screen() {
+    const [, refresh] = useState(0);
+    refreshScreen = () => refresh((value) => value + 1);
+    return content;
+  }
+  const rootRoute = createRootRoute({ component: Outlet });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([
+      createRoute({ getParentRoute: () => rootRoute, path: '/en/collections/new', component: Screen }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/away', component: () => 'Away' }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ['/away', '/en/collections/new'], initialIndex: 1 }),
+  });
   let serverHtml = '';
   const hydrationErrors: unknown[] = [];
   const render = async ({
@@ -133,19 +170,18 @@ async function mountForm(hydrate = false) {
       client.setQueryData(['exposure', 'viewer'], admitted ? ['collections'] : []);
       // Public admission alone must never authorize an imperative create.
       client.setQueryData(['exposure', 'anonymous'], ['collections']);
+      content = visible ? (
+        sender ? <NewCollectionForm csrfToken={session.csrfToken ?? ''} types={loaded.types} sender={sender} /> : <Page />
+      ) : null;
       const tree = (
         <StrictMode>
           <QueryClientProvider client={client}>
-            {visible ? (
-              sender ? (
-                <NewCollectionForm csrfToken={session.csrfToken ?? ''} types={loaded.types} sender={sender} />
-              ) : (
-                <Page />
-              )
-            ) : null}
+            <RouterProvider router={router} />
           </QueryClientProvider>
         </StrictMode>
       );
+      if (!root) await router.load();
+      else refreshScreen();
       if (!root && hydrate) {
         serverHtml = renderToString(tree);
         host.innerHTML = serverHtml;
@@ -193,6 +229,9 @@ async function mountForm(hydrate = false) {
     calls,
     createSender,
     navigation,
+    navigationBlocked,
+    router,
+    unload,
     hydrationErrors,
     render,
     form,
@@ -208,9 +247,31 @@ async function mountForm(hydrate = false) {
     get serverHtml() {
       return serverHtml;
     },
+    dialog: () => document.querySelector('[role="alertdialog"]'),
+    async choose(leave: boolean) {
+      await act(async () => {
+        const label = leave
+          ? m.library_collection_draft_navigation_leave()
+          : m.library_collection_draft_navigation_stay();
+        [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')]
+          .find((button) => button.textContent === label)!.click();
+      });
+    },
+    async depart(href?: string) {
+      await act(async () => {
+        if (href) {
+          const anchor = document.createElement('a');
+          anchor.href = href;
+          host.append(anchor);
+          anchor.click();
+          anchor.remove();
+        } else void router.navigate({ href: '/away' });
+      });
+    },
     href: (id: string) => `/${getLocale()}/collections/${encodeURIComponent(id)}`,
     async dispose() {
       if (root) await act(async () => root!.unmount());
+      router.history.destroy();
       client.clear();
       read.mockRestore();
       transport.mockRestore();
@@ -234,6 +295,57 @@ async function withForm(run: (page: Awaited<ReturnType<typeof mountForm>>) => Pr
 }
 
 describe('Curated Collection creation preserves exact uncertain intent and isolates observed current viewer lifetimes', () => {
+  test('new-route pristine review, Back/Forward Stay and deliberate discard keep distinct caller outcomes', async () => {
+    for (const unknown of [false, true])
+      await withForm(async (page) => {
+        await page.render();
+        const disclosure = page.host.querySelector<HTMLDetailsElement>('[data-collection-presentation-settings]')!;
+        await act(async () => {
+          disclosure.open = true;
+          page.title().value = '  ';
+          page.title().dispatchEvent(new window.Event('input', { bubbles: true }));
+        });
+        expect(page.unload()).toBe(false);
+        await page.depart();
+        expect(page.dialog()).toBeNull();
+        expect(page.router.state.location.pathname).toBe('/away');
+        await act(async () => { await page.router.navigate({ href: '/en/collections/new' }); });
+        await act(async () => { page.host.querySelector<HTMLElement>('#collection-visibility-private')!.click(); });
+        expect(page.unload()).toBe(true); // An explicit visibility choice alone is meaningful.
+        await act(async () => { page.router.history.back(); });
+        await page.choose(false);
+        expect(page.host.querySelector('#collection-visibility-private')!.getAttribute('aria-checked')).toBe('true');
+        await page.fill('Keep this exact title', 'unlisted', 'game');
+        const key = page.key();
+        await page.depart();
+        expect(page.dialog()!.textContent).toContain(page.m.library_collection_create_departure_description());
+        await page.choose(false);
+        expect(page.title().value).toBe('Keep this exact title');
+        expect(page.description().value).toBe('Keep this exact title description');
+        expect(page.kind().value).toBe('game');
+        expect(page.key()).toBe(key);
+        await act(async () => { page.router.history.back(); });
+        await page.choose(true);
+        expect(page.router.state.location.pathname).toBe('/away');
+        expect(page.calls).toHaveLength(0);
+        await act(async () => { page.router.history.forward(); });
+        expect(page.title().value).toBe('');
+        expect(page.key()).not.toBe(key);
+        await page.fill('Dispatched caller');
+        await page.submit();
+        if (unknown) await page.settle(0, { ok: false, reason: 'unavailable' });
+        await page.depart();
+        expect(page.dialog()!.textContent).toContain(page.m.library_collection_create_departure_unknown());
+        await page.choose(false);
+        expect(page.action().getAttribute('aria-busy')).toBe(unknown ? 'false' : 'true');
+        await page.depart();
+        await page.choose(true);
+        if (!unknown) await page.settle(0, success);
+        expect(page.navigation).toEqual([]); // Discarded commands cannot later navigate this caller.
+        expect(page.router.state.location.pathname).toBe('/away');
+      });
+  });
+
   test('invalid title creates no intent and correcting to the scalar boundary keeps raw text', async () => {
     await withForm(async (page) => {
       await page.render();
@@ -259,7 +371,11 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
         await page.submit(true);
         expect(page.calls).toHaveLength(1);
         const oldKey = page.key();
+        await page.depart('https://site.test/away');
+        expect(page.dialog()).not.toBeNull();
         await page.render({ session: viewer('viewer-two', 'csrf-two') });
+        expect(page.dialog()).toBeNull();
+        expect(page.router.state.location.pathname).toBe('/en/collections/new');
         expect(page.title().value).toBe('');
         expect(page.description().value).toBe('');
         expect(page.kind().value).toBe('');
@@ -279,6 +395,7 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
         expect(page.calls).toHaveLength(2); // Old finally cannot unlock this pending lifetime.
         await page.settle(1, { ok: true, id: 'replacement-created-id' });
         expect(page.navigation).toEqual([page.href('replacement-created-id')]);
+        expect(page.navigationBlocked).toEqual([false]);
       });
   });
 
@@ -354,6 +471,10 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
         // Even forced DOM mutation cannot replace the already dispatched payload on an explicit retry.
         page.title().value = 'Unsent replacement title';
         page.description().value = 'Unsent replacement description';
+        await page.depart();
+        expect(page.dialog()!.textContent).toContain(page.m.library_collection_create_departure_unknown());
+        await page.choose(false);
+        expect(page.key()).toBe(captured.idempotencyKey);
         await page.submit(true);
         expect(page.calls).toHaveLength(2);
         expect(page.calls[1]!.sender).toBe(page.calls[0]!.sender);
@@ -378,8 +499,12 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
           presentationKind: 'book',
           idempotencyKey: page.key(),
         });
+        await page.depart(unknown instanceof Error ? 'https://site.test/away' : undefined);
         await page.settle(3, success);
         expect(page.navigation).toEqual([page.href(success.id)]);
+        expect(page.navigationBlocked).toEqual([false]);
+        expect(page.dialog()).toBeNull();
+        expect(page.router.state.location.pathname).toBe('/en/collections/new');
       });
   });
 

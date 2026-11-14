@@ -5,7 +5,7 @@ import { completePendingCollectionCreate, setCollectionStoryMode } from '../kern
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { PageStory, PatternStory, libraryHeadingReady, pagePaths, pageReady } from './page';
+import { PageStory, PatternStory, libraryHeadingReady, pagePaths, pageReady, type PageStoryContext } from './page';
 import { MineCollectionsPageView } from '../library/mine-collections-page';
 import { readMineCollectionsPage } from '../library/mine-collections-route';
 import { readLibraryPinsPage } from '../library/pins-read';
@@ -20,6 +20,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+let creationVisit: PageStoryContext;
+function captureCreationVisit(context: PageStoryContext) {
+  creationVisit = context;
+}
+
 function render(
   mode: Parameters<typeof setCollectionStoryMode>[0],
   path: string = pagePaths['library-collections'],
@@ -31,7 +36,14 @@ function render(
 ) {
   setCollectionStoryMode(mode);
   setLibraryNavigationStoryState(pins);
-  return <PageStory visitor="Signed In" path={path} credentialMode="session" />;
+  return (
+    <PageStory
+      visitor="Signed In"
+      path={path}
+      credentialMode="session"
+      onReady={path === '/collections/new' ? captureCreationVisit : undefined}
+    />
+  );
 }
 
 async function collectionsReady(context: { canvasElement: HTMLElement }) {
@@ -498,6 +510,30 @@ export const CreateValid: Story = {
     await userEvent.click(view.getByRole('radio', { name: new RegExp(m.library_visibility_public()) }));
     await userEvent.click(view.getByRole('button', { name: m.library_collection_create() }));
     await expect(view.getByRole('heading', { level: 1, name: 'Books I come back to' })).toBeVisible();
+    await expect(within(document.body).queryByRole('alertdialog')).toBeNull();
+  },
+};
+
+export const CreateDraftDeparture: Story = {
+  name: 'Create draft Stay or Leave',
+  render: () => render('one', '/collections/new'),
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    const title = view.getByRole('textbox', { name: m.library_collection_title() });
+    await userEvent.type(title, 'A small reading list');
+    await userEvent.type(view.getByRole('textbox', { name: m.library_collection_description() }), 'Keep these notes');
+    void creationVisit.router.navigate({ href: `/${getLocale()}/library/collections` });
+    const dialog = await within(document.body).findByRole('alertdialog');
+    const stay = within(dialog).getByRole('button', { name: m.library_collection_draft_navigation_stay() });
+    await waitFor(() => expect(stay).toHaveFocus());
+    await userEvent.keyboard('{Enter}');
+    await expect(title).toHaveValue('A small reading list');
+    await expect(view.getByRole('textbox', { name: m.library_collection_description() })).toHaveValue('Keep these notes');
+    void creationVisit.router.navigate({ href: `/${getLocale()}/library/collections` });
+    await expect(await within(document.body).findByRole('alertdialog')).toHaveTextContent(
+      m.library_collection_create_departure_description(),
+    );
   },
 };
 
@@ -533,7 +569,7 @@ export const CreatePending: Story = {
 };
 
 export const CreateFailed: Story = {
-  name: 'Create failed',
+  name: 'Create unknown outcome departure',
   render: () => render('failed-create', '/collections/new'),
   play: async (context) => {
     await pageReady(context);
@@ -542,6 +578,10 @@ export const CreateFailed: Story = {
     await userEvent.click(view.getByRole('radio', { name: new RegExp(m.library_visibility_public()) }));
     await userEvent.click(view.getByRole('button', { name: m.library_collection_create() }));
     await expect(view.getByRole('alert')).toBeVisible();
+    void creationVisit.router.navigate({ href: `/${getLocale()}/library/collections` });
+    const dialog = await within(document.body).findByRole('alertdialog');
+    await expect(dialog).toHaveTextContent(m.library_collection_create_departure_unknown());
+    await expect(within(dialog).getByRole('button', { name: m.library_collection_draft_navigation_leave() })).toBeVisible();
   },
 };
 
