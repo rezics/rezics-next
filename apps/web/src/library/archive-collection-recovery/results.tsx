@@ -77,11 +77,22 @@ function pinText(state: string): string {
   }
 }
 
-function OutcomeRow({ item, index, title }: { item: RecoveryOutcomesPage['outcomes'][number]; index: number; title?: string }) {
+function OutcomeRow({
+  item,
+  index,
+  title,
+}: {
+  item: RecoveryOutcomesPage['outcomes'][number];
+  index: number;
+  title?: string;
+}) {
   const reason = reasonText(item.outcomeReason);
   return (
     <li className="grid min-w-0 gap-2 rounded-lg border p-4">
-      <h3 className="font-semibold">{m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} · {title || m.library_archive_present_title_unavailable()}</h3>
+      <h3 className="font-semibold">
+        {m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} ·{' '}
+        {title || m.library_archive_present_title_unavailable()}
+      </h3>
       <p className="text-sm font-medium">{outcomeText(item.outcome)}</p>
       <dl className="grid gap-1 text-sm sm:grid-cols-3">
         <div>
@@ -98,11 +109,18 @@ function OutcomeRow({ item, index, title }: { item: RecoveryOutcomesPage['outcom
         </div>
       </dl>
       <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-        <span className="font-medium">{!item.notePresent ? m.library_archive_recovery_note_missing()
-          : !item.noteValid ? m.library_archive_recovery_note_invalid()
-            : item.sourceNoteState === 'cleared' ? m.library_archive_recovery_note_cleared()
-              : item.sourceNoteState === 'empty' ? m.library_archive_recovery_note_empty()
-                : m.library_archive_recovery_note_value()}: </span>
+        <span className="font-medium">
+          {!item.notePresent
+            ? m.library_archive_recovery_note_missing()
+            : !item.noteValid
+              ? m.library_archive_recovery_note_invalid()
+              : item.sourceNoteState === 'cleared'
+                ? m.library_archive_recovery_note_cleared()
+                : item.sourceNoteState === 'empty'
+                  ? m.library_archive_recovery_note_empty()
+                  : m.library_archive_recovery_note_value()}
+          :{' '}
+        </span>
         {item.note}
       </p>
       {reason ? <p className="text-sm text-muted-foreground">{reason}</p> : null}
@@ -164,7 +182,7 @@ export function ArchiveRecoveryResults({
   const collectionId = page?.collection?.id ?? status.collectionId;
   const state = status.state;
   const titles = new Map<string, string>([...(targets?.values() ?? [])].map((target) => [target.id, target.title]));
-  const targetTitle = (id: string | null) => id ? titles.get(id) : undefined;
+  const targetTitle = (id: string | null) => (id ? titles.get(id) : undefined);
   const heading =
     state === 'complete'
       ? m.library_archive_recovery_complete_title()
@@ -212,16 +230,22 @@ export function ArchiveRecoveryResults({
           <section className="grid gap-3 rounded-lg border p-4" data-receiving-collection={receiving.id}>
             <h3 className="font-semibold">{receiving.title}</h3>
             <p>
-              {receiving.visibility === 'private' ? m.library_visibility_private()
-                : receiving.visibility === 'public' ? m.library_visibility_public()
-                  : receiving.visibility === 'unlisted' ? m.library_visibility_unlisted() : m.library_archive_present_unavailable()}
-              {' · '}{m.library_archive_recovery_collection_members({ count: receiving.memberCount })}
+              {receiving.visibility === 'private'
+                ? m.library_visibility_private()
+                : receiving.visibility === 'public'
+                  ? m.library_visibility_public()
+                  : receiving.visibility === 'unlisted'
+                    ? m.library_visibility_unlisted()
+                    : m.library_archive_present_unavailable()}
+              {' · '}
+              {m.library_archive_recovery_collection_members({ count: receiving.memberCount })}
             </p>
             <ol className="grid gap-2">
               {receiving.members.map((member, index) => (
                 <li key={member.id} className="rounded-md border p-3 text-sm">
                   <p>
-                    {m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} · {targetTitle(member.subjectId) || m.library_archive_present_title_unavailable()}
+                    {m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} ·{' '}
+                    {targetTitle(member.subjectId) || m.library_archive_present_title_unavailable()}
                   </p>
                   {member.note ? <p>{member.note}</p> : null}
                 </li>
@@ -272,7 +296,12 @@ export function ArchiveRecoveryResults({
       {page?.outcomes.length ? (
         <ol className="grid gap-3">
           {page.outcomes.map((item, index) => (
-            <OutcomeRow key={item.sourceOccurrenceId} item={item} index={index} title={targetTitle(item.targetSubjectId)} />
+            <OutcomeRow
+              key={item.sourceOccurrenceId}
+              item={item}
+              index={index}
+              title={targetTitle(item.targetSubjectId)}
+            />
           ))}
         </ol>
       ) : page ? (

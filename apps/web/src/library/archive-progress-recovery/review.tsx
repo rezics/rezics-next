@@ -11,7 +11,13 @@ export function Evidence({ value }: { value: unknown }) {
     </pre>
   );
 }
-export function EvidenceDetails({ value, title = m.library_archive_entry_evidence() }: { value: unknown; title?: string }) {
+export function EvidenceDetails({
+  value,
+  title = m.library_archive_entry_evidence(),
+}: {
+  value: unknown;
+  title?: string;
+}) {
   return (
     <details className="min-w-0">
       <summary className={`${actionClass} cursor-pointer`}>{title}</summary>
@@ -29,25 +35,36 @@ function Fact({ title, children }: { title: string; children: ReactNode }) {
 }
 export function progressModeLabel(mode: string) {
   switch (mode) {
-    case 'scalar_amount': return m.library_progress_mode_amount();
-    case 'cursor_position': return m.library_progress_mode_cursor();
-    case 'completed_units': return m.library_progress_mode_units();
-    default: return m.library_archive_recovery_effect_unsupported();
+    case 'scalar_amount':
+      return m.library_progress_mode_amount();
+    case 'cursor_position':
+      return m.library_progress_mode_cursor();
+    case 'completed_units':
+      return m.library_progress_mode_units();
+    default:
+      return m.library_archive_recovery_effect_unsupported();
   }
 }
 export function progressStateLabel(state: string) {
   switch (state) {
-    case 'active': return m.library_progress_state_active();
-    case 'completed': return m.library_progress_state_completed();
-    case 'abandoned': return m.library_progress_state_abandoned();
-    default: return m.library_archive_recovery_effect_unsupported();
+    case 'active':
+      return m.library_progress_state_active();
+    case 'completed':
+      return m.library_progress_state_completed();
+    case 'abandoned':
+      return m.library_progress_state_abandoned();
+    default:
+      return m.library_archive_recovery_effect_unsupported();
   }
 }
 function admissionLabel(admission: Review['completedUnits'][number]['admission']) {
   switch (admission) {
-    case 'member': return m.library_archive_present_member();
-    case 'detached': return m.library_archive_present_detached();
-    case 'unavailable': return m.library_archive_present_unavailable();
+    case 'member':
+      return m.library_archive_present_member();
+    case 'detached':
+      return m.library_archive_present_detached();
+    case 'unavailable':
+      return m.library_archive_present_unavailable();
   }
 }
 function unsupportedLabel(reason: string) {
@@ -57,14 +74,19 @@ function unsupportedLabel(reason: string) {
     case 'current-profile-unavailable':
     case 'primary-unit-not-admitted':
     case 'cursor-unit-not-admitted':
-    case 'completed-unit-mode-not-admitted': return m.library_archive_present_profile_unsupported();
-    case 'historical-state-not-expressible': return m.library_archive_present_state_unsupported();
-    case 'version-subject-mapping-not-supported': return m.library_archive_present_version_unsupported();
+    case 'completed-unit-mode-not-admitted':
+      return m.library_archive_present_profile_unsupported();
+    case 'historical-state-not-expressible':
+      return m.library_archive_present_state_unsupported();
+    case 'version-subject-mapping-not-supported':
+      return m.library_archive_present_version_unsupported();
     case 'source-count-not-fully-identified':
     case 'source-count-without-supported-unit-identities':
-    case 'units-not-admitted': return m.library_archive_present_units_unsupported();
+    case 'units-not-admitted':
+      return m.library_archive_present_units_unsupported();
     case 'cursor-value-not-admitted':
-    case 'incomplete-cursor-value': return m.library_archive_present_cursor_unsupported();
+    case 'incomplete-cursor-value':
+      return m.library_archive_present_cursor_unsupported();
     case 'amount':
     case 'total':
     case 'primary-total':
@@ -72,8 +94,10 @@ function unsupportedLabel(reason: string) {
     case 'additional-unit':
     case 'unknown-source-measure':
     case 'unmapped-additional-measure':
-    case 'additional-measures-not-in-source-record': return m.library_archive_present_measure_unsupported();
-    default: return m.library_archive_recovery_reason_other();
+    case 'additional-measures-not-in-source-record':
+      return m.library_archive_present_measure_unsupported();
+    default:
+      return m.library_archive_recovery_reason_other();
   }
 }
 export function unitLabel(measure: Pick<Review['measures'][number], 'currentMeaning'>) {
@@ -104,9 +128,11 @@ export function RecoveryReview({ review, operands }: { review: Review; operands:
       <dl className="grid gap-3 sm:grid-cols-2">
         <Fact title={m.library_archive_progress_pair()}>
           <p>{progressModeLabel(review.current.mode)}</p>
-          <p>{review.current.profile.kind === 'supported'
-            ? m.library_archive_present_profile_supported()
-            : m.library_archive_present_profile_unsupported()}</p>
+          <p>
+            {review.current.profile.kind === 'supported'
+              ? m.library_archive_present_profile_supported()
+              : m.library_archive_present_profile_unsupported()}
+          </p>
         </Fact>
         <Fact title={m.library_archive_present_session_state()}>
           <p>{progressStateLabel(review.historical.state)}</p>
@@ -127,9 +153,13 @@ export function RecoveryReview({ review, operands }: { review: Review; operands:
                 </Fact>
                 <Fact title={m.library_progress_total()}>
                   <p>{measure.sourceTotal ?? m.library_progress_measure_absent()}</p>
-                  <p>{measure.total === 'supported'
-                    ? measure.sourceTotal === null ? m.library_archive_present_stays_absent() : m.library_archive_present_will_apply()
-                    : m.library_archive_entry_retained()}</p>
+                  <p>
+                    {measure.total === 'supported'
+                      ? measure.sourceTotal === null
+                        ? m.library_archive_present_stays_absent()
+                        : m.library_archive_present_will_apply()
+                      : m.library_archive_entry_retained()}
+                  </p>
                 </Fact>
               </dl>
               <EvidenceDetails value={measure} />
@@ -144,7 +174,9 @@ export function RecoveryReview({ review, operands }: { review: Review; operands:
           <ol className="space-y-2">
             {review.completedUnits.map((unit, index) => (
               <li key={unit.unitId} className="rounded-md border p-3">
-                <p>{m.library_archive_present_item({ number: index + 1 })} · {admissionLabel(unit.admission)}</p>
+                <p>
+                  {m.library_archive_present_item({ number: index + 1 })} · {admissionLabel(unit.admission)}
+                </p>
                 <p className="text-sm text-muted-foreground">{m.library_archive_present_title_unavailable()}</p>
                 <EvidenceDetails value={unit} />
               </li>
@@ -155,7 +187,9 @@ export function RecoveryReview({ review, operands }: { review: Review; operands:
       <section className="space-y-3 rounded-md border p-4" aria-label={m.library_archive_progress_unsupported()}>
         <h3 className="font-semibold">{m.library_archive_progress_unsupported()}</h3>
         <ul className="list-disc space-y-2 pl-5">
-          {review.unsupported.map((reason, index) => <li key={index}>{unsupportedLabel(reason)}</li>)}
+          {review.unsupported.map((reason, index) => (
+            <li key={index}>{unsupportedLabel(reason)}</li>
+          ))}
         </ul>
         <p>{m.library_archive_present_history_unsupported()}</p>
         <dl className="grid gap-3 sm:grid-cols-2">
@@ -172,16 +206,26 @@ export function RecoveryReview({ review, operands }: { review: Review; operands:
 }
 function applicationLabel(state: Application['state'] | undefined) {
   switch (state) {
-    case 'applied': return m.library_archive_recovery_complete_title();
-    case 'partial': return m.library_archive_recovery_partial_title();
-    case 'stale': return m.library_archive_recovery_conflict_help();
-    case 'failed': return m.library_archive_recovery_effect_failed();
+    case 'applied':
+      return m.library_archive_recovery_complete_title();
+    case 'partial':
+      return m.library_archive_recovery_partial_title();
+    case 'stale':
+      return m.library_archive_recovery_conflict_help();
+    case 'failed':
+      return m.library_archive_recovery_effect_failed();
     case 'recoverable':
-    case 'applying': return m.library_archive_progress_recoverable();
-    default: return m.library_archive_progress_no_result();
+    case 'applying':
+      return m.library_archive_progress_recoverable();
+    default:
+      return m.library_archive_progress_no_result();
   }
 }
-export function RecoveryResult({ application, result, pending }: {
+export function RecoveryResult({
+  application,
+  result,
+  pending,
+}: {
   application: Application | null;
   result: Result | null;
   pending: boolean;
@@ -194,7 +238,9 @@ export function RecoveryResult({ application, result, pending }: {
   return (
     <section className="space-y-3 rounded-lg border p-4" aria-label={m.library_archive_progress_result()}>
       <h2 className="text-xl font-semibold">{m.library_archive_progress_result()}</h2>
-      <p role="status" className="font-medium">{unreconciled ? m.library_archive_progress_recoverable() : applicationLabel(outcome?.state)}</p>
+      <p role="status" className="font-medium">
+        {unreconciled ? m.library_archive_progress_recoverable() : applicationLabel(outcome?.state)}
+      </p>
       {outcome ? <p>{m.library_archive_present_steps({ count: outcome.acceptedSteps })}</p> : null}
       {unreconciled ? null : (
         <>
@@ -204,22 +250,48 @@ export function RecoveryResult({ application, result, pending }: {
               <dl className="grid gap-3 sm:grid-cols-2">
                 <Fact title={m.library_archive_present_session_state()}>{progressStateLabel(session.state)}</Fact>
                 <Fact title={m.library_archive_progress_pair()}>{progressModeLabel(session.mode)}</Fact>
-                {session.mode === 'scalar_amount' ? <>
-                  <Fact title={m.library_progress_amount()}>{session.amount ?? m.library_progress_measure_absent()}</Fact>
-                  <Fact title={m.library_progress_total()}>{session.total ?? m.library_progress_measure_absent()}</Fact>
-                </> : session.mode === 'cursor_position' ? <>
-                  <Fact title={m.library_progress_locator()}>{session.locator ?? m.library_progress_measure_absent()}</Fact>
-                  <Fact title={m.library_progress_position()}>{session.position ?? m.library_progress_measure_absent()}</Fact>
-                </> : <Fact title={m.library_progress_units()}>{session.completedUnitCount}</Fact>}
+                {session.mode === 'scalar_amount' ? (
+                  <>
+                    <Fact title={m.library_progress_amount()}>
+                      {session.amount ?? m.library_progress_measure_absent()}
+                    </Fact>
+                    <Fact title={m.library_progress_total()}>
+                      {session.total ?? m.library_progress_measure_absent()}
+                    </Fact>
+                  </>
+                ) : session.mode === 'cursor_position' ? (
+                  <>
+                    <Fact title={m.library_progress_locator()}>
+                      {session.locator ?? m.library_progress_measure_absent()}
+                    </Fact>
+                    <Fact title={m.library_progress_position()}>
+                      {session.position ?? m.library_progress_measure_absent()}
+                    </Fact>
+                  </>
+                ) : (
+                  <Fact title={m.library_progress_units()}>{session.completedUnitCount}</Fact>
+                )}
               </dl>
               <p className="text-sm">{meaning ? unitLabel(meaning) : m.library_progress_unit_unspecified()}</p>
-              {session.measures?.filter((measure) => session.mode !== 'scalar_amount' || measure.unit !== session.unit).map((measure, index) => (
-                <div key={index} className="rounded border p-3">
-                  <p>{unitLabel(result!.review.measures.find((item) => item.currentUnit === measure.unit) ?? { currentMeaning: null })}</p>
-                  <p>{m.library_progress_amount()}: {measure.amount ?? m.library_progress_measure_absent()}</p>
-                  <p>{m.library_progress_total()}: {measure.total ?? m.library_progress_measure_absent()}</p>
-                </div>
-              ))}
+              {session.measures
+                ?.filter((measure) => session.mode !== 'scalar_amount' || measure.unit !== session.unit)
+                .map((measure, index) => (
+                  <div key={index} className="rounded border p-3">
+                    <p>
+                      {unitLabel(
+                        result!.review.measures.find((item) => item.currentUnit === measure.unit) ?? {
+                          currentMeaning: null,
+                        },
+                      )}
+                    </p>
+                    <p>
+                      {m.library_progress_amount()}: {measure.amount ?? m.library_progress_measure_absent()}
+                    </p>
+                    <p>
+                      {m.library_progress_total()}: {measure.total ?? m.library_progress_measure_absent()}
+                    </p>
+                  </div>
+                ))}
               {result?.completedEpisodes ? (
                 <div className="space-y-2">
                   <h3 className="font-semibold">{m.library_progress_units()}</h3>
@@ -227,8 +299,11 @@ export function RecoveryResult({ application, result, pending }: {
                     {result.completedEpisodes.episodes.map((episode, index) => (
                       <li key={index}>
                         {m.library_archive_present_item({ number: index + 1 })} · {admissionLabel(episode.membership)} ·{' '}
-                        {episode.completed === true ? m.library_archive_recovery_effect_applied() : episode.completed === false
-                          ? m.library_archive_recovery_effect_not_applicable() : m.library_archive_present_unavailable()}
+                        {episode.completed === true
+                          ? m.library_archive_recovery_effect_applied()
+                          : episode.completed === false
+                            ? m.library_archive_recovery_effect_not_applicable()
+                            : m.library_archive_present_unavailable()}
                       </li>
                     ))}
                   </ol>
@@ -236,7 +311,9 @@ export function RecoveryResult({ application, result, pending }: {
                 </div>
               ) : null}
             </>
-          ) : <p>{m.library_archive_progress_no_result()}</p>}
+          ) : (
+            <p>{m.library_archive_progress_no_result()}</p>
+          )}
         </>
       )}
       <EvidenceDetails value={unreconciled ? { application: outcome } : { application, result }} />

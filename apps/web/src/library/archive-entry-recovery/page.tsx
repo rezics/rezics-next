@@ -14,7 +14,15 @@ import { archiveFileFromCustody, bindArchiveCustodyOwner, completedArchiveFor } 
 import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 import { actionClass } from '../private-export/controls';
 import { EvidenceDetails } from '../archive-progress-recovery/review';
-import { ArchiveRecordSummary, ArchiveChoiceSummary, ArchiveNativeReviewSummary, ArchiveCurrentFacts, sectionLabel, statusLabel, recordTitle } from './presentation';
+import {
+  ArchiveRecordSummary,
+  ArchiveChoiceSummary,
+  ArchiveNativeReviewSummary,
+  ArchiveCurrentFacts,
+  sectionLabel,
+  statusLabel,
+  recordTitle,
+} from './presentation';
 
 const control = `${actionClass} rounded-md border disabled:opacity-50`;
 const uuidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
@@ -105,8 +113,9 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                 ? m.library_archive_entry_working()
                 : ''}
       </p>
-      {snapshot?.notice && snapshot.notice !== 'uncertain' && snapshot.notice !== 'file_too_large'
-        ? <EvidenceDetails value={{ notice: snapshot.notice }} /> : null}
+      {snapshot?.notice && snapshot.notice !== 'uncertain' && snapshot.notice !== 'file_too_large' ? (
+        <EvidenceDetails value={{ notice: snapshot.notice }} />
+      ) : null}
       <section aria-labelledby="archive-upload" className="space-y-3 rounded-lg border p-4">
         <h2 id="archive-upload" className="text-xl font-semibold">
           {m.library_archive_upload_step()}
@@ -183,10 +192,13 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                 {state.upload!.metadata.coverage.map((item) => (
                   <div key={item.section} className="rounded border p-3">
                     <dt className="font-semibold">{sectionLabel(item.section)}</dt>
-                    <dd>{item.capture === 'empty' ? m.library_archive_recovery_coverage_empty()
-                      : !supportedRecoverySection(item.section) || item.treatment === 'retained-unsupported'
-                        ? m.library_archive_recovery_coverage_unsupported({ rows: item.rows })
-                        : m.library_archive_recovery_coverage_requires_mapping({ rows: item.rows })}</dd>
+                    <dd>
+                      {item.capture === 'empty'
+                        ? m.library_archive_recovery_coverage_empty()
+                        : !supportedRecoverySection(item.section) || item.treatment === 'retained-unsupported'
+                          ? m.library_archive_recovery_coverage_unsupported({ rows: item.rows })
+                          : m.library_archive_recovery_coverage_requires_mapping({ rows: item.rows })}
+                    </dd>
                   </div>
                 ))}
               </dl>
@@ -206,7 +218,9 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
               {state.page?.rows.map((row) => (
                 <article key={row.ordinal} className="space-y-3 rounded-lg border p-4">
                   <h3 className="font-semibold">{recordTitle(row)}</h3>
-                  <p className="text-sm">{sectionLabel(row.section)} · {statusLabel(row.status)}</p>
+                  <p className="text-sm">
+                    {sectionLabel(row.section)} · {statusLabel(row.status)}
+                  </p>
                   <ArchiveRecordSummary row={row} />
                   <ArchiveNativeReviewSummary row={row} />
                   {supportedRecoverySection(row.section) &&
@@ -343,9 +357,12 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                 <div className="space-y-3 rounded border p-4">
                   {snapshot!.reviewed.map((item) => {
                     const row = displayedRows.get(item.ordinal);
-                    return <p key={item.ordinal}>
-                      {row ? recordTitle(row) : m.library_archive_present_title_unavailable()} · {statusLabel(item.status)}
-                    </p>;
+                    return (
+                      <p key={item.ordinal}>
+                        {row ? recordTitle(row) : m.library_archive_present_title_unavailable()} ·{' '}
+                        {statusLabel(item.status)}
+                      </p>
+                    );
                   })}
                   <EvidenceDetails value={review.body} title={m.library_archive_progress_exact()} />
                   <label className="flex min-h-11 items-center gap-3">
@@ -397,12 +414,19 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
               <h2 id="archive-results" className="text-xl font-semibold">
                 {m.library_archive_results_step()}
               </h2>
-              {phase === 'complete' ? <p role="status" className="font-semibold">{m.library_archive_recovery_complete_title()}</p> : null}
+              {phase === 'complete' ? (
+                <p role="status" className="font-semibold">
+                  {m.library_archive_recovery_complete_title()}
+                </p>
+              ) : null}
               <p>{m.library_archive_entry_result_help()}</p>
               {state.results.rows.map((row) => (
                 <div key={row.ordinal} className="space-y-2 rounded border p-3">
-                  <h3 className="font-semibold">{displayedRows.has(row.ordinal)
-                    ? recordTitle(displayedRows.get(row.ordinal)!) : m.library_archive_present_title_unavailable()}</h3>
+                  <h3 className="font-semibold">
+                    {displayedRows.has(row.ordinal)
+                      ? recordTitle(displayedRows.get(row.ordinal)!)
+                      : m.library_archive_present_title_unavailable()}
+                  </h3>
                   <p>
                     {sectionLabel(row.section)} · {statusLabel(row.status)}
                   </p>
@@ -440,9 +464,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                   )}
                 </div>
               ))}
-              {snapshot?.readback && (
-                <ArchiveCurrentFacts value={snapshot.readback.value} />
-              )}
+              {snapshot?.readback && <ArchiveCurrentFacts value={snapshot.readback.value} />}
               {phase !== 'expired' && (
                 <div className="flex flex-wrap gap-3">
                   <button

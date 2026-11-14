@@ -17,7 +17,14 @@ import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 import { ProgressRecoveryJourney, type Snapshot } from './controller';
 import { browserProgressRecoveryPort } from './port';
 import type { ReviewInput } from './native';
-import { RecoveryReview, RecoveryResult, Evidence, EvidenceDetails, progressModeLabel, progressStateLabel } from './review';
+import {
+  RecoveryReview,
+  RecoveryResult,
+  Evidence,
+  EvidenceDetails,
+  progressModeLabel,
+  progressStateLabel,
+} from './review';
 import { actionClass } from '../private-export/controls';
 
 export const action = `${actionClass} rounded-md border disabled:opacity-50`;
@@ -132,13 +139,18 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
           <section className="space-y-3 rounded-lg border p-4" aria-label={m.library_archive_recovery_coverage_title()}>
             <h2 className="text-xl font-semibold">{m.library_archive_recovery_coverage_title()}</h2>
             <p>{m.library_archive_progress_holdings()}</p>
-            {snap.holdings ? <>
-              <p>{m.library_archive_recovery_manifest_rows({ rows: snap.holdings.manifest.rows })}</p>
-              <EvidenceDetails value={snap.holdings} />
-              <Pager next={snap.holdings.next} disabled={locked}
-                onFirst={() => void journey.page('holdings')}
-                onNext={(after) => void journey.page('holdings', after)} />
-            </> : null}
+            {snap.holdings ? (
+              <>
+                <p>{m.library_archive_recovery_manifest_rows({ rows: snap.holdings.manifest.rows })}</p>
+                <EvidenceDetails value={snap.holdings} />
+                <Pager
+                  next={snap.holdings.next}
+                  disabled={locked}
+                  onFirst={() => void journey.page('holdings')}
+                  onNext={(after) => void journey.page('holdings', after)}
+                />
+              </>
+            ) : null}
           </section>
           {!snap.occurrences ? (
             <button className={action} disabled={locked} onClick={() => void journey.inspect()}>
@@ -156,7 +168,9 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
                       <p>
                         {m.library_archive_present_item({ number: ordinal + 1 })} · {progressStateLabel(evidence.state)}
                       </p>
-                      <p>{progressModeLabel(evidence.mode)} · {evidence.amount ?? m.library_progress_measure_absent()}</p>
+                      <p>
+                        {progressModeLabel(evidence.mode)} · {evidence.amount ?? m.library_progress_measure_absent()}
+                      </p>
                       <p className="text-sm text-muted-foreground">
                         {m.library_archive_present_title_unavailable()} · {m.library_progress_unit_unspecified()}
                       </p>
@@ -444,7 +458,8 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
                 >
                   {
                     <>
-                      {m.library_archive_present_item({ number: index + 1 })} · {m.library_progress_unit_unspecified()} · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
+                      {m.library_archive_present_item({ number: index + 1 })} · {m.library_progress_unit_unspecified()}{' '}
+                      · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
                       {measure.total ?? m.library_progress_measure_absent()}
                     </>
                   }

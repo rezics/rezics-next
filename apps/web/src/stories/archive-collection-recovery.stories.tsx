@@ -3,8 +3,16 @@ import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, PatternStory } from './page';
-import { ArchiveCollectionChooser, ArchiveOccurrenceChooser, ArchiveRecoveryReview } from '../library/archive-collection-recovery/review';
-import { ArchiveRecoveryConflict, ArchiveRecoveryResults, ArchiveRecoveryUnknown } from '../library/archive-collection-recovery/results';
+import {
+  ArchiveCollectionChooser,
+  ArchiveOccurrenceChooser,
+  ArchiveRecoveryReview,
+} from '../library/archive-collection-recovery/review';
+import {
+  ArchiveRecoveryConflict,
+  ArchiveRecoveryResults,
+  ArchiveRecoveryUnknown,
+} from '../library/archive-collection-recovery/results';
 import { ArchiveCollectionRecoveryUpload } from '../library/archive-collection-recovery/upload';
 import type {
   RecoveryCollection,
@@ -130,8 +138,15 @@ const nativeReview: RecoveryReview = {
   completeMembership: true,
   pin: { state: 'unsupported', reason: null, reviewedRevision: null },
 };
-const page: RecoveryCollectionsPage = { ...status, state: 'preview', collectionId: null, selectedCollectionId: null,
-  selectedOccurrences: 0, next: 'native-next-cursor', collections: [collection] };
+const page: RecoveryCollectionsPage = {
+  ...status,
+  state: 'preview',
+  collectionId: null,
+  selectedCollectionId: null,
+  selectedOccurrences: 0,
+  next: 'native-next-cursor',
+  collections: [collection],
+};
 const outcomes: RecoveryOutcomesPage = {
   ...status,
   next: null,
@@ -179,9 +194,16 @@ const meta = {
   id: 'pages-library-archive-collection-recovery',
   component: ArchiveCollectionRecoveryUpload,
   parameters: { layout: 'fullscreen' },
-  decorators: [(Story, context) => context.id.endsWith('--upload') ? <Story /> : (
-    <PatternStory visitor="Signed In" path="/library/recover-collections"><Story /></PatternStory>
-  )],
+  decorators: [
+    (Story, context) =>
+      context.id.endsWith('--upload') ? (
+        <Story />
+      ) : (
+        <PatternStory visitor="Signed In" path="/library/recover-collections">
+          <Story />
+        </PatternStory>
+      ),
+  ],
   args: {
     busy: false,
     locked: false,
@@ -310,17 +332,36 @@ export const UnsupportedCollectionsRemainVisible: Story = {
     await expect(canvas.getByRole('button', { name: m.library_archive_recovery_choose_collection() })).toBeDisabled();
     await expect(canvas.getByText(collection.title!)).toBeVisible();
     await expect(canvas.getAllByText(m.library_archive_recovery_coverage_empty())).toHaveLength(1);
-    await expect(canvas.getAllByText(m.library_archive_recovery_coverage_requires_mapping({ rows: 1 }))).toHaveLength(1);
+    await expect(canvas.getAllByText(m.library_archive_recovery_coverage_requires_mapping({ rows: 1 }))).toHaveLength(
+      1,
+    );
   },
 };
 
-const sparse: RecoveryOccurrencesPage = { ...status, state: 'preview', collectionId: null, collection, occurrences: [], next: 'native-sparse-next' };
+const sparse: RecoveryOccurrencesPage = {
+  ...status,
+  state: 'preview',
+  collectionId: null,
+  collection,
+  occurrences: [],
+  next: 'native-sparse-next',
+};
 export const SparseContinuation: Story = {
   render: () => (
     <div className="mx-auto max-w-4xl p-4">
-      <ArchiveOccurrenceChooser page={sparse} selected={new Map()} busy={false} canPrevious={true}
-        onToggle={() => undefined} onTogglePage={() => undefined} onReview={() => undefined}
-        onPage={() => undefined} onFirst={() => undefined} onPrevious={() => undefined} onCollections={() => undefined} />
+      <ArchiveOccurrenceChooser
+        page={sparse}
+        selected={new Map()}
+        busy={false}
+        canPrevious={true}
+        onToggle={() => undefined}
+        onTogglePage={() => undefined}
+        onReview={() => undefined}
+        onPage={() => undefined}
+        onFirst={() => undefined}
+        onPrevious={() => undefined}
+        onCollections={() => undefined}
+      />
     </div>
   ),
   play: async ({ canvasElement }) => {
@@ -344,26 +385,58 @@ export const UnknownApplicationRecovery: Story = {
   },
 };
 const completed: RecoveryOutcomesPage = {
-  ...outcomes, state: 'complete',
+  ...outcomes,
+  state: 'complete',
   presentation: { state: 'mixed', kind: null, source: 'mixed', releaseDigest: null, reason: null },
-  outcomes: outcomes.outcomes.map((item, index) => ({ ...item, addState: 'applied', noteState: 'applied', orderState: 'applied',
-    nativeMemberId: `00000000-0000-4000-8000-00000000003${index}`, outcome: 'applied', outcomeReason: null })),
+  outcomes: outcomes.outcomes.map((item, index) => ({
+    ...item,
+    addState: 'applied',
+    noteState: 'applied',
+    orderState: 'applied',
+    nativeMemberId: `00000000-0000-4000-8000-00000000003${index}`,
+    outcome: 'applied',
+    outcomeReason: null,
+  })),
 };
 export const CompletedResult: Story = {
   render: () => (
     <div className="mx-auto max-w-4xl p-4">
-      <ArchiveRecoveryResults status={completed} page={completed} targets={new Map([[occurrenceRows[0]!.sourceSubjectId!, subject]])}
-        sourceTitle={collection.title} busy={false} canPrevious={false}
-        receiving={{ id: status.collectionId!, title: 'Recovered private reading list', visibility: 'private', memberCount: 2,
-          members: completed.outcomes.map((item) => ({ id: item.nativeMemberId!, subjectId: subject.id, note: item.note, addedAt: '2026-11-14T00:00:00.000Z' })), next: null }}
-        onRead={() => undefined} onFirst={() => undefined} onPrevious={() => undefined} onNext={() => undefined} onReadCollection={() => undefined} />
+      <ArchiveRecoveryResults
+        status={completed}
+        page={completed}
+        targets={new Map([[occurrenceRows[0]!.sourceSubjectId!, subject]])}
+        sourceTitle={collection.title}
+        busy={false}
+        canPrevious={false}
+        receiving={{
+          id: status.collectionId!,
+          title: 'Recovered private reading list',
+          visibility: 'private',
+          memberCount: 2,
+          members: completed.outcomes.map((item) => ({
+            id: item.nativeMemberId!,
+            subjectId: subject.id,
+            note: item.note,
+            addedAt: '2026-11-14T00:00:00.000Z',
+          })),
+          next: null,
+        }}
+        onRead={() => undefined}
+        onFirst={() => undefined}
+        onPrevious={() => undefined}
+        onNext={() => undefined}
+        onReadCollection={() => undefined}
+      />
     </div>
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: m.library_archive_recovery_complete_title() })).toBeVisible();
     await expect(canvas.getByRole('heading', { name: 'Recovered private reading list' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: m.library_archive_recovery_open_collection() })).toHaveAttribute('href', expect.stringContaining(status.collectionId!));
+    await expect(canvas.getByRole('link', { name: m.library_archive_recovery_open_collection() })).toHaveAttribute(
+      'href',
+      expect.stringContaining(status.collectionId!),
+    );
     await expect(canvas.getByText(m.library_archive_entry_current()).closest('details')).not.toHaveAttribute('open');
   },
 };

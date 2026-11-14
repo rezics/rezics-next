@@ -191,8 +191,11 @@ function OccurrenceRow({
         <span className="font-medium">{m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })}</span>
       </label>
       <div className="grid min-w-0 gap-2">
-        <p className="text-sm">{row.sourceSubjectId
-          ? m.library_archive_present_title_unavailable() : m.library_archive_recovery_subject_missing()}</p>
+        <p className="text-sm">
+          {row.sourceSubjectId
+            ? m.library_archive_present_title_unavailable()
+            : m.library_archive_recovery_subject_missing()}
+        </p>
         <p className="whitespace-pre-wrap break-words text-sm">
           <span className="font-medium">{noteLabel(row)}: </span>
           {row.note ?? m.library_archive_recovery_note_none()}
@@ -382,7 +385,10 @@ export function ArchiveRecoveryReview({
         {sources.length ? (
           sources.map((sourceSubjectId, index) => (
             <div key={sourceSubjectId} className="grid min-w-0 gap-2 rounded-lg border p-4">
-              <p className="font-medium">{m.library_archive_present_item({ number: index + 1 })} · {m.library_archive_present_title_unavailable()}</p>
+              <p className="font-medium">
+                {m.library_archive_present_item({ number: index + 1 })} ·{' '}
+                {m.library_archive_present_title_unavailable()}
+              </p>
               <EvidenceDetails value={{ sourceSubjectId }} />
               <CopyEditionPicker
                 value={targets.get(sourceSubjectId) ?? null}
@@ -401,8 +407,11 @@ export function ArchiveRecoveryReview({
         <ol className="grid max-h-[30rem] gap-3 overflow-auto rounded-lg border p-3">
           {[...selected.values()].map((row, index) => (
             <li key={row.sourceOccurrenceId} className="grid gap-1 border-b pb-3 last:border-0 last:pb-0">
-              <p className="font-medium">{m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} ·{' '}
-                {(row.sourceSubjectId && targets.get(row.sourceSubjectId)?.title) || m.library_archive_present_title_unavailable()}</p>
+              <p className="font-medium">
+                {m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} ·{' '}
+                {(row.sourceSubjectId && targets.get(row.sourceSubjectId)?.title) ||
+                  m.library_archive_present_title_unavailable()}
+              </p>
               <p className="whitespace-pre-wrap break-words text-sm">
                 <span className="font-medium">{noteLabel(row)}: </span>
                 {row.note ?? m.library_archive_recovery_note_none()}
@@ -435,8 +444,10 @@ export function ArchiveRecoveryReview({
             <p key={mapping.sourceSubjectId} className="break-all text-sm">
               {mapping.state === 'mapped'
                 ? m.library_archive_recovery_mapping_current({
-                    id: targets.get(mapping.sourceSubjectId)?.id === mapping.currentSubjectId
-                      ? targets.get(mapping.sourceSubjectId)!.title : m.library_archive_present_title_unavailable(),
+                    id:
+                      targets.get(mapping.sourceSubjectId)?.id === mapping.currentSubjectId
+                        ? targets.get(mapping.sourceSubjectId)!.title
+                        : m.library_archive_present_title_unavailable(),
                   })
                 : mapping.state === 'canonical-changed'
                   ? m.library_archive_recovery_mapping_changed()
@@ -446,10 +457,16 @@ export function ArchiveRecoveryReview({
           <p>
             {review.pin.state === 'unsupported'
               ? m.library_archive_recovery_pin_unsupported()
-              : m.library_archive_recovery_pin_state({ state: review.pin.state === 'applied'
-                ? m.library_archive_recovery_effect_applied() : review.pin.state === 'pending'
-                  ? m.library_archive_recovery_effect_pending() : review.pin.state === 'none'
-                    ? m.library_archive_recovery_effect_not_applicable() : m.library_archive_present_unknown() })}
+              : m.library_archive_recovery_pin_state({
+                  state:
+                    review.pin.state === 'applied'
+                      ? m.library_archive_recovery_effect_applied()
+                      : review.pin.state === 'pending'
+                        ? m.library_archive_recovery_effect_pending()
+                        : review.pin.state === 'none'
+                          ? m.library_archive_recovery_effect_not_applicable()
+                          : m.library_archive_present_unknown(),
+                })}
           </p>
           <p>{m.library_archive_recovery_destination_private()}</p>
           <p>{m.library_archive_recovery_note_choice_help()}</p>
