@@ -2530,6 +2530,14 @@ Selecting a node issues at most two explicit native reads (the selected subject,
 companion page). Correction uses the existing facts, relation and authored-document editors and returns to the same
 bounded exploration address.
 
+Decision: Facts and ordinary Subject destinations admit the graph's existing closed 2 KiB public address through
+the graph route parser. A separate `returnTo` keeps correction property/statement operands under Semantic authority;
+ordinary Subject visits normalize that graph operand to `via`. The editor budgets this separately encoded return
+alongside its existing fixed-field limit. Facts public origins may return to the same-locale graph anchor, including
+when the corrected Subject is a neighbour; Context and Realm still match the public observation. Return links use
+the current graph reader, preserve normal browser history and retire withdrawn selections instead of restoring rows,
+session tokens or correction authority. Native and mounted acceptance execution remains with the verifier.
+
 Decision: Music-context relation and correction returns preserve only the selected public stream and its bounded
 native cursor; the reader keeps at most eight page addresses and returns without rows or session tokens.
 

@@ -2,6 +2,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { catalogueEntries } from './catalogue-entry';
 import type { FactsPublicOrigin } from './facts-public-visit';
 import { m } from '../../paraglide/messages.js';
+import { subjectGraphVisitReturn } from '../pages/subject-visit-navigation';
 
 export function SubjectFactsEntry({
   id,
@@ -69,7 +70,9 @@ export function FactsPublicReturnLink({ href, locale }: { href: string; locale: 
       className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       href={href}
     >
-      {m.facts_public_return({}, { locale: locale as never })}
+      {subjectGraphVisitReturn(href, locale)
+        ? m.recording_reader_return({}, { locale: locale as never })
+        : m.facts_public_return({}, { locale: locale as never })}
     </a>
   );
 }

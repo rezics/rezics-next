@@ -377,6 +377,20 @@ test('companion and correction links return only exact public selection state an
     await ui.flush();
     expect(calls.at(-1)).toMatchObject({ edge: edgeFirst, from: anchor, to: first, edgeProperty: property });
     expect(ui.host.textContent).toContain('Anchor edge');
+    await ui.show(
+      h(ui.RoutedVisit, {
+        key: 'withdrawn-return',
+        id: anchor,
+        locale: 'en',
+        initialRoute: Object.fromEntries(edgeReturn.searchParams) as GraphBrowserRouteState,
+        graphPath: edgeReturn.pathname,
+        transport: { read: async () => ({ ok: false, reason: 'stale' }) },
+      }),
+    );
+    await ui.flush();
+    expect(ui.host.textContent).toContain('This selection is no longer current');
+    expect(ui.host.querySelector('[data-graph-detail]')).toBeNull();
+    expect(ui.host.textContent).not.toContain('Anchor edge');
   } finally {
     await ui.close();
   }

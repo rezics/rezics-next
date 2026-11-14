@@ -1,5 +1,9 @@
 import { SubjectConnections } from '../../features/pages/subject-connections-view';
-import { subjectRouteSearchLimit, subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
+import {
+  subjectGraphVisitReturn,
+  subjectRouteSearchLimit,
+  subjectVisitReturn,
+} from '../../features/pages/subject-visit-navigation';
 import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { contextHref } from '../../features/pages/context-navigation';
 import { PendingPage } from '../../shell/pending';
@@ -245,7 +249,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     return {
       realm: validatePageRealm(search.realm),
       board: validatePageBoard(search.board),
-      via: subjectVisitReturn(search.via, getLocale()),
+      via: subjectVisitReturn(search.via ?? subjectGraphVisitReturn(search.returnTo, getLocale()), getLocale()),
       ...(typeof search.recipeReturn === 'string' && search.recipeReturn.length <= 8192
         ? { recipeReturn: search.recipeReturn }
         : {}),

@@ -42,6 +42,16 @@ test('the public entry preserves admitted Global and selected Context observatio
 
   const globalHref = catalogueEntries.graph({ id: subject, label: 'Origin', locale: 'en', origin: observed }).href;
   expect(parse(globalHref)).toEqual({ kind: 'origin', origin: observed });
+  const { graphBrowserReturnHref } = await import('../src/features/pages/graph-browser/view');
+  const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
+  const selectedReturnHref = graphBrowserReturnHref(
+    base,
+    { property: ['wdt:P31'], direction: 'both', depth: 2 },
+    { kind: 'node', id: otherSubject },
+    parse(globalHref),
+  );
+  expect(subjectVisitReturn(selectedReturnHref, 'en')).toBe(selectedReturnHref);
+  expect(parse(selectedReturnHref!)).toEqual({ kind: 'origin', origin: observed });
   expect(catalogueEntries.graph({ id: subject, label: 'Origin', locale: 'en' }).href).toBe(base);
 
   const selectedReturn = graphPublicSourceReturnHref({

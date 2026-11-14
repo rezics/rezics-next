@@ -45,10 +45,9 @@ function graphPublicReturn(
   context: string,
   realm?: string,
 ): string | undefined {
-  if (typeof value !== 'string' || !graphPublicIntentFits(value)) return;
-  const accepted = subjectVisitReturn(value, locale);
-  if (!accepted || !graphPublicIntentFits(accepted)) return;
-  const url = new URL(accepted, 'https://rezics.invalid');
+  if (typeof value !== 'string' || !graphPublicIntentFits(value) || !value.startsWith(`/${locale}/subjects/${id}/`))
+    return;
+  const url = new URL(value, 'https://rezics.invalid');
   const path = url.pathname.split('/');
   const keys = [...url.searchParams.keys()];
   const returnedContext = url.searchParams.get('context') ?? candidateContext;
@@ -64,7 +63,9 @@ function graphPublicReturn(
     url.hash !== '#subject-heading'
   )
     return;
-  const address = `${url.pathname}${url.search}${url.hash}`;
+  // Check the immediate heading shape before the shared validator, which also admits graph returns.
+  const address = subjectVisitReturn(value, locale);
+  if (!address) return;
   return graphPublicIntentFits(address) ? address : undefined;
 }
 
@@ -117,13 +118,12 @@ export function graphGlobalVisitHref(path: string, returnHref: string): string {
 }
 
 function validReturn(value: unknown, id: string, locale: string): string | undefined {
-  if (typeof value !== 'string' || !graphPublicIntentFits(value)) return;
-  const admitted = subjectVisitReturn(value, locale);
-  if (!admitted) return;
-  const url = new URL(admitted, 'https://rezics.invalid');
+  if (typeof value !== 'string' || !graphPublicIntentFits(value) || !value.startsWith(`/${locale}/subjects/${id}/`))
+    return;
+  const url = new URL(value, 'https://rezics.invalid');
   const context = url.searchParams.get('context') ?? candidateContext;
   const realm = url.searchParams.get('realm') ?? undefined;
-  return graphPublicReturn(admitted, id, locale, context, realm);
+  return graphPublicReturn(value, id, locale, context, realm);
 }
 
 function validSelectors(params: URLSearchParams): boolean {
@@ -239,7 +239,7 @@ export function graphPublicVisitReturn(visit: GraphPublicVisit | undefined): str
 }
 
 export function graphPublicVisitSearch(visit: GraphPublicVisit | undefined): Record<string, string> {
-  if (visit?.kind === 'origin') return { origin: JSON.stringify(visit.origin) };
+  if (visit?.kind === 'origin') return { origin: encodeURIComponent(JSON.stringify(visit.origin)) };
   if (visit?.kind === 'global') return { publicReturn: visit.returnHref };
   return {};
 }
