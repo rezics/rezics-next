@@ -1634,6 +1634,314 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
   }
 }, 60_000);
 
+for (const siblingDecision of ['accepted', 'undecided'] as const) {
+  test(`publication retains an ${siblingDecision} sibling beside unresolved acceptance through reopen`, async () => {
+    const temporary = join(import.meta.dir, '../../../.temp');
+    await mkdir(temporary, { recursive: true });
+    const directory = await mkdtemp(join(temporary, 'showcase-accepted-siblings-'));
+    const journalPath = join(directory, 'showcase.sqlite');
+    let journal = new ShowcaseJournal(journalPath);
+    const subjectId = randomUUID();
+    let nativeType = '';
+    let labels: Record<string, string> = {};
+    const candidates = new Map<
+      string,
+      { id: string; source: BatchCommand['source'] | null; statement: BatchStatement; head: number | null }
+    >();
+    const candidateByKey = new Map<string, string>();
+    const accepted = new Set<string>();
+    type Selection = { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
+    const adopted = new Map<string, { head: number; selection: Selection }>();
+    const read = () =>
+      ({
+        subject: {
+          id: subjectId,
+          type: nativeType,
+          labels,
+          statements: Object.fromEntries(
+            [...adopted].map(([property, adoption]) => [
+              property,
+              adoption.selection.map(({ candidate, rank }) => ({
+                ...candidates.get(candidate)!.statement,
+                id: candidate,
+                rank,
+              })),
+            ]),
+          ),
+        },
+      }) as unknown as ReviewedSubjectRead;
+    const tables: CrossMediaTables = {
+      async *rows(provider, table) {
+        if (provider !== 'vndb') return;
+        if (table === 'vn_titles') {
+          yield { id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
+          yield { id: 'v1', lang: 'en', official: 't', title: 'Steins;Gate', latin: null };
+        }
+        if (table === 'vn') yield { id: 'v1', olang: 'ja', alias: null };
+        if (table === 'entry_meta') yield { id: 'v1', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
+      },
+    };
+    const metadata = sourceRecordMetadataFixture();
+    const port = {
+      async batch(request: { commands: readonly BatchCommand[] }): Promise<BatchWriteResult> {
+        return {
+          results: request.commands.map((command) => {
+            if (command.op === 'create') {
+              nativeType = command.subject.type;
+              labels = command.subject.labels;
+              return { key: command.key, status: 201 as const, value: { id: subjectId, revision: 1 } };
+            }
+            if (command.op === 'propose') {
+              const id = candidateByKey.get(command.key) ?? randomUUID();
+              candidateByKey.set(command.key, id);
+              candidates.set(id, { id, source: command.source, statement: command.statement, head: null });
+              // The record already has an independently accepted, current source identifier.
+              if (command.statement.property.id === 'wdt:P3180') {
+                accepted.add(id);
+                adopted.set('wdt:P3180', { head: 1, selection: [{ candidate: id, rank: 'normal' }] });
+              }
+              return { key: command.key, status: 201 as const, value: { candidate: id, revision: 1 } };
+            }
+            return { key: command.key, status: 200 as const, value: { revision: 1 } };
+          }),
+        };
+      },
+      async readReviewedSubject() {
+        return read();
+      },
+      async fence() {
+        return { fenced: false, securityRevision: null };
+      },
+      setSourceRecordMetadata: metadata.setSourceRecordMetadata,
+      async writeSourceStatistic() {
+        return {};
+      },
+      async clearSourceStatistic() {
+        return {};
+      },
+    } as unknown as CrossMediaPort;
+    try {
+      const plan = await planCrossMediaSeed(tables);
+      expect(plan.records.vndb.map((record) => record.key)).toEqual(['v1']);
+      const result = await seedShowcaseVndbReleases({
+        tables,
+        plan,
+        path: join(directory, 'import.sqlite'),
+        port: captureShowcaseCommands(port, journal),
+        destination: { origin: 'https://fixture.test' },
+        extras: { providers: ['vndb'], mediaDeadlineMs: 0 },
+      });
+      const names = [...candidates.values()]
+        .filter((candidate) => candidate.statement.property.id === 'schema:name')
+        .sort((left, right) => left.id.localeCompare(right.id));
+      expect(names).toHaveLength(2);
+      // The unresolved candidate runs first, including when its sibling still needs acceptance.
+      const unresolved = names[0]!;
+      const sibling = names[1]!;
+      for (const candidate of candidates.values())
+        if (candidate.id !== unresolved.id && (candidate.id !== sibling.id || siblingDecision === 'accepted'))
+          accepted.add(candidate.id);
+      const editorialId = randomUUID();
+      candidates.set(editorialId, {
+        id: editorialId,
+        source: null,
+        statement: {
+          ...sibling.statement,
+          value: { type: 'value', content: { language: 'en', text: 'Editorial title' } },
+        },
+        head: 1,
+      });
+      accepted.add(editorialId);
+      adopted.set('schema:name', { head: 7, selection: [{ candidate: editorialId, rank: 'preferred' }] });
+      const acknowledged = journal.acknowledgedCommands();
+      const acceptanceCalls: { candidateId: string; body: unknown; idempotencyKey: string }[] = [];
+      const adoptionWrites: Parameters<ShowcaseReviewPort['adoptReviewedCandidates']>[1][] = [];
+      const publicReads: ReviewedSubjectRead[] = [];
+      let unavailableCandidateId: string | null = unresolved.id;
+      const review: ShowcaseReviewPort = {
+        fence: port.fence,
+        readReviewedSubject: port.readReviewedSubject,
+        async reviewedCandidates(id, query) {
+          expect(id).toBe(subjectId);
+          expect(query.context).toBe(globalContext);
+          const property = query.property;
+          if (!property) throw new Error('Publication fixture requires a property');
+          const adoption = adopted.get(property);
+          const rows = [...candidates.values()].filter((candidate) => candidate.statement.property.id === property);
+          const paginated = property === 'schema:name';
+          const page = paginated
+            ? rows.filter((candidate) =>
+                query.cursor ? candidate.id === editorialId : candidate.id !== editorialId,
+              )
+            : rows;
+          return {
+            candidates: page.map((candidate) => ({
+              ...candidate,
+              decision: accepted.has(candidate.id) ? 'accepted' : null,
+              rank: adoption?.selection.find((item) => item.candidate === candidate.id)?.rank ?? null,
+            })),
+            next: paginated && !query.cursor ? 'editorial' : null,
+            adoption: adoption ? { mode: 'replace', head: adoption.head } : null,
+          } as never;
+        },
+        async acceptReviewedCandidate(id, candidateId, body, idempotencyKey) {
+          expect(id).toBe(subjectId);
+          expect(body).toEqual({ context: globalContext, expected_head: candidates.get(candidateId)!.head });
+          acceptanceCalls.push({ candidateId, body: structuredClone(body), idempotencyKey });
+          if (candidateId === unavailableCandidateId)
+            throw Object.assign(new Error('Acceptance unavailable'), { status: 503 });
+          accepted.add(candidateId);
+          candidates.get(candidateId)!.head = 1;
+          return {
+            acceptance: { context: body.context, candidate: candidateId, decision: 'accept', head: 1 },
+            revision: 1,
+          };
+        },
+        async adoptReviewedCandidates(id, body) {
+          expect(id).toBe(subjectId);
+          expect(body.context).toBe(globalContext);
+          expect(body.mode).toBe('replace');
+          expect(body.expected_head).toBe(adopted.get(body.property)?.head ?? null);
+          for (const item of body.selection) {
+            expect(accepted.has(item.candidate)).toBe(true);
+            expect(item.rank).not.toBe('deprecated');
+          }
+          adoptionWrites.push(structuredClone(body));
+          const current = { head: (body.expected_head ?? 0) + 1, selection: body.selection };
+          adopted.set(body.property, current);
+          return { adoption: { ...body, head: current.head }, revision: 1 };
+        },
+      };
+      const publicClient = createPublicBulkClient({
+        origin: 'https://fixture.test',
+        fetch: (async (input) => {
+          expect(new URL(String(input)).pathname.split('/').at(-1)).toBe(subjectId);
+          const current = read();
+          publicReads.push(structuredClone(current));
+          return Response.json(current);
+        }) as typeof fetch,
+      });
+      const publish = () =>
+        publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient, onProgress() {} });
+      const retainedSelection: Selection = [
+        { candidate: sibling.id, rank: 'normal' },
+        { candidate: editorialId, rank: 'preferred' },
+      ];
+      retainedSelection.sort((left, right) => left.candidate.localeCompare(right.candidate));
+      const expectPartialPublication = (publication: Awaited<ReturnType<typeof publish>>) => {
+        expect(publication.status).toBe('incomplete');
+        expect(publication.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v1', code: 'review-http-503' });
+        const record = publication.published.find((item) => item.sourceKey === 'v1');
+        expect(record?.assertions.find((assertion) => assertion.candidateId === sibling.id)).toEqual(
+          expect.objectContaining({
+            property: 'schema:name',
+            adoption: { head: 8, candidateId: sibling.id, rank: 'normal' },
+            readback: { ...sibling.statement, id: sibling.id, rank: 'normal' },
+          }),
+        );
+        expect(record?.assertions.some((assertion) => assertion.candidateId === unresolved.id)).toBe(false);
+        expect(publication.manifest.records.find((item) => item.sourceKey === 'v1')?.assertions).toContainEqual(
+          expect.objectContaining({ candidateId: unresolved.id, statement: unresolved.statement }),
+        );
+        expect(adopted.get('schema:name')).toEqual({ head: 8, selection: retainedSelection });
+        expect(publicReads.at(-1)?.subject?.statements?.['schema:name']).toEqual(
+          retainedSelection.map(({ candidate, rank }) => ({
+            ...candidates.get(candidate)!.statement,
+            id: candidate,
+            rank,
+          })),
+        );
+        expect(accepted.has(unresolved.id)).toBe(false);
+        expect(acceptanceCalls.filter((call) => call.candidateId === sibling.id)).toHaveLength(
+          siblingDecision === 'accepted' ? 0 : 1,
+        );
+      };
+      const first = await publish();
+      expectPartialPublication(first);
+      const assertion = first.manifest.records[0]!.assertions.find((item) => item.candidateId === unresolved.id)!;
+      const actionKey = `accept:${showcaseDigest({ identity: unresolved.id, digest: assertion.candidateDigest })}`;
+      const originalAction = journal.action(actionKey)!;
+      expect(originalAction).toMatchObject({ state: 'refused', error_code: 'review-http-503' });
+      expect(adoptionWrites.filter((body) => body.property === 'schema:name')).toEqual([
+        {
+          context: globalContext,
+          property: 'schema:name',
+          mode: 'replace',
+          expected_head: 7,
+          selection: retainedSelection,
+        },
+      ]);
+
+      journal.close();
+      journal = new ShowcaseJournal(journalPath);
+      const reopened = await publish();
+      expectPartialPublication(reopened);
+      expect(reopened.manifest.digest).toBe(first.manifest.digest);
+      expect(journal.action(actionKey)).toMatchObject({
+        state: 'refused',
+        error_code: 'review-http-503',
+        body_json: originalAction.body_json,
+        idempotency_key: originalAction.idempotency_key,
+      });
+      expect(adoptionWrites.filter((body) => body.property === 'schema:name')).toHaveLength(1);
+
+      journal.close();
+      journal = new ShowcaseJournal(journalPath);
+      unavailableCandidateId = null;
+      const recovered = await publish();
+      expect(recovered.status).toBe('published');
+      expect(recovered.omissions).toEqual([]);
+      expect(recovered.manifest.digest).toBe(first.manifest.digest);
+      expect(journal.acknowledgedCommands()).toEqual(acknowledged);
+      const finalSelection: Selection = [...retainedSelection, { candidate: unresolved.id, rank: 'normal' }];
+      finalSelection.sort((left, right) => left.candidate.localeCompare(right.candidate));
+      expect(adoptionWrites.filter((body) => body.property === 'schema:name').at(-1)).toEqual({
+        context: globalContext,
+        property: 'schema:name',
+        mode: 'replace',
+        expected_head: 8,
+        selection: finalSelection,
+      });
+      const recoveredNames = recovered.published[0]!.assertions.filter((item) => item.property === 'schema:name');
+      expect(recoveredNames.map((item) => item.candidateId).sort()).toEqual([sibling.id, unresolved.id].sort());
+      for (const item of recoveredNames)
+        expect(item.adoption).toEqual({ head: 9, candidateId: item.candidateId, rank: 'normal' });
+      expect(publicReads.at(-1)?.subject?.statements?.['schema:name']).toEqual(
+        finalSelection.map(({ candidate, rank }) => ({
+          ...candidates.get(candidate)!.statement,
+          id: candidate,
+          rank,
+        })),
+      );
+      const attempts = acceptanceCalls.filter((call) => call.candidateId === unresolved.id);
+      expect(attempts).toHaveLength(3);
+      expect(attempts).toEqual([attempts[0], attempts[0], attempts[0]]);
+      expect(journal.action(actionKey)).toMatchObject({
+        state: 'acknowledged',
+        body_json: originalAction.body_json,
+        idempotency_key: originalAction.idempotency_key,
+      });
+      if (siblingDecision === 'accepted') {
+        // Partial fact publication still requires the record's current source identity.
+        const identity = [...candidates.values()].find((item) => item.statement.property.id === 'wdt:P3180')!;
+        accepted.delete(identity.id);
+        adopted.delete('wdt:P3180');
+        unavailableCandidateId = identity.id;
+        const writesBeforeIdentityFailure = adoptionWrites.length;
+        const withheld = await publish();
+        expect(withheld.status).toBe('incomplete');
+        expect(withheld.published.some((record) => record.sourceKey === 'v1')).toBe(false);
+        expect(withheld.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v1', code: 'review-http-503' });
+        expect(withheld.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v1', code: 'source-uri-not-current' });
+        expect(adoptionWrites).toHaveLength(writesBeforeIdentityFailure);
+      }
+    } finally {
+      journal.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
 test('explicit 422 replaces a collided review receipt; unknown delivery keeps the sealed key', () => {
   const journal = new ShowcaseJournal(':memory:');
   try {
