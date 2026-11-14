@@ -1,16 +1,11 @@
 import { memoizedValue } from '../memoized.ts';
 import { createHmac } from 'node:crypto';
-import type { Pool } from 'pg';
 import { t } from 'elysia';
-import { deadlineClient, within } from './access-port.ts';
-import { CommandUnavailableError } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { readPartition } from '../partition/partition.ts';
 import { accessCheck, actorOf } from './access-port.ts';
 import { AuthenticationError } from '../access/contract/authentication.ts';
 import type { AccessClient, Actor } from '../request/access.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ModerationDecisionSchema, readModerationDecision } from './moderation-decisions.ts';
@@ -19,6 +14,7 @@ import page from './page-moderation-history.sql';
 import selectedPage from './moderation-history-kind-page.sql';
 import retention from './moderation-history-retention.sql';
 import type { ModerationDependencies } from './moderation.ts';
+import { moderationReadSnapshot as snapshot } from './moderation-read-connection.ts';
 
 export const MODERATION_HISTORY_MAX_LIMIT = 100;
 
@@ -83,32 +79,6 @@ function cursorRing(routeKey: Uint8Array): KeyRing {
     current: 1,
     keys: new Map([[1, createHmac('sha256', routeKey).update('content.moderation-history.cursor.v1').digest()]]),
   };
-}
-
-async function snapshot<T>(pool: Pool, route: number, deadline: number, read: (client: AccessClient) => Promise<T>) {
-  return within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partitionNo = partitionOf(route);
-        const partition = await readPartition(client, partitionNo);
-        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        const value = await read(client);
-        await client.query('COMMIT');
-        return { value, anchor: { partition: partitionNo, epoch: partition.epoch, position: partition.position } };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
 }
 
 export async function listModerationHistory(

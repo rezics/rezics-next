@@ -1484,6 +1484,8 @@ Exact reads preserve the existing affected-author branch independently of target
 a current available target, and history always checks current target/parent availability.
 No descendant, partition, report, grant or account scan discovers a page.
 
+Decision: board history, exact decision and appeal-review source reads share a deadline-bound read-only snapshot that covers checkout, BEGIN, partition/source reads, COMMIT and cleanup; unresolved native I/O discards its connection, while successful snapshots retain their existing partition anchors.
+
 At a fixed page limit L, a page uses at most `3 + 4L` anchored snapshots: board authority before and after, one
 board-index seek, and up to four bounded target/source/authority/retention snapshots per selected candidate. The index seek
 reads at most L + 1 rows; each target check and exact decision read is a point access with existing finite Access

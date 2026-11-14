@@ -1,9 +1,6 @@
 import type { Pool } from 'pg';
-import { deadlineClient, within, readPublicIdentities } from './access-port.ts';
+import { readPublicIdentities } from './access-port.ts';
 import type { PublicIdentity } from '../access/content-adapter.ts';
-import { CommandUnavailableError } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
-import { readPartition } from '../partition/partition.ts';
 import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -11,8 +8,9 @@ import type { BoardId, ThreadId } from './model.ts';
 import { readBoard, readThread, type ThreadView } from './reads.ts';
 import type { BoardView } from './model.ts';
 import targets from './appeal-review-page-targets.sql';
+import { moderationReadSnapshot, type ModerationReadAnchor } from './moderation-read-connection.ts';
 
-export type AppealReviewAnchor = Readonly<{ partition: number; epoch: number; position: bigint }>;
+export type AppealReviewAnchor = ModerationReadAnchor;
 export type AppealReviewDependencies = Readonly<{ pool: Pool; access: Access; tokens?: KeyRing; clock: () => Date }>;
 export type AppealReviewIdentity = Readonly<
   | {
@@ -64,29 +62,7 @@ export async function appealReviewSnapshot<T>(
   deadline: number,
   work: (client: AccessClient) => Promise<T>,
 ): Promise<{ value: T; anchor: AppealReviewAnchor }> {
-  return within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partitionNo = partitionOf(route);
-        const partition = await readPartition(client, partitionNo);
-        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        const value = await work(client);
-        await client.query('COMMIT');
-        return { value, anchor: { partition: partitionNo, epoch: partition.epoch, position: partition.position } };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollback) {
-          discardConnection(connection, rollback as Error);
-        }
-        throw error;
-      }
-    }),
-  );
+  return moderationReadSnapshot(pool, route, deadline, work);
 }
 
 /** Only public allowlisted identity fields are projected. Missing, erased and unavailable stay distinct. */

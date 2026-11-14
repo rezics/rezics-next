@@ -5,13 +5,14 @@ import { deadlineClient, within, notificationAllowed } from './access-port.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
-import { readPartition, type Partition } from '../partition/partition.ts';
+import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from './access-port.ts';
 import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { createAppealEffect } from './appeals.ts';
 import { writeNotices } from './notices.ts';
+import { moderationReadSnapshot as snapshot } from './moderation-read-connection.ts';
 import readDecisionSource from './decision-page-source.sql';
 import readHistorySource from './moderation-history-source.sql';
 import projectHistory from './project-moderation-history.sql';
@@ -43,38 +44,6 @@ export const ModerationDecisionSchema = t.Object(
   },
   { additionalProperties: false },
 );
-
-/** All source reads use the target's independently anchored snapshot. */
-async function snapshot<T>(
-  pool: Pool,
-  route: number,
-  deadline: number,
-  read: (client: AccessClient, partition: Partition) => Promise<T>,
-) {
-  return within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partitionNo = partitionOf(route);
-        const partition = await readPartition(client, partitionNo);
-        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-        if (partition.writeState === 'moved')
-          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        const value = await read(client, partition);
-        await client.query('COMMIT');
-        return { value, anchor: { partition: partitionNo, epoch: partition.epoch, position: partition.position } };
-      } catch (error) {
-        try {
-          await connection.query('ROLLBACK');
-        } catch (rollbackError) {
-          discardConnection(connection, rollbackError as Error);
-        }
-        throw error;
-      }
-    }),
-  );
-}
 
 type DecisionSource = NonNullable<Awaited<ReturnType<typeof readDecisionSource.run>>>;
 
