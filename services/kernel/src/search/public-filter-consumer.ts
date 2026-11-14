@@ -603,7 +603,10 @@ export async function applyPublicFilterConsumerActions(
 }
 
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadLifetime, type NativeReadQueryConfig } from '../database/bounded-read-lifetime.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import type {
   PublicFilterCost,
   PrivacyReductionStart,
@@ -792,9 +795,10 @@ export async function advanceNativeGenerationSource(
   input: NativeGenerationInput,
   context: PublicFilterConsumerContext,
 ) {
+  context = { deadline: context.deadline };
   const operations = await createPublicFilterConsumerOperations(config);
   try {
-    return await generationSources.get(operations)!(input, context);
+    return await withRequestDeadline(context.deadline, () => generationSources.get(operations)!(input, context));
   } finally {
     await operations.close();
   }
@@ -815,14 +819,15 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   const owned = new Map<string, PublicFilterQueriedObservation>();
   let closed = false;
   let closing: Promise<void> | undefined;
-  const track = <T>(run: () => Promise<T>): Promise<T> => {
+  const track = <T>(context: PublicFilterConsumerContext, run: () => Promise<T>): Promise<T> => {
     if (closed) return Promise.reject(new ConsumerFailure('observation_lost'));
-    const operation = run();
+    const operation = withRequestDeadline(context.deadline, run);
     pending.add(operation);
     void operation.finally(() => pending.delete(operation)).catch(() => {});
     return operation;
   };
   function meter(context: PublicFilterConsumerContext, maintenance = false) {
+    context = { deadline: context.deadline };
     const cost: ConsumerMeter = emptyConsumerCost();
     let preparationInputKeys = 0;
     const add = (next: PublicFilterCost) => {
@@ -872,11 +877,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         values: parameters,
         query_timeout: remaining(context),
       };
-      const result = await config.pool.query<T>(request);
-      if (!countedRows) cost.rows += result.rows.length;
-      cost.bytes += Buffer.byteLength(encodeState(result.rows));
-      check();
-      return result;
+      const client = await connect((db) => async (query, values) => {
+        const result = await db.query(query, values);
+        if (!countedRows) cost.rows += result.rows.length;
+        cost.bytes += Buffer.byteLength(encodeState(result.rows));
+        check();
+        return result;
+      });
+      try {
+        return await client.query<T>(request);
+      } finally {
+        client.release();
+      }
     };
     const unavailable = (reason: PublicFilterConsumerUnavailable['reason']): PublicFilterConsumerUnavailable => ({
       status: 'unavailable',
@@ -934,40 +946,147 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         return result as any;
       },
     };
-    const wrapQuery =
-      (db: Pick<Pool, 'query'>) => async (query: string | import('pg').QueryConfig, values?: unknown[]) => {
-        const text = typeof query === 'string' ? query : query.text;
-        const cleanup = /^ROLLBACK\b/.test(text);
-        if (!cleanup) check();
-        const parameters = values ?? (typeof query === 'string' ? [] : (query.values ?? []));
-        cost.statements++;
-        cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encodeState(parameters));
-        const request: import('pg').QueryConfig & { query_timeout: number } = {
-          text,
-          values: parameters,
-          query_timeout: cleanup ? 1000 : remaining(context),
-        };
+    const rollback = (query: string | NativeReadQueryConfig) =>
+      /^\s*ROLLBACK\b/i.test(typeof query === 'string' ? query : query.text);
+    const reserveQuery = (query: string | NativeReadQueryConfig, values?: unknown[]): NativeReadQueryConfig => {
+      const text = typeof query === 'string' ? query : query.text;
+      const cleanup = rollback(query);
+      if (!cleanup) check();
+      const parameters = values ?? (typeof query === 'string' ? [] : (query.values ?? []));
+      cost.statements++;
+      cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encodeState(parameters));
+      const timeout = cleanup ? 1000 : remaining(context);
+      const supplied = typeof query === 'string' ? undefined : query.query_timeout;
+      return {
+        ...(typeof query === 'string' ? {} : query),
+        text,
+        values: parameters,
+        query_timeout: supplied !== undefined && supplied > 0 ? Math.min(supplied, timeout) : timeout,
+      };
+    };
+    const wrapQuery = (db: Pick<Pool, 'query'>, reserved = false) =>
+      async (query: string | NativeReadQueryConfig, values?: unknown[]) => {
+        const request = reserved ? (query as NativeReadQueryConfig) : reserveQuery(query, values);
         const result = await db.query(request);
         cost.rows += result.rows.length;
         cost.bytes += Buffer.byteLength(encodeState(result.rows));
-        if (/\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
-        if (!cleanup) check();
+        if (/\b(INSERT|UPDATE|DELETE)\b/.test(request.text)) cost.resultWrites += result.rowCount ?? 0;
+        if (!rollback(request)) check();
         return result;
       };
+    const lifetimeOptions = {
+      deadlineError: () => new ConsumerFailure('deadline'),
+      mapError: (error: unknown) => (Date.now() >= context.deadline ? new ConsumerFailure('deadline') : error),
+      isUncertainSettledQueryError: () => true,
+    };
+    async function connect(observeQuery = wrapQuery): Promise<PoolClient> {
+      check();
+      return new Promise<PoolClient>((resolve, reject) => {
+        let physical: PoolClient | undefined;
+        let metered: PoolClient;
+        let handedOut = false;
+        let released = false;
+        let retired = false;
+        let uncertainty: Error | undefined;
+        let cleanupQueries = 0;
+        let finish!: () => void;
+        const returned = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        const cleanupDeadline = context.deadline + 1000;
+        const discard = (_client: PoolClient, error: Error) => {
+          uncertainty ??= error;
+          discardConnection(physical!, uncertainty);
+        };
+        const operation = withBoundedReadLifetime(
+          (work) =>
+            // Keep physical checkout/discard custody on the original Pool. Native
+            // callers still own their BEGIN/COMMIT/ROLLBACK and session locks.
+            withConnection(config.pool, async (raw) => {
+              physical = raw;
+              metered = Object.create(raw) as PoolClient;
+              // Account the native completion even if its caller has already timed out.
+              const observedQuery = observeQuery(raw);
+              metered.query = (async (query: string | NativeReadQueryConfig, values?: unknown[]) => {
+                if (released || retired) throw new ConsumerFailure('deadline');
+                return observedQuery(query, values);
+              }) as PoolClient['query'];
+              try {
+                return await work(metered);
+              } catch (error) {
+                discard(raw, error instanceof Error ? error : new Error(String(error)));
+                if (handedOut && !released) {
+                  // The expired callback may still be unwinding its own transaction.
+                  // Retain only cleanup custody, bounded from the original deadline.
+                  await withBoundedReadLifetime(
+                    (cleanup) => cleanup(metered),
+                    discard,
+                    cleanupDeadline,
+                    () => returned,
+                    lifetimeOptions,
+                  ).catch(() => {});
+                }
+                throw error;
+              } finally {
+                retired = true;
+              }
+            }),
+          discard,
+          context.deadline,
+          async (bounded) => {
+            const client = Object.create(bounded) as PoolClient;
+            client.query = (async (query: string | NativeReadQueryConfig, values?: unknown[]) => {
+              if (released || retired) throw new ConsumerFailure('deadline');
+              if (!rollback(query)) {
+                if (Date.now() >= context.deadline) throw new ConsumerFailure('deadline');
+                if (uncertainty) throw uncertainty;
+                return bounded.query(query, values);
+              }
+              cleanupQueries++;
+              try {
+                // Only the owner's ROLLBACK may bypass the retired request client.
+                return await withBoundedReadLifetime(
+                  (cleanup) => cleanup(metered),
+                  discard,
+                  Math.min(cleanupDeadline, Date.now() + 1000),
+                  (cleanup) => cleanup.query(query, values),
+                  lifetimeOptions,
+                );
+              } finally {
+                cleanupQueries--;
+              }
+            }) as PoolClient['query'];
+            client.release = (error) => {
+              if (released) return;
+              released = true;
+              if (error || cleanupQueries > 0)
+                discard(client, error instanceof Error ? error : new Error('Consumer connection became uncertain'));
+              finish();
+            };
+            handedOut = true;
+            resolve(client);
+            await returned;
+          },
+          lifetimeOptions,
+        );
+        // Rejection before handoff rejects acquisition; a late checkout still runs
+        // through the original owner's finally and is physically discarded there.
+        void operation.catch(reject);
+      });
+    }
     const pool = new Proxy(config.pool, {
       get(db, key) {
-        if (key === 'query') return wrapQuery(db);
-        if (key === 'connect')
-          return async () => {
-            const client = await db.connect();
-            return new Proxy(client, {
-              get(connection, property) {
-                if (property === 'query') return wrapQuery(connection);
-                const value = Reflect.get(connection, property);
-                return typeof value === 'function' ? value.bind(connection) : value;
-              },
-            });
+        if (key === 'query')
+          return async (query: string | NativeReadQueryConfig, values?: unknown[]) => {
+            const request = reserveQuery(query, values);
+            const client = await connect((connection) => wrapQuery(connection, true));
+            try {
+              return await client.query(request);
+            } finally {
+              client.release();
+            }
           };
+        if (key === 'connect') return () => connect();
         const value = Reflect.get(db, key);
         return typeof value === 'function' ? value.bind(db) : value;
       },
@@ -2755,11 +2874,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   const operations: PublicDiscoveryConsumerOperations = {
     capture(request, context) {
       const copied = structuredClone(request);
-      return track(() => captureForPage(copied, context));
+      return track(context, () => captureForPage(copied, context));
     },
     captureDiscovery(request, context) {
       const copied = structuredClone(request);
-      return track(() => captureForPage(copied, context));
+      return track(context, () => captureForPage(copied, context));
     },
     query(q, context, refill) {
       return standalone(q, context, refill, false) as Promise<PublicFilterConsumerQuery>;
@@ -2768,14 +2887,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       return standalone(q, context, refill, true) as Promise<DiscoveryConsumerQuery>;
     },
     repairStep(job, context) {
-      return track(() => repairStep(job, { deadline: context.deadline }));
+      return track(context, () => repairStep(job, { deadline: context.deadline }));
     },
     readStatus(request, context) {
-      return track(() => readStatus(request, { deadline: context.deadline }));
+      return track(context, () => readStatus(request, { deadline: context.deadline }));
     },
     closeObservation(input, context) {
       const q = structuredClone(input);
-      return track(async () => {
+      return track(context, async () => {
         const result = await custody.closeObservation(q, config.search, { deadline: context.deadline });
         if (result.status !== 'closed') throw new ConsumerFailure('observation_lost');
         owned.delete(q.snapshot.observation);
@@ -2924,7 +3043,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (page.busy || page.failed || page.finished || page.disposed) throw new ConsumerFailure('observation_lost');
       page.busy = true;
       try {
-        return await track(body);
+        return await track(context, body);
       } catch (error) {
         page.failed = true;
         throw error;
