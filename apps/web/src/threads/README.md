@@ -371,7 +371,11 @@ readable titles and body-first post actions. The opening is identified independe
 replies keep native order and bounded indentation. Ancestry and exact citation identifiers use labelled inspection,
 while the reviewed Subject and cited value stay visible. Closing inspection retains mounted drafts and commands.
 Post details and watch guidance use the same secondary disclosure, while deliberate actions and recovery remain visible.
-Main routed review stories are manual and stable; separate interaction stories pin branch/reply/Board return.
+Main routed review stories are manual and stable: `board.stories.tsx` and `thread-conversation.stories.tsx` use
+`PageStory` and the generated route tree for populated discussions, exact review citations, long writing, sparse
+continuation and independent attachment/watch/activity failure. `thread-conversation-walks.stories.tsx` separately
+pins branch/reply/Board return, an unchanged local draft, exact Retry and citation inspection. Regional previews
+remain existing regression sources and do not replace these routed entries.
 Runtime, native, browser, visual and ordinary test acceptance are deferred to the dev verifier; the final explicit
 workspace typecheck remains the source check. Existing regression assertions remain authoritative.
 

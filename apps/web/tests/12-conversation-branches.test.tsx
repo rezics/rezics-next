@@ -69,6 +69,7 @@ function Harness({ hash = '', reader }: { hash?: string; reader?: InstanceType<t
       <ConversationBranches
         model={model}
         thread={thread}
+        openingPostId={posts[0]!.id}
         scope={scope}
         current
         isCurrent={() => true}
@@ -123,6 +124,8 @@ afterAll(async () => {
 test('follow, exact Reply selection, local collapse and keyboard return retain order, cursor and mounted writing', async () => {
   await paint();
   const ordered = [...host.querySelectorAll('[data-conversation-row]')];
+  expect(row(0).dataset.conversationPart).toBe('opening');
+  expect(row(3).dataset.conversationPart).toBe('reply');
   const draft = row(3).querySelector('textarea')!;
   draft.value = 'Unsent inline writing';
   const composer =
@@ -137,6 +140,10 @@ test('follow, exact Reply selection, local collapse and keyboard return retain o
   await click(button(row(3), m.thread_reply_to_post()));
   const composerContext = [...host.querySelectorAll('[data-slot="reply-context"]')].at(-1)!;
   expect(composerContext.querySelector('a')?.getAttribute('href')).toBe(`#post-${id(4)}`);
+  const path = row(3).querySelector<HTMLDetailsElement>('details')!;
+  expect(path.open).toBe(false);
+  expect(path.querySelector('summary')?.textContent).toBe(m.conversation_reply_path());
+  await click(path.querySelector('summary')!);
   const follow = row(3).querySelector<HTMLAnchorElement>(`a[href="#post-${id(2)}"]`)!;
   follow.focus();
   await click(follow);
@@ -180,6 +187,7 @@ test('external deep links reveal collapsed rows, modified parent clicks remain n
   await click(button(row(0), m.thread_branch_collapse({ count: 2 })));
   await paint({ hash: `#post-${id(4)}` });
   expect(row(3).hidden).toBe(false);
+  await click(row(3).querySelector<HTMLElement>('details summary')!);
   const link = row(3).querySelector<HTMLAnchorElement>(`a[href="#post-${id(2)}"]`)!;
   await act(async () =>
     link.dispatchEvent(

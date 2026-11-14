@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ThreadPost } from '../src/threads/thread-page';
+import { m } from '../src/paraglide/messages.js';
 import { ThreadReviewContext, type ThreadReviewContextValue } from '../src/threads/thread-review-context';
 
 const threadId = '11111111-1111-4111-8111-111111111111';
@@ -87,6 +88,17 @@ test('review context follows the current target and exact published citation, pr
   expect(html).toContain(questionId);
   expect(html).toContain('historical question label and scale are unavailable');
   expect(html).not.toContain('current rating: 0');
+});
+
+test('the cited zero remains readable while exact identifiers stay in closed labelled inspection', () => {
+  const html = view(context);
+  const disclosure = html.indexOf('<details');
+  const summaryEnd = html.indexOf('</summary>', disclosure);
+  expect(disclosure).toBeGreaterThan(html.indexOf('data-cited-value="0"'));
+  expect(html.slice(disclosure, summaryEnd)).toContain(m.conversation_inspect_citation());
+  expect(html.slice(disclosure, html.indexOf('>', disclosure))).not.toMatch(/\bopen(?:=|\s|$)/);
+  expect(html.indexOf(questionId)).toBeGreaterThan(summaryEnd);
+  expect(html.indexOf(`/en/posts/${postId}/revisions/${revisionId}`)).toBeGreaterThan(summaryEnd);
 });
 
 test('withheld targets and absent citations stay explicit, and stale revisions never borrow a citation', () => {
