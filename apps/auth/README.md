@@ -31,6 +31,26 @@ lists also use shadcn items and badges. Password reveal buttons have localized s
 until hydration. Native form submissions keep their fields and actions; scripted actions retain their pending
 states with an accessible busy indicator. Error text uses ink blue, with red reserved for the brand mark.
 
+## Entry and recovery presentation
+
+Decision: login, signup, account choice and generic return/recovery views share `src/auth-task-view.tsx`:
+a task title, form or deliberate action, attached status/warnings and separate optional help. Actions stack on phones
+and wrap on desktop; help links retain a 44-pixel target. Native advice alone determines which actions exist. Generic
+history stays separate from current identity and cannot imply authentication, cancel a send or reconstruct a command.
+Signup requirements and errors both describe their fields; handle entry disables browser spelling/case correction.
+Read Retry and a fresh authentication remain separate actions. Existing localized copy supplies all eight locales.
+
+Presentation orientation uses this document's Sign-in, Sign-up, Consent and Step-up sections, the named route/view
+sources and their existing regression fixtures, plus the read-only reference index. When Impeccable reference files
+or its CLI are unavailable, use this document's shared shadcn components, spacing, wrapped content and focus rules;
+no CLI installation or capture is required to compose the source. Named synthetic stories demonstrate presentation,
+including long German copy, independently failed advice and retained unknown outcomes; they establish no native pass.
+
+This source window defers acceptance tests, browser checks and captures to the dev verifier. The final explicit
+workspace typecheck requirement takes precedence over the earlier typing deferral; the installed Auth command owns
+its generation prerequisites. Existing protocol, challenges, continuation and mounted-lifetime regression assertions
+remain unchanged.
+
 ## Mounted operation lifetime
 
 These are adopted browser requirements; documentation establishes no native, browser or shared-suite pass.

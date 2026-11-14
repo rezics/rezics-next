@@ -12,6 +12,7 @@ import {
 import { flushSync } from 'react-dom';
 import { AuthButton } from './button';
 import { AuthPage } from './frame';
+import { AuthActions, AuthHelp, AuthNotice } from './auth-task-view';
 import { m } from './paraglide/messages.js';
 import type { RouteRetryState } from './route-failure';
 
@@ -203,20 +204,22 @@ export function RouteFailureView({
     <AuthPage heading={title} headingRef={heading} headingTabIndex={-1}>
       <section className="auth-route-failure" aria-busy={pending}>
         <p>{body}</p>
-        <p>{m.auth_route_failure_read_only()}</p>
+        <AuthNotice>{m.auth_route_failure_read_only()}</AuthNotice>
         {pending ? (
           <p ref={pendingStatus} tabIndex={-1} role="status">
             {m.auth_route_failure_retrying()}
           </p>
         ) : null}
         {state === 'failed' ? <p>{m.auth_route_failure_retry_failed()}</p> : null}
-        <AuthButton type="button" variant="outline" disabled={pending} aria-busy={pending} onClick={onRetry}>
-          {pending ? m.auth_route_failure_retrying() : m.auth_route_failure_retry()}
-        </AuthButton>
-        <nav aria-label={m.auth_route_failure_safe_navigation()}>
+        <AuthActions>
+          <AuthButton type="button" disabled={pending} aria-busy={pending} onClick={onRetry}>
+            {pending ? m.auth_route_failure_retrying() : m.auth_route_failure_retry()}
+          </AuthButton>
+        </AuthActions>
+        <AuthHelp aria-label={m.auth_route_failure_safe_navigation()}>
           <a href="/login">{m.auth_route_failure_exit_login()}</a>
           <a href="/security">{m.auth_route_failure_exit_security()}</a>
-        </nav>
+        </AuthHelp>
       </section>
     </AuthPage>
   );

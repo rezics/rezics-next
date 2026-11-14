@@ -1,7 +1,7 @@
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { flushSync } from 'react-dom';
 import { AuthButton as Button } from '../button';
-import { Field } from '@rezics/ui/shadcn/field';
+import { Field, FieldError } from '@rezics/ui/shadcn/field';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import {
   AlertDialog,
@@ -15,6 +15,7 @@ import {
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthPage } from '../frame';
+import { AuthActions, AuthHelp, AuthNotice, AuthTask } from '../auth-task-view';
 import {
   explainSignIn,
   normalizeSignupHandle,
@@ -411,7 +412,9 @@ function SignupPageState({
   if (page === null) {
     return (
       <AuthPage heading={m.auth_signup_heading()}>
-        <p role="status">{m.auth_inventory_loading()}</p>
+        <AuthTask aria-busy="true">
+          <p role="status">{m.auth_inventory_loading()}</p>
+        </AuthTask>
       </AuthPage>
     );
   }
@@ -509,15 +512,15 @@ function SignupActivePageState({
     return (
       <AuthPage heading={m.auth_signup_heading()}>
         {departure}
-        <div className="auth-login-form">
+        <AuthTask>
           <p role="status">{m.auth_signup_already_signed_in()}</p>
-          <nav className="auth-login-links" aria-label={m.auth_signup_continue()}>
+          <AuthHelp aria-label={m.auth_signup_continue()}>
             <a href={signInTarget(journey.query)}>{m.auth_signup_continue()}</a>
             <a href={`/login${journey.query}`} onClick={follow}>
               {m.auth_signup_sign_in()}
             </a>
-          </nav>
-        </div>
+          </AuthHelp>
+        </AuthTask>
       </AuthPage>
     );
   }
@@ -544,7 +547,7 @@ function SignupActivePageState({
     return (
       <AuthPage heading={m.auth_signup_heading()}>
         {departure}
-        <div className="auth-login-form">
+        <AuthTask>
           {phase.kind === 'uncertain' ? (
             <SignupUncertainty phase={phase} query={journey.query} follow={follow} unavailable />
           ) : phase.kind === 'dispatched' ? (
@@ -566,7 +569,7 @@ function SignupActivePageState({
           {phase.kind !== 'uncertain' && phase.kind !== 'dispatched' ? (
             <SignupAuthLinks query={journey.query} follow={follow} />
           ) : null}
-        </div>
+        </AuthTask>
       </AuthPage>
     );
   }
@@ -575,7 +578,9 @@ function SignupActivePageState({
   return (
     <AuthPage heading={m.auth_signup_heading()}>
       {departure}
-      <SignupForm journey={journey} registration={page} phase={phase as ActiveSignupPhase} />
+      <AuthTask>
+        <SignupForm journey={journey} registration={page} phase={phase as ActiveSignupPhase} />
+      </AuthTask>
     </AuthPage>
   );
 }
@@ -593,14 +598,14 @@ function isCompletionPhase(
 
 function SignupAuthLinks({ query, follow }: { query: string; follow: (event: MouseEvent<HTMLAnchorElement>) => void }) {
   return (
-    <nav className="auth-signup-links" aria-label={m.auth_signup_sign_in()}>
+    <AuthHelp aria-label={m.auth_signup_sign_in()}>
       <a href={`/login${query}`} onClick={follow}>
         {m.auth_signup_sign_in()}
       </a>
       <a href={`/recovery${query}`} onClick={follow}>
         {m.auth_signup_recovery()}
       </a>
-    </nav>
+    </AuthHelp>
   );
 }
 
@@ -618,7 +623,7 @@ function SignupCompletion({
     if (phase.kind === 'sign-in-failed') alert.current?.focus();
   }, [phase.kind]);
   return (
-    <div className="auth-login-form" aria-busy={phase.kind === 'signing-in'}>
+    <AuthTask aria-busy={phase.kind === 'signing-in'}>
       <p role="status">{phase.kind === 'signing-in' ? m.auth_signup_signing_in() : m.auth_signup_created()}</p>
       {phase.kind === 'sign-in-failed' ? (
         <ErrorAlert ref={alert} tabIndex={-1}>
@@ -626,7 +631,7 @@ function SignupCompletion({
         </ErrorAlert>
       ) : null}
       <SignupAuthLinks query={query} follow={follow} />
-    </div>
+    </AuthTask>
   );
 }
 
@@ -640,14 +645,14 @@ function SignupRefusal({
   follow: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
-    <div className="auth-login-form">
+    <AuthTask>
       <div tabIndex={-1} id="signup-refusal">
         <ErrorAlert>
           <p>{message}</p>
-          <SignupAuthLinks query={query} follow={follow} />
         </ErrorAlert>
       </div>
-    </div>
+      <SignupAuthLinks query={query} follow={follow} />
+    </AuthTask>
   );
 }
 
@@ -667,11 +672,11 @@ function SignupUncertainty({
   retryDisabled?: boolean;
 }) {
   return (
-    <div id={uncertainPanelId}>
+    <div id={uncertainPanelId} className="grid gap-4">
       <ErrorAlert tabIndex={-1}>
         <h2>{m.auth_signup_uncertain_title()}</h2>
         <p>{m.auth_signup_uncertain_body()}</p>
-        <dl>
+        <dl className="grid gap-3 [&_dt]:text-sm [&_dd]:font-medium">
           <div>
             <dt>{m.auth_signup_handle()}</dt>
             <dd>{phase.attempt.handle}</dd>
@@ -694,8 +699,8 @@ function SignupUncertainty({
             {m.auth_signup_retry_original()}
           </Button>
         ) : null}
-        <SignupAuthLinks query={query} follow={follow} />
       </ErrorAlert>
+      <SignupAuthLinks query={query} follow={follow} />
     </div>
   );
 }
@@ -861,14 +866,15 @@ function SignupForm({
   return (
     <>
       {journey.freshAfterReturn === 'created' ? (
-        <p role="status">{m.auth_signup_return_new_attempt_created()}</p>
+        <AuthNotice role="status">{m.auth_signup_return_new_attempt_created()}</AuthNotice>
       ) : journey.freshAfterReturn === 'unresolved' ? (
-        <p role="status">{m.auth_signup_return_new_attempt()}</p>
+        <AuthNotice role="status">{m.auth_signup_return_new_attempt()}</AuthNotice>
       ) : null}
       <form
         ref={form}
         id="signup-form"
-        className="auth-login-form"
+        className="grid min-w-0 gap-5"
+        aria-busy={readOnly}
         method="post"
         action="/signup"
         noValidate
@@ -886,7 +892,6 @@ function SignupForm({
         ) : null}
         {phase.kind === 'handle-unavailable' ? (
           <ErrorAlert>
-            <p>{phase.message}</p>
             <p>{m.auth_signup_handle_correction_body()}</p>
             <Button type="button" disabled={!handleCorrectionReady} onClick={useCorrectedHandle}>
               {m.auth_signup_handle_correction_action()}
@@ -904,8 +909,17 @@ function SignupForm({
             />
           </div>
         ) : null}
-        <Field data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}>
-          <div id="signup-turnstile" tabIndex={-1} aria-describedby={turnstileError ? turnstileErrorId : undefined}>
+        <Field
+          className="gap-3 rounded-lg border border-border p-4"
+          data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}
+        >
+          <div
+            id="signup-turnstile"
+            tabIndex={-1}
+            aria-describedby={['signup-verification-hint', turnstileError ? turnstileErrorId : null]
+              .filter(Boolean)
+              .join(' ')}
+          >
             <TurnstileWidget
               ref={turnstile}
               siteKey={siteKey}
@@ -920,10 +934,12 @@ function SignupForm({
               }}
             />
           </div>
-          <p className="text-sm text-muted-foreground">{m.auth_signup_turnstile_required()}</p>
+          <p id="signup-verification-hint" className="text-sm leading-relaxed text-muted-foreground">
+            {m.auth_signup_turnstile_required()}
+          </p>
           {challengeStatus === 'loading' ? <p role="status">{m.auth_signup_turnstile_loading()}</p> : null}
           {challengeStatus === 'failed' ? (
-            <div>
+            <div className="grid gap-3">
               <ErrorAlert>
                 <p>{m.auth_signup_turnstile_failed()}</p>
               </ErrorAlert>
@@ -939,28 +955,26 @@ function SignupForm({
               </Button>
             </div>
           ) : null}
-          {turnstileError ? (
-            <p id={turnstileErrorId} role="alert">
-              {turnstileError}
-            </p>
-          ) : null}
+          {turnstileError ? <FieldError id={turnstileErrorId}>{turnstileError}</FieldError> : null}
         </Field>
         {phase.kind === 'dispatched' ? (
           <p role="status" aria-busy="true">
             {m.auth_signup_creating()}
           </p>
         ) : phase.kind === 'draft' ? (
-          <Button type="submit" aria-busy={false}>
-            {m.auth_signup_heading()}
-          </Button>
+          <AuthActions>
+            <Button type="submit" aria-busy={false}>
+              {m.auth_signup_heading()}
+            </Button>
+          </AuthActions>
         ) : null}
       </form>
       {phase.kind === 'draft' || phase.kind === 'handle-unavailable' ? (
-        <nav className="auth-login-links" aria-label={m.auth_signup_sign_in()}>
+        <AuthHelp aria-label={m.auth_signup_sign_in()}>
           <a href={`/login${query}`} onClick={follow}>
             {m.auth_signup_sign_in()}
           </a>
-        </nav>
+        </AuthHelp>
       ) : null}
     </>
   );
