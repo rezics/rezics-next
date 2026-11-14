@@ -191,6 +191,23 @@ test('a menu arriving after viewer recovery is left paused exactly once', async 
   expect(f.probes).toHaveLength(0);
 });
 
+test('checks a current viewer after attach without scheduling a duplicate probe or launching another pane', async () => {
+  const f = viewerFixture();
+  const current = f.panes.get('%3')!;
+  f.panes.delete('%3');
+  f.panes.set('%4', { ...current, command: f.encode(f.currentArgv), draft: '' });
+  f.setActivePane('%4');
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
+  expect(await f.windows.rebindIfStale('manager', f.currentArgv, '/cwd')).toBe(false);
+  expect(f.probes).toHaveLength(1);
+  f.probes.shift()!();
+  await Bun.sleep(0);
+  expect(f.calls.filter((argv) => argv.includes('send-keys')).map((argv) => argv.slice(-3))).toEqual([
+    ['%4', 'Down', 'Enter'],
+  ]);
+  expect(f.calls.some((argv) => argv.includes('split-window'))).toBe(false);
+});
+
 test('leaves unrelated panes and unowned windows alone', async () => {
   const f = viewerFixture();
   const pane = f.panes.get('%3')!;

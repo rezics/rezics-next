@@ -3783,8 +3783,8 @@ Decision: `manager-host.ts` owns the socket server, registry, shutdown and sched
 Decision: `verify` and `promote` accept no arguments; a sole `--help` or `-h` prints usage before runtime hooks, and other trailing arguments fail before either hook.
 Decision: Reconnect only a proven Goal-owned Codex viewer for the same role, account, thread and cwd. Keep the current
 viewer in the manager window. Close obsolete viewers with a visible empty composer; move others to separate draft
-windows. On a new viewer, bounded asynchronous startup probes may select Leave paused in the exact Codex resume
-menu. They do not block manager recovery, submit a prompt or resume the Goal. Unknown panes and unrelated dialogs
+windows. On viewer attachment or recovery, bounded asynchronous startup probes may select Leave paused in the exact Codex
+resume menu. They do not block manager recovery, submit a prompt or resume the Goal. Unknown panes and unrelated dialogs
 remain untouched.
 Decision: A Goal-owned Codex viewer runs under a terminal shell. Ctrl+C still reaches Codex; exiting the viewer
 returns to the shell without deleting the pane or stopping the manager's provider thread.

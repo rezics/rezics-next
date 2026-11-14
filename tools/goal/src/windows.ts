@@ -238,6 +238,7 @@ export interface ManagerWindows {
 
 /** Resolve termspaces' stable session option; do not inspect or kill unrelated windows. */
 export class TermspacesWindows implements ManagerWindows {
+  private readonly startupMenuProbes = new Set<string>();
   constructor(
     private readonly settings: WindowSettings,
     private readonly execute: WindowRunner = (executable, argv) => run(executable, argv, settings.policy),
@@ -283,7 +284,10 @@ export class TermspacesWindows implements ManagerWindows {
   async register(manager: string, argv: string[], cwd: string): Promise<string> {
     const session = await this.session();
     const existing = await this.find(session, manager);
-    if (existing) return existing;
+    if (existing) {
+      if (isCodexViewer(argv, manager)) await this.watchViewerStartup(existing, argv, cwd);
+      return existing;
+    }
     const id = await this.tmux([
       'new-window',
       '-d',
@@ -304,6 +308,7 @@ export class TermspacesWindows implements ManagerWindows {
       await this.tmux(['kill-window', '-t', id]);
       throw error;
     }
+    if (isCodexViewer(argv, manager)) await this.watchViewerStartup(id, argv, cwd);
     return id;
   }
   private find(session: string, manager: string): Promise<string | undefined> {
@@ -334,6 +339,7 @@ export class TermspacesWindows implements ManagerWindows {
       return;
     }
     await this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, viewerCommand(argv, manager)]);
+    if (isCodexViewer(argv, manager)) await this.watchViewerStartup(id, argv, cwd);
   }
   private async paneIds(window: string): Promise<string[] | undefined> {
     const result = await this.observe(() => this.tmux(['list-panes', '-t', window, '-F', '#{pane_id}']));
@@ -383,8 +389,10 @@ export class TermspacesWindows implements ManagerWindows {
         if (observed.dead === '0' || (observed.dead === '1' && options.restoreExited)) stale.push(paneId);
       }
     }
-    if (!stale.length) return false;
-    const spawned = replacement === undefined;
+    if (!stale.length) {
+      if (replacement) this.dismissStartupGoalMenu(id, replacement, argv, cwd);
+      return false;
+    }
     if (!replacement) {
       replacement = await this.tmux(['split-window', '-d', '-h', '-P', '-F', '#{pane_id}', '-t', id, '-c', cwd, viewerCommand(argv, manager)]);
       if (!/^%\d+$/.test(replacement)) return false;
@@ -403,14 +411,22 @@ export class TermspacesWindows implements ManagerWindows {
       // Keep the original terminal process and any draft without occupying the manager's layout.
       await this.tmux(['break-pane', '-d', '-s', paneId, '-n', `goal-draft-${manager}-${paneId.slice(1)}`]);
     }
-    if (spawned) this.dismissStartupGoalMenu(id, replacement, argv, cwd);
+    this.dismissStartupGoalMenu(id, replacement, argv, cwd);
     await this.tmux(['select-pane', '-t', replacement]);
     return true;
   }
+  private async watchViewerStartup(windowId: string, argv: string[], cwd: string): Promise<void> {
+    const panes = await this.paneIds(windowId);
+    if (panes?.length === 1) this.dismissStartupGoalMenu(windowId, panes[0]!, argv, cwd);
+  }
   private dismissStartupGoalMenu(windowId: string, paneId: string, argv: string[], cwd: string): void {
-    // Codex opens its menu only after the history and provider state arrive. Never wait inside manager recovery.
+    // Limit this presentation repair to an attach/recovery event and one probe sequence per owned viewer.
+    const key = JSON.stringify([windowId, paneId, argv]);
+    if (this.startupMenuProbes.has(key)) return;
+    this.startupMenuProbes.add(key);
     let remaining = 30;
     const probe = async () => {
+      let again = false;
       try {
         const pane = await this.pane(paneId);
         if (!pane || pane.dead !== '0' || !this.sameViewer(pane, argv, cwd)) return;
@@ -421,10 +437,17 @@ export class TermspacesWindows implements ManagerWindows {
           await this.tmux(['send-keys', '-t', paneId, ...(selected === 'resume' ? ['Down'] : []), 'Enter']);
           return;
         }
-        if (--remaining) this.deferViewerProbe(500, () => void probe());
+        // A ready composer is already usable. Do not send keys or wait for another dialog.
+        if (capture && /^›[ \t]+Ask Codex to do anything[ \t]*$/m.test(capture) && !capture.includes('Resume paused goal?'))
+          return;
+        if (--remaining) {
+          again = true;
+          this.deferViewerProbe(2_000, () => void probe());
+        }
       } catch (error) {
-        // This is optional viewer presentation, not part of restoring the provider session.
         console.warn('Unable to dismiss the Codex viewer startup menu:', errorMessage(error));
+      } finally {
+        if (!again) this.startupMenuProbes.delete(key);
       }
     };
     this.deferViewerProbe(500, () => void probe());
