@@ -1,6 +1,12 @@
 import type { Pool } from 'pg';
 import { readAccount, deadlineClient } from './access-port.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability,
+  requireAccessDeadline,
+  throwAccessUnavailable,
+} from '../access/unavailable.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { accessCheck } from '../request/access-check.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -89,65 +95,80 @@ export async function readLibraryProfileAnchor(
   subjectId: string,
 ): Promise<LibraryProfileAnchor | null> {
   const { pool, access, actor, at, deadline } = deps;
-  authoritativeTimeValue(at);
-  requireAccessDeadline(deadline);
-  if (actor.kind === 'account') {
-    const accountRoute = routeOf(actor.accountId);
-    if (accountRoute === null) return null;
-    const account = await readAccount(
-      deadlineClient(pool, deadline),
-      accountRoute,
-      actor.accountId,
-      currentCommandWorkAssociation()?.access,
-    );
-    if (
-      !account ||
-      account.kind !== 'actor' ||
-      account.state !== 'active' ||
-      account.fenced ||
-      !Number.isSafeInteger(actor.authnEpoch) ||
-      actor.authnEpoch < 1 ||
-      BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
-    )
-      return null;
-  }
-  const before = await identityEpochStore().readMapping(pool, subjectId);
-  if (before.state !== 'mapped') return null;
-  const work = currentCommandWorkAssociation()?.access;
-  const context = { pool, deadline, time: at, ...(work ? { work } : {}) };
-  const resolved = await resolveSubject({ pool, access }, actor, subjectId, at, context);
-  if (!resolved || resolved.subjectId !== before.terminal) return null;
-  const route = routeOf(resolved.subjectId)!;
-  const check = await accessCheck(
-    access,
-    actor,
-    'subject:read',
-    {
-      route,
-      id: resolved.subjectId,
-      eligibility: subjectReadEligibility({ route, id: resolved.subjectId }),
-    },
-    context,
-  );
-  let acceptingType: string | undefined;
-  try {
-    const reference = await readSubjectReference(pool, resolved.subjectId, async (client) => {
-      requireAccessDeadline(deadline);
-      if (!(await check(client, at))) return false;
-      acceptingType = (await readItemTypes(deadlineClient(client, deadline), [resolved.subjectId])).get(
-        resolved.subjectId,
-      );
-      return acceptingType !== undefined;
-    });
-    if (!reference || acceptingType === undefined) return null;
-    const after = await identityEpochStore().readMapping(pool, subjectId);
+  return withRequestDeadline(deadline, async () => {
+    authoritativeTimeValue(at);
     requireAccessDeadline(deadline);
-    if (after.state !== 'mapped' || after.epoch !== before.epoch || after.terminal !== before.terminal) return null;
-    return { ...resolved, component: reference.component, identityEpoch: after.epoch, acceptingType };
-  } catch (error) {
-    if (error instanceof SubjectRedirectError) return null;
-    throw error;
-  }
+    if (actor.kind === 'account') {
+      const accountRoute = routeOf(actor.accountId);
+      if (accountRoute === null) return null;
+      const work = currentCommandWorkAssociation()?.access;
+      const account = await withBoundedReadConnection(
+        pool,
+        deadline,
+        (client) => readAccount(client, accountRoute, actor.accountId, work),
+        {
+          deadlineError: () => new AccessUnavailableError('deadline'),
+          mapError(error) {
+            try {
+              throwAccessUnavailable(error, deadline);
+            } catch (mapped) {
+              return mapped;
+            }
+            return error;
+          },
+          isUncertainError: (error) => classifyUnavailability(error) !== undefined,
+          isUncertainSettledQueryError: () => true,
+        },
+      );
+      if (
+        !account ||
+        account.kind !== 'actor' ||
+        account.state !== 'active' ||
+        account.fenced ||
+        !Number.isSafeInteger(actor.authnEpoch) ||
+        actor.authnEpoch < 1 ||
+        BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+      )
+        return null;
+    }
+    const before = await identityEpochStore().readMapping(pool, subjectId);
+    if (before.state !== 'mapped') return null;
+    const work = currentCommandWorkAssociation()?.access;
+    const context = { pool, deadline, time: at, ...(work ? { work } : {}) };
+    const resolved = await resolveSubject({ pool, access }, actor, subjectId, at, context);
+    if (!resolved || resolved.subjectId !== before.terminal) return null;
+    const route = routeOf(resolved.subjectId)!;
+    const check = await accessCheck(
+      access,
+      actor,
+      'subject:read',
+      {
+        route,
+        id: resolved.subjectId,
+        eligibility: subjectReadEligibility({ route, id: resolved.subjectId }),
+      },
+      context,
+    );
+    let acceptingType: string | undefined;
+    try {
+      const reference = await readSubjectReference(pool, resolved.subjectId, async (client) => {
+        requireAccessDeadline(deadline);
+        if (!(await check(client, at))) return false;
+        acceptingType = (await readItemTypes(deadlineClient(client, deadline), [resolved.subjectId])).get(
+          resolved.subjectId,
+        );
+        return acceptingType !== undefined;
+      }, deadline);
+      if (!reference || acceptingType === undefined) return null;
+      const after = await identityEpochStore().readMapping(pool, subjectId);
+      requireAccessDeadline(deadline);
+      if (after.state !== 'mapped' || after.epoch !== before.epoch || after.terminal !== before.terminal) return null;
+      return { ...resolved, component: reference.component, identityEpoch: after.epoch, acceptingType };
+    } catch (error) {
+      if (error instanceof SubjectRedirectError) return null;
+      throw error;
+    }
+  });
 }
 
 export { sameCopyProfileAnchor as sameLibraryProfileAnchor } from './copy-model.ts';
