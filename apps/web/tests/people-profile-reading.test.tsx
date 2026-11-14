@@ -11,8 +11,11 @@ import {
   peopleReadingIds,
   peopleReadingPage,
   peopleReadingPortraitIds,
+  routes as peopleRoutes,
   selectPeopleReading,
 } from '../src/kernel/fake/people-reading';
+import { selectAnimeShowcase } from '../src/kernel/fake/anime-showcase';
+import { anime, animeId, animeSynopsisDocument } from '../src/kernel/fixtures/anime-showcase';
 import { peopleOverviewFamily } from '../src/features/pages/showcase-people/profile';
 import type { SubjectPageData } from '../src/features/pages/subject';
 
@@ -30,7 +33,10 @@ const biography = {
 };
 const exploration = { character: 'appearances', person: 'director', organization: 'production-company' };
 
-afterEach(() => selectPeopleReading());
+afterEach(() => {
+  selectPeopleReading();
+  selectAnimeShowcase();
+});
 
 async function draw(page: SubjectPageData, locale = 'en') {
   const client = new QueryClient();
@@ -54,6 +60,12 @@ function leaf(page: SubjectPageData, node: string) {
     ...(page.continuation ? { continuation: page.continuation } : {}),
   });
   return page.reads[plan.nodes[node]!]!;
+}
+
+function publicRead(page: SubjectPageData) {
+  const plan = planReads(platformRegistry, page.document, { subject: page.subject, context: page.context });
+  const key = Object.entries(plan.reads).find(([, read]) => read.kind === 'subject')![0];
+  return page.reads[key]!.body as SubjectRead;
 }
 
 test('all eight locales read identity, context, one native biography, works and discussion in order', async () => {
@@ -136,9 +148,7 @@ test('each People portrait has its own media identity and correctly sized advert
 test('exact document admission, partial dates and withheld history survive the reading presentation', async () => {
   for (const family of families) {
     const page = peopleReadingPage(peopleReadingIds[family]);
-    const plan = planReads(platformRegistry, page.document, { subject: page.subject, context: page.context });
-    const key = Object.entries(plan.reads).find(([, read]) => read.kind === 'subject')![0];
-    const read = page.reads[key]!.body as SubjectRead;
+    const read = publicRead(page);
     const candidate = read.subject.statements['schema:abstract']![0]!;
     const documents = structuredClone(read.documents!);
     documents[candidate.id] = { ...documents[candidate.id]!, candidateId: peopleReadingId(777) };
@@ -213,4 +223,104 @@ test('the routed native work continuation is finite and retains assertion identi
     { property: { id: 'wdt:P453' }, value: { content: peopleReadingIds.character } },
     { property: { id: 'wdt:P3831' }, value: { content: peopleReadingId(42) } },
   ]);
+});
+
+test('registered transport follows every People subject and exact document/discussion readback without Anime identity', async () => {
+  const transport = createStoryRecordedKernelFetch();
+  const kernel = createKernelClient('https://kernel.invalid', { fetch: transport });
+  const get = async <Body,>(path: string, status = 200) => {
+    const response = await transport(
+      new Request(`https://kernel.invalid/v1/${path}`, { headers: { authorization: 'Bearer story-viewer' } }),
+    );
+    expect(response.status).toBe(status);
+    return (await response.json()) as Body;
+  };
+  const pageFor = async (id: string) => {
+    const response = await kernel.pages.$read.post({ target: { subject: id }, languages: ['en'] });
+    expect(response.status).toBe(200);
+    return response.data as SubjectPageData;
+  };
+  const fixture = peopleReadingFixture();
+  const visits = new Map<string, SubjectPageData>();
+  for (const [id, supplied] of fixture.subjects) {
+    expect(id.startsWith('0193e000-')).toBe(true);
+    const page = await pageFor(id);
+    visits.set(id, page);
+    expect(page.subject).toBe(id);
+    expect(publicRead(page).subject).toEqual(supplied.subject);
+    expect((await get<SubjectRead>(`subjects/${id}`)).subject).toEqual(supplied.subject);
+  }
+  const threadIds = new Set<string>();
+  for (const family of families) {
+    const current = fixture.profiles[family];
+    const id = current.subject.id;
+    const document = Object.values(current.documents!)[0]!;
+    expect(document.id.startsWith('0193e000-')).toBe(true);
+    expect(document.candidateId).toBe(peopleReadingId(90 + families.indexOf(family)));
+    expect(await get(`documents/${document.id}`)).toMatchObject({ document });
+    type Thread = { id: string; boardId: string; subjectIds: string[]; firstPost: { id: string; threadId: string } };
+    const embedded = (leaf(await pageFor(id), 'threads').body as { threads: Thread[] }).threads[0]!;
+    threadIds.add(embedded.id);
+    expect(embedded.id.startsWith('0193e000-')).toBe(true);
+    expect(await get(`subjects/${id}/threads?kind=discussion`)).toMatchObject({ threads: [embedded], next: null });
+    expect(await get(`threads/${embedded.id}`)).toMatchObject({ thread: embedded });
+    expect(await get(`threads/${embedded.id}/reading-page`)).toMatchObject({
+      target: { threadId: embedded.id, boardId: embedded.boardId },
+      thread: embedded,
+    });
+    expect(await get(`threads/${embedded.id}/posts`)).toMatchObject({ posts: [embedded.firstPost], next: null });
+    expect(await get(`boards/${embedded.boardId}`)).toMatchObject({ board: { id: embedded.boardId } });
+    expect(await get(`boards/${embedded.boardId}/page`)).toMatchObject({
+      board: { id: embedded.boardId },
+      threads: expect.arrayContaining([expect.objectContaining({ thread: embedded })]),
+    });
+  }
+  expect(threadIds.size).toBe(3);
+  selectAnimeShowcase('rich');
+  expect(publicRead(await pageFor(anime.id)).subject.labels.en).toBe(anime.label);
+  expect(await get(`documents/${animeId(90)}`)).toMatchObject({ document: animeSynopsisDocument() });
+  expect(await get(`progressSessions?subjectId=${anime.id}`)).toMatchObject({
+    progressSessions: [{ subjectId: anime.id, amount: '3' }],
+  });
+  const question = '00000000-0000-7000-8000-000000000001';
+  expect(await get(`subjects/${anime.id}/ratings/${question}/vote`)).toMatchObject({ units: 17 });
+  selectPeopleReading('sparse');
+  expect(publicRead(await pageFor(peopleReadingIds.character)).summary!.cover).toBeNull();
+  selectPeopleReading();
+  for (const family of families) {
+    const id = peopleReadingIds[family];
+    const page = await pageFor(id);
+    expect(page.context).toEqual(visits.get(id)!.context);
+    expect(publicRead(page).subject).toEqual(fixture.profiles[family].subject);
+    expect(publicRead(page).summary!.cover!.media).toBe(peopleReadingPortraitIds[family]);
+    expect(await get(`libraryEntries/${id}`, 404)).toMatchObject({ code: 'not_found' });
+    expect(await get(`subjects/${id}/ratings/${question}/vote`, 404)).toMatchObject({ code: 'not_found' });
+    expect(await get(`progressSessions?subjectId=${id}`)).toMatchObject({ progressSessions: [], next: null });
+    expect(await get(`accounts?agent=${id}`)).toMatchObject({ accounts: [], next: null });
+  }
+});
+
+test('People handlers decline Anime and unallocated identities rather than claiming their prefix or resource kind', async () => {
+  const paths = [
+    `subjects/${anime.id}`, `subjects/${anime.id}/links?property=schema:director`,
+    `subjects/${anime.id}/relations?property=schema:director`, `documents/${animeId(90)}`,
+    `subjects/${peopleReadingId(999)}`, `subjects/${peopleReadingId(80)}`, `documents/${peopleReadingIds.character}`,
+    `threads/${animeId(20051)}/reading-page`, `threads/${peopleReadingId(99999)}`, `boards/${animeId(81)}`,
+    `libraryEntries/${anime.id}`, `progressSessions?subjectId=${anime.id}`, `accounts?agent=${anime.id}`,
+  ];
+  const requests = paths.map((path) => new Request(`https://kernel.invalid/v1/${path}`));
+  for (const id of [anime.id, peopleReadingId(999), peopleReadingId(80)]) {
+    requests.push(new Request('https://kernel.invalid/v1/pages:read', {
+      method: 'POST', body: JSON.stringify({ target: { subject: id } }),
+    }));
+  }
+  for (const request of requests) {
+    for (const route of peopleRoutes) {
+      if (route.method !== request.method) continue;
+      const path = new URL(request.url).pathname;
+      const match = route.path instanceof RegExp ? route.path.exec(path) : null;
+      if (typeof route.path === 'string' ? route.path !== path : !match) continue;
+      expect(await route.story!({ request: request.clone() as Request, recordings: {}, match })).toBeUndefined();
+    }
+  }
 });

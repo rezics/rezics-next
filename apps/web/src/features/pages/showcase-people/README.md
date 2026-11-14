@@ -52,6 +52,19 @@ module, and their WebP variants use Storybook's existing media mount. Existing f
 are retained. Focused regression sources pin reading order, document disclosure, sparse facts and continuation;
 the dev verifier runs these checks after landing.
 
+Decision: People profiles and their supplied related Subjects, biography documents, assertions, boards, threads,
+opening posts and post revisions use `0193e000-0000-7000-8000`; Anime retains `0193a000` and People portraits retain
+`0193d000`. Request ownership comes from exact identities in the finite supplied fixture, never a namespace prefix.
+The undisclosed parent is not an admitted destination. Shared definitions, Context and author identities remain shared.
+Profile and related-work routes, document readbacks, discussion openings and their finite Board windows use the
+ordinary registered transport and PageStory route tree in its existing order. Exact private reads return no supplied
+Library entry, vote or progress for People; they cannot borrow Anime state. PageStory prepares the selected People
+scenario before loading routes and resets it when the source, family, locale or scenario retires, preserving manual
+navigation and return context.
+Registered-transport regression sources cover People → Anime → People, all supplied related Subjects and exact
+document/thread readbacks; their execution and routed browser acceptance remain deferred to the dev verifier.
+Exact biography and opening-post readbacks retain their supplied paragraph identities across requests.
+
 People portraits use the dedicated `0193d000-0000-7000-8000-000000000070`–`072` media identities, separate from
 Anime's `0193a000` covers. Each supplied 480×600 People SVG has 160×200 and 320×400 WebP variants under its own
 Storybook media directory. The shared media URL and rendering owners serve these files at the manually chosen
