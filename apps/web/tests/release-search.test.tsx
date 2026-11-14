@@ -697,9 +697,31 @@ test('grouped responses retain current cards and render independent work expansi
   };
   const page = parseReleaseSearchGroupsPage(response);
   expect(page).toBeDefined();
+  const standalone = {
+    kind: 'release',
+    id: workId,
+    release: groupedCard({ year: 2025 }, workId, releaseType, 'Standalone edition'),
+    workLink: 'unproven',
+  };
+  const mixed = [response.groups[0]!, standalone];
+  const crossed = response.groups.map((group, index) => ({
+    ...group,
+    releases: [groupedCard({ year: 2023 }, index === 0 ? otherWorkId : workId)],
+  }));
+  for (const groups of [mixed, mixed.toReversed(), crossed, crossed.toReversed()]) {
+    const native = { ...response, groups, next: 'opaque+group/token' };
+    expect(parseReleaseSearchGroupsPage(native)).toMatchObject(native);
+  }
   expect(
     parseReleaseSearchGroupsPage({ ...response, groups: [...response.groups, response.groups[0]] }),
   ).toBeUndefined();
+  for (const groups of [
+    [standalone, standalone],
+    [response.groups[0], { ...standalone, id: releaseId, release: groupedCard({ year: 2024 }) }],
+    [response.groups[0], { ...response.groups[1], releases: response.groups[0]!.releases }],
+    [{ ...response.groups[0], releases: [groupedCard({ year: 2024 }), groupedCard({ year: 2024 })] }],
+  ])
+    expect(parseReleaseSearchGroupsPage({ ...response, groups })).toBeUndefined();
   expect(parseReleaseSearchGroupsPage({ ...response, status: 'preparing' })).toBeUndefined();
   expect(
     parseReleaseSearchChildrenPage({
@@ -722,7 +744,7 @@ test('grouped responses retain current cards and render independent work expansi
   }
 });
 
-test('work expansions keep independent child progress and resume their own response cursors', async () => {
+test.each([false, true])('mixed-role work windows keep independent progress (reverse=%s)', async (reverse) => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -743,27 +765,39 @@ test('work expansions keep independent child progress and resume their own respo
   const secondWork = '018f0000-0000-7000-8000-000000000013';
   const firstRelease = '018f0000-0000-7000-8000-000000000014';
   const secondRelease = '018f0000-0000-7000-8000-000000000015';
+  const firstLater = '018f0000-0000-7000-8000-000000000016';
+  const secondLater = '018f0000-0000-7000-8000-000000000017';
   const parsed = parseReleaseSearch({ subtype: releaseType }, bundledRelease, 'en');
-  const page = parseReleaseSearchGroupsPage({
+  const response = {
     status: 'ready',
     groups: [
       {
         kind: 'work',
         id: firstWork,
         work: groupedCard({ year: 2024 }, firstWork, 'schema:CreativeWork', 'First work'),
-        releases: [groupedCard({ year: 2022 }, `${firstRelease}-preview`, releaseType, 'First preview')],
+        releases: [groupedCard({ year: 2022 }, secondWork, releaseType, 'First preview')],
         next: 'preview-one',
       },
       {
         kind: 'work',
         id: secondWork,
         work: groupedCard({ year: 2024 }, secondWork, 'schema:CreativeWork', 'Second work'),
-        releases: [groupedCard({ year: 2022 }, `${secondRelease}-preview`, releaseType, 'Second preview')],
+        releases: [groupedCard({ year: 2022 }, secondRelease, releaseType, 'Second preview')],
         next: 'preview-two',
+      },
+      {
+        kind: 'release',
+        id: firstWork,
+        release: groupedCard({ year: 2025 }, firstWork, releaseType, 'Standalone edition'),
+        workLink: 'missing',
       },
     ],
     next: null,
     as_of: '2026-11-04T00:00:00Z',
+  };
+  const page = parseReleaseSearchGroupsPage({
+    ...response,
+    groups: reverse ? response.groups.toReversed() : response.groups,
   });
   if (!page) throw new Error('Expected a grouped release page');
   const calls: ChildReaderInput['data'][] = [];
@@ -793,12 +827,12 @@ test('work expansions keep independent child progress and resume their own respo
         firstFailure = false;
         return Promise.resolve({ status: 'unavailable' });
       }
-      return Promise.resolve(ready([card({ year: 2025 }, `${firstRelease}-later`, 'First later edition')], null));
+      return Promise.resolve(ready([card({ year: 2025 }, firstLater, 'First later edition')], null));
     }
     if (data.work === secondWork && data.cursor === 'preview-two')
       return Promise.resolve(ready([card({ year: 2023 }, secondRelease, 'Second edition')], 'second-next'));
     if (data.work === secondWork && data.cursor === 'second-next')
-      return Promise.resolve(ready([card({ year: 2024 }, `${secondRelease}-later`, 'Second later edition')], null));
+      return Promise.resolve(ready([card({ year: 2024 }, secondLater, 'Second later edition')], null));
     throw new Error('Unexpected child continuation');
   };
   const host = window.document.createElement('div');
@@ -807,16 +841,45 @@ test('work expansions keep independent child progress and resume their own respo
   const work = (id: string) => host.querySelector(`[data-release-work="${id}"]`)!;
   const expand = (id: string) => work(id).querySelector('summary')!.click();
   const continueButton = (id: string) => work(id).querySelector('button') as HTMLButtonElement;
-  try {
-    await act(async () =>
+  const render = (groups = page.groups) =>
+    act(async () =>
       root.render(
         createElement(ReleaseSearchPage, {
           locale: 'en',
           parsed,
-          state: { status: 'ready', page },
+          state: { status: 'ready', page: { ...page, groups } },
         }),
       ),
     );
+  const links = () =>
+    [...host.querySelectorAll('[data-slot="release-search-results"] a')].map((link) => [
+      link.textContent,
+      link.getAttribute('href'),
+    ]);
+  try {
+    // Preserve each native card's existing destination when its UUID occurs in both roles.
+    const destinations = new Map<string, ReturnType<typeof links>>();
+    for (const group of page.groups) {
+      await render([group]);
+      if (group.kind === 'work') await act(async () => expand(group.id));
+      destinations.set(`${group.kind}:${group.id}`, links());
+      const cards = group.kind === 'work' ? [group.work, ...group.releases] : [group.release];
+      for (const card of cards) {
+        expect(host.textContent).toContain(card.labels.en!);
+        expect(links().some(([, href]) => href?.includes(card.id))).toBe(true);
+      }
+    }
+    for (const groups of [
+      page.groups.filter((group) => group.kind === 'release' || group.id === firstWork),
+      page.groups,
+    ]) {
+      await render(groups);
+      for (const group of groups)
+        if (group.kind === 'work' && !work(group.id).querySelector('details')!.open)
+          await act(async () => expand(group.id));
+      expect(links()).toEqual(groups.flatMap((group) => destinations.get(`${group.kind}:${group.id}`)!));
+      for (const group of groups) if (group.kind === 'work') await act(async () => expand(group.id));
+    }
     expect(calls).toHaveLength(0);
     await act(async () => expand(firstWork));
     expect(work(firstWork).querySelector('details')!.open).toBe(true);
@@ -876,7 +939,7 @@ test('work expansions keep independent child progress and resume their own respo
     expect(continueButton(firstWork)).toBeNull();
     expect(work(firstWork).textContent).toContain(m.release_search_terminal({}, { locale: 'en' }));
     expect(window.document.activeElement).toBe(work(firstWork).querySelector('details'));
-    expect(work(firstWork).querySelector('a')?.getAttribute('href')).toContain(firstRelease + '-later');
+    expect(work(firstWork).querySelector('a')?.getAttribute('href')).toContain(firstLater);
   } finally {
     readChildren = releaseSearchQuery.readReleaseSearchChildren;
     await act(async () => root.unmount());
@@ -934,6 +997,12 @@ test('current release visits retire pending windows and bound cursor progress wi
         releases: [groupedCard({ year: 2024 }, releaseId, releaseType, 'Preview edition')],
         next: 'initial',
       },
+      {
+        kind: 'release',
+        id: workId,
+        release: groupedCard({ year: 2025 }, workId, releaseType, 'Standalone edition'),
+        workLink: 'unknown',
+      },
     ],
     next: 'group-next',
     as_of: '2026-11-04T00:00:00Z',
@@ -986,7 +1055,7 @@ test('current release visits retire pending windows and bound cursor progress wi
         (_, i) =>
           groupedCard(
             { year: 2024 },
-            `${releaseId}-window-${i}`,
+            `018f0000-0000-7000-8000-${String(100 + i).padStart(12, '0')}`,
             releaseType,
             `Current edition ${i}`,
           ) as unknown as ChildCard,
@@ -1050,6 +1119,7 @@ test('current release visits retire pending windows and bound cursor progress wi
       });
       await render();
       expect(pending.signal?.aborted).toBe(true);
+      expect(host.textContent).toContain('Standalone edition');
       expect(group().textContent).not.toContain('Current edition');
       expect(group().querySelector('details')!.open).toBe(false);
       await complete(ready('stale'));
