@@ -80,6 +80,9 @@ and delivers its snapshot format and public reading disclosure port. Delivery re
 editor and Markdown preservation, and shared accessible reading controls; scheduling completion or consumer
 documentation alone cannot supply those contracts. The integration brief must identify the supported representation,
 controls and named story states before consumer fixtures and stories are written.
+Until that implementation arrives, preserve the existing consumer source, assertions, messages and named stories.
+The next independent outcome is the producer in `packages/document` and `packages/ui`; dispatch the consumer
+continuation after that implementation and its integration brief, rather than after prerequisite documentation.
 
 The integration preserves separate server, browser and current-readback source and visit identities:
 
