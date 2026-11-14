@@ -28,10 +28,7 @@ import {
   type HistorySection,
   type HistoryTarget,
 } from './progress-history-windows/coordinates';
-import { Menu } from '@rezics/ui/menu';
 import { ContentItem } from '@rezics/ui/content-item';
-import { Dialog, DialogContent, DialogTitle } from '@rezics/ui/shadcn/dialog';
-import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
 import { getLocale } from '../paraglide/runtime.js';
@@ -74,6 +71,7 @@ import {
 } from './episode-checklist/server';
 import { progressSessionAddress } from './progress-address';
 import { progressHistoryRecord } from './progress-history-restore';
+import { ProgressSessionWorkspace } from './progress-session-workspace';
 
 const buttonClass =
   'inline-flex min-h-[44px] min-w-[44px] items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -940,6 +938,7 @@ function SessionEditor({
   const locatorId = useId();
   const positionId = useId();
   const structureHint = useId();
+  const taskOpenerRef = useRef<HTMLButtonElement>(null);
 
   useLayoutEffect(() => {
     // Restore an identity after React's development effect cleanup/setup cycle.
@@ -1667,122 +1666,116 @@ function SessionEditor({
     </>
   );
 
-  return (
-    <article className="max-w-4xl space-y-8 text-foreground">
-      <header className="space-y-6">
-        <PageHeading>{m.library_progress_heading()}</PageHeading>
-        <ProgressSessionReturnControls session={session} returnContext={returnContext} />
-        <div className="flex items-start gap-5 sm:gap-7">
-          <div className="w-24 shrink-0 sm:w-40">
-            <SubjectCover subject={session.subject} ratio={ratio} size="fill" priority />
-          </div>
-          <div className="min-w-0 flex-1 space-y-4">
-            <div className="space-y-1">
-              <p className="text-2xl font-medium [overflow-wrap:anywhere] sm:text-3xl">
-                {session.subject ? (
-                  <Link
-                    to={
-                      subjectHref(
-                        { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
-                        getLocale(),
-                      ).to
-                    }
-                    params={
-                      subjectHref(
-                        { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
-                        getLocale(),
-                      ).params
-                    }
-                    className="underline-offset-4 hover:underline"
-                  >
-                    <LibraryTitle label={session.subject.label} locale={getLocale()} />
-                  </Link>
-                ) : (
-                  m.library_subject_unavailable()
-                )}
-              </p>
-              <MetaLine
-                items={[
-                  session.subject?.typeLabel,
-                  <span>
-                    {m.library_progress_started()}:{' '}
-                    <time dateTime={session.startedAt}>{fullDateTime(session.startedAt, getLocale())}</time>
-                  </span>,
-                ]}
-              />
-              {session.versionSubjectId ? (
-                <div className="space-y-1 border-l-2 border-border pl-4 text-sm">
-                  <p className="text-muted-foreground">{m.library_progress_version()}</p>
-                  {session.versionSubject ? (
-                    <Link
-                      to={
-                        subjectHref(
-                          {
-                            id: session.versionSubject.id,
-                            label: displayLibraryTitle(session.versionSubject.label, getLocale()).text,
-                          },
-                          getLocale(),
-                        ).to
-                      }
-                      params={
-                        subjectHref(
-                          {
-                            id: session.versionSubject.id,
-                            label: displayLibraryTitle(session.versionSubject.label, getLocale()).text,
-                          },
-                          getLocale(),
-                        ).params
-                      }
-                      className="font-medium underline-offset-4 hover:underline"
-                    >
-                      <LibraryTitle label={session.versionSubject.label} locale={getLocale()} />
-                    </Link>
-                  ) : (
-                    <p>{m.library_subject_unavailable()}</p>
-                  )}
-                </div>
-              ) : null}
-            </div>
-            <p className="text-sm font-medium">
-              <span data-progress-state={session.state}>{stateLabel(session.state)}</span>
-            </p>
-            {sessionHasIndependentMeasures(session) ? (
-              <IndependentMeasuresReadout measures={projectIndependentMeasures(session)} revision={session.revision} />
+  const identity = (
+    <div className="flex items-start gap-5 sm:gap-7">
+      <div className="w-24 shrink-0 sm:w-40">
+        <SubjectCover subject={session.subject} ratio={ratio} size="fill" priority />
+      </div>
+      <div className="min-w-0 flex-1 space-y-4">
+        <div className="space-y-1">
+          <p className="text-2xl font-medium [overflow-wrap:anywhere] sm:text-3xl">
+            {session.subject ? (
+              <Link
+                to={
+                  subjectHref(
+                    { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
+                    getLocale(),
+                  ).to
+                }
+                params={
+                  subjectHref(
+                    { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
+                    getLocale(),
+                  ).params
+                }
+                className="underline-offset-4 hover:underline"
+              >
+                <LibraryTitle label={session.subject.label} locale={getLocale()} />
+              </Link>
             ) : (
-              <ProgressRow value={progress?.percent == null ? null : progress.percent / 100} label={progressLabel} />
+              m.library_subject_unavailable()
             )}
-            {session.meaning !== 'known' ? (
-              <p role="status" className="text-sm text-muted-foreground">
-                {session.meaning === 'unknown' ? m.library_progress_meaning_unknown() : m.library_history_unavailable()}
-              </p>
-            ) : null}
-            {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
-              <p id={structureHint} className="text-sm text-muted-foreground">
-                {m.library_progress_structure_unverified()}
-              </p>
-            ) : null}
-            {session.mode === 'cursor_position' && session.position !== null && session.locator ? (
-              <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-                <div className="space-y-1">
-                  <dt className="text-muted-foreground">{m.library_progress_locator()}</dt>
-                  <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{session.locator}</dd>
-                </div>
-              </dl>
-            ) : null}
-            {session.total && session.mode === 'scalar_amount' && session.amount === null ? (
-              <p className="text-sm text-muted-foreground">
-                {m.library_progress_total()}: {session.total}
-              </p>
-            ) : null}
-            <ProgressRecordingMeaning session={session} />
-          </div>
+          </p>
+          <MetaLine
+            items={[
+              session.subject?.typeLabel,
+              <span>
+                {m.library_progress_started()}:{' '}
+                <time dateTime={session.startedAt}>{fullDateTime(session.startedAt, getLocale())}</time>
+              </span>,
+            ]}
+          />
+          {session.versionSubjectId ? (
+            <div className="space-y-1 border-l-2 border-border pl-4 text-sm">
+              <p className="text-muted-foreground">{m.library_progress_version()}</p>
+              {session.versionSubject ? (
+                <Link
+                  to={
+                    subjectHref(
+                      {
+                        id: session.versionSubject.id,
+                        label: displayLibraryTitle(session.versionSubject.label, getLocale()).text,
+                      },
+                      getLocale(),
+                    ).to
+                  }
+                  params={
+                    subjectHref(
+                      {
+                        id: session.versionSubject.id,
+                        label: displayLibraryTitle(session.versionSubject.label, getLocale()).text,
+                      },
+                      getLocale(),
+                    ).params
+                  }
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  <LibraryTitle label={session.versionSubject.label} locale={getLocale()} />
+                </Link>
+              ) : (
+                <p>{m.library_subject_unavailable()}</p>
+              )}
+            </div>
+          ) : null}
         </div>
-      </header>
-      <PrivateOccurrenceControls
-        session={session}
-        isCurrent={readerIsCurrent}
-        lifetime={originating?.lifetime ?? originating}
-      />
+        <p className="text-sm font-medium">
+          <span data-progress-state={session.state}>{stateLabel(session.state)}</span>
+        </p>
+        {!sessionHasIndependentMeasures(session) ? (
+          <ProgressRow value={progress?.percent == null ? null : progress.percent / 100} label={progressLabel} />
+        ) : null}
+        {session.meaning !== 'known' ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {session.meaning === 'unknown' ? m.library_progress_meaning_unknown() : m.library_history_unavailable()}
+          </p>
+        ) : null}
+        {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
+          <p id={structureHint} className="text-sm text-muted-foreground">
+            {m.library_progress_structure_unverified()}
+          </p>
+        ) : null}
+        {session.mode === 'cursor_position' && session.position !== null && session.locator ? (
+          <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+            <div className="space-y-1">
+              <dt className="text-muted-foreground">{m.library_progress_locator()}</dt>
+              <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{session.locator}</dd>
+            </div>
+          </dl>
+        ) : null}
+        {session.total && session.mode === 'scalar_amount' && session.amount === null ? (
+          <p className="text-sm text-muted-foreground">
+            {m.library_progress_total()}: {session.total}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const taskStatus = (
+    <>
+      {sessionHasIndependentMeasures(session) ? (
+        <IndependentMeasuresReadout measures={projectIndependentMeasures(session)} revision={session.revision} />
+      ) : null}
       {unsupported || session.recordingState === 'unsupported' ? (
         <p role="status">{m.library_progress_no_longer_offered()}</p>
       ) : session.recordingState !== 'supported' ? (
@@ -1802,44 +1795,37 @@ function SessionEditor({
         <p role="status">{m.library_progress_saved_revision({ revision: acknowledged })}</p>
       ) : null}
       {alert && !editing ? <p role="alert">{alert}</p> : null}
+    </>
+  );
+
+  const taskActions = (
+    <>
       {session.state === 'active' ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/20 p-4">
+        <>
           {offered || sessionHasIndependentMeasures(session) ? (
-            <Button onClick={openUpdate}>{m.library_progress_update()}</Button>
+            <Button ref={taskOpenerRef} className="min-h-11" onClick={openUpdate}>
+              {m.library_progress_update()}
+            </Button>
           ) : null}
-          {completeAllowed || abandonAllowed ? (
-            <Menu
-              title={m.library_collection_actions()}
-              trigger={
-                <Button variant="ghost" className="min-h-10 px-3" aria-label={m.library_collection_actions()}>
-                  {m.library_collection_actions()}
-                </Button>
-              }
-              entries={[
-                ...(completeAllowed
-                  ? [
-                      {
-                        type: 'item' as const,
-                        label: m.library_progress_complete(),
-                        onSelect: () => {
-                          if (canHandle() && (commandGuards.complete?.isCurrent() ?? true)) setConfirming('complete');
-                        },
-                      },
-                    ]
-                  : []),
-                ...(abandonAllowed
-                  ? [
-                      {
-                        type: 'item' as const,
-                        label: m.library_progress_abandon(),
-                        onSelect: () => {
-                          if (canHandle() && (commandGuards.abandon?.isCurrent() ?? true)) setConfirming('abandon');
-                        },
-                      },
-                    ]
-                  : []),
-              ]}
-            />
+          {completeAllowed ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (canHandle() && (commandGuards.complete?.isCurrent() ?? true)) setConfirming('complete');
+              }}
+            >
+              {m.library_progress_complete()}
+            </Button>
+          ) : null}
+          {abandonAllowed ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (canHandle() && (commandGuards.abandon?.isCurrent() ?? true)) setConfirming('abandon');
+              }}
+            >
+              {m.library_progress_abandon()}
+            </Button>
           ) : null}
           {!sessionHasIndependentMeasures(session) ? (
             <Exposure operation="progress_session.record">
@@ -1856,19 +1842,8 @@ function SessionEditor({
               </Button>
             </Exposure>
           ) : null}
-        </div>
-      ) : null}
-      {session.state === 'active' && confirming && !editing ? (
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => void onFinish(confirming)}>
-            {confirming === 'complete' ? m.library_progress_confirm_complete() : m.library_progress_confirm_abandon()}
-          </Button>
-          <Button variant="outline" onClick={() => edit(() => setConfirming(null))}>
-            {m.library_progress_cancel()}
-          </Button>
-        </div>
-      ) : null}
-      {session.state !== 'active' ? (
+        </>
+      ) : (
         <Exposure operation="progress_session.record">
           <Button
             variant="outline"
@@ -1882,7 +1857,28 @@ function SessionEditor({
             {m.library_progress_clear()}
           </Button>
         </Exposure>
+      )}
+      {session.state === 'active' && confirming && !editing ? (
+        <div className="flex flex-wrap gap-3">
+          <Button variant="outline" onClick={() => void onFinish(confirming)}>
+            {confirming === 'complete' ? m.library_progress_confirm_complete() : m.library_progress_confirm_abandon()}
+          </Button>
+          <Button variant="outline" onClick={() => edit(() => setConfirming(null))}>
+            {m.library_progress_cancel()}
+          </Button>
+        </div>
       ) : null}
+    </>
+  );
+
+  const secondary = (
+    <>
+      <PrivateOccurrenceControls
+        session={session}
+        isCurrent={readerIsCurrent}
+        lifetime={originating?.lifetime ?? originating}
+      />
+      <ProgressRecordingMeaning session={session} />
       <Exposure operation="progress_session.create">
         <section className="space-y-2 text-sm">
           <Link
@@ -1906,146 +1902,142 @@ function SessionEditor({
           <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>
         </section>
       </Exposure>
-      {editing ? (
-        phone ? (
-          <BottomSheet
-            open={editing}
-            onOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}
-            title={m.library_progress_update()}
-          >
-            <input type="hidden" name="idempotencyKey" value={key} />
-            {alert ? (
-              <p role="alert" className="rounded-lg border border-border bg-card p-3">
-                {alert}
-              </p>
-            ) : null}
-            {editorContent}
-          </BottomSheet>
-        ) : (
-          <Dialog open={editing} onOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}>
-            <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
-              <DialogTitle>{m.library_progress_update()}</DialogTitle>
-              <input type="hidden" name="idempotencyKey" value={key} />
-              {alert ? (
-                <p role="alert" className="rounded-lg border border-border bg-card p-3">
-                  {alert}
-                </p>
-              ) : null}
-              {editorContent}
-            </DialogContent>
-          </Dialog>
-        )
-      ) : null}
-      <section role="region" aria-labelledby={changesHeading} className="space-y-3">
-        <h2 id={changesHeading} data-progress-history-heading="changes" tabIndex={-1} className="text-xl font-semibold">
-          {m.library_progress_changes()}
-        </h2>
-        {session.changes.length ? (
-          <ol key={JSON.stringify([session.id, positions.changes])} className="space-y-1">
-            {session.changes.map((change, occurrence) => {
-              const record = progressHistoryRecord(session, change);
-              return (
-                <ContentItem
-                  key={change.id}
-                  headingLevel={3}
-                  title={
-                    change.action
-                      ? stateLabel(change.action === 'complete' ? 'completed' : 'abandoned')
-                      : m.library_progress_change_recorded()
-                  }
-                  metadata={<RelativeTime value={change.createdAt} />}
-                  preview={
-                    <>
-                      {progressHistoryPreview(change, occurrence + 1)}
-                      {record ? (
-                        <Exposure operation="progress_session.record">
-                          <Button
-                            variant="outline"
-                            disabled={busy || pendingCommand}
-                            onClick={() =>
-                              stage({
-                                kind: 'record',
-                                data: {
-                                  sessionId: session.id,
-                                  revision: session.revision,
-                                  idempotencyKey: key,
-                                  ...record,
-                                },
-                              })
-                            }
-                          >
-                            {m.library_progress_review()}
-                          </Button>
-                        </Exposure>
-                      ) : null}
-                    </>
-                  }
-                />
-              );
-            })}
-          </ol>
-        ) : (
-          <p className="text-muted-foreground">
-            {positions.changes || session.changesNext
-              ? m.library_progress_history_reader_changes_page_empty()
-              : m.library_progress_changes_empty()}
-          </p>
-        )}
-        <ProgressHistoryControls
-          section="changes"
-          cursor={positions.changes}
-          next={session.changesNext}
-          id={session.id}
-          originating={originating}
-          search={{
-            ...(logsCursor ? { logs: logsCursor } : {}),
-            ...(positions.units ? { units: positions.units } : {}),
-          }}
-        />
-      </section>
-      <section
-        role="region"
-        aria-labelledby={unitsHeading}
-        aria-describedby={session.mode === 'completed_units' ? structureHint : undefined}
-        className="space-y-3"
-      >
-        <h2 id={unitsHeading} data-progress-history-heading="units" tabIndex={-1} className="text-xl font-semibold">
-          {m.library_progress_units()}
-        </h2>
-        {session.units.length ? (
-          <ul
-            // Native unit rows have no IDs. Scope occurrence identity to this exact ordered page,
-            // so an open disclosure cannot migrate to another record after page replacement.
-            key={JSON.stringify([session.id, positions.units, session.units])}
-            className="space-y-3"
-          >
-            {session.units.map((unit, occurrence) => (
-              <li key={occurrence} className="min-w-0 py-2">
-                <ProgressHistoryUnit value={unit} occurrence={occurrence + 1} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground">
-            {positions.units || session.unitsNext
-              ? m.library_progress_history_reader_units_page_empty()
-              : m.library_progress_units_empty()}
-          </p>
-        )}
-        <ProgressHistoryControls
-          section="units"
-          cursor={positions.units}
-          next={session.unitsNext}
-          id={session.id}
-          originating={originating}
-          search={{
-            ...(logsCursor ? { logs: logsCursor } : {}),
-            ...(positions.changes ? { changes: positions.changes } : {}),
-          }}
-        />
-      </section>
-      {children}
-    </article>
+    </>
+  );
+
+  const changes = (
+    <section role="region" aria-labelledby={changesHeading} className="space-y-3">
+      <h2 id={changesHeading} data-progress-history-heading="changes" tabIndex={-1} className="text-xl font-semibold">
+        {m.library_progress_changes()}
+      </h2>
+      {session.changes.length ? (
+        <ol key={JSON.stringify([session.id, positions.changes])} className="space-y-1">
+          {session.changes.map((change, occurrence) => {
+            const record = progressHistoryRecord(session, change);
+            return (
+              <ContentItem
+                key={change.id}
+                headingLevel={3}
+                title={
+                  change.action
+                    ? stateLabel(change.action === 'complete' ? 'completed' : 'abandoned')
+                    : m.library_progress_change_recorded()
+                }
+                metadata={<RelativeTime value={change.createdAt} />}
+                preview={
+                  <>
+                    {progressHistoryPreview(change, occurrence + 1)}
+                    {record ? (
+                      <Exposure operation="progress_session.record">
+                        <Button
+                          variant="outline"
+                          disabled={busy || pendingCommand}
+                          onClick={() =>
+                            stage({
+                              kind: 'record',
+                              data: {
+                                sessionId: session.id,
+                                revision: session.revision,
+                                idempotencyKey: key,
+                                ...record,
+                              },
+                            })
+                          }
+                        >
+                          {m.library_progress_review()}
+                        </Button>
+                      </Exposure>
+                    ) : null}
+                  </>
+                }
+              />
+            );
+          })}
+        </ol>
+      ) : (
+        <p className="text-muted-foreground">
+          {positions.changes || session.changesNext
+            ? m.library_progress_history_reader_changes_page_empty()
+            : m.library_progress_changes_empty()}
+        </p>
+      )}
+      <ProgressHistoryControls
+        section="changes"
+        cursor={positions.changes}
+        next={session.changesNext}
+        id={session.id}
+        originating={originating}
+        search={{
+          ...(logsCursor ? { logs: logsCursor } : {}),
+          ...(positions.units ? { units: positions.units } : {}),
+        }}
+      />
+    </section>
+  );
+
+  const units = (
+    <section
+      role="region"
+      aria-labelledby={unitsHeading}
+      aria-describedby={session.mode === 'completed_units' ? structureHint : undefined}
+      className="space-y-3"
+    >
+      <h2 id={unitsHeading} data-progress-history-heading="units" tabIndex={-1} className="text-xl font-semibold">
+        {m.library_progress_units()}
+      </h2>
+      {session.units.length ? (
+        <ul
+          // Native unit rows have no IDs. Scope occurrence identity to this exact ordered page,
+          // so an open disclosure cannot migrate to another record after page replacement.
+          key={JSON.stringify([session.id, positions.units, session.units])}
+          className="space-y-3"
+        >
+          {session.units.map((unit, occurrence) => (
+            <li key={occurrence} className="min-w-0 py-2">
+              <ProgressHistoryUnit value={unit} occurrence={occurrence + 1} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">
+          {positions.units || session.unitsNext
+            ? m.library_progress_history_reader_units_page_empty()
+            : m.library_progress_units_empty()}
+        </p>
+      )}
+      <ProgressHistoryControls
+        section="units"
+        cursor={positions.units}
+        next={session.unitsNext}
+        id={session.id}
+        originating={originating}
+        search={{
+          ...(logsCursor ? { logs: logsCursor } : {}),
+          ...(positions.changes ? { changes: positions.changes } : {}),
+        }}
+      />
+    </section>
+  );
+
+  return (
+    <ProgressSessionWorkspace
+      identity={identity}
+      returnControls={<ProgressSessionReturnControls session={session} returnContext={returnContext} />}
+      taskHeading={session.state === 'active' ? m.library_progress_update() : m.library_progress_clear()}
+      taskStatus={taskStatus}
+      taskActions={taskActions}
+      secondary={secondary}
+      changes={changes}
+      units={units}
+      logs={children}
+      editor={editorContent}
+      editing={editing}
+      phone={phone}
+      alert={alert}
+      idempotencyKey={key}
+      taskOpenerRef={taskOpenerRef}
+      onEditorOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}
+    />
   );
 }
 
