@@ -2,13 +2,14 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { recordLateErasureItem, resolveLateErasureItem } from './access-port.ts';
 import { runCommand } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { eraseAccountAuthoredItem } from './account-erasure-authored.ts';
 import { markAccountErasureFound } from './account-erasure-progress.ts';
 import { lockErasureFence } from './erasure-fence.ts';
 import { repairHostedCataloguePage } from './hosted-chapters-index.ts';
+import { withOwnDraftReadConnection } from './own-drafts-index-read-connection.ts';
 
 export type OwnDraftSource = {
   author_account_id: string;
@@ -23,6 +24,7 @@ export type OwnDraftSource = {
 };
 export const OWN_DRAFT_REPAIR_PAGE = 20;
 export const OWN_DRAFT_REPAIR_WORKFLOW = 'content.ownDrafts.repair';
+const OWN_DRAFT_READ_DEADLINE_MS = 5000;
 const projector = '00000000-0000-4000-8000-000000000001';
 
 /** Exact source home, released before the receiving author command. Language is
@@ -32,13 +34,11 @@ const projector = '00000000-0000-4000-8000-000000000001';
 export async function readOwnDraftSource(pool: Pool, postId: string): Promise<OwnDraftSource | null> {
   const route = routeOf(postId);
   if (route === null) throw new TypeError('Invalid draft identity');
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const partition = await readPartition(client, partitionOf(route));
-      if (!partition || partition.writeState === 'moved') throw new Error('Content partition is unavailable');
-      const result = await client.query<Omit<OwnDraftSource, 'epoch' | 'position'>>(
-        `SELECT p.author_account_id,p.thread_id,t.kind,
+  return withOwnDraftReadConnection(pool, deadlineFor(OWN_DRAFT_READ_DEADLINE_MS), async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    if (!partition || partition.writeState === 'moved') throw new Error('Content partition is unavailable');
+    const result = await client.query<Omit<OwnDraftSource, 'epoch' | 'position'>>(
+      `SELECT p.author_account_id,p.thread_id,t.kind,
           to_char(p.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
           CASE WHEN p.visibility='draft' AND p.availability='available'
             AND t.availability='available' AND t.visibility<>'taken_down' AND r.availability='available'
@@ -51,16 +51,11 @@ export async function readOwnDraftSource(pool: Pool, postId: string): Promise<Ow
          JOIN content.revision r ON r.route=p.route AND r.revision_id=p.head_revision_id
            AND r.thread_id=p.thread_id AND r.post_id=p.post_id
          WHERE p.route=$1 AND p.post_id=$2`,
-        [route, postId],
-      );
-      await client.query('COMMIT');
-      return result.rows[0]
-        ? { ...result.rows[0], epoch: partition.epoch, position: partition.position.toString() }
-        : null;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
+      [route, postId],
+    );
+    return result.rows[0]
+      ? { ...result.rows[0], epoch: partition.epoch, position: partition.position.toString() }
+      : null;
   });
 }
 
@@ -182,7 +177,7 @@ type Frontier = { after_route: number; after_thread: string; after_post: string;
  */
 export async function repairOwnDraftPage(pool: Pool): Promise<{ complete: boolean; examined: number }> {
   const hosted = await repairHostedCataloguePage(pool);
-  const selected = await withConnection(pool, async (client) => {
+  const selected = await withOwnDraftReadConnection(pool, deadlineFor(OWN_DRAFT_READ_DEADLINE_MS), async (client) => {
     const progress = await client.query<Frontier>('SELECT * FROM content.own_draft_progress WHERE singleton=0');
     const frontier = progress.rows[0];
     if (!frontier) throw new Error('Draft locator coverage is unavailable');
