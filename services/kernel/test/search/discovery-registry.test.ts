@@ -174,6 +174,7 @@ test('Account handled and handleless projections exclude every private/profile f
     if (action?.op !== 'index') throw new Error('Expected an Account document');
     expect(action.document).toEqual({
       document_format: 1,
+      identity: discoveryDocumentId(registry, accountKey),
       owner: 'accounts',
       kind: 'account',
       route,
@@ -184,6 +185,9 @@ test('Account handled and handleless projections exclude every private/profile f
       handle,
       display_name: '静かな Reader',
       revision: revision.toString(),
+      names: handle === null ? ['静かな Reader'] : ['静かな Reader', handle],
+      descriptions: [],
+      name_sort: '静かな Reader',
     });
     expect(action.version).toBe(position);
     expect(parseDiscoveryHitIdentity(registry, { _id: action.id, _source: action.document })).toEqual(accountKey);
@@ -303,7 +307,7 @@ test('Account-domain negation preserves not-applicable and incomplete evidence; 
   expect(() => validateKindCountEvidence(registry, { kind: 'account', value: 0, exact: false })).toThrow();
 });
 
-test('Subject construction keeps legacy fields and callers while one strict mixed mapping uses the adopted analyzer', () => {
+test('canonical Discovery preserves Subject projection and owner identity on the adopted analyzer', () => {
   const snapshot = { partition, position, subjects: [subject] };
   const counts = new Map([[nativeId, 4]]);
   const [legacy] = documentActions(snapshot, [nativeId], counts);
@@ -312,6 +316,7 @@ test('Subject construction keeps legacy fields and callers while one strict mixe
   expect(mixed.document).toEqual({
     ...legacy.document,
     document_format: 1,
+    identity: discoveryDocumentId(registry, personKey),
     owner: 'semantic',
     kind: subject.type,
     route,
@@ -339,8 +344,9 @@ test('Subject construction keeps legacy fields and callers while one strict mixe
   expect(mapping.settings).toEqual(subjectsMapping.settings);
   expect(mapping.mappings.dynamic).toBe('strict');
   expect(mapping.mappings._meta.discovery_document_format).toBe(1);
-  expect(mapping.mappings.properties.handle).toEqual(subjectsMapping.mappings.properties.names);
-  expect(mapping.mappings.properties.display_name).toEqual(subjectsMapping.mappings.properties.names);
+  const { copy_to: _copy, ...nameMapping } = subjectsMapping.mappings.properties.names;
+  expect(mapping.mappings.properties.handle).toEqual(nameMapping);
+  expect(mapping.mappings.properties.display_name).toEqual(nameMapping);
   expect(mapping.mappings.properties.revision).toEqual({ type: 'keyword' });
   expect(mapping.mappings.properties.source_position).toEqual({ type: 'keyword' });
   for (const field of ['biography', 'email', 'old_handles', 'operator', 'avatar', 'verification', 'authn_fence_reason'])

@@ -362,20 +362,26 @@ A null handle retains displayName. Revisions and snapshot positions remain exact
 decimal strings in documents. `discoveryBulkBody` serializes the exact native signed-bigint external version as
 raw NDJSON; do not send that string through the legacy `OpenSearch.bulk` JSON-value serializer.
 
-The inert [discovery.json](../../db/search/indices/discovery.json) defines one strict native family with the existing
-`cjk_bigram_v2` analyzer. Mapping `_meta.discovery_document_format = 1` pairs with `_source.document_format = 1`
-and native `_id = discovery-v1:<encodeURIComponent(kind)>:<canonical UUID>`. `discoveryDocumentId`,
-`parseDiscoveryDocumentId` and `parseDiscoveryHitIdentity` share that identity contract; the mixed parser rejects
-owner/kind/route/document disagreement and legacy raw UUID receipts. Mixed-public-v1 ties use `id, kind, identity`.
-`validateDiscoveryDocument` enforces per-owner field allowlists that the union mapping alone cannot enforce.
+The inert [discovery.json](../../db/search/indices/discovery.json) supplies the single canonical native family
+with the existing `cjk_bigram_v2` analyzer. Its mapping constructor always includes precise calendar facts and
+credited-name projections. Mapping `_meta.discovery_document_format = 1` pairs with `_source.document_format = 1`
+and native `_id = discovery-v1:<encodeURIComponent(kind)>:<canonical UUID>`. Every owner supplies the same identity,
+exact source position and comparable names/descriptions/name-sort fields; owner-specific field allowlists remain
+closed. `discoveryDocumentId`, `parseDiscoveryDocumentId` and `parseDiscoveryHitIdentity` share that identity
+contract. Raw UUIDs remain the separate Subject index's native identity, not a second Discovery document codec.
+Mixed-public-v1 ties use `id, kind, identity`.
 
-The immutable successor [discovery-mixed-v1.json](../../db/search/indices/discovery-mixed-v1.json) requires complete
-rebuild before activation. Both owner families supply shared names/descriptions/name sorting. The native consumer
-uses one comparable ranking and consumed frontier, complete-response decoding and retained windows; mixed service
-assembly supplies current owner hydration, bounded refill, confidential continuation and final whole-query status.
-The existing search route opts into this response only with `representation: 'discovery-v1'`. Omission preserves
-SubjectSource and the legacy Subject wire. These implementations do not establish default Source readiness or a
-native product pass before actual owner composition and activation.
+Both Subject and Discovery writers always retain calendar intervals and complete credited-name projections.
+Missing creator coverage is represented by `credit_search_complete: false` and an empty names array; it never
+publishes partial names. Ordinary readers do not perform creator indexing work. Fresh physical mappings contain
+all canonical fields; older development indexes require a complete coordinated rebuild before this source is
+promoted. Generation IDs, physical UUIDs, population completion, readiness and publication authority keep their
+existing native meanings and are not renumbered or inferred from mapping fields.
+
+The existing search route opts into the mixed-owner response with `representation: 'discovery-v1'`. Omission
+preserves the Subject-only response and its domain semantics. Native consumer assembly still supplies current
+owner hydration, bounded refill, confidential continuation and final whole-query status. These implementations
+do not establish default Source readiness or a native product pass before actual owner composition and activation.
 
 ## Deletion lifecycle
 

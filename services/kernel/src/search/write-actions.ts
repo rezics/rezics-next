@@ -1,4 +1,4 @@
-import { bulkLines, type IndexAction, type SearchDocument } from './document.ts';
+import { bulkLines, type IndexAction, type SubjectDocument } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { DiscoveryRegistry } from './discovery.ts';
@@ -49,7 +49,7 @@ function completeShards(shards: unknown): boolean {
 function validateBulkResponse(
   response: unknown,
   target: string,
-  actions: readonly Pick<IndexAction<SearchDocument>, 'op' | 'id' | 'version'>[],
+  actions: readonly Pick<IndexAction<SubjectDocument>, 'op' | 'id' | 'version'>[],
   exact = false,
 ): boolean {
   if (!isRecord(response) || typeof response.errors !== 'boolean' || !Array.isArray(response.items))
@@ -204,7 +204,7 @@ export function validateRefreshResponse(status: number, response: unknown): void
  * Return only after every action is visible to search, including independently winning
  * writes behind accepted external-version conflicts.
  */
-export async function writeIndexActions<Document extends SearchDocument>(
+export async function writeIndexActions<Document extends SubjectDocument>(
   search: OpenSearch,
   index: string,
   actions: readonly IndexAction<Document>[],

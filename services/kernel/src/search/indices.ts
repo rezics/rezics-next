@@ -2,9 +2,8 @@ import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import {
-  mixedCreditDiscoveryIndexDefinition as nativeDiscoveryDefinition,
-  mixedDiscoveryDocumentCodec,
-  type MixedDiscoveryDocumentCodec,
+  discoveryIndexDefinition as nativeDiscoveryDefinition,
+  hasDiscoveryDocumentFormat,
 } from './discovery-documents.ts';
 import { calendarIndexDefinition, hasCalendarIndexFormat } from './release-search-calendar.ts';
 import { creditSearchIndexDefinition, hasCreditIndexFormat } from './credit-search-mapping.ts';
@@ -14,7 +13,6 @@ const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const definitionUrl = new URL('../../db/search/indices/subjects.json', import.meta.url);
 
 export const SUBJECT_SORT_FORMAT = 1;
-export const DISCOVERY_INDEX_FORMAT = 1;
 export { MAX_SUBJECT_GENERATIONS };
 
 type SubjectIndexDefinition = Record<string, unknown>;
@@ -74,7 +72,8 @@ export function subjectAlias(prefix: string): string {
 
 export function subjectIndexDefinition(): SubjectIndexDefinition {
   if (definition === undefined) {
-    definition = JSON.parse(readFileSync(definitionUrl, 'utf8')) as SubjectIndexDefinition;
+    const base = JSON.parse(readFileSync(definitionUrl, 'utf8')) as SubjectIndexDefinition;
+    definition = creditSearchIndexDefinition(calendarIndexDefinition(base));
   }
   return definition;
 }
@@ -83,27 +82,9 @@ export async function createSubjectIndex(
   search: OpenSearch,
   prefix: string,
   generation: number,
-  calendarFormat?: 1,
   signal?: AbortSignal,
 ): Promise<void> {
-  const calendar = calendarFormat === 1 ? calendarIndexDefinition(subjectIndexDefinition()) : subjectIndexDefinition();
-  return createIndex(search, prefix, generation, creditSearchIndexDefinition(calendar), signal);
-}
-
-/** Successor mapping in the same physical family; legacy Subject generations keep their format. */
-export function discoveryIndexDefinition(): SubjectIndexDefinition {
-  const result = structuredClone(subjectIndexDefinition());
-  if (!record(result.mappings) || !record(result.mappings.properties) || !record(result.mappings._meta))
-    throw new TypeError('Invalid base Search index definition');
-  result.mappings._meta.discovery_format = DISCOVERY_INDEX_FORMAT;
-  Object.assign(result.mappings.properties, {
-    family: { type: 'keyword' },
-    kind: { type: 'keyword' },
-    identity: { type: 'keyword' },
-    account_revision: { type: 'keyword' },
-    active_handle: { type: 'keyword' },
-  });
-  return result;
+  return createIndex(search, prefix, generation, subjectIndexDefinition(), signal);
 }
 
 /** Allocation only; source exhaustion, replay, exact-key reconciliation and custody precede activation. */
@@ -124,19 +105,15 @@ export async function createDiscoveryIndex(
     throw new SearchUnavailableError('Discovery allocation was not acknowledged');
 }
 
-/** Read the codec from one physical mapping; callers bind it to their persisted UUID separately. */
-export async function readDiscoveryDocumentCodec(
-  search: OpenSearch,
-  index: string,
-): Promise<MixedDiscoveryDocumentCodec> {
+/** Admit the canonical physical mapping; callers bind its persisted UUID separately. */
+export async function requireDiscoveryIndexFormat(search: OpenSearch, index: string): Promise<void> {
   const response = await search.request('GET', `/${index}/_mapping`);
   const body = response.body;
   const entry = record(body) ? body[index] : undefined;
   const mappings = record(entry) ? entry.mappings : undefined;
-  const codec = mixedDiscoveryDocumentCodec(mappings);
-  if (response.status !== 200 || !record(body) || Object.keys(body).length !== 1 || codec === undefined)
-    throw new SearchUnavailableError('Discovery physical mapping has no supported projection codec');
-  return codec;
+  const valid = hasDiscoveryDocumentFormat(mappings);
+  if (response.status !== 200 || !record(body) || Object.keys(body).length !== 1 || !valid)
+    throw new SearchUnavailableError('Discovery physical mapping is not canonical');
 }
 
 export function discoveryIndexName(prefix: string, generation: number): string {
@@ -254,8 +231,8 @@ export async function readSubjectSortFormat(
 type SubjectMappingObservation = {
   metadata: Record<string, unknown>;
   sortFormat: number | null;
-  calendarFormat: 1 | null;
-  creditFormat: 1 | null;
+  calendarFormat: 1;
+  creditFormat: 1;
   activatedAt: string | null;
   ratingCompatible: boolean;
 };
@@ -289,8 +266,8 @@ async function readSubjectMapping(
     metadata = mappings._meta;
   }
 
-  const calendarFormat = hasCalendarIndexFormat(mappings) ? 1 : null;
-  const creditFormat = hasCreditIndexFormat(mappings) ? 1 : null;
+  if (!hasCalendarIndexFormat(mappings) || !hasCreditIndexFormat(mappings))
+    throw new SearchUnavailableError('Subject generation requires the canonical calendar and credited-name mapping');
 
   let sortFormat: number | null = null;
   if (Object.hasOwn(metadata, 'name_sort_format')) {
@@ -312,15 +289,15 @@ async function readSubjectMapping(
   return {
     metadata,
     sortFormat,
-    calendarFormat,
-    creditFormat,
+    calendarFormat: 1,
+    creditFormat: 1,
     activatedAt,
     ratingCompatible:
       compatible(properties.rating_score, 'double') && compatible(properties.rating_prior_epoch, 'long'),
   };
 }
 
-/** Calendar writes follow the actual target mapping, including while it is still being populated. */
+/** Admit the canonical calendar mapping, independently of population readiness. */
 export async function readSubjectCalendarMappingFormat(
   search: OpenSearch,
   prefix: string,
@@ -329,7 +306,7 @@ export async function readSubjectCalendarMappingFormat(
   return (await readSubjectMapping(search, prefix, generation)).calendarFormat;
 }
 
-/** Credit writes follow the target mapping; historical generations without `credited_names` keep their shape. */
+/** Admit the canonical credited-name mapping on the exact native target. */
 export async function readSubjectCreditMappingFormat(
   search: OpenSearch,
   prefix: string,

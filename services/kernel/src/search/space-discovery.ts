@@ -8,7 +8,7 @@ import type {
 } from '../community/index.ts';
 import type { SpaceDiscoveryDependencyReadiness } from '../community/index.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
-import { MIXED_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
+import { DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
 
 export const SPACE_DISCOVERY_KIND = 'space';
 const MAX_BATCH = 100;
@@ -27,7 +27,7 @@ export type SpaceDiscoverySnapshot = Readonly<{
 }>;
 export type SpaceDiscoveryPage = SpaceDiscoverySnapshot & Readonly<{ next: NativeSpaceDiscoveryKey | null }>;
 export type SpaceDiscoveryDocument = Readonly<{
-  document_format: typeof MIXED_DISCOVERY_DOCUMENT_FORMAT;
+  document_format: typeof DISCOVERY_DOCUMENT_FORMAT;
   identity: string;
   owner: 'content';
   kind: typeof SPACE_DISCOVERY_KIND;
@@ -236,7 +236,7 @@ function projectSnapshot(
       id,
       version: observed.position,
       document: {
-        document_format: MIXED_DISCOVERY_DOCUMENT_FORMAT,
+        document_format: DISCOVERY_DOCUMENT_FORMAT,
         identity: id,
         owner: identity.owner,
         kind: identity.kind,

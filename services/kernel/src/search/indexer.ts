@@ -55,10 +55,6 @@ export function createSubjectIndexer(options: {
   listing: SubjectListingSource;
   index: string;
   consumer: string;
-  /** Matches the target physical mapping; historical generations keep the year-only writer shape. */
-  calendarFormat?: 1;
-  /** Matches the target's credit successor. Absent means the generation has no `credited_names` field. */
-  creditFormat?: 1;
   aroundApply?: SubjectApplyGuard;
   /** Trusted native runner composition; independent of aroundApply/privacy repair. */
   writer?: SearchWriterGuard;
@@ -301,10 +297,7 @@ async function guardedApply(
 
 /** The sole ordinary writer path, shared by finite cold population and event replay. */
 export async function applySubjectKeys(
-  options: Pick<
-    Parameters<typeof createSubjectIndexer>[0],
-    'search' | 'source' | 'listing' | 'index' | 'writer' | 'calendarFormat' | 'creditFormat'
-  >,
+  options: Pick<Parameters<typeof createSubjectIndexer>[0], 'search' | 'source' | 'listing' | 'index' | 'writer'>,
   partition: number,
   ids: readonly string[],
   obligation: bigint,
@@ -319,11 +312,7 @@ export async function applySubjectKeys(
         await options.writer.write(partition, chunk, obligation);
         continue;
       }
-      // Only a credit-successor generation pays for creator projections; ordinary readers never do.
-      const snapshot =
-        options.creditFormat === 1
-          ? await readCreditIndexSnapshot(options.source, partition, chunk)
-          : await options.source.read(partition, chunk);
+      const snapshot = await readCreditIndexSnapshot(options.source, partition, chunk);
       const subjects = validateIndexObservation(snapshot, partition, chunk, obligation);
       const indexIds = chunk.filter((id) => {
         const subject = subjects.get(id);
@@ -333,7 +322,7 @@ export async function applySubjectKeys(
       const actions = await prepareBoundedSortKeys(
         options.search,
         options.index,
-        documentActions(snapshot, chunk, counts, options.calendarFormat, options.creditFormat),
+        documentActions(snapshot, chunk, counts),
       );
       await writeIndexActions(options.search, options.index, actions);
     }

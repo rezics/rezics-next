@@ -204,8 +204,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     )
       notReady();
     const search = requestSearch(context);
-    const calendarFormat = await readSubjectCalendarMappingFormat(search, config.prefix, generation);
-    const creditFormat = await readSubjectCreditMappingFormat(search, config.prefix, generation);
+    await readSubjectCalendarMappingFormat(search, config.prefix, generation);
+    await readSubjectCreditMappingFormat(search, config.prefix, generation);
     return sourcePublication.createGenerationPublication({
       pool: config.pool,
       search: config.search,
@@ -219,8 +219,6 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         consumer: subjectConsumer(config.prefix, generation),
         source: nativeSource,
         listing,
-        ...(calendarFormat === null ? {} : { calendarFormat }),
-        ...(creditFormat === null ? {} : { creditFormat }),
       },
     });
   }

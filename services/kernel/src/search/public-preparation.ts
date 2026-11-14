@@ -196,7 +196,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         ensureLive();
         if (!state.generations.includes(generation)) {
           if (state.generations.length >= 3) throw new SearchUnavailableError('Public generation limit reached');
-          await createSubjectIndex(search, options.prefix, generation, 1, signal);
+          await createSubjectIndex(search, options.prefix, generation, signal);
           ensureLive();
         }
         const uuid = await indexUuid(search, subjectIndexName(options.prefix, generation), signal);

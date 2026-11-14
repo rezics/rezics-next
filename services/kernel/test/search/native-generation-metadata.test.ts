@@ -42,7 +42,7 @@ test('activation preserves released calendar metadata through a lost mapping res
   const native = createOpenSearch(process.env.OPENSEARCH_URL!);
   const prefix = `metadata-${crypto.randomUUID().slice(0, 8)}-`;
   const index = subjectIndexName(prefix, 1);
-  await createSubjectIndex(native, prefix, 1, 1);
+  await createSubjectIndex(native, prefix, 1);
   try {
     await markSubjectCalendarReady(native, prefix, 1);
     const before = await native.request<Record<string, { mappings: { _meta: Record<string, unknown> } }>>(
