@@ -51,3 +51,9 @@ supplied portraits, permitted biographies and finite work continuation. Portrait
 module, and their WebP variants use Storybook's existing media mount. Existing family story IDs and global controls
 are retained. Focused regression sources pin reading order, document disclosure, sparse facts and continuation;
 the dev verifier runs these checks after landing.
+
+People portraits use the dedicated `0193d000-0000-7000-8000-000000000070`–`072` media identities, separate from
+Anime's `0193a000` covers. Each supplied 480×600 People SVG has 160×200 and 320×400 WebP variants under its own
+Storybook media directory. The shared media URL and rendering owners serve these files at the manually chosen
+viewport; fixtures do not fetch replacement artwork. Source review compares every advertised variant's header
+dimensions with its summary and preserves Anime cover bytes. Responsive rendering remains verifier acceptance.
