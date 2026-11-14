@@ -5987,7 +5987,7 @@
   "library_my_ratings_denied": "Votre compte ne peut pas accéder à cet inventaire privé pour le moment.",
   "library_my_ratings_departure_description": "Votre brouillon non enregistré sera supprimé si vous partez.",
   "library_my_ratings_departure_locked": "Vérifiez le résultat exact de cette demande avant de partir.",
-  "library_my_ratings_departure_title": "Quitter cette page d’évaluations ?",
+  "library_my_ratings_departure_title": "Quitter cette évaluation ?",
   "library_my_ratings_description": "Vos réponses, accompagnées des questions auxquelles vous avez répondu.",
   "library_my_ratings_edit": "Modifier la réponse",
   "library_my_ratings_empty": "Aucune réponse sur cette page.",

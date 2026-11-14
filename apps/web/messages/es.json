@@ -5987,7 +5987,7 @@
   "library_my_ratings_denied": "Tu cuenta no puede acceder ahora a este inventario privado.",
   "library_my_ratings_departure_description": "Si sales, se descartará el borrador sin guardar.",
   "library_my_ratings_departure_locked": "Revisa el resultado exacto de esta solicitud antes de salir.",
-  "library_my_ratings_departure_title": "¿Salir de esta página de valoraciones?",
+  "library_my_ratings_departure_title": "¿Salir de esta valoración?",
   "library_my_ratings_description": "Tus respuestas, junto a las preguntas originales que respondiste.",
   "library_my_ratings_edit": "Editar respuesta",
   "library_my_ratings_empty": "No hay respuestas en esta página.",

@@ -5987,7 +5987,7 @@
   "library_my_ratings_denied": "Dein Konto darf derzeit nicht auf dieses private Verzeichnis zugreifen.",
   "library_my_ratings_departure_description": "Beim Verlassen wird dein ungespeicherter Entwurf verworfen.",
   "library_my_ratings_departure_locked": "Prüfe das genaue Ergebnis dieser Anfrage, bevor du die Seite verlässt.",
-  "library_my_ratings_departure_title": "Diese Bewertungsseite verlassen?",
+  "library_my_ratings_departure_title": "Diese Bewertung verlassen?",
   "library_my_ratings_description": "Deine Antworten mit den ursprünglichen Fragen.",
   "library_my_ratings_edit": "Antwort ändern",
   "library_my_ratings_empty": "Keine Antworten auf dieser Seite.",

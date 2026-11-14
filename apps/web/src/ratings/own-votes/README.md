@@ -37,6 +37,12 @@ later editable row requires explicit selection and never replays the previous co
 from Subject reading requests the current page again and restores focus. Dirty drafts use the shared departure
 confirmation; pending or uncertain command ownership requires review before departure.
 
+Decision: inspecting another answer uses that same departure decision. Stay retains the original pair, draft and
+editor focus; discard selects only the first requested exact pair while its page, reader and row remain current.
+Inspecting the selected row is inert, including with an empty or invalid draft. An unchanged editor may switch
+directly. Page, advice or reader replacement cancels pending selection and its dialog synchronously; selection
+never acknowledges or replays a command. Retain one pending target, with no per-row drafts or additional reads.
+
 Decision: after return, retain only the exact original pair as a short-lived in-memory focus bookmark; hide prior advice while refreshing, then require a fresh Inspect action before editing or clearing.
 
 Decision: during an eligible My ratings visit, retain up to eight admitted predecessor cursors plus the current cursor in the existing return provider; stage each move and commit it only after the target response is admitted.

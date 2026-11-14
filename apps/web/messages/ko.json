@@ -5987,7 +5987,7 @@
   "library_my_ratings_denied": "현재 계정에서 이 비공개 목록에 접근할 수 없습니다.",
   "library_my_ratings_departure_description": "떠나면 저장하지 않은 초안이 폐기됩니다.",
   "library_my_ratings_departure_locked": "떠나기 전에 이 요청의 정확한 결과를 확인하세요.",
-  "library_my_ratings_departure_title": "평가 페이지를 떠날까요?",
+  "library_my_ratings_departure_title": "이 평가를 떠날까요?",
   "library_my_ratings_description": "내 답변과 답변했던 원래 질문입니다.",
   "library_my_ratings_edit": "답변 수정",
   "library_my_ratings_empty": "이 페이지에 답변이 없습니다.",
