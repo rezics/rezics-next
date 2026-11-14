@@ -19,3 +19,5 @@ One occurrence, review and confirmation creates one Session. Recovery reads the 
 recoverable replies hide facts until original checkpoint reconciliation. Cancellation and evidence removal preserve
 accepted Sessions. Unresolved commands remain in memory when the protected visit retires; navigation is blocked
 until they can be acknowledged. Full browser reload is not a persisted-command resume mechanism.
+
+Decision: lead review and outcomes with localized native effects and supplied unit meanings; keep exact IDs, operands and complete evidence in closed labelled details. Keep the three recovery visits independent, with unchanged confirmation, retry and page-read contracts. Presentation acceptance is added to the named route stories; execution and native, keyboard and visual verification are deferred to the verifier.
