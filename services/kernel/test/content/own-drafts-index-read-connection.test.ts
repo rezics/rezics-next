@@ -48,7 +48,13 @@ test('draft read commits its repeatable-read snapshot and preserves query accoun
       },
       connection: (dispatch) => dispatch(),
     },
-    () => expect(visit(poolFor(async () => current.client), Date.now() + 1000)).resolves.toBe('current source'),
+    () =>
+      expect(
+        visit(
+          poolFor(async () => current.client),
+          Date.now() + 1000,
+        ),
+      ).resolves.toBe('current source'),
   );
   expect(current.statements).toEqual([begin, 'SELECT source', 'COMMIT']);
   expect(statements).toEqual(current.statements);
@@ -81,7 +87,10 @@ for (const blocked of [begin, 'SELECT source', 'COMMIT']) {
 
 test('a checkout arriving after expiry issues no SQL', async () => {
   const checkout = deferred<PoolClient>();
-  const attempt = visit(poolFor(() => checkout.promise), Date.now() + 60);
+  const attempt = visit(
+    poolFor(() => checkout.promise),
+    Date.now() + 60,
+  );
   await expect(attempt).rejects.toBeInstanceOf(AccessUnavailableError);
   const late = connection();
   checkout.resolve(late.client);
@@ -93,9 +102,13 @@ test('a read error survives successful rollback and an expired rollback', async 
   const original = new Error('draft source failed');
   const current = connection();
   await expect(
-    withOwnDraftReadConnection(poolFor(async () => current.client), Date.now() + 1000, async () => {
-      throw original;
-    }),
+    withOwnDraftReadConnection(
+      poolFor(async () => current.client),
+      Date.now() + 1000,
+      async () => {
+        throw original;
+      },
+    ),
   ).rejects.toBe(original);
   expect(current.statements).toEqual([begin, 'ROLLBACK']);
 
@@ -107,9 +120,13 @@ test('a read error survives successful rollback and an expired rollback', async 
     }
     return Promise.resolve({ rows: [] });
   });
-  const failed = withOwnDraftReadConnection(poolFor(async () => stalled.client), Date.now() + 80, async () => {
-    throw original;
-  });
+  const failed = withOwnDraftReadConnection(
+    poolFor(async () => stalled.client),
+    Date.now() + 80,
+    async () => {
+      throw original;
+    },
+  );
   await rollbackStarted.promise;
   await expect(failed).rejects.toBe(original);
   await stalled.released.promise;
