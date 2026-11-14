@@ -1,4 +1,5 @@
-export { HostedBookInventory, StudioWorkspace, type StudioWorkspaceProps } from './workspace';
+export { StudioController } from './controller';
+export { HostedBookInventory, StudioWorkspace, StudioWorkbench, type StudioWorkspaceProps } from './workspace';
 export { createStudioAccountPort } from './account-port';
 export { createPostDocumentPort } from './post-document-port';
 export { listHostedBooks, readOwnedHostedBook } from './hosted-actions';

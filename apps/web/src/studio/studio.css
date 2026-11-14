@@ -419,3 +419,198 @@
     gap: 0.35rem;
   }
 }
+
+/* Work identity, outline and the writing surface form one responsive workbench. */
+.studio-workspace {
+  max-inline-size: 92rem;
+}
+.studio-header {
+  align-items: center;
+  padding-block: 0.5rem 1.5rem;
+  border-block-end: 1px solid var(--border);
+  margin-block-end: 1.5rem;
+}
+.studio-work-heading {
+  min-inline-size: 0;
+  max-inline-size: 65ch;
+}
+.studio-work-heading h1 {
+  font-size: clamp(1.5rem, 2.5vw, 2.15rem);
+  text-wrap: balance;
+}
+.studio-work-heading .studio-help {
+  margin-block-start: 0.4rem;
+}
+.studio-layout {
+  grid-template-areas:
+    'sidebar'
+    'document';
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.studio-sidebar {
+  border-block-start: 0;
+  border-block-end: 1px solid var(--border);
+  padding-block: 0 0.75rem;
+}
+.studio-mobile-navigation > summary {
+  color: var(--foreground);
+}
+.studio-sidebar h2 {
+  font-size: 1rem;
+}
+.studio-sidebar .studio-section-heading > span {
+  font-size: 0.75rem;
+}
+.studio-sidebar .studio-toc > .studio-help,
+.studio-sidebar .studio-toc > .studio-section-heading {
+  margin-block-end: 0.75rem;
+}
+.studio-document {
+  gap: 1rem;
+}
+.studio-document-heading {
+  padding-block: 0.5rem;
+}
+.studio-document-heading h2 {
+  font-size: clamp(1.5rem, 2.6vw, 2.25rem);
+  line-height: 1.25;
+  max-inline-size: 35ch;
+  text-wrap: balance;
+}
+.studio-document-heading .studio-eyebrow {
+  margin: 0;
+}
+.studio-document-heading > [role='status'] {
+  font-variant-numeric: tabular-nums;
+}
+.studio-document-toolbar {
+  gap: 0.5rem;
+  padding-block: 0.5rem;
+}
+.studio-document-toolbar nav {
+  gap: 0.25rem;
+}
+.studio-document-toolbar nav button:not([aria-pressed='true']) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+.studio-writing-canvas {
+  padding: clamp(0.75rem, 2vw, 1.5rem);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--background);
+}
+.studio-writing-canvas > label {
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+.studio-writing-canvas > input {
+  font-size: clamp(1.15rem, 1.8vw, 1.4rem);
+  font-weight: 600;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 0.25rem;
+  padding-inline: 0;
+}
+.studio-writing-canvas > input:hover {
+  border-block-end-color: var(--border);
+}
+.studio-rich-text .tiptap {
+  max-inline-size: 72ch;
+  margin-inline: auto;
+  line-height: 1.75;
+}
+.studio-workbench-region {
+  border-block-start: 1px solid var(--border);
+  min-inline-size: 0;
+}
+.studio-workbench-region > h2 {
+  font-size: 0.875rem;
+}
+.studio-region-trigger {
+  inline-size: 100%;
+  justify-content: space-between;
+  padding-inline: 0;
+  border-radius: 0;
+  text-align: start;
+}
+.studio-region-trigger:disabled {
+  opacity: 1;
+  color: var(--foreground);
+}
+.studio-region-trigger > span {
+  padding-inline: 0.5rem;
+  color: var(--muted-foreground);
+}
+.studio-region-content {
+  padding-block: 0.5rem 1rem;
+}
+.studio-publication-region {
+  margin-block-start: 1rem;
+}
+.studio-publication-region > [role='status'] {
+  padding-block: 0.75rem;
+}
+.studio-outline-add,
+.studio-sidebar > details > .studio-stack > .studio-technical {
+  margin-block-start: 0.75rem;
+  border-block-start: 1px solid var(--border);
+}
+.studio-outline-add > summary {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.studio-toc-actions > .studio-help {
+  padding-inline: 0.25rem;
+}
+.studio-version-list li {
+  align-items: start;
+  justify-content: space-between;
+  padding-block: 0.5rem;
+  border-block-end: 1px solid var(--border);
+}
+.studio-version-list .studio-technical {
+  flex: 1 1 12rem;
+}
+.studio-preview {
+  min-block-size: 24rem;
+  padding: clamp(1rem, 4vw, 3rem);
+}
+.studio-preview > :last-child {
+  max-inline-size: 72ch;
+  margin-inline: auto;
+}
+@media (min-width: 64rem) {
+  .studio-layout {
+    grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+    grid-template-areas: 'sidebar document';
+    column-gap: clamp(1.5rem, 3vw, 3rem);
+  }
+  .studio-sidebar {
+    border-block-end: 0;
+    padding-block-end: 0;
+  }
+  .studio-document-heading {
+    padding-block-start: 0;
+  }
+}
+@media (max-width: 30rem) {
+  .studio-document-toolbar {
+    position: sticky;
+  }
+  .studio-document-toolbar > nav {
+    flex: 1 1 100%;
+  }
+  .studio-document-toolbar > nav > button {
+    flex: 1;
+  }
+  .studio-document-toolbar > button {
+    inline-size: 100%;
+  }
+  .studio-writing-canvas {
+    padding: 0.75rem;
+  }
+}

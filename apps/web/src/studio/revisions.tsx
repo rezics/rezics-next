@@ -30,12 +30,10 @@ export function RevisionBody({
   presentation: StudioPresentation;
 }) {
   const options = { locale: getLocale() };
+  const title = revision.title.trim() || m.own_drafts_no_title({}, options);
   return (
-    <section
-      className="studio-revision-body"
-      aria-label={m.studio_revision_saved_name({ title: revision.title }, options)}
-    >
-      <h3>{revision.title}</h3>
+    <section className="studio-revision-body" aria-label={m.studio_revision_saved_name({ title }, options)}>
+      <h3>{title}</h3>
       <p className="studio-help">
         <time dateTime={revision.savedAt}>{m.studio_revision_saved({ savedAt: revision.savedAt }, options)}</time>
       </p>
@@ -89,7 +87,7 @@ export function StudioVersions({
                 >
                   {m.studio_revision_compare({ savedAt: version.savedAt }, options)}
                 </Button>
-                <span className="studio-break">{version.exact.revisionId}</span>
+                <ExactVersionDetails exact={version.exact} />
               </li>
             ))}
           </ol>

@@ -437,30 +437,31 @@ function BookStudioEntry({
   if (baseline) return <HostedLegacyBaselineEntry {...props} />;
   if (points) return <HostedDraftPointEntry {...props} />;
   if (append) return <HostedRootAppendEntry {...props} />;
+  return <BookStudioVisit {...props} />;
+}
+
+function BookPublicationTools({ owner, locale }: { owner: HostedOwnedBook; locale: Locale }) {
   return (
-    <>
-      <nav className="mx-auto flex w-full max-w-4xl flex-wrap gap-3 px-4 pt-6">
-        <a
-          className="inline-flex min-h-11 items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          href={localizeHref(
-            `/studio?catalogueId=${props.owner.item.catalogueId}&prepare=1&ownerAccount=${props.owner.viewer.accountId}&ownerEpoch=${props.owner.viewer.authnEpoch}`,
-            { locale: props.locale },
-          )}
-        >
-          {releaseCopy[props.locale].entry}
-        </a>
-        <a
-          className="inline-flex min-h-11 items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          href={localizeHref(
-            `/studio?catalogueId=${props.owner.item.catalogueId}&baseline=1&ownerAccount=${props.owner.viewer.accountId}&ownerEpoch=${props.owner.viewer.authnEpoch}`,
-            { locale: props.locale },
-          )}
-        >
-          {baselineCopy[props.locale].entry}
-        </a>
-      </nav>
-      <BookStudioVisit {...props} />
-    </>
+    <nav className="studio-action-row">
+      <a
+        className="inline-flex min-h-11 items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        href={localizeHref(
+          `/studio?catalogueId=${owner.item.catalogueId}&prepare=1&ownerAccount=${owner.viewer.accountId}&ownerEpoch=${owner.viewer.authnEpoch}`,
+          { locale: locale },
+        )}
+      >
+        {releaseCopy[locale].entry}
+      </a>
+      <a
+        className="inline-flex min-h-11 items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        href={localizeHref(
+          `/studio?catalogueId=${owner.item.catalogueId}&baseline=1&ownerAccount=${owner.viewer.accountId}&ownerEpoch=${owner.viewer.authnEpoch}`,
+          { locale: locale },
+        )}
+      >
+        {baselineCopy[locale].entry}
+      </a>
+    </nav>
   );
 }
 
@@ -546,7 +547,10 @@ function BookStudioVisit({
       const input: HostedStudioInput = {
         visitKey: JSON.stringify([accountId, origin.generation, book.catalogueId]),
         projectId: book.catalogueId,
-        title: initialSelection?.revision.title ?? book.title ?? m.studio_workspace_book_title({}, { locale }),
+        title:
+          initialSelection?.revision.title.trim() ||
+          book.title?.trim() ||
+          m.studio_workspace_book_title({}, { locale }),
         documents: { items: [document], nextCursor: null },
         publications: { items: [], nextCursor: null },
         ...(initialSelection ? { initialSelection } : {}),
@@ -594,7 +598,7 @@ function BookStudioVisit({
   if (workspace)
     return (
       <main className="mx-auto w-full max-w-screen-2xl px-4 py-6">
-        <StudioWorkspace {...workspace} />
+        <StudioWorkspace {...workspace} publicationTools={<BookPublicationTools owner={owner} locale={locale} />} />
       </main>
     );
   return <StudioResultMessage result={result} />;

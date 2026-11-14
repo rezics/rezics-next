@@ -5,7 +5,8 @@ locales; stable typed operation and completion identities own publication locks 
 of display wording. Existing account, saved-version, release, organizer, picker, history and root-append messages keep
 their owners. Safe supplied failure explanations remain verbatim beside localized recovery from native outcome kinds.
 User titles, bodies, exact IDs and saved timestamps stay intact. An absent document title stays empty in the editor;
-headings and navigation use its supplied Post ID rather than inventing a title.
+headings and navigation use the existing localized untitled or unavailable wording. Exact Post and revision identity
+stays in labelled details, never in a substitute document title.
 
 The visit distinguishes private saving, saved/unsaved preview and separate publication review. Saving retains newer
 working edits; explicit switch/discard keeps existing dirty, snapshot and upload protection and focus behavior.
