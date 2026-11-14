@@ -349,44 +349,95 @@ function WindowNavigation({
   busy: boolean;
   onNavigate?: (action: ContinueWindowAction, restoreHeadingFocus: boolean) => void;
 }) {
-  const keyboardIntent = useRef<HTMLAnchorElement | null>(null);
+  const keyboardIntent = useRef<{
+    element: HTMLAnchorElement;
+    direction: ContinueWindowDirection;
+    target: ContinueCursor;
+    href: string;
+  } | null>(null);
+  const controlSignature = JSON.stringify(
+    actions.map(({ direction, target, href, label }) => [direction, target, href, label]),
+  );
+  useLayoutEffect(() => {
+    keyboardIntent.current = null;
+  }, [busy, controlSignature]);
   if (actions.length === 0) return null;
   return (
-    <nav aria-label={m.library_continue()} className="flex flex-wrap gap-2">
-      {actions.map((action) => (
-        <a
-          key={`${action.direction}:${action.target ?? 'first'}`}
-          href={action.href}
-          aria-disabled={busy || undefined}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.repeat) keyboardIntent.current = event.currentTarget;
-          }}
-          onBlur={(event) => {
-            if (keyboardIntent.current === event.currentTarget) keyboardIntent.current = null;
-          }}
-          onClick={(event) => {
-            const restoreHeadingFocus =
-              keyboardIntent.current === event.currentTarget && document.activeElement === event.currentTarget;
-            keyboardIntent.current = null;
-            if (
-              !onNavigate ||
-              busy ||
-              event.defaultPrevented ||
-              event.button !== 0 ||
-              event.metaKey ||
-              event.ctrlKey ||
-              event.shiftKey ||
-              event.altKey
-            )
-              return;
-            event.preventDefault();
-            onNavigate(action, restoreHeadingFocus);
-          }}
-          className="inline-flex min-h-11 min-w-0 max-w-full items-center rounded-sm px-3 py-2 text-sm whitespace-normal text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:cursor-wait aria-disabled:opacity-60"
-        >
-          {action.label}
-        </a>
-      ))}
-    </nav>
+    <div className="space-y-2">
+      <nav aria-label={m.library_continue()} aria-busy={busy || undefined} className="flex flex-wrap gap-2">
+        {actions.map((action) => (
+          <a
+            key={`${action.direction}:${action.target ?? 'first'}`}
+            href={action.href}
+            aria-disabled={busy || undefined}
+            onPointerDown={() => {
+              keyboardIntent.current = null;
+            }}
+            onKeyDown={(event) => {
+              const admittedEnter =
+                event.key === 'Enter' &&
+                !event.repeat &&
+                !event.defaultPrevented &&
+                !busy &&
+                !!onNavigate &&
+                !event.metaKey &&
+                !event.ctrlKey &&
+                !event.shiftKey &&
+                !event.altKey;
+              keyboardIntent.current = admittedEnter
+                ? {
+                    element: event.currentTarget,
+                    direction: action.direction,
+                    target: action.target,
+                    href: action.href,
+                  }
+                : null;
+            }}
+            onBlur={(event) => {
+              if (keyboardIntent.current?.element === event.currentTarget) keyboardIntent.current = null;
+            }}
+            onClick={(event) => {
+              const intent = keyboardIntent.current;
+              keyboardIntent.current = null;
+              if (busy) {
+                event.preventDefault();
+                return;
+              }
+              if (
+                !onNavigate ||
+                event.defaultPrevented ||
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.shiftKey ||
+                event.altKey
+              )
+                return;
+              const restoreHeadingFocus =
+                event.detail === 0 &&
+                intent?.element === event.currentTarget &&
+                intent.direction === action.direction &&
+                intent.target === action.target &&
+                intent.href === action.href &&
+                document.activeElement === event.currentTarget;
+              event.preventDefault();
+              onNavigate(action, restoreHeadingFocus);
+            }}
+            onAuxClick={(event) => {
+              keyboardIntent.current = null;
+              if (busy) event.preventDefault();
+            }}
+            className="inline-flex min-h-11 min-w-0 max-w-full items-center rounded-sm px-3 py-2 text-sm whitespace-normal text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:cursor-wait aria-disabled:opacity-60"
+          >
+            {action.label}
+          </a>
+        ))}
+      </nav>
+      {busy ? (
+        <p role="status" className="inline-flex min-h-11 items-center text-sm text-muted-foreground">
+          {m.library_continue_loading()}
+        </p>
+      ) : null}
+    </div>
   );
 }
