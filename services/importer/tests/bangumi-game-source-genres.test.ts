@@ -23,17 +23,30 @@ const record = { id: 91044, type: 4, name: 'Authored Game', name_cn: '测试游�
 function subject(
   id: string,
   type: string,
-  statements: Record<string, { value: { type: 'value'; content: string } }[]>,
+  statements: Record<
+    string,
+    { rank?: 'normal' | 'preferred' | 'deprecated'; value: { type: 'value'; content: string } }[]
+  >,
 ) {
+  const ranked = Object.fromEntries(
+    Object.entries(statements).map(([property, values]) => [
+      property,
+      values.map((statement) => ({ rank: statement.rank ?? 'normal', value: statement.value })),
+    ]),
+  );
   return {
-    subject: { id, type, context: globalContext, statements },
+    subject: { id, type, context: globalContext, statements: ranked },
   } as unknown as ReviewedSubjectRead;
 }
 const emptyReviewedCandidates = async (): Promise<ReviewedCandidatePage> =>
   ({ candidates: [], next: null }) as unknown as ReviewedCandidatePage;
+const statement = (content: string, rank: 'normal' | 'preferred' | 'deprecated' = 'normal') => ({
+  rank,
+  value: { type: 'value' as const, content },
+});
 
 test('ordinary Game conversion preserves the exact infobox literal and withholds unavailable or wrong-scheme bindings', async () => {
-  expect(converter_revision).toBe('bangumi@15');
+  expect(converter_revision).toBe('bangumi@17');
   expect(bangumiGameSourceGenres(record).requirements.map((item) => item.literal)).toEqual([literal]);
   const tooMany = bangumiGameSourceGenres({
     type: 4,
@@ -86,7 +99,7 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
   );
   expect(proposal).toMatchObject({
     subject: gameId,
-    source: { external_id: String(record.id), converter_revision: 'bangumi@15' },
+    source: { external_id: String(record.id), converter_revision },
     statement: {
       property: { id: 'schema:genre' },
       value: { type: 'value', content: conceptId },
@@ -114,7 +127,7 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
     async readReviewedSubject(id) {
       return id === schemeId
         ? subject(schemeId, 'skos:ConceptScheme', {
-            'schema:url': [{ value: { type: 'value', content: 'https://example.test/wrong-scheme' } }],
+            'schema:url': [{ rank: 'deprecated', value: { type: 'value', content: bangumiGameSourceGenreScheme } }],
           })
         : subject(conceptId, 'skos:Concept', {
             'schema:url': [{ value: { type: 'value', content: sourceUri } }],
@@ -160,4 +173,101 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
       .convert(input, { ...context, resolvedReferences: {} })
       .proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:genre'),
   ).toBe(false);
+});
+
+test('Game genre evidence, shared reads, and verified bindings follow importer runs', async () => {
+  const literals = [literal, '动作', '冒险'];
+  const ids = literals.map((_, index) => `00000000-0000-4000-8000-00000000021${index}`);
+  const uris = literals.map((_, index) => `https://example.test/bangumi/genre/${index}`);
+  const runRecord = {
+    ...record,
+    id: 91045,
+    infobox: `{{Infobox Game\n${literals.map((value) => `|游戏类型=${value}`).join('\n')}\n}}`,
+  };
+  const profile = parseBangumiGameGenreBindings({
+    schemeId,
+    schemeUri: bangumiGameSourceGenreScheme,
+    concepts: literals.map((value, index) => ({ literal: value, id: ids[index]!, sourceUri: uris[index]! })),
+  });
+  const conversion = createSourceRegistration('bangumi').convert(
+    { external_id: String(runRecord.id), record_revision: null, record: runRecord },
+    { source: 'bangumi', subjectId: gameId },
+  );
+  const reads = new Map<string, number>();
+  const associations = new Map<string, number>();
+  let state: 'retired' | 'current' | 'unavailable' = 'current';
+  const adapter = createShowcaseBangumiGameGenreLookup('bangumi', profile, {
+    async readReviewedSubject(id) {
+      reads.set(id, (reads.get(id) ?? 0) + 1);
+      if (state === 'unavailable' && id === ids[0]) throw new TypeError('current Concept read unavailable');
+      if (id === schemeId)
+        return subject(id, 'skos:ConceptScheme', {
+          'schema:url': [statement(bangumiGameSourceGenreScheme, 'preferred')],
+        });
+      const index = ids.indexOf(id);
+      const membershipRank =
+        index === 1 && state === 'retired' ? 'deprecated' : index === 2 ? 'preferred' : 'normal';
+      return subject(id, 'skos:Concept', {
+        'schema:url': [statement(uris[index]!, index === 0 && state === 'retired' ? 'deprecated' : 'normal')],
+        'skos:inScheme': [statement(schemeId, membershipRank)],
+      });
+    },
+    async reviewedCandidates(id, query) {
+      const key = `${id}\0${query.property}\0${query.target}`;
+      associations.set(key, (associations.get(key) ?? 0) + 1);
+      return { candidates: [], next: null } as unknown as ReviewedCandidatePage;
+    },
+  });
+  const lookup = (signal: AbortSignal, externalId = String(runRecord.id)) =>
+    adapter.lookup.resolve({
+      owner: { source: 'bangumi', external_id: externalId },
+      conversion,
+      signal,
+    });
+  const idsFor = () => literals.map((value) => adapter.bindingFor(value)?.id);
+  const refs = () =>
+    Object.fromEntries(literals.map((value, index) => [bangumiGameSourceGenreReference(value), ids[index]]));
+  const expectReads = (count: number) => expect([...reads.values()]).toEqual(Array(4).fill(count));
+
+  const currentSignal = new AbortController().signal;
+  const firstCurrent = await lookup(currentSignal);
+  expect(await lookup(currentSignal, '91046')).toEqual(firstCurrent);
+  expect(firstCurrent).toEqual(refs());
+  expect(idsFor()).toEqual(ids);
+  expectReads(1);
+
+  state = 'retired';
+  const retiredSignal = new AbortController().signal;
+  const retired = await lookup(retiredSignal);
+  expect(await lookup(retiredSignal, '91046')).toEqual(retired);
+  expect(retired).toEqual({ [bangumiGameSourceGenreReference(literals[2]!)]: ids[2] });
+  expect(idsFor()).toEqual([undefined, undefined, ids[2]]);
+  expectReads(2);
+  expect([...associations.values()]).toEqual([1]);
+
+  state = 'current';
+  const restored = await lookup(new AbortController().signal);
+  expect(restored).toEqual(refs());
+  expect(idsFor()).toEqual(ids);
+  expectReads(3);
+
+  state = 'unavailable';
+  const unavailableSignal = new AbortController().signal;
+  const unavailable = await lookup(unavailableSignal);
+  expect(await lookup(unavailableSignal, '91046')).toEqual(unavailable);
+  expect(unavailable).toEqual({
+    status: 'unavailable',
+    preserveProperties: ['schema:genre'],
+    resolvedReferences: Object.fromEntries(
+      literals.slice(1).map((value, index) => [bangumiGameSourceGenreReference(value), ids[index + 1]]),
+    ),
+  });
+  expect(idsFor()).toEqual([undefined, ids[1], ids[2]]);
+  expectReads(4);
+
+  state = 'current';
+  expect(await lookup(new AbortController().signal)).toEqual(restored);
+  expect(adapter.bindingFor(literal)?.id).toBe(ids[0]);
+  expect(adapter.diagnostics()).toEqual([]);
+  expectReads(5);
 });
