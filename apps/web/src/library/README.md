@@ -426,8 +426,9 @@ Decision: put the ordered occurrence canvas before secondary metadata and presen
 and pair publication candidates with an explicit review and confirmation; preserve the existing writers and lifetimes.
 The current page alone supplies selection and positions. Repeated Subjects keep separate occurrence IDs and notes.
 Transfer tools are a labelled disclosure; the captured source/destination, revisions, exact anchor and every selected
-occurrence stay visible in review. Recovery keeps independent source and destination observations and immutable retries.
-Metadata, optional presentation and visibility/history remain in the same local draft. Creating a Collection first
+occurrence stay visible in review. Cancel opens the tools before returning focus to the destination heading, even if
+the tools were collapsed during review. Recovery keeps independent source and destination observations and immutable
+retries. Members/Details links reach both workbench regions without paging through a long phone canvas. Metadata, optional presentation and visibility/history remain in the same local draft. Creating a Collection first
 requires title and visibility; its members are added through the existing owner journey. Saving never publishes.
 
 The design reads were this README, [placement journey](collection-placement-journey.md), the editor, transfer,

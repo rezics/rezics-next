@@ -187,6 +187,24 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     });
     await settle(() => {});
     await begin();
+    const memberCanvas = host.querySelector('[data-collection-member-canvas]')!;
+    const secondary = host.querySelector('[data-collection-authoring-details]')!;
+    expect(memberCanvas.compareDocumentPosition(secondary) & window.Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(host.querySelector<HTMLDetailsElement>('[data-collection-details]')!.open).toBe(false);
+    const commandCount =
+      update.mock.calls.length + move.mock.calls.length + remove.mock.calls.length + note.mock.calls.length;
+    const selectionButton = (label: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('[data-collection-page-selection] button')].find(
+        (button) => button.textContent === label,
+      )!;
+    await settle(() => selectionButton(m.collection_workbench_select_page()).click());
+    expect([...members.selectedIds!]).toEqual(page.members.map((member) => member.id));
+    expect(unload()).toBe(false);
+    await settle(() => selectionButton(m.collection_workbench_clear_selection()).click());
+    expect(members.selectedIds!.size).toBe(0);
+    expect(update.mock.calls.length + move.mock.calls.length + remove.mock.calls.length + note.mock.calls.length).toBe(
+      commandCount,
+    );
     expect(unload()).toBe(false);
     await settle(() => members.onSelectionChange!(page.members[0]!.id, true));
     expect(unload()).toBe(false);
@@ -204,7 +222,9 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     expect(members.members).toEqual(draft);
     expect(members.selectedIds!.has(page.members[0]!.id)).toBe(true);
     await settle(() => {
-      host.querySelector('a[href]')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+      host
+        .querySelector('[data-collection-members] a[href]')!
+        .dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
     });
     expect(dialog()).not.toBeNull();
     await click(m.library_collection_draft_navigation_stay());

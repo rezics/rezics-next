@@ -10,7 +10,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
-import type { DragEvent, FormEvent, ReactNode } from 'react';
+import { useEffect, useState, type DragEvent, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
@@ -48,6 +48,12 @@ export function CollectionMetadataEditor({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   children: ReactNode;
 }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const invalidText =
+    textSubmitted && (!!collectionTextIssue('title', title) || !!collectionTextIssue('description', description));
+  useEffect(() => {
+    if (invalidText) setDetailsOpen(true);
+  }, [invalidText]);
   return (
     <form
       noValidate
@@ -57,11 +63,8 @@ export function CollectionMetadataEditor({
     >
       <details
         data-collection-details
-        open={
-          textSubmitted && (!!collectionTextIssue('title', title) || !!collectionTextIssue('description', description))
-            ? true
-            : undefined
-        }
+        open={detailsOpen || invalidText}
+        onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
       >
         <summary className="min-h-11 cursor-pointer rounded-lg py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           {m.library_collection_details()}
@@ -271,7 +274,7 @@ export function CollectionMemberList({
         return (
           <ListRow
             key={member.id}
-            className={`grid min-w-0 items-start gap-x-3 gap-y-2 py-3 ${columns} ${editing ? 'rounded-xl border border-border px-3 transition-colors' : ''} ${editing && selectedIds.has(member.id) ? 'border-primary/50 bg-primary/5' : ''}`}
+            className={`grid min-w-0 items-start gap-x-3 gap-y-2 ${columns} ${editing ? 'rounded-xl border border-border px-3 py-3 transition-colors' : 'py-2'} ${editing && selectedIds.has(member.id) ? 'border-primary/50 bg-primary/5' : ''}`}
             data-member={member.id}
             data-member-selected={editing && selectedIds.has(member.id) ? '' : undefined}
             onDragOver={editing && !busy ? (event) => event.preventDefault() : undefined}
@@ -298,11 +301,9 @@ export function CollectionMemberList({
           >
             {editing ? (
               <ListRowControl data-content-item-slot="trailing" className="flex flex-col items-center gap-2">
-                <span
-                  className="inline-flex min-h-7 min-w-7 items-center justify-center rounded-md bg-muted px-1.5 text-xs font-medium tabular-nums"
-                  aria-label={m.collection_workbench_page_position({ position: index + 1 })}
-                >
-                  {new Intl.NumberFormat(getLocale()).format(index + 1)}
+                <span className="inline-flex min-h-7 min-w-7 items-center justify-center rounded-md bg-muted px-1.5 text-xs font-medium tabular-nums">
+                  <span className="sr-only">{m.collection_workbench_page_position({ position: index + 1 })}</span>
+                  <span aria-hidden="true">{new Intl.NumberFormat(getLocale()).format(index + 1)}</span>
                 </span>
                 <span
                   aria-hidden="true"

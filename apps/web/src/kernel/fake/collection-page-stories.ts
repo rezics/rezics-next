@@ -20,6 +20,8 @@ export type CollectionStoryMode =
   | 'one-page'
   | 'many-pages'
   | 'notes-duplicates'
+  | 'transfer-review'
+  | 'transfer-destination-unavailable'
   | 'long-notes-sparse'
   | 'deep-page'
   | 'final-page'
@@ -68,6 +70,8 @@ export const collectionLongNotesSparse = {
 } as const;
 
 export const collectionStoryDestinationId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7bd0';
+export const collectionStoryAnchorId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7bd1';
+let destinationMembersUnavailable = false;
 let destinationRevision = 3;
 let destinationMembers: typeof collectionStoryMembers = [];
 
@@ -82,8 +86,9 @@ const importedCover: NonNullable<CollectionPresentationData['cover']> = {
   ),
 };
 const baseCollection: Omit<typeof collection.collection, keyof CollectionPresentationData> &
-  CollectionPresentationData = {
+  CollectionPresentationData & { membershipKind: 'curated' } = {
   ...clone(collection.collection),
+  membershipKind: 'curated',
   presentationKindSource: 'mixed',
 };
 let editedCollection: typeof baseCollection & CollectionPresentationData & { coverMediaId?: string | null } =
@@ -116,6 +121,7 @@ export function setCollectionStoryMode(next: CollectionStoryMode, editor = false
   editorNavigation = editor;
   destinationRevision = 3;
   destinationMembers = [];
+  destinationMembersUnavailable = false;
   editedCollection = clone(baseCollection);
   editedMembers = clone(members);
   boundaryUnknownSent = false;
@@ -128,13 +134,19 @@ export function setCollectionStoryMode(next: CollectionStoryMode, editor = false
     editedMembers = editedMembers.slice(0, 1);
     editedCollection.memberCount = 1;
   }
-  if (next === 'notes-duplicates' || next.startsWith('boundary-')) {
+  if (next === 'notes-duplicates' || next.startsWith('boundary-') || next.startsWith('transfer-')) {
     editedMembers.splice(1, 0, {
       ...clone(members[0]!),
       id: '01a17a3b-6e78-73b5-9efd-f4cc070cc9e1',
       note: 'A second occurrence with its own note.',
     });
     editedCollection.memberCount = 5;
+  }
+  if (next.startsWith('transfer-')) {
+    destinationMembers = members.slice(1, 3).map((member, index) => ({
+      ...clone(member),
+      id: index === 0 ? collectionStoryAnchorId : '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7bd2',
+    }));
   }
   if (next === 'long-notes-sparse') {
     editedMembers = sparseVisibleMembers();
@@ -275,12 +287,16 @@ export const routes: FakeRoute[] = [
   {
     method: 'GET',
     path: new RegExp(`^/v1/collections/${collectionStoryDestinationId}(/members)?$`),
-    story: ({ request, match }) =>
-      !request.headers.has('authorization')
-        ? { status: 404, code: 'not_found' }
-        : match?.[1]
-          ? { status: 200, members: clone(destinationMembers), next: null }
-          : { status: 200, collection: destinationCollection() },
+    story: ({ request, match }) => {
+      if (!request.headers.has('authorization')) return { status: 404, code: 'not_found' };
+      if (!match?.[1]) return { status: 200, collection: destinationCollection() };
+      // A committed transfer can be observed independently from a failed destination member read.
+      if (destinationMembersUnavailable) {
+        destinationMembersUnavailable = false;
+        return { status: 503, code: 'dependency_unavailable' };
+      }
+      return { status: 200, members: clone(destinationMembers), next: null };
+    },
   },
   {
     method: 'POST',
@@ -422,11 +438,12 @@ async function writeBatchStory(request: Request): Promise<KernelRecording> {
   const selected = editedMembers.filter((member) => body.memberIds.includes(member.id));
   if (selected.length !== body.memberIds.length) return { status: 404, code: 'not_found' };
   const moving = /(?::move|\/\$move)$/.test(new URL(request.url).pathname);
+  const anchorIndex = body.after === null ? -1 : destinationMembers.findIndex((member) => member.id === body.after);
   if (
     moving &&
     (body.destinationCollectionId !== collectionStoryDestinationId ||
       body.destinationRevision !== destinationRevision ||
-      body.after !== null)
+      (body.after !== null && anchorIndex < 0))
   )
     return { status: 409, code: 'conflict' };
   const revision = editedCollection.revision + 1;
@@ -448,8 +465,13 @@ async function writeBatchStory(request: Request): Promise<KernelRecording> {
   editedCollection.memberCount -= selected.length;
   let response: KernelRecording;
   if (moving) {
-    destinationMembers = [...clone(selected), ...destinationMembers];
+    destinationMembers = [
+      ...destinationMembers.slice(0, anchorIndex + 1),
+      ...clone(selected),
+      ...destinationMembers.slice(anchorIndex + 1),
+    ];
     destinationRevision += 1;
+    destinationMembersUnavailable = mode === 'transfer-destination-unavailable';
     response = {
       status: 200,
       source: collectionResponse(request).collection,

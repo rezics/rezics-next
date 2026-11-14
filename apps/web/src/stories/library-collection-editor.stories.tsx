@@ -8,6 +8,7 @@ import { CollectionFilters } from '../library/collection-filters';
 import {
   completePendingCollectionSave,
   collectionStoryDestinationId,
+  collectionStoryAnchorId,
   setCollectionStoryMode,
   type CollectionStoryMode,
 } from '../kernel/fake/collection-page-stories';
@@ -22,7 +23,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The actual owner editor: Edit enters a local draft, keyboard buttons and drag handles reorder only loaded occurrences, Save sends current native commands, and Cancel discards the draft. Move to start/end are immediate native boundary commands after saving or canceling drafts; an uncertain result retains the same request for retry. Writes are independently receipted. Existing imported cover and exact Type choices use the current native metadata command. Selected removal and cross-Collection transfer use the delivered native atomic commands on Save; built-in dynamic rules remain immutable.',
+          'The actual owner workbench puts loaded occurrences before optional metadata and presentation. Keyboard buttons and drag handles reorder exact occurrences, Save sends the existing commands, and Cancel discards local changes. SelectedMove reviews two occurrences of the same work and an exact destination anchor; DestinationRecovery keeps the confirmed source independent from a failed destination read. Publication still requires its own explicit confirmation. Story data is synthetic and does not establish native or browser acceptance.',
       },
     },
   },
@@ -78,7 +79,8 @@ async function openEditor(canvasElement: HTMLElement, details = true) {
   const edit = menu.getByText(m.library_collection_edit(), { exact: true });
   await userEvent.click(edit);
   await canvas.findByRole('button', { name: m.library_collection_save() });
-  if (details) await userEvent.click(canvas.getByText(m.library_collection_details(), { selector: 'summary' }));
+  const metadata = canvasElement.querySelector<HTMLDetailsElement>('[data-collection-details]')!;
+  if (details && !metadata.open) await userEvent.click(metadata.querySelector('summary')!);
   if (details) await canvas.findByRole('textbox', { name: m.library_collection_title() });
   return canvas;
 }
@@ -122,6 +124,45 @@ async function openNote(row: HTMLElement) {
   if (!details.open) await userEvent.click(details.querySelector('summary')!);
 }
 
+async function openPresentation(canvasElement: HTMLElement) {
+  const settings = canvasElement.querySelector<HTMLDetailsElement>('[data-collection-presentation-settings]')!;
+  if (!settings.open) await userEvent.click(settings.querySelector('summary')!);
+}
+
+async function reviewDuplicateTransfer(canvasElement: HTMLElement) {
+  const canvas = await openEditor(canvasElement, false);
+  const rows = Array.from(canvasElement.querySelectorAll<HTMLElement>('[data-collection-members] [data-member]'));
+  const occurrences = rows.slice(0, 2).map((row) => row.dataset.member!);
+  await userEvent.click(within(rows[0]!).getByRole('checkbox'));
+  await userEvent.click(within(rows[1]!).getByRole('checkbox'));
+  const tools = canvasElement.querySelector<HTMLDetailsElement>('[data-collection-transfer-tools]')!;
+  await userEvent.click(tools.querySelector('summary')!);
+  await userEvent.click(await canvas.findByRole('button', { name: 'Weekend reading', exact: true }));
+  const anchor = await waitFor(() => {
+    const control = canvasElement.querySelector<HTMLButtonElement>(`[data-move-anchor="${collectionStoryAnchorId}"]`);
+    expect(control).toBeEnabled();
+    return control!;
+  });
+  await userEvent.click(anchor);
+  const review = canvas.getByRole('button', { name: m.library_collection_move_review_button() });
+  await expect(review).toBeEnabled();
+  await userEvent.click(review);
+  const panel = canvasElement.querySelector<HTMLElement>('[data-collection-transfer-review]')!;
+  await expect(panel).toBeVisible();
+  const reviewed = within(panel);
+  await expect(reviewed.getAllByText('Snow Country', { exact: true })).toHaveLength(2);
+  await expect(
+    Array.from(panel.querySelectorAll('[data-transfer-occurrence]')).map((row) =>
+      row.getAttribute('data-transfer-occurrence'),
+    ),
+  ).toEqual(occurrences);
+  await expect(reviewed.getByText(collectionStoryAnchorId)).toBeVisible();
+  await expect(reviewed.getByText(m.library_collection_move_review_revision({ revision: 3 }))).toBeVisible();
+  await expect(reviewed.getByText(m.library_collection_move_atomic())).toBeVisible();
+  await expect(canvas.getByRole('button', { name: m.library_collection_save() })).toBeDisabled();
+  return { canvas, reviewed };
+}
+
 export const OwnerEdit: Story = {
   name: 'Owner edit from browse route',
   parameters: { layout: 'fullscreen' },
@@ -162,6 +203,14 @@ export const Members: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement, false);
     await expect(canvas.getAllByRole('checkbox')).toHaveLength(4);
+    const members = canvasElement.querySelector('[data-collection-member-canvas]')!;
+    const metadata = canvasElement.querySelector('[data-collection-authoring-details]')!;
+    await expect(members.compareDocumentPosition(metadata) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(canvasElement.querySelector('[data-collection-details]')).not.toHaveAttribute('open');
+    await userEvent.click(canvas.getByRole('button', { name: m.collection_workbench_select_page() }));
+    for (const checkbox of canvas.getAllByRole('checkbox')) await expect(checkbox).toBeChecked();
+    await userEvent.click(canvas.getByRole('button', { name: m.collection_workbench_clear_selection() }));
+    for (const checkbox of canvas.getAllByRole('checkbox')) await expect(checkbox).not.toBeChecked();
     for (const row of canvasElement.querySelectorAll<HTMLElement>('[data-collection-members] [data-member]')) {
       await openNote(row);
       const label = within(row).getByText(m.library_member_note(), { selector: 'label', exact: true });
@@ -341,6 +390,7 @@ export const Presentation: Story = {
   render: () => renderEditor('presentation'),
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
+    await openPresentation(canvasElement);
     const kind = canvas.getByRole('combobox', { name: m.library_collection_kind() });
     await expect(kind).toHaveValue('schema:Book');
     await userEvent.selectOptions(kind, '');
@@ -348,6 +398,7 @@ export const Presentation: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
     await openEditor(canvasElement);
+    await openPresentation(canvasElement);
     await expect(canvas.getByRole('combobox', { name: m.library_collection_kind() })).toHaveValue('');
     await expect(canvas.getByRole('combobox', { name: m.subject_cover() })).toHaveValue('');
     await expect(canvas.getByText(m.library_collection_kind_pending())).toBeVisible();
@@ -392,7 +443,9 @@ export const SelectionUnavailable: Story = {
     await expect(await canvas.findByRole('alert')).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.library_collection_remove_selected() })).toBeDisabled();
     await expect(canvas.getByText(m.library_collection_batch_unavailable())).toBeVisible();
-    await expect(canvas.getByText(m.library_collection_move_unavailable())).toBeVisible();
+    const tools = canvasElement.querySelector<HTMLDetailsElement>('[data-collection-transfer-tools]')!;
+    await userEvent.click(tools.querySelector('summary')!);
+    await expect(canvas.getByRole('button', { name: m.library_collection_move_review_button() })).toBeDisabled();
   },
 };
 
@@ -421,25 +474,36 @@ export const SelectedRemoval: Story = {
 };
 
 export const SelectedMove: Story = {
-  render: () => renderEditor(),
+  name: 'Duplicate-preserving transfer review',
+  render: () => renderEditor('transfer-review'),
   play: async ({ canvasElement }) => {
-    const canvas = await openEditor(canvasElement);
-    await userEvent.click(canvas.getAllByRole('checkbox')[0]!);
-    await userEvent.click(canvas.getAllByRole('checkbox')[1]!);
-    const target = canvas.getByRole('combobox', { name: m.library_collection_move_destination() });
-    await canvas.findByRole('option', { name: 'Weekend reading' });
-    await userEvent.selectOptions(target, collectionStoryDestinationId);
-    const move = canvas.getByRole('button', { name: m.library_collection_move_selected() });
-    await waitFor(() => expect(move).toBeEnabled());
-    await userEvent.click(move);
+    const { reviewed } = await reviewDuplicateTransfer(canvasElement);
+    await expect(reviewed.getByRole('button', { name: m.library_collection_move_confirm() })).toBeEnabled();
+    await expect(reviewed.getByRole('link', { name: 'Weekend reading' })).toHaveAttribute(
+      'href',
+      expect.stringContaining(collectionStoryDestinationId),
+    );
+  },
+};
+
+export const DestinationRecovery: Story = {
+  name: 'Confirmed transfer with destination recovery',
+  render: () => renderEditor('transfer-destination-unavailable'),
+  play: async ({ canvasElement }) => {
+    const { canvas, reviewed } = await reviewDuplicateTransfer(canvasElement);
+    await userEvent.click(reviewed.getByRole('button', { name: m.library_collection_move_confirm() }));
+    await expect(await canvas.findByText(m.library_collection_move_receipt_source_ready())).toBeVisible();
+    await expect(canvas.getByText(m.library_collection_move_receipt_destination_header())).toBeVisible();
+    await expect(canvas.getByText(m.library_collection_move_receipt_members_unavailable())).toBeVisible();
+    const members = within(canvasElement.querySelector<HTMLElement>('[data-collection-members]')!);
+    await expect(members.queryByRole('link', { name: 'Snow Country', exact: true })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_move_read_current() }));
+    await expect(await canvas.findByText(m.library_collection_move_reconciled())).toBeVisible();
+    await expect(canvas.getByText(m.library_collection_move_receipt_destination_ready())).toBeVisible();
+    await expect(canvas.queryByText(m.library_collection_move_receipt_members_unavailable())).toBeNull();
     await expect(
-      canvas.getByText(m.library_collection_move_pending({ count: 2, title: 'Weekend reading' })),
-    ).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
-    await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
-    await expect(canvas.queryByText('Snow Country', { exact: true })).toBeNull();
-    await openEditor(canvasElement);
-    await expect(canvas.getAllByRole('checkbox')).toHaveLength(2);
+      canvas.getByRole('link', { name: m.library_collection_move_destination_link({ title: 'Weekend reading' }) }),
+    ).toHaveAttribute('href', expect.stringContaining(collectionStoryDestinationId));
   },
 };
 

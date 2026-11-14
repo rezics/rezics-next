@@ -499,6 +499,7 @@ function CollectionPageLifetime({
   const [moveChoice, setMoveChoice] = useState<CollectionMoveChoice | null>(null);
   const [transfer, setTransfer] = useState<CollectionTransferReview | null>(null);
   const [chooserEpoch, setChooserEpoch] = useState(0);
+  const [transferToolsOpen, setTransferToolsOpen] = useState(false);
   const [transferState, setTransferState] = useState<CollectionTransferReviewState>(null);
   const [transferReceipt, setTransferReceipt] = useState<CollectionTransferReceipt | null>(null);
   const transferReceiptHeading = useRef<HTMLHeadingElement>(null);
@@ -2062,6 +2063,20 @@ function CollectionPageLifetime({
           <section className="min-w-0 space-y-2 border-b border-border pb-4" data-collection-authoring-heading>
             <h2 className="text-xl font-semibold tracking-tight">{m.collection_workbench_heading()}</h2>
             <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.collection_workbench_help()}</p>
+            <nav className="flex flex-wrap gap-2" aria-label={m.collection_workbench_heading()}>
+              <a
+                className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                href="#collection-member-canvas-heading"
+              >
+                {m.library_collection_members()}
+              </a>
+              <a
+                className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                href="#collection-edit-details"
+              >
+                {m.library_collection_details()}
+              </a>
+            </nav>
           </section>
         ) : null}
         <div
@@ -2073,7 +2088,11 @@ function CollectionPageLifetime({
           data-collection-workbench={editing && ownerCurrent ? '' : undefined}
         >
           <section className="min-w-0" aria-labelledby="collection-member-canvas-heading" data-collection-member-canvas>
-            <h2 id="collection-member-canvas-heading" className={editing ? 'mb-2 text-lg font-semibold' : 'sr-only'}>
+            <h2
+              id="collection-member-canvas-heading"
+              tabIndex={editing ? -1 : undefined}
+              className={editing ? 'mb-2 scroll-mt-4 text-lg font-semibold' : 'sr-only'}
+            >
               {m.library_collection_members()}
             </h2>
             {editing ? (
@@ -2132,6 +2151,7 @@ function CollectionPageLifetime({
                 <Button
                   type="button"
                   variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere]"
                   disabled={
                     pending || draftFrozen || conflict || bulkUnavailable || selectedIds.size === 0 || transfer !== null
                   }
@@ -2153,6 +2173,7 @@ function CollectionPageLifetime({
                 <Button
                   type="button"
                   variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere]"
                   disabled={
                     pending ||
                     draftFrozen ||
@@ -2171,6 +2192,8 @@ function CollectionPageLifetime({
                 <details
                   className="min-w-0 basis-full rounded-lg border border-border bg-card p-3"
                   data-collection-transfer-tools
+                  open={transferToolsOpen}
+                  onToggle={(event) => setTransferToolsOpen(event.currentTarget.open)}
                 >
                   <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                     {m.library_collection_move_selected()}
@@ -2264,6 +2287,7 @@ function CollectionPageLifetime({
                       setTransfer(null);
                       setTransferState(null);
                       setMoveChoice(null);
+                      setTransferToolsOpen(true);
                       setChooserEpoch((value) => value + 1);
                       setFailure('');
                     }}
@@ -2422,7 +2446,9 @@ function CollectionPageLifetime({
           </section>
           {editing && ownerCurrent ? (
             <aside
-              className="min-w-0 space-y-4"
+              id="collection-edit-details"
+              tabIndex={-1}
+              className="min-w-0 scroll-mt-4 space-y-4"
               aria-label={m.library_collection_details()}
               data-collection-authoring-details
             >

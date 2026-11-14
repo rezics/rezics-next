@@ -96,6 +96,13 @@ export const SelectedNonempty: Story = {
       canvas.getByRole('checkbox', { name: m.library_publication_confirm_one({ count: '1' }) }),
     ).toBeChecked();
     await expect(canvas.getByRole('button', { name: m.library_publication_publish() })).toBeEnabled();
+    const candidates = canvasElement.querySelector('[data-publication-canvas]')!;
+    const decision = canvasElement.querySelector<HTMLElement>('[data-publication-confirmation]')!;
+    await expect(candidates.compareDocumentPosition(decision) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const review = within(decision.querySelector<HTMLElement>('[data-publication-review]')!);
+    await expect(review.getAllByRole('listitem')).toHaveLength(1);
+    await expect(review.getByRole('link')).toHaveTextContent('Snow Country');
+    await expect(canvas.getByText(m.collection_workbench_publication_help())).toBeVisible();
     const details = canvas.getByText(m.library_publication_details()).closest('details')!;
     await expect(details).not.toHaveAttribute('open');
     await expect(canvas.getByText(m.library_publication_canonical())).not.toBeVisible();

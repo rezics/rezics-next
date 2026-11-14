@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   buildCollectionMemberEditPlan,
   CollectionMemberList,
+  CollectionMetadataEditor,
   CollectionSubjectList,
 } from '../src/library/collection-editor';
 import { loadCollectionPage, subjectOf, type CollectionMember } from '../src/library/reads';
@@ -214,5 +215,38 @@ test('contextual row controls retain first, last and later-page boundaries and p
   for (const [index, member] of memberRecording.members.entries()) {
     const context = m.library_member_occurrence({ title: member.subject.label.value, position: index + 1 });
     expect(actionButton(html, `${m.library_collection_actions()}: ${context}`)).toContain('aria-haspopup="menu"');
+  }
+});
+
+test('secondary Collection metadata keeps labelled fields and reveals invalid submitted text in every locale', () => {
+  const previous = getLocale();
+  const props = {
+    title: 'A local draft',
+    description: 'Description',
+    disabled: false,
+    children: null,
+    onTitleChange() {},
+    onDescriptionChange() {},
+    onSubmit() {},
+  };
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const html = renderToStaticMarkup(createElement(CollectionMetadataEditor, props));
+      expect(html).toContain('for="collection-edit-title"');
+      expect(html).toContain('id="collection-edit-title"');
+      expect(html).toContain('for="collection-edit-description"');
+      expect(html).toContain('id="collection-edit-description"');
+      expect(html).toContain(attributeText(m.library_collection_title()));
+      expect(html.match(/<details\b[^>]*>/)?.[0]).not.toContain('open');
+      const invalid = renderToStaticMarkup(
+        createElement(CollectionMetadataEditor, { ...props, title: '', textSubmitted: true }),
+      );
+      expect(invalid.match(/<details\b[^>]*>/)?.[0]).toContain('open');
+      expect(invalid).toContain('aria-invalid="true"');
+      expect(invalid).toContain(attributeText(m.library_collection_text_input_required()));
+    }
+  } finally {
+    setLocale(previous, { reload: false });
   }
 });

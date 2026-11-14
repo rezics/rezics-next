@@ -992,8 +992,15 @@ test('abandoned transfer review is inert and a capacity refusal keeps review unt
     await settle(() => ui.host.querySelector<HTMLButtonElement>(`[data-move-destination="${destinationId}"]`)!.click());
     await clickNamed(ui, m.library_collection_move_review_button());
     expect(ui.host.querySelector('[data-collection-transfer-review]')).not.toBeNull();
+    await settle(() => {
+      const tools = ui.host.querySelector<HTMLDetailsElement>('[data-collection-transfer-tools]')!;
+      tools.open = false;
+      tools.dispatchEvent(new window.Event('toggle'));
+    });
     await clickNamed(ui, m.library_collection_move_cancel_review());
     expect(ui.host.querySelector('[data-collection-transfer-review]')).toBeNull();
+    expect(ui.host.querySelector<HTMLDetailsElement>('[data-collection-transfer-tools]')!.open).toBe(true);
+    expect(ui.host.ownerDocument.activeElement?.textContent).toBe(m.library_collection_move_destination());
     expect(transfer).not.toHaveBeenCalled();
     await settle(() => ui.host.querySelector<HTMLButtonElement>(`[data-move-destination="${destinationId}"]`)!.click());
     await clickNamed(ui, m.library_collection_move_review_button());

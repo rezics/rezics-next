@@ -53,6 +53,10 @@ test('review keeps duplicate occurrence identities and the captured destination 
         }),
       );
       expect(html).toContain('occ-1-again');
+      expect(html).toMatch(/<code\b[^>]*>occ-1<\/code>/);
+      expect(html).toContain(`href="${review.sourceHref}"`);
+      expect(html).toContain(`href="${review.destinationHref}"`);
+      expect(html).toContain(m.library_collection_move_review_revision({ revision: 7 }));
       expect(html).toContain(m.library_collection_move_review_revision({ revision: 4 }));
       expect(html).toContain(m.library_collection_move_anchor_review({ page: 2, position: 3, title: 'Repeated work' }));
       expect(html).toContain(m.library_collection_move_confirm());
