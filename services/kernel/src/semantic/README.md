@@ -134,6 +134,42 @@ contract, which owns their existing work vectors.
 Definitions' public root owns pure `languageRanges`/`chooseLabel`, including browser exports and stored-tag behavior.
 `semantic/language.ts` remains the native compatibility entry; no general pickText or model change is introduced.
 
+## Library whole-source title inputs
+
+`adapters/title-inputs.ts` exposes `createSemanticTitleInputsAdapter(pool)`, whose `observe({subjects, deadline})`
+returns a whole-source `basis` and at most 100 exact original-key entries. Empty `subjects` returns the same kind of
+basis with no entries. Content composes this observer with its current Access disclosure and Content-owned source
+evidence; Semantic makes no viewer allow decision. A visible original with no labels returns an empty label map. A
+missing, hidden, pending or unsettled subject, identity mapping, home or release returns `unavailable`.
+
+The basis is SHA-256 over the active Global Definitions release digest/head and the ordered native state of all 4,096
+homes: partition number, owner node, epoch, write state, moved owner and commit position. `core.partition.position`
+advances in the native `command/fence.sql` after accepted command writes; title labels, original-language facts,
+Subject revisions, redirects, identity mappings and source ownership are read from their authoritative home state.
+Identity changes that touch another control home are covered by that home in the same complete vector. The basis does
+not depend on requested IDs, and it uses no sampled maximum, process cache or relayed projection. Any incomplete or
+inactive home prevents a current observation.
+
+Each observer takes two complete basis snapshots around its batch. The batch itself reads current identity mappings,
+visible Subject state, labels and `schema:inLanguage` facts in one shared repeatable-read snapshot. It preserves the
+exact original ID while resolving one current terminal; a missing or redirected terminal stays unavailable. The label
+query matches `read-label-choices.sql` for current terms; original-language selection matches the public summary's
+Global Context, adoption, candidate disclosure and lifecycle rules. Entries carry the terminal as `sourceId` and
+`identityEpoch:terminalRevision` as `sourceBasis`; definitions changes and all
+home revisions still retire the outer complete basis. Each per-terminal label map is limited to 8,192 returned bytes,
+and the complete batch to 1 MiB; an oversized map is unavailable rather than a partial label set.
+
+Cost is fixed at two read snapshots per observation, each with one 4,096-home metadata statement and one resolution
+of the active release through the existing native reader (which verifies availability and reads an uncached body).
+Empty observations pay only this fixed cost. A nonempty batch adds one exact partition-metadata statement for at most
+200 original/terminal homes, one title
+statement per such home, and the existing identity reader's two evidence passes over at most 100 source and 100
+control homes. Returned semantic rows are at most 200 Subject states and 100 label maps, bounded to 1 MiB. All
+Semantic snapshots finish before the observer returns and before Library can open its transaction.
+
+Decision: Semantic publishes one native, ID-independent home-position basis and exact one-hop title batches; Content
+continues to own viewer disclosure and composes its own current source evidence.
+
 ## Canonical identity boundary
 
 Subject IDs are permanent and never reused. Global subject:create creates revision 1 with its self mapping in the source transaction; import also needs batch authority. Creation is independent of Search, and compact facts do not create another revision target. subject:merge asserts duplicate identity only, with the optional atomic [reviewed Person evidence](identity-epoch-contract.md#reviewed-person-identity-precondition) precondition. Editions, translations and formats remain distinct subjects linked by relations. Durable completion requires mapping and both fixed participants.
