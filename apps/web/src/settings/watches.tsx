@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
@@ -87,13 +87,27 @@ function OwnedWatches({
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const heading = useRef<HTMLHeadingElement>(null);
+  const pendingStatus = useRef<HTMLParagraphElement>(null);
   const returnStop = useRef<HTMLButtonElement>(null);
+  const retryOriginal = useRef<HTMLButtonElement>(null);
+  const stopButtons = useRef(new Map<string, HTMLButtonElement>());
   const focusMovement = useRef(0);
+  const returnMovement = useRef(0);
+  const ignoredFocus = useRef<EventTarget | null>(null);
+  const continuation = useRef<
+    | { kind: 'window'; movement: number }
+    | { kind: 'stop'; movement: number; subscriptionId: string; index: number }
+    | null
+  >(null);
   useLayoutEffect(controller.mount, [controller]);
   useSettingsDisposal(controller.retire);
   useSettingsNavigationDraft('watches', state.command !== null, controller.needsDecision, controller);
   useEffect(() => {
-    const moved = () => {
+    const moved = (event: FocusEvent) => {
+      if (event.target === ignoredFocus.current) {
+        ignoredFocus.current = null;
+        return;
+      }
       focusMovement.current++;
     };
     document.addEventListener('focusin', moved, true);
@@ -101,18 +115,92 @@ function OwnedWatches({
   }, []);
   useEffect(() => {
     if (controller.snapshot().read !== 'idle') return;
-    if (initialReturn) void controller.returnTo(initialReturn);
-    else void controller.first();
+    if (initialReturn) {
+      returnMovement.current = focusMovement.current;
+      void controller.returnTo(initialReturn);
+    } else void controller.first();
   }, [controller, initialReturn]);
   useLayoutEffect(() => {
     const receipt = state.returnFocus;
     if (!receipt) return;
-    if (receipt.focusRequested && focusMovement.current === 0) {
-      if (receipt.outcome === 'restored') returnStop.current?.focus();
+    if (receipt.focusRequested && focusMovement.current === returnMovement.current && !controller.snapshot().retired) {
+      if (receipt.outcome === 'restored' && returnStop.current && !returnStop.current.disabled)
+        returnStop.current.focus();
       else heading.current?.focus();
     }
     controller.finishReturnFocus();
   }, [controller, state.returnFocus]);
+  const focusRow = (index: number, preferredId?: string) => {
+    const current = controller.snapshot();
+    if (current.retired) return;
+    const rows = current.rows;
+    const preferred = preferredId ? rows.find((row) => row.subscriptionId === preferredId) : undefined;
+    const row = preferred ?? rows[Math.min(index, rows.length - 1)];
+    const button = row ? stopButtons.current.get(row.subscriptionId) : undefined;
+    if (button && !button.disabled) button.focus();
+    else heading.current?.focus();
+  };
+  const focusHeading = () => {
+    if (!controller.snapshot().retired) heading.current?.focus();
+  };
+  const focusPendingStatus = () => {
+    const target = pendingStatus.current;
+    if (!target) return;
+    ignoredFocus.current = target;
+    target.focus();
+    if (ignoredFocus.current === target) ignoredFocus.current = null;
+  };
+  const rememberWindowFocus = (event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail === 0 && document.activeElement === event.currentTarget)
+      continuation.current = { kind: 'window', movement: focusMovement.current };
+  };
+  const rememberStopFocus = (event: MouseEvent<HTMLButtonElement>, subscriptionId: string) => {
+    if (event.detail !== 0 || document.activeElement !== event.currentTarget) return;
+    const rows = controller.snapshot().rows;
+    continuation.current = {
+      kind: 'stop',
+      movement: focusMovement.current,
+      subscriptionId,
+      index: Math.max(
+        0,
+        rows.findIndex((row) => row.subscriptionId === subscriptionId),
+      ),
+    };
+  };
+  useLayoutEffect(() => {
+    const pending = continuation.current;
+    if (!pending) return;
+    if (state.retired || pending.movement !== focusMovement.current) {
+      continuation.current = null;
+      return;
+    }
+    if (pending.kind === 'window') {
+      if (state.read === 'loading') {
+        focusPendingStatus();
+        return;
+      }
+      if (state.read === 'idle') return;
+      continuation.current = null;
+      if (state.read === 'ready') focusRow(0);
+      else focusHeading();
+      return;
+    }
+    if (state.write === 'sending') {
+      focusPendingStatus();
+      return;
+    }
+    continuation.current = null;
+    if (state.write === 'uncertain') {
+      if (controller.canRetryOriginal()) retryOriginal.current?.focus();
+      else focusHeading();
+    } else if (state.write === 'removed_current') {
+      focusRow(pending.index, pending.subscriptionId);
+    } else if (state.write === 'removed') {
+      focusRow(pending.index);
+    } else if (state.rows.some((row) => row.subscriptionId === pending.subscriptionId)) {
+      focusRow(pending.index, pending.subscriptionId);
+    } else focusHeading();
+  }, [controller, focusHeading, focusPendingStatus, focusRow, state]);
   const readWaiting = usePreferenceRetry(undefined, state.readRetryAt);
   const writeWaiting = usePreferenceRetry(undefined, state.writeRetryAt);
   if (state.retired) return null;
@@ -161,7 +249,10 @@ function OwnedWatches({
               variant="outline"
               aria-pressed={state.kind === 'thread'}
               disabled={readWaiting || state.read === 'loading' || state.command !== null || state.write === 'sending'}
-              onClick={() => void controller.selectKind('thread')}
+              onClick={(event) => {
+                if (state.kind !== 'thread') rememberWindowFocus(event);
+                void controller.selectKind('thread');
+              }}
             >
               {m.settings_watches_thread()}
             </Button>
@@ -171,7 +262,10 @@ function OwnedWatches({
               variant="outline"
               aria-pressed={state.kind === 'board'}
               disabled={readWaiting || state.read === 'loading' || state.command !== null || state.write === 'sending'}
-              onClick={() => void controller.selectKind('board')}
+              onClick={(event) => {
+                if (state.kind !== 'board') rememberWindowFocus(event);
+                void controller.selectKind('board');
+              }}
             >
               {m.settings_watches_board()}
             </Button>
@@ -181,7 +275,16 @@ function OwnedWatches({
           ) : state.returnOutcome ? (
             <p role="status">{m.settings_watches_return_missing()}</p>
           ) : null}
-          {state.write === 'sending' ? <p role="status">{m.settings_watches_stopping()}</p> : null}
+          {state.write === 'sending' ? (
+            <p
+              ref={pendingStatus}
+              role="status"
+              tabIndex={-1}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {m.settings_watches_stopping()}
+            </p>
+          ) : null}
           {state.write === 'removed' ? <p role="status">{m.settings_watches_removed()}</p> : null}
           {state.write === 'removed_current' ? <p role="status">{m.settings_watches_removed_current()}</p> : null}
           {state.write === 'rejected' || state.write === 'conflict' || state.write === 'denied' ? (
@@ -211,10 +314,15 @@ function OwnedWatches({
                 </p>
                 {writeWaiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
                 <Button
+                  ref={retryOriginal}
                   className={controlClass}
                   variant="outline"
                   disabled={!controller.canRetryOriginal()}
-                  onClick={() => void controller.retryOriginal()}
+                  onClick={(event) => {
+                    const command = state.command;
+                    if (command) rememberStopFocus(event, command.watchId);
+                    void controller.retryOriginal();
+                  }}
                 >
                   {m.settings_watches_retry_original()}
                 </Button>
@@ -225,7 +333,13 @@ function OwnedWatches({
             <p role="status">{m.settings_retry_wait()}</p>
           ) : null}
           {reading ? (
-            <p role="status" aria-busy="true">
+            <p
+              ref={pendingStatus}
+              role="status"
+              aria-busy="true"
+              tabIndex={-1}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               {m.settings_watches_loading()}
             </p>
           ) : null}
@@ -246,7 +360,10 @@ function OwnedWatches({
                     className={controlClass}
                     variant="outline"
                     disabled={readWaiting}
-                    onClick={() => void controller.first()}
+                    onClick={(event) => {
+                      rememberWindowFocus(event);
+                      void controller.first();
+                    }}
                   >
                     {m.settings_watches_restart()}
                   </Button>
@@ -255,7 +372,10 @@ function OwnedWatches({
                     className={controlClass}
                     variant="outline"
                     disabled={readWaiting}
-                    onClick={() => void controller.refresh()}
+                    onClick={(event) => {
+                      rememberWindowFocus(event);
+                      void controller.refresh();
+                    }}
                   >
                     {m.settings_retry()}
                   </Button>
@@ -332,18 +452,24 @@ function OwnedWatches({
                           )}
                         </div>
                         <Button
-                          ref={
-                            state.returnFocus?.outcome === 'restored' &&
-                            state.returnFocus.identity.subscriptionId === row.subscriptionId &&
-                            state.returnFocus.identity.kind === row.kind &&
-                            state.returnFocus.identity.revision === row.revision
-                              ? returnStop
-                              : undefined
-                          }
+                          ref={(button) => {
+                            if (button) stopButtons.current.set(row.subscriptionId, button);
+                            else stopButtons.current.delete(row.subscriptionId);
+                            if (
+                              state.returnFocus?.outcome === 'restored' &&
+                              state.returnFocus.identity.subscriptionId === row.subscriptionId &&
+                              state.returnFocus.identity.kind === row.kind &&
+                              state.returnFocus.identity.revision === row.revision
+                            )
+                              returnStop.current = button;
+                          }}
                           className={controlClass}
                           variant="outline"
                           disabled={disabled}
-                          onClick={() => void controller.stop(row.subscriptionId)}
+                          onClick={(event) => {
+                            rememberStopFocus(event, row.subscriptionId);
+                            void controller.stop(row.subscriptionId);
+                          }}
                         >
                           {m.settings_watches_stop()}
                         </Button>
@@ -357,7 +483,10 @@ function OwnedWatches({
                   className={controlClass}
                   variant="outline"
                   disabled={readWaiting}
-                  onClick={() => void controller.refresh()}
+                  onClick={(event) => {
+                    rememberWindowFocus(event);
+                    void controller.refresh();
+                  }}
                 >
                   {m.settings_watches_refresh()}
                 </Button>
@@ -366,7 +495,10 @@ function OwnedWatches({
                     className={controlClass}
                     variant="outline"
                     disabled={readWaiting}
-                    onClick={() => void controller.previous()}
+                    onClick={(event) => {
+                      rememberWindowFocus(event);
+                      void controller.previous();
+                    }}
                   >
                     {m.settings_watches_previous()}
                   </Button>
@@ -376,7 +508,10 @@ function OwnedWatches({
                     className={controlClass}
                     variant="outline"
                     disabled={readWaiting}
-                    onClick={() => void controller.next()}
+                    onClick={(event) => {
+                      rememberWindowFocus(event);
+                      void controller.next();
+                    }}
                   >
                     {m.settings_watches_next()}
                   </Button>
@@ -386,7 +521,10 @@ function OwnedWatches({
                     className={controlClass}
                     variant="outline"
                     disabled={readWaiting}
-                    onClick={() => void controller.first()}
+                    onClick={(event) => {
+                      rememberWindowFocus(event);
+                      void controller.first();
+                    }}
                   >
                     {m.settings_watches_first()}
                   </Button>

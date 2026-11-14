@@ -260,6 +260,116 @@ test('the mounted private view separates inaccessible targets, uncertain removal
   }
 });
 
+test('keyboard removal and window actions continue focus through exact retry and empty pages', async () => {
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
+  const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
+  const releaseOwner = owner.mount();
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const watch = (subscriptionId: string): ManagedWatch => ({
+    subscriptionId,
+    kind: 'thread',
+    revision: 1,
+    createdAt: '2026-11-03T10:00:00.000Z',
+    command: { watchId: subscriptionId, kind: 'thread', expectedRevision: 1 },
+    remove: 'available',
+    target: { title: subscriptionId, href: `/threads/${subscriptionId}` },
+  });
+  const middle = watch('middle');
+  const last = watch('last');
+  const first = watch('first');
+  let serverRows: ManagedWatch[] = [first, middle, last];
+  const attempts: Parameters<WatchManagementIO['stop']>[0][] = [];
+  let finishUnknown!: (result: Awaited<ReturnType<WatchManagementIO['stop']>>) => void;
+  const unknown = new Promise<Awaited<ReturnType<WatchManagementIO['stop']>>>((resolve) => {
+    finishUnknown = resolve;
+  });
+  const io: WatchManagementIO = {
+    read: async ({ cursor, kind }) => ({
+      kind: 'page',
+      page: {
+        viewer: { state: 'current', accountId: 'alice' },
+        actions: { remove: 'available' },
+        watches: kind === 'thread' && cursor === null ? serverRows : [],
+        next: kind === 'thread' && cursor === null && serverRows.length > 0 ? 'later' : null,
+      },
+    }),
+    stop: async (intent) => {
+      attempts.push(intent);
+      if (
+        intent.watchId === first.subscriptionId &&
+        attempts.filter((item) => item.watchId === intent.watchId).length === 1
+      )
+        return unknown;
+      serverRows = serverRows.filter((row) => row.subscriptionId !== intent.watchId);
+      return { kind: 'removed' };
+    },
+  };
+  const button = (label: string, index = 0) => {
+    const matches = [...host.querySelectorAll('button')].filter((item) => item.textContent === label);
+    expect(matches[index]).toBeDefined();
+    return matches[index]!;
+  };
+  const keyboard = async (target: HTMLButtonElement) =>
+    act(async () => {
+      target.focus();
+      target.click();
+    });
+  const outside = window.document.createElement('button');
+  outside.textContent = 'Outside watches';
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <SettingsSessionContext.Provider value={owner}>
+            <WatchesSection io={io} />
+          </SettingsSessionContext.Provider>
+        </QueryClientProvider>,
+      ),
+    );
+    await keyboard(button(m.settings_watches_board()));
+    expect(host.textContent).toContain(m.settings_watches_empty());
+    expect(window.document.activeElement).toBe(host.querySelector('h2'));
+    await keyboard(button(m.settings_watches_thread()));
+    expect(window.document.activeElement).toBe(button(m.settings_watches_stop()));
+    await keyboard(button(m.settings_watches_stop(), 1));
+    expect(window.document.activeElement).toBe(button(m.settings_watches_stop(), 1));
+    await keyboard(button(m.settings_watches_stop(), 1));
+    expect(window.document.activeElement).toBe(button(m.settings_watches_stop()));
+    await keyboard(button(m.settings_watches_next()));
+    expect(host.textContent).toContain(m.settings_watches_end());
+    expect(window.document.activeElement).toBe(host.querySelector('h2'));
+    await keyboard(button(m.settings_watches_previous()));
+    expect(window.document.activeElement).toBe(button(m.settings_watches_stop()));
+
+    window.document.body.append(outside);
+    await act(async () => {
+      button(m.settings_watches_stop()).focus();
+      button(m.settings_watches_stop()).click();
+    });
+    await act(async () => {
+      outside.focus();
+      finishUnknown({ kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } });
+      await unknown;
+    });
+    expect(window.document.activeElement).toBe(outside);
+    await keyboard(button(m.settings_watches_refresh()));
+    expect(window.document.activeElement).toBe(button(m.settings_watches_stop()));
+    await keyboard(button(m.settings_watches_retry_original()));
+    expect(attempts[2]).toBe(attempts[3]);
+    expect(host.textContent).toContain(m.settings_watches_empty());
+    expect(window.document.activeElement).toBe(host.querySelector('h2'));
+  } finally {
+    await act(async () => root.unmount());
+    releaseOwner();
+    outside.remove();
+    host.remove();
+    client.clear();
+  }
+});
+
 test('a disclosed later-page visit returns to its exact current window without scanning', async () => {
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
@@ -358,7 +468,10 @@ test('a disclosed later-page visit returns to its exact current window without s
     });
   };
   const visitAndReturn = async (label: string) => {
-    await act(async () => link(label).click());
+    await act(async () => {
+      link(label).focus();
+      link(label).click();
+    });
     expect(host.textContent).toContain('Thread target');
     await act(async () => back());
     await waitForWatchHeading();
@@ -400,6 +513,7 @@ test('a disclosed later-page visit returns to its exact current window without s
     expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeUndefined();
 
     expect(host.textContent).toContain(m.settings_watches_returned());
+    expect(window.document.activeElement).toBe(button(m.settings_watches_stop()));
     expect(requests.at(-1)).toEqual({ kind: 'thread', cursor: 'later-window' });
     expect(button(m.settings_watches_previous())).toBeTruthy();
     expect(link('Later thread')).toBeTruthy();
@@ -411,12 +525,14 @@ test('a disclosed later-page visit returns to its exact current window without s
     laterRows = [watch('concealed-on-return', 8, null), absentOnReturn];
     await visitAndReturn('Second target');
     expect(host.textContent).toContain(m.settings_watches_return_missing());
+    expect(window.document.activeElement).toBe(host.querySelector('h2'));
     expect(link('Third target')).toBeTruthy();
     expect([...host.querySelectorAll('a')].some((item) => item.textContent === 'Second target')).toBe(false);
 
     laterRows = [];
     await visitAndReturn('Third target');
     expect(host.textContent).toContain(m.settings_watches_return_missing());
+    expect(window.document.activeElement).toBe(host.querySelector('h2'));
     expect(host.querySelectorAll('a')).toHaveLength(0);
     expect(requests.slice(-2)).toEqual([
       { kind: 'thread', cursor: 'later-window' },
@@ -475,12 +591,21 @@ test('uncertain removal stays with the original viewer; replacement clears it be
     );
     const stop = [...host.querySelectorAll('button')].find((item) => item.textContent === m.settings_watches_stop());
     expect(stop).toBeDefined();
-    await act(async () => stop!.click());
+    await act(async () => {
+      stop!.focus();
+      stop!.click();
+    });
     expect(host.textContent).toContain(m.settings_watches_uncertain_text());
+    const retry = [...host.querySelectorAll('button')].find(
+      (item) => item.textContent === m.settings_watches_retry_original(),
+    );
+    expect(retry).toBeDefined();
+    expect(window.document.activeElement).toBe(retry);
     await act(async () =>
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'bob' }),
     );
     expect(host.textContent).toBe('');
+    expect(host.contains(window.document.activeElement)).toBe(false);
     expect(writes).toBe(1);
   } finally {
     await act(async () => root.unmount());

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { readSettingsPage } from '../settings/actions';
 import type { SettingsPage } from '../settings/preferences';
@@ -11,7 +11,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
-type View = 'populated' | 'inaccessible' | 'failed' | 'uncertain' | 'returned' | 'keyboard-returned';
+type View = 'populated' | 'inaccessible' | 'failed' | 'uncertain' | 'returned' | 'keyboard-returned' | 'continuation';
 const meta = {
   title: 'Account/Settings watches',
   id: 'pages-account-settings-watches',
@@ -41,6 +41,7 @@ function previewWatch(
 /** Connected fixtures illustrate Settings watch states without claiming native or rendered acceptance. */
 function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
   const [page, setPage] = useState<SettingsPage | null>(null);
+  const removed = useRef(new Set<string>());
   useState(() => {
     if ((view !== 'returned' && view !== 'keyboard-returned') || typeof globalThis.window === 'undefined') return;
     const current = window.location;
@@ -72,6 +73,25 @@ function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
       if (view === 'failed') throw new Error('Illustrative read failure');
       if ((view === 'returned' || view === 'keyboard-returned') && cursor !== 'returned-window')
         return { kind: 'unavailable', problem: { status: null, code: 'return_window_not_selected' } };
+      if (view === 'continuation') {
+        const rows = [
+          previewWatch('thread', {
+            subscriptionId: 'continuation-first',
+            revision: 1,
+            target: { title: 'First watched thread', href: '/en/threads/first' },
+          }),
+          previewWatch('thread', {
+            subscriptionId: 'continuation-last',
+            revision: 1,
+            target: { title: 'Last watched thread', href: '/en/threads/last' },
+          }),
+        ];
+        const watches = cursor === null ? rows.filter((row) => !removed.current.has(row.subscriptionId)) : [];
+        return {
+          kind: 'page',
+          page: { ...envelope, next: cursor === null && watches.length > 0 ? 'later-window' : null, watches },
+        };
+      }
       const concealed = view === 'inaccessible' || view === 'uncertain';
       return {
         kind: 'page',
@@ -102,6 +122,10 @@ function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
     },
     stop: async (attempt) => {
       attempts.push(attempt);
+      if (view === 'continuation') {
+        removed.current.add(attempt.watchId);
+        return { kind: 'removed' };
+      }
       return view === 'uncertain' ? { kind: 'uncertain', problem: { status: 503, code: null } } : { kind: 'removed' };
     },
   }));
@@ -128,7 +152,27 @@ function story(view: View): Story {
     play: async ({ canvasElement }) => {
       const canvas = within(canvasElement);
       await canvas.findByRole('heading', { name: m.settings_watches_heading() });
-      if (view === 'failed') {
+      if (view === 'continuation') {
+        const firstStop = canvas.getByRole('button', { name: m.settings_watches_stop() });
+        firstStop.focus();
+        await userEvent.keyboard('{Enter}');
+        const lastStop = canvas.getByRole('button', { name: m.settings_watches_stop() });
+        await expect(lastStop).toHaveFocus();
+        lastStop.focus();
+        await userEvent.keyboard('{Enter}');
+        await expect(canvas.getByRole('heading', { name: m.settings_watches_heading() })).toHaveFocus();
+        const next = canvas.getByRole('button', { name: m.settings_watches_next() });
+        next.focus();
+        await userEvent.keyboard('{Enter}');
+        await canvas.findByText(m.settings_watches_end());
+        await expect(canvas.getByRole('heading', { name: m.settings_watches_heading() })).toHaveFocus();
+        const previous = canvas.getByRole('button', { name: m.settings_watches_previous() });
+        previous.focus();
+        await userEvent.keyboard('{Enter}');
+        await canvas.findByText(m.settings_watches_empty());
+        await expect(canvas.getByRole('heading', { name: m.settings_watches_heading() })).toHaveFocus();
+        await expect(attempts).toHaveLength(2);
+      } else if (view === 'failed') {
         await canvas.findByText(m.settings_watches_failed_text());
       } else if (view === 'inaccessible') {
         await canvas.findByText(m.settings_watches_access_lost());
@@ -162,6 +206,8 @@ export const InaccessibleTarget = story('inaccessible');
 export const ReturnedLaterWindow = story('returned');
 
 export const KeyboardReturned = story('keyboard-returned');
+
+export const KeyboardContinuation = story('continuation');
 
 export const Failed = story('failed');
 
