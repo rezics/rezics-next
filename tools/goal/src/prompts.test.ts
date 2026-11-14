@@ -255,6 +255,77 @@ test('manager and worker roles apply operating discipline within their prompt bu
   expect(rendered.manifest.overBudget).toEqual(['role', 'opening']);
 });
 
+test('manager openings link oversized Goal detail and include each current continuation once', () => {
+  const directory = temporaryDirectory();
+  try {
+    const goalDirectory = join(directory.path, 'docs', 'goals');
+    const alphaState = join(directory.path, '.temp', 'goal', 'alpha');
+    const betaState = join(directory.path, '.temp', 'goal', 'beta');
+    mkdirSync(goalDirectory, { recursive: true });
+    mkdirSync(alphaState, { recursive: true });
+    mkdirSync(betaState, { recursive: true });
+    const historicalRequirement = 'HISTORICAL_REQUIREMENT_MUST_STAY_ON_DEMAND '.repeat(1500);
+    const oversizedScope = 'OVERSIZED_SCOPE_MUST_STAY_WHOLE '.repeat(1500);
+    const alphaDocument = [
+      '# Alpha',
+      '',
+      '## Outcome',
+      '',
+      'Alpha outcome remains concise.',
+      '',
+      '## Done when',
+      '',
+      historicalRequirement,
+      '',
+      '## Scope',
+      '',
+      oversizedScope,
+      '',
+      '## Ownership',
+      '',
+      'Alpha case ownership detail.',
+    ].join('\n');
+    writeFileSync(join(goalDirectory, 'alpha.md'), alphaDocument);
+    writeFileSync(
+      join(goalDirectory, 'beta.md'),
+      '# Beta\n\n## Outcome\n\nBeta outcome remains useful.\n\n## Scope\n\nBeta scope remains useful.\n',
+    );
+    const alphaContinuation = '- Next action: alpha continuation has one live copy.';
+    const betaContinuation = '- Next action: beta continuation has one live copy.';
+    const alphaContinuationPath = join(alphaState, 'CONTINUATION.md');
+    writeFileSync(alphaContinuationPath, alphaContinuation);
+    writeFileSync(join(betaState, 'CONTINUATION.md'), betaContinuation);
+    const brief = 'Configured brief stays intact.\n- Deliver the current outcome.';
+    const rendered = renderManagerOpening({
+      spec: {
+        id: 'alpha',
+        goal: 'alpha',
+        goals: ['alpha', 'beta'],
+        brief,
+        cwd: directory.path,
+        engine: 'codex',
+      },
+      continuationFile: alphaContinuationPath,
+      backlogPath: '/backlog',
+      command: 'goal',
+    });
+
+    expect(rendered.prompt).toContain('[full Goal document](docs/goals/alpha.md)');
+    expect(rendered.prompt).toContain('[Done when](docs/goals/alpha.md#done-when)');
+    expect(rendered.prompt).toContain('- Objective: Alpha outcome remains concise.');
+    expect(rendered.prompt).toContain('- Opening scope: Beta scope remains useful.');
+    expect(rendered.prompt).toContain(brief);
+    expect(rendered.prompt).not.toContain('HISTORICAL_REQUIREMENT_MUST_STAY_ON_DEMAND');
+    expect(rendered.prompt).not.toContain('OVERSIZED_SCOPE_MUST_STAY_WHOLE');
+    expect(rendered.prompt.split(alphaContinuation).length - 1).toBe(1);
+    expect(rendered.prompt.split(betaContinuation).length - 1).toBe(1);
+    expect(rendered.openingBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerOpeningBytes);
+    expect(rendered.manifest.overBudget).not.toContain('opening');
+  } finally {
+    directory.close();
+  }
+});
+
 test('the native check budget defers ordinary tests even without the local minimal-mode file', () => {
   const directory = mkdtempSync(join(tmpdir(), 'prompt-check-admission-'));
   const worktree = resolve(import.meta.dir, '../../..');

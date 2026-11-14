@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { assertHourlyEfficiencyBucketEnded } from '../scripts/efficiency-report.ts';
 import { migrate, openDb } from './db.ts';
 import {
   captureHourlyEfficiencyObservation,
@@ -199,6 +200,55 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
   } finally {
     db.close();
     empty.close();
+  }
+});
+
+test('an unfinished-hour preview leaves the later measured scheduled send available', async () => {
+  const h = fixture();
+  const bucket = '2026-10-31T06:00:00.000Z';
+  try {
+    expect(() => assertHourlyEfficiencyBucketEnded(parseUtcHour(bucket), new Date('2026-10-31T06:43:29.000Z'))).toThrow(
+      'cannot send an hourly efficiency report for unfinished UTC bucket',
+    );
+    const preview = await renderHourlyEfficiencyReport(h.db, {
+      bucket,
+      now: new Date('2026-10-31T06:43:29.000Z'),
+    });
+    expect(preview).toContain(
+      'Product lines added in UTC bucket: unknown (attribution unknown; source revision unavailable;',
+    );
+    expect(readFrozenHourlyEfficiencyReport(h.db, bucket)).toBeNull();
+
+    const capture = captureHourlyEfficiencyObservation(h.db, {
+      bucket,
+      now: new Date('2026-10-31T07:03:00.000Z'),
+      productLineMeasurement: measuredLines(123, 'd'.repeat(40)),
+    });
+    expect(capture).toMatchObject({ disposition: 'captured', attribution: 'measured' });
+    const deliveredReport = join(h.directory.path, 'scheduled-report.txt');
+    const notifier = `require('node:fs').writeFileSync(${JSON.stringify(deliveredReport)}, process.argv[process.argv.length - 1]);`;
+    const delivery = await sendHourlyEfficiencyReport(
+      h.db,
+      bucket,
+      capture.snapshot.report,
+      [process.execPath, '-e', notifier],
+      2000,
+      new Date('2026-10-31T07:03:00.000Z'),
+    );
+    expect(delivery.disposition).toBe('sent');
+    expect(readFileSync(deliveredReport, 'utf8')).toBe(capture.snapshot.report);
+
+    const frozen = readFrozenHourlyEfficiencyReport(h.db, bucket)!;
+    expect(frozen.observation).toMatchObject({
+      productLines: 123,
+      attribution: 'measured',
+      sourceRevision: 'd'.repeat(40),
+    });
+    expect(await renderHourlyEfficiencyReport(h.db, { bucket, now: new Date('2026-10-31T08:00:00.000Z') })).toBe(
+      frozen.report,
+    );
+  } finally {
+    h.close();
   }
 });
 
