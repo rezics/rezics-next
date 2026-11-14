@@ -229,19 +229,27 @@ async function inReadSnapshot<T>(
   read: (client: import('pg').PoolClient) => Promise<T>,
   accessPort: PublicFilterAccessBindingPort,
 ) {
-  return withBoundedReadOnlyTransaction(pool, deadline, async (client) => {
-    accessPort.requireDeadline(deadline);
-    const remaining = Math.max(1, Math.floor(deadline - Date.now()));
-    await client.query(`SET LOCAL statement_timeout = '${remaining}ms'`);
-    accessPort.requireDeadline(deadline);
-    const result = await read(client);
-    accessPort.requireDeadline(deadline);
-    return result;
-  }, {
-    deadlineError: () => {
+  return withBoundedReadOnlyTransaction(
+    pool,
+    deadline,
+    async (client) => {
       accessPort.requireDeadline(deadline);
-      return new BoundedReadDeadlineError();
+      const remaining = Math.max(1, Math.floor(deadline - Date.now()));
+      await client.query(`SET LOCAL statement_timeout = '${remaining}ms'`);
+      accessPort.requireDeadline(deadline);
+      const result = await read(client);
+      accessPort.requireDeadline(deadline);
+      return result;
     },
+    {
+      deadlineError: () => {
+        accessPort.requireDeadline(deadline);
+        return new BoundedReadDeadlineError();
+      },
+    },
+  ).catch((error: unknown) => {
+    accessPort.requireDeadline(deadline);
+    throw error;
   });
 }
 
