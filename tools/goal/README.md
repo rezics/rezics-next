@@ -3373,6 +3373,20 @@ prove automation: the active turn stays untouched until its terminal event or an
 automatic retry. A UserMessage not yet persisted in the final complete read cannot be distinguished; if it is
 emitted only after that read, the exact-turn interrupt may still race it.
 
+Decision: Send Goal mutation provenance explicitly. The initial user-requested Goal and an explicit manager stop use
+`origin: user`; controller parking, inbox reactivation, completion, limits and recovery use `origin: automatic`.
+Codex 0.169 accepts both origins and records a user Goal instruction only for `user`; its Goal update notification
+does not return the origin, so the manager snapshot retains it for late turn callbacks. This distinction preserves
+Goal history but does not suppress the TUI resume prompt: the [0.169 resume path](https://github.com/openai/codex/blob/rust-v0.169.0/codex-rs/tui/src/app/thread_goal_actions.rs)
+checks Goal status (`paused`, `blocked` or `usageLimited`), not mutation origin. The protocol has no origin-sensitive
+attachment prompt or idle-continuation deferral. Keep native Goals paused while waiting for inbox so automatic
+continuations stop; admit operator work only when the same-thread turn emits an actual `UserMessage`. If a paused-Goal
+modal prevents the TUI from emitting that item, the controller cannot distinguish or release it. An isolated app-server
+probe accepted automatic park/reactivation and user pause. The isolated TUI probe stopped at sign-in; a five-pane live
+attachment check still reproduced the modal while retaining the original threads. Do not synthesize prompt acceptance
+or clear a Goal to hide the modal. A provider/TUI change is required for modal-free attachment; viewer recovery remains
+owned by its separate lifecycle change.
+
 Public `status` keeps manager lifecycle separate from `operation`: `waiting-for-inbox`, `active-turn`, `idle`,
 `turn-interrupted` or `turn-failed`, with native Goal status and the current turn disposition alongside it. Interrupt
 intent (`controller-park` or `controller-stop`) is persisted against the exact thread and turn before provider effects,

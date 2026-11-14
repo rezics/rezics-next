@@ -663,8 +663,12 @@ test('idle Goals stay parked; a concurrent inbox wake is retained through pool r
       s
         .requests()
         .filter((r) => r.method === 'thread/goal/set')
-        .map((r) => r.params.status),
-    ).toEqual(['active', 'paused', 'paused']);
+        .map((r) => [r.params.status, r.params.origin]),
+    ).toEqual([
+      ['active', 'user'],
+      ['paused', 'automatic'],
+      ['paused', 'automatic'],
+    ]);
 
     const startsAtIdle = s.requests().filter((r) => r.method === 'turn/start').length;
     const resumesAtIdle = s.requests().filter((r) => r.method === 'thread/resume').length;
@@ -1094,6 +1098,15 @@ test('a parked manager accepts a same-thread operator UserMessage after turn/sta
     expect(
       s.requests().filter((request) => request.method === 'turn/interrupt' && request.params.turnId === 'operator-turn-1'),
     ).toHaveLength(0);
+    expect(
+      s
+        .requests()
+        .filter((request) => request.method === 'thread/goal/set' && request.params.threadId === threadId)
+        .map((request) => [request.params.status, request.params.origin]),
+    ).toEqual([
+      ['active', 'user'],
+      ['paused', 'automatic'],
+    ]);
 
     await s.notify({
       method: 'turn/completed',
@@ -1245,6 +1258,9 @@ test('a real manager stop cancels the pending parked-turn decision and keeps sto
         status: 'interrupted',
         intent: 'controller-stop',
       },
+    });
+    expect(s.requests().filter((request) => request.method === 'thread/goal/set').at(-1)).toMatchObject({
+      params: { threadId: manager.threadId, status: 'paused', origin: 'user' },
     });
   } finally {
     await s.close();

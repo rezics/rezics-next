@@ -49,6 +49,54 @@ function activeTurnId(resumed: { thread: { turns?: { id: string; status: string 
 }
 
 export type SessionTurnDelivery = { kind: 'steered' } | { kind: 'started'; turnId: string };
+export type GoalMutationOrigin = 'user' | 'automatic';
+
+/** The 0.169 protocol carries item origin as a ThreadItem discriminant, not its text. */
+export function userMessageTurn(notification: Notification): { threadId: string; turnId: string } | null {
+  if (notification.method !== 'item/started' && notification.method !== 'item/completed') return null;
+  const params = notification.params;
+  if (
+    !params ||
+    typeof params.threadId !== 'string' ||
+    !params.threadId ||
+    typeof params.turnId !== 'string' ||
+    !params.turnId ||
+    params.item?.type !== 'userMessage'
+  )
+    return null;
+  return { threadId: params.threadId, turnId: params.turnId };
+}
+
+function userMessageItem(item: unknown): boolean {
+  return Boolean(
+    item &&
+      typeof item === 'object' &&
+      !Array.isArray(item) &&
+      (item as { type?: unknown }).type === 'userMessage',
+  );
+}
+
+const THREAD_ITEM_TYPES = new Set([
+  'userMessage',
+  'hookPrompt',
+  'agentMessage',
+  'functionCallOutput',
+  'plan',
+  'reasoning',
+  'commandExecution',
+  'fileChange',
+  'mcpToolCall',
+  'dynamicToolCall',
+  'collabAgentToolCall',
+  'subAgentActivity',
+  'webSearch',
+  'imageView',
+  'sleep',
+  'imageGeneration',
+  'enteredReviewMode',
+  'exitedReviewMode',
+  'contextCompaction',
+]);
 
 /** The 0.169 protocol carries item origin as a ThreadItem discriminant, not its text. */
 export function userMessageTurn(notification: Notification): { threadId: string; turnId: string } | null {
@@ -156,8 +204,9 @@ export class ManagerSessionTransport {
     client: AppServer,
     threadId: string,
     status: 'paused' | 'active' | 'complete',
+    origin: GoalMutationOrigin,
   ): Promise<GoalState> {
-    const goal = await client.request('thread/goal/set', { threadId, status, origin: 'user' });
+    const goal = await client.request('thread/goal/set', { threadId, status, origin });
     return goal.goal;
   }
   async getGoal(client: AppServer, threadId: string): Promise<GoalState | null> {
