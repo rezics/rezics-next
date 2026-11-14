@@ -348,6 +348,7 @@ export const ORIGINAL_CONTEXT_VARIABLES = [
   'GOAL_ATTEMPT',
   'GOAL_ACCEPTANCE_REQUIRES',
   'REZICS_NATIVE_UNIT_CONTEXT',
+  'REZICS_NATIVE_UNIT_RUN_ID',
 ] as const;
 
 export function originalContextAssignments(env: NodeJS.ProcessEnv = process.env): string[] {

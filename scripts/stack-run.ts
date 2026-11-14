@@ -54,7 +54,11 @@ import {
   recognizeCheckHostRun,
   type CheckHostRecognitionDisposition,
 } from './check-placement.ts';
-import { nativeUnitContext, NATIVE_UNIT_CONTEXT_VARIABLE } from '../tools/goal/src/native-unit-context.ts';
+import {
+  nativeUnitContext,
+  NATIVE_UNIT_CONTEXT_VARIABLE,
+  NATIVE_UNIT_RUN_VARIABLE,
+} from '../tools/goal/src/native-unit-context.ts';
 import { observeNativeUnitContext } from '../tools/goal/src/native-units.ts';
 
 export type StackRun = {
@@ -323,6 +327,9 @@ export async function runOnCheckHost(
           command: [
             ...(env[NATIVE_UNIT_CONTEXT_VARIABLE]
               ? ['env', `${NATIVE_UNIT_CONTEXT_VARIABLE}=${JSON.stringify(nativeCheckContext(env))}`]
+              : []),
+            ...(env[NATIVE_UNIT_RUN_VARIABLE]
+              ? ['env', `${NATIVE_UNIT_RUN_VARIABLE}=${env[NATIVE_UNIT_RUN_VARIABLE]}`]
               : []),
             ...(profile ? ['env', `GROWTH_PROFILE=${profile}`] : []),
             ...run.command,

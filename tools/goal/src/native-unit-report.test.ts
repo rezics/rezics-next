@@ -98,8 +98,8 @@ test('hourly native accounting follows verified children and deduplicates copied
     expect(lines[0]).toContain('3 distinct parent/subagent sessions observed; 2 measured; 0 unknown');
     expect(lines[1]).toContain('30 input, 7 cached input, 7 output');
     expect(lines[1]).toContain('1 managed sessions excluded; 1 copied response records deduplicated');
-    expect(lines[2]).toContain('captured exit zero 0; nonzero 1');
-    expect(lines[2]).toContain('source checkpoint unknown 1');
+    expect(lines[2]).toContain('command exit zero 0; nonzero 1');
+    expect(lines[2]).toContain('immutable capture source unknown 1');
     expect(lines.join('\n')).not.toContain('99999999');
     expect(
       f.db
