@@ -300,10 +300,6 @@ async function mutate(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
-      // Native preparation checks owner/container state and post:revise Access.
-      // Transactional authorization still consumes its proof and rechecks the
-      // container before receipts; preparation alone never permits a write.
-      const evidence = await base.prepare!(attempt);
       const placements =
         mutation.kind === 'publish'
           ? (
@@ -326,6 +322,9 @@ async function mutate(
             ).value
           : authored!;
       await validateHostedChapterAttachments(deps, placements, { actor, deadline: context.deadline });
+      // Attachment currentness can outlast Access evidence. Mint the write
+      // proof afterward; transactional authorization still rechecks authority.
+      const evidence = await base.prepare!(attempt);
       // Only complete preparation supplies this attempt's immutable selection.
       // A retry repeats admission and selection outside the write transaction.
       prepared.set(attempt.time, placements);
@@ -484,9 +483,9 @@ async function mutatePoint(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
-      const evidence = await base.prepare!(attempt);
       await validateHostedChapterAttachments(deps, pointAttachments(input), { actor, deadline: context.deadline });
-      return evidence;
+      // Mint short-lived Access evidence only after exact attachment admission.
+      return base.prepare!(attempt);
     },
   };
   if (input.operation === 'insert') {

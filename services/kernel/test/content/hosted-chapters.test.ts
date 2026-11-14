@@ -6,6 +6,7 @@ import readChain from '../../src/content/read-chain.sql';
 import { routeOf } from '../../src/route/route.ts';
 import { observeSql, type SqlExecution } from './support/sql-observer.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
+import { nativeGrantor } from './support/native-system.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
@@ -432,4 +433,89 @@ test('attachment identity mismatches and a changed retained source fail closed w
       })
     ).status,
   ).toBe(404);
+});
+
+test('slow attachment admission leaves fresh write authority and rechecks a revoked owner', async () => {
+  const catalogue = await f.native.thread();
+  const chapter = await f.native.thread();
+  const path = `/v1/hostedCatalogues/${catalogue.firstPost.id}`;
+  const target = f.target(chapter);
+  const placement = {
+    occurrenceId: f.newOccurrenceIdFor(catalogue.firstPost.id),
+    parentId: null,
+    position: 0,
+    title: 'Chapter',
+    kind: 'chapter',
+    target,
+  };
+  const created = await write('POST', '/v1/hostedCatalogues', {
+    postId: catalogue.firstPost.id,
+    threadId: catalogue.id,
+    placements: [],
+  });
+  expect(created.status).toBe(201);
+
+  const route = routeOf(catalogue.firstPost.id)!;
+  const authorId = f.native.author.actor.accountId;
+  const ownerValid = (
+    await f.native.pool.query<{ valid: string }>(
+      `SELECT valid::text FROM access.resource_role_grant
+       WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='content.post.owner'`,
+      [route, catalogue.firstPost.id, authorId],
+    )
+  ).rows[0]!.valid;
+  async function revokeOwner() {
+    const response = await f.native.system.kernel.handle(
+      new Request('https://content.test/v1/roleGrants:revoke', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${nativeGrantor(f.native.system).bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        },
+        body: JSON.stringify({
+          resource: { route, id: catalogue.firstPost.id },
+          subject: { kind: 'account', id: authorId },
+          role: 'content.post.owner',
+          valid: ownerValid,
+        }),
+      }),
+    );
+    expect(response.status, await response.text()).toBe(200);
+  }
+
+  const nativeRead = reads.readPostMetadata;
+  let phase = 0;
+  let delayedPhase = -1;
+  let ownerRevoked = false;
+  const retained = spyOn(reads, 'readPostMetadata').mockImplementation(async (...args) => {
+    const result = await nativeRead(...args);
+    if (args[2] === target.postId && delayedPhase !== phase) {
+      delayedPhase = phase;
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+      if (phase === 1) {
+        await revokeOwner();
+        ownerRevoked = true;
+      }
+    }
+    return result;
+  });
+  try {
+    const admitted = await write('POST', `${path}:revise`, {
+      expectedRevisionId: created.value.revisionId,
+      placements: [placement],
+    });
+    expect(admitted.status).toBe(200);
+
+    phase = 1;
+    const denied = await write('POST', `${path}:revise`, {
+      expectedRevisionId: admitted.value.revisionId,
+      placements: [{ ...placement, title: 'Revised chapter' }],
+    });
+    expect([403, 404]).toContain(denied.status);
+    expect(ownerRevoked).toBe(true);
+    expect((await f.native.call('GET', `${path}?kind=structure`)).value.revisionId).toBe(admitted.value.revisionId);
+  } finally {
+    retained.mockRestore();
+  }
 });

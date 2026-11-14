@@ -101,6 +101,10 @@ attachment failures still write nothing; stale CAS follows preparation. Digest c
 their native command behavior. Empty withdrawal, responses, events and the existing 512-placement compatibility
 limits stay unchanged; prepared selection batches use the 1,024-ID cap below.
 
+Decision: bulk and point catalogue mutations complete exact chapter attachment admission before minting final
+attempt-bound Post authorization evidence. Keep the absolute request deadline, Access evidence TTL, receipt replay
+order, and transactional authority/container checks unchanged.
+
 ## Versioned outline adoption
 
 Decision: adopt the [shared versioned ordered forest](../../../../docs/knowledge-workspaces.md#shared-versioned-outline-primitive)
