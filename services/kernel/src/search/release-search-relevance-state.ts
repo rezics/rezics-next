@@ -362,7 +362,7 @@ export function createReleaseSearchRelevanceState(input: {
     if (!candidates.length) return new Set();
     const rows = await query<{ work_id: string }>(
       `SELECT candidate.work_id
-       FROM unnest($2::text[]) AS candidate(work_id)
+       FROM unnest($3::text[]) AS candidate(work_id)
        WHERE search.release_relevance_membership_contains($1, $2, candidate.work_id)`,
       [location.execution, root, candidates],
     );
