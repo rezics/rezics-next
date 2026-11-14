@@ -35,8 +35,10 @@ function poolFor(connect: () => Promise<PoolClient>): Pool {
 test('late checkout releases without starting SQL', async () => {
   const checkout = deferred<PoolClient>();
   const source = clientFor();
-  const visit = withViewerActionsReadSnapshot(poolFor(() => checkout.promise), Date.now() + 30, (client) =>
-    client.query('SELECT late advice'),
+  const visit = withViewerActionsReadSnapshot(
+    poolFor(() => checkout.promise),
+    Date.now() + 30,
+    (client) => client.query('SELECT late advice'),
   );
 
   await expect(visit).rejects.toBeInstanceOf(AccessUnavailableError);
@@ -116,9 +118,13 @@ test('rollback failure preserves the read error and discards the client', async 
   });
 
   await expect(
-    withViewerActionsReadSnapshot(poolFor(async () => source.client), Date.now() + 1_000, async () => {
-      throw primary;
-    }),
+    withViewerActionsReadSnapshot(
+      poolFor(async () => source.client),
+      Date.now() + 1_000,
+      async () => {
+        throw primary;
+      },
+    ),
   ).rejects.toBe(primary);
   expect(source.queries).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'ROLLBACK']);
   expect(source.releases[0]).toBeInstanceOf(Error);
