@@ -46,6 +46,9 @@ empty-item exit and nested lists. Task controls change checked state through an 
 Table controls create a chosen size, insert/delete rows and columns, toggle headers, select cells/rows/columns,
 merge/split, align and resize. Cell navigation, multi-cell paste and undo use maintained table mechanics. Persist
 spans, widths and IDs; enforce Document's expanded-table bound before expansion. Read-only surfaces cannot mutate.
+Physical rows fully covered by earlier rowspans may contain no own cells, matching maintained table mechanics.
+The complete table still requires a positive rectangular grid with an actual cell and no uncovered or overlapping
+positions. This is an additive profile acceptance change; ordinary snapshots retain their meaning.
 
 At a collapsed caret or selected unit, block actions support turn-into, move, duplicate and delete by pointer and
 keyboard. Moving preserves the full subtree's IDs; copying/duplicating assigns new IDs throughout. Deleting the

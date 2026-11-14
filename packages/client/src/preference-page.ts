@@ -83,6 +83,7 @@ export type PreferencePageValues = {
   suitability: PreferenceSuitability;
   version: number;
   shelf?: unknown;
+  editor?: unknown;
   notifications?: unknown;
 };
 export type PreferenceReadingPage = PreferencePageValues & PreferencePageAdvice;
@@ -129,6 +130,7 @@ export function decodePreferenceValues(value: unknown): PreferencePageValues | u
     suitability: image,
     version: value.version as number,
     ...(value.shelf !== undefined ? { shelf: value.shelf } : {}),
+    ...(value.editor !== undefined ? { editor: value.editor } : {}),
     ...(value.notifications !== undefined ? { notifications: value.notifications } : {}),
   };
 }

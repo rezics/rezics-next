@@ -163,6 +163,7 @@ test('a mandatory or unknown kind in a patch is refused with 400 and changes not
         spoilerLevel: 0,
         suitability: 'blur',
         shelf: {},
+        editor: {},
         notifications: DEFAULT_NOTIFICATIONS,
         version: 0,
       },

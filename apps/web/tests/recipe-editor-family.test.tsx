@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { act, type ComponentProps, type ReactNode } from 'react';
 import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { ScalarControl } from '../src/features/catalogue/statement-editor-view';
-import type { RichTextEditor } from '@rezics/ui/rich-text-editor';
+import type { RichTextEditor } from '@rezics/editor';
 import type { EntityPicker } from '@rezics/ui/entity-picker';
 
 // One actual-component campaign using the existing generated-client fixture.

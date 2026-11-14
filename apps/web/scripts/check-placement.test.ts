@@ -348,6 +348,7 @@ function fixture() {
   const privateRoot = join(fixtureRoot, 'private');
   mkdirSync(join(workspace, 'apps/web'), { recursive: true });
   mkdirSync(join(workspace, 'packages/ui'), { recursive: true });
+  mkdirSync(join(workspace, 'packages/editor'), { recursive: true });
   mkdirSync(join(workspace, '.temp'), { recursive: true });
   mkdirSync(privateRoot, { recursive: true });
   const hostsFile = join(privateRoot, 'hosts.json');
@@ -712,6 +713,21 @@ const finiteRoutes = [
   },
   { cwd: app, command: ['bun', 'scripts/isolated.ts', 'bun', 'test'], returns: [] },
   { cwd: resolve(root, 'packages/ui'), command: ['bun', 'scripts/isolated.ts', 'bun', 'test'], returns: [] },
+  { cwd: resolve(root, 'packages/editor'), command: ['bun', '../ui/scripts/isolated.ts', 'bun', 'test'], returns: [] },
+  {
+    cwd: resolve(root, 'packages/editor'),
+    command: [
+      'bun',
+      '../ui/scripts/isolated.ts',
+      'bun',
+      'x',
+      'vitest',
+      'run',
+      '--config',
+      'vitest.slow-frames.config.ts',
+    ],
+    returns: [],
+  },
   {
     cwd: resolve(root, 'packages/ui'),
     command: ['bun', 'scripts/isolated.ts', 'bun', 'x', 'vitest', 'run', '--config', 'vitest.slow-frames.config.ts'],
@@ -754,7 +770,7 @@ test('every finite heavy route crosses the exact driver with ordered argv, cwd, 
       '--workspace',
       f.workspace,
       '--cwd',
-      route.cwd === app ? 'apps/web' : 'packages/ui',
+      relative(root, route.cwd),
       '--source-revision',
       revision,
       '--env-file',

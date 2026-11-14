@@ -1,0 +1,53 @@
+{
+  "name": "@rezics/editor",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./reader": "./src/reader.ts",
+    "./schema": "./src/schema.ts",
+    "./styles.css": "./src/styles.css",
+    "./preferences": "./src/preferences.ts"
+  },
+  "scripts": {
+    "storybook": "bun ../../apps/web/scripts/storybook-dev.ts --ui --port 6007",
+    "check": "oxfmt --check . && bun check --no-script -p tsconfig.json && bun run typecheck && bun run test",
+    "typecheck": "bun check --no-script -p tsconfig.sources.json",
+    "test": "bun ../ui/scripts/isolated.ts bun test",
+    "test:stories": "bun ../ui/scripts/isolated.ts bun x vitest run",
+    "test:stories:slow-frames": "bun ../ui/scripts/isolated.ts bun x vitest run --config vitest.slow-frames.config.ts"
+  },
+  "dependencies": {
+    "@rezics/document": "workspace:*",
+    "@rezics/ui": "workspace:*",
+    "@tiptap/core": "3.32.2",
+    "@tiptap/extension-bubble-menu": "3.32.2",
+    "@tiptap/extension-placeholder": "3.32.2",
+    "@tiptap/extension-unique-id": "3.32.2",
+    "@tiptap/pm": "3.32.2",
+    "@tiptap/react": "3.32.2",
+    "@tiptap/static-renderer": "3.32.2",
+    "lucide-react": "1.66.0"
+  },
+  "peerDependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "11.0.0-alpha.8",
+    "@storybook/addon-mcp": "11.0.0-alpha.8",
+    "@storybook/addon-vitest": "11.0.0-alpha.8",
+    "@storybook/react-vite": "11.0.0-alpha.8",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitest/browser-playwright": "5.1.0-beta.1",
+    "playwright": "1.64.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "storybook": "11.0.0-alpha.8",
+    "tailwindcss": "4.3.3",
+    "vite": "8.3.5",
+    "vitest": "5.1.0-beta.1"
+  }
+}

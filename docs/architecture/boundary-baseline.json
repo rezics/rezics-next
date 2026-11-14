@@ -18229,22 +18229,6 @@
         }
       ]
     },
-    "ui": {
-      "owner": "web",
-      "reason": "pre-boundary code",
-      "violations": [
-        {
-          "rule": "rule 3",
-          "file": "packages/ui/src/components/editor-link.tsx",
-          "edge": "value import \"./editor-selection-menu.tsx\" #1 => packages/ui/src/components/editor-selection-menu.tsx (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "packages/ui/src/components/editor-selection-menu.tsx",
-          "edge": "value import \"./editor-link.tsx\" #1 => packages/ui/src/components/editor-link.tsx (value-import cycle)"
-        }
-      ]
-    },
     "web-accounts": {
       "owner": "accounts",
       "reason": "pre-boundary code",

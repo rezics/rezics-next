@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { hasDocumentContent } from '@rezics/document';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { RichTextEditor } from '@rezics/ui/rich-text-editor';
+import { PreferredRichTextEditor as RichTextEditor } from '../../editor/preferred-rich-text-editor';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';

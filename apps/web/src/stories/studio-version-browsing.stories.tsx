@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { fromMarkdown, normalizeDocument, withDocumentIds, type DocumentNode } from '@rezics/document';
-import { RichTextEditor } from '@rezics/ui';
+import { RichTextEditor } from '@rezics/editor';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { editionDocumentDigest } from '../content-editions/edition-model';

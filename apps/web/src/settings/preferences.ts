@@ -9,6 +9,12 @@ import {
   type PreferencePageKind,
   type PreferenceShelfAdvice,
 } from '@rezics/client';
+import {
+  validateEditorPreferences,
+  validateEditorPreferencePatch,
+  type EditorPreferences,
+  type EditorPreferencePatch,
+} from '@rezics/editor/preferences';
 import { isPlatformClosedError, isSessionUnavailableError } from './ports/vocabulary';
 import { dynamicCollectionTitle } from '../library/settings-adapter';
 import {
@@ -135,6 +141,8 @@ export type ReadingPreferences = {
   version: number;
   /** The bounded native shelf projection is present on account reads and absent in older fixtures. */
   shelf?: ShelfPreferences;
+  /** Portable private editor overrides, stored on the same account preference resource. */
+  editor?: EditorPreferences;
   /** Owner-supplied choices and actions; absent when the envelope is missing or malformed. */
   advice?: ReadingAdvice;
 };
@@ -177,6 +185,7 @@ export type PreferenceChange = {
   spoilerLevel?: SpoilerLevel;
   suitability?: Suitability;
   shelf?: ShelfPreferencePatch | null;
+  editor?: EditorPreferencePatch | null;
   idempotencyKey: string;
 };
 
@@ -486,19 +495,22 @@ function statusOf(result: { status?: number; error?: unknown }): number | undefi
 /** The write a request asks for, or `undefined` when it names no setting or carries a value the kernel would refuse. */
 export function parsePreferenceChange(input: unknown): PreferenceChange | undefined {
   if (!isRecord(input)) return undefined;
-  const { expectedVersion, spoilerLevel, suitability, shelf, idempotencyKey } = input;
+  const { expectedVersion, spoilerLevel, suitability, shelf, editor, idempotencyKey } = input;
   if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) return undefined;
   if (typeof idempotencyKey !== 'string' || !uuid.test(idempotencyKey)) return undefined;
   if (spoilerLevel !== undefined && spoilerLevel !== 0 && spoilerLevel !== 1 && spoilerLevel !== 2) return undefined;
   if (suitability !== undefined && suitability !== 'blur' && suitability !== 'show') return undefined;
   if (shelf !== undefined && !validShelfPatch(shelf)) return undefined;
-  if (spoilerLevel === undefined && suitability === undefined && shelf === undefined) return undefined;
+  if (editor !== undefined && !validateEditorPreferencePatch(editor)) return undefined;
+  if (spoilerLevel === undefined && suitability === undefined && shelf === undefined && editor === undefined)
+    return undefined;
   return {
     expectedVersion: expectedVersion as number,
     idempotencyKey,
     ...(spoilerLevel !== undefined ? { spoilerLevel } : {}),
     ...(suitability !== undefined ? { suitability } : {}),
     ...(shelf !== undefined ? { shelf: shelf as ShelfPreferencePatch | null } : {}),
+    ...(editor !== undefined ? { editor: editor as EditorPreferencePatch | null } : {}),
   };
 }
 
@@ -596,11 +608,13 @@ function present(preferences: unknown): ReadingPreferences | undefined {
   const values = decodePreferenceValues(preferences);
   const shelf = isRecord(preferences) ? presentShelf(preferences.shelf) : undefined;
   if (!values || !shelf) return undefined;
+  if (values.editor !== undefined && !validateEditorPreferences(values.editor)) return undefined;
   const reading: ReadingPreferences = {
     spoilerLevel: values.spoilerLevel,
     suitability: values.suitability,
     version: values.version,
     shelf,
+    ...(values.editor !== undefined ? { editor: values.editor as EditorPreferences } : {}),
   };
   const advice = presentAdvice(preferences, reading);
   return advice ? { ...reading, advice } : reading;

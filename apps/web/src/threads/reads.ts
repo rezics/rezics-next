@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import type { DocumentMentions } from '@rezics/ui/document-body';
+import type { DocumentMentions } from '@rezics/editor/reader';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';

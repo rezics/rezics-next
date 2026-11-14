@@ -1,4 +1,4 @@
-import type { RichTextEditorLabels } from '@rezics/ui';
+import type { RichTextEditorLabels } from '@rezics/editor';
 import { m } from '../paraglide/messages.js';
 import { getLocale, type Locale } from '../paraglide/runtime.js';
 import type { StudioFailure, StudioFeedback, StudioOperation } from './contract';
