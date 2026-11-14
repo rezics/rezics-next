@@ -31,13 +31,51 @@ type CommunityEnvironment = {
 function observeCommunityEnvironment(
   client: QueryClient | undefined,
   queryKey?: readonly unknown[],
+  reader: string | null = null,
 ): CommunityEnvironment {
   const observation = client ? browserObservation(client) : undefined;
   const source = queryKey && client ? client.getQueryCache().find({ queryKey, exact: true }) : undefined;
   const count = source?.state.dataUpdateCount;
   let retired = false;
+  let prepared: BrowserObservationSnapshot | undefined;
+  let exposure: { query: object; count: number } | undefined;
   let cached: string | undefined = observation ? undefined : STANDALONE_SNAPSHOT;
   const sourceCurrent = () => {
+    if (retired) return false;
+    const now = observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
+    if (prepared) {
+      if (
+        now.state !== prepared.state ||
+        (prepared.state === 'signed-in' &&
+          (now.state !== 'signed-in' || now.observation.id !== prepared.observation.id))
+      )
+        retired = true;
+    } else if (now.state === 'signed-in' || now.state === 'signed-out') {
+      // Preparation binds once. Every later incarnation change is a new authority episode,
+      // including equal successful credentials and changes coalesced into one React render.
+      prepared = now;
+      if (reader !== null && (now.state !== 'signed-in' || now.observation.subject !== reader)) retired = true;
+    }
+    if (retired) return false;
+    if (prepared?.state === 'signed-in') {
+      const current = client?.getQueryCache().find({
+        queryKey: ['exposure', 'viewer', prepared.observation.subject, prepared.observation.id],
+        exact: true,
+      });
+      if (exposure) {
+        if (
+          current !== exposure.query ||
+          current?.state.status !== 'success' ||
+          current.state.fetchStatus !== 'idle' ||
+          current.state.isInvalidated ||
+          current.state.dataUpdateCount !== exposure.count
+        )
+          retired = true;
+      } else if (current?.state.status === 'success' && current.state.fetchStatus === 'idle') {
+        if (current.state.isInvalidated) retired = true;
+        else exposure = { query: current, count: current.state.dataUpdateCount };
+      } else if (current?.state.status === 'error') retired = true;
+    }
     if (retired) return false;
     if (!queryKey) return true;
     const current = client?.getQueryCache().find({ queryKey, exact: true });
@@ -72,8 +110,18 @@ function observeCommunityEnvironment(
     snapshot,
     subscribe: (notify: () => void) => {
       const stop = observation?.subscribe(() => invalidate(notify)) ?? noSubscribe();
+      sourceCurrent();
       // Fence every cache transition in-stack, including fetching/idle and A/B/A in one React batch.
-      const stopCache = observation?.subscribeCache(() => {
+      const stopCache = observation?.subscribeCache((event) => {
+        if (
+          event.query.queryKey[0] === 'exposure' &&
+          event.query.queryKey[1] === 'viewer' &&
+          event.query.queryKey.length === 2 &&
+          (event.type === 'removed' ||
+            (event.type === 'updated' &&
+              ['success', 'error', 'invalidate', 'fetch', 'setState'].includes(event.action.type)))
+        )
+          retired = true;
         if (!sourceCurrent()) observation.publish(() => invalidate(notify));
       });
       return () => {
@@ -91,28 +139,18 @@ type CommunityReadingBinding = {
   environment: CommunityEnvironment;
   generation: number;
   retired: boolean;
-  privateRetired: boolean;
-  observation?: { subject: string; id: number };
+  spoiler?: number | undefined;
 };
 
 function initialBinding(
-  input: { source: object | string; descriptor: string; reader: string | null },
+  input: { source: object | string; descriptor: string; reader: string | null; spoiler?: number | undefined },
   environment: CommunityEnvironment,
 ): CommunityReadingBinding {
-  const observed = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
-  const matched =
-    input.reader !== null && observed.state === 'signed-in' && observed.observation.subject === input.reader;
-  const settledMismatch =
-    input.reader !== null &&
-    (observed.state === 'signed-out' ||
-      (observed.state === 'signed-in' && observed.observation.subject !== input.reader));
   return {
     ...input,
     environment,
     generation: 0,
-    retired: settledMismatch,
-    privateRetired: settledMismatch,
-    ...(matched && observed.state === 'signed-in' ? { observation: observed.observation } : {}),
+    retired: !environment.sourceCurrent(),
   };
 }
 
@@ -121,6 +159,8 @@ export function useSubjectCommunityReading(input: {
   source: object | string;
   descriptor: string;
   reader: string | null;
+  /** Undefined is conservative initial preparation; the first prepared setting binds this source once. */
+  spoiler?: number | undefined;
   queryKey?: readonly unknown[] | undefined;
 }) {
   const client = useContext(QueryClientContext);
@@ -134,49 +174,25 @@ export function useSubjectCommunityReading(input: {
   );
   const queryIdentity = JSON.stringify(input.queryKey);
   const environment = useMemo(
-    () => observeCommunityEnvironment(client, input.queryKey),
-    [client, queryIdentity, input.source],
+    () => observeCommunityEnvironment(client, input.queryKey, input.reader),
+    [client, queryIdentity, input.source, input.reader],
   );
   useSyncExternalStoreWithSelector(environment.subscribe, environment.snapshot, environment.snapshot, identityString);
-  const observation = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
   const [binding, setBinding] = useState(() => initialBinding(input, environment));
   const identityMatches =
     binding.source === input.source &&
     binding.descriptor === input.descriptor &&
     binding.reader === input.reader &&
+    (binding.spoiler === undefined || binding.spoiler === input.spoiler) &&
     binding.environment === environment;
 
   if (binding.source !== input.source) {
     setBinding({ ...initialBinding(input, environment), generation: binding.generation + 1 });
   } else if (!binding.retired && (!identityMatches || !environment.sourceCurrent())) {
     setBinding({ ...binding, retired: true, generation: binding.generation + 1 });
-  } else if (!binding.retired && input.reader !== null) {
-    if (binding.observation) {
-      if (
-        !binding.privateRetired &&
-        (observation.state !== 'signed-in' ||
-          observation.observation.id !== binding.observation.id ||
-          observation.observation.subject !== binding.observation.subject)
-      ) {
-        setBinding({ ...binding, retired: true, privateRetired: true, generation: binding.generation + 1 });
-      }
-    } else if (
-      !binding.privateRetired &&
-      (observation.state === 'signed-out' ||
-        (observation.state === 'signed-in' && observation.observation.subject !== input.reader))
-    ) {
-      setBinding({ ...binding, retired: true, privateRetired: true, generation: binding.generation + 1 });
-    } else if (
-      !binding.privateRetired &&
-      observation.state === 'signed-in' &&
-      observation.observation.subject === input.reader
-    ) {
-      setBinding({
-        ...binding,
-        observation: observation.observation,
-        generation: binding.generation + 1,
-      });
-    }
+  } else if (!binding.retired && binding.spoiler === undefined && input.spoiler !== undefined) {
+    // Preparing personal preferences does not remount the public reading or cancel its one pending read.
+    setBinding({ ...binding, spoiler: input.spoiler });
   }
 
   const current = useRef(binding);
@@ -192,32 +208,18 @@ export function useSubjectCommunityReading(input: {
   const isBoundCurrent = () => {
     if (
       !mounted.current ||
-      current.current !== binding ||
+      current.current.generation !== binding.generation ||
       binding.retired ||
       !identityMatches ||
       !environment.sourceCurrent()
     )
       return false;
-    if (binding.observation) {
-      const now = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
-      if (
-        now.state !== 'signed-in' ||
-        now.observation.id !== binding.observation.id ||
-        now.observation.subject !== binding.observation.subject
-      )
-        return false;
-    }
     return true;
   };
   const privateActionsCurrent = () => {
-    if (!isBoundCurrent() || binding.reader === null || binding.privateRetired) return false;
+    if (!isBoundCurrent() || binding.reader === null) return false;
     const now = environment.observation?.getSnapshot() ?? UNKNOWN_SNAPSHOT;
-    return (
-      binding.observation !== undefined &&
-      now.state === 'signed-in' &&
-      now.observation.id === binding.observation.id &&
-      now.observation.subject === binding.reader
-    );
+    return now.state === 'signed-in' && now.observation.subject === binding.reader;
   };
 
   return {

@@ -45,6 +45,21 @@ actual source replacement retires it. Public DTOs may describe visible controls,
 observation and native admission can make a private action current. Public Person credit inspect reads that prepared
 session cache and does not start another session fetch.
 
+The initial unknown/server observation may settle to signed-out for a public source or to that source's matching
+reader. This binds its existing lease without changing its generation, remounting facts or invalidating pending
+callbacks. An initially mismatched admitted reader is unusable. Game passes spoiler preparation separately from its
+address descriptor: undefined uses conservative zero until the first prepared setting; later changes retire the
+source, including returning to an earlier value. Browser observation identity owns credential renewal and A/B/A,
+including equal successful session replacement and temporary authority loss between React renders. A current
+observation's first exposure success may prepare; its replacement, invalidation, removal or failure retires the
+reading. Unscoped viewer exposure changes conservatively retire it. Recovery requires a fresh admitted source.
+
+Shared callers reviewed: album tracks; album/music release/location; Person and Character; people facts; community
+regions and connections. Their address descriptors and native admission remain unchanged. The shared mounted
+`subject-community-current-retirement.test.tsx` exercises stable preparation callbacks, private-action gating,
+credential/account/exposure retirement and non-revival; the Game view/recovery regressions exercise facts, selected
+evidence, release rows and late results. These are source regressions pending integrated execution.
+
 ## Rating presentation
 
 Decision: the human question leads distinct public, imported-source, population and own-answer regions. Public

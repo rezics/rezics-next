@@ -20,8 +20,13 @@ it shares tag admission with VideoGame and TVSeries rather than inferring metada
 Decision: exact destinations open in a new tab, preserving the source window; keyboard return restores its surviving
 opener, or the reader heading if the opener disappeared, without overriding moved focus.
 
-The mounted reader observes the existing session and exposure caches without starting another session read. Source,
-reader, locale, Context, Realm, Type or spoiler-setting replacement retires current facts, cursors, pending results,
+The mounted reader observes the existing session and exposure caches without starting another session read.
+Decision: initial unknown session to signed-out or the source's matching reader, and undefined to the first prepared
+spoiler setting, preserve the same work reading, optional-section state and pending release request. Until preferences
+prepare, spoiler disclosure uses zero; closed spoiler gates unmount their evidence. The route's session serialization
+is not a Game descriptor: the existing browser observation owns account and credential incarnation changes.
+After preparation, observation replacement (including equal successful credentials), exposure loss/replacement,
+source, reader, locale, Context, Realm, Type or deliberate spoiler-setting replacement retires current facts, cursors, pending results,
 reveal consent and focus intent. The same retired source cannot revive after an authority transition. A replacement
 source establishes a new observation. Refresh removes the prior reading; continuation removes its release window
 before fetching but retains work facts on transport failure. Withheld readings remove both sections. Failed reads
@@ -147,3 +152,10 @@ pins shared HTTP and comparison-envelope admission, retained work facts and rele
 closed optional sections, deliberate evidence and native comparison recovery, exact return focus and retirement.
 Source-only delivery defers test, typing, build, native and browser/capture acceptance to the integrated verifier.
 Earlier checks do not establish acceptance of later promoted source; source completion is not a runtime pass.
+
+Lifetime design sources: this README's lifetime, recovery and routed-visit sections, the Pages retained-readings
+contract, `tests/game-reader-recovery.test.tsx`, `tests/game-reader-view.test.tsx`,
+`tests/subject-community-current-retirement.test.tsx`, the [session observation contract](../../../session/README.md)
+and its `reader/lifetime/observation.ts` implementation. The main checkout's `.reference/INDEX.md` was consulted;
+this local repair needs no external code or new admission policy. The named mounted regressions cover initial
+preparation, spoiler disclosure, account/credential/exposure retirement, late release responses and fresh-source recovery.

@@ -1160,7 +1160,6 @@ export function SubjectPage({
           {...(realm !== undefined ? { realm } : {})}
           spoiler={reader?.spoilerLevel}
           {...(returnCheck?.selection ? { returnSelection: returnCheck.selection } : {})}
-          sessionObservation={readingAdmission ?? ''}
           {...(gameInitial ? { initial: gameInitial } : {})}
         />
       ) : null}

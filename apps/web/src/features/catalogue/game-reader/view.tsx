@@ -39,7 +39,6 @@ type Props = GameReaderAddress & {
   reader: string | null;
   spoiler?: number | undefined;
   returnSelection?: GameClassificationReturn | undefined;
-  sessionObservation?: string | undefined;
   transport: GameReaderTransport;
   initial?: GameReaderRead;
   refresh?: () => Promise<void>;
@@ -77,16 +76,8 @@ export function GameReader({ compact = false, ...props }: Props) {
   const reading = useSubjectCommunityReading({
     source: props.source,
     reader: props.reader,
-    descriptor: JSON.stringify([
-      props.id,
-      props.context,
-      props.type,
-      props.locale,
-      props.realm,
-      props.spoiler,
-      props.sessionObservation,
-      props.returnSelection,
-    ]),
+    spoiler: props.spoiler,
+    descriptor: JSON.stringify([props.id, props.context, props.type, props.locale, props.realm, props.returnSelection]),
   });
   const returnKey = props.returnSelection ? JSON.stringify(props.returnSelection) : '';
   const returnFocus = useRef({ key: '', active: false });
@@ -244,7 +235,7 @@ function GameWindow({
   };
   const gate = (statement: GameStatement, body: ReactNode) =>
     spoilerLevel(statement) > spoiler ? (
-      <SpoilerGate label={m.thread_reveal_spoiler({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
+      <SpoilerGate unmountOnHide label={m.thread_reveal_spoiler({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
         {body}
       </SpoilerGate>
     ) : (
