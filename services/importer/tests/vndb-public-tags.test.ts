@@ -63,26 +63,35 @@ const conceptIds = {
   g44: '00000000-0000-4000-8000-000000000031',
   g7: '00000000-0000-4000-8000-000000000032',
 };
+
+type NativeRank = 'normal' | 'preferred' | 'deprecated';
+function rankedValue(content: string, rank: NativeRank = 'normal') {
+  return { rank, value: { type: 'value', content } };
+}
+function nativeSubject(id: string, type: string, statements: Record<string, unknown[]>) {
+  return { subject: { id, type, statements } };
+}
+
 const subjects: Record<string, object> = {
   [schemeIds.cont]: {
     subject: {
       id: schemeIds.cont,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: vndbPublicTagScheme('cont') } }] },
+      statements: { 'schema:url': [rankedValue(vndbPublicTagScheme('cont'))] },
     },
   },
   [schemeIds.ero]: {
     subject: {
       id: schemeIds.ero,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: vndbPublicTagScheme('ero') } }] },
+      statements: { 'schema:url': [rankedValue(vndbPublicTagScheme('ero'))] },
     },
   },
   [schemeIds.tech]: {
     subject: {
       id: schemeIds.tech,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: vndbPublicTagScheme('tech') } }] },
+      statements: { 'schema:url': [rankedValue(vndbPublicTagScheme('tech'))] },
     },
   },
   [conceptIds.g311]: {
@@ -90,8 +99,8 @@ const subjects: Record<string, object> = {
       id: conceptIds.g311,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: vndbPublicTagConceptUri('cont', 'g311') } }],
-        'skos:inScheme': [{ value: { content: schemeIds.cont } }],
+        'schema:url': [rankedValue(vndbPublicTagConceptUri('cont', 'g311'))],
+        'skos:inScheme': [rankedValue(schemeIds.cont)],
       },
     },
   },
@@ -100,8 +109,8 @@ const subjects: Record<string, object> = {
       id: conceptIds.g44,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: vndbPublicTagConceptUri('ero', 'g44') } }],
-        'skos:inScheme': [{ value: { content: schemeIds.ero } }],
+        'schema:url': [rankedValue(vndbPublicTagConceptUri('ero', 'g44'))],
+        'skos:inScheme': [rankedValue(schemeIds.ero)],
       },
     },
   },
@@ -110,14 +119,14 @@ const subjects: Record<string, object> = {
       id: conceptIds.g7,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: vndbPublicTagConceptUri('tech', 'g7') } }],
-        'skos:inScheme': [{ value: { content: schemeIds.tech } }],
+        'schema:url': [rankedValue(vndbPublicTagConceptUri('tech', 'g7'))],
+        'skos:inScheme': [rankedValue(schemeIds.tech)],
       },
     },
   },
 };
 
-function port(commands: BatchCommand[]): CrossMediaPort {
+function port(commands: BatchCommand[], reads: Record<string, object> = subjects): CrossMediaPort {
   const metadata = sourceRecordMetadataFixture();
   return {
     async batch(request) {
@@ -144,7 +153,7 @@ function port(commands: BatchCommand[]): CrossMediaPort {
     },
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      const known = subjects[id];
+      const known = reads[id];
       if (!known) return { subject: { id } } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
       return known as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
@@ -189,24 +198,27 @@ test('operator plans authored public tags and imports exact genre proposals thro
   expect(JSON.stringify(plan.gaps)).not.toContain('secret lie');
   const commands: BatchCommand[] = [];
   const directory = await mkdtemp(join(tmpdir(), 'vndb-public-tags-'));
+  const reviewedSubjects = structuredClone(subjects) as Record<string, object>;
+  const reviewedPort = (target: BatchCommand[]) => port(target, reviewedSubjects);
+  const known = {
+    schemes: [
+      { category: 'cont' as const, id: schemeIds.cont },
+      { category: 'ero' as const, id: schemeIds.ero },
+      { category: 'tech' as const, id: schemeIds.tech },
+    ],
+    concepts: [
+      { category: 'cont' as const, code: 'g311', id: conceptIds.g311 },
+      { category: 'ero' as const, code: 'g44', id: conceptIds.g44 },
+      { category: 'tech' as const, code: 'g7', id: conceptIds.g7 },
+    ],
+  };
   try {
-    const bindings = await readVndbPublicTagBindings(port(commands), {
-      schemes: [
-        { category: 'cont', id: schemeIds.cont },
-        { category: 'ero', id: schemeIds.ero },
-        { category: 'tech', id: schemeIds.tech },
-      ],
-      concepts: [
-        { category: 'cont', code: 'g311', id: conceptIds.g311 },
-        { category: 'ero', code: 'g44', id: conceptIds.g44 },
-        { category: 'tech', code: 'g7', id: conceptIds.g7 },
-      ],
-    });
+    const bindings = await readVndbPublicTagBindings(reviewedPort(commands), known);
     expect(bindings.concepts.map((item) => item.code).sort()).toEqual(['g311', 'g44', 'g7']);
     const first = await importVndbPublicTags({
       tables: authoredTables(),
       path: join(directory, 'state.sqlite'),
-      port: port(commands),
+      port: reviewedPort(commands),
       bindings,
     });
     expect(first.status).toBe('imported-with-gaps');
@@ -221,32 +233,34 @@ test('operator plans authored public tags and imports exact genre proposals thro
     expect(JSON.stringify(proposed)).not.toContain('u9001');
     const keys = genres.map((command) => command.key);
     const count = commands.length;
+    reviewedSubjects[conceptIds.g44] = nativeSubject(conceptIds.g44, 'skos:Concept', {
+      'schema:url': [rankedValue(vndbPublicTagConceptUri('ero', 'g44'), 'deprecated')],
+      'skos:inScheme': [rankedValue(schemeIds.ero, 'deprecated')],
+    });
+    const withheld = await readVndbPublicTagBindings(reviewedPort([]), known);
+    expect(withheld.concepts.map((item) => item.code).sort()).toEqual(['g311', 'g7']);
+    reviewedSubjects[conceptIds.g44] = nativeSubject(conceptIds.g44, 'skos:Concept', {
+      'schema:url': [
+        rankedValue(vndbPublicTagConceptUri('ero', 'g44'), 'deprecated'),
+        rankedValue(vndbPublicTagConceptUri('ero', 'g44'), 'preferred'),
+      ],
+      'skos:inScheme': [rankedValue(schemeIds.cont, 'deprecated'), rankedValue(schemeIds.ero, 'normal')],
+    });
+    const restored = await readVndbPublicTagBindings(reviewedPort(commands), known);
+    expect(restored.concepts.map(({ code, id }) => [code, id])).toContainEqual(['g44', conceptIds.g44]);
     const again = await importVndbPublicTags({
       tables: authoredTables(),
       path: join(directory, 'state.sqlite'),
-      port: port(commands),
-      bindings,
+      port: reviewedPort(commands),
+      bindings: restored,
     });
     expect(again.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
-    const nextGenres = commands.filter(
-      (command) => command.op === 'propose' && command.statement.property.id === 'schema:genre',
-    );
-    expect(nextGenres.map((command) => command.key).slice(0, keys.length)).toEqual(keys);
     expect(commands.length).toBeGreaterThanOrEqual(count);
-    subjects[conceptIds.g44] = { subject: { id: conceptIds.g44, type: 'skos:Concept', statements: {} } };
-    const withheld = await readVndbPublicTagBindings(port([]), {
-      schemes: [
-        { category: 'cont', id: schemeIds.cont },
-        { category: 'ero', id: schemeIds.ero },
-        { category: 'tech', id: schemeIds.tech },
-      ],
-      concepts: [
-        { category: 'cont', code: 'g311', id: conceptIds.g311 },
-        { category: 'ero', code: 'g44', id: conceptIds.g44 },
-        { category: 'tech', code: 'g7', id: conceptIds.g7 },
-      ],
-    });
-    expect(withheld.concepts.map((item) => item.code).sort()).toEqual(['g311', 'g7']);
+    expect(
+      commands
+        .filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:genre')
+        .map((command) => command.key),
+    ).toEqual(expect.arrayContaining(keys));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

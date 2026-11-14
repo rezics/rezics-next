@@ -163,6 +163,8 @@ Decision: Only a reviewed-subject 404 is treated as an absent binding; authoriza
 
 Decision: Character trait, appearance-role and blood-type readback counts only `normal` or `preferred` native statements and scans every value; a deprecated-only URI, `skos:inScheme` membership or `skos:broader` edge withholds only dependent bindings, preserving current siblings for unchanged-source recovery.
 
+Decision: Reviewed VNDB tag and staff-credit bindings scan every native statement and accept only exact matching value statements ranked `normal` or `preferred`. Deprecated-only URIs or `skos:inScheme` memberships withhold only their binding; current siblings remain usable and recover when matching evidence returns on unchanged input. Import proposals, acceptance, adoption and public readback remain separate.
+
 VNDB weights need the exact current Kana `/vn` response for the same selected work/tag, retaining decimal rating, endpoint and response digest. Exclude user IDs, notes and votes; COPY aggregates never supply weights or statistics. Character traits and appearances use the exact selected rows, source-supported parents and separate taxonomy Schemes. `lie=true`, unsupported role codes, unavailable parents or missing current identities cannot fabricate shared Concepts or memberships. Preserve VNDB spoiler levels and character roles as distinct qualifiers. The one mapper/publisher remains the shared vocabulary flow.
 
 ### Bangumi facts, books and sites

@@ -14,6 +14,7 @@ import {
   creditTypeSchemeUri,
   planVndbStaffCredits,
   readCreditTypeBindings,
+  readCreditTypeBindingsDetailed,
 } from '../src/vndb-staff-credits.ts';
 
 function authoredTables() {
@@ -49,12 +50,27 @@ function authoredTables() {
 const schemeId = '00000000-0000-4000-8000-000000000090';
 const scenarioId = '00000000-0000-4000-8000-000000000091';
 const designId = '00000000-0000-4000-8000-000000000092';
+type NativeRank = 'normal' | 'preferred' | 'deprecated';
+function rankedValue(content: string, rank: NativeRank = 'normal') {
+  return { rank, value: { type: 'value', content } };
+}
+function nativeSubject(
+  id: string,
+  type: string,
+  urls: ReturnType<typeof rankedValue>[],
+  memberships?: ReturnType<typeof rankedValue>[],
+) {
+  const statements: Record<string, unknown[]> = { 'schema:url': urls };
+  if (memberships) statements['skos:inScheme'] = memberships;
+  return { subject: { id, type, statements } };
+}
+
 const subjects: Record<string, object> = {
   [schemeId]: {
     subject: {
       id: schemeId,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: creditTypeSchemeUri } }] },
+      statements: { 'schema:url': [rankedValue(creditTypeSchemeUri)] },
     },
   },
   [scenarioId]: {
@@ -62,8 +78,8 @@ const subjects: Record<string, object> = {
       id: scenarioId,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: creditTypeConceptUri('scenario') } }],
-        'skos:inScheme': [{ value: { content: schemeId } }],
+        'schema:url': [rankedValue(creditTypeConceptUri('scenario'))],
+        'skos:inScheme': [rankedValue(schemeId)],
       },
     },
   },
@@ -72,14 +88,14 @@ const subjects: Record<string, object> = {
       id: designId,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: creditTypeConceptUri('chardesign') } }],
-        'skos:inScheme': [{ value: { content: schemeId } }],
+        'schema:url': [rankedValue(creditTypeConceptUri('chardesign'))],
+        'skos:inScheme': [rankedValue(schemeId)],
       },
     },
   },
 };
 
-function port(commands: BatchCommand[]): CrossMediaPort {
+function port(commands: BatchCommand[], reads: Record<string, object> = subjects): CrossMediaPort {
   const metadata = sourceRecordMetadataFixture();
   return {
     async batch(request) {
@@ -106,7 +122,7 @@ function port(commands: BatchCommand[]): CrossMediaPort {
     },
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      const known = subjects[id];
+      const known = reads[id];
       if (!known) return { subject: { id } } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
       return known as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
@@ -128,8 +144,10 @@ test('operator plans two aliases for one person and imports exact roles through 
   expect(plan.edges).toEqual([]);
   const commands: BatchCommand[] = [];
   const directory = await mkdtemp(join(tmpdir(), 'vndb-staff-credits-'));
+  const reviewedSubjects = structuredClone(subjects) as Record<string, object>;
+  const reviewedPort = (target: BatchCommand[]) => port(target, reviewedSubjects);
   try {
-    const bindings = await readCreditTypeBindings(port(commands), {
+    const bindings = await readCreditTypeBindings(reviewedPort(commands), {
       schemeId,
       concepts: [
         { code: 'scenario', id: scenarioId },
@@ -141,7 +159,7 @@ test('operator plans two aliases for one person and imports exact roles through 
     const first = await importVndbStaffCredits({
       tables: authoredTables(),
       path: join(directory, 'state.sqlite'),
-      port: port(commands),
+      port: reviewedPort(commands),
       bindings,
     });
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
@@ -176,19 +194,10 @@ test('operator plans two aliases for one person and imports exact roles through 
     expect(proposed.some((command) => command.statement.property.id === 'schema:musicBy')).toBe(false);
     const keys = proposed.map((command) => command.key);
     const count = commands.length;
-    const again = await importVndbStaffCredits({
-      tables: authoredTables(),
-      path: join(directory, 'state.sqlite'),
-      port: port(commands),
-      bindings,
-    });
-    expect(again.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
-    expect(commands.filter((command) => command.op === 'propose').map((command) => command.key)).toEqual(
-      expect.arrayContaining(keys),
-    );
-    expect(commands.length).toBeGreaterThanOrEqual(count);
-    subjects[scenarioId] = { subject: { id: scenarioId, type: 'skos:Concept', statements: {} } };
-    const withheld = await readCreditTypeBindings(port([]), {
+    reviewedSubjects[scenarioId] = nativeSubject(scenarioId, 'skos:Concept', [
+      rankedValue(creditTypeConceptUri('scenario'), 'deprecated'),
+    ], [rankedValue(schemeId, 'deprecated')]);
+    const withheld = await readCreditTypeBindings(reviewedPort([]), {
       schemeId,
       concepts: [
         { code: 'scenario', id: scenarioId },
@@ -196,7 +205,95 @@ test('operator plans two aliases for one person and imports exact roles through 
       ],
     });
     expect(withheld.concepts.map((item) => item.code)).toEqual(['chardesign']);
+    reviewedSubjects[scenarioId] = nativeSubject(scenarioId, 'skos:Concept', [
+      rankedValue(creditTypeConceptUri('scenario'), 'deprecated'),
+      rankedValue('https://vndb.org/credit-types/retired-scenario'),
+      rankedValue(creditTypeConceptUri('scenario'), 'preferred'),
+    ], [rankedValue('another-scheme', 'deprecated'), rankedValue(schemeId)]);
+    const restored = await readCreditTypeBindings(reviewedPort(commands), {
+      schemeId,
+      concepts: [
+        { code: 'scenario', id: scenarioId },
+        { code: 'chardesign', id: designId },
+      ],
+    });
+    expect(restored.concepts.map(({ code, id }) => [code, id]).sort()).toEqual([
+      ['chardesign', designId],
+      ['scenario', scenarioId],
+    ]);
+    const again = await importVndbStaffCredits({
+      tables: authoredTables(),
+      path: join(directory, 'state.sqlite'),
+      port: reviewedPort(commands),
+      bindings: restored,
+    });
+    expect(again.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
+    expect(commands.length).toBeGreaterThanOrEqual(count);
+    expect(commands.filter((command) => command.op === 'propose').map((command) => command.key)).toEqual(
+      expect.arrayContaining(keys),
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('credit bindings require current rank in reviewed and independently public reads', async () => {
+  const known = {
+    schemeId,
+    concepts: [
+      { code: 'scenario', id: scenarioId },
+      { code: 'chardesign', id: designId },
+    ],
+  };
+  const reviewedSubjects = structuredClone(subjects) as Record<string, object>;
+  const publicSubjects = structuredClone(subjects) as Record<string, object>;
+  reviewedSubjects[schemeId] = nativeSubject(schemeId, 'skos:ConceptScheme', [
+    rankedValue(creditTypeSchemeUri, 'deprecated'),
+    rankedValue('https://vndb.org/credit-types/retired'),
+    rankedValue(creditTypeSchemeUri, 'preferred'),
+  ]);
+  reviewedSubjects[scenarioId] = nativeSubject(
+    scenarioId,
+    'skos:Concept',
+    [rankedValue(creditTypeConceptUri('scenario'), 'deprecated'), rankedValue(creditTypeConceptUri('scenario'))],
+    [rankedValue('old-scheme', 'deprecated'), rankedValue(schemeId, 'preferred')],
+  );
+  publicSubjects[schemeId] = nativeSubject(schemeId, 'skos:ConceptScheme', [
+    rankedValue('https://vndb.org/credit-types/old', 'deprecated'),
+    rankedValue(creditTypeSchemeUri),
+  ]);
+  publicSubjects[scenarioId] = nativeSubject(
+    scenarioId,
+    'skos:Concept',
+    [rankedValue(creditTypeConceptUri('scenario'), 'deprecated'), rankedValue(creditTypeConceptUri('scenario'))],
+    [rankedValue('old-scheme', 'deprecated'), rankedValue(schemeId)],
+  );
+
+  const current = await readCreditTypeBindingsDetailed(
+    port([], reviewedSubjects),
+    known,
+    async (id) => publicSubjects[id] ?? { subject: { id } },
+  );
+  expect(current.bindings.schemes.map((item) => item.id)).toEqual([schemeId]);
+  expect(current.bindings.concepts.map((item) => item.code).sort()).toEqual(['chardesign', 'scenario']);
+
+  publicSubjects[scenarioId] = nativeSubject(
+    scenarioId,
+    'skos:Concept',
+    [rankedValue(creditTypeConceptUri('scenario'))],
+    [rankedValue(schemeId, 'deprecated')],
+  );
+  const deprecatedPublicMembership = await readCreditTypeBindingsDetailed(
+    port([], reviewedSubjects),
+    known,
+    async (id) => publicSubjects[id] ?? { subject: { id } },
+  );
+  expect(deprecatedPublicMembership.bindings.concepts.map((item) => item.code)).toEqual(['chardesign']);
+
+  reviewedSubjects[schemeId] = nativeSubject(schemeId, 'skos:ConceptScheme', [
+    rankedValue(creditTypeSchemeUri, 'deprecated'),
+  ]);
+  const deprecatedReviewedUrl = await readCreditTypeBindings(port([], reviewedSubjects), known);
+  expect(deprecatedReviewedUrl.schemes).toEqual([]);
+  expect(deprecatedReviewedUrl.concepts).toEqual([]);
 });
