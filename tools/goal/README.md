@@ -1732,8 +1732,6 @@ measurements. `attempts --json` exports worker manifests.
 Decision: renewed manager openings keep the configured brief and each current continuation once, replace full Goal
 documents with complete Scope then Outcome paragraphs plus owner-detail links, and omit whole summary paragraphs when
 the existing opening budget is tight; managers read omitted detail on demand.
-Decision: compact Goal summaries omit absent outcome/scope fields, missing documents remain path-only, and report
-captures omit absent private-duty context while previews stay read-only.
 Decision: task-specific worker guidance renders after the contract to keep the reusable role within its byte budget while retaining the frozen repair line in the role template.
 Decision: Worker prompts render architecture-map rows for the modules that own the brief's paths and those modules' allowed dependencies, with a one-line pointer to `docs/architecture/modules.json`; a Kernel-only brief carries no web rows. The map is computed from `scripts/architecture-map.ts` without loading oxc-parser.
 Decision: Refresh only the `interface-stories.txt` prompt golden when its generated `wapp` row omits the current `w/knowledge/route.tsx` entry; prompt behavior, budgets and other goldens stay unchanged.
