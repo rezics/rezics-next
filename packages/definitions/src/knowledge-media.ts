@@ -41,7 +41,10 @@ export function knowledgeMediaSource(mediaId: string, selection?: KnowledgeMedia
   const locator = new URL(`rezics-media:${mediaId}`);
   if (selection !== undefined) {
     if (!parseKnowledgeMediaSelection(selection)) throw new TypeError('Invalid Knowledge media selection');
-    for (const [key, value] of Object.entries(selection)) if (value !== undefined) locator.searchParams.set(key, value);
+    for (const key of fields) {
+      const value = Reflect.get(selection, key);
+      if (value !== undefined) locator.searchParams.set(key, value);
+    }
   }
   return locator.href;
 }

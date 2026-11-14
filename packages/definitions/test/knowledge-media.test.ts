@@ -16,6 +16,10 @@ test('managed own locators and exact source references retain different custody'
   expect(parseKnowledgeMediaSource(knowledgeMediaSource(media))).toEqual({ mediaId: media, selection: null });
   expect(parseKnowledgeMediaSource(knowledgeMediaSource(media, selection))).toEqual({ mediaId: media, selection });
   expect(parseKnowledgeMediaQuery(knowledgeMediaQuery(selection))).toEqual(selection);
+  expect(knowledgeMediaSource(media, {
+    publicationId: selection.publicationId, sourceSha256: selection.sourceSha256,
+    revisionId: selection.revisionId, documentId: selection.documentId, representation: 'public',
+  })).toBe(knowledgeMediaSource(media, selection));
   expect(parseKnowledgeMediaQuery({})).toBeUndefined();
 });
 
