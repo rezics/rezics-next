@@ -91,7 +91,18 @@ type CurrentSubject = {
   id: string;
   type: string;
   context: string;
-  statements: Record<string, readonly { value?: { type?: string; content?: unknown } }[]>;
+  statements: Record<
+    string,
+    readonly { rank?: 'normal' | 'preferred' | 'deprecated'; value?: { type?: string; content?: unknown } }[]
+  >;
+};
+type CurrentSubjectRead = { subject: CurrentSubject | null } | { error: unknown };
+type AssociationRead = { page: ReviewedCandidatePage } | { error: unknown };
+type LookupRun = {
+  currentReads: Map<string, Promise<CurrentSubjectRead>>;
+  associationReads: Map<string, Promise<AssociationRead>>;
+  verified: Map<string, BangumiGameGenreConcept>;
+  diagnostics: Map<string, BangumiGameGenreDiagnostic>;
 };
 type BindingState =
   | { state: 'bound'; binding: BangumiGameGenreConcept }
@@ -181,7 +192,12 @@ function hasCurrentValue(subject: CurrentSubject, property: string, content: str
   const values = subject.statements[property];
   return (
     Array.isArray(values) &&
-    values.some((statement) => statement.value?.type === 'value' && statement.value.content === content)
+    values.some(
+      (statement) =>
+        (statement.rank === 'normal' || statement.rank === 'preferred') &&
+        statement.value?.type === 'value' &&
+        statement.value.content === content,
+    )
   );
 }
 
@@ -220,32 +236,51 @@ export function createShowcaseBangumiGameGenreLookup(
   diagnostics: () => readonly BangumiGameGenreDiagnostic[];
   bindingFor: (literal: string) => BangumiGameGenreConcept | undefined;
 } {
-  const diagnosticsByOccurrence = new Map<string, BangumiGameGenreDiagnostic>();
-  const currentReads = new Map<string, Promise<{ subject: CurrentSubject | null } | { error: unknown }>>();
-  const associationReads = new Map<string, Promise<{ page: ReviewedCandidatePage } | { error: unknown }>>();
-  const verified = new Map<string, BangumiGameGenreConcept>();
+  // The importer creates one signal per run (including resume). Keep shared
+  // reads and verified bindings only for that run, then reread unchanged input.
+  const runs = new WeakMap<AbortSignal, LookupRun>();
+  let activeRun: LookupRun | undefined;
+  const runFor = (signal: AbortSignal): LookupRun => {
+    let run = runs.get(signal);
+    if (!run) {
+      run = {
+        currentReads: new Map(),
+        associationReads: new Map(),
+        verified: new Map(),
+        diagnostics: new Map(),
+      };
+      runs.set(signal, run);
+      activeRun = run;
+    }
+    return run;
+  };
 
-  const read = (id: string) => {
-    let pending = currentReads.get(id);
+  const read = (run: LookupRun, id: string): Promise<CurrentSubjectRead> => {
+    let pending = run.currentReads.get(id);
     if (!pending) {
       pending = port.readReviewedSubject(id).then(
         (result) => ({ subject: currentSubject(result, id) }),
         (error) => ({ error }),
       );
-      currentReads.set(id, pending);
+      run.currentReads.set(id, pending);
     }
     return pending;
   };
 
-  async function missingAssociation(id: string, property: string, value: string): Promise<BindingFailure['state']> {
+  async function missingAssociation(
+    run: LookupRun,
+    id: string,
+    property: string,
+    value: string,
+  ): Promise<BindingFailure['state']> {
     const key = `${id}\0${property}\0${value}`;
-    let pending = associationReads.get(key);
+    let pending = run.associationReads.get(key);
     if (!pending) {
       pending = port.reviewedCandidates(id, { property, target: value, context: globalContext, limit: 100 }).then(
         (page) => ({ page }),
         (error) => ({ error }),
       );
-      associationReads.set(key, pending);
+      run.associationReads.set(key, pending);
     }
     const read = await pending;
     if ('error' in read) return failure(read.error);
@@ -261,43 +296,47 @@ export function createShowcaseBangumiGameGenreLookup(
     return 'retracted-binding';
   }
 
-  async function inspect(binding: BangumiGameGenreConcept): Promise<BindingState> {
+  async function inspect(run: LookupRun, binding: BangumiGameGenreConcept): Promise<BindingState> {
     if (!profile) return { state: 'missing-binding' };
-    const schemeRead = await read(profile.schemeId);
+    const schemeRead = await read(run, profile.schemeId);
     if ('error' in schemeRead) return { state: failure(schemeRead.error) };
     const scheme = schemeRead.subject;
     if (!scheme)
-      return { state: await missingAssociation(profile.schemeId, 'schema:url', bangumiGameSourceGenreScheme) };
+      return {
+        state: await missingAssociation(run, profile.schemeId, 'schema:url', bangumiGameSourceGenreScheme),
+      };
     if (scheme.type !== 'skos:ConceptScheme') return { state: 'wrong-scheme' };
     if (!hasCurrentValue(scheme, 'schema:url', bangumiGameSourceGenreScheme)) {
       if ((scheme.statements['schema:url'] ?? []).length) return { state: 'wrong-scheme' };
       return {
-        state: await missingAssociation(profile.schemeId, 'schema:url', bangumiGameSourceGenreScheme),
+        state: await missingAssociation(run, profile.schemeId, 'schema:url', bangumiGameSourceGenreScheme),
       };
     }
 
-    const conceptRead = await read(binding.id);
+    const conceptRead = await read(run, binding.id);
     if ('error' in conceptRead) return { state: failure(conceptRead.error) };
     const concept = conceptRead.subject;
-    if (!concept) return { state: await missingAssociation(binding.id, 'schema:url', binding.sourceUri) };
+    if (!concept)
+      return { state: await missingAssociation(run, binding.id, 'schema:url', binding.sourceUri) };
     if (concept.type !== 'skos:Concept') return { state: 'wrong-scheme' };
     if (!hasCurrentValue(concept, 'skos:inScheme', profile.schemeId)) {
       if ((concept.statements['skos:inScheme'] ?? []).length) return { state: 'wrong-scheme' };
-      return { state: await missingAssociation(binding.id, 'skos:inScheme', profile.schemeId) };
+      return { state: await missingAssociation(run, binding.id, 'skos:inScheme', profile.schemeId) };
     }
     if (!hasCurrentValue(concept, 'schema:url', binding.sourceUri))
-      return { state: await missingAssociation(binding.id, 'schema:url', binding.sourceUri) };
+      return { state: await missingAssociation(run, binding.id, 'schema:url', binding.sourceUri) };
     return { state: 'bound', binding };
   }
 
   const lookup: ImportIdentifierLookup = {
     async resolve({ owner, conversion, signal }) {
+      const run = runFor(signal);
       if (owner.source !== sourceAlias || conversion.source !== 'bangumi') return {};
       const record = conversion.normalized as { type?: unknown; infobox?: unknown };
       if (record.type !== 4 || typeof record.infobox !== 'string') return {};
       const mapping = bangumiGameSourceGenres({ type: 4, infobox: record.infobox });
       for (const item of mapping.diagnostics)
-        diagnosticsByOccurrence.set(
+        run.diagnostics.set(
           `${owner.external_id}\0${item.pointer}`,
           diagnostic(owner.external_id, item.pointer, 'source-field-unsupported'),
         );
@@ -309,20 +348,20 @@ export function createShowcaseBangumiGameGenreLookup(
         const key = `${owner.external_id}\0${requirement.pointer}`;
         const binding = profile?.concepts.find((item) => item.literal === requirement.literal);
         if (!binding) {
-          diagnosticsByOccurrence.set(key, diagnostic(owner.external_id, requirement.pointer, 'missing-binding'));
+          run.diagnostics.set(key, diagnostic(owner.external_id, requirement.pointer, 'missing-binding'));
           continue;
         }
-        const result = await inspect(binding);
+        const result = await inspect(run, binding);
         if (result.state === 'bound') {
-          verified.set(binding.literal, binding);
+          run.verified.set(binding.literal, binding);
           references[bangumiGameSourceGenreReference(binding.literal)] = binding.id;
-          diagnosticsByOccurrence.delete(key);
+          run.diagnostics.delete(key);
         } else {
-          diagnosticsByOccurrence.set(key, diagnostic(owner.external_id, requirement.pointer, result.state));
+          run.diagnostics.set(key, diagnostic(owner.external_id, requirement.pointer, result.state));
           if (result.state === 'binding-unavailable') unavailable = true;
         }
       }
-      signal?.throwIfAborted();
+      signal.throwIfAborted();
       if (unavailable)
         return { status: 'unavailable', preserveProperties: ['schema:genre'] } satisfies ImportIdentifierResolution;
       return references;
@@ -330,8 +369,8 @@ export function createShowcaseBangumiGameGenreLookup(
   };
   return {
     lookup,
-    diagnostics: () => uniqueDiagnostics([...diagnosticsByOccurrence.values()]),
-    bindingFor: (literal) => verified.get(literal),
+    diagnostics: () => uniqueDiagnostics([...(activeRun?.diagnostics.values() ?? [])]),
+    bindingFor: (literal) => activeRun?.verified.get(literal),
   };
 }
 
