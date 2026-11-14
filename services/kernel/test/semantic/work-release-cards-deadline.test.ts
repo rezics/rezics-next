@@ -103,9 +103,7 @@ test('release cards stop selected-field work at their original explicit deadline
   expect(body.workReleaseCards.state).toBe('available');
   const publicCard = body.workReleaseCards.cards!.find(({ subject }) => subject === edition.id)!;
   expect(publicCard.fields['schema:inLanguage'].statements[0].value.content).toBe('ja');
-  expect(publicCard.fields['schema:publisher'].related[publisher.id].label.value).toContain(
-    'Deadline-bound publisher',
-  );
+  expect(publicCard.fields['schema:publisher'].related[publisher.id].label.value).toContain('Deadline-bound publisher');
 
   const pool = kernelPool;
   if (!pool) throw new Error('Native fixture did not expose its kernel pool');

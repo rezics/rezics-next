@@ -192,98 +192,102 @@ export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): 
     const scalarFields: { subject: string; property: string; field: SelectedField }[] = [];
     const clientsByHome = new Map<number, CommandTransaction>();
     const typeById = new Map(memberships.map(({ id, type }) => [id, type]));
-    await withReadTransaction(input.pool, async (client) => {
-      const homes = new Map<number, string[]>();
-      for (const id of ids) {
-        const home = routeById.get(id)!;
-        const batch = homes.get(home) ?? [];
-        batch.push(id);
-        homes.set(home, batch);
-      }
-      for (const [home, batch] of homes) {
-        const local = (await partitionReadClient(client, home)) as CommandTransaction;
-        clientsByHome.set(home, local);
-        for (const id of batch) {
-          const fields = new Map<string, SelectedField>();
-          for (const property of requested.get(id) ?? []) {
-            if (isRelationProperty(input.release, property)) {
-              const rows = (await listOutboundLinks.run(local, {
-                context_id: context,
-                route: routeOf(id)!,
-                subject_id: id,
-                property,
-                filter_value: NIL_UUID,
-                after_order: '',
-                after_target: NIL_UUID,
-                after_statement: NIL_UUID,
-                page_limit: workReleaseCardFieldLimit + 1,
-              })) as {
-                statement: string;
-                slot: string;
-                target: string | null;
-                external: string | null;
-                value: CurrentRelationCandidate['value'];
-              }[];
-              if (rows.length > workReleaseCardFieldLimit) {
-                fields.set(property, { facts: [], withheld: false, unavailable: true });
-                continue;
-              }
-              fields.set(property, { facts: [], withheld: false });
-              const relationFilter = input.release.properties[property]?.relation?.filter;
-              const candidates = relationCandidatesByPartition.get(home) ?? [];
-              for (const row of rows) {
-                if (row.value === undefined) {
+    await withReadTransaction(
+      input.pool,
+      async (client) => {
+        const homes = new Map<number, string[]>();
+        for (const id of ids) {
+          const home = routeById.get(id)!;
+          const batch = homes.get(home) ?? [];
+          batch.push(id);
+          homes.set(home, batch);
+        }
+        for (const [home, batch] of homes) {
+          const local = (await partitionReadClient(client, home)) as CommandTransaction;
+          clientsByHome.set(home, local);
+          for (const id of batch) {
+            const fields = new Map<string, SelectedField>();
+            for (const property of requested.get(id) ?? []) {
+              if (isRelationProperty(input.release, property)) {
+                const rows = (await listOutboundLinks.run(local, {
+                  context_id: context,
+                  route: routeOf(id)!,
+                  subject_id: id,
+                  property,
+                  filter_value: NIL_UUID,
+                  after_order: '',
+                  after_target: NIL_UUID,
+                  after_statement: NIL_UUID,
+                  page_limit: workReleaseCardFieldLimit + 1,
+                })) as {
+                  statement: string;
+                  slot: string;
+                  target: string | null;
+                  external: string | null;
+                  value: CurrentRelationCandidate['value'];
+                }[];
+                if (rows.length > workReleaseCardFieldLimit) {
                   fields.set(property, { facts: [], withheld: false, unavailable: true });
                   continue;
                 }
-                candidates.push({
-                  id,
-                  property,
-                  candidate: {
-                    subject: id,
+                fields.set(property, { facts: [], withheld: false });
+                const relationFilter = input.release.properties[property]?.relation?.filter;
+                const candidates = relationCandidatesByPartition.get(home) ?? [];
+                for (const row of rows) {
+                  if (row.value === undefined) {
+                    fields.set(property, { facts: [], withheld: false, unavailable: true });
+                    continue;
+                  }
+                  candidates.push({
+                    id,
                     property,
-                    candidate: row.statement,
-                    target: row.target,
-                    external: row.external,
-                    value: row.value,
-                    context,
-                    defaults,
-                    slot: row.slot,
-                    ...(relationFilter === undefined
-                      ? {}
-                      : { filterProperties: Array.isArray(relationFilter) ? relationFilter : [relationFilter] }),
-                    requireRelation: true,
-                  },
-                });
+                    candidate: {
+                      subject: id,
+                      property,
+                      candidate: row.statement,
+                      target: row.target,
+                      external: row.external,
+                      value: row.value,
+                      context,
+                      defaults,
+                      slot: row.slot,
+                      ...(relationFilter === undefined
+                        ? {}
+                        : { filterProperties: Array.isArray(relationFilter) ? relationFilter : [relationFilter] }),
+                      requireRelation: true,
+                    },
+                  });
+                }
+                relationCandidatesByPartition.set(home, candidates);
+                continue;
               }
-              relationCandidatesByPartition.set(home, candidates);
-              continue;
+              const view = await effectiveSlotFacts(local, id, property, context, defaults);
+              const facts = view.facts.filter((fact) => fact.kind === 'statement');
+              const field = { facts: [...facts], withheld: !!view.resolution };
+              fields.set(property, field);
+              scalarFields.push({ subject: id, property, field });
             }
-            const view = await effectiveSlotFacts(local, id, property, context, defaults);
-            const facts = view.facts.filter((fact) => fact.kind === 'statement');
-            const field = { facts: [...facts], withheld: !!view.resolution };
-            fields.set(property, field);
-            scalarFields.push({ subject: id, property, field });
+            selected.set(id, fields);
           }
-          selected.set(id, fields);
         }
-      }
 
-      await applyWorkReleaseCardFieldFences(client, input.routeKey, clientsByHome, scalarFields);
+        await applyWorkReleaseCardFieldFences(client, input.routeKey, clientsByHome, scalarFields);
 
-      for (const [home, candidates] of relationCandidatesByPartition) {
-        const local = (await partitionReadClient(client, home)) as CommandTransaction;
-        for (let offset = 0; offset < candidates.length; offset += 500) {
-          const batch = candidates.slice(offset, offset + 500);
-          const current = await currentRelationFacts(
-            local,
-            input.routeKey,
-            batch.map(({ candidate }) => candidate),
-          );
-          for (const [key, fact] of current) relationFacts.set(key, fact);
+        for (const [home, candidates] of relationCandidatesByPartition) {
+          const local = (await partitionReadClient(client, home)) as CommandTransaction;
+          for (let offset = 0; offset < candidates.length; offset += 500) {
+            const batch = candidates.slice(offset, offset + 500);
+            const current = await currentRelationFacts(
+              local,
+              input.routeKey,
+              batch.map(({ candidate }) => candidate),
+            );
+            for (const [key, fact] of current) relationFacts.set(key, fact);
+          }
         }
-      }
-    }, input.deadline);
+      },
+      input.deadline,
+    );
 
     for (const candidates of relationCandidatesByPartition.values()) {
       for (const { id, property, candidate } of candidates) {
