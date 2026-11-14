@@ -4,6 +4,7 @@ WITH input AS (
 )
 SELECT scope.identity, scope.frontier, scope.capture_id::text AS capture,
        scope.committed_revision::text AS revision,
+       scope.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid AS "scopeCommitted",
        capture.capture_id::text AS "nativeCaptureId", capture.scanned::text AS scanned, capture.complete,
        receipt.transaction_id::text AS "transactionId",
        receipt.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()

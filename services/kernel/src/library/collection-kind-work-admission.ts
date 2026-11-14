@@ -26,6 +26,7 @@ import {
 } from './collection-kind-input-bounds.ts';
 import admitEpisode from './collection-kind-work-admit.sql';
 import readSource from './collection-kind-work-source.sql';
+import { readAdmittedCollectionKindDefinition } from './collection-kind-definition.ts';
 
 export { collectionKindInputAdmissionWork } from './collection-kind-input-bounds.ts';
 
@@ -62,8 +63,10 @@ const localAdmissions = new WeakMap<
     locator: CollectionKindPreparationLocator;
     originId: string;
     referenceId: string;
+    committed: boolean;
     releaseDigest: string;
     audience: string;
+    expiresAt: number;
     sourceFence: string;
     identityObservation: IdentityScopeObservation;
     sourceIdentity: NativeSourceIdentity;
@@ -79,10 +82,15 @@ const maxNativeInteger = 9_223_372_036_854_775_807n;
 function exactLocator(locator: CollectionKindPreparationLocator): boolean {
   return (
     !!locator &&
+    typeof locator === 'object' &&
+    !Array.isArray(locator) &&
     Object.keys(locator).sort().join(',') === 'collectionId,ownerAccountId,preparationId,route' &&
     Number.isInteger(locator.route) &&
     locator.route >= 0 &&
     locator.route <= 65535 &&
+    typeof locator.collectionId === 'string' &&
+    typeof locator.ownerAccountId === 'string' &&
+    typeof locator.preparationId === 'string' &&
     routeOf(locator.collectionId) === locator.route &&
     routeOf(locator.ownerAccountId) === locator.route &&
     uuid.test(locator.preparationId)
@@ -105,6 +113,7 @@ export function bindCollectionKindPreparationStep(
   const resources = currentOperationalResources(tx);
   const deadline = work.deadlineAt;
   if (
+    !Number.isSafeInteger(deadline) ||
     resources.mode !== 'work-step' ||
     resources.partition !== partitionOf(locator.route) ||
     resources.accounts.length !== 1 ||
@@ -253,6 +262,7 @@ function sourceIdentity(
     typeof ownerEpoch !== 'number' ||
     !Number.isSafeInteger(ownerEpoch) ||
     ownerEpoch < 1 ||
+    ownerEpoch > 2147483647 ||
     typeof receivingEpoch !== 'string' ||
     !/^[1-9][0-9]{0,18}$/.test(receivingEpoch) ||
     BigInt(receivingEpoch) > maxNativeInteger ||
@@ -397,8 +407,10 @@ export async function admitCollectionKindPreparationStep(
         locator: Object.freeze({ ...locator }),
         originId: consumer.originId,
         referenceId: consumer.referenceId,
+        committed: consumer.committed && scope.scopeCommitted,
         releaseDigest: consumer.catalogueRoot,
         audience: consumer.audience,
+        expiresAt: Date.parse(consumer.expiresAt),
         sourceFence: token.fence,
         identityObservation: Object.freeze({
           key: Object.freeze({
@@ -417,7 +429,7 @@ export async function admitCollectionKindPreparationStep(
   return result === true;
 }
 
-/** Reread Source custody; missing independent audience/identity results remain unavailable. */
+/** Reread the original Source, then hold its real committed identity receipt through this home. */
 export async function readCollectionKindWorkDefinition(
   tx: OperationalTransaction,
   locator: CollectionKindPreparationLocator,
@@ -436,15 +448,7 @@ export async function readCollectionKindWorkDefinition(
     !isDeepStrictEqual(admitted.custody.identity, admitted.sourceIdentity)
   )
     return null;
-  // Exact foreign producer gap: createIdentityScopedObservations(...).revalidate
-  // in semantic/identity-scoped-observations.ts returns IdentityScopeRevalidateResult
-  // (current observation and work only). It provides neither IdentityNativeReceipt
-  // nor the five audience dependency closures. NativeDefinitionCatalogue.head,
-  // kinds, kindPage and kindCandidates supply pins/declarations, not that receipt
-  // or current Source-local audience proof. Source custody and consent cannot
-  // construct any of these operands. Keep only the complete-definition dispatch
-  // unavailable; admission above is independent of completed Type evidence.
-  return null;
+  return readAdmittedCollectionKindDefinition(tx, locator, work);
 }
 
 /** Retained pre-Type owner operands only; no repair receipt or disclosure closure. */
@@ -455,7 +459,7 @@ export function currentCollectionKindInputAdmission(
 ) {
   const invocation = currentInvocation(tx, locator, work);
   const held = localAdmissions.get(work);
-  return invocation && held?.tx === tx && isDeepStrictEqual(held.locator, locator)
+  return invocation && held?.tx === tx && Date.now() < held.expiresAt && isDeepStrictEqual(held.locator, locator)
     ? Object.freeze({ ...held, pool: invocation.pool, deadline: invocation.deadline })
     : undefined;
 }

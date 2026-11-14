@@ -7,6 +7,7 @@ import type { WorkDimensions } from './contract/work-dimensions.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
 import admitEpisode from './collection-kind-work-admit.sql';
 import readSource from './collection-kind-work-source.sql';
+import readDefinition from './collection-kind-definition.sql';
 import readState from './collection-kind-input-state.sql';
 import readInput from './collection-kind-input-read.sql';
 import insertInput from './collection-kind-input-insert.sql';
@@ -90,6 +91,13 @@ function admissionEpisode() {
 }
 function admissionSource() {
   return memoizedValue(admissionSource, () => statement(readSource.sql, 3, 3, 3, 10240, { escaped: 0 }));
+}
+function definition() {
+  // A 1024-byte completion attempt and bounded scalar metadata/receiving keys.
+  // JSON escaping and the Source bind are prepaid, including optional misses.
+  return memoizedValue(definition, () =>
+    statement(readDefinition.sql, 8, 8, 8, 6 * (1024 + 2048), { escaped: 0 }),
+  );
 }
 function custody() {
   return memoizedValue(custody, () =>
@@ -182,6 +190,7 @@ export function COLLECTION_KIND_INPUT_TERMS() {
     Object.freeze({
       admissionEpisode: admissionEpisode(),
       admissionSource: admissionSource(),
+      definition: definition(),
       custody: custody(),
       state: state(),
       read: read(),

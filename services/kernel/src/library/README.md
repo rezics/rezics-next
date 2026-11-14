@@ -573,8 +573,9 @@ Current implementation evidence is narrower than the capability:
   NativeCollectionWork. A raw original is not a Type vote. Missing scoped Type/disclosure stays typed unavailable
   and cannot certify a winner. Account-fenced operational transactions retain work with its owning account; the
   existing Library erasure inventory includes all four local kind stores. `collectionKindSourceBindings` installs
-  the Semantic scoped-observation factory. A current scope observation does not itself supply the complete-definition
-  native receipt or audience dependency closures required by `collection-kind-work-admission.ts`.
+  the Semantic scoped-observation factory. `collection-kind-work-admission.ts` resolves the retained native
+  definition through `collection-kind-definition.ts` and Semantic's committed receipt producer. Audience closures
+  and Type evidence consume that definition; they are not prerequisites for constructing it.
 - `work-module.ts` registers Collection listing effects and ordinary entry, label and copy retention. `account-fact-purge.ts` exports
   `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
 - Decision: due-command and default-worker retention growth at 256/1024/4096 uses complete `cost-folded` captures,
@@ -604,8 +605,30 @@ existing migrations and ordinary Collection tables are unchanged. The full calla
 interval/foreign receipt operands are documented in [Access](../access/README.md#native-kind-audience-contract).
 Source checkpoints are post-vote progress, not committed pre-Type raw input. Decision: Kind raw-original input
 is one nine-axis Library plan with explicit zero engineRequests at NativeCollectionWork; native Type stays
-unavailable. Neither a capture, a consent enrollment nor a current scoped observation manufactures the Semantic
-committed repair receipt and all five owner closures.
+unavailable. The admitted definition now resolves the genuine committed identity receipt independently of the
+five audience closures. Neither that receipt nor consent/custody supplies those closures or a Kind winner.
+
+`readCollectionKindWorkDefinition` retains the enrolled catalogue release and exact original audience, current
+Source identity/observation, scoped capture/revision and native custody. The Source observation preserves its
+own accepted meaning and includes the retained Kind release pin; a catalogue pin never becomes a receipt.
+The definition lookup uses the exact scope registration and finish association at the current revision (the
+preceding revision after ready advancement), its completion and one bounded native receiving locator. Initial
+registration goes through Semantic's capture/ready association checks; repaired registration uses its actual
+job, attempt and receiving keys. Missing historical associations stay unavailable without backfill.
+
+The getter calls `resolveCommittedIdentityScopeReceipt` and `holdCommittedIdentityScopeReceipt` with the installed
+`collection-kind` context. Each call directly charges the same admitted `NativeCollectionWork`; returned work is
+cumulative and is never added again. The Library lookup prepays eight native rows/points, one statement, its
+literal/bind bytes and bounded metadata/attempt projection. Every use holds the real receipt on that same live
+Source transaction. Return from and release the home before foreign preparation, then bind/admit the same original
+with its unchanged Pool, owner, partition, preparation and deadline for final adoption. Repeated admission preserves
+current consent, original expiry, Source fences and custody; a copied definition cannot carry a live hold.
+
+Accounts still owns fresh original authorization and all five native audience closures. Its current
+`kind-audience-original.ts` prepare/verify bodies must consume this actual definition instead of treating the
+committed receipt producer as missing. Semantic still owns original and terminal Type/disclosure evidence from
+the committed raw interval. Neither downstream result is fabricated here. Initial/repaired positive definitions,
+final transaction currentness, accounting and unchanged permission behavior require deferred native acceptance.
 
 ### Native whole-query episode storage
 
