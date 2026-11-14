@@ -18,8 +18,9 @@ Decision: the worker's 64-key page size bounds one dispatch only; larger closure
 
 `startConceptBrowse` copies and freezes the exact property/concept/scheme selection and the release, graph,
 scheme, membership, principal and request binding before retaining the root. The state contains only this
-bounded definition and a revision-fenced storage locator. It contains neither discovered keys nor frontier arrays.
-An old version-one array state is rejected rather than imported as complete evidence.
+bounded definition and a revision-fenced storage locator in one canonical v1 envelope. It contains neither
+discovered keys nor frontier arrays. Stored definitions and locator revisions are unchanged; workers reconstruct
+this envelope from their retained selection, binding and locator rather than importing another state shape.
 
 `createConceptBrowseStore` implements the internal derived-storage seam within the existing retained-plan
 lifecycle. The owning plan supplies immutable identity, leases, expiry, cancellation and worker dispatch. No

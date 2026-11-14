@@ -38,6 +38,7 @@ test('native relevance membership reads exact resumed branch membership', async 
   const pool = createPool(databaseUrl);
   const state = createReleaseSearchRelevanceState({
     pool,
+    deadline: Date.now() + 30_000,
     run: async <T>(operation: () => Promise<T>) => operation(),
     reserve: () => undefined,
     poolId: 'semantic',
@@ -51,8 +52,10 @@ test('native relevance membership reads exact resumed branch membership', async 
     candidates = [seed, leftWork, rightWork, absent];
 
   try {
-    const root = await state.start(binding, now, [seed]);
-    execution = root.execution;
+    const empty = await state.start(binding, now);
+    execution = empty.execution;
+    expect(await state.seen(binding, empty, candidates, now)).toEqual(new Set());
+    const root = await state.advance(binding, empty, '0'.repeat(64), [seed], now);
     expect(await state.seen(binding, root, candidates, now)).toEqual(new Set([seed]));
 
     const left = await state.advance(binding, root, '1'.repeat(64), [leftWork], now + 1);
