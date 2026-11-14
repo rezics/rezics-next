@@ -86,7 +86,8 @@ export function createYearlyCompletionGoalReads(dependencies: { pool: Pool }) {
       };
       alive();
       try {
-        return await withReadingDashboardReadConnection(dependencies.pool, { deadline, signal }, async (client) => {
+        const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
+        return await withReadingDashboardReadConnection(dependencies.pool, readOptions, async (client) => {
           await client.query('BEGIN');
           await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
             route,

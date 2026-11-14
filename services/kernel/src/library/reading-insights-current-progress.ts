@@ -191,7 +191,11 @@ function currentScope(row: ScopeRow | undefined): ReadingInsightsCurrentProgress
 
 /** Bounded, owner-only read over maintained groups; it never hydrates native sessions or schedules work. */
 export function createReadingInsightsCurrentProgressReads(deps: { pool: Pool }) {
-  async function currentProgress(actor: Actor, deadline: number, signal?: AbortSignal) {
+  async function currentProgress(
+    actor: Actor,
+    deadline: number,
+    signal?: AbortSignal,
+  ): Promise<ReadingInsightsCurrentProgress> {
     if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
     const route = routeOf(actor.accountId);
     if (route === null || !actor.scopes.includes('progress_session:list')) throw new ProblemError('forbidden');
@@ -199,7 +203,8 @@ export function createReadingInsightsCurrentProgressReads(deps: { pool: Pool }) 
       if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
     };
     alive();
-    return withReadingDashboardReadConnection(deps.pool, { deadline, signal }, async (client) => {
+    const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
+    return withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
       await client.query('BEGIN');
       await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
         route,

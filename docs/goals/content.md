@@ -61,6 +61,9 @@ discovery sources, results, continuations and their query and default-worker ass
 Decision: Report and moderation reads use one Content-owned repeatable-read transaction wrapper for the full original
 deadline; unresolved native I/O is discarded without queuing rollback behind it.
 
+Decision: Bounded read callers preserve PostgreSQL query timeouts, array rows and exact result types; Library dashboard
+reads retain their separate savepoint and accounting lifetime.
+
 Decision: Content owns large-serial Book release-candidate acceptance; Web links to it for the mounted journey.
 Chapter, outline and complete-release size has no 512 ceiling; request envelopes, pages and preparation steps may
 follow [architecture bounds](../architecture.md) without limiting total book size. Authors publish a new chapter or

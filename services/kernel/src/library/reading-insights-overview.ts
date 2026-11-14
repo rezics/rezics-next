@@ -46,6 +46,22 @@ export type ReadingInsightsOverview = Readonly<{
   }>;
 }>;
 
+type ReadingInsightsOverviewReads = Readonly<{
+  overview(
+    actor: Actor,
+    year: number,
+    deadline: number,
+    signal?: AbortSignal,
+  ): Promise<ReadingInsightsOverview>;
+  overview<T>(
+    actor: Actor,
+    year: number,
+    deadline: number,
+    signal: AbortSignal | undefined,
+    deliver: (value: ReadingInsightsOverview, encoded: string) => T,
+  ): Promise<T>;
+}>;
+
 function panelFailure(error: unknown): ReadingInsightsPanelFailure | undefined {
   if (!(error instanceof ProblemError)) return undefined;
   switch (error.code) {
@@ -72,7 +88,7 @@ async function readPanel<T>(read: () => Promise<T>): Promise<ReadingInsightsPane
 }
 
 /** Composes separately identified pure reads; each keeps its own authority and source revision. */
-export function createReadingInsightsOverviewReads(deps: { pool: Pool }) {
+export function createReadingInsightsOverviewReads(deps: { pool: Pool }): ReadingInsightsOverviewReads {
   const allTimeReads = createConsumptionStatisticsReads(deps);
   const yearReads = createReportedYearSummaryReads(deps);
   const profileReads = createReadingInsightsProfileReads(deps);
@@ -90,9 +106,9 @@ export function createReadingInsightsOverviewReads(deps: { pool: Pool }) {
       if (!Number.isInteger(year) || year < 1 || year > 9999) throw new ProblemError('invalid_request');
       const settled = await Promise.allSettled([
         readPanel(() => allTimeReads.summary(actor, deadline, signal)),
-        readPanel(() => yearReads.summary(actor, year, deadline, signal)),
+        readPanel<ReportedYearSummary>(() => yearReads.summary(actor, year, deadline, signal)),
         readPanel(() => profileReads.profiles(actor, year, deadline, signal)),
-        readPanel(() => currentProgressReads.currentProgress(actor, deadline, signal)),
+        readPanel<ReadingInsightsCurrentProgress>(() => currentProgressReads.currentProgress(actor, deadline, signal)),
         readPanel(() => assessmentReads.assessments(actor, deadline, signal)),
       ] as const);
       const unwrap = <T>(result: PromiseSettledResult<T>): T => {

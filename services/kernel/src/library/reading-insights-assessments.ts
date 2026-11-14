@@ -154,7 +154,8 @@ export function createReadingInsightsAssessmentReads(deps: { pool: Pool }) {
       if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
     };
     alive();
-    return withReadingDashboardReadConnection(deps.pool, { deadline, signal }, async (client) => {
+    const readOptions = { deadline, ...(signal === undefined ? {} : { signal }) };
+    return withReadingDashboardReadConnection(deps.pool, readOptions, async (client) => {
       await client.query('BEGIN');
       await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
         route,
