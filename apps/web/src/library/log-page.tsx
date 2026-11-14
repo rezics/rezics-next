@@ -1,6 +1,6 @@
 import { Exposure } from '../kernel/exposure';
 import { RelativeTime } from './logs-relative-time';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -88,6 +88,55 @@ type PublicationPage = {
   undoKey: string | undefined;
 };
 
+type OriginPresentation = {
+  removeLifetime: object | undefined;
+  removeObservation: object | undefined;
+  restoreLifetime: object | undefined;
+  restoreObservation: object | undefined;
+};
+
+type ReturnIntent = {
+  lifetime: symbol;
+  opener: HTMLButtonElement;
+  origin: OriginPresentation;
+};
+
+type FocusIntent = {
+  lifetime: symbol;
+  destination: 'confirmation' | 'cancel' | 'retry' | 'deleted' | 'reading';
+  focusVersion: number;
+  origin: OriginPresentation;
+};
+
+type PresentationTargets = {
+  lifetime: symbol;
+  readingContext: HTMLElement | null;
+  removeContext: HTMLElement | null;
+  deleteButton: HTMLButtonElement | null;
+  confirmButton: HTMLButtonElement | null;
+  deletedContext: HTMLElement | null;
+  returnIntent: ReturnIntent | null;
+  focusIntent: FocusIntent | null;
+};
+
+function originPresentation(origin?: PublishedLogOrigin): OriginPresentation {
+  return {
+    removeLifetime: origin?.remove.lifetime,
+    removeObservation: origin?.remove.observation,
+    restoreLifetime: origin?.restore.lifetime,
+    restoreObservation: origin?.restore.observation,
+  };
+}
+
+function sameOriginPresentation(left: OriginPresentation, right: OriginPresentation): boolean {
+  return (
+    left.removeLifetime === right.removeLifetime &&
+    left.removeObservation === right.removeObservation &&
+    left.restoreLifetime === right.restoreLifetime &&
+    left.restoreObservation === right.restoreObservation
+  );
+}
+
 function publicationPage(
   id: string,
   isOwner: boolean,
@@ -136,9 +185,44 @@ export function PublishedLogPageView({
     deletionRevision: number | undefined;
   } | null>(null);
   const busy = useRef<{ lifetime: symbol; operation: 'remove' | 'restore' } | null>(null);
+  const deleteErrorId = useId();
+  const focusVersion = useRef(0);
+  const suppressFocusTracking = useRef(false);
+  const presentationTargets = useRef<PresentationTargets | null>(null);
+  const currentOriginPresentation = originPresentation(originating);
+  const currentOriginPresentationRef = useRef(currentOriginPresentation);
+  currentOriginPresentationRef.current = currentOriginPresentation;
+  if (!presentationTargets.current || presentationTargets.current.lifetime !== page.lifetime) {
+    presentationTargets.current = {
+      lifetime: page.lifetime,
+      readingContext: null,
+      removeContext: null,
+      deleteButton: null,
+      confirmButton: null,
+      deletedContext: null,
+      returnIntent: null,
+      focusIntent: null,
+    };
+  }
+  const targets = presentationTargets.current;
   const { lifetime, revision, undo, deleteStarted, confirming, deleted, pending, error, idempotencyKey } = page;
   const deletionId = undo?.deletionId;
   const deletionRevision = undo?.revision;
+
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent) => {
+      if (
+        suppressFocusTracking.current ||
+        !(event.target instanceof HTMLElement) ||
+        event.target === document.body ||
+        event.target === document.documentElement
+      )
+        return;
+      focusVersion.current++;
+    };
+    document.addEventListener('focusin', onFocusIn);
+    return () => document.removeEventListener('focusin', onFocusIn);
+  }, []);
 
   useLayoutEffect(() => {
     bindLogsReturnVisit(locale, sessionSubject ?? null, log.id);
@@ -200,6 +284,16 @@ export function PublishedLogPageView({
 
   const isCurrent = (operation: 'remove' | 'restore') =>
     committed.current?.lifetime === lifetime && page.isOwner && (!originating || originating[operation].isCurrent());
+  function focusLocalTarget(target: HTMLElement | null) {
+    if (!target?.isConnected) return false;
+    suppressFocusTracking.current = true;
+    try {
+      target.focus();
+    } finally {
+      suppressFocusTracking.current = false;
+    }
+    return true;
+  }
   function update(change: Partial<PublicationPage>) {
     setPage((current) => (current.lifetime === lifetime ? { ...current, ...change } : current));
   }
@@ -215,6 +309,9 @@ export function PublishedLogPageView({
       return;
     const headers = originating ? originating.remove.headers() : csrfHeaders();
     if (!headers) return;
+    const originAtStart = originPresentation(originating);
+    const focusVersionAtStart = focusVersion.current;
+    focusLocalTarget(targets.removeContext);
     busy.current = { lifetime, operation: 'remove' };
     update({ deleteStarted: deleteStarted ?? Date.now(), pending: true, error: null });
     try {
@@ -224,10 +321,23 @@ export function PublishedLogPageView({
       });
       if (!isCurrent('remove')) return;
       if (!result.ok) {
+        targets.focusIntent = {
+          lifetime,
+          destination: 'retry',
+          focusVersion: focusVersionAtStart,
+          origin: originAtStart,
+        };
         update({ error: result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed() });
         return;
       }
       if (result.id !== page.id) return;
+      targets.returnIntent = null;
+      targets.focusIntent = {
+        lifetime,
+        destination: 'deleted',
+        focusVersion: focusVersionAtStart,
+        origin: originAtStart,
+      };
       update({
         idempotencyKey: crypto.randomUUID(),
         confirming: false,
@@ -236,7 +346,15 @@ export function PublishedLogPageView({
         undoKey: crypto.randomUUID(),
       });
     } catch {
-      if (isCurrent('remove')) update({ error: m.library_logs_write_failed() });
+      if (isCurrent('remove')) {
+        targets.focusIntent = {
+          lifetime,
+          destination: 'retry',
+          focusVersion: focusVersionAtStart,
+          origin: originAtStart,
+        };
+        update({ error: m.library_logs_write_failed() });
+      }
     } finally {
       if (isCurrent('remove')) {
         busy.current = null;
@@ -258,6 +376,9 @@ export function PublishedLogPageView({
       return false;
     const headers = originating ? originating.restore.headers() : csrfHeaders();
     if (!headers) return false;
+    const originAtStart = originPresentation(originating);
+    const focusVersionAtStart = focusVersion.current;
+    focusLocalTarget(targets.deletedContext);
     busy.current = { lifetime, operation: 'restore' };
     try {
       const result = await restorePublishedLog({
@@ -265,6 +386,13 @@ export function PublishedLogPageView({
         headers,
       });
       if (!isCurrent('restore') || !result.ok || result.id !== page.id) return false;
+      targets.returnIntent = null;
+      targets.focusIntent = {
+        lifetime,
+        destination: 'reading',
+        focusVersion: focusVersionAtStart,
+        origin: originAtStart,
+      };
       update({ revision: result.revision, deleted: false, undo: undefined, deleteStarted: null });
       return true;
     } finally {
@@ -272,26 +400,64 @@ export function PublishedLogPageView({
     }
   }
 
-  if (deleted) {
-    return (
-      <article className="max-w-4xl space-y-4 text-foreground">
-        <UndoNotice
-          key={page.restoreGeneration}
-          message={m.library_logs_deleted()}
-          deadline={(deleteStarted ?? 0) + 30_000}
-          available={Boolean(undo) && (!originating || originating.restore.isCurrent())}
-          operation="published_log.create"
-          failure={m.library_logs_write_failed()}
-          restore={restore}
-        />
-        <PublishedLogBack logId={log.id} locale={locale} sessionSubject={sessionSubject} />
-      </article>
-    );
-  }
+  useLayoutEffect(() => {
+    const intent = targets.focusIntent;
+    if (!intent) return;
+    if (presentationTargets.current !== targets || intent.lifetime !== lifetime) {
+      targets.focusIntent = null;
+      return;
+    }
+    if (!sameOriginPresentation(currentOriginPresentationRef.current, intent.origin)) {
+      targets.focusIntent = null;
+      targets.returnIntent = null;
+      return;
+    }
+    if (intent.destination === 'retry' && pending) return;
+    const ready =
+      (intent.destination === 'confirmation' && confirming && !deleted) ||
+      (intent.destination === 'cancel' && !confirming && !deleted) ||
+      (intent.destination === 'retry' && confirming && !deleted && !pending && error !== null) ||
+      (intent.destination === 'deleted' && deleted) ||
+      (intent.destination === 'reading' && !deleted);
+    if (!ready) {
+      targets.focusIntent = null;
+      return;
+    }
+    targets.focusIntent = null;
+    if (focusVersion.current !== intent.focusVersion) {
+      if (intent.destination === 'cancel') targets.returnIntent = null;
+      return;
+    }
+    let target: HTMLElement | null = null;
+    if (intent.destination === 'confirmation' || intent.destination === 'retry') {
+      target = targets.confirmButton;
+    } else if (intent.destination === 'cancel') {
+      const returnIntent = targets.returnIntent;
+      const hasCurrentReturn =
+        returnIntent?.lifetime === lifetime &&
+        sameOriginPresentation(returnIntent.origin, intent.origin) &&
+        returnIntent.opener.ownerDocument === document;
+      target = hasCurrentReturn && targets.deleteButton?.isConnected ? targets.deleteButton : targets.readingContext;
+      targets.returnIntent = null;
+    } else if (intent.destination === 'deleted') {
+      target = targets.deletedContext;
+    } else {
+      target = targets.readingContext;
+    }
+    focusLocalTarget(target);
+  });
 
   return (
     <article className="max-w-4xl space-y-6 text-foreground">
-      <header className="space-y-3">
+      <header
+        ref={(node) => {
+          if (presentationTargets.current === targets) targets.readingContext = node;
+        }}
+        role="group"
+        aria-label={m.library_logs_page_heading()}
+        tabIndex={-1}
+        className="space-y-3 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         <PageHeading>{m.library_logs_page_heading()}</PageHeading>
         <p className="max-w-prose text-muted-foreground">{m.library_logs_description()}</p>
         <p className="text-sm text-muted-foreground">{m.library_journal_public_boundary()}</p>
@@ -327,48 +493,103 @@ export function PublishedLogPageView({
           <p className="text-muted-foreground">{m.library_history_published_snapshot()}</p>
         </section>
       </details>
-      {error ? (
-        <p role="alert" className="rounded-lg border border-border bg-card p-3">
-          {error}
-        </p>
-      ) : null}
-      {isOwner && revision !== undefined && (!originating || originating.remove.isCurrent()) ? (
+      {deleted ? (
+        <section
+          ref={(node) => {
+            if (presentationTargets.current === targets) targets.deletedContext = node;
+          }}
+          role="region"
+          aria-label={m.library_logs_deleted()}
+          tabIndex={-1}
+          className="space-y-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <UndoNotice
+            key={page.restoreGeneration}
+            message={m.library_logs_deleted()}
+            deadline={(deleteStarted ?? 0) + 30_000}
+            available={Boolean(undo) && (!originating || originating.restore.isCurrent())}
+            operation="published_log.create"
+            failure={m.library_logs_write_failed()}
+            restore={restore}
+          />
+        </section>
+      ) : isOwner && revision !== undefined && (!originating || originating.remove.isCurrent()) ? (
         <Exposure operation="published_log.delete">
-          <div className="flex flex-wrap gap-3">
-            {!confirming ? (
-              <button
-                type="button"
-                className={buttonClass}
-                onClick={() => {
-                  if (isCurrent('remove')) update({ confirming: true });
-                }}
-              >
-                {m.library_logs_delete()}
-              </button>
-            ) : (
-              <>
+          <section
+            ref={(node) => {
+              if (presentationTargets.current === targets) targets.removeContext = node;
+            }}
+            role="region"
+            aria-label={m.library_logs_delete()}
+            aria-busy={pending || undefined}
+            tabIndex={-1}
+            className="space-y-3 rounded-xl border bg-card p-4 sm:p-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {error ? (
+              <p id={deleteErrorId} role="alert" className="rounded-lg border border-border p-3">
+                {error}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-3">
+              {!confirming ? (
                 <button
+                  ref={(node) => {
+                    if (presentationTargets.current === targets) targets.deleteButton = node;
+                  }}
                   type="button"
                   className={buttonClass}
-                  disabled={pending}
-                  autoFocus
-                  onClick={() => void remove()}
-                >
-                  {m.library_logs_confirm_delete()}
-                </button>
-                <button
-                  type="button"
-                  className={buttonClass}
-                  disabled={pending}
-                  onClick={() => {
-                    if (isCurrent('remove')) update({ confirming: false });
+                  onClick={(event) => {
+                    if (isCurrent('remove')) {
+                      const origin = originPresentation(originating);
+                      targets.returnIntent = { lifetime, opener: event.currentTarget, origin };
+                      targets.focusIntent = {
+                        lifetime,
+                        destination: 'confirmation',
+                        focusVersion: focusVersion.current,
+                        origin,
+                      };
+                      update({ confirming: true });
+                    }
                   }}
                 >
-                  {m.library_logs_cancel()}
+                  {m.library_logs_delete()}
                 </button>
-              </>
-            )}
-          </div>
+              ) : (
+                <>
+                  <button
+                    ref={(node) => {
+                      if (presentationTargets.current === targets) targets.confirmButton = node;
+                    }}
+                    type="button"
+                    className={buttonClass}
+                    disabled={pending}
+                    aria-describedby={error ? deleteErrorId : undefined}
+                    onClick={() => void remove()}
+                  >
+                    {m.library_logs_confirm_delete()}
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    disabled={pending}
+                    onClick={() => {
+                      if (isCurrent('remove')) {
+                        targets.focusIntent = {
+                          lifetime,
+                          destination: 'cancel',
+                          focusVersion: focusVersion.current,
+                          origin: originPresentation(originating),
+                        };
+                        update({ confirming: false });
+                      }
+                    }}
+                  >
+                    {m.library_logs_cancel()}
+                  </button>
+                </>
+              )}
+            </div>
+          </section>
         </Exposure>
       ) : null}
     </article>
