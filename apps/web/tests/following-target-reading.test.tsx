@@ -105,3 +105,61 @@ test('Collection exposure withdrawal retires retained links and inspection witho
     await h.dispose();
   }
 });
+
+test('identity leads independent Open and Inspect controls; current prose precedes disclosed references and command meaning', async () => {
+  let reads = 0;
+  const supplied = {
+    ...follow('space'),
+    reason: 'membership' as const,
+    destination: { kind: 'space' as const, spaceId, address: 'quiet-reading' },
+  };
+  const h = await mountFollowing(page(supplied), async (input) => {
+    reads++;
+    return {
+      ...input,
+      result: {
+        state: 'ready',
+        space: {
+          spaceId,
+          realmId,
+          title: 'The current reading circle',
+          summary: 'Read slowly together.',
+          address: 'quiet-reading',
+        },
+      },
+    };
+  });
+  try {
+    const row = h.host.querySelector<HTMLElement>('[data-follow-target]')!;
+    const open = row.querySelector<HTMLAnchorElement>('[data-content-item-slot="trailing"] a')!;
+    expect(open.getAttribute('aria-label')).toBe('Open space title');
+    expect(open.getAttribute('href')).toBe('/en/spaces/quiet-reading');
+    expect(open.closest('button')).toBeNull();
+    expect(row.textContent).not.toContain('Required by membership');
+    expect(row.textContent).not.toContain(spaceId);
+    expect(reads).toBe(0);
+    const inspect = await h.inspect(spaceId);
+    expect(inspect.getAttribute('aria-expanded')).toBe('true');
+    expect(inspect.getAttribute('aria-controls')).toBe('following-inspection');
+    expect(row.dataset.followingSelected).toBe('true');
+    const panel = h.host.querySelector<HTMLElement>('[role="dialog"]')!;
+    const current = panel.querySelector<HTMLElement>('[data-following-current-identity]')!;
+    expect(current.textContent).toContain('The current reading circle');
+    expect(current.textContent).toContain('Read slowly together.');
+    const details = panel.querySelector<HTMLDetailsElement>('details')!;
+    expect(details.open).toBe(false);
+    expect(current.compareDocumentPosition(details) & h.window.Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    await h.settle(() => details.querySelector('summary')!.click());
+    expect(details.open).toBe(true);
+    expect(details.textContent).toContain(spaceId);
+    expect(details.textContent).toContain('Required by membership');
+    expect(details.textContent).toContain('Removing this follow does not leave a community');
+    expect(reads).toBe(1);
+    await h.settle(() => panel.dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(inspect.getAttribute('aria-expanded')).toBe('false');
+    expect(row.dataset.followingSelected).toBeUndefined();
+    expect(h.window.document.activeElement).toBe(inspect);
+  } finally {
+    await h.dispose();
+  }
+});

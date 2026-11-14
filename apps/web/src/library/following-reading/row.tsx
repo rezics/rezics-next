@@ -28,17 +28,11 @@ export function FollowingReadingRow({
   inspect: (trigger: HTMLButtonElement) => void;
   controls: ReactNode;
 }) {
-  const { follow, title, kind, destination } = row;
+  const { follow, title, targetKind, kind, destination } = row;
   const collectionWithdrawn = destination?.kind === 'collection' && !canReadCollection;
   const href = suspended || collectionWithdrawn ? undefined : destination?.href;
-  const targetKind =
-    follow.targetType === 'subject'
-      ? m.library_follow_count_context_subject()
-      : follow.targetType === 'collection'
-        ? m.library_following_kind_collection()
-        : m.library_following_kind_space();
   const admission = suspended
-    ? m.following_reading_return_preparing()
+    ? null
     : collectionWithdrawn
       ? m.following_reading_collection_withdrawn()
       : !follow.target

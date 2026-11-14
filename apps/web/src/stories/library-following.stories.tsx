@@ -1,8 +1,23 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
-import { setLibraryFollowingStoryMode, type LibraryFollowingStoryMode } from '../kernel/fake/library-following-story';
-import { PageStory, libraryFollowingReady, libraryHeadingReady, pagePaths, pageReady } from './page';
+import {
+  followingStoryCollectionId,
+  followingStoryCursor,
+  followingStorySpaceId,
+  libraryFollowingStoryReads,
+  setLibraryFollowingStoryAdmission,
+  setLibraryFollowingStoryMode,
+  type LibraryFollowingStoryMode,
+} from '../kernel/fake/library-following-story';
+import {
+  PageStory,
+  libraryFollowingReady,
+  libraryHeadingReady,
+  pagePaths,
+  pageReady,
+  type PageStoryContext,
+} from './page';
 
 const meta = {
   title: 'Library/Following',
@@ -12,7 +27,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'FULL Following rows supply admitted Space and Realm destinations. Inspection confirms the current Space before exposing its Realm membership owner; Community retains the command.',
+          'One native Following page presents identity and kind before independent Open, Inspect and removal controls. Selected Space details come from one deliberate read; references and follow meaning are disclosed separately. Routed stories include admission withdrawal, a persisted-document return and retry at the same kind/cursor. These synthetic transitions are source acceptance cases for later browser verification.',
       },
     },
   },
@@ -20,9 +35,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function FollowingStory(mode: LibraryFollowingStoryMode = 'recorded') {
+let currentPage: PageStoryContext | null = null;
+function capturePage(context: PageStoryContext) {
+  currentPage = context;
+  return () => {
+    if (currentPage === context) currentPage = null;
+  };
+}
+
+function FollowingStory(mode: LibraryFollowingStoryMode = 'recorded', path = pagePaths['library-following']) {
   setLibraryFollowingStoryMode(mode);
-  return <PageStory visitor="Signed In" path={pagePaths['library-following']} />;
+  return <PageStory visitor="Signed In" path={path} onReady={capturePage} />;
 }
 
 async function followRow(canvasElement: HTMLElement, title: string) {
@@ -48,7 +71,23 @@ async function followMenu(canvasElement: HTMLElement, title: string) {
 
 export const SignedIn: Story = {
   name: 'Signed In',
-  play: libraryFollowingReady,
+  play: async (context) => {
+    await libraryFollowingReady(context);
+    const rows = context.canvasElement.querySelectorAll('[data-follow-target-type]');
+    await expect([...rows].map((row) => row.getAttribute('data-follow-target-type'))).toEqual([
+      'space',
+      'collection',
+      'subject',
+      'subject',
+    ]);
+    const canvas = within(context.canvasElement);
+    const covered = await followRow(context.canvasElement, 'The Little Prince');
+    await expect(covered.querySelector('[data-content-item-slot="visual"]')).not.toBeNull();
+    await expect(canvas.getByRole('link', { name: m.following_reading_open({ title: 'Kokoro' }) })).toBeVisible();
+    await expect(
+      canvas.getByRole('link', { name: m.following_reading_open({ title: 'A quiet space' }) }),
+    ).toHaveAttribute('href', /\/spaces\/quiet-novel-club$/);
+  },
   render: () => FollowingStory(),
 };
 
@@ -205,13 +244,22 @@ async function inspectCommunity(canvasElement: HTMLElement) {
 export const InspectionReady: Story = {
   render: () => FollowingStory(),
   play: async ({ canvasElement }) => {
+    await libraryFollowingReady({ canvasElement });
     await inspectCommunity(canvasElement);
     const panel = await within(canvasElement).findByRole('dialog');
     await expect(await within(panel).findByText(m.following_reading_current_identity())).toBeVisible();
+    await expect(within(panel).getByText(/A reading circle for long evenings/)).toBeVisible();
     await expect(within(panel).getByRole('link', { name: m.realm_membership_label() })).toHaveAttribute(
       'href',
       /\/realms\//,
     );
+    const details = panel.querySelector('details')!;
+    await expect(details.open).toBe(false);
+    await expect(within(panel).getByText(followingStorySpaceId)).not.toBeVisible();
+    await userEvent.click(within(panel).getByText(m.following_reading_details()));
+    await expect(within(panel).getByText(followingStorySpaceId)).toBeVisible();
+    await expect(within(panel).getByText(m.following_reading_remove_meaning())).toBeVisible();
+    await userEvent.click(within(panel).getByText(m.following_reading_details()));
   },
 };
 export const CommunityPreparing: Story = {
@@ -264,5 +312,108 @@ export const CurrentSourceInspection: Story = {
     await waitFor(() => expect(within(canvasElement).queryByRole('dialog')).toBeNull());
     await inspectCommunity(canvasElement);
     await expect(await within(canvasElement).findByRole('dialog')).toBeVisible();
+  },
+};
+
+export const CollectionExposureWithdrawal: Story = {
+  render: () => FollowingStory(),
+  play: async ({ canvasElement }) => {
+    await libraryFollowingReady({ canvasElement });
+    const row = canvasElement.querySelector<HTMLElement>(`[data-follow-target="${followingStoryCollectionId}"]`)!;
+    const inspect = within(row).getByRole('button', {
+      name: m.following_reading_inspect_target({ title: 'Quiet novels for long evenings' }),
+    });
+    await userEvent.click(inspect);
+    const panel = await within(canvasElement).findByRole('dialog');
+    const oldOpen = within(panel).getByRole('link');
+    currentPage!.queryClient.setQueriesData<{ subject: string; admitted: string[] }>(
+      { predicate: ({ queryKey }) => queryKey[0] === 'exposure' && queryKey[1] === 'viewer' },
+      (previous) =>
+        previous ? { ...previous, admitted: previous.admitted.filter((value) => value !== 'collections') } : previous,
+    );
+    await expect(oldOpen.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))).toBe(false);
+    await waitFor(() => expect(panel).not.toBeInTheDocument());
+    await expect(within(row).queryByRole('link')).toBeNull();
+    await expect(within(row).getByText(m.following_reading_collection_withdrawn())).toBeVisible();
+    await expect(
+      within(row).getByRole('button', {
+        name: m.library_follow_more_actions({ title: 'Quiet novels for long evenings' }),
+      }),
+    ).toBeEnabled();
+    await userEvent.click(inspect);
+    const current = await within(canvasElement).findByRole('dialog');
+    await expect(within(current).getByText(m.following_reading_collection_withdrawn())).toBeVisible();
+    await expect(within(current).queryByRole('link')).toBeNull();
+  },
+};
+
+export const ReturnReadmission: Story = {
+  render: () =>
+    FollowingStory(
+      'return-readmission',
+      `${pagePaths['library-following']}?cursor=${encodeURIComponent(followingStoryCursor)}`,
+    ),
+  play: async ({ canvasElement }) => {
+    await libraryFollowingReady({ canvasElement });
+    await inspectCommunity(canvasElement);
+    await within(canvasElement).findByText(m.following_reading_current_identity());
+    const oldRow = canvasElement.querySelector<HTMLElement>(`[data-follow-target="${followingStorySpaceId}"]`)!;
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+    await waitFor(() => expect(within(canvasElement).queryByRole('dialog')).toBeNull());
+    await expect(within(oldRow).queryByRole('link')).toBeNull();
+    await expect(within(canvasElement).getByText(m.following_reading_return_preparing())).toBeVisible();
+    setLibraryFollowingStoryAdmission('denied');
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    await expect(await within(canvasElement).findByText(m.library_my_ratings_denied())).toBeVisible();
+    await expect(canvasElement.querySelector('[data-follow-target]')).toBeNull();
+    setLibraryFollowingStoryAdmission('ready');
+    await userEvent.click(within(canvasElement).getByRole('button', { name: m.following_reading_refresh() }));
+    const currentRow = await followRow(canvasElement, 'A quiet space, open again');
+    await expect(
+      within(currentRow).getByRole('link', {
+        name: m.following_reading_open({ title: 'A quiet space, open again' }),
+      }),
+    ).toHaveAttribute('href', /\/spaces\/quiet-novel-club$/);
+    await expect(within(canvasElement).queryByRole('dialog')).toBeNull();
+    await expect(
+      libraryFollowingStoryReads().every((read) => read.cursor === followingStoryCursor && read.targetType === null),
+    ).toBe(true);
+    await inspectCommunity(canvasElement);
+    await expect(await within(canvasElement).findByText(m.following_reading_current_identity())).toBeVisible();
+  },
+};
+
+export const SameCursorRetry: Story = {
+  render: () =>
+    FollowingStory(
+      'same-cursor-retry',
+      `${pagePaths['library-following']}?kind=collection&cursor=${encodeURIComponent(followingStoryCursor)}`,
+    ),
+  play: async ({ canvasElement }) => {
+    await followRow(canvasElement, 'Quiet novels for long evenings');
+    const canvas = within(canvasElement);
+    const refresh = canvas.getByRole('button', { name: m.following_reading_refresh() });
+    await waitFor(() => expect(refresh).toBeEnabled());
+    setLibraryFollowingStoryAdmission('unavailable');
+    await userEvent.click(refresh);
+    await expect(await canvas.findByText(m.library_follow_unavailable())).toBeVisible();
+    const beforeRetry = libraryFollowingStoryReads().length;
+    setLibraryFollowingStoryAdmission('ready');
+    await userEvent.click(canvas.getByRole('button', { name: m.library_follow_retry() }));
+    await waitFor(() => expect(canvas.queryByText(m.library_follow_unavailable())).toBeNull());
+    const row = await followRow(canvasElement, 'Quiet novels for long evenings');
+    await expect(within(row).getByRole('heading', { name: 'Quiet novels for long evenings' })).toBeVisible();
+    await expect(libraryFollowingStoryReads().length).toBeGreaterThan(beforeRetry);
+    await expect(
+      libraryFollowingStoryReads().every(
+        (read) => read.cursor === followingStoryCursor && read.targetType === 'collection',
+      ),
+    ).toBe(true);
+    await expect(canvasElement.querySelectorAll('[data-follow-target]')).toHaveLength(1);
+    await expect(canvas.getByRole('link', { name: m.library_collection_more() })).toHaveAttribute(
+      'href',
+      /kind=collection/,
+    );
+    await expect(canvas.getByRole('link', { name: m.library_collection_more() })).toHaveAttribute('href', /cursor=/);
   },
 };

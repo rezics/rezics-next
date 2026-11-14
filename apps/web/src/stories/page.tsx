@@ -3,7 +3,13 @@ import { accountProfileHref } from '../accounts/profile-editor/address';
 import { selectHomeFeedStory, type HomeFeedStory } from '../kernel/fake/home-feed-stories';
 import { setLabelCatalogueStory } from '../kernel/fake/library-labels';
 import { resetLabelAssignmentStory } from '../kernel/fake/library-label-assignments';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+  type AnyRouter,
+} from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { StoryObj } from '@storybook/react-vite';
 import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential';
@@ -136,6 +142,8 @@ function localizedEntry(path: string): string {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+export type PageStoryContext = { router: AnyRouter; queryClient: QueryClient };
+
 /** Each story enters the generated application route tree at its localized public URL. */
 export function PageStory({
   visitor,
@@ -146,6 +154,7 @@ export function PageStory({
   labelsFixture,
   homeFeedFixture,
   previewNewTabs = false,
+  onReady,
 }: {
   visitor: 'Signed In' | 'Signed Out';
   path: string;
@@ -155,6 +164,8 @@ export function PageStory({
   labelsFixture?: Parameters<typeof selectLabelStory>[0];
   homeFeedFixture?: HomeFeedStory;
   previewNewTabs?: boolean;
+  /** Let a routed story drive current admission and history through this page's actual owners. */
+  onReady?: (context: PageStoryContext) => void | (() => void);
 }) {
   const entry = localizedEntry(path);
   const [limitation, setLimitation] = useState<string>();
@@ -180,6 +191,7 @@ export function PageStory({
     void router.load();
     return { router, queryClient };
   }, [entry, labelsFixture, visitor, credentialMode, homeFeedFixture, ratingsFixture]);
+  useLayoutEffect(() => onReady?.({ router, queryClient }), [onReady, router, queryClient]);
   useLayoutEffect(
     () =>
       bindPreviewNavigation({

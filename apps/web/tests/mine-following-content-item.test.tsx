@@ -177,7 +177,7 @@ test('Following uses shared item headings and independent native actions while p
     expect(heading.lang).toBe('ja');
     expect(heading.closest('[aria-hidden="true"]')).toBeNull();
     expect(heading.tabIndex).toBe(-1);
-    expect(rows[0]!.querySelectorAll('a')).toHaveLength(1);
+    expect(rows[0]!.querySelectorAll('a')).toHaveLength(2);
     expect(rows[0]!.querySelector('a a, a button, h3 a')).toBeNull();
     expect(rows[2]!.querySelector('a')?.getAttribute('href')).toBe(
       `/en/collections/${encodeURIComponent(collection.target!.id)}`,
@@ -186,12 +186,12 @@ test('Following uses shared item headings and independent native actions while p
     expect(rows[1]!.querySelector('a')).toBeNull();
     expect(rows[3]!.querySelector('a')).toBeNull();
     expect(rows[0]!.querySelector('[data-content-item-slot="metadata"]')?.textContent).toContain('Book');
-    expect(rows[0]!.textContent).toContain(m.library_follow_reason_library());
+    expect(rows[0]!.textContent).not.toContain(m.library_follow_reason_library());
     expect(rows[1]!.textContent).toContain(m.library_following_subjects());
-    expect(rows[1]!.textContent).toContain(m.library_follow_reason_library());
+    expect(rows[1]!.textContent).not.toContain(m.library_follow_reason_library());
     expect(rows[2]!.textContent).toContain(m.library_following_kind_collection());
     expect(rows[3]!.textContent).toContain(m.library_following_kind_space());
-    expect(rows[3]!.textContent).toContain(m.library_follow_reason_membership());
+    expect(rows[3]!.textContent).not.toContain(m.library_follow_reason_membership());
 
     await act(async () => {
       admit(['personal_library']);

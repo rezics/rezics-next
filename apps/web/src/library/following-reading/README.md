@@ -8,7 +8,9 @@ description field; only a deliberate current Space read supplies its summary. No
 Impeccable reference files are absent from the supplied reference/skill locations; the documented shared
 [ContentItem](../../../../../packages/ui/src/components/content-item.md) slots provide the layout fallback.
 The final minimal verification policy requires Web workspace typing; focused regression sources and routed stories
-are delivered for the dev verifier, with acceptance and browser execution deferred.
+are delivered for the dev verifier, with acceptance and browser execution deferred. `following-target-reading.test.tsx` pins independent opening,
+current prose and the reference disclosure. The shared-item assertion expects the additional Open link and source text
+inside inspection; the clipboard regression opens that disclosure before copying. Other lifecycle assertions stay intact.
 
 Following renders one native FULL page in supplied order, at most twenty rows. Its summary identities and exact target
 index are prepared once per page in O(N); inspection selects by exact target ID in O(1). Local confirmed removal

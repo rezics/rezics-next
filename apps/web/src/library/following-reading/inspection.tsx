@@ -92,7 +92,7 @@ export function FollowingInspection({
   returnFrontier?: FollowingReturnFrontier | null;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
-  const { follow, title, kind, reason, destination: supplied } = selection.row;
+  const { follow, title, targetKind, kind, reason, destination: supplied } = selection.row;
   const space = useSelectedSpace(selection, subject, locale, readSpace);
   useLayoutEffect(() => {
     if (selection.current()) heading.current?.focus();
@@ -154,14 +154,19 @@ export function FollowingInspection({
             >
               {title.text}
             </h2>
-            <p className="text-sm text-muted-foreground">{kind}</p>
+            <p className="flex flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span className="font-medium">{targetKind}</span>
+              {kind !== targetKind ? <span>{kind}</span> : null}
+            </p>
           </div>
         </div>
       </header>
       {ready ? (
         <div className="min-w-0 space-y-2" data-following-current-identity="">
           <h3 className="text-sm font-medium text-muted-foreground">{m.following_reading_current_identity()}</h3>
-          <p className="text-lg leading-snug font-semibold wrap-anywhere">{ready.title}</p>
+          {ready.title !== title.text ? (
+            <p className="text-lg leading-snug font-semibold wrap-anywhere">{ready.title}</p>
+          ) : null}
           {ready.summary ? (
             <p className="whitespace-pre-wrap text-sm leading-relaxed wrap-anywhere">{ready.summary}</p>
           ) : null}
@@ -211,7 +216,7 @@ export function FollowingInspection({
               ? m.following_reading_open_realm()
               : m.following_reading_open({ title: ready?.title ?? title.text })}
           </a>
-        ) : !isSpace || ready ? (
+        ) : (!isSpace || ready) && !collectionWithdrawn ? (
           <p role="status" className="text-sm leading-relaxed">
             {m.following_reading_no_destination()}
           </p>
