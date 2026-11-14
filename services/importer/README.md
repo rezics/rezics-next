@@ -218,6 +218,8 @@ Decision: shared reviewed Bangumi/VNDB tags finish as one journaled flow with se
 
 Decision: reviewed Bangumi binding recovery treats only native normal/preferred statements and candidates as current evidence. Deprecated source equivalence and alternate candidates remain history and do not block or certify a separately selected exact mapping.
 
+Decision: selected Bangumi staff Scheme and role Concepts certify exact source URI, identity and Scheme membership only through independently read native normal or preferred statements. Scan every statement so deprecated alternatives cannot hide a current exact binding; deprecated-only evidence is history for both recovery occupancy and final creator readback.
+
 Publication reads derive the selection from live candidate ranks, adoption mode/head and deletion tombstones.
 Checkpoint accepted pages in the publication journal. On reopen, match the first page and adoption head before
 resuming the cursor. Replacement requires the complete listing through its terminal page.
