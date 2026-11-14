@@ -418,7 +418,10 @@ async function openWorkspaceOutline(canvasElement: HTMLElement, locale: Locale) 
   return view.getByRole('region', { name: m.knowledge_workspace_documents({}, options) });
 }
 
-export const NestedOutline: Story = {
+export const NestedOutline: Story = { args: { scenario: 'branches' } };
+
+export const NestedOutlineDraftAndBranchRecovery: Story = {
+  name: 'Nested outline: retained draft and branch recovery',
   args: { scenario: 'branches' },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
