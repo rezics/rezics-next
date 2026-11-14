@@ -8,7 +8,9 @@ export function followingTargetKind(follow: MineFollow): string {
     ? m.library_follow_count_context_subject()
     : follow.targetType === 'collection'
       ? m.library_following_kind_collection()
-      : m.library_following_kind_space();
+      : follow.targetType === 'zone'
+        ? m.library_following_kind_zone()
+        : m.library_following_kind_space();
 }
 
 export function followingKind(follow: MineFollow): string {

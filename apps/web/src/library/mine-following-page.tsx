@@ -655,7 +655,7 @@ function MineFollowingPageState({
         ) : null}
       </header>
       <nav aria-label={m.following_kind_label()} className="flex flex-wrap gap-2">
-        {(['all', 'subject', 'collection', 'space'] as const).map((value) => {
+        {(['all', 'subject', 'collection', 'space', 'zone'] as const).map((value) => {
           const label =
             value === 'all'
               ? m.following_kind_all()
@@ -663,7 +663,9 @@ function MineFollowingPageState({
                 ? m.following_kind_subject()
                 : value === 'collection'
                   ? m.following_kind_collection()
-                  : m.following_kind_space();
+                  : value === 'space'
+                    ? m.following_kind_space()
+                    : m.following_kind_zone();
           const variant = kind === value ? 'default' : 'outline';
           return kindChangeDisabled ? (
             <Button

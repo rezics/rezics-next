@@ -3,12 +3,12 @@ import { subjectHref } from '../../subject/subject-href';
 import type { MineFollow } from '../mine-following';
 import type { SelectedSpace } from './space-reader';
 
-export type FollowingDestination = { href: string; kind: 'subject' | 'collection' | 'space' | 'realm' };
+export type FollowingDestination = { href: string; kind: 'subject' | 'collection' | 'space' | 'realm' | 'zone' };
 const uuid = v.pipe(v.string(), v.uuid());
 // The address reader accepts one nonempty path parameter, at most 128 characters.
 const address = v.pipe(v.string(), v.minLength(1), v.maxLength(128));
 
-/** Summary identity is not a Space address or Realm identity. */
+/** Summary identity is not a native destination operand. */
 export function suppliedDestination(follow: MineFollow, title: string, locale: string): FollowingDestination | null {
   if (!follow.target) return null;
   if (follow.targetType === 'subject')
@@ -21,6 +21,10 @@ export function suppliedDestination(follow: MineFollow, title: string, locale: s
   if (follow.target.id !== follow.targetId) return null;
   const supplied = follow.destination;
   if (!supplied || supplied.kind === 'unavailable') return null;
+  if (follow.targetType === 'zone')
+    return supplied.kind === 'zone'
+      ? { kind: 'zone', href: `/${encodeURIComponent(locale)}/zones/${encodeURIComponent(supplied.zoneId)}` }
+      : null;
   if (supplied.kind === 'space') {
     if (supplied.spaceId !== follow.targetId || !v.is(address, supplied.address)) return null;
     return { kind: 'space', href: `/${encodeURIComponent(locale)}/spaces/${encodeURIComponent(supplied.address)}` };

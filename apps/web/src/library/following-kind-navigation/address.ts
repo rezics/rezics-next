@@ -4,7 +4,7 @@ import type { MineFollow } from '../mine-following';
 export type FollowingKind = 'all' | MineFollow['targetType'];
 export function followingKind(value: unknown): FollowingKind | null {
   if (value === undefined || value === 'all') return 'all';
-  return value === 'subject' || value === 'collection' || value === 'space' ? value : null;
+  return value === 'subject' || value === 'collection' || value === 'space' || value === 'zone' ? value : null;
 }
 
 /** Commerce owns the native population selector and kind-bound cursors. */

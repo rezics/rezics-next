@@ -7,8 +7,8 @@ groups exact references, follow source and command meaning in a disclosure. The 
 description field; only a deliberate current Space read supplies its summary. No row enrichment is added.
 Impeccable reference files are absent from the supplied reference/skill locations; the documented shared
 [ContentItem](../../../../../packages/ui/src/components/content-item.md) slots provide the layout fallback.
-The final minimal verification policy requires Web workspace typing; focused regression sources and routed stories
-are delivered for the dev verifier, with acceptance and browser execution deferred. `following-target-reading.test.tsx` pins independent opening,
+Focused regression sources and stories are delivered for the dev verifier; test, typing, build and browser execution
+are deferred for source-only delivery. `following-target-reading.test.tsx` pins independent opening,
 current prose and the reference disclosure. The shared-item assertion expects the additional Open link and source text
 inside inspection; the clipboard regression opens that disclosure before copying. Other lifecycle assertions stay intact.
 
@@ -27,8 +27,16 @@ owners. The panel returns to that existing row control rather than mounting anot
 FULL Space rows carry the Community producer's current destination and applicable-action projection. A Space
 destination uses its supplied address; a Realm destination uses its supplied Realm ID; an unavailable destination
 creates no link. Space UUID is neither address nor Realm UUID. The row opens a supplied destination without point
-reads. This community receiver supports only Space and Realm destinations; other native kinds, including Zone,
-produce no link.
+reads. Space inspection retains its separate selected currentness read.
+
+Decision: native Zone rows use the supplied FULL identity and only `destination.kind=zone` with its exact `zoneId`
+for the localized `/zones/{id}` reader; Zone inspection adds no point read or destination inference.
+The native Zone kind is visible in the row, inspection and exact-reference disclosure in all eight locales. Concealed
+or missing identity, missing destination and an unavailable supplied destination retain the follow without an Open
+link. A Zone is never presented as a Space or Realm, and community membership controls remain with Space/Realm.
+All-kind and Zone-only pages share the existing bounded index, sparse removal, opaque continuation, explicit retry
+and kind-bound return descriptor. A fresh native page retires selected identity and retained destination callbacks;
+browser return suspends opening until that page arrives. Account, locale and exposure retirement use the same owners.
 
 Explicit inspection may make one typed `client.spaces({spaceId}).get` under the same prepared viewer and current
 exposure. The response names its reader, target and locale. The selected request checks those against its parent

@@ -257,7 +257,9 @@ export function FollowingInspection({
                   ? m.following_reading_space_id()
                   : follow.targetType === 'collection'
                     ? m.following_reading_collection_id()
-                    : m.following_reading_subject_id()
+                    : follow.targetType === 'zone'
+                      ? m.following_reading_zone_id()
+                      : m.following_reading_subject_id()
               }
               value={follow.targetId}
               current={selection.current}
