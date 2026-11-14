@@ -76,11 +76,15 @@ export function ReadingOccurrence({
   page,
   address,
   returnTo,
+  position,
+  total,
 }: {
   occurrence: DiaryOccurrence;
   page: DiaryPage;
   address: DiaryAddress;
   returnTo: string;
+  position: number;
+  total: number;
 }) {
   const subjectLabel = occurrence.subject?.label ?? m.library_diary_subject_unavailable();
   const subjectLanguage = occurrence.subject?.language ?? m.library_diary_language_unavailable();
@@ -125,61 +129,67 @@ export function ReadingOccurrence({
       headingLevel={3}
       className="min-w-0 rounded-xl border bg-card px-4 sm:px-5 [&_h3]:text-lg [&_h3]:[overflow-wrap:anywhere]"
       state={
-        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
+        <span className="max-w-full rounded-full bg-muted px-2.5 py-1 text-start text-xs font-medium [overflow-wrap:anywhere]">
           {m.library_diary_state({ state: stateLabel(occurrence.state) })}
         </span>
       }
       metadata={
-        <div className="space-y-1 text-sm text-muted-foreground">
+        <div className="min-w-0 space-y-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
           <p>{m.library_history_recorded_event()}</p>
-          {versionAttached ? (
-            <p lang={occurrence.versionSubject?.language ?? undefined} className="[overflow-wrap:anywhere]">
-              {versionLabel}
-            </p>
-          ) : null}
+          <p lang={versionAttached ? (occurrence.versionSubject?.language ?? undefined) : undefined}>
+            <span className="font-medium">{m.library_diary_version_subject()}:</span> {versionLabel}
+          </p>
+          <p>
+            <span className="font-medium">{m.library_diary_page_order()}:</span>{' '}
+            {new Intl.NumberFormat(getLocale()).format(position)} / {new Intl.NumberFormat(getLocale()).format(total)}
+          </p>
         </div>
       }
       preview={
         <div className="min-w-0 space-y-3">
-          <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted-foreground">{m.library_diary_reported_start()}</dt>
-              <dd className="mt-0.5">{startDate}</dd>
+          <dl className="grid min-w-0 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+            <div className="min-w-0">
+              <dt className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{m.library_diary_reported_start()}</dt>
+              <dd className="mt-0.5 min-w-0 [overflow-wrap:anywhere]">{startDate}</dd>
             </div>
-            <div>
-              <dt className="text-muted-foreground">{m.library_diary_reported_finish()}</dt>
-              <dd className="mt-0.5">{finishDate}</dd>
+            <div className="min-w-0">
+              <dt className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
+                {m.library_diary_reported_finish()}
+              </dt>
+              <dd className="mt-0.5 min-w-0 [overflow-wrap:anywhere]">{finishDate}</dd>
             </div>
           </dl>
           <details className="min-w-0 border-t">
             <summary className="min-h-11 cursor-pointer content-center rounded px-1 text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               {m.library_diary_review_details()}
             </summary>
-            <div className="space-y-4 pb-4 pt-2">
+            <div className="min-w-0 space-y-4 pb-4 pt-2 [&_h4]:[overflow-wrap:anywhere] [&_p]:[overflow-wrap:anywhere]">
               <p className="text-sm">{m.library_diary_review_read_only()}</p>
               <dl className="grid min-w-0 gap-x-5 gap-y-3 sm:grid-cols-2">
                 {facts.map(({ id, label, value }) => (
                   <div className="min-w-0" key={id}>
-                    <dt className="text-sm font-medium">{label}</dt>
-                    <dd className="mt-1 min-w-0 break-words">{value}</dd>
+                    <dt className="min-w-0 text-sm font-medium [overflow-wrap:anywhere]">{label}</dt>
+                    <dd className="mt-1 min-w-0 [overflow-wrap:anywhere]">{value}</dd>
                   </div>
                 ))}
                 <div className="min-w-0">
-                  <dt className="text-sm font-medium">{m.library_diary_occurrence_id()}</dt>
+                  <dt className="text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_occurrence_id()}</dt>
                   <dd className="mt-1 break-all font-mono text-sm">{occurrence.id}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-sm font-medium">{m.library_diary_occurrence_revision()}</dt>
+                  <dt className="text-sm font-medium [overflow-wrap:anywhere]">
+                    {m.library_diary_occurrence_revision()}
+                  </dt>
                   <dd className="mt-1 font-mono text-sm">{String(occurrence.revision)}</dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-sm font-medium">{m.library_diary_page_revision()}</dt>
+                  <dt className="text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_page_revision()}</dt>
                   <dd className="mt-1 break-all font-mono text-sm">
                     {page.currentness?.revision ?? m.library_diary_page_revision_unavailable()}
                   </dd>
                 </div>
                 <div className="min-w-0">
-                  <dt className="text-sm font-medium">{m.library_diary_page_order()}</dt>
+                  <dt className="text-sm font-medium [overflow-wrap:anywhere]">{m.library_diary_page_order()}</dt>
                   <dd className="mt-1 break-all font-mono text-sm">{page.order}</dd>
                 </div>
               </dl>

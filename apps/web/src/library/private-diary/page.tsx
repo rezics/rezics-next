@@ -1,5 +1,5 @@
 import { useLocation, useRouter } from '@tanstack/react-router';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useOperation } from '../application';
 import { m } from '../../paraglide/messages.js';
@@ -12,10 +12,10 @@ import { PRIVATE_DIARY_PAGE_BYTES, PRIVATE_DIARY_PAGE_LIMIT } from './native';
 import { ReadingOccurrence } from './reading-occurrence';
 import { chronologicalGroups, recordedDayLabel } from './timeline';
 import { ReadingPeriod } from './reading-period';
+import { ReadingWorkspace } from './reading-workspace';
 import { PrivateDiaryWindowNavigation } from './window-navigation';
 
 type ReaderSession = ReturnType<typeof useSession>;
-const useReviewCommitEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 type NonPageDiaryRead = Exclude<PrivateDiaryLoad['diary'], { kind: 'ready' }>;
 export type PrivateDiaryReadingLoadResult =
   | (Omit<PrivateDiaryLoad, 'diary'> & {
@@ -63,6 +63,7 @@ export function PrivateDiaryPage({
   } | null>(null);
   const [windowVersion, setWindowVersion] = useState(0);
   const occurrencesHeading = useRef<HTMLHeadingElement>(null);
+  const focusedReturn = useRef<{ request: string; done: boolean } | null>(null);
   const currentReturn = safeReturnTo(returnTo ?? address.returnTo);
   const load =
     allowed &&
@@ -126,37 +127,34 @@ export function PrivateDiaryPage({
     !activeReplacementRetry;
   const previousAddress = navigationReady ? navigation.previousAddress() : null;
   const canStartFirst = navigationReady && navigation.canStartFirst(address);
-  const reviewIdentity = {
-    loaded,
-    authorizedLoad,
-    page: visiblePage,
-    year: address.year,
-    month: address.month,
-    cursor: address.cursor,
-    snapshot: address.snapshot,
-  };
-  const previousReviewIdentity = useRef(reviewIdentity);
-  const [reviewGeneration, setReviewGeneration] = useState(0);
-  useReviewCommitEffect(() => {
-    const previous = previousReviewIdentity.current;
-    if (
-      previous.loaded === loaded &&
-      previous.authorizedLoad === authorizedLoad &&
-      previous.page === visiblePage &&
-      previous.year === address.year &&
-      previous.month === address.month &&
-      previous.cursor === address.cursor &&
-      previous.snapshot === address.snapshot
-    )
-      return;
-    previousReviewIdentity.current = reviewIdentity;
-    setReviewGeneration((generation) => generation + 1);
-  }, [loaded, authorizedLoad, visiblePage, address.year, address.month, address.cursor, address.snapshot]);
-  const reviewPageKey = `${authorizedLoad?.viewer ?? 'unavailable'}:${reviewGeneration}`;
   useEffect(() => {
-    if (visiblePage && address.focus && visiblePage.occurrences.some((row) => row.id === address.focus))
-      document.getElementById('diary-occurrence-' + address.focus)?.focus();
-  }, [visiblePage, address.focus]);
+    if (!address.focus) {
+      focusedReturn.current = null;
+      return;
+    }
+    const request = JSON.stringify([
+      address.year,
+      address.month,
+      address.cursor,
+      address.snapshot,
+      address.focus,
+    ]);
+    let focusRequest: { request: string; done: boolean };
+    if (focusedReturn.current?.request === request) {
+      focusRequest = focusedReturn.current;
+    } else {
+      focusRequest = { request, done: false };
+      focusedReturn.current = focusRequest;
+    }
+    if (focusRequest.done) return;
+    if (visiblePage?.occurrences.some((row) => row.id === address.focus)) {
+      const target = document.getElementById('diary-occurrence-' + address.focus);
+      if (target) {
+        target.focus();
+        focusRequest.done = true;
+      }
+    }
+  }, [visiblePage, address.focus, address.year, address.month, address.cursor, address.snapshot]);
   useEffect(() => {
     const change = navigation.observe({
       source: sourceKey,
@@ -372,175 +370,218 @@ export function PrivateDiaryPage({
           </Link>
         </form>
       ) : null}
-      {address.year !== undefined && authenticated && !retired && routeNavigationAvailable ? (
-        <ReportedYearPanel
-          year={address.year}
-          address={{ ...address, returnTo: currentReturn }}
-          result={authorizedLoad?.reportedYear ?? { kind: 'unavailable' }}
-          retry={() => void router.invalidate()}
-        />
-      ) : null}
-      {authenticated && !retired && authorizedLoad && routeNavigationAvailable ? (
-        <ReadingPeriod
-          address={address}
-          returnTo={currentReturn}
-          allTime={authorizedLoad.summary}
-          reportedYear={authorizedLoad.reportedYear}
-          retry={() => void router.invalidate()}
-        />
-      ) : null}
-
       {!authenticated ? (
         <p role="status" className="rounded-md border p-4">
           {m.library_diary_unavailable()}
         </p>
-      ) : retired ? null : stalePage ? (
-        <section className="rounded-md border p-4">
-          <p>{m.library_diary_stale()}</p>
-          <Link
-            className="mt-2 inline-flex min-h-11 items-center rounded-md border px-3"
-            to="/library/history"
-            search={{
-              year: address.year,
-              month: address.month,
-              returnTo: currentReturn,
-            }}
-          >
-            {m.library_diary_restart()}
-          </Link>
-        </section>
-      ) : pageRefusal ? (
-        <p role="status" className="rounded-md border p-4">
-          {pageRefusal === 'closed' ? m.platform_closed_message() : m.ctxw_denied()}
-        </p>
-      ) : authorizedLoad?.diary.kind === 'unavailable' || (page && !currentPage) ? (
-        <section className="rounded-md border p-4">
-          <p>{m.library_diary_read_unavailable()}</p>
-          <button
-            type="button"
-            className="mt-2 min-h-11 rounded-md border px-3"
-            onClick={() => void router.invalidate()}
-          >
-            {m.library_selection_retry()}
-          </button>
-        </section>
-      ) : visiblePage ? (
-        <section aria-labelledby="library-diary-occurrences" className="space-y-4">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <h2 id="library-diary-occurrences" ref={occurrencesHeading} tabIndex={-1} className="text-lg font-semibold">
-              {m.library_diary_occurrences()}
-            </h2>
-          </div>
-          {visiblePage.occurrences.length === 0 ? (
-            <div className="space-y-3 rounded-xl border border-dashed p-6 sm:p-8">
-              <p className="font-medium">{m.library_diary_page_empty()}</p>
-              {!address.cursor && !visiblePage.next && address.year === undefined ? (
-                <>
-                  <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
-                    {m.library_history_first_use()}
-                  </p>
-                  <Link
-                    to="/library"
-                    className="inline-flex min-h-11 items-center rounded-md border px-4 text-sm text-primary"
+      ) : retired ? null : (
+        <ReadingWorkspace
+          periodContext={
+            routeNavigationAvailable && authorizedLoad ? (
+              <div className="min-w-0 space-y-4">
+                <ReadingPeriod
+                  address={address}
+                  returnTo={currentReturn}
+                  allTime={authorizedLoad.summary}
+                  reportedYear={authorizedLoad.reportedYear}
+                  retry={() => void router.invalidate()}
+                />
+                {address.year !== undefined ? (
+                  <details
+                    className={[
+                      'min-w-0 [&_h2]:sr-only [&_dl]:min-w-0 [&_dt]:[overflow-wrap:anywhere]',
+                      '[&_dd]:min-w-0 [&_dd]:[overflow-wrap:anywhere] [&_a]:min-w-0 [&_a]:max-w-full',
+                      '[&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] [&_p]:[overflow-wrap:anywhere]',
+                    ].join(' ')}
                   >
-                    {m.library_history_open_library()}
-                  </Link>
-                </>
-              ) : null}
-            </div>
-          ) : (
-            <div className="space-y-7">
-              {chronologicalGroups(visiblePage.occurrences, (row) => row.recordedStartedAt).map((group) => (
-                <section
-                  key={`${group.date}:${group.offset}`}
-                  aria-label={recordedDayLabel(group.date, getLocale())}
-                  className="space-y-3"
-                >
-                  <p className="flex items-center gap-3 text-sm font-medium text-muted-foreground">
-                    <time dateTime={group.date}>{recordedDayLabel(group.date, getLocale())}</time>
-                    <span aria-hidden="true" className="h-px flex-1 bg-border" />
-                  </p>
-                  <ol className="space-y-3">
-                    {group.rows.map((occurrence, index) => (
-                      <ReadingOccurrence
-                        key={`${reviewPageKey}:${group.offset + index}:${occurrence.id}`}
-                        occurrence={occurrence}
-                        page={visiblePage}
-                        address={address}
-                        returnTo={currentReturn}
+                    <summary className="inline-flex min-h-11 max-w-full cursor-pointer items-center rounded-md border px-3 text-sm font-medium [overflow-wrap:anywhere]">
+                      {m.library_diary_year_heading({ year: address.year })}
+                    </summary>
+                    <div className="mt-3 min-w-0">
+                      <ReportedYearPanel
+                        year={address.year}
+                        address={{ ...address, returnTo: currentReturn }}
+                        result={authorizedLoad.reportedYear ?? { kind: 'unavailable' }}
+                        retry={() => void router.invalidate()}
                       />
-                    ))}
-                  </ol>
-                </section>
-              ))}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {navigationReady ? (
-              <>
-                {previousAddress ? (
-                  <button
-                    type="button"
-                    className="min-h-11 rounded-md border px-4"
-                    onClick={(event) => moveWindow('previous', previousAddress, event.detail === 0)}
-                  >
-                    {m.library_continue_previous_window()}
-                  </button>
+                    </div>
+                  </details>
                 ) : null}
-                {canStartFirst ? (
-                  <button
-                    type="button"
-                    className="min-h-11 rounded-md border px-4"
-                    onClick={(event) =>
-                      moveWindow(
-                        'first',
-                        {
-                          year: address.year,
-                          month: address.month,
-                          snapshot: address.snapshot,
-                        },
-                        event.detail === 0,
-                      )
-                    }
-                  >
-                    {m.library_continue_first_window()}
-                  </button>
-                ) : null}
-                {visiblePage.next ? (
-                  <button
-                    type="button"
-                    className="min-h-11 rounded-md border px-4"
-                    onClick={(event) =>
-                      moveWindow(
-                        'next',
-                        {
-                          cursor: visiblePage.next!,
-                          year: address.year,
-                          month: address.month,
-                          snapshot: address.snapshot,
-                        },
-                        event.detail === 0,
-                      )
-                    }
-                  >
-                    {m.library_diary_next()}
-                  </button>
+              </div>
+            ) : null
+          }
+          timeline={
+            visiblePage ? (
+              <section aria-labelledby="library-diary-occurrences" className="min-w-0 space-y-4">
+                <h2
+                  id="library-diary-occurrences"
+                  ref={occurrencesHeading}
+                  tabIndex={-1}
+                  className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere]"
+                >
+                  {m.library_diary_occurrences()}
+                </h2>
+                {visiblePage.occurrences.length === 0 ? (
+                  <div className="min-w-0 space-y-3 rounded-xl border border-dashed p-6 sm:p-8">
+                    <p className="font-medium">{m.library_diary_page_empty()}</p>
+                    {!address.cursor && !visiblePage.next && address.year === undefined ? (
+                      <>
+                        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+                          {m.library_history_first_use()}
+                        </p>
+                        <Link
+                          to="/library"
+                          className="inline-flex min-h-11 max-w-full items-center rounded-md border px-4 text-sm text-primary [overflow-wrap:anywhere]"
+                        >
+                          {m.library_history_open_library()}
+                        </Link>
+                      </>
+                    ) : null}
+                  </div>
                 ) : (
-                  <p className="self-center text-sm text-muted-foreground">{m.library_diary_end()}</p>
+                  <div className="min-w-0 space-y-7">
+                    {chronologicalGroups(visiblePage.occurrences, (row) => row.recordedStartedAt).map((group) => (
+                      <section
+                        key={`${group.date}:${group.offset}`}
+                        aria-label={recordedDayLabel(group.date, getLocale())}
+                        className="min-w-0 space-y-3"
+                      >
+                        <p className="flex min-w-0 items-center gap-3 text-sm font-medium text-muted-foreground">
+                          <time dateTime={group.date} className="min-w-0 [overflow-wrap:anywhere]">
+                            {recordedDayLabel(group.date, getLocale())}
+                          </time>
+                          <span aria-hidden="true" className="h-px min-w-3 flex-1 bg-border" />
+                        </p>
+                        <ol className="min-w-0 space-y-3">
+                          {group.rows.map((occurrence, index) => (
+                            <ReadingOccurrence
+                              key={`${group.date}:${group.offset + index}:${occurrence.id}`}
+                              occurrence={occurrence}
+                              page={visiblePage}
+                              address={address}
+                              returnTo={currentReturn}
+                              position={group.offset + index + 1}
+                              total={visiblePage.occurrences.length}
+                            />
+                          ))}
+                        </ol>
+                      </section>
+                    ))}
+                  </div>
                 )}
-              </>
-            ) : null}
-          </div>
-          {visiblePage.occurrences.length ? (
-            <aside aria-label={m.library_history_window_details()} className="text-xs text-muted-foreground">
-              {m.library_diary_page_bound({
-                count: Math.min(PRIVATE_DIARY_PAGE_LIMIT, visiblePage.occurrences.length),
-                bytes: PRIVATE_DIARY_PAGE_BYTES,
-              })}
-            </aside>
-          ) : null}
-        </section>
-      ) : null}
+              </section>
+            ) : null
+          }
+          recovery={
+            stalePage ? (
+              <section className="min-w-0 rounded-md border p-4">
+                <p>{m.library_diary_stale()}</p>
+                <Link
+                  className="mt-2 inline-flex min-h-11 max-w-full items-center rounded-md border px-3 [overflow-wrap:anywhere]"
+                  to="/library/history"
+                  search={{
+                    year: address.year,
+                    month: address.month,
+                    returnTo: currentReturn,
+                  }}
+                >
+                  {m.library_diary_restart()}
+                </Link>
+              </section>
+            ) : pageRefusal ? (
+              <p role="status" className="min-w-0 rounded-md border p-4 [overflow-wrap:anywhere]">
+                {pageRefusal === 'closed' ? m.platform_closed_message() : m.ctxw_denied()}
+              </p>
+            ) : authorizedLoad?.diary.kind === 'unavailable' || (page && !currentPage) ? (
+              <section className="min-w-0 rounded-md border p-4">
+                <p>{m.library_diary_read_unavailable()}</p>
+                <button
+                  type="button"
+                  className="mt-2 min-h-11 max-w-full rounded-md border px-3 [overflow-wrap:anywhere]"
+                  onClick={() => void router.invalidate()}
+                >
+                  {m.library_selection_retry()}
+                </button>
+              </section>
+            ) : null
+          }
+          windowNavigation={
+            visiblePage ? (
+              <section className="min-w-0 space-y-3">
+                <div className="flex min-w-0 flex-wrap gap-2">
+                  {navigationReady ? (
+                    <>
+                      {previousAddress ? (
+                        <button
+                          type="button"
+                          className="min-h-11 max-w-full rounded-md border px-4 [overflow-wrap:anywhere]"
+                          onClick={(event) => moveWindow('previous', previousAddress, event.detail === 0)}
+                        >
+                          {m.library_continue_previous_window()}
+                        </button>
+                      ) : null}
+                      {canStartFirst ? (
+                        <button
+                          type="button"
+                          className="min-h-11 max-w-full rounded-md border px-4 [overflow-wrap:anywhere]"
+                          onClick={(event) =>
+                            moveWindow(
+                              'first',
+                              {
+                                year: address.year,
+                                month: address.month,
+                                snapshot: address.snapshot,
+                              },
+                              event.detail === 0,
+                            )
+                          }
+                        >
+                          {m.library_continue_first_window()}
+                        </button>
+                      ) : null}
+                      {visiblePage.next ? (
+                        <button
+                          type="button"
+                          className="min-h-11 max-w-full rounded-md border px-4 [overflow-wrap:anywhere]"
+                          onClick={(event) =>
+                            moveWindow(
+                              'next',
+                              {
+                                cursor: visiblePage.next!,
+                                year: address.year,
+                                month: address.month,
+                                snapshot: address.snapshot,
+                              },
+                              event.detail === 0,
+                            )
+                          }
+                        >
+                          {m.library_diary_next()}
+                        </button>
+                      ) : (
+                        <p className="min-w-0 self-center text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                          {m.library_diary_end()}
+                        </p>
+                      )}
+                    </>
+                  ) : null}
+                </div>
+                {visiblePage.occurrences.length ? (
+                  <aside
+                    aria-label={m.library_history_window_details()}
+                    className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]"
+                  >
+                    {m.library_diary_page_bound({
+                      count: Math.min(PRIVATE_DIARY_PAGE_LIMIT, visiblePage.occurrences.length),
+                      bytes: PRIVATE_DIARY_PAGE_BYTES,
+                    })}
+                  </aside>
+                ) : null}
+              </section>
+            ) : null
+          }
+        />
+      )}
     </main>
   );
 }
