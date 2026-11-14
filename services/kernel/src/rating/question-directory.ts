@@ -1,9 +1,9 @@
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient, readRealm, accessCheck, type Access, type Actor } from './dependencies.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem-error.ts';
 
@@ -88,9 +88,16 @@ export async function requireGlobalQuestionRead(deps: Dependencies, actor: Actor
     },
     { pool: deps.pool, deadline },
   );
-  await withConnection(deps.pool, async (client) => {
-    if (!(await check(deadlineClient(client, deadline)))) throw new ProblemError('not_found');
-  });
+  let admitted: boolean;
+  try {
+    admitted = await withBoundedReadConnection(deps.pool, deadline, (client) =>
+      check(deadlineClient(client, deadline)),
+    );
+  } catch (error) {
+    throwAccessUnavailable(error, deadline);
+    throw error;
+  }
+  if (!admitted) throw new ProblemError('not_found');
 }
 
 /** Native Realm readability includes protected grants, host state and current bans.
