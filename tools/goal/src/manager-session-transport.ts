@@ -20,9 +20,8 @@ function codexThreadConfig(spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>) 
   };
 }
 
-function codexTurnSettings(spec: Pick<ManagerSpec, 'effort'>) {
-  return { model: CODEX_MANAGER_MODEL, effort: spec.effort };
-}
+type CodexTurnSpec = Pick<ManagerSpec, 'id' | 'model' | 'effort'>;
+type CodexThreadSpec = CodexTurnSpec & Pick<ManagerSpec, 'compactTokens'>;
 
 /** `ThreadGoalSetParams` from installed `codex-cli 0.169`; no idle-continuation field is acknowledged. */
 function activeGoalSet(threadId: string, spec: Pick<ManagerSpec, 'objective' | 'budget'>) {
@@ -35,11 +34,11 @@ function activeGoalSet(threadId: string, spec: Pick<ManagerSpec, 'objective' | '
   };
 }
 
-function threadAccess(spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>, threadId: string) {
+function threadAccess(spec: CodexThreadSpec, threadId: string, model: string) {
   return {
     ...FULL_ACCESS,
     threadId,
-    model: CODEX_MANAGER_MODEL,
+    model,
     config: codexThreadConfig(spec),
   };
 }
@@ -49,6 +48,7 @@ function activeTurnId(resumed: { thread: { turns?: { id: string; status: string 
 }
 
 export type SessionTurnDelivery = { kind: 'steered' } | { kind: 'started'; turnId: string };
+export type GoalMutationOrigin = 'user' | 'automatic';
 
 /** The 0.169 protocol carries item origin as a ThreadItem discriminant, not its text. */
 export function userMessageTurn(notification: Notification): { threadId: string; turnId: string } | null {
@@ -68,10 +68,7 @@ export function userMessageTurn(notification: Notification): { threadId: string;
 
 function userMessageItem(item: unknown): boolean {
   return Boolean(
-    item &&
-      typeof item === 'object' &&
-      !Array.isArray(item) &&
-      (item as { type?: unknown }).type === 'userMessage',
+    item && typeof item === 'object' && !Array.isArray(item) && (item as { type?: unknown }).type === 'userMessage',
   );
 }
 
@@ -107,6 +104,9 @@ export class ManagerSessionTransport {
     private readonly stateDirectory: string,
     private readonly onNotification: (notification: Notification) => void,
   ) {}
+  private model(spec: Pick<ManagerSpec, 'id' | 'model'>): string {
+    return this.services.codexManagerModel?.(spec.id) ?? spec.model ?? CODEX_MANAGER_MODEL;
+  }
   client(pool: CodexPool): Promise<AppServer> {
     const key = pool.codexHome;
     const existing = this.pools.get(key);
@@ -135,11 +135,11 @@ export class ManagerSessionTransport {
     void client.catch(() => this.pools.delete(key));
     return client;
   }
-  async startThread(client: AppServer, spec: Pick<ManagerSpec, 'cwd' | 'effort' | 'compactTokens'>): Promise<string> {
+  async startThread(client: AppServer, spec: CodexThreadSpec & Pick<ManagerSpec, 'cwd'>): Promise<string> {
     const started = await client.request('thread/start', {
       ...FULL_ACCESS,
       cwd: spec.cwd,
-      model: CODEX_MANAGER_MODEL,
+      model: this.model(spec),
       config: codexThreadConfig(spec),
     });
     return started.thread.id as string;
@@ -156,8 +156,9 @@ export class ManagerSessionTransport {
     client: AppServer,
     threadId: string,
     status: 'paused' | 'active' | 'complete',
+    origin: GoalMutationOrigin,
   ): Promise<GoalState> {
-    const goal = await client.request('thread/goal/set', { threadId, status, origin: 'user' });
+    const goal = await client.request('thread/goal/set', { threadId, status, origin });
     return goal.goal;
   }
   async getGoal(client: AppServer, threadId: string): Promise<GoalState | null> {
@@ -166,26 +167,27 @@ export class ManagerSessionTransport {
   }
   async startTurn(
     client: AppServer,
-    spec: Pick<ManagerSpec, 'effort'>,
+    spec: CodexTurnSpec,
     threadId: string,
     prompt: string,
   ): Promise<string> {
     const turn = await client.request('turn/start', {
       threadId,
-      ...codexTurnSettings(spec),
+      model: this.model(spec),
+      effort: spec.effort,
       input: textInput(prompt),
     });
     return turn.turn.id;
   }
   async resumeThread(
     client: AppServer,
-    spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>,
+    spec: CodexThreadSpec,
     threadId: string,
   ): Promise<{
     activeTurnId: string | null;
     latestTurn?: { id: string; status: ManagerTurnDisposition['status'] };
   }> {
-    const resumed = await client.request('thread/resume', threadAccess(spec, threadId));
+    const resumed = await client.request('thread/resume', threadAccess(spec, threadId, this.model(spec)));
     const latest = resumed.thread.turns?.at(-1);
     const status = latest?.status;
     const latestTurn =
@@ -220,8 +222,7 @@ export class ManagerSessionTransport {
         const itemEntry = entry as { turnId?: unknown; item?: unknown };
         if (typeof itemEntry.turnId !== 'string' || !itemEntry.turnId)
           throw new Error('Invalid thread/items/list turn identity for manager turn');
-        if (itemEntry.turnId !== turnId)
-          throw new Error('Mismatched thread/items/list turn identity for manager turn');
+        if (itemEntry.turnId !== turnId) throw new Error('Mismatched thread/items/list turn identity for manager turn');
         const item = itemEntry.item;
         const type =
           item && typeof item === 'object' && !Array.isArray(item) ? (item as { type?: unknown }).type : null;
@@ -245,7 +246,7 @@ export class ManagerSessionTransport {
   }
   private async startWakeTurn(
     client: AppServer,
-    spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>,
+    spec: CodexThreadSpec,
     threadId: string,
     summary: string,
     persistActiveTurn: (turnId: string | null) => void,
@@ -266,7 +267,7 @@ export class ManagerSessionTransport {
   }
   async deliverToSession(
     client: AppServer,
-    spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>,
+    spec: CodexThreadSpec,
     threadId: string,
     activeTurnId: string | null,
     summary: string,
@@ -292,7 +293,7 @@ export class ManagerSessionTransport {
   }
   async interruptTurn(
     client: AppServer,
-    spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>,
+    spec: CodexThreadSpec,
     threadId: string,
     turnId: string,
     beforeInterrupt: (turnId: string) => void,
@@ -318,14 +319,14 @@ export class ManagerSessionTransport {
     await client.request('turn/interrupt', { threadId, turnId });
   }
   async registerCodexViewer(
-    spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd'>,
+    spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd' | 'model' | 'effort'>,
     threadId: string,
     client: AppServer,
   ): Promise<void> {
     await this.services.windows.register(spec.id, this.codexViewerArgv(spec, threadId, client), spec.cwd);
   }
   async rebindCodexViewer(
-    spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd'>,
+    spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd' | 'model' | 'effort'>,
     threadId: string,
     client: AppServer,
     options: { restoreExited?: boolean } = {},
@@ -338,7 +339,7 @@ export class ManagerSessionTransport {
       options,
     );
   }
-  private codexViewerArgv(spec: Pick<ManagerSpec, 'id' | 'pool'>, threadId: string, client: AppServer): string[] {
+  private codexViewerArgv(spec: Pick<ManagerSpec, 'id' | 'pool' | 'model' | 'effort'>, threadId: string, client: AppServer): string[] {
     const viewer = [spec.pool.executable ?? 'codex', 'resume', threadId];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
     return [
