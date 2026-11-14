@@ -6,7 +6,7 @@ import { join } from 'node:path';
 const root = join(import.meta.dir, '..');
 const stories = ['src/components/editor-touch-bar.stories.tsx'];
 
-test('on touch screens the rich-text editor offers a formatting bar above the keyboard that keeps the editor focused', async () => {
+test('the rich-text editor keeps touch formatting focused and shares toolbar, keyboard and native input history', async () => {
   for (const file of stories) expect(existsSync(join(root, file)), file).toBe(true);
   const output = mkdtempSync(join(tmpdir(), 'rezics-ui-editor-touch-'));
   const report = join(output, 'stories.json');

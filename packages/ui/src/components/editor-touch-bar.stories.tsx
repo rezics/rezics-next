@@ -1,5 +1,7 @@
 import { checkDocument, fromPlainText, type DocumentProfile, type DocumentSnapshot } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Editor } from '@tiptap/core';
+import { closeHistory } from '@tiptap/pm/history';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { RichTextEditorLabels } from './editor-labels.ts';
@@ -25,13 +27,14 @@ function demo(
     return (
       <div className="min-h-[70vh] pb-24">
         {options.historyControls &&
-          ['Edit', 'Preview', 'History', 'Read only', 'Outer shortcut', 'Replace', 'Unmount'].map((next) => (
+          ['Edit', 'Preview', 'History', 'Read only', 'Outer shortcut', 'Replace', 'Restore', 'Unmount'].map((next) => (
             <button
               key={next}
               type="button"
               onClick={() => {
                 setMode(next);
                 if (next === 'Replace') setValue(fromPlainText('Other document', profile));
+                if (next === 'Restore') setValue(initial);
               }}
             >
               {next}
@@ -177,14 +180,31 @@ export const UndoRedo: Story = {
     await userEvent.click(redo);
     await waitFor(() => expect(plainText(history.latest.current)).toBe('History'));
     expect(checked(history.latest.current)).toBeTruthy();
+    const original = history.latest.current;
 
     const shortcut = async (key: string, expected: string, init: KeyboardEventInit = {}, handled = true) => {
-      const event = new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true, ...init });
+      const event = key.startsWith('history')
+        ? new InputEvent('beforeinput', { inputType: key, bubbles: true, cancelable: true, ...init })
+        : new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true, ...init });
       expect(textbox.dispatchEvent(event)).toBe(!handled);
       await waitFor(() => expect(textbox.textContent).toBe(expected));
       if (handled) expect(textbox).toHaveFocus();
     };
     const control = async (name: string) => userEvent.click(canvas.getByRole('button', { name, exact: true }));
+    const view = (textbox as HTMLElement & { editor: Editor }).editor.view;
+    const captureNative = () => view.props.handleDOMEvents!.beforeinput!;
+    const staleInput = new InputEvent('beforeinput', { inputType: 'historyUndo', cancelable: true });
+    Object.defineProperty(staleInput, 'target', { value: textbox });
+    view.dispatch(closeHistory(view.state.tr));
+    await userEvent.type(textbox, '!');
+    await shortcut('historyUndo', 'History');
+    await shortcut('historyRedo', 'History!');
+    await waitFor(() => expect(plainText(history.latest.current)).toBe('History!'));
+    expect(checked(history.latest.current)?.attrs?.id).toBe(checked(original)?.attrs?.id);
+    await control('Restore');
+    await userEvent.click(textbox);
+    for (const type of ['historyUndo', 'historyRedo']) await shortcut(type, '', {}, false);
+    await userEvent.type(textbox, 'History');
     for (const panel of ['Preview', 'History']) {
       await control(panel);
       expect(textbox).not.toBeVisible();
@@ -200,11 +220,22 @@ export const UndoRedo: Story = {
       await shortcut(panel === 'Preview' ? 'y' : 'z', 'History', { ...platform, shiftKey: panel === 'History' });
       await shortcut('z', 'History', { shiftKey: true }, false);
     }
+    const retiredInput = captureNative();
     for (const mode of ['Read only', 'Outer shortcut', 'Edit']) {
       await control(mode);
+      await shortcut('historyUndo', 'History', {}, false);
       if (mode !== 'Read only') await userEvent.click(textbox);
       await shortcut('z', 'History', { isComposing: mode === 'Edit' }, mode === 'Outer shortcut');
     }
+    expect(retiredInput(view, staleInput)).toBe(false);
+    await shortcut('historyUndo', 'History', { isComposing: true }, false);
+    textbox.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    await shortcut('historyUndo', 'History', {}, false);
+    textbox.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    await waitFor(() => expect(view.composing).toBe(false));
+    await shortcut('historyUndo', 'History', { cancelable: false }, false);
+    textbox.addEventListener('beforeinput', (event) => event.preventDefault(), { capture: true, once: true });
+    await shortcut('historyUndo', 'History');
     await shortcut('z', 'History', { altKey: true }, false);
     await shortcut('z', '');
     await shortcut('z', 'History', { shiftKey: true });
@@ -218,15 +249,28 @@ export const UndoRedo: Story = {
     await userEvent.type(textbox, 'New');
     const currentText = textbox.textContent!;
     const staleKey = Object.assign(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }), { nativeEvent: {} });
+    expect(retiredInput(view, staleInput)).toBe(false);
     retired(staleKey);
     expect(textbox.textContent).toBe(currentText);
+    await shortcut('historyUndo', 'Other document');
+    await shortcut('historyRedo', currentText);
     await shortcut('z', 'Other document');
     await shortcut('z', 'Other document', {}, false);
     await waitFor(() => expect(plainText(history.latest.current)).toBe('Other document'));
+    await control('Restore');
+    await userEvent.click(textbox);
+    for (const type of ['historyUndo', 'historyRedo']) await shortcut(type, '', {}, false);
+    await userEvent.type(textbox, 'History');
+    expect(retiredInput(view, staleInput)).toBe(false);
+    expect(textbox.textContent).toBe('History');
+    await waitFor(() => expect(history.latest.current).toEqual(original));
     const unmounted = keyboardCallback();
+    const unmountedInput = captureNative();
     await control('Unmount');
     const published = history.latest.current;
     unmounted(staleKey);
+    expect(unmountedInput(view, staleInput)).toBe(false);
+    expect(staleInput.defaultPrevented).toBe(false);
     expect(history.latest.current).toBe(published);
   },
 };

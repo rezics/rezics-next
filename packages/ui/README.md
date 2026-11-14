@@ -131,12 +131,20 @@ Decision: native `beforeinput` history uses a visit-bound editor prop over the e
 the installed plugin's eager handler is disabled, and only an actually applied step consumes the event.
 Native Edit-menu/mobile undo (`historyUndo`) and redo (`historyRedo`), keyboard undo (Ctrl/Cmd+Z) and redo
 (Ctrl/Cmd+Shift+Z or Ctrl+Y) share the toolbar's native ProseMirror history.
+The DOM boundary admits only a cancelable, uncanceled history input targeting the focused current editable canvas,
+outside event or editor composition. Unavailable steps bubble; retired callbacks cannot affect a later equal document.
+History commands report application only when dispatch changes editor state; an absent or filtered transaction bubbles.
 Caller key handling runs first; only a handled shortcut is consumed, while composition, read-only mode and retired
 visits cannot dispatch history commands. History commands keep editor focus. Hiding the mounted editor for preview
 or version history retains its history; controlled echoes and editability toggles retain it too. An external document
 replacement clears both history stacks in the existing editor, and a replaced editor starts with its own history.
-Keyboard and visit acceptance extend the existing touch-bar `UndoRedo` story; the focused inline-lifetime regression
-runs it alongside `InlineLifetimeJourney`, keeping the existing story inventory.
+Keyboard, native input and visit acceptance extend the existing touch-bar `UndoRedo` story; the focused
+inline-lifetime regression runs it alongside `InlineLifetimeJourney`, keeping the existing story inventory.
+Its authored `InputEvent`s illustrate one-step history, empty stacks, cancellation, composition, replacement and
+retirement; they do not establish native Edit-menu or mobile behavior. Verifier acceptance still owes both named
+history/lifetime regressions and ordinary Studio/Knowledge native history, keyboard parity and private replacement;
+original launch acceptance remains owed. Input dispatch is O(1) plus the existing bounded history transaction, with
+no reads, polling, storage, listener fanout or per-consumer state.
 
 This shared history capability is inherited by Studio Book/Column ([workspace](../../apps/web/src/studio/workspace.tsx)),
 [native drafts](../../apps/web/src/studio/native-draft-composer.tsx),

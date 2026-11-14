@@ -5,7 +5,7 @@ import { join } from 'node:path';
 const root = join(import.meta.dir, '..');
 const stories = ['src/components/editor-link.stories.tsx', 'src/components/editor-touch-bar.stories.tsx'];
 
-test('mounted rich-text authoring and keyboard history stay owned by their editable document visit', async () => {
+test('mounted rich-text authoring, keyboard and native input history stay owned by their editable document visit', async () => {
   for (const story of stories) expect(existsSync(join(root, story)), story).toBe(true);
   const temp = join(root, '../../.temp');
   mkdirSync(temp, { recursive: true });
