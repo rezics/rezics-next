@@ -41,11 +41,11 @@ export function RealmCatalogueNavigation({
     <section
       aria-labelledby={heading}
       aria-describedby={context}
-      className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-4 text-card-foreground [overflow-wrap:anywhere] sm:p-6"
+      className="min-w-0 space-y-5 text-foreground [overflow-wrap:anywhere]"
       data-slot="realm-catalogue-navigation"
     >
       <header className="min-w-0 space-y-2">
-        <h2 id={heading} className="text-xl font-semibold">
+        <h2 id={heading} className="text-2xl font-semibold">
           {m.realm_catalogue_heading({}, options)}
         </h2>
         <p id={context} className="max-w-prose text-sm leading-relaxed text-muted-foreground">
@@ -173,7 +173,7 @@ export function RealmCatalogueNavigation({
               </p>
             </form>
           </div>
-          <div className="min-w-0 space-y-2 border-t pt-5">
+          <div className="min-w-0 space-y-2 border-s border-border ps-4">
             <h3 className="font-semibold">{m.realm_catalogue_ratings_heading({}, options)}</h3>
             <p id={ratings} className="max-w-prose text-sm leading-relaxed text-muted-foreground">
               {m.realm_catalogue_ratings_context({}, options)}

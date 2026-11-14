@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
+import { sharedRatio, type CoverSubject } from '@rezics/ui/cover';
 import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
 import { m } from '../paraglide/messages.js';
 import { RealmMembership } from './realm-membership';
 import { RealmCommunityBoards } from './realm-community/boards';
+import { CommunitySectionNavigation } from './realm-community/navigation';
 import { RealmBansPanel } from './realm-bans-panel';
 import { RealmMembersEntry } from './members/entry';
 import type { PublishedSubject, RealmHome, SpacePageData } from './space';
@@ -91,12 +92,22 @@ function Published({
   }));
   const ratio = sharedRatio(titled.map((item) => item.cover));
   return (
-    <section className="space-y-4" aria-labelledby="realm-published-heading">
-      <h2 ref={focus.boundaryRef} tabIndex={-1} id="realm-published-heading" className="text-xl font-semibold">
+    <section
+      className="min-w-0 space-y-5 border-t border-border pt-6 sm:pt-8"
+      aria-labelledby="realm-published-heading"
+    >
+      <h2
+        ref={focus.boundaryRef}
+        tabIndex={-1}
+        id="realm-published-heading"
+        className="scroll-mt-6 text-2xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+      >
         {m.realm_published_heading()}
       </h2>
-      <p className="text-sm text-muted-foreground">{m.realm_publication_open_view()}</p>
-      <p className="max-w-prose text-sm text-muted-foreground">{m.realm_catalogue_publications_context()}</p>
+      <div className="max-w-prose space-y-1 text-sm leading-relaxed text-muted-foreground">
+        <p>{m.realm_publication_open_view()}</p>
+        <p>{m.realm_catalogue_publications_context()}</p>
+      </div>
       {editable ? (
         <PublicationControls control={control} refresh={refresh} search={search} onCommand={onCommand} />
       ) : null}
@@ -549,6 +560,17 @@ function SpaceHome({
       : page.realm?.continuity?.governanceReadOnly === true);
   const [entered, setEntered] = useState(false);
   const managementId = useId();
+  const managementHeadingId = `${managementId}-heading`;
+  const catalogueId = `${managementId}-catalogue`;
+  const managementTrigger = useRef<HTMLButtonElement>(null);
+  const managementHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (entered) managementHeading.current?.focus();
+  }, [entered]);
+  const closeManagement = () => {
+    setEntered(false);
+    managementTrigger.current?.focus();
+  };
   const [admissions, setAdmissions] = useState<Partial<Record<CommunityManagementOperation, boolean>>>({});
   const report = useCallback((operation: CommunityManagementOperation, admitted: boolean) => {
     setAdmissions((previous) => (previous[operation] === admitted ? previous : { ...previous, [operation]: admitted }));
@@ -619,7 +641,6 @@ function SpaceHome({
       ) : null}
     </section>
   ) : null;
-  const colors = placeholderColors({ id: page.space.id, types: [] });
   const banner = page.space.banner;
   const bannerVariant = banner?.variants.find((variant) => variant.format === 'webp') ?? banner?.variants.at(-1);
   const previewSrc =
@@ -630,7 +651,7 @@ function SpaceHome({
   return (
     <article
       ref={pageRoot}
-      className="max-w-5xl space-y-10 text-foreground"
+      className="min-w-0 max-w-5xl space-y-8 text-foreground [overflow-wrap:anywhere] sm:space-y-10"
       {...(page.realmCarrier ? { 'data-realm-carrier': page.realmCarrier } : {})}
     >
       {page.realmCarrier === 'unavailable' ? (
@@ -642,30 +663,25 @@ function SpaceHome({
         <RealmHomeHeader realm={page.realm} space={page.space} participation={participation} />
       ) : (
         <>
-          <header
-            className="relative isolate flex flex-col gap-4 overflow-hidden rounded-3xl px-6 py-8 sm:px-10 sm:py-10"
-            style={{ backgroundColor: colors.background, color: colors.foreground }}
-          >
+          <header className="min-w-0 overflow-hidden rounded-2xl bg-card text-card-foreground">
             {bannerSrc && !spaceRemoved ? (
-              <>
-                <img
-                  src={bannerSrc}
-                  alt=""
-                  aria-hidden="true"
-                  className="absolute inset-0 -z-20 h-full w-full object-cover"
-                  onError={(event) => {
-                    event.currentTarget.style.display = 'none';
-                  }}
-                />
-                <div aria-hidden="true" className="absolute inset-0 -z-10 bg-black/75" />
-              </>
+              <img
+                src={bannerSrc}
+                alt=""
+                className="max-h-56 w-full object-cover"
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none';
+                }}
+              />
             ) : null}
-            <div className="relative z-10 flex w-full flex-wrap items-center justify-between gap-4">
-              <PageHeading className="min-w-0 flex-1 basis-64">{page.space.title}</PageHeading>
+            <div className="min-w-0 space-y-4 px-4 py-6 sm:px-6 sm:py-8">
+              <PageHeading className="min-w-0">{page.space.title}</PageHeading>
+              {page.space.summary && !spaceRemoved ? (
+                <p className="max-w-prose leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                  {page.space.summary}
+                </p>
+              ) : null}
             </div>
-            {page.space.summary && !spaceRemoved ? (
-              <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
-            ) : null}
           </header>
           {participation}
         </>
@@ -675,12 +691,21 @@ function SpaceHome({
           {spaceRemoved || realmRemoved ? m.container_lifecycle_removed_state() : m.container_lifecycle_orphaned()}
         </p>
       ) : null}
-      <RealmCatalogueCurrent
-        page={page}
-        available={Boolean(page.realm && !realmRemoved && !orphaned && presentationCurrent)}
-        sourceRevision={catalogueVersion}
-        isCurrentSource={() => catalogueRevision.current === catalogueVersion}
-      />
+      {page.realm && !realmRemoved && readable ? (
+        <CommunitySectionNavigation catalogueId={catalogueId} current={() => !lifetime || lifetime.current()} />
+      ) : null}
+      <div
+        id={catalogueId}
+        tabIndex={-1}
+        className="min-w-0 scroll-mt-6 space-y-6 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+      >
+        <RealmCatalogueCurrent
+          page={page}
+          available={Boolean(page.realm && !realmRemoved && !orphaned && presentationCurrent)}
+          sourceRevision={catalogueVersion}
+          isCurrentSource={() => catalogueRevision.current === catalogueVersion}
+        />
+      </div>
       {page.realm && !realmRemoved && readable ? (
         <RealmShelf
           realm={page.realm}
@@ -702,21 +727,41 @@ function SpaceHome({
         />
       ) : null}
       {admitted ? (
-        <Button
-          variant="outline"
-          aria-expanded={entered}
-          aria-controls={managementId}
-          onClick={() => setEntered((previous) => !previous)}
-        >
-          {m.community_manage()}
-        </Button>
+        <section className="min-w-0 space-y-3 border-t border-border pt-6" aria-label={m.community_manage()}>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+            {m.community_manage_description()}
+          </p>
+          <Button
+            ref={managementTrigger}
+            variant="outline"
+            className="h-auto min-h-11 max-w-full whitespace-normal"
+            aria-expanded={entered}
+            aria-controls={managementId}
+            onClick={() => (entered ? closeManagement() : setEntered(true))}
+          >
+            {m.community_manage()}
+          </Button>
+        </section>
       ) : null}
       <CommunityManagementContext.Provider value={management}>
-        <div id={managementId} hidden={!entered} inert={!entered} className="min-w-0 space-y-8">
+        <section
+          id={managementId}
+          aria-labelledby={managementHeadingId}
+          hidden={!entered}
+          inert={!entered}
+          className="min-w-0 space-y-8 border-t border-border pt-6 [&_button]:max-w-full [&_button]:whitespace-normal"
+        >
           {entered ? (
-            <header className="flex flex-wrap items-center justify-between gap-3 border-t pt-6">
-              <h2 className="text-2xl font-semibold">{m.community_manage()}</h2>
-              <Button variant="ghost" onClick={() => setEntered(false)}>
+            <header className="flex flex-wrap items-center justify-between gap-3">
+              <h2
+                id={managementHeadingId}
+                ref={managementHeading}
+                tabIndex={-1}
+                className="text-2xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+              >
+                {m.community_manage()}
+              </h2>
+              <Button variant="ghost" className="h-auto min-h-11 whitespace-normal" onClick={closeManagement}>
                 {m.community_manage_close()}
               </Button>
             </header>
@@ -765,7 +810,7 @@ function SpaceHome({
               onRestriction={onRealmRestriction}
             />
           ) : null}
-        </div>
+        </section>
       </CommunityManagementContext.Provider>
     </article>
   );

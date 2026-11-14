@@ -38,7 +38,7 @@ function recentRegion(board: RealmBoard, boardHref: string, current: () => boole
     ) : null;
   return (
     <ul
-      className="space-y-1 border-s border-border ps-4"
+      className="min-w-0 divide-y divide-border border-s border-border ps-4"
       data-slot="realm-board-recent"
       aria-label={m.realm_board_recent()}
     >
@@ -53,7 +53,7 @@ function recentRegion(board: RealmBoard, boardHref: string, current: () => boole
         );
         const replies = commentsLabel(thread.comments);
         return (
-          <li key={thread.id} className="min-w-0">
+          <li key={thread.id} className="min-w-0 py-2 first:pt-0 last:pb-0">
             <a
               href={href}
               data-slot="realm-board-recent-link"
@@ -101,12 +101,22 @@ export function RealmCommunityBoards({
     return boardRequestHref(getLocale(), board.id, returnTo ? { returnTo } : {});
   };
   return (
-    <section data-slot="realm-community-boards" className="space-y-4" aria-labelledby="realm-boards-heading">
-      <h2 ref={focus.boundaryRef} tabIndex={-1} id="realm-boards-heading" className="text-xl font-semibold">
+    <section
+      data-slot="realm-community-boards"
+      className="min-w-0 space-y-5 border-t border-border pt-6 sm:pt-8"
+      aria-labelledby="realm-boards-heading"
+    >
+      <h2
+        ref={focus.boundaryRef}
+        tabIndex={-1}
+        id="realm-boards-heading"
+        className="scroll-mt-6 text-2xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+      >
         {m.realm_boards_heading()}
       </h2>
+      <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.community_boards_description()}</p>
       {boards.length ? (
-        <ul className="space-y-1">
+        <ul className="divide-y divide-border">
           {boards.map((board) => {
             const href = boardHref(board);
             return (
@@ -116,11 +126,11 @@ export function RealmCommunityBoards({
                 ref={board.id === focus.firstId ? focus.itemRef : null}
                 tabIndex={-1}
                 aria-label={board.id === focus.firstId ? focus.regionLabel : undefined}
-                className="flex flex-col items-stretch gap-3 rounded-xl px-4 py-3 focus-visible:outline-2 focus-visible:outline-ring"
+                className="flex flex-col items-stretch gap-4 rounded-lg px-2 py-4 sm:px-4 sm:py-5 focus-visible:outline-2 focus-visible:outline-ring"
               >
-                <div className="flex items-start gap-4">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <h3 className="font-semibold">
+                <div className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-2">
+                  <div className="min-w-0 flex-1 basis-48 space-y-1">
+                    <h3 className="text-lg font-semibold">
                       <a
                         href={href}
                         onClick={(event) => {
@@ -132,7 +142,7 @@ export function RealmCommunityBoards({
                         onContextMenu={(event) => {
                           if (!current()) event.preventDefault();
                         }}
-                        className="inline-flex min-h-11 min-w-11 items-center rounded-sm py-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                        className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
                         data-slot="realm-board-link"
                       >
                         {board.title ?? m.threads_untitled()}
