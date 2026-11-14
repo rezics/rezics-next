@@ -78,11 +78,6 @@ export function HostedBookCheckpointControls({
                   <bdi>{resume.title}</bdi>
                 </p>
               ) : null}
-              {withheld ? (
-                <p className="max-w-prose leading-relaxed text-muted-foreground">
-                  {m.book_reader_checkpoint_withheld({}, options)}
-                </p>
-              ) : null}
               {clear ? (
                 <Button
                   variant="ghost"
@@ -105,6 +100,11 @@ export function HostedBookCheckpointControls({
       {message ? (
         <p role="status" className="max-w-prose px-2 py-1 text-sm leading-relaxed text-muted-foreground">
           {message}
+        </p>
+      ) : null}
+      {withheld ? (
+        <p role="status" className="max-w-prose px-2 py-1 text-sm leading-relaxed text-muted-foreground">
+          {m.book_reader_checkpoint_withheld({}, options)}
         </p>
       ) : null}
     </section>

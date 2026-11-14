@@ -1,6 +1,6 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { ArrowLeft, ArrowRight, ChevronRight, List, Pin, PinOff } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, List, Pin, PinOff } from 'lucide-react';
 import {
   Component,
   useCallback,
@@ -220,7 +220,7 @@ function BookReaderView({
     const variant = appearance === 'control' ? 'outline' : 'ghost';
     const className = `${control} ${
       appearance === 'breadcrumb'
-        ? 'justify-start px-1.5 py-1 font-normal text-muted-foreground hover:text-foreground hover:underline underline-offset-4'
+        ? 'min-w-0 shrink justify-start px-1.5 py-1 font-normal text-muted-foreground hover:text-foreground hover:underline underline-offset-4'
         : appearance === 'row'
           ? 'w-full justify-between gap-3 rounded-md px-3 py-3 text-base font-normal'
           : appearance === 'step'
@@ -448,9 +448,12 @@ function BookReaderView({
             />
           </article>
           {renderProgress ? (
-            <details className="min-w-0 border-t pt-3">
-              <summary className={`flex min-h-11 cursor-pointer items-center text-sm font-medium ${focusable}`}>
+            <details className="group min-w-0 border-t pt-3">
+              <summary
+                className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-medium ${focusable}`}
+              >
                 {m.book_reader_progress_review({}, options)}
+                <ChevronDown aria-hidden="true" className="size-4 shrink-0 group-open:rotate-180" />
               </summary>
               <div className="min-w-0 py-3">
                 <ProgressRegion

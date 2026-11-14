@@ -204,8 +204,17 @@ save or clear. A later chapter open still performs its existing exact-body admis
 `illustrative-source.ts` supplies labelled native-format examples through the actual mapper, exclusively for tests
 and stories. It is never a production source. Story IDs remain `interfaces-hosted-book-reader` with named states
 `nested-contents`, `exact-chapter`, `sparse-continuation`, `failed-page-recovery`, `moved-occurrence`,
-`unavailable-navigation` and `retired-reading`. Review at 390px/1280px in light/dark and all eight locale globals.
+`unavailable-navigation` and `retired-reading`; `saved-continue` and `independent-checkpoint-failure` cover checkpoint
+presentation independently of the body. Review at 390px/1280px in light/dark and all eight locale globals.
 The reading column keeps the shared reading measure, wrapping controls, focus rings and safe area spacing.
+
+Review stories opt into two parts and distinct multilingual chapters, including long titles, prose, a table and a
+code block through the actual mapper and shared renderer. Regression fixtures retain their original small default.
+The saved Continue example opens its exact saved occurrence. The checkpoint-unavailable example keeps an independent
+unsaved progress edit under Review reading progress; Retry does not reset that edit. Checkpoint controls are the
+same presentation used by the native owner, with explicitly local illustrative state. Main review stories remain
+manual and stable; set the Storybook `readerJourney` parameter to `true` to run the retained interaction assertions.
+Only their destination selectors change from buttons to canonical links; their outcome assertions stay unchanged.
 
 `tests/hosted-book-reader.test.tsx` retains original bounds, exact operands, reuse, sparse retry, move, focus,
 keyboard/RTL, locale/viewer/session/source retirement and independent progress assertions. Extensions cover native

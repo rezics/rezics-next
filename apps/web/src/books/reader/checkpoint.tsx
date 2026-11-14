@@ -160,11 +160,9 @@ export function HostedBookCheckpoint({
               ? m.book_reader_loading({}, options)
               : observation.state !== 'ready'
                 ? m.book_reader_progress_unavailable({}, options)
-                : value?.state === 'saved' && value.resume.availability === 'unavailable'
-                  ? m.book_reader_checkpoint_withheld({}, options)
-                  : value?.state === 'none'
-                    ? m.book_reader_checkpoint_none({}, options)
-                    : null;
+                : value?.state === 'none'
+                  ? m.book_reader_checkpoint_none({}, options)
+                  : null;
   const retryCommand =
     notice === 'uncertain'
       ? () => {
