@@ -117,3 +117,12 @@ export {
   type SemanticTitleInputs,
   type SemanticTitleInputsObservation,
 } from './title-inputs.ts';
+export type {
+  SemanticTitleProvenanceOrigin,
+  SemanticTitleProvenanceSupport,
+  SemanticTitleFieldBinding,
+  SemanticTitleProvenanceEntry,
+  SemanticTitleProvenanceObservation,
+  SemanticTitleProvenance,
+} from './title-inputs-provenance.ts';
+export { SEMANTIC_TITLE_PROVENANCE_MAX_BYTES } from './title-inputs-provenance.ts';
