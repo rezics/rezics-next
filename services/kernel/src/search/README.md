@@ -747,6 +747,10 @@ Mixed plans retain indexed authority and a separate actual public projection cap
 revalidates both captures. Native owner evidence delegates to Library's complete-original closure and current
 native points before using the shared Boolean interpreter, and is reread before settlement. A clone or a handle from another factory cannot execute.
 
+`ConceptBrowseState` uses one canonical v1 internal envelope: selection, complete currentness binding and the
+exact retained locator. Scope workers reconstruct it from the existing retained definition; neither the stored
+scope identity nor `retained.revision` is a format generation or renumbered by this contract.
+
 `scope-preparation.ts` advances complete public structural capture or Library native custody and the agreed
 `createIdentityScopedObservations(pool)` registration/revalidation protocol. The existing Search WorkModule runs
 bounded capture steps and discovers sixteen due locators per tick. A request can advance one step with its actual

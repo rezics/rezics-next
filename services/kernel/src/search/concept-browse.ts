@@ -20,7 +20,7 @@ export type ConceptBrowseBinding = Readonly<{
 /** An internal locator in the existing retained-plan lifecycle, never a public cursor. */
 export type ConceptBrowseLocator = Readonly<{ id: string; revision: string }>;
 export type ConceptBrowseState = Readonly<{
-  version: 2;
+  version: 1;
   selection: ConceptDescendantSelection;
   binding: ConceptBrowseBinding;
   retained: ConceptBrowseLocator;
@@ -158,7 +158,7 @@ function validLimits(limits: ConceptBrowseLimits): boolean {
 }
 function freezeState(state: ConceptBrowseState): ConceptBrowseState {
   return Object.freeze({
-    version: 2 as const,
+    version: 1 as const,
     selection: Object.freeze({
       concept: state.selection.concept,
       property: state.selection.property,
@@ -187,7 +187,7 @@ export async function startConceptBrowse(
   if (!validBinding(binding) || !validSelection(selection, binding)) return null;
   // Copy before awaiting persistence; caller mutation cannot change the retained definition.
   const definition = freezeState({
-    version: 2,
+    version: 1,
     selection,
     binding,
     retained: { id: '', revision: '' },
@@ -204,7 +204,7 @@ export async function advanceConceptBrowse(
 ): Promise<ConceptBrowseResult> {
   if (
     !validLimits(limits) ||
-    input.version !== 2 ||
+    input.version !== 1 ||
     !validBinding(input.binding) ||
     !validSelection(input.selection, input.binding) ||
     !validLocator(input.retained)
@@ -305,7 +305,7 @@ export async function currentConceptMemberships(
     throw new RangeError('Invalid concept membership page');
   const unknown = (): RelationFacetMatch[] => Array.from({ length: concepts.length }, () => 'not_proven');
   if (
-    state.version !== 2 ||
+    state.version !== 1 ||
     !validBinding(state.binding) ||
     !validSelection(state.selection, state.binding) ||
     !validLocator(state.retained) ||

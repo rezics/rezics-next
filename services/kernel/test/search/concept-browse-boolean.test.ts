@@ -32,7 +32,7 @@ function fixture(options: { changed?: boolean; concealed?: boolean; full?: boole
   let retired = 0,
     lateMembership = false;
   const cut: ConceptStatementCut = {
-    state: { version: 2, selection, binding, retained: { id: 'retained', revision: '1' } },
+    state: { version: 1, selection, binding, retained: { id: 'retained', revision: '1' } },
     source: {
       observe: async () => ({ status: 'current', binding }),
       children: async () => {
