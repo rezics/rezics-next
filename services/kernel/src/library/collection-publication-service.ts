@@ -1,8 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { Pool, PoolClient } from 'pg';
-import { readAccount, deadlineClient } from './access-port.ts';
+import type { Pool } from 'pg';
+import { readAccount, within } from './access-port.ts';
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck } from '../request/access-check.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -23,6 +22,7 @@ import type {
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { CollectionPublicationStatus } from './collection-publication-http.ts';
 import { collectionPublicationStatus } from './collection-publication-http.ts';
+import { withCollectionReadConnection, withCollectionReadSnapshot } from './collection-read-connection.ts';
 import { readCollection } from './collection-store.ts';
 import type { CommandOutcome } from '../command/command.ts';
 
@@ -33,20 +33,6 @@ type StatusSnapshot = Readonly<{
   rule: Awaited<ReturnType<typeof readCollectionPublicationRule>>;
   update: Awaited<ReturnType<typeof accessCheck>>;
 }>;
-
-async function readOnly<T>(pool: Pool, read: (client: PoolClient) => Promise<T>): Promise<T> {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const value = await read(client);
-      await client.query('COMMIT');
-      return value;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
-  });
-}
 
 function concealed(): never {
   throw new ProblemError('not_found');
@@ -65,11 +51,12 @@ export function createCollectionPublicationService(dependencies: Dependencies) {
   async function locate(publicationId: string, deadline: number): Promise<CollectionPublicationLocator | null> {
     const route = routeOf(publicationId);
     if (route === null) return null;
-    const row = await withConnection(
+    const row = await withCollectionReadConnection(
       pool,
-      async (connection) =>
+      deadline,
+      async (client) =>
         (
-          await deadlineClient(connection, deadline).query<{ ownerAccountId: string; collectionId: string }>(
+          await client.query<{ ownerAccountId: string; collectionId: string }>(
             `SELECT owner_account_id::text AS "ownerAccountId",collection_id::text AS "collectionId"
            FROM library.collection_publication_episode
            WHERE route=$1 AND publication_id=$2`,
@@ -103,15 +90,16 @@ export function createCollectionPublicationService(dependencies: Dependencies) {
       !actor.scopes.includes('collection:update')
     )
       concealed();
-    const update = await accessCheck(
-      access,
-      actor,
-      'collection:update',
-      { route: locator.route, id: locator.collectionId },
-      { pool, deadline, time },
+    const update = await within(deadline, () =>
+      accessCheck(
+        access,
+        actor,
+        'collection:update',
+        { route: locator.route, id: locator.collectionId },
+        { pool, deadline, time },
+      ),
     );
-    return readOnly(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
+    return withCollectionReadSnapshot(pool, deadline, async (client) => {
       const currentAccount = await readAccount(client, accountRoute, actor.accountId);
       const collection = await readCollection(client, locator.route, locator.collectionId);
       const episode = await readCollectionPublicationEpisode(client, locator);
@@ -160,20 +148,29 @@ export function createCollectionPublicationService(dependencies: Dependencies) {
       if (actor.accountId !== locator.ownerAccountId) concealed();
       const route = routeOf(actor.accountId);
       if (route === null) concealed();
-      const time = await withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
+      let ownedTime: AuthoritativeTime | undefined;
+      let ended = false;
       try {
+        const time = await withCollectionReadConnection(pool, deadline, async (client) => {
+          const minted = await mintReadTime(client, clock);
+          // A bounded checkout may expire before its callback returns the minted time.
+          if (ended) releaseOperationalTime(minted);
+          else ownedTime = minted;
+          return minted;
+        });
         const first = await snapshot(actor, locator, time, deadline);
         const checks = first.rule
-          ? await prepareCollectionRuleAuthority(
-              { pool, access },
-              actor,
-              first.rule.filter,
-              { time, read: true },
-              deadline,
+          ? await within(deadline, () =>
+              prepareCollectionRuleAuthority(
+                { pool, access },
+                actor,
+                first.rule!.filter,
+                { time, read: true },
+                deadline,
+              ),
             )
           : [];
-        const final = await readOnly(pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
+        const final = await withCollectionReadSnapshot(pool, deadline, async (client) => {
           const currentAccount = await readAccount(client, route, actor.accountId);
           const collection = await readCollection(client, locator.route, locator.collectionId);
           const episode = await readCollectionPublicationEpisode(client, locator);
@@ -204,7 +201,8 @@ export function createCollectionPublicationService(dependencies: Dependencies) {
         });
         return collectionPublicationStatus(final);
       } finally {
-        releaseOperationalTime(time);
+        ended = true;
+        if (ownedTime) releaseOperationalTime(ownedTime);
       }
     },
   };
