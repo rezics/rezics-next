@@ -257,7 +257,7 @@ export async function executeCollectionRemoveTarget(
         const outcome = (state: TargetEvidence['outcome'], reason: TargetEvidence['reason'] = null) =>
           evidence(command, native.transactionId, state, reason);
         if (!curatorAccountId) throw new GrantDeniedError();
-        await guardCollectionBulkTargetHistory(tx, curatorAccountId);
+        await guardCollectionBulkTargetHistory(tx, curatorAccountId, original.accountId);
         if (sameHome) {
           // Match the operation owner's lock order. Only this transaction may acknowledge a same-home effect.
           await tx.query(

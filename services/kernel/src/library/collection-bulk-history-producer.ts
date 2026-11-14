@@ -17,14 +17,20 @@ function curatorReference(accountId: string) {
   return { accountRoute, accountId, roles: ACCOUNT_ROLE_BITS.owner };
 }
 
-/** Hold the copied Collection role against both account erasure and History's local late fence. */
-export async function guardCollectionBulkTargetHistory(tx: CommandTransaction, curatorAccountId: string) {
+/** Hold both copied account roles against erasure and History's local late fence. */
+export async function guardCollectionBulkTargetHistory(
+  tx: CommandTransaction,
+  curatorAccountId: string,
+  sourceAccountId: string,
+) {
   const curator = curatorReference(curatorAccountId);
-  try {
-    await shareAccount(tx, curatorAccountId);
-  } catch (error) {
-    if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
-    throw error;
+  for (const accountId of [...new Set([curatorAccountId, sourceAccountId])].sort()) {
+    try {
+      await shareAccount(tx, accountId);
+    } catch (error) {
+      if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
+      throw error;
+    }
   }
   const identity = commandHistoryIdentityAccounts(tx);
   if (identity.length === 0) throw new TypeError('Missing verified Collection bulk command identity');

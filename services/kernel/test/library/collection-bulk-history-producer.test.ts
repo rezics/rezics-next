@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import type { DurableInitiatorRecord } from '../../src/access/durable-initiator.ts';
+import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { HistorySealedError } from '../../src/history/contract/errors.ts';
 import { ACCOUNT_ROLE_BITS as R } from '../../src/history/contract/contracts.ts';
 import { decodeLocator } from '../../src/history/contract/locator.ts';
@@ -325,4 +326,110 @@ test('a sealed curator locator fence rolls back the remote target receipt and Co
       )
     ).rowCount,
   ).toBe(0);
+});
+
+test('source erasure after capture prevents remote add and removal receipts and effects', async () => {
+  const source = await f.identity([...batchScopes, 'account:delete'], 2);
+  const curator = await f.identity(batchScopes, 1);
+  const collection = (
+    await f.commands.createCollection(
+      curator.actor,
+      { title: 'Erased source bulk custody', visibility: 'private' },
+      entryKey(),
+    )
+  ).value;
+  await f.grant(collection.id, source.actor.accountId);
+
+  const addSubjectId = await f.createSubject('game', 'Late bulk add');
+  const removeSubjectId = await f.createSubject('game', 'Late bulk removal');
+  await f.commands.addMember(curator.actor, collection.id, { subjectId: removeSubjectId }, entryKey());
+  const member = (
+    await f.pool.query<{ memberId: string; revision: string; transactionId: string; addedAt: string }>(
+      `SELECT member_id AS "memberId",member_revision::text AS revision,
+        transaction_id AS "transactionId",added_at::text AS "addedAt"
+       FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND subject_id=$3 AND deletion_id IS NULL`,
+      [routeOf(collection.id), collection.id, removeSubjectId],
+    )
+  ).rows[0]!;
+  const sourceRoute = routeOf(source.actor.accountId)!;
+  const counter = await f.pool.query<{ seq: string | null }>(
+    'SELECT seq::text AS seq FROM library.owner_write_counter WHERE route=$1 AND account_id=$2',
+    [sourceRoute, source.actor.accountId],
+  );
+  const add = await capture(
+    source.actor,
+    {
+      action: 'add_to_collection',
+      collectionId: collection.id,
+      selection: { kind: 'explicit', targets: [{ subjectId: addSubjectId }] },
+    },
+    [
+      {
+        kind: 'subject',
+        collectionId: collection.id,
+        subjectId: addSubjectId,
+        requestedSubjectId: null,
+        expected: { kind: 'absent', slotGeneration: counter.rows[0]?.seq ?? '0' },
+      },
+    ],
+  );
+  const remove = await capture(
+    source.actor,
+    {
+      action: 'remove_from_collection',
+      collectionId: collection.id,
+      selection: { kind: 'occurrences', memberIds: [member.memberId] },
+    },
+    [
+      {
+        kind: 'occurrence',
+        collectionId: collection.id,
+        memberId: member.memberId,
+        subjectId: removeSubjectId,
+        expected: {
+          memberRevision: member.revision,
+          transactionId: member.transactionId,
+          addedAt: member.addedAt,
+        },
+      },
+    ],
+  );
+
+  await createLifecycleCommands({ pool: f.pool, access: f.access }).tombstone(
+    { actor: source.actor, deadline: Date.now() + 30_000 },
+    { accountId: source.actor.accountId, key: entryKey() },
+  );
+  const added = await executeCollectionAddTarget(add.dependencies, add.command);
+  const removed = await executeCollectionRemoveTarget(remove.dependencies, remove.command);
+  expect(added).toMatchObject({ kind: 'terminal', evidence: { outcome: 'denied' } });
+  expect(removed).toMatchObject({ kind: 'terminal', evidence: { outcome: 'denied' } });
+
+  expect(
+    (
+      await f.pool.query(
+        `SELECT 1 FROM library.collection_member
+         WHERE route=$1 AND collection_id=$2 AND subject_id=$3 AND deletion_id IS NULL`,
+        [routeOf(collection.id), collection.id, addSubjectId],
+      )
+    ).rowCount,
+  ).toBe(0);
+  expect(
+    (
+      await f.pool.query(
+        `SELECT 1 FROM library.collection_member
+         WHERE route=$1 AND collection_id=$2 AND member_id=$3 AND deletion_id IS NULL`,
+        [routeOf(collection.id), collection.id, member.memberId],
+      )
+    ).rowCount,
+  ).toBe(1);
+  for (const command of [add.command, remove.command])
+    expect(
+      (
+        await f.pool.query(
+          `SELECT 1 FROM core.receipt WHERE partition_no=$1 AND principal_id=$2
+           AND command_kind='library.collectionBulk.target' AND request_digest=decode($3,'hex')`,
+          [command.receipt.partition, command.receipt.principalId, command.receipt.digest],
+        )
+      ).rowCount,
+    ).toBe(0);
 });

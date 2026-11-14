@@ -396,7 +396,7 @@ export async function executeCollectionAddTarget(
           const first = await readCollection(tx, collectionRoute, collectionId);
           if (!first || first.state !== 'active') throw new ProblemError('not_found');
           if (!first.curatorAccountId) throw new GrantDeniedError();
-          await guardCollectionBulkTargetHistory(tx, first.curatorAccountId);
+          await guardCollectionBulkTargetHistory(tx, first.curatorAccountId, accountId);
 
           // Match the existing add writer's owner-gate then Collection-parent lock order before
           // predicting its optional outbox event. History admission is already held at this point.
