@@ -111,7 +111,10 @@ export const routes: FakeRoute[] = [
       const key = request.headers.get('idempotency-key')!;
       const receipt = receipts.get(key);
       if (receipt) return receipt;
-      const change = (await request.json()) as Pick<typeof managed, 'title' | 'description' | 'visibility' | 'revision'>;
+      const change = (await request.json()) as Pick<
+        typeof managed,
+        'title' | 'description' | 'visibility' | 'revision'
+      >;
       if (change.revision !== managed.revision) return conflict();
       managed = { ...managed, ...change, revision: managed.revision + 1 };
       const result = { status: 200, collection: { ...managed } };

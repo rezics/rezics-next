@@ -57,9 +57,7 @@ test('uncertain creation and update name the original request even when save nor
         refresh={() => {}}
       />,
     );
-    expect(html).toContain(
-      creating ? m.library_rule_retry_create_original() : m.library_rule_retry_save_original(),
-    );
+    expect(html).toContain(creating ? m.library_rule_retry_create_original() : m.library_rule_retry_save_original());
     expect(html).not.toContain('disabled=""');
     expect(html).not.toContain(m.library_rule_save_and_view_results());
     expect(html).not.toContain(m.library_rule_create_and_view_results());
