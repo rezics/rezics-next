@@ -4,7 +4,8 @@ import { dirname } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act } from 'react';
 import { ContentItem } from '@rezics/ui/content-item';
-import type { FeedItem } from '../src/features/pages/home-feed-read';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { FeedItem, HomeFeedResult } from '../src/features/pages/home-feed-read';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { HomeFeed } = await import('../src/features/pages/home-feed');
 const { homeFeedItemPresentation } = await import('../src/features/feed/home-feed-item');
@@ -39,6 +40,62 @@ function render(items: FeedItem[], locale = 'en') {
     </ol>,
   );
   return window;
+}
+
+type FollowingPost = Extract<FeedItem, { summary: { threadId: string } }>;
+
+function reviewReply(): FollowingPost {
+  return {
+    id: 'current-review-reply',
+    source: 'following',
+    key: { owner: 'content', kind: 'post', route: 0, id: 'review-reply' },
+    occurredAt: null,
+    summary: {
+      id: 'review-reply',
+      threadId: 'review-thread',
+      title: 'A reply to the review',
+      createdAt: '2026-11-04T00:00:00Z',
+      excerpt: 'The selected reply body',
+      reviewContext: {
+        target: {
+          state: 'available',
+          subject: { id: 'reviewed-subject', kind: 'schema:Book', label: { value: 'Reviewed book', language: 'en' } },
+        },
+        citation: {
+          state: 'available',
+          question: {
+            id: 'reviewed-question',
+            revision: 9,
+            label: 'How clear was the ending?',
+            grain: 'work',
+            scale: { min: 0, max: 20, displayStep: 1 },
+          },
+          units: 17,
+          voteRevision: 4,
+        },
+      },
+      parentContext: {
+        kind: 'reply',
+        parent: {
+          state: 'available',
+          id: 'review-parent',
+          revisionId: 'review-parent-revision',
+          createdAt: '2026-11-03T00:00:00Z',
+          author: null,
+          excerpt: 'The parent reveals the ending',
+          language: 'en',
+          spoiler: true,
+        },
+      },
+    },
+    destination: {
+      kind: 'post',
+      id: 'review-reply',
+      postId: 'review-reply',
+      threadId: 'review-thread',
+      title: 'A reply to the review',
+    },
+  };
 }
 
 test('each mixed-feed kind preserves source, occurrence, identity, preview and exact localized destination', () => {
@@ -90,6 +147,18 @@ test('each mixed-feed kind preserves source, occurrence, identity, preview and e
     expect(rows[5]!.querySelector('[data-feed-card-account] a')?.getAttribute('href')).toContain(
       `/${locale}/subjects/`,
     );
+    const reviewPost = render([reviewReply()], locale);
+    const postRow = reviewPost.document.querySelector('li')!;
+    expect(postRow.querySelector('[data-feed-card-kind]')?.getAttribute('data-feed-card-kind')).toBe('reply');
+    expect(postRow.querySelector('[data-feed-card-reviewed-subject] a')?.getAttribute('href')).toContain(
+      `/${locale}/subjects/`,
+    );
+    expect(postRow.querySelector('[data-question-id]')?.getAttribute('data-units')).toBe('17');
+    expect(postRow.querySelector('[data-feed-card-parent-post]')?.getAttribute('href')).toContain(
+      '?post=review-parent#post-review-parent',
+    );
+    expect(postRow.querySelector('a a, a button, button a')).toBeNull();
+    reviewPost.happyDOM.abort();
     window.happyDOM.abort();
   }
 });
@@ -218,7 +287,7 @@ test('1, 10 and 20 rows perform no reads and keep bounded supplied images, title
   retired.happyDOM.abort();
 });
 
-test('independent primary, cover, author and action keyboard stops survive long names and row retirement at both widths', async () => {
+test('independent card controls survive long names, row retirement and review-post page/viewer replacement', async () => {
   const window = render(preparedFeedCardReading(true));
   const globals = {
     window,
@@ -263,6 +332,23 @@ test('independent primary, cover, author and action keyboard stops survive long 
     const host = window.document.createElement('div');
     window.document.body.append(host);
     const root = createRoot(host as unknown as HTMLElement);
+    const client = new QueryClient();
+    const session = (subject: string) => ({ state: 'signed-in', subject, csrfToken: `csrf-${subject}` });
+    const ready = (item: FeedItem): HomeFeedResult => ({
+      state: 'ready',
+      page: {
+        feedItems: [item],
+        next: null,
+        asOf: '2026-11-04T00:00:00Z',
+        sources: { discovery: 'not_requested', following: 'ready', continue: 'not_requested' },
+      },
+    });
+    const show = (result: HomeFeedResult) =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <HomeFeed locale="en" result={result} signedIn />
+        </QueryClientProvider>,
+      );
     try {
       await act(async () =>
         root.render(
@@ -285,8 +371,76 @@ test('independent primary, cover, author and action keyboard stops survive long 
       expect(host.querySelectorAll('li[data-feed-id], img, a')).toHaveLength(0);
       expect(host.textContent).not.toContain('Prepared reader');
       expect(host.textContent).not.toContain('Prepared carrier Realm');
+
+      const post = reviewReply();
+      const context = post.summary.reviewContext!;
+      client.setQueryData(['session'], session('reader-a'));
+      await act(async () => show(ready(post)));
+      const parent = () => host.querySelector('[data-feed-card-parent="available"]')!;
+      const reveal = () => parent().querySelector('button')!;
+      expect(host.textContent).toContain('Reviewed book');
+      expect(host.textContent).toContain('How clear was the ending?');
+      expect(host.querySelector('[data-question-id]')?.getAttribute('data-vote-revision')).toBe('4');
+      expect(reveal().disabled).toBe(false);
+      await act(async () => reveal().click());
+      expect(parent().textContent).toContain('The parent reveals the ending');
+
+      if (context.citation.state !== 'available') throw new Error('Prepared citation missing');
+      const refreshed: FollowingPost = {
+        ...post,
+        summary: {
+          ...post.summary,
+          reviewContext: {
+            ...context,
+            citation: {
+              ...context.citation,
+              units: 6,
+              voteRevision: 5,
+              question: { ...context.citation.question, revision: 10 },
+            },
+          },
+        },
+      };
+      await act(async () => show(ready(refreshed)));
+      expect(host.querySelector('[data-question-id]')?.getAttribute('data-units')).toBe('6');
+      expect(host.querySelector('[data-question-id]')?.getAttribute('data-question-revision')).toBe('10');
+      expect(parent().textContent).not.toContain('The parent reveals the ending');
+      expect(reveal().disabled).toBe(false);
+      await act(async () => {
+        client.setQueryData(['session'], session('reader-b'));
+        show({ state: 'loading', code: 'loading' });
+      });
+      expect(host.querySelectorAll('[data-feed-card-review-context], [data-feed-card-parent]')).toHaveLength(0);
+      expect(host.textContent).not.toContain('Reviewed book');
+      await act(async () =>
+        show(
+          ready({
+            ...post,
+            summary: {
+              ...post.summary,
+              reviewContext: { target: { state: 'withheld' }, citation: { state: 'withheld' } },
+            },
+          }),
+        ),
+      );
+      expect(host.querySelector('[data-feed-card-reviewed-subject]')).toBeNull();
+      expect(host.querySelector('[data-question-id]')).toBeNull();
+      expect(host.querySelector('[data-feed-review-citation="withheld"]')).not.toBeNull();
+      expect(host.querySelector('[data-feed-card-parent-revision]')?.getAttribute('href')).toContain(
+        '/posts/review-parent/revisions/review-parent-revision',
+      );
+      await act(async () => {
+        client.setQueryData(['session'], session('reader-a'));
+        show({ state: 'loading', code: 'loading' });
+      });
+      await act(async () => show(ready(post)));
+      expect(host.querySelector('[data-question-id]')?.getAttribute('data-units')).toBe('17');
+      expect(host.querySelector('[data-question-id]')?.getAttribute('data-question-revision')).toBe('9');
+      expect(reveal().disabled).toBe(false);
+      expect(parent().textContent).not.toContain('The parent reveals the ending');
     } finally {
       await act(async () => root.unmount());
+      client.clear();
     }
   } finally {
     for (const [key, descriptor] of previous) {
