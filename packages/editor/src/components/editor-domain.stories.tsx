@@ -105,9 +105,9 @@ export const DomainAnnotations: Story = {
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Annotated document' });
     await selectEditorText(textbox, '漢字');
-    await userEvent.click(canvas.getByRole('button', { name: 'Ruby annotation', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Ruby annotation' }));
     let dialog = within(await screen.findByRole('dialog', { name: 'Ruby annotation' }));
-    await userEvent.type(dialog.getByRole('textbox', { name: 'Reading', exact: true }), 'かんじ');
+    await userEvent.type(dialog.getByRole('textbox', { name: 'Reading' }), 'かんじ');
     await userEvent.type(dialog.getByRole('textbox', { name: 'Language tag' }), 'ja');
     await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'Reading position' }), 'under');
     await userEvent.keyboard('{Enter}');
@@ -123,12 +123,12 @@ export const DomainAnnotations: Story = {
     });
 
     await userEvent.click(textbox.querySelector('ruby [data-ruby-base]')!);
-    await userEvent.click(canvas.getByRole('button', { name: 'Ruby annotation', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Ruby annotation' }));
     dialog = within(await screen.findByRole('dialog', { name: 'Ruby annotation' }));
     await userEvent.click(dialog.getByRole('button', { name: 'Remove ruby annotation' }));
     await waitFor(() => expect(nodes(annotations.latest.current, 'ruby')).toHaveLength(0));
     await selectEditorText(textbox, '漢字');
-    await userEvent.click(canvas.getByRole('button', { name: 'Language and direction', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Language and direction' }));
     dialog = within(await screen.findByRole('dialog', { name: 'Language and direction' }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Language tag' }), 'zh-Hant-TW');
     await userEvent.selectOptions(dialog.getByRole('combobox', { name: 'Text direction' }), 'auto');
@@ -140,7 +140,7 @@ export const DomainAnnotations: Story = {
       }),
     );
     await selectEditorText(textbox, 'outside');
-    await userEvent.click(canvas.getByRole('button', { name: 'Spoiler', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Spoiler' }));
     await waitFor(() =>
       expect(
         within(canvas.getByRole('region', { name: 'Reading preview' })).getByRole('button', { name: 'Reveal spoiler' }),
@@ -148,7 +148,7 @@ export const DomainAnnotations: Story = {
     );
 
     await placeEditorCaret(textbox, textbox.querySelector('p')!);
-    await userEvent.click(canvas.getByRole('button', { name: 'Footnote', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Footnote' }));
     dialog = within(await screen.findByRole('dialog', { name: 'Footnote' }));
     const label = dialog.getByRole('combobox', { name: 'Footnote label' });
     await userEvent.clear(label);
@@ -172,9 +172,9 @@ export const StaleAnnotationTarget: Story = {
     const canvas = within(canvasElement);
     const textbox = canvas.getByRole('textbox', { name: 'Annotated document' });
     await selectEditorText(textbox, '漢字');
-    await userEvent.click(canvas.getByRole('button', { name: 'Ruby annotation', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Ruby annotation' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Ruby annotation' }));
-    await userEvent.type(dialog.getByRole('textbox', { name: 'Reading', exact: true }), 'stale draft');
+    await userEvent.type(dialog.getByRole('textbox', { name: 'Reading' }), 'stale draft');
     const apply = dialog.getByRole('button', { name: 'Apply' });
     stale.host.replace();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Ruby annotation' })).toBeNull());
