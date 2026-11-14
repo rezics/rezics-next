@@ -14,7 +14,7 @@ import {
 } from './native-bindings.ts';
 import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryOwnerAdapterSlots, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
-import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { SearchUnavailableError, type OpenSearch, type SearchRequestOptions } from './opensearch.ts';
 import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';
 import {
   discoveryDocumentActions,
@@ -312,6 +312,84 @@ export async function nativeDiscoveryRegistry(
 
 export type DiscoveryTarget = { prefix: string; generation: number; uuid: string; incarnation: string };
 export type DiscoveryProjection = ReturnType<typeof createDiscoveryProjection>;
+export type DiscoveryProjectionContext = Readonly<{ deadline: number; signal?: AbortSignal }>;
+
+function projectionRemaining(context: DiscoveryProjectionContext): number {
+  if (!Number.isFinite(context.deadline)) throw new TypeError('Invalid discovery projection deadline');
+  context.signal?.throwIfAborted();
+  const milliseconds = context.deadline - Date.now();
+  if (milliseconds <= 0) throw new SearchUnavailableError('Discovery projection deadline expired');
+  return Math.max(1, Math.floor(milliseconds));
+}
+
+/** Keep the native transport's terminal promise, including response-body cancellation, under publisher custody. */
+function projectionSearch(search: OpenSearch, context?: DiscoveryProjectionContext): OpenSearch {
+  // Existing population, repair and erasure callers retain their configured transport defaults.
+  if (!context) return search;
+  projectionRemaining(context);
+  const admitted = context;
+  async function dispatch<T>(
+    send: (options: SearchRequestOptions) => Promise<T>,
+    options?: SearchRequestOptions,
+  ): Promise<T> {
+    const milliseconds = projectionRemaining(admitted);
+    options?.signal?.throwIfAborted();
+    const controller = new AbortController();
+    const abort = () =>
+      controller.abort(admitted.signal?.aborted ? admitted.signal.reason : options?.signal?.reason);
+    admitted.signal?.addEventListener('abort', abort, { once: true });
+    options?.signal?.addEventListener('abort', abort, { once: true });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expire = () => {
+      const left = admitted.deadline - Date.now();
+      if (left > 0) timer = setTimeout(expire, Math.max(1, Math.ceil(left)));
+      else controller.abort(new SearchUnavailableError('Discovery projection deadline expired'));
+    };
+    timer = setTimeout(expire, Math.max(1, Math.ceil(admitted.deadline - Date.now())));
+    try {
+      const value = await send({
+        ...options,
+        // An absent timeout belongs to the configured transport. The signal supplies the absolute ceiling.
+        ...(options?.timeoutMs === undefined ? {} : { timeoutMs: Math.min(options.timeoutMs, milliseconds) }),
+        signal: controller.signal,
+      });
+      projectionRemaining(admitted);
+      controller.signal.throwIfAborted();
+      return value;
+    } finally {
+      clearTimeout(timer);
+      admitted.signal?.removeEventListener('abort', abort);
+      options?.signal?.removeEventListener('abort', abort);
+    }
+  }
+  return {
+    request<T>(
+      method: Parameters<OpenSearch['request']>[0],
+      path: string,
+      body?: unknown,
+      options?: SearchRequestOptions,
+    ) {
+      return dispatch((options) => search.request<T>(method, path, body, options), options);
+    },
+    bulk<T>(lines: readonly unknown[], options?: Parameters<OpenSearch['bulk']>[1]) {
+      return dispatch((options) => search.bulk<T>(lines, options), options);
+    },
+    ...(search.bulkRaw
+      ? {
+          bulkRaw<T>(body: string, options?: Parameters<NonNullable<OpenSearch['bulkRaw']>>[1]) {
+            return dispatch((options) => search.bulkRaw!<T>(body, options), options);
+          },
+        }
+      : {}),
+  };
+}
+
+type HeldDiscoveryTarget = {
+  client: PoolClient;
+  index: string;
+  acknowledge(): Promise<void>;
+  context?: DiscoveryProjectionContext;
+};
 
 export class DiscoveryPhysicalTargetChangedError extends Error {
   constructor() {
@@ -406,11 +484,15 @@ export async function withDiscoveryTarget<T>(
   target: DiscoveryTarget,
   work: (client: PoolClient, index: string) => Promise<T>,
   purge = false,
+  context?: DiscoveryProjectionContext,
 ): Promise<T> {
   const index = discoveryIndexName(target.prefix, target.generation);
+  const transport = projectionSearch(search, context);
   return withConnection(pool, async (client) => {
+    if (context) projectionRemaining(context);
     await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [index]);
     try {
+      if (context) projectionRemaining(context);
       const {
         rows: [row],
       } = await client.query<{ index_uuid: string; incarnation: string; state: string }>(
@@ -425,12 +507,14 @@ export async function withDiscoveryTarget<T>(
         (purge ? ['retired', 'allocated'] : ['retiring', 'retired', 'quarantined', 'allocated']).includes(row.state)
       )
         throw new DiscoveryPhysicalTargetChangedError();
-      if (!(await discoveryPhysicalTargetMatches(search, target))) throw new DiscoveryPhysicalTargetChangedError();
+      if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
+      if (context) projectionRemaining(context);
       const value = await work(client, index);
-      if (!(await discoveryPhysicalTargetMatches(search, target))) throw new DiscoveryPhysicalTargetChangedError();
+      if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
       return value;
     } finally {
       try {
+        if (context) projectionRemaining(context);
         await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [index]);
       } catch (error) {
         discardConnection(client, error instanceof Error ? error : new Error(String(error)));
@@ -571,12 +655,18 @@ export function createDiscoveryProjection(options: {
     actions: readonly AnyDiscoveryIndexAction[],
     repair: boolean,
     capture: boolean,
-    held?: { client: PoolClient; index: string; acknowledge(): Promise<void> },
+    held?: HeldDiscoveryTarget,
   ) {
+    const context = held?.context;
+    const transport = projectionSearch(search, context);
+    const live = () => {
+      if (context) projectionRemaining(context);
+    };
     const effects: DiscoveryRepairEffect[] = [];
     const apply = async (client: PoolClient, index: string) => {
       const pending: AnyDiscoveryIndexAction[] = [];
       for (const action of actions) {
+        live();
         const key = parseDiscoveryDocumentKey(registry, action.id),
           values = [key.route, key.id, target.prefix, target.generation, key.kind];
         // Erasure can commit after source/locator reads; session custody excludes its physical purge.
@@ -596,7 +686,7 @@ export function createDiscoveryProjection(options: {
           throw new Error('Discovery native position cannot resurrect its keyed deletion');
         if (old && BigInt(old.position) === action.version && old.settled && !repair) {
           // Raw replay revisits unchanged keys. An exact visible winner makes that replay idempotent.
-          await readDiscoveryRepairWinner(search, index, action);
+          await readDiscoveryRepairWinner(transport, index, action);
           continue;
         }
         if (
@@ -605,6 +695,7 @@ export function createDiscoveryProjection(options: {
         )
           if (capture || held) throw new Error('Discovery source version is behind its permanent copy high water');
           else continue;
+        live();
         await client.query(
           `INSERT INTO search.discovery_copy(route,source_id,prefix,generation,kind,position,revision,deleted,settled)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false) ON CONFLICT(route,source_id,prefix,generation,kind)
@@ -614,18 +705,20 @@ export function createDiscoveryProjection(options: {
         pending.push(action);
       }
       let bulk: unknown;
-      const transport: OpenSearch = capture
+      const writer: OpenSearch = capture
         ? {
-            ...search,
+            ...transport,
             async bulkRaw<T>(body: string, options?: Parameters<NonNullable<OpenSearch['bulkRaw']>>[1]) {
-              if (!search.bulkRaw) throw new TypeError('Discovery requires the native exact-version transport');
-              const response = await search.bulkRaw<T>(body, options);
+              if (!transport.bulkRaw) throw new TypeError('Discovery requires the native exact-version transport');
+              const response = await transport.bulkRaw<T>(body, options);
               bulk = response;
               return response;
             },
           }
-        : search;
-      await writeDiscoveryActions(transport, registry, index, pending);
+        : transport;
+      live();
+      // Intent is durable before dispatch; an ambiguous or expired response never enters settlement below.
+      await writeDiscoveryActions(writer, registry, index, pending);
       if (capture && pending.length > 0) {
         if (!record(bulk) || !Array.isArray(bulk.items) || bulk.items.length !== pending.length)
           throw new Error('Discovery repair has no exact native response');
@@ -636,7 +729,7 @@ export function createDiscoveryProjection(options: {
           if (record(result) && result.status === 409 && action.op === 'index') {
             // The original mixed writer verified the identical winner. Retain fresh visibility
             // and recheck the whole keyed body; the conflict itself never certifies settlement.
-            const refresh = await search.request('POST', `/${index}/_refresh`);
+            const refresh = await transport.request('POST', `/${index}/_refresh`);
             validateRefreshResponse(refresh.status, refresh.body);
             evidence = { kind: 'recovered', refresh: refresh.body };
           } else {
@@ -644,7 +737,7 @@ export function createDiscoveryProjection(options: {
             validateDiscoveryWriteReceipt(response, index, [action]);
             evidence = { kind: 'bulk', bulk: response };
           }
-          const winner = await readDiscoveryRepairWinner(search, index, action);
+          const winner = await readDiscoveryRepairWinner(transport, index, action);
           effects.push({
             key: parseDiscoveryDocumentId(registry, action.id),
             action: action as DiscoveryIndexAction,
@@ -654,12 +747,14 @@ export function createDiscoveryProjection(options: {
         }
       }
       if (held) {
-        for (const action of pending) await readDiscoveryRepairWinner(search, index, action);
-        if (!(await discoveryPhysicalTargetMatches(search, target))) throw new DiscoveryPhysicalTargetChangedError();
+        for (const action of pending) await readDiscoveryRepairWinner(transport, index, action);
+        if (!(await discoveryPhysicalTargetMatches(transport, target))) throw new DiscoveryPhysicalTargetChangedError();
+        live();
         await client.query('BEGIN');
       }
       try {
         for (const action of pending) {
+          live();
           const key = parseDiscoveryDocumentKey(registry, action.id);
           await client.query(
             `UPDATE search.discovery_copy SET settled=true WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5 AND position=$6`,
@@ -667,11 +762,17 @@ export function createDiscoveryProjection(options: {
           );
         }
         if (held) {
+          live();
           await held.acknowledge();
+          live();
           await client.query('COMMIT');
         }
       } catch (error) {
-        if (held) await client.query('ROLLBACK');
+        if (held) {
+          if (context && (context.signal?.aborted || Date.now() >= context.deadline))
+            discardConnection(client, error instanceof Error ? error : new Error(String(error)));
+          else await client.query('ROLLBACK');
+        }
         throw error;
       }
     };
@@ -756,7 +857,12 @@ export function createDiscoveryProjection(options: {
     return applyActions(actions, true, true);
   }
   /** Translate the existing Content refresh; no alternate native read or eligibility owner. */
-  async function prepareReviews(refresh: ReviewDiscoveryRefresh, ids: readonly string[]) {
+  async function prepareReviews(
+    refresh: ReviewDiscoveryRefresh,
+    ids: readonly string[],
+    context?: DiscoveryProjectionContext,
+  ) {
+    const transport = projectionSearch(search, context);
     if (ids.length > 100 || new Set(ids).size !== ids.length) throw new RangeError('Invalid review receiving batch');
     const requested = new Set(ids);
     const seen = new Set<string>();
@@ -802,11 +908,17 @@ export function createDiscoveryProjection(options: {
       },
       ids.map((id) => ({ owner: 'content', kind: 'review', id, route: routeOf(id)! })),
     );
-    return prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);
+    const prepared = await prepareBoundedSortKeys(
+      transport,
+      discoveryIndexName(target.prefix, target.generation),
+      actions,
+    );
+    if (context) projectionRemaining(context);
+    return prepared;
   }
   async function applyReviews(
     actions: readonly SecondScopeDiscoveryIndexAction[],
-    held: { client: PoolClient; index: string; acknowledge(): Promise<void> },
+    held: HeldDiscoveryTarget,
   ) {
     if (
       actions.length > 100 ||

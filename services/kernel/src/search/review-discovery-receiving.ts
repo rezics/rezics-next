@@ -75,33 +75,49 @@ async function within<T>(deadline: number, work: () => Promise<T>): Promise<T> {
 function turn<T>(context: ReviewReceivingContext | undefined, work: (deadline: number) => Promise<T>): Promise<T> {
   if (context && !Number.isFinite(context.deadline)) throw new TypeError('Invalid review receiving deadline');
   const deadline = Math.min(Date.now() + turnBudgetMs, deadlineFor(turnBudgetMs), context?.deadline ?? Infinity);
-  return within(deadline, () => work(deadline));
+  // Every stage enforces this deadline. Await their terminal cleanup instead of racing the whole turn.
+  return withRequestDeadline(deadline, async () => {
+    remaining(deadline);
+    try {
+      const value = await work(deadline);
+      remaining(deadline);
+      return value;
+    } catch (error) {
+      remaining(deadline);
+      throw error;
+    }
+  });
 }
 
 /** Writable checkout, not a read snapshot. Only a completely cleaned session may return to the pool. */
-function connection<T>(
+async function connection<T>(
   pool: Pool,
   deadline: number,
   work: (client: PoolClient) => Promise<T>,
-  unsettledProjection?: () => Promise<void> | undefined,
+  unsettledTarget?: () => Promise<void> | undefined,
 ): Promise<T> {
   let reusable = false;
-  return withBoundedReadLifetime(
-    (run) =>
-      withConnection(pool, async (raw) => {
+  let acquired = false;
+  let checkout: Promise<unknown> | undefined;
+  const bounded = withBoundedReadLifetime(
+    (run) => {
+      const operation = withConnection(pool, async (raw) => {
+        acquired = true;
         try {
           return await run(raw);
         } finally {
           // This also covers expiry while a manual transaction or advisory session lock is idle.
           if (!reusable) {
             discardConnection(raw, new Error('Review receiving session was not fully released'));
-            // applyReviews owns an uncancellable transport. Keep its existing single-publisher lock
-            // until that effect settles, even though the caller and bounded client have expired.
-            // The target owner must provide terminal cancellation before this custody can be finite.
-            await unsettledProjection?.()?.catch(() => {});
+            // Retire SQL immediately, but retain the physical session lock until all target transport
+            // (including physical checks and readback) has completed its original-deadline cancellation.
+            await unsettledTarget?.()?.catch(() => {});
           }
         }
-      }),
+      });
+      checkout = operation;
+      return operation;
+    },
     discardConnection,
     deadline,
     async (client) => {
@@ -127,6 +143,13 @@ function connection<T>(
       isUncertainSettledQueryError: () => true,
     },
   );
+  try {
+    return await bounded;
+  } finally {
+    // The bounded client can retire before its checkout callback finishes terminal transport cleanup.
+    // A still-queued acquisition owns no session; the lifetime retires it before any late SQL dispatch.
+    if (acquired) await checkout?.catch(() => {});
+  }
 }
 
 /** Adapt only Search's withConnection helpers to this owned checkout. Never pass this to native owners. */
@@ -146,38 +169,6 @@ function onSession<T>(pool: Pool, client: PoolClient, work: (session: Pool) => P
     { connection: (dispatch) => dispatch(), query: (_sql, _operands, dispatch) => dispatch() },
     () => work(session),
   );
-}
-
-type TargetSearch = Parameters<typeof withDiscoveryTarget>[1];
-
-/** Only the target-session checks use this transport; projection retains its own transport custody. */
-function targetSearch(search: TargetSearch, deadline: number): TargetSearch {
-  return {
-    ...search,
-    async request<T>(
-      method: Parameters<TargetSearch['request']>[0],
-      path: string,
-      body?: unknown,
-      options?: Parameters<TargetSearch['request']>[3],
-    ) {
-      const controller = new AbortController();
-      const abort = () => controller.abort(options?.signal?.reason);
-      if (options?.signal?.aborted) abort();
-      else options?.signal?.addEventListener('abort', abort, { once: true });
-      try {
-        return await within(deadline, () =>
-          search.request<T>(method, path, body, {
-            ...options,
-            timeoutMs: Math.min(options?.timeoutMs ?? Infinity, remaining(deadline)),
-            signal: controller.signal,
-          }),
-        );
-      } finally {
-        options?.signal?.removeEventListener('abort', abort);
-        controller.abort();
-      }
-    },
-  };
 }
 
 type Stored = {
@@ -294,6 +285,7 @@ export function createReviewDiscoveryReceiving(options: {
   }
 
   async function receive(home: number, deadline: number): Promise<ReviewReceivingFrontier> {
+    const projectionContext = { deadline };
     const values = [...parameters(target), home];
     const claim = randomUUID();
     let attempted = false;
@@ -345,8 +337,8 @@ export function createReviewDiscoveryReceiving(options: {
       const refreshed = ids.length
         ? await within(deadline, () => refreshReviewDiscoveryChanges(source, page))
         : undefined;
-      const actions = refreshed ? await within(deadline, () => projection.prepareReviews(refreshed, ids)) : [];
-      let applying: Promise<void> | undefined;
+      const actions = refreshed ? await projection.prepareReviews(refreshed, ids, projectionContext) : [];
+      let publishing: Promise<void> | undefined;
       const apply = async (client: PoolClient, index: string) => {
         const admitted = await client.query(
           `UPDATE search.review_discovery_receiving SET stage=$8::jsonb WHERE ${where}
@@ -363,16 +355,16 @@ export function createReviewDiscoveryReceiving(options: {
         );
         if (admitted.rowCount !== 1)
           throw new Error('Review receiving claim or native observation is no longer current');
-        await within(deadline, () => {
-          applying = projection.applyReviews(actions, {
-            client,
-            index,
-            async acknowledge() {
-              remaining(deadline);
-              // Copy settlement and receiving frontier commit in the same PostgreSQL transaction,
-              // only after the exact engine effects have become visible. A lost response repeats refresh.
-              const result = await client.query(
-                `UPDATE search.review_discovery_receiving SET acknowledged=$8,
+        await projection.applyReviews(actions, {
+          client,
+          index,
+          context: projectionContext,
+          async acknowledge() {
+            remaining(deadline);
+            // Copy settlement and receiving frontier commit in the same PostgreSQL transaction,
+            // only after the exact engine effects have become visible. A lost response repeats refresh.
+            const result = await client.query(
+              `UPDATE search.review_discovery_receiving SET acknowledged=$8,
                  through=$9,completed_cut=CASE WHEN $9::bigint IS NULL THEN $10 ELSE completed_cut END,
                  native_position=COALESCE($11::bigint,native_position),stage=NULL,
                  pending=($9::bigint IS NOT NULL OR requested>$8::bigint),
@@ -380,30 +372,30 @@ export function createReviewDiscoveryReceiving(options: {
                  claim=NULL,claim_until=NULL WHERE ${where} AND claim=$7 AND claim_until>clock_timestamp()
                  AND acknowledged=$12::bigint AND through=$10::bigint
                  AND ($11::bigint IS NULL OR native_position IS NULL OR native_position<=$11::bigint)`,
-                [
-                  ...values,
-                  claim,
-                  page.after.toString(),
-                  page.next === null ? null : page.through.toString(),
-                  page.through.toString(),
-                  refreshed?.nativePosition.toString() ?? null,
-                  claimed.acknowledged,
-                ],
-              );
-              if (result.rowCount !== 1) throw new Error('Review receiving acknowledgement lost its claim');
-            },
-          });
-          return applying;
+              [
+                ...values,
+                claim,
+                page.after.toString(),
+                page.next === null ? null : page.through.toString(),
+                page.through.toString(),
+                refreshed?.nativePosition.toString() ?? null,
+                claimed.acknowledged,
+              ],
+            );
+            if (result.rowCount !== 1) throw new Error('Review receiving acknowledgement lost its claim');
+          },
         });
       };
       await connection(
         pool,
         deadline,
-        (owned) =>
-          onSession(pool, owned, (session) =>
-            withDiscoveryTarget(session, targetSearch(search, deadline), target, apply),
-          ),
-        () => applying,
+        (owned) => {
+          publishing = onSession(pool, owned, (session) =>
+            withDiscoveryTarget(session, search, target, apply, false, projectionContext),
+          );
+          return publishing;
+        },
+        () => publishing,
       );
       return await frontier();
     } catch (error) {
