@@ -46,6 +46,7 @@ export type ParsedCredit = Readonly<{
   row: SelectedCredit;
   targetId: string;
   qualifiers: readonly CreditSearchQualifier[];
+  itemQualifierIds: readonly string[];
   overflowQualifiers: boolean;
 }>;
 
@@ -188,8 +189,17 @@ export function parseCredit(row: SelectedCredit, release: Release, qualifiersPer
     : sortQualifiers(
         (statement.qualifiers ?? []).map((qualifier) => ({ property: qualifier.property, value: qualifier.value })),
       );
-  if (!overflowQualifiers && qualifiers.length > qualifiersPerCredit) return null;
-  return { row, targetId: statement.value, qualifiers, overflowQualifiers };
+  // Normalization must not turn a partially representable credit into an unqualified statement.
+  if (!overflowQualifiers && qualifiers.length !== rawQualifiers.length) return null;
+  const itemQualifierIds = [
+    ...new Set(
+      qualifiers
+        .filter((qualifier) => release.properties[qualifier.property]?.datatype === 'wikibase-item')
+        .map((qualifier) => qualifier.value),
+    ),
+  ];
+  if (itemQualifierIds.some((id) => routeOf(id) === null)) return null;
+  return { row, targetId: statement.value, qualifiers, itemQualifierIds, overflowQualifiers };
 }
 
 export async function parsePage(
