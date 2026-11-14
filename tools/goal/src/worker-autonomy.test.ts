@@ -50,7 +50,7 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   writeFileSync(join(sourceOnlyState.path, 'verification-mode'), 'source-only\n');
   const sourceTask = promptTask('web');
   const sourceOnly = workerPrompt(
-    { ...sourceTask, brief: { ...sourceTask.brief, target: 'dev' } },
+    sourceTask,
     undefined,
     undefined,
     [],
