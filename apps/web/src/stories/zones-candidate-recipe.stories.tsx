@@ -13,7 +13,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A development-only candidate using fictional recipes. Gated stories illustrate response states; they do not claim an official site, live catalogue, or native source readiness.',
+          'A fictional Recipes candidate shown as a gated development preview, deferred for real source admission. These stories do not claim an official site, live catalogue, or native source readiness.',
       },
     },
   },
@@ -77,13 +77,13 @@ const detailReturn: Story['play'] = async ({ canvasElement }) => {
 };
 
 export const AdmittedPreview: Story = {
-  name: 'Admitted · gated preview',
+  name: 'Candidate · admitted gated preview · deferred',
   render: () => <CandidatePage path={zonePath('admitted')} />,
   parameters: {
     docs: {
       description: {
         story:
-          'A clearly labelled development preview with fictional, typed Recipe rows.',
+          'A clearly labelled, deferred candidate preview with fictional, typed Recipe rows.',
       },
     },
   },
@@ -91,12 +91,13 @@ export const AdmittedPreview: Story = {
 };
 
 export const ReadyEmpty: Story = {
-  name: 'Ready empty · gated preview',
+  name: 'Candidate · ready empty · gated preview · deferred',
   render: () => <CandidatePage path={zonePath('empty')} />,
   parameters: {
     docs: {
       description: {
-        story: 'The source read succeeds and returns no matching Recipe rows.',
+        story:
+          'The candidate read succeeds and returns no matching Recipe rows; real source admission is deferred.',
       },
     },
   },
@@ -105,30 +106,31 @@ export const ReadyEmpty: Story = {
 };
 
 export const SparseHome: Story = {
-  name: 'Sparse · gated preview',
+  name: 'Candidate · sparse gated preview · deferred',
   render: () => <CandidatePage path={zonePath('sparse')} />,
   parameters: {
     docs: {
       description: {
-        story: 'One fictional Recipe is present with optional facts absent.',
+        story:
+          'One fictional Recipe is present with optional facts absent; this gated candidate preview is deferred.',
       },
     },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(/optional facts absent/i);
-    await canvas.findByRole('link', { name: /Apricot Window-Pan Toast/ });
+    await canvas.findByRole('link', { name: /Rain-on-the-Window Porridge/ });
   },
 };
 
 export const PlatformClosed: Story = {
-  name: 'Platform closed · 403',
+  name: 'Candidate · platform closed 403 · gated preview · deferred',
   render: () => <CandidatePage path={zonePath('closed')} />,
   parameters: {
     docs: {
       description: {
         story:
-          'A readable candidate whose source access is closed: platform_closed.',
+          'This fictional candidate preview remains gated and deferred because source access is closed: platform_closed.',
       },
     },
   },
@@ -137,13 +139,13 @@ export const PlatformClosed: Story = {
 };
 
 export const SourcesUnavailable: Story = {
-  name: 'Sources unavailable · 503',
+  name: 'Candidate · semantic unavailable 503 · gated preview · deferred',
   render: () => <CandidatePage path={zonePath('unavailable')} />,
   parameters: {
     docs: {
       description: {
         story:
-          'The admitted source owner is not ready: semantic_not_ready, with Retry-After: 1.',
+          'This fictional candidate preview remains gated and deferred while its source owner is unavailable: semantic_not_ready, with Retry-After: 1.',
       },
     },
   },
@@ -152,12 +154,13 @@ export const SourcesUnavailable: Story = {
 };
 
 export const PrivateCandidate: Story = {
-  name: 'Private · concealed 404',
+  name: 'Candidate · private concealed 404 · gated preview · deferred',
   render: () => <CandidatePage path={zonePath('private')} />,
   parameters: {
     docs: {
       description: {
-        story: 'A private candidate is indistinguishable from a missing page.',
+        story:
+          'A private, fictional candidate is gated and deferred, and is indistinguishable from a missing page.',
       },
     },
   },
@@ -171,13 +174,13 @@ export const PrivateCandidate: Story = {
 };
 
 export const MissingCandidate: Story = {
-  name: 'Missing · concealed 404',
+  name: 'Candidate · missing concealed 404 · gated preview · deferred',
   render: () => <CandidatePage path={zonePath('missing')} />,
   parameters: {
     docs: {
       description: {
         story:
-          'A nonexistent candidate uses the same concealed 404 response as a private one.',
+          'A nonexistent gated candidate uses the same concealed 404 response as a private one; real source admission is deferred.',
       },
     },
   },
@@ -191,7 +194,7 @@ export const MissingCandidate: Story = {
 };
 
 export const RecipeDetail: Story = {
-  name: 'Recipe detail · gated preview',
+  name: 'Candidate · recipe detail · gated preview · deferred',
   render: () => (
     <CandidatePage
       path={recipePath('admitted', RECIPE_SUBJECT_IDS.apricotToast)}
@@ -201,7 +204,7 @@ export const RecipeDetail: Story = {
     docs: {
       description: {
         story:
-          'A recipe row resolves to its matching synthetic Subject through the Zone read route.',
+          'A fictional recipe row resolves to its matching synthetic Subject through the Zone read route in this gated, deferred candidate preview.',
       },
     },
   },

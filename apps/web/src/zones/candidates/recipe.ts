@@ -1,5 +1,18 @@
+import type { SubjectRead } from '@rezics/client';
+import {
+  PAGE_GLOBAL_CONTEXT,
+  planReads,
+  platformRegistry,
+  type CompositionDocument,
+} from '@rezics/composition';
+import type { Release } from '@rezics/definitions';
+import definitions from '../../kernel/recorded/definitions-release.json';
 import recipeStarter from '../../../../../packages/definitions/presentation/recipe/zone.json';
 import type { ZonePageResponse, ZonePublic } from '../appearance';
+
+const release = definitions.release as Release;
+const properties = release.properties as Record<string, { datatype: string }>;
+const types = release.types as Record<string, { bases: string[] }>;
 
 export const RECIPE_ZONE_IDS = {
   admitted: '0193c000-0006-7000-8000-000000000000',
@@ -17,27 +30,19 @@ export const RECIPE_SUBJECT_IDS = {
   apricotToast: '0193c100-0006-7000-8000-000000000001',
   harborOats: '0193c100-0006-7000-8000-000000000002',
   rainyLentils: '0193c100-0006-7000-8000-000000000003',
+  sparsePorridge: '0193c100-0006-7000-8000-000000000004',
 } as const;
 
-type RecipeFact = { datatype: string; content: unknown };
-type RecipeStatement = {
-  id: string;
-  rank: 'normal';
-  property: { id: string; data_type: string };
-  value: { type: 'value'; content: unknown };
-  qualifiers: [];
-  references: [];
-};
+type Subject = SubjectRead['subject'];
+type Statement = Subject['statements'][string][number];
 
 export type RecipeCandidate = {
   id: string;
   type: 'schema:Recipe';
   labels: { en: string };
-  descriptions: { en: string };
-  aliases: Record<string, never>;
-  facts: Record<string, RecipeFact[]>;
   ingredientNotes: string[];
   method: string[];
+  facts: Record<string, unknown[]>;
 };
 
 const minute = 'http://www.wikidata.org/entity/Q7727';
@@ -45,8 +50,7 @@ const minute = 'http://www.wikidata.org/entity/Q7727';
 const recipe = (
   id: string,
   name: string,
-  description: string,
-  ingredientNotes: string[],
+  ingredients: string[],
   method: string[],
   cookMinutes?: number,
   servings?: number,
@@ -54,36 +58,22 @@ const recipe = (
   id,
   type: 'schema:Recipe',
   labels: { en: name },
-  descriptions: { en: description },
-  aliases: {},
+  ingredientNotes: ingredients,
+  method,
   facts: {
-    'schema:name': [{ datatype: 'string', content: name }],
+    'schema:name': [name],
     ...(cookMinutes === undefined
       ? {}
-      : {
-          'schema:cookTime': [
-            {
-              datatype: 'quantity',
-              content: { amount: `+${cookMinutes}`, unit: minute },
-            },
-          ],
-        }),
+      : { 'schema:cookTime': [{ amount: `+${cookMinutes}`, unit: minute }] }),
     ...(servings === undefined
       ? {}
-      : {
-          'schema:recipeYield': [
-            {
-              datatype: 'quantity',
-              content: { amount: `+${servings}`, unit: '1' },
-            },
-          ],
-        }),
-    ...(ingredientNotes.length === 0
+      : { 'schema:recipeYield': [{ amount: `+${servings}`, unit: '1' }] }),
+    ...(ingredients.length === 0
       ? {}
       : {
-          'schema:recipeIngredient': ingredientNotes.map((text) => ({
-            datatype: 'monolingualtext',
-            content: { text, language: 'en' },
+          'schema:recipeIngredient': ingredients.map((text) => ({
+            text,
+            language: 'en',
           })),
         }),
     ...(method.length === 0
@@ -91,30 +81,24 @@ const recipe = (
       : {
           'schema:recipeInstructions': [
             {
-              datatype: 'document',
-              content: {
-                language: 'en',
-                document: {
-                  root: { props: {} },
-                  content: method.map((text, index) => ({
-                    type: 'Text',
-                    props: { id: `step-${index + 1}`, text },
-                  })),
-                },
+              language: 'en',
+              document: {
+                root: { props: {} },
+                content: method.map((text, index) => ({
+                  type: 'Text',
+                  props: { id: `step-${index + 1}`, text },
+                })),
               },
             },
           ],
         }),
   },
-  ingredientNotes,
-  method,
 });
 
 export const RECIPE_SUBJECTS: readonly RecipeCandidate[] = [
   recipe(
     RECIPE_SUBJECT_IDS.apricotToast,
     'Apricot Window-Pan Toast',
-    'A fictional, crisp-edged breakfast with warm fruit and a little orange zest.',
     [
       '2 slices country bread',
       '3 ripe apricots, halved',
@@ -130,7 +114,6 @@ export const RECIPE_SUBJECTS: readonly RecipeCandidate[] = [
   recipe(
     RECIPE_SUBJECT_IDS.harborOats,
     'Harbor-Morning Oat Cups',
-    'A fictional baked oat cup with pear, toasted seeds, and a soft center.',
     ['1 cup rolled oats', '1 ripe pear, diced', '2 tablespoons pumpkin seeds'],
     [
       'Stir the oats and diced pear together with enough water to hold the mixture.',
@@ -142,7 +125,6 @@ export const RECIPE_SUBJECTS: readonly RecipeCandidate[] = [
   recipe(
     RECIPE_SUBJECT_IDS.rainyLentils,
     'Rainy-Day Lentil Pot',
-    'A fictional one-pot supper with green lentils, tomato, and a bright herb finish.',
     [
       '1 cup green lentils',
       '1 small onion, diced',
@@ -159,15 +141,14 @@ export const RECIPE_SUBJECTS: readonly RecipeCandidate[] = [
 ];
 
 const sparseRecipe = recipe(
-  RECIPE_SUBJECT_IDS.apricotToast,
-  'Apricot Window-Pan Toast',
-  'A fictional recipe with a name and no recorded optional facts.',
+  RECIPE_SUBJECT_IDS.sparsePorridge,
+  'Rain-on-the-Window Porridge',
   [],
   [],
 );
 
 export const RECIPE_PREVIEW_LABEL =
-  'Development preview · fictional recipes; no live catalogue or official-site claim.';
+  'Candidate · development preview, gated and deferred. Fictional recipes; no live catalogue or official-site claim.';
 
 type StarterNode = { type: string; props: Record<string, unknown> };
 type StarterDocument = { root: unknown; content: StarterNode[] };
@@ -231,32 +212,96 @@ export const RECIPE_HOME_COPY = {
   readonly RecipeCandidate[]
 >;
 
-function statements(
-  candidate: RecipeCandidate,
-): Record<string, RecipeStatement[]> {
-  return Object.fromEntries(
-    Object.entries(candidate.facts).map(([property, facts]) => [
-      property,
-      facts.map((fact, index) => ({
-        id: `${candidate.id}:${property}:${index + 1}`,
-        rank: 'normal' as const,
-        property: { id: property, data_type: fact.datatype },
-        value: { type: 'value' as const, content: fact.content },
-        qualifiers: [] as [],
-        references: [] as [],
-      })),
-    ]),
+function recipeStatements(candidate: RecipeCandidate): Subject['statements'] {
+  const statements: Subject['statements'] = {};
+  for (const [property, values] of Object.entries(candidate.facts)) {
+    statements[property] = values.map((content, index) => ({
+      id: `${candidate.id}:${property}:${index + 1}`,
+      rank: 'normal',
+      property: { id: property, data_type: properties[property]!.datatype },
+      value: { type: 'value', content },
+      qualifiers: [],
+      references: [],
+      rezics: { release: definitions.digest, revision: 1 },
+    })) as Statement[];
+  }
+  return statements;
+}
+
+export function recipeCandidate(id: string): RecipeCandidate | undefined {
+  return [...RECIPE_SUBJECTS, sparseRecipe].find(
+    (candidate) => candidate.id === id,
   );
 }
 
-export function recipeSubjectRecord(candidate: RecipeCandidate) {
+function candidateLabel(
+  candidate: RecipeCandidate,
+  languages: readonly string[] = [],
+) {
+  const labels = candidate.labels as Record<string, string>;
+  for (const language of languages) {
+    const exact = labels[language];
+    if (exact) return { value: exact, language };
+    const primary = language.split('-')[0];
+    const fallback = primary ? labels[primary] : undefined;
+    if (fallback) return { value: fallback, language: primary! };
+  }
+  return { value: candidate.labels.en, language: 'en' };
+}
+
+export function recipeSubjectRead(
+  candidate: RecipeCandidate,
+  languages: readonly string[] = [],
+): SubjectRead {
+  const subject: Subject = {
+    id: candidate.id,
+    type: candidate.type,
+    revision: 1,
+    release: definitions.digest,
+    context: PAGE_GLOBAL_CONTEXT,
+    resolution: {},
+    relationCounts: {},
+    labels: candidate.labels,
+    descriptions: {},
+    aliases: {},
+    statements: recipeStatements(candidate),
+    sourceRecords: [],
+  };
+  const types = [candidate.type, ...typesById(candidate.type)];
+  return {
+    subject,
+    summary: {
+      id: candidate.id,
+      type: candidate.type,
+      types,
+      creativeWork: types.includes('schema:CreativeWork'),
+      label: candidateLabel(candidate, languages),
+      cover: null,
+    },
+    related: {},
+    account: null,
+  };
+}
+
+function typesById(id: string): string[] {
+  const found = new Set<string>();
+  const pending = [...(types[id]?.bases ?? [])];
+  while (pending.length > 0) {
+    const next = pending.shift()!;
+    if (found.has(next)) continue;
+    found.add(next);
+    pending.push(...(types[next]?.bases ?? []));
+  }
+  return [...found];
+}
+
+function searchHit(candidate: RecipeCandidate, languages: readonly string[]) {
+  const { summary } = recipeSubjectRead(candidate, languages);
   return {
     id: candidate.id,
     type: candidate.type,
     labels: candidate.labels,
-    descriptions: candidate.descriptions,
-    aliases: candidate.aliases,
-    statements: statements(candidate),
+    summary,
   };
 }
 
@@ -274,88 +319,27 @@ export function recipeZone(state: RecipeCandidateState): ZonePublic {
 
 export function recipeHomeResponse(
   state: 'admitted' | 'empty' | 'sparse',
+  languages: readonly string[] = [],
 ): ZonePageResponse {
+  const document = RECIPE_HOME_DOCUMENTS[state] as CompositionDocument;
+  const plan = planReads(platformRegistry, document, { subject: null });
+  const subjects = RECIPE_HOME_COPY[state].map((candidate) =>
+    searchHit(candidate, languages),
+  );
+  const reads = Object.fromEntries(
+    Object.keys(plan.reads).map((key) => [
+      key,
+      {
+        status: 200,
+        body: { subjects, next: null, as_of: '2026-10-26T00:00:00.000Z' },
+      },
+    ]),
+  );
   return {
     profile: 'schema:Recipe',
     template: { scope: 'route', key: '' },
-    document: RECIPE_HOME_DOCUMENTS[state],
-    reads: {
-      works: { items: RECIPE_HOME_COPY[state].map(recipeSubjectRecord) },
-    },
+    document,
+    reads,
     zone: recipeZone(state),
   };
-}
-
-export function recipeSubject(
-  id: string,
-  state: 'admitted' | 'empty' | 'sparse',
-): RecipeCandidate | undefined {
-  const visible = RECIPE_HOME_COPY[state];
-  const matching = visible.find((candidate) => candidate.id === id);
-  if (!matching) return undefined;
-  if (state === 'sparse') return sparseRecipe;
-  return RECIPE_SUBJECTS.find((candidate) => candidate.id === id);
-}
-
-export function recipeSubjectResponse(
-  candidate: RecipeCandidate,
-  zone: ZonePublic,
-): ZonePageResponse {
-  const detail = candidate.method.length
-    ? candidate.method.join('\n\n')
-    : 'This preview has no preparation notes or optional facts for this recipe.';
-  const document: StarterDocument = {
-    root: { props: {} },
-    content: [
-      {
-        type: 'Stack',
-        props: {
-          id: 'recipe-detail',
-          gap: 'md',
-          children: [
-            {
-              type: 'Heading',
-              props: {
-                id: 'recipe-title',
-                text: candidate.labels.en,
-                level: 1,
-              },
-            },
-            {
-              type: 'Text',
-              props: {
-                id: 'recipe-description',
-                text: candidate.descriptions.en,
-              },
-            },
-            {
-              type: 'Heading',
-              props: {
-                id: 'recipe-preparation-heading',
-                text: 'Fictional preparation notes',
-                level: 2,
-              },
-            },
-            { type: 'Text', props: { id: 'recipe-preparation', text: detail } },
-          ],
-        },
-      },
-    ],
-  };
-  return {
-    profile: 'schema:Recipe',
-    template: { scope: 'type', key: 'schema:Recipe' },
-    document,
-    reads: { subject: recipeSubjectRecord(candidate) },
-    zone,
-    subject: candidate.id,
-    views: ['overview'],
-  };
-}
-
-export function recipeFact(
-  candidate: RecipeCandidate,
-  property: string,
-): RecipeFact | undefined {
-  return candidate.facts[property]?.[0];
 }
