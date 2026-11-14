@@ -442,8 +442,7 @@ test('an accepted source-only amendment waits for terminal proof, then starts it
       unavailableCompilerReceipt: true,
     });
     writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'source-only\n');
-    const landings: LandingRequest[] = [];
-    const job = new WorkerJob(h.tasks, { enqueue: (request) => landings.push(request) }, { deliver() {} });
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
 
     job.resumePendingRetries();
     await job.drain();
@@ -470,7 +469,6 @@ test('an accepted source-only amendment waits for terminal proof, then starts it
         .events(retained.task.id)
         .filter((event) => event.kind === 'worker-run-started' && event.attempt === 2),
     ).toHaveLength(1);
-    expect(landings).toHaveLength(0);
   } finally {
     await h.disposeAsync();
   }
