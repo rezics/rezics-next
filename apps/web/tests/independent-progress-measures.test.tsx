@@ -649,8 +649,8 @@ test('mounted visit refreshes pristine props and preserves a later field edit th
     const review = [...host.querySelectorAll('section')].find(
       (section) => section.getAttribute('aria-label') === m.library_progress_measures_review(),
     );
-    expect(review?.textContent).toContain(m.library_progress_measures_review_unchanged({ unit: 'chapter' }));
-    expect(review?.textContent).toContain(m.library_progress_measures_review_amount({ unit: 'volume', amount: '7' }));
+    expect(review?.textContent).toContain(m.library_progress_measures_review_unchanged({ unit: 'chapters' }));
+    expect(review?.textContent).toContain(m.library_progress_measures_review_amount({ unit: 'volumes', amount: '7' }));
     await click(m.library_progress_confirm_correction());
     expect(
       calls.map(({ sessionId: id, revision, measureId, amount }) => ({ id, revision, measureId, amount })),

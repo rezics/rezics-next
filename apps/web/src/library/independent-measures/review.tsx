@@ -1,6 +1,6 @@
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { IndependentMeasure, MeasureEdit } from './contract';
-import { independentActionClass, independentPrimaryActionClass } from './recovery';
 
 export function IndependentMeasuresReview({
   revision,
@@ -20,43 +20,57 @@ export function IndependentMeasuresReview({
   onCancel?: () => void;
 }) {
   return (
-    <section className="space-y-4" aria-label={m.library_progress_measures_review()}>
+    <section
+      className="space-y-4 rounded-xl border border-border bg-muted/30 p-4"
+      aria-label={m.library_progress_measures_review()}
+    >
       <h3 className="text-lg font-semibold">{m.library_progress_measures_review()}</h3>
-      <p className="text-sm">{m.library_progress_measures_shared_revision({ revision })}</p>
+      <p className="text-sm text-muted-foreground">{m.library_progress_measures_intro()}</p>
       {correction ? <p role="alert">{m.library_progress_measures_correction()}</p> : null}
-      <dl className="space-y-3">
+      <dl className="divide-y divide-border">
         {measures.map((measure) => {
           const edit = edits.find((item) => item.unit === measure.unit);
-          const label = measure.label || measure.unit;
           return (
-            <div key={measure.unit}>
-              <dt className="text-sm font-medium">
-                {measure.primary ? m.library_progress_measure_primary() : m.library_progress_measure_additional()} ·{' '}
-                {label}
-              </dt>
-              <dd className="break-all text-sm">
+            <div key={measure.unit} className="space-y-1 py-3">
+              <dt className="text-sm font-medium [overflow-wrap:anywhere]">{measure.label}</dt>
+              <dd
+                className={`text-sm tabular-nums [overflow-wrap:anywhere] ${edit ? 'font-medium' : 'text-muted-foreground'}`}
+              >
                 {!edit
-                  ? m.library_progress_measures_review_unchanged({ unit: measure.unit })
+                  ? m.library_progress_measures_review_unchanged({ unit: measure.label })
                   : edit.kind === 'clear'
-                    ? m.library_progress_measures_review_clear({ unit: measure.unit })
-                    : m.library_progress_measures_review_amount({ unit: measure.unit, amount: edit.amount ?? '' })}
+                    ? m.library_progress_measures_review_clear({ unit: measure.label })
+                    : m.library_progress_measures_review_amount({ unit: measure.label, amount: edit.amount ?? '' })}
               </dd>
             </div>
           );
         })}
       </dl>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2 border-t border-border pt-4">
         {onConfirm ? (
-          <button type="button" className={independentPrimaryActionClass} disabled={busy} onClick={onConfirm}>
+          <Button type="button" className="min-h-11" disabled={busy} onClick={onConfirm}>
             {m.library_progress_confirm_correction()}
-          </button>
+          </Button>
         ) : null}
         {onCancel ? (
-          <button type="button" className={independentActionClass} disabled={busy} onClick={onCancel}>
+          <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={onCancel}>
             {m.library_progress_cancel()}
-          </button>
+          </Button>
         ) : null}
       </div>
+      <details className="text-sm text-muted-foreground">
+        <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.library_progress_details()}
+        </summary>
+        <p>{m.library_progress_measures_shared_revision({ revision })}</p>
+        <ul className="mt-2 space-y-1">
+          {measures.map((measure) => (
+            <li key={measure.unit}>
+              <code className="break-all">{measure.unit}</code>
+            </li>
+          ))}
+        </ul>
+      </details>
     </section>
   );
 }

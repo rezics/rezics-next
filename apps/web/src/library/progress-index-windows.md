@@ -12,3 +12,19 @@ Decision: window history identity is the installed router history key (`state.ke
 Absent optional window fields are omitted rather than assigned `undefined`.
 
 Each current window costs one existing prepared native list read capped at 100 rows and the existing batched type/profile presentation for that page. If the selected Subject summary is absent from the page, the existing single Subject point read supplies it. A stale non-first cursor adds one cursorless native page read; the admitted coordinate is then the first page and the path restarts without a synthetic predecessor. A session return costs one fresh native list read at the saved coordinate, plus the same bounded presentation and conditional Subject point read. No page-chain replay, row hydration, refill, count read, prefetch or per-session read is added.
+
+## List and selected-session presentation
+
+Decision: supplied work/version identity and start time lead each session. Discovery keeps the work picker and
+Apply action together; additional raw-address filters and starting another session are deliberate disclosures.
+Only the admitted page supplies rows. Recording choices use the shared labelled select, and native details remain
+inspectable without placing mode IDs or permission diagnostics in the normal reading path.
+
+Selected sessions group the saved value, replacement amount or deliberate clear, review and recovery by native
+unit. Independent refresh replaces untouched drafts with the newer saved values and retains local amount/clear
+choices. History stays a separate observation surface; neither refresh nor opening history settles an uncertain
+command. Review uses the captured command and existing credential lifetime. No unit conversion, inferred total,
+completion inference or new producer method is introduced.
+
+Decision: this presentation's source-only review uses stable manual mounted page/session stories, preserving existing
+regression sources for the dev verifier; typing, tests, browser acceptance, builds and captures are deferred.
