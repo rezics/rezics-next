@@ -79,9 +79,13 @@ async function open(fragment = '', holdAdvice = false) {
     router,
     async advice(status = 200) {
       const read = reads.at(-1)!;
-      await flush(() => read.resolve(status === 200
-        ? Response.json(recoveryPage(read.stage, { minPasswordLength: 8, maxPasswordLength: 128 }))
-        : new Response('', { status })));
+      await flush(() =>
+        read.resolve(
+          status === 200
+            ? Response.json(recoveryPage(read.stage, { minPasswordLength: 8, maxPasswordLength: 128 }))
+            : new Response('', { status }),
+        ),
+      );
     },
     async submit(value: string) {
       await flush(() => {
@@ -232,8 +236,8 @@ test('unknown completion retains an immutable submission for explicit retry and 
   }
 });
 
-const retryButton = (host: HTMLElement) => [...host.querySelectorAll('button')]
-  .find((control) => control.textContent === 'Try again')!;
+const retryButton = (host: HTMLElement) =>
+  [...host.querySelectorAll('button')].find((control) => control.textContent === 'Try again')!;
 const activate = (control: HTMLElement, detail = 0) => {
   control.focus();
   control.dispatchEvent(new dom.MouseEvent('click', { bubbles: true, detail }));
@@ -252,7 +256,10 @@ test('initial and observed recovery advice preserve external reading focus throu
     await page.advice(503);
     expect(document.activeElement).toBe(reader);
     expect(page.calls).toHaveLength(0);
-  } finally { await page.close(); reader.remove(); }
+  } finally {
+    await page.close();
+    reader.remove();
+  }
 });
 
 for (const fragment of ['', link, '#account_id=missing-token'])
@@ -267,12 +274,13 @@ for (const fragment of ['', link, '#account_id=missing-token'])
         expect(trigger.disabled).toBe(false);
         expect(document.activeElement).toBe(trigger);
         const reader = page.host.querySelector<HTMLAnchorElement>('a[href="/login"]')!;
-        if (modality === 'tab') await flush(() => {
-          trigger.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
-          reader.focus(); // DOM fixture does not implement browser Tab traversal.
-        });
-        if (modality === 'pointer-away') await flush(() =>
-          document.body.dispatchEvent(new dom.MouseEvent('mousedown', { bubbles: true })));
+        if (modality === 'tab')
+          await flush(() => {
+            trigger.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+            reader.focus(); // DOM fixture does not implement browser Tab traversal.
+          });
+        if (modality === 'pointer-away')
+          await flush(() => document.body.dispatchEvent(new dom.MouseEvent('mousedown', { bubbles: true })));
         if (modality === 'observation')
           await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
         await page.advice(503);
@@ -281,8 +289,12 @@ for (const fragment of ['', link, '#account_id=missing-token'])
         await flush(() => activate(retryButton(page.host), modality === 'pointer' ? 1 : 0));
         if (modality !== 'keyboard' && modality !== 'pointer') await flush(() => reader.focus());
         await page.advice();
-        const target = fragment === link ? page.host.querySelector('[name="new_password"]')
-          : fragment ? page.host.querySelector('[role="alert"]') : page.host.querySelector('[name="email"]');
+        const target =
+          fragment === link
+            ? page.host.querySelector('[name="new_password"]')
+            : fragment
+              ? page.host.querySelector('[role="alert"]')
+              : page.host.querySelector('[name="email"]');
         if (modality === 'keyboard') expect(document.activeElement).toBe(target);
         else expect(document.activeElement).not.toBe(target);
         if (fragment === '#account_id=missing-token') {
@@ -295,6 +307,8 @@ for (const fragment of ['', link, '#account_id=missing-token'])
         }
         expect(page.calls).toHaveLength(0);
         expect(window.location.hash).toBe('');
-      } finally { await page.close(); }
+      } finally {
+        await page.close();
+      }
     }
   });

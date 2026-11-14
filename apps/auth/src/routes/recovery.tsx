@@ -64,7 +64,8 @@ function useRecoveryFocus() {
     if (
       document.activeElement !== owned.trigger &&
       (owned.trigger.isConnected || document.activeElement !== document.body)
-    ) return;
+    )
+      return;
     target(owned.destination)?.focus();
   };
   useLayoutEffect(() => {
@@ -77,10 +78,8 @@ function useRecoveryFocus() {
     const acted = (event: MouseEvent | KeyboardEvent) => {
       if (!intent.current) return;
       const sameControl = event.target instanceof Node && intent.current.trigger.contains(event.target);
-      if (
-        !sameControl || event.type === 'click' ||
-        ('key' in event && (event.key === 'Enter' || event.key === ' '))
-      ) cancel();
+      if (!sameControl || event.type === 'click' || ('key' in event && (event.key === 'Enter' || event.key === ' ')))
+        cancel();
     };
     document.addEventListener('focusin', moved, true);
     document.addEventListener('focusout', blurred, true);

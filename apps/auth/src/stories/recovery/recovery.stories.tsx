@@ -21,8 +21,13 @@ export default {
 };
 
 type Mode =
-  | 'start-acknowledged' | 'start-unknown' | 'complete-unknown'
-  | 'unavailable' | 'pending' | 'fresh-pending' | 'retry-pending';
+  | 'start-acknowledged'
+  | 'start-unknown'
+  | 'complete-unknown'
+  | 'unavailable'
+  | 'pending'
+  | 'fresh-pending'
+  | 'retry-pending';
 // Real route with bounded presentation fixtures. These are not native acceptance results.
 function Page({ mode }: { mode: Mode }) {
   const [installed, setInstalled] = useState(false);
@@ -114,7 +119,10 @@ const keyboardPending = (mode: 'fresh-pending' | 'retry-pending') => ({
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await returned(canvasElement);
     const control = await waitFor(() => {
-      const candidate = button(canvasElement, mode === 'fresh-pending' ? m.auth_recovery_new_link() : m.auth_login_retry());
+      const candidate = button(
+        canvasElement,
+        mode === 'fresh-pending' ? m.auth_recovery_new_link() : m.auth_login_retry(),
+      );
       return candidate && !candidate.disabled ? candidate : null;
     });
     control!.focus();

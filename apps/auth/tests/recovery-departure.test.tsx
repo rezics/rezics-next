@@ -114,10 +114,17 @@ test('attempt replacement and unmount discard pending keyboard advice orientatio
     const page = await setup();
     try {
       let finish!: (response: Response) => void;
-      globalThis.fetch = (() => new Promise<Response>((resolve) => { finish = resolve; })) as typeof fetch;
+      globalThis.fetch = (() =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        })) as typeof fetch;
       await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
       await flush(() => finish(new Response('', { status: 503 })));
-      await flush(() => { const retry = button(page.host, 'Try again')!; retry.focus(); retry.click(); });
+      await flush(() => {
+        const retry = button(page.host, 'Try again')!;
+        retry.focus();
+        retry.click();
+      });
       const stale = finish;
       if (boundary === 'replace') await flush(() => page.router.history.replace('/recovery'));
       else await page.close();
@@ -127,6 +134,8 @@ test('attempt replacement and unmount discard pending keyboard advice orientatio
       expect(document.activeElement).toBe(reader);
       expect(page.calls).toHaveLength(0);
       reader.remove();
-    } finally { await page.close(); }
+    } finally {
+      await page.close();
+    }
   }
 });
