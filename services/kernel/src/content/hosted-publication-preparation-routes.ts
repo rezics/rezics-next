@@ -18,6 +18,7 @@ import {
   RevisionPreconditionError,
 } from './commands.ts';
 import {
+  HostedPublicationStagingCheckpointUnavailableError,
   HostedPublicationStagingConflictError,
   HostedPublicationStagingExpiredError,
   HostedPublicationStagingNotFoundError,
@@ -118,6 +119,8 @@ async function operation<T>(run: () => Promise<T>): Promise<T> {
       error instanceof HostedPublicationActivationIneligibleError
     )
       throw new ProblemError('precondition_failed');
+    if (error instanceof HostedPublicationStagingCheckpointUnavailableError)
+      throw new ProblemError('dependency_unavailable');
     if (error instanceof HostedVersionReleaseCandidateError && error.code !== 'invalid-tree')
       throw new ProblemError('precondition_failed');
     throw error;

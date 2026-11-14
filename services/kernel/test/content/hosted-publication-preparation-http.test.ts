@@ -970,8 +970,8 @@ test('legacy advance receipts without checkpoints require progress recovery and 
   const beforeReplay = await retainedCounts();
 
   const unavailableReplay = await f.native.call('POST', `${stagePath}:advance`, { stepId: legacyStepId });
-  expect(unavailableReplay.status).toBe(412);
-  expect(unavailableReplay.value).toMatchObject({ code: 'precondition_failed' });
+  expect(unavailableReplay.status).toBe(503);
+  expect(unavailableReplay.value).toMatchObject({ code: 'dependency_unavailable' });
   expect(await retainedCounts()).toEqual(beforeReplay);
 
   const current = await f.native.call('POST', `${stagePath}:progress`, {});

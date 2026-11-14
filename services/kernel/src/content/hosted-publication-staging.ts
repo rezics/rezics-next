@@ -17,6 +17,7 @@ import {
 import {
   HOSTED_PUBLICATION_STAGING_BATCH_LIMIT,
   HOSTED_PUBLICATION_STAGING_STEP_LIMIT,
+  HostedPublicationStagingCheckpointUnavailableError,
   HostedPublicationStagingConflictError,
   HostedPublicationStagingExpiredError,
   HostedPublicationStagingNotFoundError,
@@ -128,9 +129,7 @@ export type HostedPublicationAdvanceReceipt = Readonly<{
 
 function savedStepCheckpoint(receipt: PreparationAdvanceReceiptRow): HostedPublicationStagingCheckpoint {
   if (receipt.result_checkpoint === null)
-    throw stagingConflict(
-      'Hosted publication step checkpoint is unavailable; read progress and continue with a new step ID',
-    );
+    throw new HostedPublicationStagingCheckpointUnavailableError();
   return receipt.result_checkpoint;
 }
 

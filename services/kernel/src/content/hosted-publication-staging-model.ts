@@ -119,6 +119,13 @@ export class HostedPublicationStagingExpiredError extends Error {
   }
 }
 
+export class HostedPublicationStagingCheckpointUnavailableError extends Error {
+  constructor() {
+    super('Hosted publication step checkpoint is unavailable; read current progress before continuing');
+    this.name = 'HostedPublicationStagingCheckpointUnavailableError';
+  }
+}
+
 export function requireSafeSourceOrder(value: string): number {
   if (!/^(0|[1-9][0-9]*)$/.test(value)) throw new HostedPublicationStagingConflictError('Invalid staged source order');
   const exact = BigInt(value);

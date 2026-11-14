@@ -487,10 +487,10 @@ across source pages, candidate creation/pages and exhausted acknowledgements; in
 intact and are consulted before phase dispatch.
 
 Decision: new advance receipts also retain the bounded staging checkpoint in `result_checkpoint`. The column stays
-nullable for immutable receipts written before this snapshot existed; retries of those rows return HTTP 412
-(`precondition_failed`) without replacing the receipt or advancing work. The author reads current progress and uses
-a new step ID to continue. Never reconstruct historical counters or frontiers from the live stage. Rollback refuses
-after any checkpoint has been acknowledged.
+nullable for immutable receipts written before this snapshot existed; retries of those rows return HTTP 503
+(`dependency_unavailable`) without replacing the receipt or advancing work. The author reads current progress and
+uses a new step ID to continue. Never reconstruct historical counters or frontiers from the live stage. Rollback
+refuses after any checkpoint has been acknowledged.
 
 Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
 
