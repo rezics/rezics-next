@@ -2,6 +2,7 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { useCallback, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { addressLease } from '../../../../session';
 import { browserObservation } from '../../../../session';
+import { defaultReader, type Reader } from '../../../../subject/reader';
 
 const noSubscribe = () => () => {};
 const anonymousSnapshot = () => 'unobserved';
@@ -12,6 +13,7 @@ export function useOrganizationEpisode(
   descriptor: string,
   viewer: string | null,
   cacheSource: object = source,
+  preferences: Reader | null = defaultReader,
 ) {
   const client = useContext(QueryClientContext);
   const store = client ? browserObservation(client) : undefined;
@@ -53,12 +55,16 @@ export function useOrganizationEpisode(
   const holder = useRef<ReturnType<typeof createEpisode> | undefined>(undefined);
   const next = useRef(0);
   const [, renderRetirement] = useState(0);
+  const observedPreferences = preferences && JSON.stringify([preferences.spoilerLevel, preferences.suitability]);
   if (!holder.current || holder.current.source !== source) {
     holder.current?.retire();
-    holder.current = createEpisode(source, descriptor, viewer, cache, ++next.current);
+    holder.current = createEpisode(source, descriptor, viewer, cache, ++next.current, observedPreferences);
   }
   const episode = holder.current;
   if (episode.descriptor !== descriptor || episode.viewer !== viewer || episode.cache !== cache) episode.retire();
+  // Preparation may settle once; subsequent replacement, including A/B/A, is terminal.
+  if (episode.preferences !== null && episode.preferences !== observedPreferences) episode.retire();
+  if (!episode.retired && episode.preferences === null) episode.preferences = observedPreferences;
   if (episode.admitted && (!ready || episode.session !== session)) episode.retire();
   if (ready && !episode.admitted && !episode.retired) {
     episode.admitted = true;
@@ -87,7 +93,14 @@ export function useOrganizationEpisode(
   return { episode, available: !episode.retired && ready, current: episode.current };
 }
 
-function createEpisode(source: object, descriptor: string, viewer: string | null, cache: string, key: number) {
+function createEpisode(
+  source: object,
+  descriptor: string,
+  viewer: string | null,
+  cache: string,
+  key: number,
+  preferences: string | null,
+) {
   const abort = new AbortController();
   const lease = addressLease(() => episode.active && !episode.retired && episode.owns());
   const episode = {
@@ -96,6 +109,7 @@ function createEpisode(source: object, descriptor: string, viewer: string | null
     viewer,
     cache,
     key,
+    preferences,
     admitted: false,
     session: undefined as ReturnType<ReturnType<typeof browserObservation>['getSnapshot']> | undefined,
     retired: false,

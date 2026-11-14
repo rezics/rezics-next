@@ -4,6 +4,7 @@ import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import type { OrganizationFact } from '../src/features/catalogue/organization-reader';
+import type { Reader } from '../src/subject/reader';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
@@ -14,7 +15,7 @@ const { organizationHistoryVisitReturn, subjectVisitReturn } =
 const { subjectHref } = await import('../src/subject/subject-href');
 const { peopleOrganizationId, peopleProfileFixture } = await import('../src/kernel/fake/catalogue-people-profile');
 const { m } = await import('../src/paraglide/messages.js');
-const { OrganizationReader } = await import('../src/features/catalogue/organization-reader/view');
+const { OrganizationOverview } = await import('../src/features/catalogue/organization-reader/overview');
 
 const context = '00000000-0000-4000-8000-00000000d811';
 const realm = '00000000-0000-4000-8000-00000000d812';
@@ -90,19 +91,25 @@ test('a selected Context and exact dated Organization assertion survive target, 
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const { release, organization, second } = reading();
+  let preferences: Reader | null = null;
   const page = new URL(
     subjectHref({ id: peopleOrganizationId, label: 'Paper Lantern Studio' }, 'en').href,
     'https://site.test',
   );
   page.searchParams.set('realm', realm);
   window.history.replaceState(window.history.state, '', `${page.pathname}${page.search}`);
-  const render = async (key: string, current = organization, source: object = {}, navigate = false) =>
+  const render = async (key: string, current = organization, source: object = current, navigate = false) =>
     act(async () => {
       root.render(
         <QueryClientProvider client={client}>
-          <OrganizationReader
+          <OrganizationOverview
             key={key}
-            read={{ public: current, release }}
+            id={current.subject.id}
+            context={current.subject.context}
+            reader={null}
+            public={current}
+            release={release}
+            preferences={preferences}
             source={source}
             locale="en"
             realm={realm}
@@ -161,6 +168,14 @@ test('a selected Context and exact dated Organization assertion survive target, 
       property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
       value: { type: 'value', content: { amount: '+2', unit: '1' } },
     });
+    const preparingSource = {};
+    preferences = null;
+    window.history.replaceState(window.history.state, '', via);
+    await render('preparing', hidden, preparingSource, true);
+    preferences = { spoilerLevel: 2, suitability: 'show' };
+    await render('preparing', hidden, preparingSource);
+    expect(host.querySelector('[role="region"]')?.textContent).toContain(second.id);
+    preferences = { spoilerLevel: 0, suitability: 'blur' };
     await render('initial', hidden, {});
     expect(host.querySelector('[role="region"]')).toBeNull();
     expect(host.textContent).toContain(m.organization_reader_changed());

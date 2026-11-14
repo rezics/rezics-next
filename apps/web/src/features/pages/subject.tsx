@@ -1178,6 +1178,10 @@ export function SubjectPage({
       ) : null}
     </>
   );
+  const organizationPublic = useMemo(
+    () => (read?.subject.type === 'schema:Organization' ? composedSubjectRead(read) : undefined),
+    [page, read?.subject, read?.related, read?.account, read?.summary],
+  );
   const peopleProfiles = (
     <>
       {overview && read && !page.account && read.subject.type === 'schema:Organization' ? (
@@ -1189,10 +1193,10 @@ export function SubjectPage({
           reader={page.requestedReader ?? null}
           {...(realm !== undefined ? { realm } : {})}
           link={ContextLink}
-          public={composedSubjectRead(read)}
+          public={organizationPublic}
           release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
           documents={read.documents}
-          preferences={reader ?? defaultReader}
+          preferences={reader ?? null}
           currentHref={workReturn}
           returnTo={visitReturn}
         />

@@ -46,15 +46,17 @@ export function OrganizationOverview({
   public?: SubjectRead | undefined;
   release?: Pick<Release, 'types' | 'properties'> | undefined;
   documents?: unknown;
-  preferences?: Reader;
+  preferences?: Reader | null;
   currentHref?: string | undefined;
   returnTo?: string | undefined;
   read?: OrganizationRead;
 }) {
   const { episode, available } = useOrganizationEpisode(
     source,
-    JSON.stringify([id, context, locale, realm, preferences.spoilerLevel, preferences.suitability]),
+    JSON.stringify([id, context, locale, realm]),
     reader,
+    source,
+    preferences,
   );
   const admitted = useMemo(
     () =>

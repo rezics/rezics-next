@@ -13,6 +13,7 @@ import {
   withSubjectVisitReturn,
 } from '../src/features/pages/subject-visit-navigation';
 import { m } from '../src/paraglide/messages.js';
+import { defaultReader, type Reader } from '../src/subject/reader';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { OrganizationReader } = await import('../src/features/catalogue/organization-reader/view');
@@ -93,7 +94,8 @@ async function mounted(
   }
 }
 
-test('composition documents stay together; exact inspection closes to its opener, and replacement offers current recovery', async () => {
+const preparationCases = test.each([defaultReader, { spoilerLevel: 2, suitability: 'show' } as const]);
+preparationCases('prepared settings %j preserve exact inspection and return until replacement', async (prepared) => {
   await mounted(async ({ host, window, client, render, click }) => {
     const { read, documents, fact } = reading();
     const realm = '00000000-0000-4000-8000-00000000d401';
@@ -101,6 +103,8 @@ test('composition documents stay together; exact inspection closes to its opener
       stream: 'out:wdt:P1365',
     });
     let requests = 0;
+    let preferences: Reader | null = null;
+    const source = {};
     const fallback = async () => {
       requests++;
       return read;
@@ -119,9 +123,12 @@ test('composition documents stay together; exact inspection closes to its opener
           read={fallback}
           realm={realm}
           currentHref={currentHref}
+          preferences={preferences}
         />,
       );
-    await show({});
+    await show(source);
+    const details = host.querySelector<HTMLDetailsElement>('[data-slot="people-profile-details"]')!;
+    await act(async () => details.querySelector('summary')!.click());
     expect(requests).toBe(0);
     expect(host.textContent).toContain('Mira directs independent films.');
     const opener = [...host.querySelectorAll('button')].find(
@@ -137,6 +144,12 @@ test('composition documents stay together; exact inspection closes to its opener
     expect(correctionAddress.searchParams.get('context')).toBe(read.public.subject.context);
     expect(correctionAddress.searchParams.get('realm')).toBe(realm);
     const via = correctionAddress.searchParams.get('via')!;
+    preferences = prepared;
+    await show(source);
+    await show(source);
+    expect(host.querySelector('[role="region"]')).toBe(inspection);
+    expect(details.open).toBe(true);
+    expect(requests).toBe(0);
     const returned = subjectVisitReturn(via, 'en')!;
     expect(organizationHistoryVisitReturn(new URL(returned, 'https://site.test').hash)).toMatchObject({
       context: read.public.subject.context,
@@ -172,7 +185,7 @@ test('composition documents stay together; exact inspection closes to its opener
   });
 });
 
-test('failed fallback offers a Context-preserving page refresh and rejects retired locale/source work', async () => {
+preparationCases('pending settings %j retain one fallback and retire later locale/source work', async (prepared) => {
   await mounted(async ({ host, window, client, render }) => {
     const { read, documents } = reading();
     const realm = '00000000-0000-4000-8000-00000000d401';
@@ -183,6 +196,7 @@ test('failed fallback offers a Context-preserving page refresh and rejects retir
         pending.push({ resolve, reject: () => reject(new Error('unavailable')), signal }),
       );
     let source = {};
+    let preferences: Reader | null = null;
     const show = (locale = 'en') =>
       render(
         <OrganizationOverview
@@ -195,9 +209,13 @@ test('failed fallback offers a Context-preserving page refresh and rejects retir
           read={dependency}
           realm={realm}
           currentHref={currentHref}
+          preferences={preferences}
         />,
       );
     await show();
+    preferences = prepared;
+    await show();
+    expect(pending[0]!.signal.aborted).toBe(false);
     expect(host.textContent).toContain(m.candidate_loading());
     expect(host.querySelectorAll('button')).toHaveLength(0);
     await act(async () => pending[0]!.reject());
@@ -223,6 +241,17 @@ test('failed fallback offers a Context-preserving page refresh and rejects retir
     await act(async () => old.resolve(read));
     expect(host.querySelectorAll('button')).toHaveLength(0);
     expect(host.textContent).toContain(m.organization_reader_refresh());
+    source = {};
+    await show();
+    const replaced = pending[3]!;
+    preferences = { ...prepared, suitability: prepared.suitability === 'show' ? 'blur' : 'show' };
+    await show();
+    expect(replaced.signal.aborted).toBe(true);
+    await act(async () => replaced.resolve(read));
+    preferences = prepared;
+    await show();
+    expect(host.querySelectorAll('button')).toHaveLength(0);
+    expect(pending).toHaveLength(4);
   });
 });
 
@@ -241,14 +270,33 @@ test('explicit spoiler reveals and concealed identities never survive equal succ
     fact.value = { type: 'value', content: 'Private historical assertion' };
     const a = {},
       b = {};
+    let preferences: Reader | null = null;
     const show = (source: object, locale = 'en', viewer: string | null = null) =>
-      render(<OrganizationReader read={read} documents={documents} source={source} locale={locale} reader={viewer} />);
+      render(
+        <OrganizationReader
+          read={read}
+          documents={documents}
+          source={source}
+          locale={locale}
+          reader={viewer}
+          preferences={preferences}
+        />,
+      );
     await show(a);
     expect(host.textContent).not.toContain('Private historical assertion');
     await click(m.subject_spoiler_show());
     expect(host.textContent).toContain('Private historical assertion');
     await click(m.subject_spoiler_hide());
     expect(host.textContent).not.toContain('Private historical assertion');
+    await click(m.subject_spoiler_show());
+    await click(m.organization_reader_inspect());
+    const correction = host.querySelector('[role="region"] a')!;
+    preferences = { spoilerLevel: 1, suitability: 'show' };
+    await show(a);
+    expect(host.querySelector('[role="region"]')).toBeNull();
+    expect(host.textContent).not.toContain('Private historical assertion');
+    expect(correction.isConnected).toBe(false);
+    expect(organizationHistoryVisitReturn(window.location.hash)).toBeUndefined();
     await click(m.subject_spoiler_show());
     await show(b);
     await show(a);

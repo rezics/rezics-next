@@ -120,7 +120,7 @@ export function OrganizationReader({
   link = PlainLink,
   realm,
   documents,
-  preferences = defaultReader,
+  preferences: observedPreferences = defaultReader,
   currentHref,
   returnTo,
 }: {
@@ -131,23 +131,19 @@ export function OrganizationReader({
   link?: PageLink;
   realm?: string | undefined;
   documents?: unknown;
-  preferences?: Reader;
+  preferences?: Reader | null;
   currentHref?: string | undefined;
   returnTo?: string | undefined;
 }) {
   const observationSource = useMemo(() => ({ source, read, documents }), [source, read, documents]);
+  const preferences = observedPreferences ?? defaultReader;
+  const disclosure = JSON.stringify([preferences.spoilerLevel, preferences.suitability]);
   const { episode, available } = useOrganizationEpisode(
     observationSource,
-    JSON.stringify([
-      read.public.subject.id,
-      read.public.subject.context,
-      locale,
-      realm,
-      preferences.spoilerLevel,
-      preferences.suitability,
-    ]),
+    JSON.stringify([read.public.subject.id, read.public.subject.context, locale, realm]),
     reader,
     source,
+    observedPreferences,
   );
   const [selected, setSelected] = useState<Selection>();
   const [changed, setChanged] = useState(false);
@@ -238,6 +234,16 @@ export function OrganizationReader({
     const hash = replaceOrganizationHistoryAddress(address);
     if (hash) setReturnHash(hash);
   };
+  const previousDisclosure = useRef(disclosure);
+  useLayoutEffect(() => {
+    if (previousDisclosure.current === disclosure) return;
+    previousDisclosure.current = disclosure;
+    const fact = selected && read.public.subject.statements[selected.property]?.find((fact) => fact.id === selected.id);
+    if (fact && spoilerLevel(fact) > preferences.spoilerLevel && episode.current()) {
+      persistVisit();
+      setSelected(undefined);
+    }
+  }, [disclosure, selected, read, episode, preferences.spoilerLevel, persistVisit]);
   return (
     <section
       data-slot="organization-reader"
@@ -277,6 +283,7 @@ export function OrganizationReader({
             realm={realm}
             episode={episode}
             preferences={preferences}
+            preferencesPrepared={observedPreferences !== null}
             selected={selected}
             select={(value) => {
               if (episode.current()) {
@@ -395,6 +402,7 @@ function OrganizationFacts({
   episode,
   documents,
   preferences,
+  preferencesPrepared,
   selected,
   select,
   close,
@@ -412,6 +420,7 @@ function OrganizationFacts({
   episode: OrganizationEpisode;
   documents?: unknown;
   preferences: Reader;
+  preferencesPrepared: boolean;
   selected: Selection | undefined;
   select: (selection: Selection | undefined) => void;
   close: () => void;
@@ -468,15 +477,17 @@ function OrganizationFacts({
   useEffect(() => {
     if (handledReturn.current === returnHash) return;
     const intent = organizationHistoryVisitReturn(returnHash);
-    handledReturn.current = returnHash;
     if (!intent || !episode.current()) return;
+    const field = model?.fields.find((item) => item.id === intent.property);
+    const fact = field?.facts.find((item) => item.id === intent.candidate);
+    // A fallback display threshold cannot settle a concealed return before actual settings arrive.
+    if (!preferencesPrepared && fact && spoilerLevel(fact) > preferences.spoilerLevel) return;
+    handledReturn.current = returnHash;
     if (selected?.episode === episode.key) {
       if (selected.id === intent.candidate && selected.property === intent.property) finishNavigation();
       return;
     }
     finishNavigation();
-    const field = model?.fields.find((item) => item.id === intent.property);
-    const fact = field?.facts.find((item) => item.id === intent.candidate);
     const exact =
       intent.holder === subject.id &&
       intent.context === subject.context &&
@@ -519,6 +530,7 @@ function OrganizationFacts({
     subject.id,
     subject.context,
     preferences.spoilerLevel,
+    preferencesPrepared,
     select,
     reportChanged,
     focusHeader,
@@ -620,6 +632,7 @@ function OrganizationFacts({
             <li key={fact.id} className="min-w-0 space-y-1">
               {spoilerLevel(fact) > preferences.spoilerLevel ? (
                 <OrganizationFactDisclosure
+                  key={`${preferences.spoilerLevel}:${preferences.suitability}`}
                   locale={locale}
                   current={episode.current}
                   onHide={() => {
