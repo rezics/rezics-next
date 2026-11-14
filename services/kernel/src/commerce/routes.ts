@@ -2,7 +2,12 @@ import { memoizedValue } from '../memoized.ts';
 import { BenefitAcquisitionError } from './acquisition.ts';
 import { listSubjectOffers } from './subject-offers.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './money.ts';
-import { ContentEditionUnavailableError, contentEditionTermsView, contentPostTermsView, type SaleDependencies } from './benefit.ts';
+import {
+  ContentEditionUnavailableError,
+  contentEditionTermsView,
+  contentPostTermsView,
+  type SaleDependencies,
+} from './benefit.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { t } from 'elysia';
