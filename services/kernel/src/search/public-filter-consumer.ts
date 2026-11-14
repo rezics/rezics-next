@@ -1130,6 +1130,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   function own(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, m: Meter) {
     owned.set(queried.snapshot.observation, { queried, context: Object.freeze({ deadline: context.deadline }), m });
   }
+  async function releaseUse(use: CustodyUse, context: PublicFilterConsumerContext, m: Meter) {
+    const released = m.take(await custody.release(use, context));
+    if (released.status !== 'released')
+      throw new ConsumerFailure(released.reason === 'deadline' ? 'deadline' : 'source_pending');
+  }
   type Page = {
     context: PublicFilterConsumerContext;
     m: Meter;
@@ -1897,7 +1902,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           encoded = await save(work, encoded, true, m);
           own(prepared.queried, context, m);
         } finally {
-          m.add((await custody.release(acquired.use, context)).cost);
+          await releaseUse(acquired.use, context, m);
         }
       } else {
         // A PIT renewal and the segment commit are separate owners. Re-read its
@@ -2032,7 +2037,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             own(result.queried, context, m);
             encoded = await save(work, encoded, true, m);
           } finally {
-            m.add((await custody.release(acquired.use, context)).cost);
+            await releaseUse(acquired.use, context, m);
           }
         }
         if (!exhausted) return { status: 'preparing', repair: job, cost: m.cost };
@@ -2259,7 +2264,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const m = page?.m ?? meter(context);
     const preparing = () => ({ status: 'preparing' as const, queried: q, cost: m.cost });
     let use: CustodyUse | undefined;
-    try {
+    const run = async (): Promise<PublicFilterConsumerQuery | DiscoveryConsumerQuery> => {
       m.check();
       // This installed factory is the finite registry family. A retained
       // catalogue consumer needs its actual root-bound native resolver; it
@@ -2448,10 +2453,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         window: retainedWindow,
         cost: m.cost,
       };
+    };
+    try {
+      return await run().finally(async () => {
+        if (use && page?.use !== use) await releaseUse(use, context, m);
+      });
     } catch (error) {
       return failure(error, m);
-    } finally {
-      if (use && page?.use !== use) m.add((await custody.release(use, context)).cost);
     }
   }
   async function readStatus(
@@ -2503,7 +2511,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   async function repairStep(input: PublicFilterConsumerJob, context: PublicFilterConsumerContext, m = meter(context)) {
     const job = structuredClone(input);
     let use: CustodyUse | undefined;
-    try {
+    const run = async () => {
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const loaded = await load(job, m);
       const { work } = loaded;
@@ -2757,10 +2765,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // Changed-since-start remains a disclosure barrier for the old execution in query/readStatus.
       // It does not undo genuinely completed repair; settled is only a maintenance diagnostic.
       return { status: 'settled' as const, job, cost: m.cost };
+    };
+    try {
+      return await run().finally(async () => {
+        if (use) await releaseUse(use, context, m);
+      });
     } catch (error) {
       return failure(error, m);
-    } finally {
-      if (use) m.add((await custody.release(use, context)).cost);
     }
   }
   async function mixedRepairWriter(q: PublicFilterQueriedObservation, m: Meter) {
@@ -3038,7 +3049,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             );
             if (appended.status !== 'appended') return m.unavailable('observation_lost');
           } finally {
-            m.add((await custody.release(acquired.use, context)).cost);
+            await releaseUse(acquired.use, context, m);
           }
         }
         work.execution = input.job;
@@ -3080,6 +3091,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     const page = retained ?? newPage(Object.freeze({ deadline: incoming.deadline }));
     const context = page.context;
+    let disposal: Promise<void> | undefined;
     async function run<T>(body: () => Promise<T>): Promise<T> {
       if (page.busy || page.failed || page.finished || page.disposed) throw new ConsumerFailure('observation_lost');
       page.busy = true;
@@ -3177,30 +3189,30 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           page.m.check();
           page.finished = true;
         }),
-      async dispose() {
-        if (page.busy) throw new ConsumerFailure('observation_lost');
-        if (page.disposed) return;
+      dispose() {
+        if (page.busy) return Promise.reject(new ConsumerFailure('observation_lost'));
+        if (disposal) return disposal;
         page.disposed = true;
-        try {
-          if (!page.finished && page.id) {
-            // A lost result retains pending and every attempted child. Cleanup
-            // never clears an uncertain dispatch, extends time or grants coverage.
-            await pageSql(
-              page,
-              { points: 1, keys: 2, writes: 1 },
-              `UPDATE search.public_filter_coverage_page SET state='failed',revision=revision+1,work=$3
+        return (disposal = (async () => {
+          try {
+            if (!page.finished && page.id) {
+              // A lost result retains pending and every attempted child. Cleanup
+              // never clears an uncertain dispatch, extends time or grants coverage.
+              await pageSql(
+                page,
+                { points: 1, keys: 2, writes: 1 },
+                `UPDATE search.public_filter_coverage_page SET state='failed',revision=revision+1,work=$3
              WHERE (partition_no,id)=($1,$2) AND state IN ('planned','open','sealed') RETURNING id`,
-              () => [locatorHome(page.queried!.snapshot.observation), page.id, encodeState(page.m.cost)],
-            );
+                () => [locatorHome(page.queried!.snapshot.observation), page.id, encodeState(page.m.cost)],
+              );
+            }
+          } finally {
+            if (page.use) {
+              await releaseUse(page.use, context, page.m);
+              page.use = null;
+            }
           }
-        } finally {
-          if (page.use) {
-            const use = page.use;
-            page.use = null;
-            page.m.add((await custody.release(use, context)).cost);
-            page.m.check();
-          }
-        }
+        })());
       },
     };
   }
@@ -3212,16 +3224,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   ) {
     const page = openPage(Object.freeze({ deadline: context.deadline }));
     try {
-      const result = mixed ? await page.queryDiscovery(q, refill) : await page.query(q, refill);
-      if (result.status === 'queried') {
-        await page.consume(result.execution, result.window.examined);
-        await page.finish();
+      try {
+        const result = mixed ? await page.queryDiscovery(q, refill) : await page.query(q, refill);
+        if (result.status === 'queried') {
+          await page.consume(result.execution, result.window.examined);
+          await page.finish();
+        }
+        return result;
+      } finally {
+        await page.dispose();
       }
-      return result;
     } catch (error) {
       return page.failure(error);
-    } finally {
-      await page.dispose();
     }
   }
   installPublicFilterCoveragePage(operations, openPage);

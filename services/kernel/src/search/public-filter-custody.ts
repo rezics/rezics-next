@@ -1827,7 +1827,9 @@ export function createPublicFilterCustody(
           if (!updated.rowCount) throw new Failure('observation_lost');
           return { status: 'retained' as const, queried: successor, cost: meter };
         } finally {
-          addCost(meter, (await api.release(acquired.use, context)).cost);
+          const released = await api.release(acquired.use, context);
+          addCost(meter, released.cost);
+          if (released.status !== 'released') throw new Failure(released.reason);
         }
       });
     },
