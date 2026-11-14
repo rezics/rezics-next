@@ -26,7 +26,10 @@ import { snapshot, type ContentReadDependencies } from './reads.ts';
 import { hostedCatalogue } from './hosted-chapters-store.ts';
 import type { HostedChapterTarget, HostedCommandContext } from './hosted-chapters-model.ts';
 import { observeHostedPublicationActivationTarget } from './hosted-publication-point-eligibility.ts';
-import { readHostedPublicationStagingActivationTargets } from './hosted-publication-staging.ts';
+import {
+  lockHostedPublicationStagingForActivation,
+  readHostedPublicationStagingActivationTargets,
+} from './hosted-publication-staging.ts';
 import type { HostedPublicationTargetCursor } from './hosted-publication-staging-model.ts';
 import { commitHostedVersionRevision } from './hosted-version-revision.ts';
 import { readHostedVersionSnapshot } from './hosted-version-store.ts';
@@ -212,6 +215,11 @@ async function activationCommand(
       authorization,
     },
     async (tx, { time, transactionId }) => {
+      // runCommand has already authorized and settled exact receipt replay.
+      // Lock stage first, as build/reclaim do, before activation/candidate locks
+      // and before the authority-home locks and final catalogue CAS. SERIALIZABLE
+      // alone permits the stale stage read to precede a committed cancellation.
+      await lockHostedPublicationStagingForActivation(tx as AccessClient, { catalogueId, stageId });
       const value = await work(tx, time, transactionId);
       return {
         value,

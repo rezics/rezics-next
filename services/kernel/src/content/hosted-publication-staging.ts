@@ -230,6 +230,18 @@ async function lockStage(client: AccessClient, locator: HostedPublicationStaging
   if (!row) throw new HostedPublicationStagingNotFoundError();
   return row;
 }
+
+/** Join activation to the existing cancellation/build/reclaim fence. Acquire it
+ * before activation or candidate locks and retain it through the command's final
+ * authorization, receipt and COMMIT. Lifecycle admission stays with activation:
+ * its exact deadline comparison uses native command time, not wall-clock expiry. */
+export async function lockHostedPublicationStagingForActivation(
+  client: AccessClient,
+  locator: HostedPublicationStagingLocator,
+): Promise<void> {
+  await lockStage(client, locator);
+}
+
 async function refreshExpiry(client: AccessClient, row: StageRow): Promise<StageRow> {
   if (!row.is_expired || row.status === 'cancelled' || row.status === 'expired' || row.status === 'failed') return row;
   await client.query(
@@ -1441,8 +1453,10 @@ async function requireSealedStage(client: AccessClient, stageInput: StageRow): P
   if (!seal.rows.length) throw stagingConflict('Staged candidates are missing their exact seal');
 }
 
-/** Cancellation fences all later reads and writes. It does not delete a retained
- * source or candidate row and is idempotent for an already cancelled stage. */
+/** Cancellation shares activation's stage fence: a committed cancellation keeps
+ * a fresh activation private. An activation committed first retains its public
+ * selection and receipt; withdrawing it uses the separate unpublish operation.
+ * Retained source/candidate rows survive, and repeated cancellation is idempotent. */
 export async function cancelHostedPublicationStaging(
   client: AccessClient,
   actorInput: Actor,

@@ -399,6 +399,12 @@ current author admission still precedes exact committed receipt replay, which re
 and never moves the publication pointer again. The current public edition remains selected and readable under its
 ordinary disclosure rules; expired unpublished candidates remain private.
 
+Decision: every fresh activation body takes the existing stage row fence before activation/candidate locks,
+authority-home comparison and the final catalogue CAS, retaining it through final authorization, receipt and commit.
+Build and reclaim already fence the stage before candidate work. A cancellation committed first prevents selection;
+activation committed first keeps its exact receipt and selected edition after cancellation or expiry. Cancellation
+does not unpublish; withdrawal remains a separate command. Exact authorized receipt replay precedes this fence.
+
 Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
 
 Decision: advertise and enforce a 1,024-ID selection batch cap, based on an isolated interleaved 40-sample benchmark;
