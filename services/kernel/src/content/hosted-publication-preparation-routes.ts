@@ -1,6 +1,7 @@
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '@rezics/operations/protocol';
+import { memoizedValue } from '../memoized.ts';
 import { AuthenticationError } from '../access/contract/authentication.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -46,15 +47,24 @@ import {
 const closed = { additionalProperties: false } as const;
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const responseHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
-const params = t.Object({ id: HostedIdSchema }, closed);
-const stageParams = t.Object({ id: HostedIdSchema, stageId: HostedIdSchema }, closed);
-const authorDetail = {
-  'x-exposure': 'public',
-  'x-resource-types': ['content.post'],
-  'x-action': 'post:revise',
-  'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
-  security: [{ bearerAuth: [] }],
-};
+
+function params() {
+  return memoizedValue(params, () => t.Object({ id: HostedIdSchema }, closed));
+}
+
+function stageParams() {
+  return memoizedValue(stageParams, () => t.Object({ id: HostedIdSchema, stageId: HostedIdSchema }, closed));
+}
+
+function authorDetail() {
+  return memoizedValue(authorDetail, () => ({
+    'x-exposure': 'public',
+    'x-resource-types': ['content.post'],
+    'x-action': 'post:revise',
+    'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+    security: [{ bearerAuth: [] }],
+  }));
+}
 
 function failures() {
   return {
@@ -123,14 +133,14 @@ export function hostedPublicationPreparationRoutes(
   app.post(
     customMethod('/v1/hostedCatalogues/:id', 'prepareRelease'),
     {
-      params,
+      params: params(),
       headers,
-      body: strictContentSchema(HostedPublicationPreparationStartSchema),
+      body: strictContentSchema(HostedPublicationPreparationStartSchema()),
       response: {
-        202: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
+        202: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema()), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release' },
+      detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release' },
     },
     async ({ actor, params: { id }, body, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -149,14 +159,14 @@ export function hostedPublicationPreparationRoutes(
   app.post(
     customMethod('/v1/hostedCatalogues/:id/publicationPreparations/:stageId', 'appendSelectionBatch'),
     {
-      params: stageParams,
+      params: stageParams(),
       headers,
-      body: strictContentSchema(HostedPublicationPreparationBatchSchema),
+      body: strictContentSchema(HostedPublicationPreparationBatchSchema()),
       response: {
-        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
+        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema()), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_append_batch' },
+      detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_append_batch' },
     },
     async ({ actor, params: { id, stageId }, body, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -174,14 +184,14 @@ export function hostedPublicationPreparationRoutes(
   app.post(
     customMethod('/v1/hostedCatalogues/:id/publicationPreparations/:stageId', 'freezeSelection'),
     {
-      params: stageParams,
+      params: stageParams(),
       headers,
-      body: strictContentSchema(HostedPublicationPreparationEmptySchema),
+      body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
       response: {
-        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
+        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema()), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_freeze_selection' },
+      detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_freeze_selection' },
     },
     async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -199,14 +209,14 @@ export function hostedPublicationPreparationRoutes(
   app.post(
     customMethod('/v1/hostedCatalogues/:id/publicationPreparations/:stageId', 'advance'),
     {
-      params: stageParams,
+      params: stageParams(),
       headers,
-      body: strictContentSchema(HostedPublicationPreparationAdvanceSchema),
+      body: strictContentSchema(HostedPublicationPreparationAdvanceSchema()),
       response: {
-        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
+        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema()), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_advance' },
+      detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_advance' },
     },
     async ({ actor, params: { id, stageId }, body, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -224,14 +234,14 @@ export function hostedPublicationPreparationRoutes(
   app.post(
     customMethod('/v1/hostedCatalogues/:id/publicationPreparations/:stageId', 'progress'),
     {
-      params: stageParams,
+      params: stageParams(),
       headers,
-      body: strictContentSchema(HostedPublicationPreparationEmptySchema),
+      body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
       response: {
-        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
+        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema()), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_progress' },
+      detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_progress' },
     },
     async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -249,14 +259,14 @@ export function hostedPublicationPreparationRoutes(
   app.post(
     customMethod('/v1/hostedCatalogues/:id/publicationPreparations/:stageId', 'cancel'),
     {
-      params: stageParams,
+      params: stageParams(),
       headers,
-      body: strictContentSchema(HostedPublicationPreparationEmptySchema),
+      body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
       response: {
-        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
+        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema()), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_cancel' },
+      detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_cancel' },
     },
     async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -274,14 +284,14 @@ export function hostedPublicationPreparationRoutes(
   app.post(
     customMethod('/v1/hostedCatalogues/:id/publicationPreparations/:stageId', 'seal'),
     {
-      params: stageParams,
+      params: stageParams(),
       headers,
-      body: strictContentSchema(HostedPublicationPreparationEmptySchema),
+      body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
       response: {
-        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema), responseHeaders),
+        200: withHeaders(strictContentSchema(HostedPublicationPreparationProgressSchema()), responseHeaders),
         ...failures(),
       },
-      detail: { ...authorDetail, operationId: 'hosted_catalogue.prepare_release_seal' },
+      detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_seal' },
     },
     async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');

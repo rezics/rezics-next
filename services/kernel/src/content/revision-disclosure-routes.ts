@@ -157,9 +157,9 @@ export function revisionDisclosureRoutes(
       {
         params: params(),
         headers,
-        body: strictContentSchema(RevisionDisclosureIssueSchema),
+        body: strictContentSchema(RevisionDisclosureIssueSchema()),
         response: {
-          200: withHeaders(strictContentSchema(RevisionDisclosureReceiptSchema), responseHeaders),
+          200: withHeaders(strictContentSchema(RevisionDisclosureReceiptSchema()), responseHeaders),
           ...failures(),
         },
         detail: writeDetail('post.issue_revision_disclosure'),
@@ -182,9 +182,9 @@ export function revisionDisclosureRoutes(
       {
         params: params(),
         headers,
-        body: strictContentSchema(RevisionDisclosureRevokeSchema),
+        body: strictContentSchema(RevisionDisclosureRevokeSchema()),
         response: {
-          200: withHeaders(strictContentSchema(RevisionDisclosureReceiptSchema), responseHeaders),
+          200: withHeaders(strictContentSchema(RevisionDisclosureReceiptSchema()), responseHeaders),
           ...failures(),
         },
         detail: writeDetail('post.revoke_revision_disclosure'),

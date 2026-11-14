@@ -242,7 +242,7 @@ test('selection batches accept 1,024 IDs through request and persistence caps an
     batchId: f.newOccurrenceId(),
     occurrenceIds: Array.from({ length: HOSTED_PUBLICATION_STAGING_BATCH_LIMIT }, () => f.newOccurrenceId()),
   };
-  expect(Value.Check(HostedPublicationPreparationBatchSchema, request)).toBe(true);
+  expect(Value.Check(HostedPublicationPreparationBatchSchema(), request)).toBe(true);
   const stored = await transaction((client) =>
     appendHostedPublicationSelectionBatch(client, f.native.author.actor, { ...locator, ...request }),
   );
@@ -257,7 +257,7 @@ test('selection batches accept 1,024 IDs through request and persistence caps an
     batchId: f.newOccurrenceId(),
     occurrenceIds: [...request.occurrenceIds, f.newOccurrenceId()],
   };
-  expect(Value.Check(HostedPublicationPreparationBatchSchema, oversized)).toBe(false);
+  expect(Value.Check(HostedPublicationPreparationBatchSchema(), oversized)).toBe(false);
   await expect(
     transaction((client) =>
       appendHostedPublicationSelectionBatch(client, f.native.author.actor, { ...locator, ...oversized }),

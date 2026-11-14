@@ -1,6 +1,7 @@
 import type { QueryResultRow } from 'pg';
 import type { AccessClient, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import { memoizedValue } from '../memoized.ts';
 import type { HostedPublicationStagingLocator } from './hosted-publication-staging-model.ts';
 import deleteNodes from './hosted-version-candidate-cleanup-nodes.sql';
 import deleteOccurrences from './hosted-version-candidate-cleanup-occurrences.sql';
@@ -148,12 +149,14 @@ const RECEIPT_FIELDS = `
   cleanup.owner_epoch::text,cleanup.generation_id,cleanup.terminal_status,
   receipt.phase,receipt.cursor,receipt.deleted_row_count::text,receipt.deleted_rows,receipt.completed`;
 
-const PAGE_STATEMENTS = {
-  nodes: deleteNodes,
-  occurrences: deleteOccurrences,
-  sibling_roots: deleteSiblingRoots,
-  snapshots: deleteSnapshots,
-} as const;
+function pageStatements() {
+  return memoizedValue(pageStatements, () => ({
+    nodes: deleteNodes,
+    occurrences: deleteOccurrences,
+    sibling_roots: deleteSiblingRoots,
+    snapshots: deleteSnapshots,
+  }));
+}
 
 function accountActor(actor: Actor): AccountActor {
   if (actor.kind !== 'account' || !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 0)
@@ -489,7 +492,7 @@ async function deletePage(
   after: CleanupCursor | null,
   limit: number,
 ): Promise<DeletedRow[]> {
-  const statement = PAGE_STATEMENTS[phase];
+  const statement = pageStatements()[phase];
   const values: Readonly<Record<string, unknown>> = {
     route,
     catalogue_id: catalogueId,
