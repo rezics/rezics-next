@@ -74,6 +74,7 @@ one entered Account lookup,
 uses the existing membership POST owner for selected add, and passes one selected identity through a narrow context
 to the default `RealmBansPanel`; that Panel remains the ban/unban writer. No remove, role, approve or mute command is
 added. Neither enumeration nor identity alone supplies action authority.
+Pending membership does not certify participation.
 
 The add review names the exact Account and Realm. Its frozen intent keeps the Account, Realm, authority observation,
 starting interval and idempotency key together; interval proof stays local and is not sent as a wire field. A definite

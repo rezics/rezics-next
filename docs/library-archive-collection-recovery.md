@@ -1,6 +1,6 @@
 # Native Library archive Collection recovery
 
-This page owns recovery of one manually curated Collection from the completed V1/V2 native Library export. The
+This page owns recovery of one manually curated Collection from a completed V1–V4 native Library export. The
 [export contract](library-export.md) remains the authority for producer fields and capture semantics. The consumer
 uses `decodeLibraryArchive` from `services/kernel/src/library/library-archive.ts`; it does not install another
 archive format, exporter, general importer or retained raw-file store.

@@ -56,6 +56,25 @@ publisher. Commerce retains native authorization, revision/CAS and deletion sema
 uses the existing members reader, including its native preparing and unavailable outcomes; no successful fixture
 establishes native execution or whole-query publication.
 
+## Save and reopen a query
+
+`/library/rules/new` and `/collections/{id}/rule` use the existing rule editor. An admitted Collection filter and
+displayed type transfer with `id` order through the one-use browser-memory handoff bound to the initiating viewer.
+Private predicates never enter the destination URL, browser storage or shared hydration. Text, resource and non-`id`
+sort selections remain on the source with an explanation. Reload discards the handoff and shows guidance.
+
+First save reviews the title and rule, then creates one private dynamic Collection with
+`POST /v1/collections` `{membershipKind:'dynamic', visibility:'private', rule:{filter,sort:'id'}}`. Confirmed creation
+offers members and rule destinations. Reopened rules retain their accepted release; a new handoff uses the current
+release. Explicit edits are readmitted under the current release and preserve the draft on incompatibility.
+`PUT /v1/collections/{id}/rule` carries the original CAS revision. Built-in identities have no rule editor.
+
+The [saved-results reader](saved-query-results.md) owns preparing, empty, unavailable and stale-cursor recovery,
+published permitted membership and its separate owner publication action. Metadata management and deletion above
+remain the existing Commerce commands. Commerce retains complete paged dynamic owner metadata, dynamic member
+preparation, publication and native outcome proof; source binding or an illustrative success does not establish those
+native outcomes.
+
 ## Installed visit bindings
 
 | Owner action                    | Web caller                                                                                | Generated operation and native producer                                                                             |

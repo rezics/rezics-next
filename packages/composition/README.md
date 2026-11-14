@@ -94,8 +94,8 @@ left to the web zones and kernel zones owners rather than duplicated here.
 
 Decision: the fewest tests pin user-visible publish and read: executable profile input, raw TypeList limits, first
 native duplicate occurrence, mixed sibling Retry-After with recorded Search and reaction pages, and public
-ReactionSummary totals. Members keep recorded native duplicates because common-members already canonicalizes. No extra
-page stories.
+ReactionSummary totals. The [Web continuation owner](../../apps/web/src/features/pages/README.md#composed-member-continuation)
+defines composed Members' canonical identity and completion behavior.
 
 ## Safety
 

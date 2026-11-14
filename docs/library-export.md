@@ -12,10 +12,9 @@ original coverage, and reviewed V2 annotation/journal date/reflection recovery i
 Decision: version 3 adds the private occurrence assessment to each journal record. Version 4 appends VNDB and AniList
 upload/evidence sections because installed V3 captures already bind the 17-section vocabulary. Versions
 1, 2 and 3 keep their original record shapes; a missing legacy assessment is not inferred. The existing archive consumer
-continues to recover V2 annotations and journal dates/reflection. Copy/progress archive inspection accepts the exact
-V3 assessment inventory without adopting assessments; Entry/label merge accepts V1–V3; Collection recovery accepts
-V1/V2. Installed native consumers refuse V4 bytes, whose provider evidence remains inert. Web recovery visits project
-a completed V4 capture to that installed envelope at upload and keep the downloaded file unchanged.
+continues to recover V2 annotations and journal dates/reflection. Installed archive consumers accept original V1–V4
+manifests and bytes without projecting the file into another version. Each recovery owner specifies which facts it
+can adopt; V4 provider evidence remains retained, counted and unsupported by archive recovery.
 
 ## Mounted methods and Web handoff
 

@@ -5,6 +5,22 @@ vocabulary. It imports only the literal candidate Context. The public `public-vi
 vocabulary and composes canonical Subject links; the broader Subject return parser consumes the pure leaf directly.
 The leaf never imports either consumer. No dependency grant or cycle exception is needed.
 
+## Selection and return
+
+Filter and selection changes create normal browser history entries. Companion and correction returns preserve
+only the admitted filter, direction, depth and exact selected node or edge identity, then reread the bounded native
+page and detail. Returned intent never restores a response or correction authority.
+
+Graph exploration opens in the readable list. Readers manually choose list or diagram without another read or a
+history entry. Both use one current response index for supplied node and forward relation labels, expose exact
+statement identity in the adjacent inspector, and keep native sparse continuations explicit. Content-sized HTML
+controls determine diagram geometry. Unknown relation names remain unavailable.
+
+Focused source regressions cover projection, exact selection, sparse retry and current-read retirement. Mounted
+native journeys and eight-locale phone/desktop review remain separate verifier acceptance.
+
+## Public address admission
+
 Graph origin and Global return addresses retain their existing encoding, selectors, fallback and 2,048-character
 and byte limits. A graph return names only its immediate Subject heading with its matching locale, Context and
 optional Realm. Heading admission shares the Subject path grammar, including encoded-path rejection and the

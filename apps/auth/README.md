@@ -1158,6 +1158,10 @@ refill, polling, per-row authorization or automatic command on restoration, Retr
 
 ## Operator transfer
 
+Entry forms lead the visit; the general walkthrough follows in an accessible disclosure. Local-file,
+untrusted-file, approval, responsibility and unknown-outcome warnings remain beside their corresponding actions.
+This source-present hierarchy does not establish native or browser acceptance.
+
 Imported data follows the [Accounts operator contract](../../docs/accounts.md#2-operators-and-automated-accounts).
 Destination advice cannot establish source approval or execution.
 

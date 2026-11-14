@@ -40,6 +40,10 @@ Decision: My Realms capture, admission, query ownership and navigation state liv
 
 Decision: Keep `/realms` on its existing bounded page and caller; project the installed current data directly, route admitted entry and management to the existing Realm and member-management pages, and bind leave review and original replay to the exact Account, episode, advice and credential while current membership reads reconcile accepted operations.
 
+Unavailable entry means this page has no admitted current destination. It does not establish that the Realm is
+deleted, unreadable elsewhere or no longer joined. Ordinary continuation and same-cursor error retry keep their
+existing caller ownership; sparse pages retain their opaque continuation and first-page recovery stays explicit.
+
 ## Expanded entry and selected leave admission
 
 Admit presentation and media only from that current page. Concealment retires prior labels and media; it never
@@ -64,6 +68,18 @@ The existing caller, Query object, page, session, source, locale and credential 
 review, readback and retry. Exposure or presentation retirement discards the selection and fences late effects.
 Returning from entry or management obtains a fresh admitted inventory page; keyboard return restores focus only
 within that current visit. This extension preserves the reserved private SSR/hydration boundary above.
+
+## Current native cost
+
+- Touches: one existing `/v1/me/realms` page read with normal session preparation. Web formats the returned rows
+  once, without per-row membership, Account, Access or media reads. One explicit leave selection uses the existing
+  current-standing reader; accepted reconciliation stays within that one selected Realm.
+- Bound: native page size 20, raw scan budget 80, one current page and its opaque continuation; zero selected actions
+  unless supplied advice admits them. No sparse-page refill or private-page storage is introduced.
+- Growth: the current projection covers 0/1/10/20 rows with one page read. Explicit accepted leave settlement uses
+  the existing four-read sequence, without a workflow-status request or per-row standing read. Content owns native
+  raw80 traversal and growth256/1024/4096 evidence. Ordinary native/browser/root and growth acceptance remain with
+  the receiving Goal; installed typing and refreshed recordings alone do not establish those outcomes.
 
 ## Finite inventory return
 

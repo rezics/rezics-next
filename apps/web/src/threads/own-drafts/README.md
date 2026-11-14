@@ -45,6 +45,16 @@ heading only while that action owns focus; user focus movement, failure and reti
 Native authorization, mounted producer recordings and physical 256/1024/4096 growth acceptance remain Content-owned
 and deferred until executed; generated declarations and Web fixtures do not establish them.
 
+## Installed consumer handoff
+
+The typed seam remains the sole native list/selection boundary; native action paths never become browser fetch URLs
+and browser-local text never becomes a server draft. The earlier handoff withheld native list and selection until
+generated methods arrived; the installed generated methods described above now supply that boundary. Source and
+mounted 1/10/20-row checks cover one-body selection, sparse replacement, delayed results and keyboard return focus.
+They do not complete the signed-in `/drafts` route/navigation, existing-composer resume, save/publish/erase readback,
+browser-local recovery choice and command-state acceptance against the installed client. Those composed outcomes
+remain separate verifier obligations.
+
 When a resumed editor is open, Return to drafts uses the same departure decision as the editor. Staying keeps the
 chosen server or browser body and its retry state; deliberate departure returns focus to the inventory opener.
 

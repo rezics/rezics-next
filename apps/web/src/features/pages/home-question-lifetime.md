@@ -6,6 +6,10 @@ choice page; absence from that page does not mean the selected identity was lost
 only when a question is selected, restored or explicitly refreshed. It supplies the current label, grain, revision
 and scale shown for the selector.
 
+The consumer uses the normally generated directory and point routes without handwritten declarations, casts or
+generator changes. Labels use native question text; grain, revision, scale and all control/error text have all eight
+launch-locale messages. The initial anonymous Home preload remains unselected.
+
 The receiver validates the installed `RatingQuestionView` shape, including its optional `realmId`, `meaning`,
 `canonicalLabel`, `labelRevision` and `lifecycle` fields. Global Home omits Realm selection. A directory response
 containing any Realm-scoped or retired entry is unavailable; an active Realm-scoped point is denied, and an explicitly retired
@@ -22,6 +26,7 @@ and cursor before the replacement read. Current directory and point requests use
 signals; generation checks suppress late results after another selection, viewer/session replacement or route
 remount. Private feed and selected metadata stay outside the reusable Home query cache, hydration, URL and history
 payload.
+The route's locale, subject and CSRF remount fences those abortable requests as well.
 
 An operational directory failure retains the exact attempted cursor for an explicit retry. A stale or invalid
 frontier requires the explicit restart action, which removes that cursor while retaining the selection. A valid
@@ -32,3 +37,14 @@ Back and Forward restore only the validated same-origin Home descriptor and re-r
 contains the current selectors and bounded frontier, never rows or credentials; a frontier that cannot be restored
 requires explicit restart. Content cards keep their own citation provenance and historical scale. That historical
 scale is not current selector metadata and cannot establish a selectable question.
+
+## Evidence boundary
+
+The authored default-route composition cases cover question propagation, bounded paging, conjunctive
+kind/Space/question selection, sparse continuation, revision/lost identity and stale request isolation. They were
+not executed for that consumer source delivery. The retained PageStory IDs
+`pages-discovery-home--question-selection`, `pages-discovery-home--question-choices-unavailable` and
+`pages-discovery-home--question-choices-next-page` use illustrative native-format consumer envelopes. Additional
+sparse continuation, same-input retry, explicit restart and selected-retirement stories retain their existing IDs;
+none is a native recording or visual proof. The generated directory and point receiving do not establish native
+question predicates, complete default Source coverage, original acceptance, visual review or public delivery.

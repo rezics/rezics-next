@@ -3,7 +3,20 @@
 `withComposedCommunity` reads only the existing composition's `subjectThreads` leaves. Web's
 `CommunityList` passes each admitted node to `SubjectCommunityRegion` inside the existing Subject
 community, refresh and verification contexts. The shared adapter applies equally to work, character
-and person pages; it never infers a placement from a title, Semantic Context or Realm membership.
+person and organization pages; it never infers a placement from a title, Semantic Context or Realm membership.
+
+## Citation and action projection
+
+Preserve the admitted first-post review citation as immutable score context, independently of the author's current
+vote. Mount reactions only when native counts and an explicit viewer slot are both supplied. Reply, reaction,
+watch and overflow controls bind the exact Content viewer and target; the existing reaction engine and contribution
+destinations stay shared across Subject kinds. Thread creation has its separate explicit native
+[entry admission](#creation-entry), and a row cannot confer it. Missing authoritative activity fields remain
+unavailable rather than zero.
+
+The [core-page audit](../../../../../../docs/research/page-needs-api-render-audit.md) is supporting source evidence;
+these fields and mounted controls do not establish native execution or rendered, accessibility or publication
+acceptance.
 
 Decision: Subject pages receive Access public-identity through `pages.read` `readPublicAccountByAgent` and one shared accounts-ids batch, including native cards; live identity, null unknown and evidence-backed deletion stay distinct, card leftover fields are not identity, and attribution is not command authority. Native/browser acceptance stays with Threads.
 

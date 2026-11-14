@@ -201,6 +201,14 @@ The shell's measured phone navigation clearance offsets the fixed selection bar.
 inset once; the measured navigation height already includes that inset. Desktop and standalone modes use zero
 clearance. See [the shell clearance contract](../shell/README.md#phone-navigation-clearance).
 
+# Bounded private entry and own-score overlays
+
+Library supplies current private entry and own-score overlays for admitted Search and Collection identities,
+including deliberate own-score shelf ordering; Content owns rating facts. These are bounded native page
+capabilities, with no per-row reads or public-cache personalization. Search retains its results; Web's separate
+`/library/ratings` inventory retains each original Subject/question pair and its edit, Clear, readback and recovery
+contract. Missing producers stay unavailable; presentation cannot invent values or action authority.
+
 # Collection filters
 
 A Collection page supplies its released supported facet roster to `CollectionFilters`. The property picker
@@ -232,8 +240,9 @@ reader takes property labels from the definitions release; Concept IDs, property
 in explicit `f.`/`l.`/`r.` route search. `Pages/Collections/Advanced facets` records the released property picker,
 count-free paging and retained selections outside the window. Its fixture pages are illustrative interaction evidence;
 the focused native/default-reader acceptance is `apps/web/tests/native/collection-advanced-facets.host.test.ts`.
-It seeds matching and outside-scope Books, follows a second value page, checks curated and dynamic scope, saved
-review labels, empty `200` and a refused reader through native Search. The Web verifier runs it after integration
+It seeds eleven matching Books in a curated Collection plus an outside-scope match, follows a second value page,
+checks curated and saved dynamic scope, owner review and saved-review labels, empty `200` and a refused reader through
+native Search. The Web verifier runs it after integration
 with `bun test apps/web/tests/native/collection-advanced-facets.host.test.ts`. The focused interaction acceptance
 is `bun test apps/web/tests/collection-advanced-facets.test.tsx apps/web/tests/saved-filter-review.test.tsx` and
 covers retained off-page/off-window operands, preparing/empty/refused feedback and saved-review empty operands.

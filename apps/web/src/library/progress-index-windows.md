@@ -30,3 +30,13 @@ completion inference or new producer method is introduced.
 
 Decision: this presentation's source-only review uses stable manual mounted page/session stories, preserving existing
 regression sources for the dev verifier; typing, tests, browser acceptance, builds and captures are deferred.
+
+## Row identity and historical units
+
+Rows show the supplied version title, or localized Unavailable when that identity is withheld, and the localized
+started datetime in ContentItem metadata. A null version choice is omitted. A missing unit label keeps the human
+unavailable-unit wording and accessible mode/unit details; the stored amount and position keep their original
+meaning. Do not invent a percentage, total, rescaling or unit conversion for historical data. The standalone Next
+anchor retains its opaque cursor and has an actual 44px phone/coarse-pointer target. These requirements belong to
+the complete current-source Progress index journey; detail, helper, profile, Labels and buyer readers retain their
+independent owners and acceptance.

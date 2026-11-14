@@ -45,6 +45,76 @@ search and route consumers share one QueryClient-owned host, session observer an
 inside the outlet leaves the header without a host and makes ordinary `/en` SSR fail; the focused Web startup and
 existing header tests retain this receiving contract.
 
+## Navigation contributions
+
+Journey owners supply leaves and creation links through `AppShellProps.navigation` in
+[`shell/shell.tsx`](shell.tsx). The shell retains desktop, phone and script-free rendering;
+owners do not copy its layout, menus, settings or Appearance controls. Phone CreateSheet consumes the same
+`NavigationEntries` with `kind="creation"`; the current navigation also renders contributed creation links.
+
+[`shell/navigation.ts`](navigation.ts) exports `NavigationContribution`,
+`NavigationContext`, `NavigationOperation`, `NavigationSession`, `ResolvedNavigationEntry`, `createNavigation`,
+`resolveNavigation` and `navigationPathname`. Contributions have a stable owner-namespaced `id`, `kind`, `group`,
+finite `order`, plain-text `label`, unprefixed local `href`, optional icon, `match`, `signedIn` and existing
+`operation`. Navigation groups are `primary` then `personal`; creation entries use `create`, last. Within a group,
+order then id determines placement. Label/href functions receive only `{locale, pathname}` with the current locale
+prefix removed. Returning a null href omits an unsupported context. Matching is exact by default; `prefix` includes
+descendants at a path-segment boundary. Query/fragment links retain their suffix and use the path for current state.
+Duplicate ids and destinations within the same kind are rejected. Snapshots copy and freeze metadata; callbacks
+must be pure, route-static functions, never close over account data, credentials or request state.
+
+[`shell/navigation-view.tsx`](navigation-view.tsx) exports `defaultNavigation`,
+`NavigationProvider({contributions?, children})`, `NavigationEntries({context, session, kind?, children})` (a render
+function receiving `ResolvedNavigationEntry`) and `NavigationLinks({context, session, kind?, label, className?})`.
+The default ids remain `shell.home`, `shell.search`, `shell.library`, `shell.orders`; Library and Orders keep their
+existing signed-in operation gates and descendant matching. Public leaves render SSR anchors without JavaScript.
+Signed-in entries wait for hydration and session preparation; operations use existing Exposure and its bounded,
+private no-store viewer read. An offered entry grants no read or command permission. There is no user registry,
+account-menu fetch, new permission engine or private data in static configuration.
+
+Fixed Subject, Realm and provider-review entries use exact operation markers from the existing Exposure read, like Sales, because their public native routes have no gate group.
+
+The [Subject purchase slot](../features/pages/README.md#subject-purchase-entry-slot) owns optional purchase regions and their public/private boundaries.
+
+A root composition can accept a real Commerce-owned private component and add a contextual native creation link
+without changing the shell (all imports below exist):
+
+```tsx
+import { AppShell, type AppShellProps } from '../../shell/shell';
+import { createNavigation } from '../../shell/navigation';
+import type { SubjectPurchaseRegions } from './subject-slots';
+import { m } from '../../paraglide/messages.js';
+
+const navigation = createNavigation([
+  {
+    id: 'library.create-collection',
+    kind: 'creation',
+    group: 'create',
+    order: 0,
+    label: ({ locale }) => m.library_collection_new({}, { locale }),
+    href: ({ pathname }) => (pathname.startsWith('/library') ? '/collections/new' : null),
+    signedIn: true,
+    operation: 'collection.create',
+  },
+]);
+
+function JourneyRoot({
+  children,
+  PurchaseEntry,
+}: {
+  children: AppShellProps['children'];
+  PurchaseEntry: NonNullable<SubjectPurchaseRegions['privateRegion']>;
+}) {
+  return (
+    <AppShell navigation={navigation} subjectPurchase={{ privateRegion: PurchaseEntry }}>
+      {children}
+    </AppShell>
+  );
+}
+```
+
+The shared navigation pattern is `Patterns/Navigation/Contributions` (public leaf, private pending, offered/gated creation, locale/path). It uses the delivered components; source integration and prepared patterns establish neither native journey acceptance nor full page/visual review.
+
 ## Phone navigation clearance
 
 `PhoneNavigationClearance` scopes one `--bottom-nav-height` value around the shell and observes its own phone

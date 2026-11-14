@@ -64,6 +64,28 @@ Closing inspection restores its connected keyboard opener only from current pane
 pending navigation completion respect later focus, key and pointer interaction. Replacement retires old destination
 return intent; current keyboard navigation can still finish at the reader heading.
 
+## HTTP admission and comparison recovery
+
+The default Subject extension reuses its already planned inverse release window through `gameOverviewInitial`.
+Composition and deliberate continuation share `gameReaderEditionPage` and its row, byte, identity and cursor bounds.
+A malformed successful external response such as `{}`, a null row or an assertion missing its property/value
+objects is unavailable, never an empty release catalogue. The shared HTTP receiver admits row and nested assertion
+objects before reading their identities, so both composition and the dedicated reader use the existing failure mapping.
+Decision: admit the optional comparison's installed closed union at that HTTP seam; malformed or oversized comparison
+facts become comparison-unavailable while independently valid work facts and release memberships remain usable.
+Admission checks all native card fields, statement/evidence shapes and summary/cover credits without rewriting values,
+and matches each card's Subject, Type and membership to its ordered admitted row. Native unavailable, available-empty,
+missing, withheld and unsupported meanings stay distinct. The comparison Retry explicitly rereads that same native
+page, including its cursor, through the existing window request fence; replacement retires pending results.
+Retrying an accepted page is a revisit: it neither hits the forward cursor-cycle refusal nor pushes Previous again.
+An unaccepted navigation failure keeps its original traversal intent when retried. Every accepted retry still counts
+toward the existing 64-window fence.
+Admission costs O(N + K) for at most 20 memberships and the supplied facts within the comparison's 2 MiB cap, with
+native field limits of 32 statements, 64 qualifiers, 32 references, 64 parts per reference and 64 KiB per field statement.
+It adds no request, hydration or retained response history; membership assertions keep their existing row byte bound.
+An initially unavailable release section retains admitted work facts and retries the first native window explicitly;
+withheld or invalid admission still removes both sections. No former release destinations survive a failed retry.
+
 ## Cost
 
 One deliberate window performs at most four generated native reads: Subject, active definitions pointer, its immutable
@@ -90,27 +112,6 @@ Game identities and media use a UUID namespace distinct from the other routed fi
 Original CC0 cover illustrations and their WebP variants live in `.storybook/media/`; no provider recording is claimed.
 All installed tabs remain reachable. Native references use the reserved `north-quay.example` catalogue address.
 
-The default Subject extension reuses its already planned inverse release window through `gameOverviewInitial`.
-Composition and deliberate continuation share `gameReaderEditionPage` and its row, byte, identity and cursor bounds.
-A malformed successful external response such as `{}`, a null row or an assertion missing its property/value
-objects is unavailable, never an empty release catalogue. The shared HTTP receiver admits row and nested assertion
-objects before reading their identities, so both composition and the dedicated reader use the existing failure mapping.
-A malformed successful external response such as `{}` is unavailable, never an empty release catalogue.
-Decision: admit the optional comparison's installed closed union at that HTTP seam; malformed or oversized comparison
-facts become comparison-unavailable while independently valid work facts and release memberships remain usable.
-Admission checks all native card fields, statement/evidence shapes and summary/cover credits without rewriting values,
-and matches each card's Subject, Type and membership to its ordered admitted row. Native unavailable, available-empty,
-missing, withheld and unsupported meanings stay distinct. The comparison Retry explicitly rereads that same native
-page, including its cursor, through the existing window request fence; replacement retires pending results.
-Retrying an accepted page is a revisit: it neither hits the forward cursor-cycle refusal nor pushes Previous again.
-An unaccepted navigation failure keeps its original traversal intent when retried. Every accepted retry still counts
-toward the existing 64-window fence.
-Admission costs O(N + K) for at most 20 memberships and the supplied facts within the comparison's 2 MiB cap, with
-native field limits of 32 statements, 64 qualifiers, 32 references, 64 parts per reference and 64 KiB per field statement.
-It adds no request, hydration or retained response history; membership assertions keep their existing row byte bound.
-An initially unavailable release section retains admitted work facts and retries the first native window explicitly;
-withheld or invalid admission still removes both sections. No former release destinations survive a failed retry.
-
 Compact work facts use a two-column rhythm where space permits. Qualifiers and references remain available in each
 fact's evidence disclosure; native date values retain calendar, signed time, precision, timezone and uncertainty.
 Comparison groups with an available value omit redundant missing/unsupported alternative properties in compact mode;
@@ -126,10 +127,7 @@ Design sources: [reading-first Overview](../../../../../../docs/subject-pages.md
 [page composition](../../pages/README.md#reading-first-overview), this reader's admission/recovery contract and
 [Storybook ownership](../../../../README.md#storybook-and-page-recordings).
 
-Decision: repair malformed edition data at the shared HTTP receiver and pin retained work facts and release-section
-failure through `gameOverviewInitial` in `tests/game-showcase.test.ts`. Run that focused file through the Web owner
-runner and the changed workspace's owner typecheck through `worker-check`; broader mounted/native/browser/build/capture
-acceptance remains with the dev verifier. Source completion is not a runtime pass.
-Comparison-envelope and mounted recovery regression source lives in `tests/game-showcase.test.ts` and
-`tests/game-reader-view.test.tsx`. Source-only delivery defers test, typing, build, native and browser/capture acceptance
-to the integrated verifier. Source completion is not a runtime pass.
+Regression source in `tests/game-showcase.test.ts` pins shared HTTP admission, retained work facts and release-section
+failure through `gameOverviewInitial`; `tests/game-reader-view.test.tsx` covers mounted comparison and recovery.
+During source-only delivery, test, typing, build, native and browser/capture execution belongs to the integrated
+verifier. Earlier checks do not establish acceptance of later promoted source; source completion is not a runtime pass.

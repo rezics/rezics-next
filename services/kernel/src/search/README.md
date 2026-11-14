@@ -2609,3 +2609,16 @@ replacement/withdrawal during preparation and final disclosure, unavailable prod
 binding and expiry. Native receiving/replay, current Subject closure, paused-index withdrawal, exact navigation,
 SQL growth at 256/1024/4096, generated-client and browser acceptance run in the dev verifier; source/typechecking
 alone is not that proof. Copy/export and the owned-document directory remain their native owners' operations.
+
+## Source closure delivery order
+
+Search owns two ordered release outcomes from the
+[critical-path review](../../../../docs/research/critical-path-attempts-review.md): first complete captured-prefix
+repair, independent successor/Source verification and actual Search settlement with contiguous ACK; then deliver a
+useful installed default page backed by maintained indexed population and one real coverage root, with all dispatched
+and failed child work inside its bounds. Newer work and changed old cuts remain blocked by the original continuity
+contract. Helper exports and the first checkpoint alone do not establish public Source closure. The
+[public-filter consumer contract](public-filter-consumer-contract.md) and
+[Semantic Source contract](../semantic/public-filter-source-contract.md) retain protocol authority. Content owns feed
+composition and Web owns the sole Home consumer; independent consumer source proceeds against settled interfaces,
+while installation and positive default-path proof remain separately owed.

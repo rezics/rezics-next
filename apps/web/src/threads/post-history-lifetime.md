@@ -1,5 +1,11 @@
 # Immutable history reading lifetime
 
+The reader consumes the session-owned [browser lifetime boundary](../session/README.md#supported-reader-lifetime).
+The root session hook installs its cache observation once; isolated mounts keep cache-only observation without a
+Router requirement. Successful replacement, including equal data and A/B/A, synchronously retires old controls,
+slow-mode abort ownership and deferred focus. Native response authority and exact uncertain intent remain with the
+feature. Workspace typing is source acceptance; the complete visit retains its runtime acceptance.
+
 ## Native page admission
 
 The installed KernelClient now declares the closed `page` context alongside `revisions` and `next` through supported
@@ -46,7 +52,11 @@ bound until controller acceptance executes the original mounted variants. Source
 do not establish native execution or growth.
 
 The native 20-row default, 100-row maximum, opaque cursor and unchanged retry/media/exact-reader assertions remain.
-Native growth256/1024/4096, browser inspection and frozen integration acceptance are controller work.
+Native growth256/1024/4096, the original mounted variant/retirement acceptance, eight-locale phone/desktop browser
+and Storybook inspection, and frozen integration acceptance are controller work. The earlier Work history region,
+other post History page, UnitRevisionHistory and [core-page audit](../../../../docs/research/page-needs-api-render-audit.md)
+are reading references only; their restore/moderation actions supply no authority to this reader and no legacy code
+is ported.
 
 ## Prepared reader and disclosure
 

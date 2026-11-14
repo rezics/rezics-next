@@ -5,6 +5,9 @@
 summary is opened through the localized Subject route; the native `subjectHref` is never used as a browser URL.
 Public figures, source statistics and Library membership do not come from this inventory.
 
+The personal navigation contribution places My ratings before Consumption history, preserving existing import
+positions. The shared shell remains the navigation renderer.
+
 The route reads the installed native page through the generated `@rezics/client` operation
 `me['rating-votes'].get`, and its page and row types come from that operation's published response. A server-only
 closed validator in `response.ts` still admits each page before use. Vote PUT, DELETE and exact original-key readback

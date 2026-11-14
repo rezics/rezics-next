@@ -1,5 +1,12 @@
 # Personal list import
 
+Web provides signed-in visits for a person's own VNDB XML, [AniList JSON](personal-anilist-import.md),
+[MAL XML](personal-mal-import.md) and [Bangumi export](personal-bangumi-import.md). This guide owns shared review,
+consent and retry admission; those provider guides retain their format-specific presentation and native bounds.
+Each visit binds its installed typed `libraryImports` provider methods. Native owners supply parsing, bounds,
+matching, review, apply and retention. The visits show bounded native pages, match states and private source evidence;
+targets, released Library state and native scores require independent explicit choices, with skip and retain explicit.
+
 Decision: AniList, Bangumi and MAL keep eight observed predecessor coordinates plus the current coordinate in
 their existing page owners. Previous rereads the exact retained operand; First rereads native `-1` for AniList and
 Bangumi and `0` for MAL, including at the retained edge. Only a successful read changes the trail; a failed read
@@ -38,9 +45,10 @@ installed generated request types as the boundary for independent state and scor
 
 Decision: replacement review retires the previous confirmation before question or provider admission, including a
 refusal. Native pages retaining that old review cannot restore its consent within the visit. Fresh admission must
-supply a new review; uncertain commands retry only the retained operands. MAL confirmation shows the reviewed
-question even if a later question point read differs. Bangumi current inspection always reads the exact reviewed
-Subject/question pair, independently of the acknowledged outcome.
+supply a new review; uncertain commands retry only the retained operands. Score consent stays bound to the reviewed
+target, question, source and native units or clear choice; a later question read cannot relabel it. MAL confirmation
+shows the reviewed question even if a later question point read differs. Bangumi current inspection always reads the
+exact reviewed Subject/question pair, independently of the acknowledged outcome.
 
 Installed provider operations remain the only score command paths:
 

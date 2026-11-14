@@ -69,7 +69,7 @@ and relation children. Gating the outer public link and `FictionalReferenceDetai
 **Scenario:** open a readable named arc with a work; reload after the current read becomes 403/404. The alert
 changes, but the former identity remains in DOM text/attributes under `hidden`. This is a disclosure-contract
 defect, not a claim that hidden content is visibly painted or a new server-side authorization bypass. The adopted
-[Web identity rule](../goals/web.md#adopted-quality-round-three-requirements) forbids withheld identity in markup.
+[shared identity rule](../../packages/ui/README.md#identity-and-disclosure) forbids withheld identity in markup.
 
 **Complete fix:** distinguish retained private draft state from renderable current public data. Refusal must render
 the honest unavailable state without old public identity or links, while preventing commands against that old

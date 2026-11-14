@@ -6,6 +6,15 @@ keeps the existing visual, context, title, metadata, preview, state, action and 
 buttons. Titles and supplied context wrap at narrow widths. The control rail moves beside the text only when the
 row has at least 40 rem of width; its width stays bounded so actions cannot consume the title column.
 
+## Public API
+
+`@rezics/ui/content-item` exports `ContentItem` and `ContentItemProps`. Props include ordinary `li` attributes
+except `title` and `children`; `title` is the supplied heading content, with optional `href` and `titleLang`.
+`headingLevel` accepts 2, 3 or 4 and defaults to 2. Optional `visual`, `context`, `metadata`, `preview`, `state`,
+`actions` and `trailing` regions retain their distinct order and purpose. `forceOverlay` enables the existing
+primary link overlay when a caller needs that hit area. The root remains a semantic `li`; owners supply their
+surrounding list and their own real data, action state and destinations.
+
 The primary link uses the visible title as its accessible name by default. A caller may supply `primaryLinkLabel` when
 the destination needs additional, noninteractive summary context; a nonblank value becomes the link's exact accessible
 name while the visible heading remains unchanged. The supplied name must include the visible title verbatim and must

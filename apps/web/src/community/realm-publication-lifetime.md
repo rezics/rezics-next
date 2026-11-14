@@ -36,6 +36,8 @@ disclosed redirect target. The review shows both identities and each label and c
 labels carry their native language. Available covers use the shared Cover and image-credit rendering, including the
 complete Content-owned credit and rights obligations. The shelf picker contributes only original identity; its
 title, types and image never become native review presentation. Commands continue to address the original Subject.
+All launch locales provide the review states. Full Realm/Space page composition and its Board and membership
+consumers retain their existing owners.
 
 Decision: cap the serialized and retained selected publication review at 128 KiB UTF-8, project original and terminal Semantic summaries in one observation, and independently report an optional label or complete cover as unavailable when its full meaning cannot fit; never truncate attribution or legal text.
 

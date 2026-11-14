@@ -331,7 +331,8 @@ retirement, native refusal recovery and the remaining `boards({ id }).slowMode` 
 ## Thread watch
 
 A signed-in reader can watch one currently readable thread for preference-governed in-app activity. Watching grants no
-read access and sends no email. The mounted control reads private state only for the current thread and viewer/session;
+read access and sends no email. The default thread route shows the confirmed state beside its title and offers one
+explicit Watch or Stop action. The mounted control reads private state only for the current thread and viewer/session;
 it uses a no-store read outside SSR/shared caches and retires the result when its target, access or credentials change.
 The generated native GET returns exactly `{watching}`; PUT and DELETE return 204. Each command freezes the thread,
 viewer/session stamp, original credential owner and requested state. There is no revision, command-key receipt or

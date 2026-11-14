@@ -4,6 +4,8 @@ Search keeps the rating population separate from resource membership. The commit
 contains one canonical Realm ID; a missing or empty field means the existing Global population. The filter field
 continues to express authored Realm or Collection membership. Selecting a rating population never creates, removes,
 or changes a membership condition. Search offers only the authorized Realm choices supplied by its native owner.
+One explicitly selected readable Realm population is private to the mounted visit and never enters public metadata
+or a public Search index. Native order and privacy outcomes remain authoritative.
 
 Realm rating order supports the standard question, descending published score, and one subject partition. Native
 Search intersects the complete query and filter set before ranking. The Web control does not collect candidates,

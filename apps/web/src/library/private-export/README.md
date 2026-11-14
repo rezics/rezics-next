@@ -1,8 +1,8 @@
 # Web private Library export consumer guide
 
-Web owns the signed-in `/library/export` visit. Commerce owns the capture, its source fence, authorization, expiry,
-limits and native record meanings. The [native contract](../../../../docs/library-export.md) is authoritative for those
-details.
+Web owns the signed-in `/library/export` visit, separately from public Collection ItemList export and personal-list
+import writers. Commerce owns the capture, its source fence, authorization, expiry, limits and native record
+meanings. The [native contract](../../../../../docs/library-export.md) is authoritative for those details.
 
 Decision: new captures use version 4; stored version 1, 2 and 3 captures keep their original sections, record shapes,
 manifest fields, byte accounting and cursor epochs. Version 3 keeps the 17-section version 2 inventory and adds
@@ -97,8 +97,6 @@ refusal remain distinct from cancellation. Restart requires an acknowledged disp
 Decision: pin export-to-restore with journey tests for owner-keyed completed-archive custody, exact original
 artifact bytes, opaque sequential cursors, original-intent retries, Collection readback and other-member denial;
 keep the existing named upload, review and result stories. Recovery destination labels are localized.
-Decision: keep downloaded V4 bytes unchanged; Collection recovery uploads the installed V1 envelope, and Entry and
-progress recovery upload the installed V3 envelope, because those native consumers refuse version 4.
 Decision: native Web fixture personas alice (owner) and bob (other member) plus actual Kernel commands prove the
 export-to-restore walk; dump seed identities are not required for owned Library facts. Unreadable archive bytes pass
 through to the native decoder.

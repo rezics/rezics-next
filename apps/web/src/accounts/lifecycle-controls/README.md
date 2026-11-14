@@ -80,3 +80,10 @@ can resolve it before any dispatch. There is no automatic mutation replay or fre
 The native owner README linked by the assignment is absent on this base; existing generated lifecycle contracts are
 consumed unchanged. Sources read: this page group, Web account management's read deadline, the lifecycle route,
 generated client entry point and existing lifecycle presentation/transport tests. No reference-project source applies.
+
+## Native fixture reconciliation
+
+Accounts owns reconciliation of its lifecycle transport fixture with delivered private review/readback ports.
+Preserve security, current credential and key, uncertainty, explicit `not_applied`, effect-count and first native
+lifetime-cleanup assertions. Presentation changes authorize neither a second lifecycle writer nor a Web retry that
+substitutes current observation for the original effect's outcome.

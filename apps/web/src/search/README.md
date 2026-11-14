@@ -51,6 +51,13 @@ envelope; it does not reimplement parseText, and a malformed page is unavailable
 
 ## Filters and condition authoring
 
+Selected kind, property and value labels use human unavailable wording when the label is missing; the exact
+selection, URL and constraint remain intact and inspectable in labelled technical details. Clear-one and Clear-all,
+the existing local header authority, closed result rows, one bounded native request and SSR fences remain unchanged.
+Selected-label presentation belongs to `search.tsx`, preserving the delivered `results.tsx` contract, and adds no
+per-chip fetch, substitute constraint or broadened query. New locale keys for this presentation stay within
+`search_constraint_identity_*`; Search retains native scope without a competing writer.
+
 Decision: `ConditionMetadata` remains a type-only released projection in `contracts/condition-metadata.ts`; runtime
 filter parsing and construction live in the Search application entry `condition-editor-model.ts`. Library readers
 that need the projection consume that application entry.

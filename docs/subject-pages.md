@@ -369,6 +369,11 @@ UTF-8 bytes, and the reader keeps at most eight cursor addresses plus its curren
 content action slot. It offers the existing header search and search page first; opening a matching subject keeps
 that existing identity. Creation never merges identities or assigns a client-generated subject ID.
 
+The ordinary creation entry remains an SSR anchor to its existing destination. It needs an explicit 44px target
+on phones and coarse pointers, full label wrapping and visible focus through the complete creation journey,
+without editing frozen generated button variants. The [quality finding](research/quality-round3-backlog.md#catalogue-entry-make-the-linked-creation-action-a-real-phone-control)
+is source-only geometry evidence, not a measured current visual result or a separate link-repair delivery.
+
 The form reads the active immutable definition release through the shared release helpers. Its Type choices and
 localized help come from emitted metadata and the existing language fallback. Work, edition and release remain
 different objects. The data-language tags on names, descriptions and aliases are independent of the interface
@@ -1871,6 +1876,11 @@ Relation reveal consent follows the statement occurrence, delivered content, pag
 Custom relation types from a selected Context appear in their own group under their own label, after the bundled
 groups, and are labelled with the Context they come from.
 
+Semantic must admit sourced work-specific Character identity and main-character linkage in an active Definition
+before Web presents it. An appearance role is not that identity, and generic relation transport admits no new
+vocabulary. The [core-page audit](research/page-needs-api-render-audit.md) supplies supporting source evidence,
+without establishing native execution, rendered, accessibility or publication acceptance.
+
 ## Character appearances and relationships
 
 The Character page composes adopted work appearances, Character-qualified voice credits and exact document previews. The visit retains at most two assertion windows of twenty rows each and 256 related-reference summaries, subject to tighter installed caps. The selected page and its evidence remain current; it does not drain cursors or hydrate each row separately.
@@ -2045,6 +2055,27 @@ operands and twenty exact Realm reads concurrently, with no per-render requests 
 own call. Mounted metadata retains only current/selected keys; unrelated members, votes or imported history do not
 increase the request count. Native examined-work and physical cost remain the producer's verification obligation.
 
+### Population reader ownership and evidence
+
+Population admission keeps its per-client `browserObservation` and incarnation-bound visit lease, and captures the
+public session owner's monotonic active-QueryClient revision. Server rendering stays unknown until hydration.
+Replacing that owner retires the previous comparison even when the same reader later returns. Source-isolated
+caches, actual-reader comparison, fresh anonymous/null-CSRF admission, route/Context/view binding and bounded
+current Realm labels remain part of the real generated-client BFF boundary.
+
+Content retains questions, privacy/math, aggregates and native vote authority; Accounts/Auth retain session and
+Realm disclosure authority; Search retains public composition, canonical frame and its shared-file regions.
+Reaction and personal-vote consumers keep their existing contracts. Public figure/head receive no private credential,
+population payload or provenance. Subject assessment, provider SourceStatistics and enjoyment remain independent.
+This consumer installs no Sales, Home, provider-review, redirected-population maintenance, Library retained-preparation
+or whole-selection bulk capability; those depend on their own producer, confirmation ABI and inclusive cost.
+
+Eight-locale copy and full-page phone390/desktop1280 stories cover selection, removal, sparse continuation and source
+failure. The first-scope source handoff recorded connected assertions for native wire operands/refusal, independent
+recovery/public head, selection bounds, delayed work, equal-success and ABA replacement, QueryClient/visit/unmount
+and ordinary notifications as authored **UNRUN**. Source presence and local typing do not establish whole-feature
+acceptance; native, browser, growth, physical and integration verification remain separate obligations.
+
 ## Classification assessment on pages
 
 Decision: the installed work-tag reader pages twelve disclosed assertions at a time and returns to the exact
@@ -2108,6 +2139,12 @@ command plus a fixed reconciliation sequence. Acknowledgements do not authorize 
 acceptance is `apps/web/tests/subject-classification-assessment.test.tsx` at 20, 200 and 2,000 eligible historical
 ballots with the selected association and two provider rows held fixed. Unknown native scan bounds remain unknown.
 No engine adapter is added; existing native engines stay producer-owned.
+
+Mounted source-classification transport extends this existing assessment/provenance owner independently of native
+ballots, provider SourceStatistics and enjoyment. Internal factories alone establish no usable transport. Readiness
+requires delivered generated types and reached native outcomes, followed by inspection of the existing interface;
+the source handoff creates no additional frontend owner. The [core-page audit](research/page-needs-api-render-audit.md)
+is supporting source evidence and does not establish that acceptance.
 
 ## Provider source observation inspection
 

@@ -679,9 +679,30 @@ rights or select a candidate. Candidate review and selection remain a later nati
 exact arc is reread and shown even when it differs from the earlier proposal. Current-read failure stays on the
 classification overlay and does not empty the profile or adopt the work identity.
 Decision: StoryArc classification correction opts into CharacterClassifications `changedSetReview`. A successful
-current reread updates only the same arc UUID; failed reads keep the last admitted public identity and the
-classification overlay. Draft rank keeps a selected `preferred` assertion; Character48 staging still emits
+current reread updates only the same arc UUID. Draft rank keeps a selected `preferred` assertion; Character48 staging still emits
 `statementInput` `normal` until that producer projects richer rank into its holders.
+
+### Current StoryArc reading and recovery
+
+Public identity, facts and links require a successful current read. A refused or unavailable reload removes all
+public markup from the former reading, including hidden descendants and attributes, and permanently retires its
+callbacks and pending results. Recovery renders only the newly admitted reading. Private editor holders may stay
+mounted while rendering nothing, retaining drafts and exact sealed retry credentials, keys and operands. A resumed
+work editor rereads its original address before using current authority. Creation and selected-reader recovery
+remain independent. Global editing and native Realm refusal keep their existing contracts; viewer or CSRF-session
+epoch replacement releases the whole mount.
+
+An explicit keyboard reload keeps its surviving focused header opener. If disabling it loses focus, orient only
+to the completed same-selection arc, work, creation or failure boundary. Focus movement, pointer use, selection
+confirmation and editor or reader changes cancel that intent; other reads never move focus.
+
+The [catalogue quality follow-up](research/catalogue-family-quality-followup.md) establishes source transitions and
+error-address mismatches. Retire refused StoryArc readings first, then complete Game creation recovery, followed by
+precise Album, Manga and Screen creation-error recovery as three separate pages. These five outcomes retain
+source-present family composition and Semantic's Character current-reading/reference ownership; they do not start
+another shared-editor rewrite. The
+research provides no passing browser, native, visual, accessibility or publication proof. Each complete owning journey
+still owes its original integration acceptance.
 
 ## Ordinary multilingual correction
 
@@ -1120,6 +1141,9 @@ create. A validated acknowledgment keeps the exact returned UUID even when later
 identity without another write.
 Decision: Album creation eligibility is the current Global Context `subject.create` observation, independent of
 edition disclosure; guest is session-derived.
+
+Album creation remains editable while eligibility admission is pending. Returning to editing retires that review,
+preserves the current draft and requires a fresh review before another create command.
 
 Creation sends only
 explicitly entered terms and added assertions, qualifiers and citations; it sends no ingestion Source metadata.

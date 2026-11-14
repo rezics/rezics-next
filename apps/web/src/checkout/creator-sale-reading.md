@@ -121,3 +121,12 @@ typing; native, browser, growth and runtime acceptance remain with integration.
 The named base edges do not belong to the largest Web value SCC. This migration removes seven checkout-to-session/
 Edition implementation behavior imports and adds one pure Edition-contract import; the largest Web SCC stays at
 82 files. Unrelated cyclic readers remain with their owners rather than expanding this migration into them.
+
+## Creator offer identity disclosure
+
+Creator offer rows expose the supplied offer ID and revision in a labelled keyboard-operable disclosure. Include
+the supplied captured Edition route and ID only when present. Recognizable supplied offer titles lead the row;
+exact identifiers remain inspectable without an additional read. Sale work/offer navigation belongs to this complete
+journey, using supplied targetSubjectId/offerId and each public destination's own admission; a sale reference never
+supplies a buyer-private order destination. Source and story delivery leave native, browser and promotion acceptance
+independent.

@@ -116,6 +116,8 @@ response before projection: revision is bounded, rows preserve exact supplied or
 their positions, each page stays within 20, and a retained cursor stays opaque and replayable within the 4096-character
 native query bound; malformed responses are unavailable. Stories for retained detached completion, sparse
 continuation and exact uncertain replay are illustrative until recorded.
+Missing generated `progressSessions({sessionId}).episodes.get` or `.$recordEpisodes.post` methods stay unavailable;
+Web does not add a second progress-index writer or use scalar-counter identity for the checklist.
 
 Obtain catalogue membership/order from that one Semantic page, pass at most 20 exact Episode IDs to
 `progressSessions({sessionId}).episodes.get({query:{ids}})`, and record with

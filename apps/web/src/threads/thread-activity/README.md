@@ -25,3 +25,16 @@ locale and renders the absolute native timestamp in UTC. Existing Board activity
 
 Work stays bounded to one selected native thread and its one confirmation. It adds no per-reply activity work, census,
 aggregate, polling or new command authority. Original reading-page source/place/actor checks and reply bounds remain.
+
+## Producer and consumer boundary
+
+Content supplies authoritative reply count and last conversation activity through the existing activity authority;
+loaded reply length and first-post edit time cannot substitute for them. Home remains the sole feed assembler.
+Board, thread and Subject readers consume exact installed count-kind, cohort, contribution-time and freshness fields
+in their existing bounded page, preserving exact, lower-bound, zero and withheld meanings. Optional consumer fields
+and internal factories do not establish usable schema or transport. Readiness requires delivered generated types
+and reached native outcomes, followed by inspection of the existing interface; this adds no frontend owner.
+
+The [core-page audit](../../../../../docs/research/page-needs-api-render-audit.md) supplies supporting source evidence.
+Installed typing, prepared examples and this source contract do not establish native, rendered, accessibility or
+publication acceptance.

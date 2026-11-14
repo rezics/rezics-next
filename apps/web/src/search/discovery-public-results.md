@@ -1,5 +1,12 @@
 # Public Search result rows
 
+Search owns type-aware descriptive, creator/release and public-figure context in the existing mixed result journey,
+while retaining the rich Subject search. Missing and withheld context remain distinct. Closed wire/client variants,
+bounded descriptive facts and authentic private Library overlays are received under final currentness; the existing
+publication journey separately owns actual default registration. Assignment alone establishes no delivery, and
+absent typed capabilities stay unavailable. The [core-page audit](../../../../docs/research/page-needs-api-render-audit.md)
+is supporting evidence, not native, rendered, accessibility or publication acceptance.
+
 The mixed result list admits one complete native page before rendering any row. Every hit has a closed summary kind and
 the full `{ owner, kind, route, id }` key; summary identity must match the key, and each summary kind must match its
 owner and native kind. React identity uses that whole key, so equal UUIDs from different owners, routes or kinds remain

@@ -1,5 +1,24 @@
 # Resource access recovery
 
+## Recognizable and exact identity
+
+Resource identity, acting-as presentation and owner-transfer labels lead with recognizable labels supplied by the
+current DTO. Show a known resource kind, or an honest generic resource when no title is supplied, and retain visible
+organization/Realm role meaning. Missing labels stay unavailable. Full resource ID, route/type and subject IDs
+belong in labeled technical details; exact transfer operands remain inspectable before confirmation.
+
+This presentation covers `identityName`, `subjectTitle`, `SubjectName`, the ready resource/acting-as area and
+`owner-transfer.tsx`, with consistent stories and regressions. It consumes only the existing 20-grant/22-identity
+DTO, adds no identity lookup or I/O and preserves the explicit transfer lookup. Adapters, native/API authorization,
+session/credentials, mutations and uncertain retry retain their existing contracts. New locale keys for this
+identity presentation are confined to `access_identity_*`.
+
+The [quality findings](../../../../../docs/research/quality-round3-backlog.md#resource-access-separate-recognizable-roles-from-exact-machine-identity)
+are supporting source/visual evidence with the report's capture limits; they do not establish this journey's native,
+browser or visual acceptance.
+
+## Current requests and recovery
+
 Decision: use the existing account ten-second deadline for each native request, with fifteen-second review,
 twenty-five-second lookup/grant and thirty-five-second transfer BFF envelopes; only an explicit retry replays
 the original pending command. Each envelope includes the native phases plus five seconds for delivery.

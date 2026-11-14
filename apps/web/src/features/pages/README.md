@@ -21,6 +21,21 @@ disclosure, continuation, return-receipt and work-budget behavior. Their return 
 Subject base addresses use the already public `subject/load-subject` entry, and language labels use the local
 `locale-presentation.ts` helper.
 
+## Bounded page experience
+
+A page supplies recognizable item identity, context, current viewer state and applicable actions together, so a
+person can act deliberately and recover truthfully. Shared controls alone do not complete an experience without
+page interaction state. Keep bounded public responses distinct from private overlays; missing producers, dropped
+admitted fields and deliberately withheld fields require different remedies. Per-row point reads, invented zeros,
+synthetic revisions, browser registries and client candidate scans do not supply missing page capabilities.
+
+The [core-page audit](../../../../../docs/research/page-needs-api-render-audit.md) is supporting evidence from its
+stated source revision. Earlier apps and reference-platform comparisons establish useful experience requirements,
+without carrying over their transports or authority models. Its source findings establish neither current native
+execution nor rendered, accessibility or publication success. Each new engine path retains derived cost and
+three-scale growth checks in its owning journey; inspect the actual default journey after landing before calling
+the experience complete. Prepared stories, source review and publication remain separately qualified evidence.
+
 ## Session preparation and retained readings
 
 Decision: session preparation preserves an admitted public body; private controls bind to the first matching
@@ -41,19 +56,29 @@ confirming that intent; exact replay remains deliberate. Population disclosure s
 reader lease, with no private payload added to SSR. Library facts supply no public count or authority. Review
 entries stay manually editable. The [private inventory](../../ratings/own-votes/README.md) owns original-pair edits.
 
+## Subject purchase entry slot
+
+`AppShellProps.subjectPurchase` accepts `SubjectPurchaseRegions` from
+[`features/pages/subject-slots.tsx`](subject-slots.tsx): optional `publicRegion`
+and `privateRegion`, each a React component with `SubjectPurchaseContext` props `{subjectId, subjectType, locale}`.
+`SubjectPurchaseSlot({context})` renders the named `data-slot="subject-purchase"` at the end of the current subject's
+successful composition header, after its existing actions. `useSubjectPurchaseContext()` returns the same public
+fields inside the region, or null outside it. Missing regions render nothing. `publicRegion` may render from those
+public fields during SSR; `privateRegion` mounts only after hydration and a prepared signed-in session. The native
+owner then prepares its own admitted offer/entitlement reads through the existing private BFF/no-store boundary.
+The slot fetches nothing, derives no entitlement from Library and provides no purchase or benefit fallback.
+[`shell/feature-slots.tsx`](../../shell/feature-slots.tsx) exports
+`FeatureSlotsProvider({subjectPurchase?, children})` and `useFeatureSlots()` for isolated hosts and patterns.
+Semantic keeps subject composition and neighboring editor, relations and review regions; Commerce keeps the supplied
+purchase/benefit components, native data and authorization.
+
+The shared pattern is `Patterns/Subjects/Purchase entry slot` (empty, populated, private pending). It uses recorded public Subject composition and an owner-region fixture that makes no business claim. Source integration and this prepared pattern establish neither native journey acceptance nor full page/visual review. [Shell navigation](../../shell/README.md#navigation-contributions) records root composition with contributed creation links and a Commerce-owned private component.
+
 ## Composition render identity
 
 Decision: `CompositionRender` keeps its Puck render config while its registry has equal entries and its definitions, root and document root are unchanged, and each slot callback is invoked for its content, so composed controls stay mounted through sibling and route re-renders while a new document or registry entry still remounts them.
 
-## Platform Home
-
-The anonymous catalogue reads the active native `/` composition once and renders its supplied `TypeList` windows with the existing Search owner, limits and total read budget. A 404 is missing, rejected native requests remain rejected, and 5xx or fetch dependency failures remain unavailable with deliberate reload. The checked-in platform profile continues to declare the four intended populations; changing its source does not activate it. The publisher owns active profile delivery.
-
-Decision: `ReactionSummary` renders public totals from the planned reactions leaf and the recorded native counts page. Each total is one text node (`Like 42`) so the visible label and count stay together. Viewer reaction stays on the header actions slot. A mismatched producer, malformed counts or Retry-After wait makes that leaf unavailable without hiding supported siblings. Mixed configured TypeList recovery uses the same declared slots: a waiting books leaf keeps its own hint while recorded recipes and reactions stay in document order. Zone TypeList uses the same configured Search admission as the catalogue TypeList. The renderer reads `OverviewContext` from the context leaf and admits kinds locally so it does not import overview or threads.
-
-Decision: the fewest Web tests pin those states plus TypeList raw-limit admission. Recorded Members responses may contain duplicates; the renderer retains their first canonical Subject disclosure in native order.
-
-## Composed Members continuation
+## Composed member continuation
 
 Decision: each mounted Members node retains first-admitted rows and supplied facts in native order per canonical
 Subject ID; More/Retry appends one native page, transient failures preserve the exact cursor, and successful explicit
@@ -84,6 +109,23 @@ reader stayed on the requesting trigger; moved focus and retired requests cannot
 restart/retirement and keyboard exhaustion. Continued/Exhausted stories use illustrative native-format responses
 through the default renderer. Their fixtures establish no native, visual or assistive-technology proof; source-only
 delivery defers execution and the verifier retains those acceptance checks.
+
+Completion and end messages use all launch locales. Failures keep the existing preparing, invalid, unavailable and
+changed-reading meanings. Each node isolates its request-cache identity so a replacement reading cannot inherit
+an old in-flight page. After the local end marker, Tab continues in document order. Observed native slot admission
+deduplicates canonical identities only after enforcing the raw planned page bound.
+
+The [continuation regression](../../../tests/member-list-continuation.test.tsx) and Continued/Exhausted stories
+retain original integration, native, visual and assistive-technology acceptance separately from authored fixtures.
+
+## Platform Home
+
+The anonymous catalogue reads the active native `/` composition once and renders its supplied `TypeList` windows with the existing Search owner, limits and total read budget. A 404 is missing, rejected native requests remain rejected, and 5xx or fetch dependency failures remain unavailable with deliberate reload. The checked-in platform profile continues to declare the four intended populations; changing its source does not activate it. The publisher owns active profile delivery.
+
+Decision: `ReactionSummary` renders public totals from the planned reactions leaf and the recorded native counts page. Each total is one text node (`Like 42`) so the visible label and count stay together. Viewer reaction stays on the header actions slot. A mismatched producer, malformed counts or Retry-After wait makes that leaf unavailable without hiding supported siblings. Mixed configured TypeList recovery uses the same declared slots: a waiting books leaf keeps its own hint while recorded recipes and reactions stay in document order. Zone TypeList uses the same configured Search admission as the catalogue TypeList. The renderer reads `OverviewContext` from the context leaf and admits kinds locally so it does not import overview or threads.
+
+Decision: the fewest Web tests pin those states plus TypeList raw-limit admission. Composed Members use the
+[canonical continuation contract](#composed-member-continuation).
 
 ## Work tag reading
 

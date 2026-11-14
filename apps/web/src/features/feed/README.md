@@ -1,5 +1,8 @@
 # Feed results
 
+The [mixed Home consumer](home.md) owns default-path acceptance, conjunctive selections, exact Space lookup,
+question receiving, one-page costs and the Home composition; this guide owns its shared result and card family.
+
 Decision: Home loader regressions include both the native route catalogue and mixed-feed reads, keeping both
 anonymous before the separate member read. Install Worker bindings before importing their production component graph.
 
@@ -243,6 +246,13 @@ browser sharing recovery. Story responses are visibly prepared; inspect the sign
 dark, long-string and keyboard variants at 390 and 1280 through the normal verifier.
 
 ## Reading a mixed Home card
+
+Decision: the title is Home's only stretched primary link. Supplied visual, context and native action links remain
+independent and usable above that link. Human kind/source labels describe only disclosed context. Text-only
+discussions have no blank visual column, and missing images never create fabricated content; the shared cover/avatar
+placeholder retains its explicit absence meaning. Home adds no resting border, divider or card background.
+Subject and supplied Collection visuals are 80 px on phone and 96 px on desktop; account avatars are 64 px on phone
+and 80 px on desktop. Those dimensions preserve proportional supplied images and add no image lookup.
 
 `homeFeedItemPresentation` composes `card-presentation` and `card-attribution` into the existing ContentItem slots.
 Kind and source precede the title; identity, disclosed related context and time follow it; the plain-text preview

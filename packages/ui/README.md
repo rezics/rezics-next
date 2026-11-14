@@ -139,6 +139,20 @@ React label and 44px phone/coarse targets; chip presentations retain the text tr
 - `RatingSummary` takes the aggregates the rating module returns (count, sum and histogram per population, plus the threshold) and never shows a score without its population and count. The headline is the page's own population; every other population is a labelled list and is never averaged or substituted; imported source scores follow, labelled with their source and scale. Below the threshold it shows the count, the votes still needed and why the distribution is hidden; with no votes it draws nothing.
 - `RatingInput` is one slider over the question's scale plus a clear button. It works in displayed points and reports stored units, saves optimistically and rolls back with an announced message when saving fails.
 
+## Identity and disclosure
+
+Recognizable supplied human identity leads; a missing label is unavailable, never an invented name. Known, unknown
+and explicitly deleted records remain distinct, and only an explicit deletion reason permits a deleted tombstone.
+Withheld identity must not enter markup or attributes, including inside a closed disclosure. Optional technical
+details never hide essential warnings, permission/status, unknown outcomes or the decision identity beside an
+action. Full exact dangerous operands remain inspectable before confirmation. Presentation adds no row hydration,
+name lookup or fabricated richer fields.
+
+The [quality review](../../docs/research/quality-round3-backlog.md#evidence-custody-and-limits) supplies historical
+supporting evidence. Source presence, integration, checks, native proof, visual review and publication remain
+separate. A matching page file alone does not prove equality of its renderer, shared UI, stories or deployed
+revision; stale publication cannot establish a current source defect.
+
 ## Deletion
 
 Import `Tombstone` from `@rezics/ui/tombstone` for a reference to a deleted, withheld or unavailable record. Ordinary reads

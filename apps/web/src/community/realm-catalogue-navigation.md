@@ -1,7 +1,6 @@
 # Realm and Space catalogue entry
 
-The [Web scope and rating requirements](../../../../docs/goals/web.md#second-scope-interfaces)
-retain authority over Search controls. This guide owns the community handoff implemented by
+The [Search owner](../search/README.md) retains authority over Search controls. This guide owns the community handoff implemented by
 `RealmCatalogueCurrent`, `RealmCatalogueNavigation` and `realm-catalogue-entry` in the default
 `SpacePage` composition used for both Realm and Space routes.
 
