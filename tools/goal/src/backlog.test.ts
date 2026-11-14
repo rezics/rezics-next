@@ -591,14 +591,21 @@ test('a product task stopped for over an hour without action is cancelled into i
     .query('INSERT INTO worker_retry_intents(task_id, attempt, body) VALUES (?, 1, ?)')
     .run('retrying', JSON.stringify({ status: 'pending', options: {} }));
   task(f.db, 'typing', 'stopped', { goal: 'web', manager: 'web', markdown: 'Completed source' }, 8);
+  const typingTask = f.db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('typing')!;
+  f.db
+    .query('UPDATE worker_tasks SET body=? WHERE id=?')
+    .run(JSON.stringify({ ...JSON.parse(typingTask.body), currentAttempt: 1 }), 'typing');
   f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
     'typing',
     JSON.stringify({
+      taskId: 'typing',
+      attempt: 1,
       state: 'exited',
       endedAt: new Date(old).toISOString(),
       exitCode: 0,
       failureKind: null,
       blocker: null,
+      checks: ['11111111-1111-1111-1111-111111111111'],
       typingEvidencePending: {
         result: 'Compiler input closure is unavailable for the last check-host typecheck.',
         command: ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'],
@@ -606,6 +613,31 @@ test('a product task stopped for over an hour without action is cancelled into i
     }),
   );
   event(f.db, 'typing', 'typing-evidence-pending', old);
+  task(f.db, 'typing-owner-unknown', 'stopped', { goal: 'web', markdown: 'Completed source, owner missing' }, 10);
+  const ownerlessTask = f.db
+    .query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?')
+    .get('typing-owner-unknown')!;
+  f.db
+    .query('UPDATE worker_tasks SET body=? WHERE id=?')
+    .run(JSON.stringify({ ...JSON.parse(ownerlessTask.body), currentAttempt: 1 }), 'typing-owner-unknown');
+  f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
+    'typing-owner-unknown',
+    JSON.stringify({
+      taskId: 'typing-owner-unknown',
+      attempt: 1,
+      state: 'exited',
+      endedAt: new Date(old).toISOString(),
+      exitCode: 0,
+      failureKind: null,
+      blocker: null,
+      checks: ['22222222-2222-2222-2222-222222222222'],
+      typingEvidencePending: {
+        result: 'Compiler input closure is unavailable for the last check-host typecheck.',
+        command: ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'],
+      },
+    }),
+  );
+  event(f.db, 'typing-owner-unknown', 'typing-evidence-pending', old);
   task(f.db, 'compiler-failed', 'stopped', { goal: 'web', manager: 'web', markdown: 'Compiler failure' }, 9);
   f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
     'compiler-failed',
@@ -619,6 +651,7 @@ test('a product task stopped for over an hour without action is cancelled into i
   );
   event(f.db, 'compiler-failed', 'worker-exited', old);
   const typingRecoveryCalls: { taskId: string; attempt: number }[] = [];
+  f.runtime.supermanager = 'supermanager';
   f.runtime.recoverTyping = async (ref) => {
     typingRecoveryCalls.push(ref);
     return { status: 'pending', result: 'Compiler input closure is unavailable for the last check-host typecheck.' };
@@ -628,7 +661,10 @@ test('a product task stopped for over an hour without action is cancelled into i
 
   expect(sweep.expired.map((entry) => entry.taskId)).toEqual(['expired', 'second', 'compiler-failed']);
   expect(f.cancelled).toEqual(['expired', 'second', 'compiler-failed']);
-  expect(typingRecoveryCalls).toEqual([{ taskId: 'typing', attempt: 1 }]);
+  expect(typingRecoveryCalls).toEqual([
+    { taskId: 'typing', attempt: 1 },
+    { taskId: 'typing-owner-unknown', attempt: 1 },
+  ]);
   expect(f.db.query('SELECT current_attempt FROM worker_tasks WHERE id=?').get('typing')).toMatchObject({
     current_attempt: 1,
   });
@@ -639,16 +675,23 @@ test('a product task stopped for over an hour without action is cancelled into i
   expect(reason).toContain('spec-conflict: two requirements disagree');
   expect(existsSync(join(f.state, 'backlog', 'control-plane'))).toBe(false);
   const events = f.inbox.pending('web');
-  expect(
-    events.some(({ event: delivered }) => delivered.summary.includes('typing-recover typing --expected-attempt 1')),
-  ).toBe(true);
+  const receiverNotice = events.find(({ event: delivered }) => delivered.summary.includes('evidence receiver'));
+  expect(receiverNotice?.event.summary).toContain('Task owner web or the configured operations manager');
+  expect(receiverNotice?.event.summary).toContain('authenticated owner authorization to receive compiler evidence');
+  expect(receiverNotice?.event.summary).toContain('typing-recover typing --expected-attempt 1');
+  const unknownOwnerNotice = f.inbox
+    .pending('supermanager')
+    .find(({ event: delivered }) => delivered.summary.includes('typing-owner-unknown'));
+  expect(unknownOwnerNotice?.event.summary).toContain('Task owner is unknown');
+  expect(unknownOwnerNotice?.event.summary).toContain('identify the receiver');
+  expect(unknownOwnerNotice?.event.summary).toContain('typing-recover typing-owner-unknown --expected-attempt 1');
   const expiryNotice = events.find(({ event: delivered }) => delivered.summary.includes('Stopped-task limit:'));
   expect(expiryNotice?.event.summary).toContain('Stopped-task limit: 3 task(s)');
   expect(expiryNotice?.event.summary).toContain('expired, second, compiler-failed');
 
   // A cancelled task is no longer stopped, so the next sweep does nothing more.
   expect((await sweepBacklog(f.runtime)).expired).toEqual([]);
-  expect(typingRecoveryCalls).toHaveLength(1);
+  expect(typingRecoveryCalls).toHaveLength(2);
 });
 
 test('a controller-parked manager below eight ready briefs is woken at most once an hour', async () => {
@@ -825,6 +868,28 @@ test('administrative notices preserve an authenticated no-work disposition while
   expect(saved).toMatchObject({ low_work_manager: 'web', low_work_session: 'web-session' });
   expect((saved as { low_work_scope: string }).low_work_scope).toBe(recorded.scope);
 
+  const setGoalState = (status: 'active' | 'paused', waitingForInbox: boolean, origin?: string) => {
+    const manager = f.db
+      .query<{ state: string }, [string]>('SELECT state FROM manager_sessions WHERE id=?')
+      .get('web')!;
+    const state = JSON.parse(manager.state) as {
+      [key: string]: unknown;
+      goalState: { [key: string]: unknown };
+    };
+    state.goalState = { ...state.goalState, status };
+    state.waitingForInbox = waitingForInbox;
+    if (origin) state.goalPauseOrigin = origin;
+    else delete state.goalPauseOrigin;
+    f.db.query('UPDATE manager_sessions SET state=? WHERE id=?').run(JSON.stringify(state), 'web');
+  };
+  setGoalState('paused', true, 'automatic');
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
+  expect(f.db.query('SELECT low_work_scope FROM backlog_goals WHERE goal=?').get('web')).toMatchObject({
+    low_work_scope: recorded.scope,
+  });
+  setGoalState('active', false);
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
+
   f.db
     .query(`INSERT INTO manager_inbox(manager, event, wakeable, created_at, goal_id)
             VALUES (?, ?, ?, ?, ?)`)
@@ -836,6 +901,9 @@ test('administrative notices preserve an authenticated no-work disposition while
       'web',
     );
   expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  setGoalState('paused', false, 'user');
+  f.inbox.deliver({ managerId: 'web', goalId: 'web', kind: 'info', summary: 'Evidence while explicitly paused' });
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
 });
 
 test('low-backlog no-work dispositions rearm on a brief, scoped source, receiving evidence, owner change, or clear', async () => {
