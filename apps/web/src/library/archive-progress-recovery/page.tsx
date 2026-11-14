@@ -1,36 +1,24 @@
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useRecoveryLifetime } from '../recovery-lifetime';
 import { useLocation } from '@tanstack/react-router';
-import { useId, useEffect, useReducer, useState } from 'react';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@rezics/ui/shadcn/select';
+import { useEffect, useReducer, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
-import { IndependentMeasuresReadout } from '../independent-measures/editor';
-import { measureValueKind } from '../independent-measures/contract';
-import { EpisodeChecklistEditor } from '../episode-checklist/editor';
-import { preparingVisit } from '../episode-checklist/controller';
 import type { ProgressChoices } from '../progress-profile';
 import { ArchiveRecoveryDeparture } from '../archive-collection-recovery/departure';
 import { archiveFileFromCustody, bindArchiveCustodyOwner, completedArchiveFor } from '../private-export/custody';
 import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 import { ProgressRecoveryJourney, type Snapshot } from './controller';
 import { browserProgressRecoveryPort } from './port';
-import type { ReviewInput } from './native';
-import {
-  RecoveryReview,
-  RecoveryResult,
-  Evidence,
-  EvidenceDetails,
-  progressModeLabel,
-  progressStateLabel,
-} from './review';
+import { RecoveryReview, RecoveryResult, EvidenceDetails, progressModeLabel, progressStateLabel } from './review';
 import { actionClass } from '../private-export/controls';
+import { MappingPanel, Pager } from './mapping-panel';
+import { ProgressWorkspace } from './progress-workspace';
 
+export { Pager };
 export const action = `${actionClass} rounded-md border disabled:opacity-50`;
 type Journey = ProgressRecoveryJourney<ProgressChoices>;
 type View = Snapshot<ProgressChoices>;
-const uuid = '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}';
 
 export function ArchiveProgressRecoveryPage() {
   const location = useLocation();
@@ -88,164 +76,188 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
     cancelled: m.library_archive_progress_cancelled,
     removed: m.library_archive_progress_removed,
   };
-  return (
-    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
-      <PageHeading>{m.library_archive_progress_title()}</PageHeading>
-      <p>{m.library_archive_progress_intro()}</p>
-      <ArchiveRecoveryDestinations current="progress" />
-      <p role="status" aria-live="polite">
-        {notices[snap.notice]()}
-      </p>
+  const retryable = snap.pending || snap.notice === 'uncertain' || snap.notice === 'recoverable';
+  const intake = !snap.upload ? (
+    <section className="min-w-0 space-y-4 rounded-lg border p-4" aria-label={m.library_archive_progress_file()}>
       {snap.refusal ? <EvidenceDetails value={{ status: snap.refusal }} /> : null}
-      {snap.pending || snap.notice === 'uncertain' || snap.notice === 'recoverable' ? (
+      {retryable ? (
         <button className={action} disabled={snap.busy} onClick={() => void journey.retry()}>
           {m.library_archive_progress_retry()}
         </button>
       ) : null}
-      {!snap.upload ? (
-        <div className="space-y-3">
-          <label className="block space-y-2">
-            <span>{m.library_archive_progress_file()}</span>
-            <input
-              className={action}
-              type="file"
-              accept="application/json,.json"
-              disabled={locked}
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                event.currentTarget.value = '';
-                if (file) void journey.upload(file);
-              }}
-            />
-          </label>
-          {snap.hasOriginalArchive ? (
-            <button className={action} disabled={locked} onClick={() => void journey.adoptOriginal()}>
-              {m.library_archive_recovery_restart_original()}
-            </button>
-          ) : completed ? (
-            <button
-              className={action}
-              disabled={locked}
-              onClick={() => void journey.upload(archiveFileFromCustody(completed))}
-            >
-              {m.library_archive_use_completed_export()}
-            </button>
-          ) : null}
-          {completed || snap.hasOriginalArchive ? <p>{m.library_archive_completed_export_help()}</p> : null}
-        </div>
+      <div className="space-y-3">
+        <label className="block space-y-2">
+          <span>{m.library_archive_progress_file()}</span>
+          <input
+            className={action}
+            type="file"
+            accept="application/json,.json"
+            disabled={locked}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = '';
+              if (file) void journey.upload(file);
+            }}
+          />
+        </label>
+        {snap.hasOriginalArchive ? (
+          <button className={action} disabled={locked} onClick={() => void journey.adoptOriginal()}>
+            {m.library_archive_recovery_restart_original()}
+          </button>
+        ) : completed ? (
+          <button
+            className={action}
+            disabled={locked}
+            onClick={() => void journey.upload(archiveFileFromCustody(completed))}
+          >
+            {m.library_archive_use_completed_export()}
+          </button>
+        ) : null}
+        {completed || snap.hasOriginalArchive ? <p>{m.library_archive_completed_export_help()}</p> : null}
+        {snap.cancelled || snap.notice === 'removed' ? (
+          <button className={action} disabled={locked} onClick={() => journey.restart()}>
+            {m.library_archive_progress_restart()}
+          </button>
+        ) : null}
+      </div>
+    </section>
+  ) : null;
+  const sourceContext = snap.upload ? (
+    <section className="min-w-0 space-y-3 rounded-lg border p-4" aria-label={m.library_archive_recovery_coverage_title()}>
+      <h2 className="text-xl font-semibold">{m.library_archive_recovery_coverage_title()}</h2>
+      <p>{m.library_archive_progress_expiry({ at: snap.upload.expiresAt })}</p>
+      <p>{m.library_archive_progress_holdings()}</p>
+      {snap.holdings ? (
+        <>
+          <p>{m.library_archive_recovery_manifest_rows({ rows: snap.holdings.manifest.rows })}</p>
+          <EvidenceDetails value={snap.holdings} />
+          <Pager
+            next={snap.holdings.next}
+            disabled={locked}
+            onFirst={() => void journey.page('holdings')}
+            onNext={(after) => void journey.page('holdings', after)}
+          />
+        </>
+      ) : null}
+    </section>
+  ) : null;
+  const occurrenceBrowser = snap.upload ? (
+    <section className="min-w-0 space-y-3 rounded-lg border p-4" aria-label={m.library_archive_progress_occurrences()}>
+      <h2 className="text-xl font-semibold">{m.library_archive_progress_occurrences()}</h2>
+      {!snap.occurrences ? (
+        <button className={action} disabled={locked} onClick={() => void journey.inspect()}>
+          {m.library_archive_progress_inspect()}
+        </button>
       ) : (
         <>
-          <p>{m.library_archive_progress_expiry({ at: snap.upload.expiresAt })}</p>
-          <section className="space-y-3 rounded-lg border p-4" aria-label={m.library_archive_recovery_coverage_title()}>
-            <h2 className="text-xl font-semibold">{m.library_archive_recovery_coverage_title()}</h2>
-            <p>{m.library_archive_progress_holdings()}</p>
-            {snap.holdings ? (
-              <>
-                <p>{m.library_archive_recovery_manifest_rows({ rows: snap.holdings.manifest.rows })}</p>
-                <EvidenceDetails value={snap.holdings} />
-                <Pager
-                  next={snap.holdings.next}
-                  disabled={locked}
-                  onFirst={() => void journey.page('holdings')}
-                  onNext={(after) => void journey.page('holdings', after)}
-                />
-              </>
-            ) : null}
-          </section>
-          {!snap.occurrences ? (
-            <button className={action} disabled={locked} onClick={() => void journey.inspect()}>
-              {m.library_archive_progress_inspect()}
-            </button>
+          {!snap.occurrences.occurrences.length ? (
+            <p>{m.library_archive_progress_empty()}</p>
           ) : (
-            <section className="space-y-3">
-              <h2 className="text-xl font-semibold">{m.library_archive_progress_occurrences()}</h2>
-              {!snap.occurrences.occurrences.length ? (
-                <p>{m.library_archive_progress_empty()}</p>
-              ) : (
-                <ul className="space-y-3">
-                  {snap.occurrences.occurrences.map(({ ordinal, evidence }) => (
-                    <li className="rounded-md border p-3" key={ordinal}>
-                      <p>
-                        {m.library_archive_present_item({ number: ordinal + 1 })} · {progressStateLabel(evidence.state)}
-                      </p>
-                      <p>
-                        {progressModeLabel(evidence.mode)} · {evidence.amount ?? m.library_progress_measure_absent()}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {m.library_archive_present_title_unavailable()} · {m.library_progress_unit_unspecified()}
-                      </p>
-                      <p className="text-sm">
-                        {m.library_archive_progress_unit_help({ count: evidence.completed_unit_count })}
-                      </p>
-                      <EvidenceDetails value={{ ordinal, evidence }} />
-                      <button
-                        className={action}
-                        disabled={locked || snap.cancelled}
-                        aria-pressed={snap.selected?.session_id === evidence.session_id}
-                        onClick={() => {
-                          setConsent('');
-                          void journey.select(evidence);
-                        }}
-                      >
-                        {m.library_archive_progress_select()}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Pager
-                next={snap.occurrences.next}
-                disabled={locked}
-                onFirst={() => void journey.page('occurrences')}
-                onNext={(after) => void journey.page('occurrences', after)}
-              />
-            </section>
+            <ul className="min-w-0 space-y-3">
+              {snap.occurrences.occurrences.map(({ ordinal, evidence }) => (
+                <li className="min-w-0 rounded-md border p-3" key={ordinal}>
+                  <p>
+                    {m.library_archive_present_item({ number: ordinal + 1 })} · {progressStateLabel(evidence.state)}
+                  </p>
+                  <p>
+                    {progressModeLabel(evidence.mode)} · {evidence.amount ?? m.library_progress_measure_absent()}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {m.library_archive_present_title_unavailable()} · {m.library_progress_unit_unspecified()}
+                  </p>
+                  <p className="text-sm">{m.library_archive_progress_unit_help({ count: evidence.completed_unit_count })}</p>
+                  <EvidenceDetails value={{ ordinal, evidence }} />
+                  <button
+                    className={action}
+                    disabled={locked || snap.cancelled}
+                    aria-pressed={snap.selected?.session_id === evidence.session_id}
+                    onClick={() => {
+                      setConsent('');
+                      void journey.select(evidence);
+                    }}
+                  >
+                    {m.library_archive_progress_select()}
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
-          {snap.selected && !snap.cancelled ? (
-            <Mapping key={snap.selected.session_id} journey={journey} snap={snap} />
-          ) : null}
-          {snap.review ? <RecoveryReview review={snap.review} operands={snap.operands!} /> : null}
-          {snap.review?.applicable && !snap.application && !snap.cancelled ? (
-            <div className="space-y-3">
-              <label className="flex min-h-11 items-center gap-3">
-                <input
-                  type="checkbox"
-                  className="size-5"
-                  checked={consent === snap.review.reviewId}
-                  disabled={locked}
-                  onChange={(event) => setConsent(event.target.checked ? snap.review!.reviewId : '')}
-                />
-                {m.library_archive_progress_consent()}
-              </label>
-              <button
-                className={action}
-                disabled={locked || consent !== snap.review.reviewId}
-                onClick={() => {
-                  setConsent('');
-                  void journey.confirm(snap.review!.reviewId);
-                }}
-              >
-                {m.library_archive_progress_confirm()}
-              </button>
-            </div>
-          ) : null}
-          <RecoveryResult application={snap.application} result={snap.result} pending={snap.pending} />
-          {snap.application && !snap.pending ? (
-            <button className={action} disabled={locked} onClick={() => void journey.readResult()}>
-              {m.library_archive_progress_readback()}
-            </button>
-          ) : null}
-          {snap.result?.progressSession?.id ? (
-            <a className={action} href={localizeHref(`/library/progress/${snap.result.progressSession.id}`)}>
-              {m.library_archive_progress_open_session()}
-            </a>
-          ) : null}
-          <button className={action} disabled={locked} onClick={() => void journey.remove()}>
-            {m.library_archive_progress_remove()}
-          </button>
-          {snap.removed ? <p>{snap.removed}</p> : null}
+          <Pager
+            next={snap.occurrences.next}
+            disabled={locked}
+            onFirst={() => void journey.page('occurrences')}
+            onNext={(after) => void journey.page('occurrences', after)}
+          />
         </>
       )}
+    </section>
+  ) : null;
+  const plan = snap.selected && !snap.cancelled ? (
+    <div className="min-w-0 space-y-4">
+      <MappingPanel key={snap.selected.session_id} journey={journey} snap={snap} />
+      {snap.review ? <RecoveryReview review={snap.review} operands={snap.operands!} /> : null}
+    </div>
+  ) : null;
+  const applyAction = snap.review?.applicable && !snap.application && !snap.cancelled ? (
+    <div className="space-y-3 rounded-lg border p-4">
+      <label className="flex min-h-11 items-center gap-3">
+        <input
+          type="checkbox"
+          className="size-5"
+          checked={consent === snap.review.reviewId}
+          disabled={locked}
+          onChange={(event) => setConsent(event.target.checked ? snap.review!.reviewId : '')}
+        />
+        {m.library_archive_progress_consent()}
+      </label>
+      <button
+        className={action}
+        disabled={locked || consent !== snap.review.reviewId}
+        onClick={() => {
+          setConsent('');
+          void journey.confirm(snap.review!.reviewId);
+        }}
+      >
+        {m.library_archive_progress_confirm()}
+      </button>
+    </div>
+  ) : null;
+  const operation = snap.upload && (snap.refusal || retryable || applyAction || snap.application || snap.result) ? (
+    <section className="min-w-0 space-y-4" aria-label={m.library_archive_progress_result()}>
+      {snap.refusal ? <EvidenceDetails value={{ status: snap.refusal }} /> : null}
+      {retryable ? (
+        <button className={action} disabled={snap.busy} onClick={() => void journey.retry()}>
+          {m.library_archive_progress_retry()}
+        </button>
+      ) : null}
+      {applyAction}
+      <RecoveryResult application={snap.application} result={snap.result} pending={snap.pending} />
+      {snap.application && !snap.pending ? (
+        <button className={action} disabled={locked} onClick={() => void journey.readResult()}>
+          {m.library_archive_progress_readback()}
+        </button>
+      ) : null}
+    </section>
+  ) : null;
+  const restoredSession = snap.result?.progressSession?.id ? (
+    <section
+      className="min-w-0 rounded-lg border p-4"
+      aria-label={m.library_archive_progress_open_session()}
+    >
+      <a className={action} href={localizeHref(`/library/progress/${snap.result.progressSession.id}`)}>
+        {m.library_archive_progress_open_session()}
+      </a>
+    </section>
+  ) : null;
+  const archiveActions = snap.upload ? (
+    <section
+      className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border p-4"
+      aria-label={m.library_archive_progress_remove()}
+    >
+      <button className={action} disabled={locked} onClick={() => void journey.remove()}>
+        {m.library_archive_progress_remove()}
+      </button>
+      {snap.removed ? <p>{snap.removed}</p> : null}
       {snap.upload && !snap.cancelled ? (
         <button className={action} onClick={() => void journey.cancel()}>
           {m.library_archive_recovery_confirm_cancel()}
@@ -256,6 +268,27 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
           {m.library_archive_progress_restart()}
         </button>
       ) : null}
+    </section>
+  ) : null;
+  return (
+    <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
+      <PageHeading>{m.library_archive_progress_title()}</PageHeading>
+      <p>{m.library_archive_progress_intro()}</p>
+      <ArchiveRecoveryDestinations current="progress" />
+      <p role="status" aria-live="polite">
+        {notices[snap.notice]()}
+      </p>
+      {intake}
+      {snap.upload ? (
+        <ProgressWorkspace
+          sourceContext={sourceContext}
+          occurrenceBrowser={occurrenceBrowser}
+          plan={plan}
+          operation={operation}
+          restoredSession={restoredSession}
+          archiveActions={archiveActions}
+        />
+      ) : null}
       <ArchiveRecoveryDeparture
         active={!!snap.upload || snap.pending}
         locked={snap.pending}
@@ -265,280 +298,5 @@ export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; sn
         onLeave={() => journey.retire()}
       />
     </main>
-  );
-}
-
-export function Pager({
-  next,
-  disabled,
-  onFirst,
-  onNext,
-}: {
-  next: number | null | undefined;
-  disabled: boolean;
-  onFirst: () => void;
-  onNext: (after: number) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-3">
-      <button className={action} disabled={disabled} onClick={onFirst}>
-        {m.buyer_history_first()}
-      </button>
-      {next !== null && next !== undefined ? (
-        <button className={action} disabled={disabled} onClick={() => onNext(next)}>
-          {m.buyer_history_next()}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
-  const profilePairSelectId = useId();
-  const additionalMeasureSelectId = useId();
-  const source = snap.selected!;
-  const [subject, setSubject] = useState('');
-  const [pair, setPair] = useState('');
-  const [additional, setAdditional] = useState<Record<string, string>>({});
-  const [ids, setIds] = useState<string[]>([]);
-  const locked = snap.busy || snap.pending;
-  const pairs = snap.choices?.flatMap((choice) => choice.units.map((unit) => ({ mode: choice.mode, ...unit }))) ?? [];
-  const choice = pairs.find((item) => `${item.mode}:${item.id}` === pair);
-  const body: ReviewInput | null =
-    choice && snap.mappedSubject
-      ? {
-          sessionId: source.session_id,
-          subjectId: snap.mappedSubject,
-          mode: choice.mode,
-          unit: choice.id,
-          additionalMeasures:
-            choice.mode === 'scalar_amount'
-              ? Object.entries(additional)
-                  .filter(([, unit]) => unit)
-                  .map(([sourceUnit, unit]) => ({ sourceUnit, unit }))
-              : [],
-          unitIds: choice.mode === 'completed_units' ? ids : [],
-        }
-      : null;
-  const visit = preparingVisit(null);
-  visit.kind = 'ready';
-  visit.membership = 'admitted';
-  visit.rows = (snap.units?.units ?? []).map(({ evidence }) => {
-    const admission = snap.unitSupport.find((unit) => unit.unitId === evidence.unit_id)?.admission;
-    return {
-      episodeSubjectId: evidence.unit_id,
-      completed: false,
-      membership: admission ?? 'unavailable',
-      ordinal: null,
-      label: m.library_archive_present_title_unavailable(),
-      source: 'inspect',
-    };
-  });
-  visit.selection = { add: ids, remove: [] };
-  const changed = () => journey.invalidateReview();
-  const measures = [
-    { unit: source.unit, amount: source.amount, total: source.total },
-    ...(source.additional_measures ?? []),
-  ];
-  const profilePairOptions = [
-    { value: null, label: m.library_archive_progress_choose() },
-    ...pairs.map((item) => ({
-      value: `${item.mode}:${item.id}`,
-      label: `${progressModeLabel(item.mode)} · ${item.label || m.library_progress_unit_unspecified()}`,
-    })),
-  ];
-  return (
-    <section className="space-y-4 rounded-md border p-4">
-      <h2 className="text-xl font-semibold">{m.library_archive_progress_mapping()}</h2>
-      <details>
-        <summary className={action}>{m.library_archive_progress_source()}</summary>
-        <Evidence value={source} />
-      </details>
-      <IndependentMeasuresReadout
-        revision={source.revision}
-        measures={measures.map((item, index) => ({
-          ...item,
-          primary: index === 0,
-          label: m.library_progress_unit_unspecified(),
-          kind: measureValueKind(item.amount),
-          meaning: 'unknown',
-          recording: 'historical',
-        }))}
-      />
-      <form
-        className="space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setPair('');
-          setAdditional({});
-          setIds([]);
-          void journey.mapSubject(subject);
-        }}
-      >
-        <label className="block space-y-2">
-          <span>{m.library_archive_progress_subject()}</span>
-          <input
-            className={`${action} w-full`}
-            required
-            pattern={uuid}
-            value={subject}
-            disabled={locked}
-            onChange={(event) => {
-              setSubject(event.target.value);
-              changed();
-            }}
-          />
-        </label>
-        <button className={action} disabled={locked}>
-          {m.library_archive_progress_profile()}
-        </button>
-      </form>
-      {snap.mappedSubject ? (
-        <>
-          <EvidenceDetails value={{ subjectId: snap.mappedSubject }} />
-          {!pairs.length ? (
-            <p>{m.library_archive_progress_unsupported()}</p>
-          ) : (
-            <Field className="block space-y-2">
-              <FieldLabel id={`${profilePairSelectId}-label`} htmlFor={profilePairSelectId}>
-                {m.library_archive_progress_pair()}
-              </FieldLabel>
-              <Select<string, false>
-                items={profilePairOptions}
-                disabled={locked}
-                value={pair || null}
-                onValueChange={(value) => {
-                  setPair(value ?? '');
-                  setAdditional({});
-                  setIds([]);
-                  changed();
-                }}
-              >
-                <SelectTrigger
-                  id={profilePairSelectId}
-                  aria-labelledby={`${profilePairSelectId}-label`}
-                  className={`${action} w-full`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false}>
-                  <SelectGroup>
-                    {profilePairOptions.map(({ value, label, ...itemProps }) => (
-                      <SelectItem key={value ?? ''} value={value} {...itemProps}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-        </>
-      ) : null}
-      {choice?.mode === 'scalar_amount'
-        ? (source.additional_measures ?? []).map((measure, index) => {
-            const additionalMeasureOptions = [
-              { value: null, label: m.library_archive_progress_omit() },
-              ...pairs
-                .filter(
-                  (item) =>
-                    item.mode === 'scalar_amount' &&
-                    item.id !== choice.id &&
-                    !Object.entries(additional).some(
-                      ([sourceUnit, unit]) => sourceUnit !== measure.unit && unit === item.id,
-                    ),
-                )
-                .map((item) => ({ value: item.id, label: item.label || m.library_progress_unit_unspecified() })),
-            ];
-            return (
-              <Field key={measure.unit} className="block space-y-2">
-                <FieldLabel
-                  id={`${additionalMeasureSelectId}-${measure.unit}-label`}
-                  htmlFor={`${additionalMeasureSelectId}-${measure.unit}`}
-                >
-                  {
-                    <>
-                      {m.library_archive_present_item({ number: index + 1 })} · {m.library_progress_unit_unspecified()}{' '}
-                      · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
-                      {measure.total ?? m.library_progress_measure_absent()}
-                    </>
-                  }
-                </FieldLabel>
-                <Select<string, false>
-                  items={additionalMeasureOptions}
-                  disabled={locked}
-                  value={additional[measure.unit] || null}
-                  onValueChange={(value) => {
-                    setAdditional({ ...additional, [measure.unit]: value ?? '' });
-                    changed();
-                  }}
-                >
-                  <SelectTrigger
-                    id={`${additionalMeasureSelectId}-${measure.unit}`}
-                    aria-labelledby={`${additionalMeasureSelectId}-${measure.unit}-label`}
-                    className={`${action} w-full`}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent alignItemWithTrigger={false}>
-                    <SelectGroup>
-                      {additionalMeasureOptions.map(({ value, label, ...itemProps }) => (
-                        <SelectItem key={value ?? ''} value={value} {...itemProps}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </Field>
-            );
-          })
-        : null}
-      <section className="space-y-3">
-        <h3 className="font-semibold">{m.library_archive_progress_units()}</h3>
-        <p>{m.library_archive_progress_unit_help({ count: source.completed_unit_count })}</p>
-        <EvidenceDetails value={snap.units} />
-        {choice?.mode === 'completed_units' && body ? (
-          <>
-            <button
-              className={action}
-              disabled={locked}
-              onClick={() =>
-                void journey.review(
-                  { ...body, unitIds: snap.units!.units.map(({ evidence }) => evidence.unit_id) },
-                  true,
-                )
-              }
-            >
-              {m.library_archive_progress_membership()}
-            </button>
-            <EpisodeChecklistEditor
-              visit={visit}
-              busy={locked}
-              onToggle={(id) => {
-                if (ids.includes(id)) setIds(ids.filter((value) => value !== id));
-                else if (ids.length < 20) setIds([...ids, id]);
-                changed();
-              }}
-              onClear={() => {
-                setIds([]);
-                changed();
-              }}
-              onReview={() => body && void journey.review(body)}
-            />
-            <p>{m.library_archive_progress_selected({ count: ids.length })}</p>
-          </>
-        ) : null}
-        <Pager
-          next={snap.units?.next}
-          disabled={locked}
-          onFirst={() => void journey.page('units')}
-          onNext={(after) => void journey.page('units', after)}
-        />
-      </section>
-      <button className={action} disabled={locked || !body} onClick={() => body && void journey.review(body)}>
-        {m.library_archive_progress_review()}
-      </button>
-    </section>
   );
 }
