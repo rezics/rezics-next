@@ -83,7 +83,11 @@ function respond(message: any): void {
       goals.set(p.threadId, goal);
       result = { goal };
       emit({ method: 'thread/goal/updated', params: { threadId: p.threadId, goal } });
-      if (process.env.FAKE_GOAL_AUTO_START_ON_ACTIVE === '1' && previous?.status === 'paused' && p.status === 'active') {
+      if (
+        process.env.FAKE_GOAL_AUTO_START_ON_ACTIVE === '1' &&
+        previous?.status === 'paused' &&
+        p.status === 'active'
+      ) {
         const turn = { id: `turn-${++nextTurn}`, status: 'inProgress', source: 'goal' };
         turns.set(p.threadId, turn);
         emit({ method: 'turn/started', params: { threadId: p.threadId, turn } });
@@ -141,6 +145,7 @@ function respond(message: any): void {
     }
     case 'test/notify':
       if (p.method === 'turn/completed') turns.delete(p.params.threadId);
+      if (p.method === 'turn/started') turns.set(p.params.threadId, p.params.turn);
       if (p.method === 'item/started' || p.method === 'item/completed')
         persistItem(p.params.threadId, p.params.turnId, p.params.item);
       emit(p);
