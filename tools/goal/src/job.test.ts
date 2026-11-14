@@ -203,8 +203,12 @@ async function typingRetryFixture(
     ...(kernelOutput ? { REMOTE_CHECK_HOST: 'fixture-host', REZICS_CHECK_RUN: outputRun } : {}),
   };
   recordWorkerCheckTypingInputs(env, worktree, physicalRunId, compiler);
-  const complete = options.setupFailure ? undefined : beginTypingInputReceipt(worktree, env, compiler);
-  if (!options.setupFailure && !complete) throw new Error('Compiler fixture did not capture its inputs');
+  const complete =
+    options.setupFailure && !options.legacySourceRepair
+      ? undefined
+      : beginTypingInputReceipt(worktree, env, options.legacySourceRepair ? ['bun', 'scripts/typecheck.ts'] : compiler);
+  if ((!options.setupFailure || options.legacySourceRepair) && !complete)
+    throw new Error('Compiler fixture did not capture its inputs');
   if (kernelOutput) {
     mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
     const artifactStage = process.env.REZICS_CHECK_ARTIFACTS_DIR;
@@ -238,14 +242,14 @@ async function typingRetryFixture(
       bundleSha256: outputTreeDigest(bundle),
     });
   }
-  complete?.(1);
+  complete?.(options.legacySourceRepair ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1);
 
   const log = join(worktree, '.temp/goal/checks', `${checkId}.log`);
   mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
   writeFileSync(
     log,
     options.legacySourceRepair
-      ? "kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'\n"
+      ? "kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'\nerror: script \"typecheck\" exited with code 75\n"
       : options.setupFailure === 'generic'
       ? 'remote-check: connection failed before a result\n'
       : options.setupFailure
@@ -473,6 +477,11 @@ test('an accepted source amendment retries only for a retained terminal missing-
       false,
     );
     expect(proven.listedCheckId).not.toBe(proven.checkId);
+    const setupLogPath = join(proven.task.worktree, '.temp/goal/checks', `${proven.checkId}.log`);
+    const retainedSetupLog = readFileSync(setupLogPath, 'utf8');
+    writeFileSync(setupLogPath, 'error: script "typecheck" exited with code 75\n');
+    expect(reconcileQueuedTypingFailureRetry(h.tasks, proven.ref)).toBe(false);
+    writeFileSync(setupLogPath, retainedSetupLog);
     expect(reconcileQueuedTypingFailureRetry(h.tasks, proven.ref)).toBe(true);
     expect(reconcileQueuedTypingFailureRetry(h.tasks, proven.ref)).toBe(true);
     expect(h.store.retryIntent(proven.ref)?.status).toBe('pending');
@@ -504,12 +513,22 @@ test('an accepted source amendment retries only for a retained terminal missing-
     expect(
       readFileSync(join(proven.task.worktree, setupResult.log), 'utf8'),
     ).toContain("phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'");
-    expect(
-      readWorkerCheckHostStamp(
-        workerCheckBudgetDirectory(h.settings.stateDirectory, proven.task.id, proven.ref.attempt),
-        '1',
-      ).setupFailure,
-    ).toBeUndefined();
+    const setupStamp = readWorkerCheckHostStamp(
+      workerCheckBudgetDirectory(h.settings.stateDirectory, proven.task.id, proven.ref.attempt),
+      '1',
+    );
+    expect(setupStamp).toMatchObject({
+      exitCode: WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
+      includedTypecheck: true,
+      typecheckFailed: true,
+      typingInputs: {
+        physicalRunId: proven.physicalRunId,
+        sourceStable: true,
+        exitCode: WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT,
+        command: proven.compiler,
+      },
+    });
+    expect(setupStamp.setupFailure).toBeUndefined();
     expect(
       JSON.parse(
         readFileSync(

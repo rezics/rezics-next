@@ -2351,6 +2351,26 @@ function originalAttemptCheckMatchesPendingCommand(input: {
   });
 }
 
+function retainedSetupTypingReceiptMatches(
+  record: WorkerCheckHostStampRecord,
+  request: NonNullable<WorkerCheckHostStampRecord['typingRequest']>,
+  physicalRunId: string,
+): boolean {
+  if (record.typingInputs === undefined) return record.typecheckFailed !== true;
+  const receipt: unknown = record.typingInputs;
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) return false;
+  const value = receipt as Partial<TypingInputReceipt>;
+  return (
+    value.version === 1 &&
+    value.physicalRunId === physicalRunId &&
+    value.sourceStable === true &&
+    value.exitCode === WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT &&
+    checkEvidenceArgv(value.command) &&
+    isDeepStrictEqual(value.command, request.command) &&
+    checkEvidenceArgv(value.compilerCommand)
+  );
+}
+
 /** Admit only retained migration setup evidence from this attempt, without treating setup as a compiler result. */
 function terminalMigrationSetupDefect(
   input: {
@@ -2409,12 +2429,11 @@ function terminalMigrationSetupDefect(
       return Boolean(
         request &&
         record.exitCode === WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT &&
-        record.includedTypecheck !== false &&
-        record.typecheckFailed !== true &&
-        record.typingInputs === undefined &&
+        record.includedTypecheck === true &&
         request.physicalRunId === result.physicalRunId &&
         JSON.stringify(request.command) === JSON.stringify(settled.command) &&
         JSON.stringify(request.command) === JSON.stringify(result.argv) &&
+        retainedSetupTypingReceiptMatches(record, request, result.physicalRunId) &&
         (record.setupFailure === undefined ||
           (record.setupFailure !== null &&
             record.setupFailure.kind === 'missing-kernel-migration-up-marker' &&
@@ -2445,14 +2464,17 @@ function terminalMigrationSetupDefect(
     const log = boundedLog(record.log);
     const defect = retainedKernelMigrationHeaderDefect(input.worktree, log);
     if (!defect) continue;
-    const failure = record.setupFailure;
-    if (
-      failure !== undefined &&
-      (failure.path !== defect.path ||
-        failure.diagnostic !== defect.line ||
-        failure.logDigest !== createHash('sha256').update(log).digest('hex'))
-    )
-      continue;
+    const failure: unknown = record.setupFailure;
+    if (failure !== undefined) {
+      if (!failure || typeof failure !== 'object' || Array.isArray(failure)) continue;
+      const retained = failure as NonNullable<WorkerCheckHostStampRecord['setupFailure']>;
+      if (
+        retained.path !== defect.path ||
+        retained.diagnostic !== defect.line ||
+        retained.logDigest !== createHash('sha256').update(log).digest('hex')
+      )
+        continue;
+    }
     const history = readCheckEvidence(
       join(input.worktree, '.temp', 'goal', 'checks', 'custody', 'history', `${checkId}.${result.physicalRunId}.json`),
     );
