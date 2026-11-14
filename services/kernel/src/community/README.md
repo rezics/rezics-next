@@ -10,6 +10,8 @@ Current Realm and Space lifecycle/revision changes and Realm ban writes advance 
 authority epoch in the same native transaction. Content records Realm and Space homes only when the exact target
 read traverses that ancestry, then compares and locks those recorded homes during final Book activation. This
 invalidation does not replace Community's current read decision or create a cross-home permission transaction.
+Decision: `realm_member` inserts, interval/role updates and deletions advance the same logical home's publication
+authority epoch in that transaction; rollback retains the prior basis and unrelated homes stay unchanged.
 
 ## Declaration and ambient operands
 

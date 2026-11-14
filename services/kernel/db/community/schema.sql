@@ -2540,6 +2540,13 @@ CREATE TRIGGER realm_member_count_no_truncate BEFORE TRUNCATE ON community.realm
 
 
 --
+-- Name: realm_member realm_member_publication_authority; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER realm_member_publication_authority AFTER INSERT OR DELETE OR UPDATE ON community.realm_member FOR EACH ROW EXECUTE FUNCTION core.bump_publication_authority_route_row();
+
+
+--
 -- Name: realm_member_terminal realm_member_terminal_immutable; Type: TRIGGER; Schema: community; Owner: -
 --
 
