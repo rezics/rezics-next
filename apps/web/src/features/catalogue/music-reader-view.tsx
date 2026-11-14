@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { useSubjectCommunityReading } from '../pages/subject-community-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { ContentItemHeading } from '@rezics/ui/content-item';
@@ -7,11 +7,12 @@ import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateValue } from '../pages/data';
 import { linkClass, linkColor, PlainLink, type PageLink, type Stmt } from '../pages/shared';
-import { loadAlbumEditions, loadAlbumProfile } from './album-profile-actions';
+import { loadAlbumEditions } from './album-profile-actions';
 import { AlbumProfileEntry } from './album-profile-entry';
 import {
   musicReaderVisit,
   type AlbumEditionRead,
+  type AlbumDefinitions,
   type MusicReaderVisit,
   type ProfileBound,
   type ProfileField,
@@ -22,7 +23,6 @@ import {
   type ProfileSourceRecord,
 } from './music-reader';
 import type { SubjectRead } from '@rezics/client';
-import type { Release } from '@rezics/definitions';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
@@ -232,19 +232,29 @@ export function ProfileReaderGroups({
   );
 }
 
-function EditionList({ editions, locale }: { editions: AlbumEditionRead; locale: string }) {
+function EditionList({
+  editions,
+  locale,
+  onRetry,
+}: {
+  editions: AlbumEditionRead | undefined;
+  locale: string;
+  onRetry?: () => void;
+}) {
   const o = options(locale);
   return (
     <section data-slot="music-album-editions" className="min-w-0 space-y-3">
       <ContentItemHeading level={2} className="text-xl font-semibold">
         {m.subject_editions({}, o)}
       </ContentItemHeading>
-      {!editions.ok ? (
+      {!editions ? (
+        <p role="status">{m.candidate_loading({}, o)}</p>
+      ) : !editions.ok ? (
         <p role="alert">
-          {editions.reason === 'withheld' ? m.music_reader_denied({}, o) : m.music_reader_unavailable({}, o)}
+          {editions.reason === 'withheld' ? m.music_reader_denied({}, o) : m.album_tracks_unavailable({}, o)}
         </p>
       ) : !editions.admitted ? (
-        <p role="status">{m.music_reader_unavailable({}, o)}</p>
+        <p role="status">{m.album_tracks_unconfigured({}, o)}</p>
       ) : editions.rows.length ? (
         <ul className="min-w-0 space-y-2">
           {editions.rows.map((row) => {
@@ -264,8 +274,13 @@ function EditionList({ editions, locale }: { editions: AlbumEditionRead; locale:
           })}
         </ul>
       ) : (
-        <p role="status">{m.music_reader_empty({}, o)}</p>
+        <p role="status">{m.music_context_empty_page({}, o)}</p>
       )}
+      {editions && !editions.ok && onRetry ? (
+        <button type="button" className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} onClick={onRetry}>
+          {m.correction_retry({}, o)}
+        </button>
+      ) : null}
     </section>
   );
 }
@@ -282,7 +297,7 @@ export function MusicAlbumReader({
   link = PlainLink,
 }: {
   locale: string;
-  release?: Release;
+  release?: AlbumDefinitions;
   public?: SubjectRead | null;
   bounds?: readonly ProfileBound[];
   editions?: AlbumEditionRead;
@@ -329,7 +344,7 @@ export function MusicAlbumReader({
         />
       ) : null}
       {visit.state === 'ready' || visit.state === 'empty' ? (
-        <EditionList editions={visit.editions} locale={locale} />
+        <EditionList editions={visit.editions} locale={locale} {...(onRetry ? { onRetry } : {})} />
       ) : null}
       <ProfileBoundNotes bounds={visit.bounds} locale={locale} />
       <ProfileSourceList sources={visit.sources} locale={locale} />
@@ -348,6 +363,7 @@ export function MusicAlbumOverview({
   reader = null,
   locale,
   public: publicRead,
+  release,
   bounds,
   link = PlainLink,
 }: {
@@ -355,30 +371,31 @@ export function MusicAlbumOverview({
   reader?: string | null;
   locale: string;
   public: SubjectRead;
+  release?: AlbumDefinitions | undefined;
   bounds?: readonly ProfileBound[];
   link?: PageLink;
 }) {
   const instance = useId();
+  const origin = source ?? publicRead;
+  const [definitions, setDefinitions] = useState({ source: origin, release, revision: 0 });
+  const revision = definitions.source !== origin ? 0 : definitions.revision + Number(definitions.release !== release);
+  if (definitions.source !== origin || definitions.release !== release)
+    setDefinitions({ source: origin, release, revision });
   const reading = useSubjectCommunityReading({
-    source: source ?? publicRead,
+    source: origin,
     reader,
-    descriptor: JSON.stringify([publicRead.subject.id, locale]),
+    descriptor: JSON.stringify([publicRead.subject.id, publicRead.subject.context, locale, revision]),
   });
   const query = useQuery({
     queryKey: ['music-album-reader', instance, publicRead.subject.id, locale, reading.key],
-    enabled: reading.available,
+    enabled: reading.available && !!release && !!publicRead.subject.context,
     queryFn: async () => {
       if (!reading.isCurrent()) throw new Error('Retired album source');
-      const result = await loadAlbumProfile({ data: publicRead.subject.id });
+      const editions = await loadAlbumEditions({
+        data: { id: publicRead.subject.id, context: publicRead.subject.context! },
+      });
       if (!reading.isCurrent()) throw new Error('Retired album source');
-      const editions =
-        result.ok && publicRead.subject.context
-          ? await loadAlbumEditions({
-              data: { id: publicRead.subject.id, context: publicRead.subject.context },
-            })
-          : undefined;
-      if (!reading.isCurrent()) throw new Error('Retired album source');
-      return { profile: result, editions };
+      return editions;
     },
     retry: false,
     staleTime: Infinity,
@@ -387,10 +404,12 @@ export function MusicAlbumOverview({
     refetchOnReconnect: false,
   });
   if (!reading.available) return <p role="status">{m.music_reader_stale({}, options(locale))}</p>;
-  const profile = query.data?.profile;
-  const release = profile?.ok ? profile.release : undefined;
-  const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
-  const editions = query.data?.editions;
+  const editions: AlbumEditionRead | undefined =
+    !publicRead.subject.context || query.isError
+      ? { ok: false, reason: 'unavailable' }
+      : query.isFetching
+        ? undefined
+        : query.data;
   return (
     <MusicAlbumReader
       locale={locale}
@@ -398,9 +417,9 @@ export function MusicAlbumOverview({
       {...(release ? { release } : {})}
       {...(bounds ? { bounds } : {})}
       {...(editions ? { editions } : {})}
-      {...(reason ? { reason } : {})}
-      {...(query.isPending ? { loading: true } : {})}
-      onRetry={() => void query.refetch()}
+      {...(release && publicRead.subject.context
+        ? { onRetry: () => void query.refetch({ cancelRefetch: false }) }
+        : {})}
       link={link}
     />
   );

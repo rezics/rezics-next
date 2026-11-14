@@ -35,6 +35,21 @@ first-window restart instead. Previous explicitly revisits a successful address 
 including a cursor already seen on forward traversal; every accepted revisit still counts toward the 64-window fence. An absent next token never supplies a catalogue total. No edit, candidate selection, provider
 login or private Library action occurs.
 
+## Subject preparation handoffs
+
+Decision: Subject supplies undefined to Game for both absent preferences and the shared `defaultReader` sentinel;
+the first actual zero or nonzero setting prepares the existing reading. Equal actual values retain it; a later
+different value retires it. Mounted Subject regressions own this caller boundary as well as pending native windows,
+selected edition inspection and disclosure.
+
+Album facts use the same Subject page's installed immutable definitions immediately. The overview does not reread
+the album profile. Its independent native Edition request retains current Subject, definitions and inverse
+`schema:releaseOf` admission, and explicit Retry repeats that address. Undefined Edition data means preparing;
+failure, unsupported configuration, an admitted empty window and rows remain distinct. Neither pending nor failed
+Editions suppresses composed facts or supplies a catalogue total. Source, viewer, locale, Context or installed
+definitions replacement retires the observation and its late results; a fresh page source establishes a new reading.
+Track reading remains independent. Existing Album and Game stories remain the visual review surfaces.
+
 Game dates consume shared time presentation plus release-fidelity's explicit TBA meaning. Only an absent calendar
 uses the native Gregorian default; explicit non-Gregorian calendars stay unsupported. Signed years, precision,
 timezone and uncertainty are shown even when the shared helper intentionally omits a structured date.

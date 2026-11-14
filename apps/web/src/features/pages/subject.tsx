@@ -1158,7 +1158,7 @@ export function SubjectPage({
           context={page.context?.id ?? read.subject.context}
           locale={locale}
           {...(realm !== undefined ? { realm } : {})}
-          spoiler={reader?.spoilerLevel}
+          spoiler={reader && reader !== defaultReader ? reader.spoilerLevel : undefined}
           {...(returnCheck?.selection ? { returnSelection: returnCheck.selection } : {})}
           {...(gameInitial ? { initial: gameInitial } : {})}
         />
@@ -1528,6 +1528,7 @@ export function SubjectPage({
                         reader={page.requestedReader ?? null}
                         locale={locale}
                         public={composedSubjectRead(read)}
+                        release={releasedDefinitions}
                         bounds={boundedProfileRelations(page)}
                         link={ContextLink}
                       />

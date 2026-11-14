@@ -19,6 +19,9 @@ export type ProfileReaderState =
   | 'stale'
   | 'invalid';
 
+/** The page installs only these immutable Release fields; overview grouping needs no active pointer. */
+export type AlbumDefinitions = Pick<Release, 'types' | 'properties'>;
+
 export type ProfileSourceRecord = {
   name: string;
   url: string;
@@ -86,7 +89,8 @@ export type MusicReaderVisit = {
   groups: ProfileGroup[];
   sources: ProfileSourceRecord[];
   bounds: ProfileBound[];
-  editions: AlbumEditionRead;
+  /** Undefined means the independent native window has not prepared. */
+  editions: AlbumEditionRead | undefined;
   correction?: { id: string; href: string };
 };
 
@@ -157,7 +161,7 @@ export function profileLibraryControls(release: Release, type: string): ProfileL
 }
 
 export function profileFieldLabel(
-  release: Release,
+  release: AlbumDefinitions,
   property: string,
   locale: string,
   related?: SubjectRead['related'],
@@ -238,7 +242,7 @@ export function composedSubjectRead(read: {
 }
 
 export function profileFields(
-  release: Release,
+  release: AlbumDefinitions,
   publicRead: SubjectRead,
   properties: readonly string[],
   locale: string,
@@ -349,12 +353,9 @@ export async function readAlbumEditions(
   }
 }
 
-function emptyEditions(release?: Release): Extract<AlbumEditionRead, { ok: true }> {
-  return { ok: true, admitted: !!release && albumEditionsAdmitted(release), rows: [], next: null, caughtUp: true };
-}
-
-function musicGroups(release: Release): Record<string, string[]> {
-  const fields = albumFields(release);
+function musicGroups(release: AlbumDefinitions): Record<string, string[]> {
+  // The correction owner's grouping consumes only Types and properties from its full Release contract.
+  const fields = albumFields(release as Release);
   const credits = fields.relations.filter((id) => release.properties[id]?.relation?.group === 'credit');
   return {
     dates: fields.scalar.filter((id) => release.properties[id]?.datatype === 'time'),
@@ -368,7 +369,7 @@ function musicGroups(release: Release): Record<string, string[]> {
 
 export function musicReaderVisit(input: {
   locale: string;
-  release?: Release;
+  release?: AlbumDefinitions;
   public?: SubjectRead | null;
   reason?: Exclude<ProfileReaderState, 'ready' | 'empty'>;
   bounds?: readonly ProfileBound[];
@@ -377,15 +378,15 @@ export function musicReaderVisit(input: {
 }): MusicReaderVisit {
   const library: ProfileLibrary = { admitted: false, states: [], copies: false, progress: false };
   const unpublished = { tracks: true as const, library: true as const };
-  const editions = input.editions ?? emptyEditions(input.release);
+  const editions = input.editions;
   const bounds = [
     ...(input.bounds ?? []),
-    ...(editions.ok && editions.admitted
+    ...(editions?.ok && editions.admitted
       ? [
           {
             property: albumEditionProperty,
             loaded: editions.rows.length,
-            complete: editions.next === null,
+            complete: editions.next === null && editions.caughtUp,
             ...(editions.next ? { next: editions.next } : {}),
           },
         ]
