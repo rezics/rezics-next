@@ -98,53 +98,6 @@ const THREAD_ITEM_TYPES = new Set([
   'contextCompaction',
 ]);
 
-/** The 0.169 protocol carries item origin as a ThreadItem discriminant, not its text. */
-export function userMessageTurn(notification: Notification): { threadId: string; turnId: string } | null {
-  if (notification.method !== 'item/started' && notification.method !== 'item/completed') return null;
-  const params = notification.params;
-  if (
-    !params ||
-    typeof params.threadId !== 'string' ||
-    !params.threadId ||
-    typeof params.turnId !== 'string' ||
-    !params.turnId ||
-    params.item?.type !== 'userMessage'
-  )
-    return null;
-  return { threadId: params.threadId, turnId: params.turnId };
-}
-
-function userMessageItem(item: unknown): boolean {
-  return Boolean(
-    item &&
-      typeof item === 'object' &&
-      !Array.isArray(item) &&
-      (item as { type?: unknown }).type === 'userMessage',
-  );
-}
-
-const THREAD_ITEM_TYPES = new Set([
-  'userMessage',
-  'hookPrompt',
-  'agentMessage',
-  'functionCallOutput',
-  'plan',
-  'reasoning',
-  'commandExecution',
-  'fileChange',
-  'mcpToolCall',
-  'dynamicToolCall',
-  'collabAgentToolCall',
-  'subAgentActivity',
-  'webSearch',
-  'imageView',
-  'sleep',
-  'imageGeneration',
-  'enteredReviewMode',
-  'exitedReviewMode',
-  'contextCompaction',
-]);
-
 /** Provider-facing manager sessions: connection cache, concrete Codex/Claude requests and viewer argv. */
 export class ManagerSessionTransport {
   private pools = new Map<string, Promise<AppServer>>();
