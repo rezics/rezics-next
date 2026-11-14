@@ -46,12 +46,17 @@ def source(record):
     paths = record['ownedPaths']
     for field, args in (
         ('head', ['rev-parse', 'HEAD']),
+        ('committedDiffStat', ['diff', '--stat', record.get('baseCommit') or 'HEAD', 'HEAD', '--', *paths]),
+        ('committedDiff', ['diff', '--binary', '--full-index', record.get('baseCommit') or 'HEAD', 'HEAD', '--', *paths]),
         ('diffStat', ['diff', '--stat', 'HEAD', '--', *paths]),
         ('trackedDiff', ['diff', '--binary', '--full-index', 'HEAD', '--', *paths]),
         ('untrackedPaths', ['ls-files', '--others', '--exclude-standard', '-z', '--', *paths]),
     ):
         if not paths and field != 'head':
             result[field] = [] if field == 'untrackedPaths' else ''
+            continue
+        if field in {'committedDiffStat', 'committedDiff'} and not record.get('baseCommit'):
+            result.setdefault('errors', {})[field] = 'launch baseline commit is unavailable'
             continue
         try:
             call = subprocess.run(['git', '-C', record['worktree'], *args], capture_output=True,
@@ -78,6 +83,29 @@ def source(record):
             result['untrackedFiles'][name] = entry
         except OSError as error:
             result.setdefault('errors', {})['untracked:' + name] = str(error)
+    committed_diff = result.get('committedDiff')
+    result['committedSource'] = None if committed_diff is None else bool(committed_diff)
+    tracked_diff = result.get('trackedDiff')
+    untracked_paths = result.get('untrackedPaths')
+    if tracked_diff or untracked_paths:
+        result['retainedEdits'] = True
+    elif tracked_diff is not None and untracked_paths is not None:
+        result['retainedEdits'] = False
+    else:
+        result['retainedEdits'] = None
+    complete_capture = all(field in result for field in (
+        'head', 'committedDiff', 'trackedDiff', 'untrackedPaths',
+    )) and not result.get('errors')
+    if not complete_capture:
+        result['classification'] = 'unavailable'
+    elif result['committedSource'] and result['retainedEdits']:
+        result['classification'] = 'committed-source-and-retained-edits'
+    elif result['committedSource']:
+        result['classification'] = 'committed-source'
+    elif result['retainedEdits']:
+        result['classification'] = 'retained-edits'
+    else:
+        result['classification'] = 'no-source'
     return result
 
 
@@ -135,9 +163,13 @@ def remove_writing(record, state):
 def retain_evidence(completion, record, retry_source):
     # A failed final read must not erase the runner's last separately observed source.
     if 'source' in record:
+        previous_checkpoint = completion.get('sourceCheckpoint')
+        if previous_checkpoint is not None and previous_checkpoint != record['source']:
+            completion.setdefault('sourceCheckpointHistory', []).append(previous_checkpoint)
         completion['sourceCheckpoint'] = record['source']
     previous = completion.get('source')
-    if previous is None or (retry_source and previous.get('errors')):
+    if (previous is None or 'classification' not in previous
+            or (retry_source and previous.get('errors'))):
         if previous is not None:
             completion.setdefault('sourceAttempts', []).append(previous)
         try:
@@ -154,12 +186,22 @@ def retain_evidence(completion, record, retry_source):
     if 'nextOutcomeProposal' in record:
         completion['nextOutcomeProposal'] = record['nextOutcomeProposal']
     execution = completion.setdefault('execution', {})
+    for old, current in (('runnerState', 'state'), ('endedAt', 'endedAt'), ('exitCode', 'exitCode')):
+        if current not in execution and old in completion:
+            execution[current] = completion[old]
     # Service exit belongs to the runner, not necessarily to its original source writer.
     # Preserve only observed execution/cancellation fields; absence grants no authorization.
-    execution.update({key: record[key] for key in (
+    for key in (
         'state', 'identity', 'startedAt', 'endedAt', 'exitCode', 'error',
         'cancelled', 'cancelledAt', 'cancelReason', 'cancellation',
-    ) if key in record})
+    ):
+        if key not in record:
+            continue
+        if record[key] is None and execution.get(key) is not None:
+            continue
+        execution[key] = record[key]
+    exit_code = execution.get('exitCode')
+    execution['resultAvailable'] = isinstance(exit_code, int) and not isinstance(exit_code, bool)
     service = {key: os.environ[key] for key in ('SERVICE_RESULT', 'EXIT_CODE', 'EXIT_STATUS') if key in os.environ}
     if service:
         execution.setdefault('service', {}).update(service)
@@ -184,8 +226,22 @@ def finish(path, *, main, state, bun=None, retry_source=False):
             'baseCommit': record.get('baseCommit'), 'ownedPaths': record['ownedPaths'],
             'identity': record.get('identity'), 'observedAt': now(),
             'nextOutcomeProposal': record.get('nextOutcomeProposal'),
-            'acceptance': 'Deferred. This is retained source and a worker handoff, not accepted output.',
+            'acceptance': 'Deferred. Source and execution observations are recorded separately; acceptance remains pending.',
         }
+        # Keep the launch's original manager as attribution, separately from the eventual inbox recipient.
+        completion.setdefault('sourceManager', record.get('sourceManager') or record['manager'])
+        if isinstance(completion.get('delivery'), dict):
+            delivery = completion['delivery']
+            if not delivery.get('sourceManager'):
+                delivery['sourceManager'] = completion['sourceManager']
+            # Older helpers named the recipient recipientManager; preserve that handoff attribution.
+            legacy_recipient = (delivery.get('recipientManager') or delivery.get('recipient')
+                                or completion.get('recipientManager') or completion.get('recipient')
+                                or completion['sourceManager'])
+            if not delivery.get('recipient'):
+                delivery['recipient'] = legacy_recipient
+            if not completion.get('recipient'):
+                completion['recipient'] = legacy_recipient
         retain_evidence(completion, record, retry_source)
         # Evidence survives even if cleanup, the native helper or this callback is interrupted.
         atomic(target, completion)
@@ -208,7 +264,14 @@ def finish(path, *, main, state, bun=None, retry_source=False):
                 delivery = json.loads(call.stdout)
                 if not isinstance(delivery, dict) or not isinstance(delivery.get('id'), int) or delivery['id'] < 1:
                     raise ValueError('native helper returned no inbox row id')
-                completion['delivery'] = {**delivery, 'deliveredAt': now()}
+                recipient = delivery.get('recipient') or completion['sourceManager']
+                if not isinstance(recipient, str) or not recipient:
+                    raise ValueError('native helper returned no inbox recipient')
+                completion['recipient'] = recipient
+                completion['delivery'] = {
+                    **delivery, 'sourceManager': completion['sourceManager'], 'recipient': recipient,
+                    'deliveredAt': now(),
+                }
                 completion.pop('deliveryError', None)
             except (OSError, ValueError, RuntimeError) as error:
                 failure = {'observedAt': now(), 'cause': str(error)}
