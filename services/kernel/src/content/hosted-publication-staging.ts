@@ -128,8 +128,7 @@ export type HostedPublicationAdvanceReceipt = Readonly<{
 }>;
 
 function savedStepCheckpoint(receipt: PreparationAdvanceReceiptRow): HostedPublicationStagingCheckpoint {
-  if (receipt.result_checkpoint === null)
-    throw new HostedPublicationStagingCheckpointUnavailableError();
+  if (receipt.result_checkpoint === null) throw new HostedPublicationStagingCheckpointUnavailableError();
   return receipt.result_checkpoint;
 }
 
