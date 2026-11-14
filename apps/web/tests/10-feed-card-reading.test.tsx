@@ -126,14 +126,20 @@ test('each mixed-feed kind preserves source, occurrence, identity, preview and e
     const reply = rows[2]!;
     expect(reply.querySelector('a')?.getAttribute('href')).toContain('?post=prepared-post#post-prepared-post');
     expect(reply.textContent).toContain('Prepared reply');
+    expect(reply.querySelector('[data-feed-card-parent]')).toBeNull();
     const review = rows[3]!;
     expect(review.querySelector('a')?.getAttribute('href')).toContain('/threads/');
+    expect(review.querySelectorAll('[data-feed-card-review-context]')).toHaveLength(1);
+    expect(review.querySelectorAll('[data-feed-card-reviewed-subject]')).toHaveLength(1);
     expect(review.querySelector('[data-feed-card-reviewed-subject] a')?.getAttribute('href')).toContain(
       `/${locale}/subjects/`,
     );
     expect(rows[6]!.querySelector('a')?.getAttribute('href')).toBe(`/${locale}/spaces/prepared-reading-room`);
-    expect(rows[6]!.querySelector('[data-feed-card-carrier]')?.textContent).toContain('Prepared carrier Realm');
-    expect(rows[6]!.querySelector('[data-feed-card-carrier] a')).toBeNull();
+    expect(rows[6]!.querySelectorAll('[data-home-carrier-state]')).toHaveLength(1);
+    expect(rows[6]!.textContent?.match(/Prepared carrier Realm/g)).toHaveLength(1);
+    expect(rows[6]!.querySelector('[data-home-carrier-link]')?.getAttribute('href')).toBe(
+      `/${locale}/realms/prepared-realm`,
+    );
     expect(rows[7]!.querySelector('[data-content-item-slot="actions"] a')?.getAttribute('href')).toBe(
       homeFeedResume(items[7]!, locale),
     );
@@ -149,11 +155,24 @@ test('each mixed-feed kind preserves source, occurrence, identity, preview and e
     );
     const reviewPost = render([reviewReply()], locale);
     const postRow = reviewPost.document.querySelector('li')!;
+    for (const selector of [
+      'h2',
+      '[data-feed-card-review-context]',
+      '[data-feed-card-reviewed-subject]',
+      '[data-feed-review-citation]',
+      '[data-feed-card-parent]',
+    ])
+      expect(postRow.querySelectorAll(selector)).toHaveLength(1);
     expect(postRow.querySelector('[data-feed-card-kind]')?.getAttribute('data-feed-card-kind')).toBe('reply');
     expect(postRow.querySelector('[data-feed-card-reviewed-subject] a')?.getAttribute('href')).toContain(
       `/${locale}/subjects/`,
     );
     expect(postRow.querySelector('[data-question-id]')?.getAttribute('data-units')).toBe('17');
+    expect(postRow.querySelector('[data-question-id]')?.getAttribute('data-question-scale-max')).toBe('20');
+    expect(postRow.querySelector('[data-feed-review-citation]')?.textContent).toContain(
+      m.subject_community_recorded_scale({ min: '0', max: '20', step: '1' }, { locale }),
+    );
+    expect(postRow.querySelector('[data-feed-card-parent]')?.textContent).not.toContain('The parent reveals the ending');
     expect(postRow.querySelector('[data-feed-card-parent-post]')?.getAttribute('href')).toContain(
       '?post=review-parent#post-review-parent',
     );
@@ -218,7 +237,7 @@ test('missing account and reviewed-Subject targets stay unlinked while native Sp
   expect(rows[1]!.querySelector('a')?.getAttribute('href')).toBe('/en/spaces/prepared-reading-room');
   expect(rows[2]!.querySelector('[data-feed-card-reviewed-subject]')).toBeNull();
   expect(rows[3]!.querySelector('[data-feed-card-kind]')?.getAttribute('data-feed-card-kind')).toBe('subject');
-  expect(window.document.body.textContent).not.toContain('/realms/');
+  expect(rows[1]!.querySelector('[data-home-carrier-link]')?.getAttribute('href')).toBe('/en/realms/prepared-realm');
   window.happyDOM.abort();
 });
 
@@ -382,8 +401,15 @@ test('independent card controls survive long names, row retirement and review-po
       expect(host.textContent).toContain('How clear was the ending?');
       expect(host.querySelector('[data-question-id]')?.getAttribute('data-vote-revision')).toBe('4');
       expect(reveal().disabled).toBe(false);
+      expect(reveal().getAttribute('aria-expanded')).toBe('false');
       await act(async () => reveal().click());
       expect(parent().textContent).toContain('The parent reveals the ending');
+      expect(host.textContent?.match(/The parent reveals the ending/g)).toHaveLength(1);
+      expect(reveal().getAttribute('aria-expanded')).toBe('true');
+      await act(async () => reveal().click());
+      expect(parent().textContent).not.toContain('The parent reveals the ending');
+      await act(async () => reveal().click());
+      const retiredReveal = reveal();
 
       if (context.citation.state !== 'available') throw new Error('Prepared citation missing');
       const refreshed: FollowingPost = {
@@ -402,10 +428,12 @@ test('independent card controls survive long names, row retirement and review-po
         },
       };
       await act(async () => show(ready(refreshed)));
+      await act(async () => retiredReveal.click());
       expect(host.querySelector('[data-question-id]')?.getAttribute('data-units')).toBe('6');
       expect(host.querySelector('[data-question-id]')?.getAttribute('data-question-revision')).toBe('10');
       expect(parent().textContent).not.toContain('The parent reveals the ending');
       expect(reveal().disabled).toBe(false);
+      const previousViewerReveal = reveal();
       await act(async () => {
         client.setQueryData(['session'], session('reader-b'));
         show({ state: 'loading', code: 'loading' });
@@ -434,6 +462,7 @@ test('independent card controls survive long names, row retirement and review-po
         show({ state: 'loading', code: 'loading' });
       });
       await act(async () => show(ready(post)));
+      await act(async () => previousViewerReveal.click());
       expect(host.querySelector('[data-question-id]')?.getAttribute('data-units')).toBe('17');
       expect(host.querySelector('[data-question-id]')?.getAttribute('data-question-revision')).toBe('9');
       expect(reveal().disabled).toBe(false);

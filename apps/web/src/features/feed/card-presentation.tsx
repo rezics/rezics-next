@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import {
   BookOpenIcon,
   BoxesIcon,
@@ -18,6 +18,7 @@ import type { FeedItem } from '../pages/home-feed-read';
 import { accountHref, subjectHref } from '../../subject/subject-href';
 import { exactRevisionHref } from '../../threads/exact-revision-href';
 import { threadLocation } from '../../threads/thread-href';
+import { LanguageTag } from '../pages/values';
 
 export type FeedCardKind = 'work' | 'subject' | 'discussion' | 'reply' | 'review' | 'collection' | 'account' | 'space';
 
@@ -214,6 +215,7 @@ export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; local
   // Posts inherit review context from their containing thread without carrying a summary kind.
   const context = 'reviewContext' in summary ? summary.reviewContext : undefined;
   if (context) {
+    const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 20 });
     const target = context.target;
     const citation = context.citation;
     return (
@@ -234,25 +236,35 @@ export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; local
             data-question-revision={citation.question.revision}
             data-vote-revision={citation.voteRevision}
             data-units={citation.units}
+            data-question-grain={citation.question.grain}
+            data-question-scale-min={citation.question.scale.min}
+            data-question-scale-max={citation.question.scale.max}
+            data-question-display-step={citation.question.scale.displayStep}
           >
             <bdi>{citation.question.label}</bdi>
             <span> · </span>
             {m.thread_provenance_vote(
               {
-                units: new Intl.NumberFormat(locale).format(citation.units),
+                units: number.format(citation.units),
                 questionId: citation.question.id,
-                revision: new Intl.NumberFormat(locale).format(citation.voteRevision),
+                revision: number.format(citation.voteRevision),
               },
               options,
             )}
             <span> · </span>
-            {m.rating_question_revision(
-              { revision: new Intl.NumberFormat(locale).format(citation.question.revision) },
+            {m.rating_question_revision({ revision: number.format(citation.question.revision) }, options)}
+            <span> · </span>
+            {m.subject_community_recorded_scale(
+              {
+                min: number.format(citation.question.scale.min),
+                max: number.format(citation.question.scale.max),
+                step: number.format(citation.question.scale.displayStep),
+              },
               options,
             )}
           </span>
         ) : citation.state === 'absent' ? (
-          <span data-feed-review-citation="absent">{m.library_my_ratings_review_missing({}, options)}</span>
+          <span data-feed-review-citation="absent">{m.thread_review_citation_absent({}, options)}</span>
         ) : (
           <span data-feed-review-citation="withheld">{m.post_history_score_concealed({}, options)}</span>
         )}
@@ -284,13 +296,12 @@ export function FeedCardParentContext({
   origin?: FeedCardOrigin;
 }) {
   const [revealed, setRevealed] = useState(false);
+  const excerptId = useId();
   if (item.destination.kind !== 'post' || !('parentContext' in item.summary)) return null;
   const context = item.summary.parentContext;
   if (!context || context.kind !== 'reply') return null;
   const parent = context.parent;
   const options = { locale: locale as Locale };
-  if (parent.state === 'removed')
-    return <p data-feed-card-parent="removed">{m.thread_reply_parent_deleted({}, options)}</p>;
   if (parent.state === 'withheld')
     return <p data-feed-card-parent="withheld">{m.thread_reply_parent_unavailable({}, options)}</p>;
 
@@ -301,15 +312,27 @@ export function FeedCardParentContext({
     undefined,
     parent.id,
   );
+  if (parent.state === 'removed')
+    return (
+      <p data-feed-card-parent="removed">
+        <a href={parentHref} className={feedCardLinkClassName} data-feed-card-parent-post>
+          {m.thread_reply_parent_deleted({}, options)}
+        </a>
+      </p>
+    );
   const exactHref = exactRevisionHref({ postId: parent.id, revisionId: parent.revisionId }, locale);
   const authorName =
     parent.author?.displayName ||
     (parent.author?.handle ? `@${parent.author.handle}` : m.thread_author_unknown({}, options));
   const authorHandle = parent.author?.handle;
   const current = () => origin?.isCurrent() ?? true;
+  const excerptVisible = !parent.spoiler || (revealed && current());
   return (
     <section className="flex min-w-0 flex-col gap-1" data-feed-card-parent="available">
-      <span>{m.thread_reply_parent({}, options)}</span>
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2">
+        <span>{m.thread_reply_parent({}, options)}</span>
+        <LanguageTag lang={parent.language} locale={locale} />
+      </span>
       {parent.author ? (
         <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-parent-author={parent.author.id}>
           {authorHandle && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(authorHandle) ? (
@@ -322,22 +345,31 @@ export function FeedCardParentContext({
         </span>
       ) : null}
       {parent.excerpt ? (
-        parent.spoiler && !revealed ? (
-          <button
-            type="button"
-            className={feedCardLinkClassName}
-            disabled={!current()}
-            onClick={() => {
-              if (current()) setRevealed(true);
-            }}
-          >
-            {m.thread_reveal_spoiler({}, options)}
-          </button>
-        ) : (
-          <p className="whitespace-pre-line [overflow-wrap:anywhere]" lang={parent.language ?? undefined}>
-            <bdi>{parent.excerpt}</bdi>
-          </p>
-        )
+        <>
+          {parent.spoiler ? (
+            <button
+              type="button"
+              className={feedCardLinkClassName}
+              aria-expanded={excerptVisible}
+              aria-controls={excerptVisible ? excerptId : undefined}
+              disabled={!current()}
+              onClick={() => {
+                if (current()) setRevealed((value) => !value);
+              }}
+            >
+              {excerptVisible ? m.subject_spoiler_hide({}, options) : m.thread_reveal_spoiler({}, options)}
+            </button>
+          ) : null}
+          {excerptVisible ? (
+            <p
+              id={excerptId}
+              className="whitespace-pre-line [overflow-wrap:anywhere]"
+              lang={parent.language ?? undefined}
+            >
+              <bdi>{parent.excerpt}</bdi>
+            </p>
+          ) : null}
+        </>
       ) : null}
       <span className="flex min-w-0 flex-wrap gap-x-2">
         <a href={parentHref} className={feedCardLinkClassName} data-feed-card-parent-post>

@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test } from 'bun:test';
-import { FeedCardSubjectContext } from '../src/features/feed/card-presentation';
+import { ContentItem } from '@rezics/ui/content-item';
 import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
 import { homeFeedReaction } from '../src/features/feed/home-feed-reaction';
 import type { FeedItem } from '../src/features/pages/home-feed-read';
@@ -90,9 +90,7 @@ function followingPost(context?: ReviewContext): FollowingPost {
 
 function html(item: FeedItem, origin?: { key: string; isCurrent(): boolean }) {
   const presentation = homeFeedItemPresentation(item, 'en', origin);
-  return renderToStaticMarkup(
-    createElement('div', null, presentation.context, presentation.metadata, presentation.preview),
-  );
+  return renderToStaticMarkup(createElement(ContentItem, { ...presentation, headingLevel: 2 }));
 }
 
 test('review threads and following posts render only current Subject and exact citation witnesses', () => {
@@ -109,7 +107,19 @@ test('review threads and following posts render only current Subject and exact c
     expect(markup).toContain(`data-question-id="${ids.question}"`);
     expect(markup).toContain('data-question-revision="9"');
     expect(markup).toContain('data-vote-revision="4"');
+    expect(markup).toContain('Recorded scale 0–20, step 1');
+    for (const marker of ['data-feed-card-review-context', 'data-feed-card-reviewed-subject', 'data-feed-review-citation'])
+      expect(markup.match(new RegExp(marker, 'g'))).toHaveLength(1);
+    expect(markup.match(/How clear was this edition\?/g)).toHaveLength(1);
+    expect(markup.match(/<h2\b/g)).toHaveLength(1);
   }
+  const citation = populated.citation;
+  if (citation.state !== 'available') throw new Error('Prepared citation missing');
+  const fineScale = {
+    ...populated,
+    citation: { ...citation, question: { ...citation.question, scale: { min: -1, max: 1, displayStep: 0.0001 } } },
+  };
+  expect(html(review(fineScale))).toContain('Recorded scale -1–1, step 0.0001');
 });
 
 test('native target and citation states disclose independently on following posts and override discovery metadata', () => {
@@ -118,7 +128,8 @@ test('native target and citation states disclose independently on following post
   for (const target of targets) {
     for (const citation of citations) {
       for (const item of [followingPost({ target, citation }), review({ target, citation })]) {
-        const markup = renderToStaticMarkup(createElement(FeedCardSubjectContext, { item, locale: 'en' }));
+        const markup = html(item);
+        expect(markup.match(/data-feed-review-citation/g)).toHaveLength(1);
         expect(markup.includes('data-feed-card-reviewed-subject')).toBe(target.state === 'available');
         expect(markup.includes('Current Subject')).toBe(target.state === 'available');
         expect(markup.includes(ids.subject)).toBe(target.state === 'available');
@@ -126,7 +137,7 @@ test('native target and citation states disclose independently on following post
         expect(markup.includes(ids.question)).toBe(citation.state === 'available');
         expect(markup.includes('How clear was this edition?')).toBe(citation.state === 'available');
         expect(markup.includes('17 units')).toBe(citation.state === 'available');
-        expect(markup.includes('No answer is currently stored')).toBe(citation.state === 'absent');
+        expect(markup.includes('No rating was cited for this post.')).toBe(citation.state === 'absent');
         expect(markup.includes('No recorded rating is disclosed')).toBe(citation.state === 'withheld');
         expect(markup).not.toContain('Stale Subject label');
         expect(markup).not.toContain(ids.staleSubject);
@@ -149,6 +160,8 @@ test('review-post context preserves exact parent destinations and current spoile
   expect(markup).toContain('Current Subject');
   expect(markup).toContain('How clear was this edition?');
   expect(markup).toContain('Current parent author');
+  expect(markup.match(/data-feed-card-parent="available"/g)).toHaveLength(1);
+  expect(markup.match(/Current parent author/g)).toHaveLength(1);
   expect(markup).toContain('Reveal spoiler');
   expect(markup).not.toContain('Spoiler text stays hidden');
   expect(markup).toContain(`post=${ids.parent}#post-${ids.parent}`);
@@ -157,6 +170,27 @@ test('review-post context preserves exact parent destinations and current spoile
   const retired = html(item, { key: 'retired-page', isCurrent: () => false });
   expect(retired).toContain('disabled=""');
   expect(retired).not.toContain('Spoiler text stays hidden');
+});
+
+test('parent absence, removal and concealment disclose only supplied fields in the actual card', () => {
+  const post = followingPost(populated);
+  for (const parent of [{ state: 'removed', id: ids.parent }, { state: 'withheld' }] as const) {
+    const markup = html({ ...post, summary: { ...post.summary, parentContext: { kind: 'reply', parent } } });
+    expect(markup.match(/data-feed-card-parent=/g)).toHaveLength(1);
+    expect(markup.includes(`post=${ids.parent}#post-${ids.parent}`)).toBe(parent.state === 'removed');
+    expect(markup.includes('deleted post')).toBe(parent.state === 'removed');
+    expect(markup.includes('unavailable post')).toBe(parent.state === 'withheld');
+    for (const hidden of [
+      ids.author,
+      ids.parentRevision,
+      'Current parent author',
+      'Spoiler text stays hidden',
+      'Reveal spoiler',
+    ])
+      expect(markup).not.toContain(hidden);
+  }
+  const opening = html({ ...post, summary: { ...post.summary, parentContext: { kind: 'opening' } } });
+  expect(opening).not.toContain('data-feed-card-parent=');
 });
 
 test('reaction receiving preserves exact target, empty totals, viewer selection and page freshness', () => {

@@ -584,9 +584,14 @@ The existing consumers are `apps/web/src/features/feed/home-feed-item.tsx` and
 `HomeFeedActions` / `FeedActionBar` in `apps/web/src/features/feed/action-bar.tsx`, mounted by
 `apps/web/src/features/pages/home-feed.tsx`. The current native review context is the sole authority for its
 reviewed work and citation; absent, concealed or unavailable context never falls back to discovery metadata.
+
 Decision: Home composes the typed native review renderer once in metadata and the immediate-parent renderer once
 in preview; attribution owns author, account, times and image credit. Shared `PublicReviewDetails` and
 `PublicReplyParent` keep their other callers. Space carrier context comes only from the public-owner preview.
+Native absent citation copy describes an uncited post, independently of private rating storage; concealed citations
+keep their own status. Available citations retain supplied units, question/vote revisions and the recorded scale,
+even when the reviewed Subject is absent or concealed. Parent spoiler reveal and hide use the current origin;
+replacement resets disclosure and retires earlier callbacks.
 
 An available parent carries both the current exact post destination and an exact revision destination. Removed and
 withheld parents disclose only their respective admitted fields.

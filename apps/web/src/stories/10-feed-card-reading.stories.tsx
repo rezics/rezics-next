@@ -101,7 +101,11 @@ const journey: Story['play'] = async ({ canvasElement }) => {
     'href',
     expect.stringContaining('/subjects/'),
   );
-  await expect(canvasElement.querySelector('[data-feed-card-carrier] a')).toBeNull();
+  await expect(canvasElement.querySelectorAll('[data-home-carrier-state]')).toHaveLength(1);
+  await expect(canvasElement.querySelector('[data-home-carrier-link]')).toHaveAttribute(
+    'href',
+    `/${getLocale()}/realms/prepared-realm`,
+  );
   for (const element of canvasElement.querySelectorAll('a, button')) {
     await expect(element.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   }

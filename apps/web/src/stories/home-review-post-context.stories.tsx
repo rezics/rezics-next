@@ -9,7 +9,13 @@ import { getLocale } from '../paraglide/runtime.js';
 
 type FollowingPost = Extract<FeedItem, { summary: { threadId: string } }>;
 type ReviewContext = NonNullable<FollowingPost['summary']['reviewContext']>;
-type Scenario = 'populated' | 'citation-states' | 'concealed-target' | 'replacement' | 'discovery-fallback';
+type Scenario =
+  | 'populated'
+  | 'citation-states'
+  | 'concealed-target'
+  | 'concealed-parent'
+  | 'replacement'
+  | 'discovery-fallback';
 type Viewer = 'reader-a' | 'reader-b';
 
 const ids = {
@@ -81,27 +87,30 @@ function reviewPost(id: string, context: ReviewContext): FollowingPost {
   };
 }
 
+function reviewThread(context?: ReviewContext): FeedItem {
+  return {
+    id: 'prepared-discovery-review',
+    source: 'discovery',
+    key: { owner: 'content', kind: 'review', route: 0, id: ids.thread },
+    occurredAt: null,
+    summary: {
+      id: ids.thread,
+      kind: 'review',
+      title: 'Reading the ending again',
+      excerpt: 'The closing scene brought me back to the promise of the first chapter.',
+      author: { displayName: 'Review reader', handle: 'review_reader' },
+      subject: { id: ids.subject, title: 'Letters from B-612' },
+      ...(context ? { reviewContext: context } : {}),
+    },
+    destination: { kind: 'thread', id: ids.thread, title: 'Reading the ending again' },
+  };
+}
+
 function preparedRows(scenario: Scenario, revision: number, viewer: Viewer): FeedItem[] {
   const context = nativeContext(revision);
   switch (scenario) {
     case 'discovery-fallback':
-      return [
-        {
-          id: 'prepared-discovery-review',
-          source: 'discovery',
-          key: { owner: 'content', kind: 'review', route: 0, id: ids.thread },
-          occurredAt: null,
-          summary: {
-            id: ids.thread,
-            kind: 'review',
-            title: 'Reading the ending again',
-            excerpt: 'The closing scene brought me back to the promise of the first chapter.',
-            author: { displayName: 'Review reader', handle: 'review_reader' },
-            subject: { id: ids.subject, title: 'Letters from B-612' },
-          },
-          destination: { kind: 'thread', id: ids.thread, title: 'Reading the ending again' },
-        },
-      ];
+      return [reviewThread()];
     case 'citation-states':
       return [
         reviewPost(ids.post, { target: context.target, citation: { state: 'absent' } }),
@@ -109,6 +118,16 @@ function preparedRows(scenario: Scenario, revision: number, viewer: Viewer): Fee
       ];
     case 'concealed-target':
       return [reviewPost(ids.post, { target: { state: 'withheld' }, citation: context.citation })];
+    case 'concealed-parent': {
+      const concealed: ReviewContext = { target: { state: 'withheld' }, citation: { state: 'withheld' } };
+      return [
+        reviewThread(concealed),
+        ...([{ state: 'withheld' }, { state: 'removed', id: ids.parent }] as const).map((parent, index) => {
+          const post = reviewPost(index ? ids.secondPost : ids.post, concealed);
+          return { ...post, summary: { ...post.summary, parentContext: { kind: 'reply' as const, parent } } };
+        }),
+      ];
+    }
     case 'replacement':
       return [
         reviewPost(
@@ -117,7 +136,7 @@ function preparedRows(scenario: Scenario, revision: number, viewer: Viewer): Fee
         ),
       ];
     case 'populated':
-      return [reviewPost(ids.post, context)];
+      return [reviewThread(context), reviewPost(ids.post, context)];
   }
 }
 
@@ -141,7 +160,9 @@ function HomeReviewPostContext({ scenario }: { scenario: Scenario }) {
         next: null,
         asOf: '2026-11-04T10:01:00Z',
         sources: {
-          discovery: scenario === 'discovery-fallback' ? 'ready' : 'not_requested',
+          discovery: ['discovery-fallback', 'populated', 'concealed-parent'].includes(scenario)
+            ? 'ready'
+            : 'not_requested',
           following: scenario === 'discovery-fallback' ? 'not_requested' : 'ready',
           continue: 'not_requested',
         },
@@ -191,7 +212,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Illustrative installed-format Following posts rendered by HomeFeed, including their native review and immediate-parent contexts. Replacement keeps row and parent identities equal to exercise spoiler retirement. These stories are source evidence; native and phone/desktop acceptance remain deferred.',
+          'Illustrative installed-format reviews and Following posts rendered by HomeFeed, including populated citations, concealed review targets, and removed or concealed immediate parents. Replacement keeps row and parent identities equal to exercise spoiler retirement. These stories are source evidence; native and phone/desktop acceptance remain deferred.',
       },
     },
   },
@@ -199,9 +220,39 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const PopulatedReviewPost: Story = { args: { scenario: 'populated' } };
+export const PopulatedReviewPost: Story = {
+  args: { scenario: 'populated' },
+  play: async ({ canvasElement }) => {
+    for (const row of canvasElement.querySelectorAll('[data-feed-id]')) {
+      for (const selector of [
+        'h2',
+        '[data-feed-card-review-context]',
+        '[data-feed-card-reviewed-subject]',
+        '[data-feed-review-citation]',
+      ])
+        await expect(row.querySelectorAll(selector)).toHaveLength(1);
+      await expect(row.querySelectorAll('[data-feed-review-context], [data-feed-parent-context]')).toHaveLength(0);
+    }
+    await expect(canvasElement.querySelectorAll('[data-feed-card-parent]')).toHaveLength(1);
+    await expect(within(canvasElement).queryByText(parentExcerpt)).toBeNull();
+  },
+};
 export const AbsentAndWithheldCitation: Story = { args: { scenario: 'citation-states' } };
 export const ConcealedTarget: Story = { args: { scenario: 'concealed-target' } };
+export const ConcealedReviewAndParents: Story = {
+  args: { scenario: 'concealed-parent' },
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelectorAll('[data-feed-review-citation="withheld"]')).toHaveLength(3);
+    await expect(canvasElement.querySelectorAll('[data-feed-card-parent="withheld"]')).toHaveLength(1);
+    await expect(canvasElement.querySelectorAll('[data-feed-card-parent="removed"] a')).toHaveLength(1);
+    await expect(
+      canvasElement.querySelectorAll(
+        '[data-feed-card-reviewed-subject], [data-question-id], [data-feed-card-parent-revision]',
+      ),
+    ).toHaveLength(0);
+    await expect(within(canvasElement).queryByText(parentExcerpt)).toBeNull();
+  },
+};
 export const DiscoveryReviewFallback: Story = { args: { scenario: 'discovery-fallback' } };
 export const PageAndViewerReplacement: Story = {
   args: { scenario: 'replacement' },
@@ -216,6 +267,9 @@ export const PageAndViewerReplacement: Story = {
     await expect(reveal()).toBeEnabled();
     await userEvent.click(reveal());
     await expect(within(parent()).getByText(parentExcerpt)).toBeVisible();
+    await userEvent.click(within(parent()).getByRole('button', { name: m.subject_spoiler_hide() }));
+    await expect(within(parent()).queryByText(parentExcerpt)).toBeNull();
+    await userEvent.click(reveal());
     await userEvent.click(canvas.getByRole('button', { name: 'Replace page' }));
     await expect(canvasElement.querySelector('[data-question-id]')).toHaveAttribute('data-units', '6');
     await expect(canvasElement.querySelector('[data-question-id]')).toHaveAttribute('data-question-revision', '10');
