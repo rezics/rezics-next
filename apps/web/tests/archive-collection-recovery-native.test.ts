@@ -23,6 +23,8 @@ const status: RecoveryStatus = {
   cancelRequested: false,
   collectionId: null,
   confirmation: null,
+  fullRestoration: false,
+  presentation: { state: 'unattempted', kind: null, source: null, releaseDigest: null, reason: null },
   pin: { state: 'unsupported', reason: null },
   sectionReasons: {},
 };

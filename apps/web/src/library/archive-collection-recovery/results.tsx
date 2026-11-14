@@ -6,6 +6,7 @@ import { EvidenceDetails } from '../archive-progress-recovery/review';
 import { actionClass } from '../private-export/controls';
 import type { RecoveryOutcomesPage, RecoveryStatus } from './contract';
 import type { ReceivingCollectionReadback } from './readback';
+import { RecoveryPresentationOutcome } from './presentation';
 
 function stateText(state: string): string {
   switch (state) {
@@ -213,6 +214,7 @@ export function ArchiveRecoveryResults({
                     ? m.library_archive_recovery_applying_help()
                     : m.library_archive_recovery_result_help()}
         </p>
+        <RecoveryPresentationOutcome presentation={status.presentation} />
         {collectionId ? (
           <>
             <a
@@ -229,6 +231,12 @@ export function ArchiveRecoveryResults({
         {receiving ? (
           <section className="grid gap-3 rounded-lg border p-4" data-receiving-collection={receiving.id}>
             <h3 className="font-semibold">{receiving.title}</h3>
+            <p className="text-sm [overflow-wrap:anywhere]" data-receiving-presentation>
+              <span className="font-medium">{m.library_archive_recovery_presentation_current()}: </span>
+              {receiving.presentationKindSource === 'owner'
+                ? receiving.presentationKind
+                : m.library_collection_mixed_label()}
+            </p>
             <p>
               {receiving.visibility === 'private'
                 ? m.library_visibility_private()

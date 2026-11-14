@@ -13,7 +13,9 @@ import {
   type RecoveryOccurrence,
   type RecoveryOccurrencesPage,
   type RecoveryReview,
+  type RecoveryPresentationEvidence,
 } from './contract';
+import { RecoveryPresentationChoices, RecoverySealedPresentation } from './presentation';
 import { canSelectOccurrence, selectionLimitReached, type OccurrenceSelection } from './selection';
 
 function Coverage({ page }: { page: RecoveryCollectionsPage }) {
@@ -323,18 +325,24 @@ export function ArchiveRecoveryReview({
   collection,
   selected,
   targets,
+  presentationKind,
+  presentationEvidence,
   review,
   busy,
   onTarget,
+  onPresentationKind,
   onSubmit,
   onApply,
 }: {
   collection: RecoveryCollection;
   selected: OccurrenceSelection;
   targets: ReadonlyMap<string, EntityPickerSubject>;
+  presentationKind: string | null;
+  presentationEvidence: RecoveryPresentationEvidence | null;
   review: RecoveryReview | null;
   busy: boolean;
   onTarget: (sourceSubjectId: string, target: EntityPickerSubject | null) => void;
+  onPresentationKind: (kind: string | null) => void;
   onSubmit: () => void;
   onApply: () => void;
 }) {
@@ -378,6 +386,15 @@ export function ArchiveRecoveryReview({
           </div>
         </dl>
       </div>
+
+      {!review ? (
+        <RecoveryPresentationChoices
+          kind={presentationKind}
+          evidence={presentationEvidence}
+          disabled={busy}
+          onChange={onPresentationKind}
+        />
+      ) : null}
 
       <div className="grid gap-3">
         <h3 className="font-semibold">{m.library_archive_recovery_mappings_title()}</h3>
@@ -430,6 +447,7 @@ export function ArchiveRecoveryReview({
       {review ? (
         <div className="grid gap-3 rounded-xl border border-primary/40 p-4" role="status">
           <h3 className="font-semibold">{m.library_archive_recovery_native_review_title()}</h3>
+          {review.review ? <RecoverySealedPresentation choice={review.review.presentation} /> : null}
           <p>
             {review.completeMembership
               ? m.library_archive_recovery_membership_complete()

@@ -85,6 +85,8 @@ for (const [key, value] of Object.entries(globals))
 const { createRoot } = await import('react-dom/client');
 const { ArchiveCollectionRecoveryPortContext } = await import('../src/library/archive-collection-recovery/port');
 const { PrivateArchiveCollectionRecoveryPage } = await import('../src/library/archive-collection-recovery/page');
+const { RecoveryPresentationTypesContext } = await import('../src/library/archive-collection-recovery/presentation');
+const releasedTypes = async () => [{ id: 'schema:Book', label: 'Book' }, { id: 'schema:Movie', label: 'Film' }];
 const previousLocale = getLocale();
 await setLocale('en', { reload: false });
 
@@ -111,6 +113,8 @@ function status(state: RecoveryStatus['state'], overrides: Partial<RecoveryStatu
     cancelRequested: false,
     collectionId: null,
     confirmation: null,
+    fullRestoration: false,
+    presentation: { state: 'unattempted', kind: null, source: null, releaseDigest: null, reason: null },
     pin: { state: 'unsupported', reason: null },
     sectionReasons: {},
     ...overrides,
@@ -154,7 +158,9 @@ const secondOccurrence = occurrence(occurrenceTwo, 'Second archived note', '1');
 const thirdOccurrence = occurrence(occurrenceThree, 'Third archived note', '0');
 const occurrenceCollection: NonNullable<RecoveryOccurrencesPage['collection']> = {
   ...collection,
-  presentationDisposition: 'retained',
+  presentationDisposition: 'unsupported_current_meaning',
+  presentationAdmissible: false,
+  presentationReleaseDigest: 'a'.repeat(64),
 };
 
 function collectionsPage(
@@ -190,6 +196,7 @@ function reviewResult(selectedOccurrences = 2): RecoveryReview {
       reviewId: 'recovery-review-1',
       digest: 'a'.repeat(64),
       epoch: 1,
+      presentation: { kind: null, source: 'mixed', releaseDigest: null },
       completeOrder: true,
       completeMembership: true,
       selectedOccurrences,
@@ -355,6 +362,8 @@ function fakePort(
           id: receivingCollectionId,
           title: 'Restored private Collection',
           visibility: 'private',
+          presentationKind: null,
+          presentationKindSource: 'mixed',
           memberCount: 2,
           next: null,
           members: [
@@ -378,7 +387,7 @@ function fakePort(
   return { port, calls };
 }
 
-async function mount(port: RecoveryPort, initialVisit = visit()) {
+async function mount(port: RecoveryPort, initialVisit = visit(), readTypes = releasedTypes) {
   let currentVisit = initialVisit;
   let forceRender = () => undefined;
   function TestRoot() {
@@ -387,7 +396,8 @@ async function mount(port: RecoveryPort, initialVisit = visit()) {
     return createElement(
       ArchiveCollectionRecoveryPortContext.Provider,
       { value: port },
-      createElement(PrivateArchiveCollectionRecoveryPage, { visit: currentVisit }),
+      createElement(RecoveryPresentationTypesContext.Provider, { value: readTypes },
+        createElement(PrivateArchiveCollectionRecoveryPage, { visit: currentVisit })),
     );
   }
   const rootRoute = createRootRoute({ component: TestRoot });
@@ -712,6 +722,7 @@ test('mounted recovery navigates independent native windows, revises selection, 
       };
     };
     expect(reviewed.body.selectedOccurrenceIds).toEqual([occurrenceOne, occurrenceThree]);
+    expect((reviewed.body as { presentationKind?: string | null }).presentationKind).toBeNull();
     expect(reviewed.body.mappings).toEqual([{ sourceSubjectId: subjectId, targetSubjectId: targetId }]);
     expect(view.host.textContent).toContain(m.library_archive_recovery_new_private_destination());
     expect(view.host.textContent).toContain(m.library_archive_recovery_mapping_current({ id: targetId }));
@@ -920,6 +931,8 @@ test('cancel then restart reuses the original archive and native Collection read
     await journey.readReceivingCollection();
     const restored = journey.snapshot().receiving;
     expect(restored?.id).toBe(receivingCollectionId);
+    expect(restored?.presentationKindSource).toBe('mixed');
+    expect(restored?.presentationKind).toBeNull();
     expect(restored?.members.map((member) => member.note)).toEqual(['First archived note', 'Repeated occurrence']);
     expect(fake.calls.readbacks).toEqual([{ id: receivingCollectionId, cursor: null }]);
     await journey.cancel();

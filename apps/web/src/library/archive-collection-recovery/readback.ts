@@ -20,6 +20,8 @@ export type ReceivingCollectionReadback = {
   id: string;
   title: string;
   visibility: 'private' | 'public' | 'unlisted' | null;
+  presentationKind: CollectionEnvelope['presentationKind'];
+  presentationKindSource: CollectionEnvelope['presentationKindSource'];
   memberCount: number;
   members: ReceivingMemberReadback[];
   next: string | null;
@@ -57,6 +59,8 @@ export function projectReceivingCollection(
     id: collection.id,
     title: collection.title,
     visibility,
+    presentationKind: collection.presentationKind,
+    presentationKindSource: collection.presentationKindSource,
     memberCount: collection.memberCount,
     members,
     next: 'next' in page && typeof page.next === 'string' ? page.next : null,

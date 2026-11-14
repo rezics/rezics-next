@@ -58,6 +58,7 @@ export type RecoverySnapshot = {
   occurrencesPage: RecoveryOccurrencesPage | null;
   selected: OccurrenceSelection;
   targets: ReadonlyMap<string, EntityPickerSubject>;
+  presentationKind: string | null;
   review: RecoveryReview | null;
   outcomesPage: RecoveryOutcomesPage | null;
   collectionsWindow: RecoveryWindowSnapshot;
@@ -81,6 +82,7 @@ export type ArchiveCollectionRecoveryJourney = {
   setSelection: (selection: OccurrenceSelection) => void;
   prepareReview: () => void;
   setTarget: (sourceSubjectId: string, target: EntityPickerSubject | null) => void;
+  setPresentationKind: (kind: string | null) => void;
   editSelection: () => void;
   reviewSelection: () => Promise<void>;
   apply: () => Promise<void>;
@@ -120,6 +122,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
   let occurrencePageData: RecoveryOccurrencesPage | null = null;
   let selected: OccurrenceSelection = new Map();
   let targets = new Map<string, EntityPickerSubject>();
+  let presentationKind: string | null = null;
   let review: RecoveryReview | null = null;
   let outcomePageData: RecoveryOutcomesPage | null = null;
   let windows = {
@@ -148,6 +151,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
       occurrencesPage: occurrencePageData,
       selected: new Map(selected),
       targets: new Map(targets),
+      presentationKind,
       review,
       outcomesPage: outcomePageData,
       collectionsWindow: {
@@ -178,6 +182,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
     occurrencePageData = null;
     selected = new Map();
     targets = new Map();
+    presentationKind = null;
     review = null;
     outcomePageData = null;
     receiving = null;
@@ -575,6 +580,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
       clearReadWindow('outcomes');
       selected = new Map();
       targets = new Map();
+      presentationKind = null;
       review = null;
       outcomePageData = null;
       stage = 'occurrences';
@@ -613,10 +619,20 @@ export function createArchiveCollectionRecoveryJourney(input: {
       stage = occurrencePageData ? 'occurrences' : 'collections';
       publish();
     },
+    setPresentationKind(kind: string | null) {
+      if (!live() || busy || unknown || review || stage !== 'review') return;
+      presentationKind = kind;
+      publish();
+    },
     reviewSelection() {
       if (!live() || busy || unknown || !selectedCollection || !uploadId || !selected.size) return Promise.resolve();
       const targetIds = new Map([...targets].map(([sourceId, subject]) => [sourceId, subject.id]));
-      const body = makeReviewBody({ collectionId: selectedCollection.id, selected, targets: targetIds });
+      const body = makeReviewBody({
+        collectionId: selectedCollection.id,
+        selected,
+        targets: targetIds,
+        presentationKind,
+      });
       const command: Extract<RecoveryEffectCommand, { kind: 'review' }> = {
         kind: 'review',
         uploadId,
@@ -664,6 +680,11 @@ export function createArchiveCollectionRecoveryJourney(input: {
         send: () => port.status(uploadId!),
         onValue: (value) => {
           acceptStatus(value);
+          if (value.presentation.state === 'unsupported_or_stale' && !value.collectionId) {
+            review = null;
+            stage = 'results';
+            return;
+          }
           if (value.state === 'preview') {
             review = null;
             stage = selectedCollection ? 'occurrences' : 'collections';

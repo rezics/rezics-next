@@ -42,6 +42,7 @@ export function makeReviewBody(input: {
   collectionId: string;
   selected: OccurrenceSelection;
   targets: ReadonlyMap<string, string | null>;
+  presentationKind?: RecoveryReviewBody['presentationKind'];
 }): RecoveryReviewBody {
   const occurrences = [...input.selected.values()];
   const subjectIds = new Set(
@@ -51,6 +52,7 @@ export function makeReviewBody(input: {
   );
   return {
     collectionId: input.collectionId,
+    presentationKind: input.presentationKind ?? null,
     selectedOccurrenceIds: occurrences.map((row) => row.sourceOccurrenceId),
     mappings: [...subjectIds].sort().map((sourceSubjectId) => ({
       sourceSubjectId,

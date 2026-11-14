@@ -21,6 +21,27 @@ and chooses a target. Native review checks current canonical identity again. An 
 revision, timestamp or receipt never grants current access. Missing, inaccessible, changed or unsupported targets
 remain unresolved in native outcomes.
 
+## Explicit presentation choice
+
+Decision: default to mixed and reuse the Collection editor's released-Type choices; only an explicit
+`presentationKind` enters native review, and sealed native kind, source and release digest remain unchanged through
+apply retry and independent presentation results. Archived values never select a Type.
+
+The occurrence preview supplies the raw archived kind, availability, disposition and current digest. Unsupported
+archived meaning stays visible while the person chooses mixed or a current Type. Choices read the existing active
+release and use the existing Collection editor projection and accessible radio controls, with no member hydration
+or separate Type directory. Leaving the choice unset sends null. Native performs Type admission and seals the
+reviewed release; Web does not substitute a browser release digest.
+
+Review displays the sealed kind, archived/alternative/mixed source and release digest next to the title, member,
+note and order choices. Editing a confirmed review requires a new native review and deliberate confirmation.
+Unknown commands lock edits and retain their exact body, command key, visit credential and review. A current release
+cannot rename or replace a sealed choice. A stale unaccepted create is read back before a fresh review; an accepted
+create replays its original confirmation. Cancellation and source/account/locale retirement keep the existing visit
+boundaries. Presentation results show mixed, adopted, unsupported-or-stale and unattempted independently of member,
+note and order results, with `fullRestoration: false`. Explicit native Collection readback includes its current
+presentation kind and owner/mixed source, including the native fallback after Type retirement.
+
 Review names the new private destination and source title and description, lists the exact selected occurrence notes,
 shows native membership/order completeness and any admitted pin result, then requires a deliberate confirmation.
 Apply proceeds only from the native review ID and digest. Each click admits the native maximum of 25 steps; the visit
@@ -66,11 +87,13 @@ and admission coordinates; it does not duplicate the predecessor stack.
 The explicit selection retains at most `R` delivered occurrence operands. At the producer's 120,000-byte source-row
 cap plus 512-byte projection allowance, that is at most 120,512,000 bytes for 1,000 selected row copies. Review sends
 only occurrence IDs and one source-to-target mapping per distinct selected Subject (at most 1,000 each), not those
-row copies; its canonical JSON body is at most 155,094 ASCII bytes for UUID operands. Apply retains one review ID and
+row copies; its canonical JSON body is at most 155,884 ASCII bytes for UUID operands plus a 128-character Type identifier (including JSON escaping). Apply retains one review ID and
 64-character digest (127 canonical JSON bytes) and each click admits at most 25 native steps; total selected work
 remains capped at `3R + 2` attempts. Upload transfer remains `O(U)`. The visit does not walk pages to a total, hydrate
 each row, reconstruct rank keys, or load the archive into browser storage. Subject suggestions run only after an
-explicit search term.
+explicit search term. Presentation choices add one active-release read per opened choice editor or explicit retry;
+the immutable definitions body keeps its existing producer bounds and cache. Mixed adds no native Type lookup, and
+review adds only the native addressed Type admission and constant-size sealed choice.
 
 Decision: keep the original encoded archive after a successful read so Cancel then Restart can reuse it; a completed
 export from this signed-in owner is the same source. Results reopen the current Collection reader for actual title,

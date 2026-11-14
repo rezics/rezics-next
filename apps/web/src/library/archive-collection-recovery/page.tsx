@@ -323,9 +323,12 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
             collection={snapshot.selectedCollection}
             selected={snapshot.selected}
             targets={snapshot.targets}
+            presentationKind={snapshot.presentationKind}
+            presentationEvidence={snapshot.occurrencesPage?.collection ?? null}
             review={snapshot.review}
             busy={snapshot.busy || locked}
             onTarget={(sourceId, target) => journey.setTarget(sourceId, target)}
+            onPresentationKind={(kind) => journey.setPresentationKind(kind)}
             onSubmit={() => touch(journey.reviewSelection())}
             onApply={() => touch(journey.apply())}
           />
@@ -386,6 +389,16 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
               )
             }
           />
+          {snapshot.status.presentation.state === 'unsupported_or_stale' && !snapshot.status.collectionId ? (
+            <button
+              type="button"
+              className={`${actionClass} justify-self-start rounded-md border`}
+              disabled={snapshot.busy || locked}
+              onClick={() => journey.prepareReview()}
+            >
+              {m.library_archive_recovery_edit_selection()}
+            </button>
+          ) : null}
           <button
             type="button"
             className={`${actionClass} justify-self-start rounded-md border`}

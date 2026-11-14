@@ -12,6 +12,8 @@ import {
 } from './contract';
 import type { RecoveryApplyBody, RecoveryPageQuery, RecoveryReviewBody, RecoveryUploadBody } from './contract';
 import { kernelArchiveCollectionRecoveryPort } from './native';
+import { refreshRelease } from '../../subject/definitions';
+import { readCollectionTypeOptions } from '../collection-presentation';
 
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -91,6 +93,14 @@ function validateReview(value: unknown): {
   if (new Set(mappings.map((mapping) => mapping.sourceSubjectId)).size !== mappings.length) {
     throw new Error('Invalid Collection recovery request');
   }
+  const presentationKind = value.presentationKind;
+  if (
+    presentationKind !== undefined &&
+    presentationKind !== null &&
+    (typeof presentationKind !== 'string' || presentationKind.length === 0 || presentationKind.length > 128)
+  ) {
+    throw new Error('Invalid Collection recovery request');
+  }
   return {
     uploadId: requireId(value.uploadId),
     key: requireKey(value.key),
@@ -98,6 +108,7 @@ function validateReview(value: unknown): {
       collectionId: requireId(value.collectionId),
       selectedOccurrenceIds,
       mappings,
+      ...(presentationKind === undefined ? {} : { presentationKind }),
     },
   };
 }
@@ -125,6 +136,12 @@ function port() {
 const pageQuery = (cursor?: string): RecoveryPageQuery => ({
   limit: RECOVERY_PAGE_ROWS,
   ...(cursor ? { cursor } : {}),
+});
+
+/** The same released-Type authority as the Collection editor; Native admits and seals the choice. */
+export const readArchiveRecoveryPresentationTypes = createServerFn({ method: 'GET' }).handler(async () => {
+  setResponseHeader('cache-control', 'private, no-store');
+  return refreshRelease().then(readCollectionTypeOptions, () => null);
 });
 
 export const uploadArchiveCollectionRecovery = createServerFn({ method: 'POST' })

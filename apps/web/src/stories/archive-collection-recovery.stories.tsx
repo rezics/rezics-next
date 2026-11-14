@@ -24,6 +24,8 @@ import type {
   RecoveryStatus,
 } from '../library/archive-collection-recovery/contract';
 import type { OccurrenceSelection } from '../library/archive-collection-recovery/selection';
+import { RecoveryPresentationTypesContext } from '../library/archive-collection-recovery/presentation';
+import { useState } from 'react';
 
 const subject: EntityPickerSubject = {
   id: '00000000-0000-4000-8000-000000000026',
@@ -42,9 +44,6 @@ const collection: RecoveryCollection = {
   membershipKind: 'manual',
   builtinKind: null,
   presentationKind: 'collection',
-  presentationDisposition: 'none',
-  presentationAdmissible: false,
-  presentationReleaseDigest: null,
   memberCount: 2,
   orderedCount: 2,
   eligible: true,
@@ -52,6 +51,12 @@ const collection: RecoveryCollection = {
   orderComplete: true,
   visibilityDisposition: 'private',
   unsupported: null,
+};
+const presentationEvidence = {
+  presentationKind: 'collection',
+  presentationDisposition: 'unsupported_current_meaning',
+  presentationAdmissible: false,
+  presentationReleaseDigest: 'a'.repeat(64),
 };
 const occurrenceRows: RecoveryOccurrence[] = [
   {
@@ -257,6 +262,9 @@ export const Review: Story = {
       <ArchiveRecoveryReview
         collection={collection}
         selected={selected}
+        presentationKind={null}
+        presentationEvidence={presentationEvidence}
+        onPresentationKind={() => undefined}
         targets={new Map([[occurrenceRows[0]!.sourceSubjectId!, subject]])}
         review={nativeReview}
         busy={false}
@@ -342,7 +350,7 @@ const sparse: RecoveryOccurrencesPage = {
   ...status,
   state: 'preview',
   collectionId: null,
-  collection,
+  collection: { ...collection, ...presentationEvidence },
   occurrences: [],
   next: 'native-sparse-next',
 };
@@ -412,6 +420,8 @@ export const CompletedResult: Story = {
           id: status.collectionId!,
           title: 'Recovered private reading list',
           visibility: 'private',
+          presentationKind: null,
+          presentationKindSource: 'mixed',
           memberCount: 2,
           members: completed.outcomes.map((item) => ({
             id: item.nativeMemberId!,

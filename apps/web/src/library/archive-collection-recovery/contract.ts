@@ -34,6 +34,11 @@ export type RecoveryApplyBody = BodyOf<RecoveryRoot['apply']['post']>;
 export type RecoveryCollection = RecoveryCollectionsPage['collections'][number];
 export type RecoveryOccurrence = RecoveryOccurrencesPage['occurrences'][number];
 export type RecoveryOutcome = RecoveryOutcomesPage['outcomes'][number];
+export type RecoveryPresentationChoice = NonNullable<RecoveryReview['review']>['presentation'];
+export type RecoveryPresentationEvidence = Pick<
+  NonNullable<RecoveryOccurrencesPage['collection']>,
+  'presentationKind' | 'presentationAdmissible' | 'presentationReleaseDigest' | 'presentationDisposition'
+>;
 
 export type RecoveryEffectCommand =
   | { kind: 'upload'; key: string; body: RecoveryUploadBody }
