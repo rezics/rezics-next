@@ -56,57 +56,63 @@ export function ZoneNameFields({
     ) : null;
   const fields = (
     <fieldset disabled={disabled} className="min-w-0 space-y-4">
-      <legend className="mb-3 text-lg font-semibold">{m.zones_create_names({}, options)}</legend>
+      <legend id="zone-names-heading" className="mb-3 text-lg font-semibold">
+        {m.zones_create_names({}, options)}
+      </legend>
       <p id="zone-name-help" className="text-sm text-muted-foreground">
         {m.zones_create_names_help({}, options)}
       </p>
       <p className="text-sm text-muted-foreground">{m.zone_name_fallback({}, options)}</p>
       {!primaryLanguage ? <p className="text-sm text-muted-foreground">{m.zone_name_legacy({}, options)}</p> : null}
-      <Field data-invalid={!!descriptions?.['zone-primary-language']}>
-        <FieldLabel htmlFor="zone-primary-language">{m.zone_name_language({}, options)}</FieldLabel>
-        <SharedSelect.Select
-          value={primary}
-          items={UI_LOCALES.map((language) => ({ value: language, label: languageName(language) }))}
-          onValueChange={(value) => {
-            if (value === null) return;
-            const language = value as ZoneLanguage;
-            change({ ...labels }, language);
-          }}
-        >
-          <SharedSelect.SelectTrigger
-            id="zone-primary-language"
-            aria-invalid={!!descriptions?.['zone-primary-language']}
-            aria-describedby={['zone-name-help', descriptions?.['zone-primary-language']].filter(Boolean).join(' ')}
-            className="max-md:min-h-11 pointer-coarse:min-h-11"
+      <div className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
+        <Field data-invalid={!!descriptions?.['zone-primary-language']}>
+          <FieldLabel htmlFor="zone-primary-language">{m.zone_name_language({}, options)}</FieldLabel>
+          <SharedSelect.Select
+            value={primary}
+            items={UI_LOCALES.map((language) => ({ value: language, label: languageName(language) }))}
+            onValueChange={(value) => {
+              if (value === null) return;
+              const language = value as ZoneLanguage;
+              change({ ...labels }, language);
+            }}
           >
-            <SharedSelect.SelectValue />
-          </SharedSelect.SelectTrigger>
-          <SharedSelect.SelectContent>
-            <SharedSelect.SelectGroup>
-              {UI_LOCALES.map((language) => (
-                <SharedSelect.SelectItem key={language} value={language}>
-                  {languageName(language)}
-                </SharedSelect.SelectItem>
-              ))}
-            </SharedSelect.SelectGroup>
-          </SharedSelect.SelectContent>
-        </SharedSelect.Select>
-      </Field>
-      <Field data-invalid={invalid(primary)}>
-        <FieldLabel htmlFor={`zone-label-${primary}`}>{m.zone_name_primary({}, options)}</FieldLabel>
-        <Input
-          id={`zone-label-${primary}`}
-          lang={primary}
-          value={labels[primary] ?? ''}
-          required
-          aria-invalid={invalid(primary)}
-          aria-describedby={describedBy(primary)}
-          onChange={(event) => change({ ...labels, [primary]: event.target.value })}
-        />
-        {error(primary)}
-      </Field>
-      <details ref={translations} className="min-w-0 space-y-4">
-        <summary className="cursor-pointer font-medium">{m.zone_name_translations({}, options)}</summary>
+            <SharedSelect.SelectTrigger
+              id="zone-primary-language"
+              aria-invalid={!!descriptions?.['zone-primary-language']}
+              aria-describedby={['zone-name-help', descriptions?.['zone-primary-language']].filter(Boolean).join(' ')}
+              className="max-md:min-h-11 pointer-coarse:min-h-11"
+            >
+              <SharedSelect.SelectValue />
+            </SharedSelect.SelectTrigger>
+            <SharedSelect.SelectContent>
+              <SharedSelect.SelectGroup>
+                {UI_LOCALES.map((language) => (
+                  <SharedSelect.SelectItem key={language} value={language}>
+                    {languageName(language)}
+                  </SharedSelect.SelectItem>
+                ))}
+              </SharedSelect.SelectGroup>
+            </SharedSelect.SelectContent>
+          </SharedSelect.Select>
+        </Field>
+        <Field data-invalid={invalid(primary)}>
+          <FieldLabel htmlFor={`zone-label-${primary}`}>{m.zone_name_primary({}, options)}</FieldLabel>
+          <Input
+            id={`zone-label-${primary}`}
+            lang={primary}
+            value={labels[primary] ?? ''}
+            required
+            aria-invalid={invalid(primary)}
+            aria-describedby={describedBy(primary)}
+            onChange={(event) => change({ ...labels, [primary]: event.target.value })}
+          />
+          {error(primary)}
+        </Field>
+      </div>
+      <details ref={translations} className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
+        <summary className="min-h-11 cursor-pointer break-words py-2 font-medium pointer-coarse:min-h-12">
+          {m.zone_name_translations({}, options)}
+        </summary>
         <p className="text-sm text-muted-foreground">{m.zone_name_translation_help({}, options)}</p>
         {UI_LOCALES.filter((language) => language !== primary && Object.hasOwn(labels, language)).map((language) => (
           <Field key={language} data-invalid={invalid(language)}>
@@ -124,7 +130,7 @@ export function ZoneNameFields({
             <Button
               type="button"
               variant="outline"
-              className="h-auto whitespace-normal text-start"
+              className="h-auto min-h-11 max-w-full whitespace-normal break-words text-start pointer-coarse:min-h-12"
               onClick={() => {
                 const next = { ...labels };
                 delete next[language];
@@ -176,11 +182,12 @@ export function ZoneNameFields({
       id="zone-names"
       tabIndex={-1}
       data-correction-section=""
+      aria-labelledby="zone-names-heading"
       aria-describedby={Object.entries(descriptions)
         .filter(([id]) => id === 'zone-names' || id === 'zone-primary-language' || id.startsWith('zone-label-'))
         .map(([, value]) => value)
         .join(' ')}
-      className="min-w-0"
+      className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6 xl:col-start-1 xl:row-start-1"
     >
       {fields}
     </section>
