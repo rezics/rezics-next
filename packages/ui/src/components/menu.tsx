@@ -125,6 +125,15 @@ const entryPanelClassName = 'w-max min-w-[min(8rem,var(--available-width))] max-
 const entryRowClassName = 'min-w-0 whitespace-normal text-start';
 const touchEntryRowClassName = 'h-auto min-h-11 w-full min-w-0 justify-start gap-2 whitespace-normal py-2 text-start';
 
+function entryLinkProps(entry: Extract<MenuEntry, { type: 'link' }>) {
+  return {
+    // Removing the destination also prevents native open-in-new-tab actions.
+    href: entry.disabled ? undefined : entry.href,
+    'aria-current': entry.current ? ('page' as const) : undefined,
+    ...(entry.disabled ? { 'aria-disabled': true, tabIndex: -1 } : {}),
+  };
+}
+
 function EntryLabel({ label, current }: { label: string; current?: boolean }) {
   return (
     <>
@@ -184,7 +193,7 @@ function DropdownEntries({
           key={index}
           className={entryRowClassName}
           disabled={entry.disabled}
-          render={<a href={entry.href} aria-current={entry.current ? 'page' : undefined} />}
+          render={<a {...entryLinkProps(entry)} />}
         >
           <EntryLabel label={entry.label} current={entry.current} />
         </D.DropdownMenuItem>
@@ -541,10 +550,10 @@ export function Menu({
                     return (
                       <a
                         key={index}
-                        href={entry.href}
-                        aria-current={entry.current ? 'page' : undefined}
-                        className={`flex items-center rounded-xl px-3 text-sm hover:bg-accent ${touchEntryRowClassName}`}
-                        onClick={() => close()}
+                        {...entryLinkProps(entry)}
+                        role="link"
+                        className={`flex items-center rounded-xl px-3 text-sm hover:bg-accent aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-transparent ${touchEntryRowClassName}`}
+                        onClick={entry.disabled ? undefined : () => close()}
                       >
                         <EntryLabel label={entry.label} current={entry.current} />
                       </a>

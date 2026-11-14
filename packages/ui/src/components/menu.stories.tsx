@@ -131,6 +131,55 @@ export const DestructiveEntry: Story = {
   },
 };
 
+export const DisabledCurrentLink: Story = {
+  args: {
+    entries: [
+      { type: 'link', label: 'Current destination', href: '#menu-disabled-destination', current: true, disabled: true },
+      { type: 'link', label: 'Available destination', href: '#menu-enabled-destination' },
+    ],
+  },
+  render: ({ entries }) => (
+    <Menu title="Destinations" entries={entries} closeOnNavigation trigger={<Button>Open menu</Button>} />
+  ),
+  play: async () => {
+    const route = window.location.href;
+    const sheet = sheetPresentation();
+    try {
+      await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+      const panel = await screen.findByRole(sheet ? 'dialog' : 'menu');
+      const disabled = within(panel).getByRole(sheet ? 'link' : 'menuitem', { name: 'Current destination' });
+      const enabled = within(panel).getByRole(sheet ? 'link' : 'menuitem', { name: 'Available destination' });
+      await expect(disabled).toHaveAttribute('aria-disabled', 'true');
+      await expect(disabled).toHaveAttribute('aria-current', 'page');
+      await expect(disabled).toHaveAttribute('tabindex', '-1');
+      await expect(disabled).not.toHaveAttribute('href');
+      await expect(disabled.querySelector('[data-slot="menu-current-indicator"]')).toBeVisible();
+      await expect(getComputedStyle(disabled).opacity).toBe('0.5');
+      await userEvent.pointer(
+        { target: disabled, keys: sheet ? '[TouchA]' : '[MouseLeft]' },
+        { pointerEventsCheck: 0 },
+      );
+      await userEvent.pointer({ target: disabled, keys: '[MouseMiddle]' }, { pointerEventsCheck: 0 });
+      await userEvent.keyboard('{Control>}');
+      await userEvent.click(disabled, { pointerEventsCheck: 0 });
+      await userEvent.keyboard('{/Control}');
+      disabled.focus();
+      await userEvent.keyboard('{Enter} ');
+      await expect(panel).toBeVisible();
+      await expect(window.location.href).toBe(route);
+      await expect(enabled).toHaveAttribute('href', '#menu-enabled-destination');
+      enabled.focus();
+      await userEvent.keyboard('{Enter}');
+      await waitFor(() => expect(panel).not.toBeVisible());
+      await waitFor(() => expect(window.location.hash).toBe('#menu-enabled-destination'));
+    } finally {
+      window.history.replaceState(window.history.state, '', route);
+    }
+    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    await expect(await screen.findByRole(sheet ? 'dialog' : 'menu')).toBeVisible();
+  },
+};
+
 const localizedLabels = {
   item: 'Meine derzeitige Sammlung mit allen vorgemerkten Veröffentlichungen und persönlichen Leseempfehlungen',
   link: '目前所在的收藏目的地，包含已閱讀、計劃閱讀以及朋友推薦的所有作品與完整的本地化說明',

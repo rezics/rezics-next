@@ -85,6 +85,9 @@ the end of their row in both forms, including submenus. The marker adds no acces
 from radio selection. Entry labels (items, links, submenus and radio options) wrap, including unbroken words,
 within viewport-bounded dropdown panels and the sheet width. Markers and submenu arrows keep their space;
 multiline touch rows grow above the 44px minimum. This treatment belongs to entry rows, not custom content.
+Decision: disabled link entries expose `aria-disabled="true"`, have no native destination or keyboard stop, and
+never select or close either menu form. Their labels and current markers remain visible; enabled neighbors retain
+native navigation. The `DisabledCurrentLink` story covers both presentations with fixture destinations.
 Custom menu content with client-side links can set `closeOnNavigation` so following a link closes the menu without
 adding a sheet-history entry.
 
