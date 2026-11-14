@@ -1,7 +1,7 @@
 # Agent conduct
 
-These rules apply to every agent in this repository: Codex workers and managers, the Claude supermanager and Claude
-subagents. Role prompts in `tools/goal` repeat the parts that apply to each role.
+These rules apply to the resident supermanager, workers who author Goals, execution units and their native subagents.
+The supermanager is the only manager. Role prompts in `tools/goal` contain only the instructions their role needs.
 
 ## Measure yourself by landed work
 
@@ -94,11 +94,11 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
   - a performance-critical structure;
   - anything hard to reverse.
     Simple, local designs need no research.
-- Managers propose such research to the supermanager, who decides whether the design is complex. A complex design
-  gets one researcher, Claude Opus 5.5. GPT-6 Astra is expensive. It is used only for a very important decision,
-  such as a cross-cutting architecture or one costly to reverse, and the supermanager decides when. Astra then runs
-  at xhigh effort as a second, independent researcher on the same brief, and neither sees the other's work.
-  Each writes `docs/research/<topic>-<researcher>.md`.
+- The manager commissions research for a named decision with a consumer Goal. Use the currently authorized Codex
+  pool and one researcher by default. Units may use native subagents and the explicitly authorized Grok CLI for useful
+  research within their Goal. Grok uses the unit's shared worktree, not a separate research worktree. A second
+  independent study requires a decision whose uncertainty justifies its cost; the manager decides that trade-off.
+  Valuable reports use `docs/research/<topic>-<researcher>.md`.
 - A research brief states the decision the research must enable, the context and evidence to read, competing
   hypotheses, the requirements every candidate is tested against, and the deliverables. Researchers measure where
   they can. They cite only sources they retrieved, track their confidence, and end with what would change the
@@ -107,46 +107,37 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
   style, counts only from the last four months: current vendor guidance for the models REZICS runs, and measurements
   on those models. Older papers and guides are background. They never set a number or decide a design.
 - The owner compares the reports and records the decision in the owner document before briefing implementation.
-  The owner is the Goal's manager, or the supermanager for a cross-cutting design. Implementation briefs link the
-  decision.
+  The product owner retains contract authority; the resident manager resolves cross-owner choices. Implementation
+  briefs link the decision.
 - Reports follow the [research lifecycle](documentation.md#research): kept unchanged when valuable, never loaded by
   default, deleted when they have no lasting value.
 
-## Managers
+## Manager and execution units
 
-Every manager, including the supermanager, approaches the project from the same perspective as a human manager.
-Work with people as peers: exercise independent judgment within your authority, explain trade-offs, and own the
-outcome. Use feedback to decide and act. The maintainer's explicit decisions retain precedence.
+The resident supermanager is the only manager. It works with people as peers, exercises independent judgment within
+its authority and owns delivery. The maintainer's explicit decisions retain precedence.
 
-- Follow [delivery ownership](delivery.md#delivery-ownership) for assignments and peer decisions. Use current user
-  journeys, native evidence and worker findings to identify a shared cause before opening separate tasks. Turn
-  actionable findings into prioritized work and keep responsibility for what gets scheduled.
-- A manager synthesizes what its workers report (results, decisions, conflicts, duplicated or missing work across
-  tasks) and turns it into decisions and the next briefs. Workers do not read other workers' tasks; the manager reads
-  them once for all.
-- You own the product experience of your area, not only its contracts. Before you brief, write down what a person
-  should see and be able to do there, and judge it against the two earlier REZICS apps and the reference platforms
-  in `docs/research/`. Whatever an earlier REZICS app had is the minimum. Design each API from what its page shows,
-  including the viewer's state and allowed actions in one bounded request, not from the data your Goal stores.
-  Challenge a contract that is complete on paper but wrong for users. After a task lands, look at the result as a
-  user (Storybook, screenshots, the running app) before you call the outcome done; passing tests are not enough.
-- Your outputs are ready briefs and decisions. Keep at least eight ready briefs in your Goal's backlog while your road
-  has unowned approved outcomes. Scope additions go to the supermanager as candidates naming the scope line they
-  extend.
-- When the road has no unowned outcome, the Goal is in its quality stage: prove each Done-when clause of its Goal brief
-  on current dev with that clause's acceptance evidence (outcome suites, growth checks, interface review). Brief every
-  failing, flaky, missing or unmeasured clause, each dev defect in your paths, and each gap between a page you own and
-  its design bar, naming the clause, defect or bar. Keep up to eight such briefs ready; a brief that names none of
-  them is padding.
-- Do not sleep or poll. End the turn; the controller wakes you on an inbox event.
-- Send only decisions, questions and handoffs: one message per decision, at most 60 words. Never send
-  acknowledgements, receipts, status reports or lists of things you did not do.
-- Read your brief and continuation once per session. Keep the continuation under 8,000 characters and replace it
-  rather than append to it.
-- Act on every stopped task within an hour: retry with a rewritten brief, split it or cancel it.
-- A shared environment problem goes to the supermanager as one `blocker` with the exact error line when its fix needs the
-  main checkout or the live control plane, or when its owner has not fixed it within 15 minutes. Owners fix or escalate;
-  they do not forward an environment problem to another manager.
+- The manager discovers missing user outcomes, synthesizes native evidence and worker findings, and prioritizes
+  complete Goals. A worker may author a Goal; the manager adopts its scope, acceptance, write boundaries and allocation.
+- An execution unit consumes its assigned Goal through a native Codex Goal. It chooses implementation order and may
+  use native subagents and Grok CLI autonomously. It does not create a manager session, a domain backlog or a new
+  management tier. Complete useful work rather than stopping after a plan.
+- All activity within a unit uses one shared worktree, including subagents and Grok. Different units use separate
+  worktrees. Assign file ownership before concurrent edits; designate one integration writer to stage and commit
+  coherent changes without including a peer's unfinished work. That coordination does not create another manager.
+- Product and module owners retain their contract authority. Units resolve routine choices from those contracts and
+  continue independent work. Send the manager a concrete conflict or missing authority, with options and a recommendation.
+- The manager owns allocation, cross-unit trade-offs, live runtime configuration, incident response, publication and
+  progress reports. Units return source revisions, reached acceptance and actionable failures. Do not revive old domain
+  managers, duplicate another unit's assignment or reconstruct former manager inboxes.
+- Judge the result as a person using the product. Preserve the earlier REZICS behavior required by the owner contract;
+  review real native/API and mounted-page outcomes before accepting a journey. Passing fixtures alone are insufficient.
+- Keep native Goal continuity while useful required work remains. Preserve coherent source across failed checks and
+  report deferred acceptance separately. At a timebox boundary, report what remains without claiming completion.
+- The manager schedules only useful wakes through the existing inbox. Units do not add polling loops or recurring
+  status turns. Read the assigned Goal once and replace a short local continuation instead of appending history.
+- Route a repeated environment failure to the manager with its exact first error, affected operation and needed owner
+  action. Keep independent source work moving while the class repair or check runs.
 
 ## Supermanager and subagents
 
@@ -165,6 +156,6 @@ outcome. Use feedback to decide and act. The maintainer's explicit decisions ret
 | Brief text                     | 12,000 characters             |
 | Worker prompt in total         | 20,000 characters             |
 | Final summary / blocker detail | 120 / 80 words                |
-| Manager message                | 60 words; at most six an hour |
-| Manager continuation           | 8,000 characters              |
+| Decision or handoff message    | 60 words                     |
+| Local continuation             | 8,000 characters              |
 | Wait interval                  | at least 300 seconds          |
