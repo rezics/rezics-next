@@ -1,7 +1,10 @@
 import type { Pool, PoolClient } from 'pg';
 import { randomUUID } from 'node:crypto';
-import { withConnection } from '../database/pool.ts';
+import { discardConnection, withBoundedReadConnection, withConnection } from '../database/pool.ts';
+import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { enqueueWorkIntent, type WorkClient } from '../work/client.ts';
+import { SearchUnavailableError } from './opensearch.ts';
 import type { PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
 
 export const PUBLIC_PREPARATION_WORKFLOW = 'search.publicPreparation';
@@ -27,6 +30,12 @@ export type PreparationRecord = {
   expires_at: string;
 };
 
+const PREPARATION_BUDGET_MS = 30_000;
+const lifetimeOptions = {
+  deadlineError: () => new SearchUnavailableError('Public preparation database deadline expired'),
+  isUncertainSettledQueryError: () => true,
+};
+
 /** One scalar operational frontier. It never stores public rows, permissions, cuts or coverage. */
 export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefix: string) {
   const intent = (id: string, revision: string, notBefore = Date.now()) => ({
@@ -35,22 +44,49 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
     workflowId: `search.publicPreparation:${id}:${revision}`,
     input: { accounts: [], id, prefix, revision, notBefore },
   });
-  async function transaction<T>(run: (client: PoolClient) => Promise<T>) {
-    return withConnection(pool, async (client) => {
-      await client.query('BEGIN');
-      try {
-        const value = await run(client);
-        await client.query('COMMIT');
-        return value;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
-    });
+  async function transaction<T>(deadline: number, run: (client: PoolClient) => Promise<T>) {
+    let closed = true;
+    return withBoundedReadLifetime(
+      (bounded) =>
+        withConnection(pool, async (raw) => {
+          try {
+            return await bounded(raw);
+          } finally {
+            // The callback can outlive its deadline while enqueueing an intent. An
+            // unfinished write transaction must never return to the reusable pool.
+            if (!closed) discardConnection(raw, new Error('Public preparation transaction did not finish'));
+          }
+        }),
+      discardConnection,
+      deadline,
+      async (client) => {
+        closed = false;
+        await client.query('BEGIN');
+        try {
+          const value = await run(client);
+          await client.query('COMMIT');
+          closed = true;
+          return value;
+        } catch (error) {
+          try {
+            await client.query('ROLLBACK');
+            closed = true;
+          } catch {
+            // Keep the original failure; checkout cleanup retires the client.
+          }
+          throw error;
+        }
+      },
+      lifetimeOptions,
+    );
   }
   return {
-    async retain(locator: PreparationLocator, expiresAt: number): Promise<string> {
-      return transaction(async (client) => {
+    async retain(
+      locator: PreparationLocator,
+      expiresAt: number,
+      deadline = deadlineFor(PREPARATION_BUDGET_MS),
+    ): Promise<string> {
+      return transaction(deadline, async (client) => {
         const result = await client.query<{ id: string; revision: string }>(
           `
           INSERT INTO search.public_preparation AS stored
@@ -97,18 +133,29 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
       });
     },
     async claim(id: string, revision: string, deadline: number): Promise<PreparationRecord | null> {
-      const result = await pool.query<PreparationRecord>(
-        `
+      const result = await withBoundedReadConnection(
+        pool,
+        deadline,
+        (client) =>
+          client.query<PreparationRecord>(
+            `
         UPDATE search.public_preparation SET lease_until = $5, revision = revision + 1
         WHERE partition_no = 0 AND prefix = $1 AND id = $2 AND revision = $3
           AND lease_until <= $4 AND due_at <= $4
         RETURNING id, revision::text, locator, expires_at::text`,
-        [prefix, id, revision, Date.now(), deadline],
+            [prefix, id, revision, Date.now(), deadline],
+          ),
+        lifetimeOptions,
       );
       return result.rows[0] ?? null;
     },
-    async advance(record: PreparationRecord, locator: PreparationLocator | null, delayMs = 0): Promise<void> {
-      await transaction(async (client) => {
+    async advance(
+      record: PreparationRecord,
+      locator: PreparationLocator | null,
+      delayMs = 0,
+      deadline = deadlineFor(PREPARATION_BUDGET_MS),
+    ): Promise<void> {
+      await transaction(deadline, async (client) => {
         if (locator === null) {
           await client.query(
             `DELETE FROM search.public_preparation WHERE partition_no = 0 AND prefix = $1 AND id = $2 AND revision = $3`,
@@ -127,8 +174,8 @@ export function createPublicPreparationStore(pool: Pool, work: WorkClient, prefi
         if (next) await enqueueWorkIntent(work, client, intent(record.id, next.revision, Date.now() + delayMs));
       });
     },
-    async due(): Promise<void> {
-      await transaction(async (client) => {
+    async due(deadline = deadlineFor(PREPARATION_BUDGET_MS)): Promise<void> {
+      await transaction(deadline, async (client) => {
         // CASE reads the uncleared lease; later SET assignments see earlier ones.
         const rows = await client.query<{ id: string; revision: string }>(
           `
