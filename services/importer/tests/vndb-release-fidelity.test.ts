@@ -26,7 +26,11 @@ import {
   developmentStatusTaxonomy,
   planVndbReleaseFidelity,
   readVndbReleaseBindings,
+  releasedStateConceptUri,
+  releasedStateSchemeUri,
+  releasedStateTaxonomy,
   vndbReleaseScanLimits,
+  type VndbReleaseBindingGroup,
 } from '../src/vndb-release-fidelity.ts';
 
 /** Authored COPY tables. These are not observed public dump evidence. */
@@ -86,12 +90,16 @@ async function authoredCopy(directory: string, released = '20200229') {
 
 const schemeId = '00000000-0000-4000-8000-000000000098';
 const statusId = '00000000-0000-4000-8000-000000000099';
+function valueStatement(content: string, rank: 'normal' | 'preferred' | 'deprecated' = 'normal') {
+  return { rank, value: { type: 'value' as const, content } };
+}
+
 const subjects: Record<string, object> = {
   [schemeId]: {
     subject: {
       id: schemeId,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: developmentStatusSchemeUri } }] },
+      statements: { 'schema:url': [valueStatement(developmentStatusSchemeUri)] },
     },
   },
   [statusId]: {
@@ -99,14 +107,14 @@ const subjects: Record<string, object> = {
       id: statusId,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: developmentStatusConceptUri('1') } }],
-        'skos:inScheme': [{ value: { content: schemeId } }],
+        'schema:url': [valueStatement(developmentStatusConceptUri('1'))],
+        'skos:inScheme': [valueStatement(schemeId)],
       },
     },
   },
 };
 
-function port(commands: BatchCommand[]): CrossMediaPort {
+function port(commands: BatchCommand[], currentSubjects: Record<string, object> = subjects): CrossMediaPort {
   const metadata = sourceRecordMetadataFixture();
   return {
     async batch(request) {
@@ -133,12 +141,110 @@ function port(commands: BatchCommand[]): CrossMediaPort {
     },
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      const known = subjects[id];
+      const known = currentSubjects[id];
       if (!known) return { subject: { id } } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
       return known as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
   };
 }
+
+test('VNDB release bindings follow current ranked Scheme and Concept evidence independently', async () => {
+  type NativeSubject = {
+    subject: {
+      id: string;
+      type: string;
+      statements: Record<string, ReturnType<typeof valueStatement>[]>;
+    };
+  };
+  const nativeSubject = (id: string, type: string, uri: string, schemeId?: string): NativeSubject => ({
+    subject: {
+      id,
+      type,
+      statements: {
+        'schema:url': [valueStatement(uri)],
+        ...(schemeId === undefined ? {} : { 'skos:inScheme': [valueStatement(schemeId)] }),
+      },
+    },
+  });
+  const devSchemeId = '00000000-0000-4000-8000-000000000101';
+  const statusOneId = '00000000-0000-4000-8000-000000000102';
+  const statusTwoId = '00000000-0000-4000-8000-000000000103';
+  const releasedSchemeId = '00000000-0000-4000-8000-000000000104';
+  const releasedConceptId = '00000000-0000-4000-8000-000000000105';
+  const currentSubjects: Record<string, NativeSubject> = {
+    [devSchemeId]: nativeSubject(devSchemeId, 'skos:ConceptScheme', developmentStatusSchemeUri),
+    [statusOneId]: nativeSubject(
+      statusOneId,
+      'skos:Concept',
+      developmentStatusConceptUri('1'),
+      devSchemeId,
+    ),
+    [statusTwoId]: nativeSubject(
+      statusTwoId,
+      'skos:Concept',
+      developmentStatusConceptUri('2'),
+      devSchemeId,
+    ),
+    [releasedSchemeId]: nativeSubject(releasedSchemeId, 'skos:ConceptScheme', releasedStateSchemeUri),
+    [releasedConceptId]: nativeSubject(
+      releasedConceptId,
+      'skos:Concept',
+      releasedStateConceptUri('TBA'),
+      releasedSchemeId,
+    ),
+  };
+  const groups: VndbReleaseBindingGroup[] = [
+    {
+      taxonomy: developmentStatusTaxonomy,
+      uri: developmentStatusSchemeUri,
+      schemeId: devSchemeId,
+      concepts: [
+        { code: '1', id: statusOneId },
+        { code: '2', id: statusTwoId },
+      ],
+    },
+    {
+      taxonomy: releasedStateTaxonomy,
+      uri: releasedStateSchemeUri,
+      schemeId: releasedSchemeId,
+      concepts: [{ code: 'TBA', id: releasedConceptId }],
+    },
+  ];
+  const codes = async () =>
+    (await readVndbReleaseBindings(port([], currentSubjects), groups)).concepts
+      .map(({ taxonomy, code }) => `${taxonomy}:${code}`)
+      .sort();
+  const allCodes = [
+    `${developmentStatusTaxonomy}:1`,
+    `${developmentStatusTaxonomy}:2`,
+    `${releasedStateTaxonomy}:TBA`,
+  ].sort();
+  const unaffectedCodes = [`${developmentStatusTaxonomy}:2`, `${releasedStateTaxonomy}:TBA`].sort();
+  const setEvidence = (
+    id: string,
+    property: string,
+    content: string,
+    rank: 'normal' | 'preferred' | 'deprecated',
+  ) => {
+    currentSubjects[id]!.subject.statements[property] = [valueStatement(content, rank)];
+  };
+
+  expect(await codes()).toEqual(allCodes);
+  setEvidence(devSchemeId, 'schema:url', developmentStatusSchemeUri, 'deprecated');
+  expect(await codes()).toEqual([`${releasedStateTaxonomy}:TBA`]);
+  setEvidence(devSchemeId, 'schema:url', developmentStatusSchemeUri, 'preferred');
+  expect(await codes()).toEqual(allCodes);
+
+  setEvidence(statusOneId, 'schema:url', developmentStatusConceptUri('1'), 'deprecated');
+  expect(await codes()).toEqual(unaffectedCodes);
+  setEvidence(statusOneId, 'schema:url', developmentStatusConceptUri('1'), 'normal');
+  expect(await codes()).toEqual(allCodes);
+
+  setEvidence(statusOneId, 'skos:inScheme', devSchemeId, 'deprecated');
+  expect(await codes()).toEqual(unaffectedCodes);
+  setEvidence(statusOneId, 'skos:inScheme', devSchemeId, 'preferred');
+  expect(await codes()).toEqual(allCodes);
+});
 
 test('operator plans authored VNDB COPY releases without mixing work and release grains and imports through the seed caller', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'vndb-release-fidelity-'));
@@ -183,6 +289,12 @@ test('operator plans authored VNDB COPY releases without mixing work and release
       },
     ]);
     expect(bindings.concepts.map((item) => item.code)).toEqual(['1']);
+    expect(bindings.schemes).toMatchObject([
+      { taxonomy: developmentStatusTaxonomy, id: schemeId, uri: developmentStatusSchemeUri },
+    ]);
+    expect(bindings.concepts).toMatchObject([
+      { taxonomy: developmentStatusTaxonomy, code: '1', id: statusId, schemeId },
+    ]);
     const first = await importVndbReleaseFidelity({
       tables: await authoredCopy(directory),
       path: join(directory, 'state.sqlite'),
