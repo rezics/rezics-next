@@ -731,9 +731,9 @@ test('the unmounted activation factory registers three commands that createKerne
     'x-rate-limit': { family: 'write', units: 1 },
     security: [{ bearerAuth: [] }],
   });
-  expect(paths['/v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:advanceActivation']?.post?.operationId).toBe(
-    'hosted_catalogue.prepare_release_advance_activation',
-  );
+  expect(
+    paths['/v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:advanceActivation']?.post?.operationId,
+  ).toBe('hosted_catalogue.prepare_release_advance_activation');
   expect(paths['/v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:activate']?.post?.operationId).toBe(
     'hosted_catalogue.prepare_release_activate',
   );
