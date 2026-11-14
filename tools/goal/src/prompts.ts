@@ -60,6 +60,8 @@ const MINIMAL_WRAPPER_RESULT = wrapperResult(
 const OWNED_ONCE =
   'This brief leaves acceptance to the worker. Choose or add a focused, meaningful check that exercises the stated outcome; no pass is presumed. Run the chosen command once after your last relevant edit and report its exact command and observed result.';
 const SCARCE_ONCE = 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
+const CONTINUATION_BOUNDARY =
+  'Continue only for real source; separate scope names actual paths and only real dependencies. For no source, proof or an owner referral, use `handoff: review` and a blank line.';
 const CHECK_CONDITIONS = new Set<ConditionId>([
   'source-only',
   'minimal-verification',
@@ -415,11 +417,12 @@ function promptView(input: WorkerPromptInput, deferOrdinaryTests = false, source
       ? ''
       : 'Build the whole outcome in this attempt. Only a part that needs undelivered work from elsewhere may remain: commit a coherent part and return success with that part listed as follow-up.',
     continuationBriefPath: `${CONTINUATION_DIRECTORY}/<short-name>.md`,
+    continuationBoundary: CONTINUATION_BOUNDARY,
     checkFailureFollowThrough: sourceOnly
       ? 'Repair source defects established by existing results. Keep deferred checks unverified.'
       : 'Fix tests that passed on base but fail now.',
     sourceOnlyContinuation: continuesItself(task)
-      ? `Complete owned source in this attempt. Only undelivered work from another Goal may remain: checkpoint the coherent source and write that remainder at ${CONTINUATION_DIRECTORY}/<short-name>.md (goal ${brief.goal}, manager ${manager}); name it in the result.`
+      ? `${CONTINUATION_BOUNDARY} Save at ${CONTINUATION_DIRECTORY}/<short-name>.md; name it in result.`
       : '',
     waitSeconds: String(policy.guidance.longCommandWaitMs / 1000),
     waitMs: String(policy.guidance.longCommandWaitMs),

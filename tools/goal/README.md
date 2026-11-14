@@ -2396,6 +2396,7 @@ release. Prose and fenced examples never supply scope.
 An exact leading body line `handoff: review` followed by a blank line marks an explicit no-owned-remainder or proof
 handoff. It keeps the body intact in the source manager's `proposed/` queue with `paths: []` and a review reason;
 an incomplete marker becomes a correction proposal.
+Decision: worker prompts distinguish real scoped source from no-source review notes and point to this existing parser contract.
 
 regular Markdown that cannot be admitted moves to `<state>/backlog/<goal>/failed/` under a task/attempt-prefixed name,
 with a `.reason` file and a manager `instruction` naming the continuation and reason; other entries are removed. The

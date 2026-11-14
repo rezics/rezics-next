@@ -9,7 +9,7 @@ Other modules: docs/architecture/modules.json
 
 The retry manifest records a failure from an earlier attempt. Hosts and tools may have been fixed since then. Rerun the failing command once before reporting any blocker about that failure; report a `tool` blocker only if it fails again.
 
-Build the whole outcome in this attempt and continue until it is built and its checks pass: a session that ends with work it could still do costs a new attempt. Write a continuation only for a part that needs another Goal's undelivered work: commit a coherent, type-checking part and write that part as a continuation brief at `.temp/continuation/<short-name>.md` (goal web, manager web). Such a remainder is not a blocker: return success and name the continuation.
+Build the whole outcome in this attempt and continue until it is built and its checks pass: a session that ends with work it could still do costs a new attempt. Continue only for real source; separate scope names actual paths and only real dependencies. For no source, proof or an owner referral, use `handoff: review` and a blank line. Commit a coherent, type-checking part and write the continuation or review note at `.temp/continuation/<short-name>.md` (goal web, manager web); return success and name the file.
 
 The task contract follows:
 
