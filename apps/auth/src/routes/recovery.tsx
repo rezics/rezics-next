@@ -12,8 +12,12 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import {
-  useCallback, useLayoutEffect, useRef, useState,
-  type FormEvent, type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
@@ -38,7 +42,7 @@ const emailErrorId = 'recovery-email-error';
 const passwordId = 'recovery-password';
 const passwordErrorId = 'recovery-password-error';
 type RecoveryControlEvent = ReactMouseEvent<HTMLElement>;
-type AdviceControl = 'retry' | 'fresh';
+type AdviceControl = 'retry' | 'fresh' | 'fresh-link';
 
 // One mounted control owns one orientation. Observation never creates intent.
 function useRecoveryFocus() {
@@ -73,7 +77,10 @@ function useRecoveryFocus() {
     const acted = (event: MouseEvent | KeyboardEvent) => {
       if (!intent.current) return;
       const sameControl = event.target instanceof Node && intent.current.trigger.contains(event.target);
-      if (!sameControl || event.type === 'click' || ('key' in event && (event.key === 'Enter' || event.key === ' '))) cancel();
+      if (
+        !sameControl || event.type === 'click' ||
+        ('key' in event && (event.key === 'Enter' || event.key === ' '))
+      ) cancel();
     };
     document.addEventListener('focusin', moved, true);
     document.addEventListener('focusout', blurred, true);
@@ -204,6 +211,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   useLayoutEffect(() => {
     if (advice.state.kind === 'loading' || !adviceControl) return;
     setAdviceControl(null);
+    if (adviceControl === 'fresh-link') setMessage('');
     focusIntent.settle((destination) => {
       if (destination === 'return') return document.getElementById('recovery-return-heading');
       if (!page) return readStatus.current;
@@ -409,6 +417,32 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     );
   }
 
+  if ((page && hasFragment && !credentials) || (reading && adviceControl === 'fresh-link')) {
+    return (
+      <AuthPage heading={m.auth_recovery_heading()}>
+        <ErrorAlert tabIndex={-1} ref={alert}>
+          {message}
+        </ErrorAlert>
+        {readAdvice}
+        <a
+          href="/recovery"
+          aria-disabled={reading}
+          aria-busy={reading}
+          onClick={(event) => {
+            event.preventDefault();
+            if (reading) return;
+            focusIntent.claim(event, 'form');
+            setAdviceControl('fresh-link');
+            setHasFragment(false);
+            setFresh(true);
+          }}
+        >
+          {m.auth_recovery_new_link()}
+        </a>
+      </AuthPage>
+    );
+  }
+
   if (!page) {
     return (
       <AuthPage heading={m.auth_recovery_heading()}>
@@ -418,29 +452,6 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
         {hasRecoveryHistory(attempt.returned) ? <RecoveryHistory summary={attempt.returned} /> : null}
         <a href="/login">{m.auth_login_heading()}</a>
         <RecoveryDeparture shouldWarn={shouldWarn} leave={clearSecrets} focus={() => readStatus.current?.focus()} />
-      </AuthPage>
-    );
-  }
-
-  if (hasFragment && !credentials) {
-    return (
-      <AuthPage heading={m.auth_recovery_heading()}>
-        <ErrorAlert tabIndex={-1} ref={alert}>
-          {message}
-        </ErrorAlert>
-        <a
-          href="/recovery"
-          onClick={(event) => {
-            event.preventDefault();
-            focusIntent.claim(event, 'form');
-            setAdviceControl('fresh');
-            setHasFragment(false);
-            setMessage('');
-            setFresh(true);
-          }}
-        >
-          {m.auth_recovery_new_link()}
-        </a>
       </AuthPage>
     );
   }

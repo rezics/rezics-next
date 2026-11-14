@@ -20,7 +20,9 @@ export default {
   decorators: [authLocale],
 };
 
-type Mode = 'start-acknowledged' | 'start-unknown' | 'complete-unknown' | 'unavailable' | 'pending';
+type Mode =
+  | 'start-acknowledged' | 'start-unknown' | 'complete-unknown'
+  | 'unavailable' | 'pending' | 'fresh-pending' | 'retry-pending';
 // Real route with bounded presentation fixtures. These are not native acceptance results.
 function Page({ mode }: { mode: Mode }) {
   const [installed, setInstalled] = useState(false);
@@ -55,6 +57,8 @@ function Page({ mode }: { mode: Mode }) {
     globalThis.fetch = (async (input, init) => {
       if (input === '/recovery/page') {
         reads++;
+        if (reads === 2 && mode === 'retry-pending') return new Response('', { status: 503 });
+        if (reads > 2 && (mode === 'fresh-pending' || mode === 'retry-pending')) return new Promise<Response>(() => {});
         if (reads > 1 && mode === 'unavailable') return new Response('', { status: 503 });
         if (reads > 1 && mode === 'pending') return new Promise<Response>(() => {});
         const stage = JSON.parse(String(init?.body)).stage;
@@ -104,3 +108,21 @@ export const StartUnknown = story('start-unknown');
 export const CompletionUnknown = story('complete-unknown');
 export const AdviceUnavailable = story('unavailable');
 export const AdvicePending = story('pending');
+
+const keyboardPending = (mode: 'fresh-pending' | 'retry-pending') => ({
+  render: () => <Page mode={mode} />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await returned(canvasElement);
+    const control = await waitFor(() => {
+      const candidate = button(canvasElement, mode === 'fresh-pending' ? m.auth_recovery_new_link() : m.auth_login_retry());
+      return candidate && !candidate.disabled ? candidate : null;
+    });
+    control!.focus();
+    control!.click();
+    await waitFor(() => control!.getAttribute('aria-busy') === 'true');
+    if (!control!.isConnected || document.activeElement !== control)
+      throw new Error('Pending keyboard recovery must keep its requesting control focused');
+  },
+});
+export const KeyboardFreshPending = keyboardPending('fresh-pending');
+export const KeyboardRetryPending = keyboardPending('retry-pending');

@@ -95,7 +95,7 @@ test('cached completion drops credentials, aborts reads, rejects late writes and
     );
     expect(page.host.textContent).not.toContain('other@example.test');
     expect(button(page.host, m.auth_login_retry())).toBeDefined();
-    await flush(() => button(page.host, m.auth_login_retry())!.click());
+    await flush(() => { const control = button(page.host, m.auth_login_retry())!; control.focus(); control.click(); });
     await flush(() =>
       finish(Response.json(recoveryPage('complete', { minPasswordLength: 8, maxPasswordLength: 128 }))),
     );
@@ -111,7 +111,7 @@ test('cached completion drops credentials, aborts reads, rejects late writes and
       Response.json(
         recoveryPage(JSON.parse(String(init?.body)).stage, { minPasswordLength: 8, maxPasswordLength: 128 }),
       )) as typeof fetch;
-    await flush(() => button(page.host, 'Request a new recovery link')!.click());
+    await flush(() => { const control = button(page.host, 'Request a new recovery link')!; control.focus(); control.click(); });
     expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
     expect(document.activeElement?.id).toBe('recovery-email');
     expect(page.calls).toHaveLength(1);
@@ -166,7 +166,7 @@ test('acknowledged start retains generic history; a new document without mounted
   expect(page.host.textContent).toContain('Your recovery request was accepted');
   expect(page.host.textContent).not.toContain('private@example.test');
   expect(page.host.querySelector('input')).toBeNull();
-  await flush(() => button(page.host, 'Request a new recovery link')!.click());
+  await flush(() => { const control = button(page.host, 'Request a new recovery link')!; control.focus(); control.click(); });
   expect(document.activeElement?.id).toBe('recovery-email');
   await page.close();
   page = await setup();
@@ -199,5 +199,43 @@ test('a deliberate newer start acknowledgement does not settle an earlier unknow
     expect(page.calls).toHaveLength(2);
   } finally {
     await page.close();
+  }
+});
+
+test('historical fresh recovery keeps its trigger pending and cancels keyboard ownership on Tab or pointer', async () => {
+  for (const complete of [false, true]) for (const modality of ['keyboard', 'pointer', 'tab']) for (const status of complete ? [200, 503] : [200]) {
+    const page = await setup(complete);
+    try {
+      await submit(page.host, complete ? 'private-password' : 'reader@example.test');
+      await flush(() => page.calls[0]!.resolve(new Response('', { status: 503 })));
+      await flush(() => transition('pagehide'));
+      await flush(() => transition('pageshow'));
+      const trigger = button(page.host, 'Request a new recovery link')!;
+      let finish!: (response: Response) => void;
+      globalThis.fetch = (() => new Promise<Response>((resolve) => { finish = resolve; })) as typeof fetch;
+      await flush(() => {
+        trigger.focus();
+        trigger.dispatchEvent(new dom.MouseEvent('click', { bubbles: true, detail: modality === 'pointer' ? 1 : 0 }));
+      });
+      const reader = page.host.querySelector<HTMLAnchorElement>('a[href="/login"]')!;
+      if (complete) {
+        expect(trigger.isConnected).toBe(true);
+        expect(trigger.disabled).toBe(false);
+        expect(document.activeElement).toBe(trigger);
+        if (modality === 'tab') await flush(() => reader.focus());
+        await flush(() => finish(status === 200
+          ? Response.json(recoveryPage('start', { minPasswordLength: 8, maxPasswordLength: 128 }))
+          : new Response('', { status })));
+      }
+      if (status !== 200) {
+        expect(document.activeElement === button(page.host, m.auth_login_retry())!.parentElement).toBe(modality === 'keyboard');
+        continue;
+      }
+      const input = page.host.querySelector<HTMLInputElement>('[name="email"]')!;
+      expect(input.value).toBe('');
+      expect(document.activeElement === input).toBe(modality === 'keyboard' || (!complete && modality === 'tab'));
+      expect(page.host.textContent).toContain('result is unknown');
+      expect(page.calls).toHaveLength(1);
+    } finally { await page.close(); }
   }
 });
