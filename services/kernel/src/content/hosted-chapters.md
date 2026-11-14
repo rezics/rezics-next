@@ -36,6 +36,10 @@ Preparation start returns 202 and the remaining preparation commands return 200.
 limited to 1,024 IDs with no aggregate cap. Preparation responses are private and no-store, expose only retained
 progress and candidate counts, and never select the publication pointer.
 
+Decision: native Book acceptance advances retained preparation through bounded `:advance` requests with fresh
+route-native step IDs until candidate coverage is complete before sealing; a finite fixture cap is only a liveness
+guard and does not impose a production aggregate limit.
+
 Decision: preparation route registration returns its chained Elysia type through chapter composition, so the
 generated Kernel client exposes all seven mounted commands and Studio calls them directly with inferred operands.
 
