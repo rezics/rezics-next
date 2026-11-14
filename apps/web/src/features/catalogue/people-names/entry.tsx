@@ -24,14 +24,11 @@ export function PeopleNamesEntry({
   adviceLoader?: NamesAdviceLoader;
 }) {
   const { subject } = reading.public;
-  const incarnation = useRef({ public: reading.public, release: reading.release, reader: reading.reader });
+  // Supplied names do not depend on display preferences. PeopleFacts owns their profile disclosure boundary.
+  const incarnation = useRef({ public: reading.public, release: reading.release });
   const identity = useRef(0);
-  if (
-    incarnation.current.public !== reading.public ||
-    incarnation.current.release !== reading.release ||
-    incarnation.current.reader !== reading.reader
-  ) {
-    incarnation.current = { public: reading.public, release: reading.release, reader: reading.reader };
+  if (incarnation.current.public !== reading.public || incarnation.current.release !== reading.release) {
+    incarnation.current = { public: reading.public, release: reading.release };
     identity.current++;
   }
   const lifetime = useNamesLifetime(

@@ -12,6 +12,7 @@ import { characterRelationshipsFixture } from '../src/kernel/fake/character-rela
 import { contextHref } from '../src/features/pages/context-navigation';
 import type { TermsPageAuthority } from '../src/features/catalogue/subject-terms';
 import { locales } from '../src/paraglide/runtime';
+import { defaultReader } from '../src/subject/reader';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { PersonReader } = await import('../src/features/catalogue/person-reader/reader');
@@ -225,6 +226,9 @@ test('mounted signed-out search, overflow, exact copying, advice retry and A-B-A
     await click(button('Next language groups'));
     await click(button('Next language groups'));
     expect(host.querySelector('[data-name-language="tr"]')).not.toBeNull();
+    const lastLanguage = host.querySelector('[data-name-language="tr"]');
+    await draw({ ...A, reader: { ...defaultReader } });
+    expect(host.querySelector('[data-name-language="tr"]')).toBe(lastLanguage);
     const input = host.querySelector('input')!;
     const setQuery = async (value: string) =>
       act(async () => {
@@ -282,6 +286,19 @@ test('mounted signed-out search, overflow, exact copying, advice retry and A-B-A
       new Promise((resolve) => {
         finishAdvice = resolve;
       });
+    const pending = { ...A, public: structuredClone(A.public) };
+    await draw(pending);
+    const pendingInput = host.querySelector('input'),
+      pendingReads = reads;
+    for (const reader of [defaultReader, { ...defaultReader }]) {
+      await draw({ ...pending, reader });
+      expect(host.querySelector('input')).toBe(pendingInput);
+      expect(host.textContent).toContain('Checking current Terms advice');
+      expect(reads).toBe(pendingReads);
+    }
+    await act(async () => finishAdvice(allowed));
+    expect(host.textContent).toContain('allows proposing');
+    expect(reads).toBe(pendingReads);
     await draw({ ...A, public: structuredClone(A.public) });
     const oldAdvice = finishAdvice;
     reply = async () => denied;
