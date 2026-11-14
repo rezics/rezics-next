@@ -40,24 +40,28 @@ if (args[0] === 'resume') {
         return;
       }
       if (method === 'initialize') request('thread/resume', { threadId: args[1] });
-      else if (method === 'thread/resume') append(process.env.FAKE_VIEWER_LOG, { ...viewer, phase: 'attached', endpoint });
+      else if (method === 'thread/resume')
+        append(process.env.FAKE_VIEWER_LOG, { ...viewer, phase: 'attached', endpoint });
     });
-    socket.addEventListener('error', () => append(process.env.FAKE_VIEWER_LOG, { ...viewer, phase: 'failed', endpoint }));
+    socket.addEventListener('error', () =>
+      append(process.env.FAKE_VIEWER_LOG, { ...viewer, phase: 'failed', endpoint }),
+    );
   }
   setInterval(() => {}, 60_000);
 } else if (args[0] === 'app-server') {
   type Thread = { turns: { id: string; status: string }[]; goal: Record<string, unknown> | null };
   const threadStatePath = process.env.FAKE_THREAD_STATE;
-  const stored = threadStatePath && existsSync(threadStatePath)
-    ? (JSON.parse(readFileSync(threadStatePath, 'utf8')) as Record<string, Thread>)
-    : {};
+  const stored =
+    threadStatePath && existsSync(threadStatePath)
+      ? (JSON.parse(readFileSync(threadStatePath, 'utf8')) as Record<string, Thread>)
+      : {};
   const threads = new Map<string, Thread>(Object.entries(stored));
   const persistThreads = () => {
     if (threadStatePath) writeFileSync(threadStatePath, JSON.stringify(Object.fromEntries(threads)));
   };
   const currentNumber = (prefix: string) => {
     const ids = [...threads.values()].flatMap((thread) => thread.turns.map((turn) => turn.id));
-    return Math.max(0, ...ids.flatMap((id) => id.startsWith(prefix) ? [Number(id.slice(prefix.length)) || 0] : []));
+    return Math.max(0, ...ids.flatMap((id) => (id.startsWith(prefix) ? [Number(id.slice(prefix.length)) || 0] : [])));
   };
   let nextThread = currentNumber('thread-');
   let nextTurn = currentNumber('turn-');
@@ -121,9 +125,7 @@ if (args[0] === 'resume') {
           case 'turn/start': {
             const thread = threads.get(params.threadId as string) ?? { turns: [], goal: null };
             if (thread.turns.some((turn) => turn.status === 'inProgress')) {
-              socket.send(
-                JSON.stringify({ id: request.id, error: { code: -32600, message: 'Turn already active' } }),
-              );
+              socket.send(JSON.stringify({ id: request.id, error: { code: -32600, message: 'Turn already active' } }));
               return;
             }
             const turn = { id: `turn-${++nextTurn}`, status: 'inProgress' };

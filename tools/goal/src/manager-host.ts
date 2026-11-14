@@ -284,12 +284,7 @@ function isAppServerAttachment(value: unknown): value is AppServerAttachment {
 }
 
 function sameIdentity(left: ProcessIdentity, right: ProcessIdentity): boolean {
-  return (
-    left.pid === right.pid &&
-    left.start === right.start &&
-    left.boot === right.boot &&
-    left.group === right.group
-  );
+  return left.pid === right.pid && left.start === right.start && left.boot === right.boot && left.group === right.group;
 }
 
 function readAppServerRegistry(path: string): AppServerRegistryEntry[] {
@@ -384,7 +379,10 @@ function processEnvironment(pid: number): Map<string, string> {
   );
 }
 
-function appServerProcessProof(pool: CodexPool, attachment: AppServerAttachment): 'adopt' | 'stale' | 'obsolete' | 'refuse' {
+function appServerProcessProof(
+  pool: CodexPool,
+  attachment: AppServerAttachment,
+): 'adopt' | 'stale' | 'obsolete' | 'refuse' {
   try {
     if (!isPrivateAppServerEndpoint(attachment.endpoint)) return 'refuse';
     if (attachment.environmentFingerprint !== appServerEnvironmentFingerprint(pool)) return 'refuse';
@@ -424,7 +422,11 @@ function appServerProcessProof(pool: CodexPool, attachment: AppServerAttachment)
   }
 }
 
-function buildAppServerAttachment(pool: CodexPool, endpoint: string | undefined, identity: ProcessIdentity | undefined): AppServerAttachment | undefined {
+function buildAppServerAttachment(
+  pool: CodexPool,
+  endpoint: string | undefined,
+  identity: ProcessIdentity | undefined,
+): AppServerAttachment | undefined {
   if (!endpoint || !identity) return undefined;
   if (!isPrivateAppServerEndpoint(endpoint)) throw new Error(`Refusing non-private app-server endpoint: ${endpoint}`);
   if (!sameProcess(identity) || identity.group !== identity.pid) return undefined;
@@ -462,7 +464,9 @@ function buildAppServerAttachment(pool: CodexPool, endpoint: string | undefined,
 
 function writeAppServerHandoffRequest(stateDirectory: string): void {
   const path = join(stateDirectory, appServerHandoffName);
-  writeFileSync(path, JSON.stringify({ version: 1, requestedAt: Date.now(), requesterPid: process.pid }), { mode: 0o600 });
+  writeFileSync(path, JSON.stringify({ version: 1, requestedAt: Date.now(), requesterPid: process.pid }), {
+    mode: 0o600,
+  });
   chmodSync(path, 0o600);
 }
 
@@ -540,20 +544,14 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
   const registryPath = join(runtime.stateDirectory, appServerRegistryName);
   const handoffPath = join(runtime.stateDirectory, appServerHandoffName);
   const handoffAppServers = () => restartHandoffRequested(runtime.stateDirectory);
-  const connectManagerPool = async (
-    pool: CodexPool,
-    onStart?: (identity: ProcessIdentity) => void,
-  ) => {
+  const connectManagerPool = async (pool: CodexPool, onStart?: (identity: ProcessIdentity) => void) => {
     const entries = readAppServerRegistry(registryPath);
     const samePoolId = entries.filter((entry) => entry.attachment?.poolId === pool.id);
     if (samePoolId.length > 1) throw new Error(`Multiple recorded app-servers for manager pool ${pool.id}`);
     const entry = samePoolId[0];
     let attachment = entry?.attachment;
     if (attachment) {
-      if (
-        attachment.codexHome !== pool.codexHome ||
-        attachment.executable !== (pool.executable ?? 'codex')
-      )
+      if (attachment.codexHome !== pool.codexHome || attachment.executable !== (pool.executable ?? 'codex'))
         throw new Error(`Refusing manager pool identity change for ${pool.id}`);
       const proof = appServerProcessProof(pool, attachment);
       if (proof === 'refuse') throw new Error(`Refusing unverified manager app-server for pool ${pool.id}`);
@@ -574,7 +572,9 @@ export async function serveManagers(runtime: IntegrationRuntime, options: Manage
           if (error instanceof ForeignAppServerEndpointError) throw error;
           // One bounded same-pool recovery: retire only the proven old group, then launch once and resume the stored
           // thread. A foreign endpoint or changed environment is refused before this recovery path.
-          console.error(`Manager app-server reattach failed for ${pool.id}; starting one clean rejoin: ${String(error)}`);
+          console.error(
+            `Manager app-server reattach failed for ${pool.id}; starting one clean rejoin: ${String(error)}`,
+          );
           await stopRecordedAppServer(attachment.identity, policy.appServer);
           removeAppServerIdentity(registryPath, attachment.identity);
           attachment = undefined;

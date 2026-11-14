@@ -196,12 +196,7 @@ export class ManagerSessionTransport {
     const goal = await client.request('thread/goal/get', { threadId });
     return goal.goal;
   }
-  async startTurn(
-    client: AppServer,
-    spec: CodexTurnSpec,
-    threadId: string,
-    prompt: string,
-  ): Promise<string> {
+  async startTurn(client: AppServer, spec: CodexTurnSpec, threadId: string, prompt: string): Promise<string> {
     const turn = await client.request('turn/start', {
       threadId,
       model: this.model(spec),
@@ -267,11 +262,7 @@ export class ManagerSessionTransport {
           item && typeof item === 'object' && !Array.isArray(item) ? (item as { type?: unknown }).type : null;
         if (typeof type !== 'string' || !THREAD_ITEM_TYPES.has(type))
           throw new Error('Invalid thread/items/list item type for manager turn');
-        if (
-          userMessageItem(item) &&
-          !isHarnessGoalContinuation(itemEntry) &&
-          !isHarnessGoalContinuation(item)
-        )
+        if (userMessageItem(item) && !isHarnessGoalContinuation(itemEntry) && !isHarnessGoalContinuation(item))
           return true;
       }
       if (page.nextCursor === null) return false;
@@ -383,7 +374,11 @@ export class ManagerSessionTransport {
       options,
     );
   }
-  private codexViewerArgv(spec: Pick<ManagerSpec, 'id' | 'pool' | 'model' | 'effort'>, threadId: string, client: AppServer): string[] {
+  private codexViewerArgv(
+    spec: Pick<ManagerSpec, 'id' | 'pool' | 'model' | 'effort'>,
+    threadId: string,
+    client: AppServer,
+  ): string[] {
     const viewer = [spec.pool.executable ?? 'codex', 'resume', threadId];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
     return [

@@ -191,11 +191,9 @@ export async function reportServices(
     const handoffPath = stateDirectory ? join(stateDirectory, 'manager-app-servers-handoff.json') : undefined;
     if (handoffPath) {
       mkdirSync(stateDirectory!, { recursive: true });
-      writeFileSync(
-        handoffPath,
-        JSON.stringify({ version: 1, requestedAt: Date.now(), requesterPid: process.pid }),
-        { mode: 0o600 },
-      );
+      writeFileSync(handoffPath, JSON.stringify({ version: 1, requestedAt: Date.now(), requesterPid: process.pid }), {
+        mode: 0o600,
+      });
       chmodSync(handoffPath, 0o600);
     }
     const restarted = await run(['systemctl', '--user', 'restart', ...RESIDENT_CODE_UNITS]);

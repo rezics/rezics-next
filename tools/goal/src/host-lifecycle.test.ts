@@ -137,11 +137,19 @@ function installFakeWebSocketCodex(stateDirectory: string): string {
 
 function startIsolatedTmux(socket: string, session: string, cwd: string): void {
   if (!tmuxBinary) throw new Error('tmux fixture is unavailable');
-  const result = spawnSync(tmuxBinary, ['-u', '-S', socket, 'new-session', '-d', '-s', session, '-c', cwd, 'sleep', '300'], {
-    encoding: 'utf8',
-  });
+  const result = spawnSync(
+    tmuxBinary,
+    ['-u', '-S', socket, 'new-session', '-d', '-s', session, '-c', cwd, 'sleep', '300'],
+    {
+      encoding: 'utf8',
+    },
+  );
   if (result.status !== 0)
-    throw new Error(result.error?.message || result.stderr || `tmux exited ${result.status}${result.signal ? ` (${result.signal})` : ''}`);
+    throw new Error(
+      result.error?.message ||
+        result.stderr ||
+        `tmux exited ${result.status}${result.signal ? ` (${result.signal})` : ''}`,
+    );
 }
 
 function tmux(socket: string, ...argv: string[]): string {
@@ -170,7 +178,10 @@ async function waitForJsonLine(path: string, predicate: (entry: any) => boolean,
   throw new Error(`Timed out waiting for ${label}`);
 }
 
-function appServerRegistryEntry(stateDirectory: string): { identity: ProcessIdentity; attachment: AppServerAttachment } {
+function appServerRegistryEntry(stateDirectory: string): {
+  identity: ProcessIdentity;
+  attachment: AppServerAttachment;
+} {
   const records = JSON.parse(readFileSync(join(stateDirectory, 'manager-app-servers.json'), 'utf8')) as {
     identity: ProcessIdentity;
     attachment?: AppServerAttachment;
@@ -192,10 +203,12 @@ function storedManagerState(stateDirectory: string, id = 'accounts'): Record<str
 }
 
 function managerWindow(socket: string, session: string): string {
-  return tmux(socket, 'list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}')
-    .split('\n')
-    .find((line) => line.endsWith('\taccounts'))
-    ?.split('\t')[0] ?? '';
+  return (
+    tmux(socket, 'list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}')
+      .split('\n')
+      .find((line) => line.endsWith('\taccounts'))
+      ?.split('\t')[0] ?? ''
+  );
 }
 
 async function unusedLoopbackPort(): Promise<number> {
@@ -205,7 +218,7 @@ async function unusedLoopbackPort(): Promise<number> {
     server.listen(0, '127.0.0.1', resolve);
   });
   const port = (server.address() as { port: number }).port;
-  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   return port;
 }
 
@@ -226,9 +239,9 @@ async function cleanHosted(
   const appServers = join(stateDirectory, 'manager-app-servers.json');
   let recorded: ProcessIdentity[] = [];
   try {
-    recorded = (JSON.parse(readFileSync(appServers, 'utf8')) as (ProcessIdentity | { identity: ProcessIdentity })[]).map(
-      (record) => ('identity' in record ? record.identity : record),
-    );
+    recorded = (
+      JSON.parse(readFileSync(appServers, 'utf8')) as (ProcessIdentity | { identity: ProcessIdentity })[]
+    ).map((record) => ('identity' in record ? record.identity : record));
   } catch {}
   const childrenBeforeExit = [
     ...knownChildren,
@@ -316,127 +329,126 @@ test('a host that finds a recorded app-server of a dead host stops it before res
   }
 }, 15_000);
 
-test.skipIf(!tmuxBinary)('a routine Goal host restart keeps the pool server endpoint and its tmux viewer', async () => {
-  const f = fixture();
-  const tmuxDirectory = join(process.cwd(), '.temp');
-  mkdirSync(tmuxDirectory, { recursive: true });
-  const tmuxSocket = join(tmuxDirectory, `goal-tmux-${randomUUID()}.sock`);
-  const session = 'goal-host-lifecycle';
-  const rpcPath = join(f.path, 'rpc.jsonl');
-  const viewerPath = join(f.path, 'viewers.jsonl');
-  const serverStartPath = join(f.path, 'servers.jsonl');
-  let first: Hosted | undefined;
-  let second: Hosted | undefined;
-  try {
-    const executable = installFakeWebSocketCodex(f.path);
-    Object.assign(f.env, {
-      FAKE_APP_SERVER_WEBSOCKET: '1',
-      FAKE_CODEX_EXECUTABLE: executable,
-      FAKE_RPC_LOG: rpcPath,
-      FAKE_SERVER_START_LOG: serverStartPath,
-      FAKE_THREAD_STATE: join(f.path, 'threads.json'),
-      FAKE_VIEWER_LOG: viewerPath,
-      FAKE_TMUX_SOCKET: tmuxSocket,
-      FAKE_TMUX_SESSION: session,
-    });
-    startIsolatedTmux(tmuxSocket, session, f.path);
-    first = startHost(f.env);
-    await first.ready;
-    const started = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
-    expect(started.code).toBe(0);
-    const originalViewer = await waitForJsonLine(
-      viewerPath,
-      (entry) => entry.phase === 'attached',
-      'the initial tmux viewer to attach to its app-server',
-    );
-    const originalThread = jsonLines(rpcPath).find((message) => message.method === 'thread/start');
-    expect(originalThread).toBeDefined();
-    const originalState = storedManagerState(f.path);
-    const originalThreadId = originalState.threadId as string;
-    expect(originalThreadId).toBeTruthy();
-    const originalWindow = managerWindow(tmuxSocket, session);
-    expect(originalWindow).not.toBe('');
-    const originalPanes = tmux(tmuxSocket, 'list-panes', '-t', originalWindow, '-F', '#{pane_id}');
-    const original = appServerRegistryEntry(f.path);
-    const originalViewerIdentity = processIdentity(originalViewer.pid);
-    expect(originalViewerIdentity).toBeDefined();
-    expect(originalViewer.codexHome).toBe(join(f.path, 'codex'));
-    expect(originalViewer.argv).toEqual([
-      'resume',
-      originalThreadId,
-      '--remote',
-      original.attachment.endpoint,
-    ]);
-    expect(readFileSync(`/proc/${original.identity.pid}/environ`, 'utf8')).toContain(
-      `CODEX_HOME=${join(f.path, 'codex')}\0`,
-    );
+test.skipIf(!tmuxBinary)(
+  'a routine Goal host restart keeps the pool server endpoint and its tmux viewer',
+  async () => {
+    const f = fixture();
+    const tmuxDirectory = join(process.cwd(), '.temp');
+    mkdirSync(tmuxDirectory, { recursive: true });
+    const tmuxSocket = join(tmuxDirectory, `goal-tmux-${randomUUID()}.sock`);
+    const session = 'goal-host-lifecycle';
+    const rpcPath = join(f.path, 'rpc.jsonl');
+    const viewerPath = join(f.path, 'viewers.jsonl');
+    const serverStartPath = join(f.path, 'servers.jsonl');
+    let first: Hosted | undefined;
+    let second: Hosted | undefined;
+    try {
+      const executable = installFakeWebSocketCodex(f.path);
+      Object.assign(f.env, {
+        FAKE_APP_SERVER_WEBSOCKET: '1',
+        FAKE_CODEX_EXECUTABLE: executable,
+        FAKE_RPC_LOG: rpcPath,
+        FAKE_SERVER_START_LOG: serverStartPath,
+        FAKE_THREAD_STATE: join(f.path, 'threads.json'),
+        FAKE_VIEWER_LOG: viewerPath,
+        FAKE_TMUX_SOCKET: tmuxSocket,
+        FAKE_TMUX_SESSION: session,
+      });
+      startIsolatedTmux(tmuxSocket, session, f.path);
+      first = startHost(f.env);
+      await first.ready;
+      const started = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
+      expect(started.code).toBe(0);
+      const originalViewer = await waitForJsonLine(
+        viewerPath,
+        (entry) => entry.phase === 'attached',
+        'the initial tmux viewer to attach to its app-server',
+      );
+      const originalThread = jsonLines(rpcPath).find((message) => message.method === 'thread/start');
+      expect(originalThread).toBeDefined();
+      const originalState = storedManagerState(f.path);
+      const originalThreadId = originalState.threadId as string;
+      expect(originalThreadId).toBeTruthy();
+      const originalWindow = managerWindow(tmuxSocket, session);
+      expect(originalWindow).not.toBe('');
+      const originalPanes = tmux(tmuxSocket, 'list-panes', '-t', originalWindow, '-F', '#{pane_id}');
+      const original = appServerRegistryEntry(f.path);
+      const originalViewerIdentity = processIdentity(originalViewer.pid);
+      expect(originalViewerIdentity).toBeDefined();
+      expect(originalViewer.codexHome).toBe(join(f.path, 'codex'));
+      expect(originalViewer.argv).toEqual(['resume', originalThreadId, '--remote', original.attachment.endpoint]);
+      expect(readFileSync(`/proc/${original.identity.pid}/environ`, 'utf8')).toContain(
+        `CODEX_HOME=${join(f.path, 'codex')}\0`,
+      );
 
-    const mockSystemctl = async (argv: string[]) => {
-      if (argv[0] === 'systemctl' && argv[2] === 'restart' && argv.includes(HOST_UNIT)) {
-        first!.child.kill('SIGTERM');
-        await first!.exited;
+      const mockSystemctl = async (argv: string[]) => {
+        if (argv[0] === 'systemctl' && argv[2] === 'restart' && argv.includes(HOST_UNIT)) {
+          first!.child.kill('SIGTERM');
+          await first!.exited;
+          return { code: 0, output: '' };
+        }
+        if (argv[0] === 'systemctl' && argv.includes('show'))
+          return { code: 0, output: 'LoadState=loaded\nActiveState=active\nSubState=running\nResult=success' };
         return { code: 0, output: '' };
-      }
-      if (argv[0] === 'systemctl' && argv.includes('show'))
-        return { code: 0, output: 'LoadState=loaded\nActiveState=active\nSubState=running\nResult=success' };
-      return { code: 0, output: '' };
-    };
-    expect(await reportServices('restart', mockSystemctl, () => {}, undefined, f.path)).toBe(0);
-    expect(sameProcess(original.identity)).toBe(true);
+      };
+      expect(await reportServices('restart', mockSystemctl, () => {}, undefined, f.path)).toBe(0);
+      expect(sameProcess(original.identity)).toBe(true);
 
-    second = startHost(f.env);
-    await second.ready;
-    const resumed = await waitForJsonLine(
-      rpcPath,
-      (message) =>
-        message.method === 'thread/resume' &&
-        message.params.threadId === originalThreadId &&
-        message.params.model === 'gpt-6.1-sol',
-      'the original manager thread to resume',
-    );
-    expect(resumed.params.threadId).toBe(originalThreadId);
-    const adopted = appServerRegistryEntry(f.path);
-    expect(sameIdentityForTest(adopted.identity, original.identity)).toBe(true);
-    expect(sameProcess(adopted.identity)).toBe(true);
-    expect(adopted.attachment.endpoint).toBe(original.attachment.endpoint);
-    expect(adopted.attachment.codexHome).toBe(original.attachment.codexHome);
-    expect(adopted.attachment.executable).toBe(original.attachment.executable);
-    expect(adopted.attachment.environmentFingerprint).toBe(original.attachment.environmentFingerprint);
-    const resumedState = storedManagerState(f.path);
-    for (const key of [
-      'threadId',
-      'status',
-      'objective',
-      'budget',
-      'goalState',
-      'promptManifest',
-      'pool',
-      'engine',
-      'effort',
-      'goals',
-      'supermanager',
-      'limits',
-      'history',
-    ])
-      expect(resumedState[key]).toEqual(originalState[key]);
-    expect(jsonLines(serverStartPath)).toHaveLength(1);
-    expect(jsonLines(rpcPath).filter((message) => message.method === 'thread/start')).toHaveLength(1);
-    expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(1);
-    expect(sameProcess(originalViewerIdentity!)).toBe(true);
-    expect(jsonLines(viewerPath).filter((entry) => entry.phase === 'started')).toHaveLength(1);
-    expect(jsonLines(viewerPath).filter((entry) => entry.phase === 'attached')).toHaveLength(1);
-    expect(managerWindow(tmuxSocket, session)).toBe(originalWindow);
-    expect(tmux(tmuxSocket, 'list-panes', '-t', originalWindow, '-F', '#{pane_id}')).toBe(originalPanes);
-    expect(existsSync(join(f.path, 'manager-app-servers-handoff.json'))).toBe(false);
-  } finally {
-    await cleanHosted(f.path, second);
-    await cleanHosted(f.path, first);
-    if (existsSync(tmuxSocket) && tmuxBinary)
-      spawnSync(tmuxBinary, ['-u', '-S', tmuxSocket, 'kill-server'], { stdio: 'ignore' });
-    rmSync(tmuxSocket, { force: true });
-    f.close();
-  }
-}, 30_000);
+      second = startHost(f.env);
+      await second.ready;
+      const resumed = await waitForJsonLine(
+        rpcPath,
+        (message) =>
+          message.method === 'thread/resume' &&
+          message.params.threadId === originalThreadId &&
+          message.params.model === 'gpt-6.1-sol',
+        'the original manager thread to resume',
+      );
+      expect(resumed.params.threadId).toBe(originalThreadId);
+      const adopted = appServerRegistryEntry(f.path);
+      expect(sameIdentityForTest(adopted.identity, original.identity)).toBe(true);
+      expect(sameProcess(adopted.identity)).toBe(true);
+      expect(adopted.attachment.endpoint).toBe(original.attachment.endpoint);
+      expect(adopted.attachment.codexHome).toBe(original.attachment.codexHome);
+      expect(adopted.attachment.executable).toBe(original.attachment.executable);
+      expect(adopted.attachment.environmentFingerprint).toBe(original.attachment.environmentFingerprint);
+      const resumedState = storedManagerState(f.path);
+      for (const key of [
+        'threadId',
+        'status',
+        'objective',
+        'budget',
+        'goalState',
+        'promptManifest',
+        'pool',
+        'engine',
+        'effort',
+        'goals',
+        'supermanager',
+        'limits',
+        'history',
+      ])
+        expect(resumedState[key]).toEqual(originalState[key]);
+      expect(jsonLines(serverStartPath)).toHaveLength(1);
+      expect(jsonLines(rpcPath).filter((message) => message.method === 'thread/start')).toHaveLength(1);
+      expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(1);
+      expect(sameProcess(originalViewerIdentity!)).toBe(true);
+      expect(jsonLines(viewerPath).filter((entry) => entry.phase === 'started')).toHaveLength(1);
+      expect(jsonLines(viewerPath).filter((entry) => entry.phase === 'attached')).toHaveLength(1);
+      expect(managerWindow(tmuxSocket, session)).toBe(originalWindow);
+      expect(tmux(tmuxSocket, 'list-panes', '-t', originalWindow, '-F', '#{pane_id}')).toBe(originalPanes);
+      expect(existsSync(join(f.path, 'manager-app-servers-handoff.json'))).toBe(false);
+    } finally {
+      await cleanHosted(f.path, second);
+      await cleanHosted(f.path, first);
+      if (existsSync(tmuxSocket) && tmuxBinary)
+        spawnSync(tmuxBinary, ['-u', '-S', tmuxSocket, 'kill-server'], { stdio: 'ignore' });
+      rmSync(tmuxSocket, { force: true });
+      f.close();
+    }
+  },
+  30_000,
+);
 
 test('a foreign or credential-bearing viewer endpoint is refused before connecting', async () => {
   const pool = { id: 'pool', codexHome: '/private/codex-home' };
@@ -474,13 +486,13 @@ test('a foreign or credential-bearing viewer endpoint is refused before connecti
     await expect(attachPool(pool, { ...attachment, endpoint: 'ws://198.51.100.7:43123' })).rejects.toThrow(
       'Refusing non-private app-server endpoint',
     );
-    await expect(
-      attachPool(pool, { ...attachment, endpoint: 'ws://viewer:secret@127.0.0.1:43123' }),
-    ).rejects.toThrow('Refusing non-private app-server endpoint');
+    await expect(attachPool(pool, { ...attachment, endpoint: 'ws://viewer:secret@127.0.0.1:43123' })).rejects.toThrow(
+      'Refusing non-private app-server endpoint',
+    );
   } finally {
     foreignServer.kill('SIGTERM');
     await new Promise<void>((resolve) => foreignServer.once('exit', () => resolve()));
-    await new Promise<void>((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) => listener.close((error) => (error ? reject(error) : resolve())));
   }
 });
 
@@ -532,7 +544,10 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
 
     const unavailablePort = await unusedLoopbackPort();
     const registryPath = join(f.path, 'manager-app-servers.json');
-    const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as { identity: ProcessIdentity; attachment?: AppServerAttachment }[];
+    const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as {
+      identity: ProcessIdentity;
+      attachment?: AppServerAttachment;
+    }[];
     const record = registry.find((entry) => entry.attachment?.poolId === 'fake');
     if (!record?.attachment) throw new Error('Missing provider replacement attachment');
     record.attachment.endpoint = `ws://127.0.0.1:${unavailablePort}`;
@@ -875,7 +890,9 @@ test('recovery restores all five stale viewers without losing drafts or starting
     ).length;
     await recovered.recover();
     expect(
-      requests.filter((request) => request.method === 'thread/resume' && request.params.threadId === webThread.threadId),
+      requests.filter(
+        (request) => request.method === 'thread/resume' && request.params.threadId === webThread.threadId,
+      ),
     ).toHaveLength(webResumeCount);
     expect(recovered.get('web')).toMatchObject({
       threadId: webThread.threadId,

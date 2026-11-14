@@ -167,19 +167,22 @@ export function appServerEnvironment(pool: CodexPool, parent: NodeJS.ProcessEnv 
 }
 
 /** Hash all inherited provider environment values without placing any credential in the registry. */
-export function appServerEnvironmentFingerprint(
-  pool: CodexPool,
-  parent: NodeJS.ProcessEnv = process.env,
-): string {
-  const sorted = Object.entries(appServerEnvironment(pool, parent)).sort(([left], [right]) => left.localeCompare(right));
+export function appServerEnvironmentFingerprint(pool: CodexPool, parent: NodeJS.ProcessEnv = process.env): string {
+  const sorted = Object.entries(appServerEnvironment(pool, parent)).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
   return createHash('sha256').update(JSON.stringify(sorted)).digest('hex');
 }
 
 export function selectedAppServerExecutable(pool: CodexPool, pathValue = process.env.PATH ?? ''): string {
   const executable = pool.executable ?? 'codex';
-  const candidates = isAbsolute(executable) || executable.includes('/')
-    ? [resolve(executable)]
-    : pathValue.split(delimiter).filter(Boolean).map((directory) => join(directory, executable));
+  const candidates =
+    isAbsolute(executable) || executable.includes('/')
+      ? [resolve(executable)]
+      : pathValue
+          .split(delimiter)
+          .filter(Boolean)
+          .map((directory) => join(directory, executable));
   for (const candidate of candidates) {
     try {
       accessSync(candidate, constants.X_OK);

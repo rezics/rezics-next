@@ -9,7 +9,12 @@ import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import { managerOwnership, ownedGoals } from './manager-ownership.ts';
-import { ManagerSessionTransport, userMessageTurn, type GoalMutationOrigin, isHarnessGoalContinuation } from './manager-session-transport.ts';
+import {
+  ManagerSessionTransport,
+  userMessageTurn,
+  type GoalMutationOrigin,
+  isHarnessGoalContinuation,
+} from './manager-session-transport.ts';
 import { readGoalDocuments, renderManagerOpening } from './prompts.ts';
 import { recordFlow } from './flow.ts';
 import type { PromptBudgetManifest } from './types.ts';
@@ -1868,11 +1873,7 @@ export class ManagerSessions {
                     this.armParkedTurnDecision(current, current.threadId!, turnId);
                   }
                 }
-                if (
-                  current.activeTurnId === null &&
-                  current.status === 'running' &&
-                  !unexpectedManagerTurn(current)
-                ) {
+                if (current.activeTurnId === null && current.status === 'running' && !unexpectedManagerTurn(current)) {
                   await this.markWaitingForInbox(current.id);
                   current = this.get(current.id);
                   assertManagedManager(current);

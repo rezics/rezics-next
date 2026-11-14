@@ -16,7 +16,12 @@ import type { Task } from './types.ts';
 
 async function setup(
   policy?: ControlPolicy,
-  options: { autoStartGoalOnActive?: boolean; lateStartGoalOnPause?: boolean; threadSubscriptions?: boolean; codexManagerModel?: (id: string) => string | undefined } = {},
+  options: {
+    autoStartGoalOnActive?: boolean;
+    lateStartGoalOnPause?: boolean;
+    threadSubscriptions?: boolean;
+    codexManagerModel?: (id: string) => string | undefined;
+  } = {},
 ) {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
@@ -202,7 +207,7 @@ test('manager startup follows installed protocol and two managers share one app-
 
 test('a manager model override applies to its next turn on the same thread only', async () => {
   let model: string | undefined;
-  const s = await setup(undefined, { codexManagerModel: (id) => id === 'manager' ? model : undefined });
+  const s = await setup(undefined, { codexManagerModel: (id) => (id === 'manager' ? model : undefined) });
   try {
     const original = await s.managers.start(s.spec);
     const peer = await s.managers.start({ ...s.spec, id: 'peer' });
@@ -216,7 +221,8 @@ test('a manager model override applies to its next turn on the same thread only'
     await s.managers.flush();
     const starts = s.requests().filter((request) => request.method === 'turn/start');
     expect(starts.filter((r) => r.params.threadId === original.threadId).at(-1)?.params).toMatchObject({
-      model: 'gpt-6-astra', effort: 'high',
+      model: 'gpt-6-astra',
+      effort: 'high',
     });
     expect(starts.filter((r) => r.params.threadId === peer.threadId).at(-1)?.params.model).toBe('gpt-6.1-sol');
     expect(s.managers.get(s.spec.id).threadId).toBe(original.threadId);
@@ -241,8 +247,13 @@ test('sets the configured model before a native Goal wake can start a turn', asy
     s.inbox.deliver({ managerId: s.spec.id, kind: 'instruction', summary: 'Continue' });
     await s.managers.wake(s.spec.id);
     await s.managers.flush();
-    const relevant = s.requests().slice(before).filter((r) =>
-      r.method === 'thread/settings/update' || r.method === 'thread/goal/set' && r.params.status === 'active');
+    const relevant = s
+      .requests()
+      .slice(before)
+      .filter(
+        (r) =>
+          r.method === 'thread/settings/update' || (r.method === 'thread/goal/set' && r.params.status === 'active'),
+      );
     expect(relevant.map((r) => r.method)).toEqual(['thread/settings/update', 'thread/goal/set']);
     expect(relevant[0]?.params).toEqual({ threadId: original.threadId, model: 'gpt-6-astra', effort: 'high' });
     expect(s.managers.get(s.spec.id).threadId).toBe(original.threadId);
@@ -819,30 +830,46 @@ test('a recovered manager subscribes before native inbox activation and parks wh
   try {
     const manager = await s.managers.start(s.spec);
     const threadId = manager.threadId!;
-    await s.notify({ method: 'turn/completed', params: { threadId, turn: { id: manager.activeTurnId, status: 'completed' } } });
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
     s.client.close = () => {};
     await s.managers.close();
     await s.client.request('test/drop-thread-subscriptions', {});
     recovered = new ManagerSessions(s.db, s.inbox, s.services);
     const before = s.requests().length;
     await recovered.recover();
-    expect(s.requests().slice(before).some((r) => r.method === 'thread/resume')).toBe(false);
+    expect(
+      s
+        .requests()
+        .slice(before)
+        .some((r) => r.method === 'thread/resume'),
+    ).toBe(false);
 
     // Codex can already have loaded the thread for a viewer. The controller must not depend on
     // turn/start failing or adding a listener: the first delivery may go straight to turn/steer.
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Apply the delivered result' });
     await recovered.wake(manager.id);
     await recovered.flush();
-    const relevant = s.requests().slice(before).filter((r) =>
-      r.method === 'thread/resume' || r.method === 'thread/goal/set' && r.params.status === 'active');
+    const relevant = s
+      .requests()
+      .slice(before)
+      .filter((r) => r.method === 'thread/resume' || (r.method === 'thread/goal/set' && r.params.status === 'active'));
     expect(relevant.map((r) => r.method)).toEqual(['thread/resume', 'thread/goal/set']);
     const turnId = recovered.get(manager.id).activeTurnId!;
     expect(turnId).toBe('turn-2');
     expect(s.inbox.notifications(manager.id)).toHaveLength(0);
-    await s.client.request('test/notify', { method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'completed' } } });
+    await s.client.request('test/notify', {
+      method: 'turn/completed',
+      params: { threadId, turn: { id: turnId, status: 'completed' } },
+    });
     await recovered.flush();
     expect(recovered.get(manager.id)).toMatchObject({
-      threadId, activeTurnId: null, waitingForInbox: true, goalState: { status: 'paused' },
+      threadId,
+      activeTurnId: null,
+      waitingForInbox: true,
+      goalState: { status: 'paused' },
       turnDisposition: { threadId, turnId, status: 'completed', intent: 'work' },
     });
     const starts = s.requests().filter((r) => r.method === 'turn/start').length;
@@ -997,7 +1024,10 @@ test('recovery settles a completed explicit inbox turn while the native Goal rem
   try {
     const manager = await s.managers.start(s.spec);
     const threadId = manager.threadId!;
-    await s.notify({ method: 'turn/completed', params: { threadId, turn: { id: manager.activeTurnId, status: 'completed' } } });
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
     await s.client.request('thread/goal/set', { threadId, status: 'blocked' });
     await s.managers.flush();
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Resolve a real scheduling decision' });
@@ -1005,15 +1035,26 @@ test('recovery settles a completed explicit inbox turn while the native Goal rem
     const turnId = s.managers.get(manager.id).activeTurnId!;
     s.client.close = () => {};
     await s.managers.close();
-    await s.client.request('test/notify', { method: 'turn/completed', params: { threadId, turn: { id: turnId, status: 'completed' } } });
+    await s.client.request('test/notify', {
+      method: 'turn/completed',
+      params: { threadId, turn: { id: turnId, status: 'completed' } },
+    });
     const before = s.requests().length;
     recovered = new ManagerSessions(s.db, s.inbox, s.services);
     await recovered.recover();
     await recovered.flush();
     expect(recovered.get(manager.id)).toMatchObject({
-      threadId, activeTurnId: null, waitingForInbox: false, goalState: { status: 'blocked' },
+      threadId,
+      activeTurnId: null,
+      waitingForInbox: false,
+      goalState: { status: 'blocked' },
     });
-    expect(s.requests().slice(before).filter((r) => r.method === 'thread/goal/set' || r.method === 'turn/start')).toHaveLength(0);
+    expect(
+      s
+        .requests()
+        .slice(before)
+        .filter((r) => r.method === 'thread/goal/set' || r.method === 'turn/start'),
+    ).toHaveLength(0);
   } finally {
     await recovered?.close();
     await closeTransport();
