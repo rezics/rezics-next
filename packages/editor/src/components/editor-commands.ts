@@ -5,6 +5,8 @@ import { TextSelection } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
 import type { EditorCommandLabel } from './editor-labels.ts';
 import { editorCommandsForPresentation } from './editor-command-preferences.ts';
+import { compactHistory } from './editor-compact-transaction.ts';
+import { clearEditorFindHighlights } from './editor-find.tsx';
 
 export interface EditorCommand {
   id: string;
@@ -100,8 +102,10 @@ export const touchBarFormatCommands: readonly EditorCommand[] = markCommands.fil
 
 /** A nonempty branch can still produce no transaction, or dispatch can be filtered. */
 function applyHistory(editor: Editor, command: typeof undo): boolean {
+  if ((command === undo ? undoDepth(editor.state) : redoDepth(editor.state)) === 0) return false;
+  clearEditorFindHighlights(editor);
   const before = editor.state;
-  command(before, (transaction) => editor.view.dispatch(transaction));
+  compactHistory(command, before, (transaction) => editor.view.dispatch(transaction));
   return editor.state !== before;
 }
 

@@ -43,6 +43,7 @@ import {
 } from './editor-workbench.tsx';
 import { EditorFindHighlights } from './editor-find.tsx';
 import { setEditorCommandPreferences } from './editor-command-preferences.ts';
+import { recordTextReplayBatch, skipProvenTextReplay } from './editor-compact-transaction.ts';
 import { restoreMovedUnitIdentity } from './editor-drag-identity.ts';
 import type { EditorWorkbenchLabels } from './editor-workbench-labels.ts';
 import type {
@@ -557,6 +558,7 @@ export function RichTextEditor({
         mentionExtension(mentionHandlers, mentionEnabled),
       ],
       content: normalizedValue.doc as JSONContent,
+      coreExtensionOptions: { delete: { filterTransaction: skipProvenTextReplay } },
       injectCSS: false,
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
@@ -640,6 +642,8 @@ export function RichTextEditor({
           return true;
         },
       },
+      onTransaction: ({ transaction, appendedTransactions }) =>
+        recordTextReplayBatch(transaction, appendedTransactions),
       onUpdate: ({ editor: current }) => scheduleRef.current(current),
       onBlur: ({ editor: current }) => {
         if (!mounted.current || renderedEditor.current !== current || current.isDestroyed) return;

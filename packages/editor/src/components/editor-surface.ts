@@ -8,7 +8,7 @@ import {
   type Extensions,
 } from '@tiptap/core';
 import Placeholder from '@tiptap/extension-placeholder';
-import UniqueID from '@tiptap/extension-unique-id';
+import { IdentityUniqueID } from './editor-identity-replay.ts';
 import type { DocumentProfile } from '@rezics/document';
 import { identifiableNodeNames, textNodeNames, blocksNodeNames } from '@rezics/document';
 import { Fragment, Slice } from '@tiptap/pm/model';
@@ -211,7 +211,7 @@ export function editorExtensions(
       ? [EditorTables.configure(options.onInvalidContent ? { onInvalidContent: options.onInvalidContent } : {})]
       : []),
     Placeholder.configure({ placeholder: options.placeholder ?? '' }),
-    UniqueID.configure({
+    IdentityUniqueID.configure({
       types: uniqueTypes,
       generateID: () => crypto.randomUUID(),
       updateDocument: !options.readOnly,

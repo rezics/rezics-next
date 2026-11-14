@@ -6,13 +6,16 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shad
 import { Input } from '@rezics/ui/shadcn/input';
 import { Extension, type Editor } from '@tiptap/core';
 import { closeHistory } from '@tiptap/pm/history';
-import type { Node as DocumentNode } from '@tiptap/pm/model';
+import { Fragment, Slice, type Mark, type Node as DocumentNode } from '@tiptap/pm/model';
+import { ReplaceStep } from '@tiptap/pm/transform';
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { useEditorState } from '@tiptap/react';
 import { useDeferredValue, useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { editorLabel, type EditorWorkbenchLabels } from './editor-workbench-labels.ts';
 import { editorSnapshot, maxSnapshotBytes } from './rich-text-editor-snapshot.ts';
+import { compactTransaction } from './editor-compact-transaction.ts';
+import { buildTextDocument, TextDocumentIndex, type ClosedTextEdit } from './editor-text-document.ts';
 
 export type EditorFindMatch = { from: number; to: number; text: string };
 export type EditorFindOptions = { matchCase: boolean; wholeWord: boolean };
@@ -102,20 +105,66 @@ export function replaceDocumentMatches(
     maxSnapshotBytes
   )
     return null;
-  const transaction = closeHistory(state.tr);
-  for (const match of [...matches].reverse()) {
-    if (
-      match.from < 0 ||
-      match.to > state.doc.content.size ||
-      state.doc.textBetween(match.from, match.to) !== match.text
-    )
-      return null;
-    const $from = state.doc.resolve(match.from);
-    const marks = $from.nodeAfter?.isText ? $from.nodeAfter.marks : $from.marksAcross(state.doc.resolve(match.to));
-    transaction.setStoredMarks(marks ?? []).insertText(replacement, match.from, match.to);
+  const index = new TextDocumentIndex(state.doc);
+  const edits: ClosedTextEdit[] = [];
+  const insertions = new Map<readonly Mark[], Slice>();
+  let noOp = true;
+  let previousEnd = -1;
+  for (const match of matches) {
+    if (match.from < previousEnd || match.to <= match.from) return null;
+    previousEnd = match.to;
+    const marks = index.firstMarks(match.from);
+    if (!marks) return null;
+    let insert = insertions.get(marks);
+    if (!insert) {
+      insert = replacement ? new Slice(Fragment.from(state.schema.text(replacement, marks)), 0, 0) : Slice.empty;
+      insertions.set(marks, insert);
+    }
+    const admitted = index.edit(match.from, match.to, insert);
+    if (!admitted || admitted.removed.content.textBetween(0, admitted.removed.content.size) !== match.text) return null;
+    if (!admitted.removed.eq(insert)) noOp = false;
+    edits.push(admitted.edit);
   }
-  transaction.setStoredMarks(state.storedMarks);
-  return transaction.scrollIntoView();
+  if (noOp) return state.tr;
+  try {
+    buildTextDocument(state.doc, edits, maxSnapshotBytes, false);
+  } catch (error) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+  const transaction = closeHistory(compactTransaction(state));
+  const textSelection =
+    state.selection instanceof TextSelection ? { anchor: state.selection.anchor, head: state.selection.head } : null;
+  for (let position = edits.length - 1; position >= 0; position--) {
+    const edit = edits[position]!;
+    transaction.step(new ReplaceStep(edit.from, edit.to, edit.insert));
+    if (textSelection) {
+      const map = transaction.mapping.maps.at(-1)!;
+      textSelection.anchor = map.map(textSelection.anchor);
+      textSelection.head = map.map(textSelection.head);
+      // Preserve native insertText's explicit selection collapse without resolving every prefix.
+      const end = Math.max(textSelection.anchor, textSelection.head);
+      if (replacement && textSelection.anchor !== textSelection.head && end === edit.from + replacement.length)
+        textSelection.anchor = textSelection.head = end;
+    }
+  }
+  const result = transaction.doc;
+  try {
+    editorSnapshot(result, state.schema.nodes.image ? 'blocks' : 'text');
+  } catch {
+    return null;
+  }
+  if (result.eq(state.doc)) return state.tr;
+  transaction.setSelection(
+    textSelection ? TextSelection.create(result, textSelection.anchor, textSelection.head) : transaction.selection,
+  );
+  return transaction.setStoredMarks(state.storedMarks).scrollIntoView();
+}
+
+export function clearEditorFindHighlights(editor: Editor): void {
+  const current = searchKey.getState(editor.state);
+  if (!current || current === DecorationSet.empty) return;
+  editor.view.dispatch(editor.state.tr.setMeta(searchKey, { matches: [], current: 0 }));
 }
 
 export type EditorFindHandle = {
@@ -210,15 +259,14 @@ export function EditorFind({
       if (live.total) onInvalidContent?.();
       return false;
     }
-    try {
-      editorSnapshot(transaction.doc, editor.schema.nodes.image ? 'blocks' : 'text');
-    } catch {
-      onInvalidContent?.();
-      return false;
-    }
+    if (!transaction.docChanged) return false;
     const previous = editor.state.doc;
+    clearEditorFindHighlights(editor);
+    if (!isCurrent() || editor.state.doc !== previous) return false;
     editor.view.dispatch(transaction);
-    return editor.state.doc !== previous;
+    const changed = editor.state.doc !== previous;
+    if (changed) editor.view.dispatch(closeHistory(editor.state.tr));
+    return changed;
   };
   useImperativeHandle(ref, () => ({
     next,
