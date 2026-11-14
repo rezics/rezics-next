@@ -69,7 +69,7 @@ function BlockMenuContent({
       ref={root}
       shouldFilter={false}
       loop
-      label={title}
+      label={labels.searchBlocks ?? productControlLabels.searchBlocks}
       className="w-72 max-w-full"
       onKeyDownCapture={(event) => {
         if (event.nativeEvent.isComposing || event.keyCode === 229) event.stopPropagation();

@@ -48,7 +48,7 @@ export function EditorCommandPalette({
       closeLabel={labels.close}
       finalFocus={finalFocus}
     >
-      <Command>
+      <Command label={labels.commandSearch}>
         <CommandInput aria-label={labels.commandSearch} placeholder={labels.commandSearch} />
         <CommandList>
           <CommandEmpty>{labels.noCommands}</CommandEmpty>

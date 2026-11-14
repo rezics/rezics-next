@@ -36,7 +36,6 @@ test('mounted rich-text authoring, keyboard and native input history stay owned 
       new Response(run.stderr).text(),
       run.exited,
     ]);
-    expect(code, `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(0);
     expect(existsSync(report), `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(true);
     const result = JSON.parse(readFileSync(report, 'utf8')) as {
       testResults: { assertionResults: { status: string; title: string; failureMessages: string[] }[] }[];
@@ -47,6 +46,12 @@ test('mounted rich-text authoring, keyboard and native input history stay owned 
         `${assertion.title}: ${assertion.status} ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`.trim(),
       )
       .sort();
+    const failures = result.testResults.flatMap((file) =>
+      file.assertionResults
+        .filter((assertion) => assertion.status === 'failed')
+        .map((assertion) => `${assertion.title}: ${assertion.failureMessages.join('\n').slice(0, 2_000)}`),
+    );
+    expect(code, failures.length ? failures.join('\n\n') : `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(0);
     expect(outcomes).toEqual(['Inline Lifetime Journey: passed', 'Undo Redo: passed']);
   } finally {
     rmSync(output, { recursive: true, force: true });

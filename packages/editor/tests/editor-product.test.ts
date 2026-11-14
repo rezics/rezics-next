@@ -25,11 +25,16 @@ test('authoring presets, settings, form-host safety, domain text and structural 
       child.exited,
     ]);
     const details = `${stdout.slice(-3000)}\n${stderr.slice(-5000)}`;
-    expect(code, details).toBe(0);
     expect(existsSync(report), details).toBe(true);
     const result = JSON.parse(readFileSync(report, 'utf8')) as {
       testResults: { name: string; assertionResults: { status: string; title: string; failureMessages: string[] }[] }[];
     };
+    const failures = result.testResults.flatMap((file) =>
+      file.assertionResults
+        .filter((outcome) => outcome.status !== 'passed')
+        .map((outcome) => `${outcome.title}: ${outcome.failureMessages.join('\n').slice(0, 2_000)}`),
+    );
+    expect(code, failures.length ? failures.join('\n\n') : details).toBe(0);
     for (const story of stories) {
       const file = result.testResults.find((entry) => entry.name.endsWith(story));
       expect(file, story).toBeDefined();
