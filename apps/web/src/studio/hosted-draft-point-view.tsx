@@ -210,10 +210,7 @@ export function HostedDraftPointView({
       else operation.current?.focus();
     }
   }, [visit, state, phase, titleEditable, refreshing]);
-  const focusAfter = (
-    action: () => void | Promise<void>,
-    target: 'feedback' | 'edit' | 'next-edit' = 'feedback',
-  ) => {
+  const focusAfter = (action: () => void | Promise<void>, target: 'feedback' | 'edit' | 'next-edit' = 'feedback') => {
     focusRequest.current = { origin: document.activeElement, target };
     void action();
   };
@@ -510,11 +507,7 @@ export function HostedDraftPointView({
           ) : null}
           <div className="studio-action-row">
             {phase === 'acknowledged' || phase === 'next-edit' ? (
-              <Button
-                type="button"
-                disabled={refreshing}
-                onClick={() => focusAfter(visit.nextEdit, 'next-edit')}
-              >
+              <Button type="button" disabled={refreshing} onClick={() => focusAfter(visit.nextEdit, 'next-edit')}>
                 {phase === 'acknowledged'
                   ? m.studio_draft_command_next_edit({}, options)
                   : m.studio_draft_command_retry_next({}, options)}

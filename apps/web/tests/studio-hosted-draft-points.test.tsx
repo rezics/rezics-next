@@ -732,70 +732,82 @@ test('late move feedback respects focus elsewhere; session replacement retires a
   }
 });
 
-test.each(['unavailable', 'denied'] as const)('next-edit %s owner read stays locked and retries only the read', async (kind) => {
-  const f = await fixture(),
-    ui = await mount(f);
-  try {
-    await act(async () => {
-      f.visit.setTitle('First edit');
-      await f.visit.review();
-      await f.visit.submit();
-    });
-    f.native.readOwn.mockImplementationOnce(async () => hostedFailure(kind, 'Reopen the Book or retry reading.'));
-    await ui.click('Next edit');
-    expect(active(f)).toMatchObject({ phase: 'next-edit', refreshing: false, intent: null, error: { kind }, receipt });
-    expect(ui.host.textContent).toContain('Editing stays locked');
-    expect(ui.host.textContent).toContain('Reopen the Book or retry reading.');
-    expect(document.activeElement?.textContent).toBe('Current Book head for the next edit');
-    await act(async () => {
-      f.visit.setTitle('Cannot edit before a current read');
-      await f.visit.review();
-      await f.visit.submit();
-    });
-    expect(active(f).title).toBe('');
-    expect(f.native.readOutlineWindow).toHaveBeenCalledTimes(2);
-    f.native.readOwn.mockImplementationOnce(async () => hostedFailure(kind, 'Reopen the Book or retry reading.'));
-    (getByRole(ui.host, 'button', { name: 'Retry reading for next edit' }) as HTMLButtonElement).focus();
-    await ui.click('Retry reading for next edit');
-    expect(document.activeElement?.textContent).toBe('Current Book head for the next edit');
-    expect(active(f).phase).toBe('next-edit');
-    await ui.click('Retry reading for next edit');
-    expect(active(f)).toMatchObject({ phase: 'idle', head: id(8), error: null, intent: null, receipt });
-    expect(document.activeElement?.textContent).toBe('Choose an edit');
-    expect(f.native.readOwn).toHaveBeenCalledTimes(3);
-    expect(f.native.writeDraftPoint).toHaveBeenCalledTimes(1);
-  } finally {
-    await ui.close();
-  }
-});
+test.each(['unavailable', 'denied'] as const)(
+  'next-edit %s owner read stays locked and retries only the read',
+  async (kind) => {
+    const f = await fixture(),
+      ui = await mount(f);
+    try {
+      await act(async () => {
+        f.visit.setTitle('First edit');
+        await f.visit.review();
+        await f.visit.submit();
+      });
+      f.native.readOwn.mockImplementationOnce(async () => hostedFailure(kind, 'Reopen the Book or retry reading.'));
+      await ui.click('Next edit');
+      expect(active(f)).toMatchObject({
+        phase: 'next-edit',
+        refreshing: false,
+        intent: null,
+        error: { kind },
+        receipt,
+      });
+      expect(ui.host.textContent).toContain('Editing stays locked');
+      expect(ui.host.textContent).toContain('Reopen the Book or retry reading.');
+      expect(document.activeElement?.textContent).toBe('Current Book head for the next edit');
+      await act(async () => {
+        f.visit.setTitle('Cannot edit before a current read');
+        await f.visit.review();
+        await f.visit.submit();
+      });
+      expect(active(f).title).toBe('');
+      expect(f.native.readOutlineWindow).toHaveBeenCalledTimes(2);
+      f.native.readOwn.mockImplementationOnce(async () => hostedFailure(kind, 'Reopen the Book or retry reading.'));
+      (getByRole(ui.host, 'button', { name: 'Retry reading for next edit' }) as HTMLButtonElement).focus();
+      await ui.click('Retry reading for next edit');
+      expect(document.activeElement?.textContent).toBe('Current Book head for the next edit');
+      expect(active(f).phase).toBe('next-edit');
+      await ui.click('Retry reading for next edit');
+      expect(active(f)).toMatchObject({ phase: 'idle', head: id(8), error: null, intent: null, receipt });
+      expect(document.activeElement?.textContent).toBe('Choose an edit');
+      expect(f.native.readOwn).toHaveBeenCalledTimes(3);
+      expect(f.native.writeDraftPoint).toHaveBeenCalledTimes(1);
+    } finally {
+      await ui.close();
+    }
+  },
+);
 
-test.each(['focus', 'pointer', 'Tab'] as const)('next-edit orientation is cancelled by %s navigation while reading', async (navigation) => {
-  const f = await fixture(),
-    ui = await mount(f);
-  const elsewhere = document.body.appendChild(document.createElement('button'));
-  try {
-    await act(async () => {
-      f.visit.setTitle('Part');
-      await f.visit.review();
-      await f.visit.submit();
-    });
-    const pending = deferred<StudioResult<HostedOwnedBook>>();
-    f.native.readOwn.mockImplementationOnce(() => pending.promise);
-    const next = getByRole(ui.host, 'button', { name: 'Next edit' }) as HTMLButtonElement;
-    next.focus();
-    await ui.click('Next edit');
-    if (navigation === 'focus') elsewhere.focus();
-    else if (navigation === 'pointer') elsewhere.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
-    const focus = document.activeElement;
-    await act(async () => pending.resolve(ok(f.owner)));
-    expect(active(f).phase).toBe('idle');
-    expect(document.activeElement).toBe(focus?.isConnected ? focus : document.body);
-  } finally {
-    elsewhere.remove();
-    await ui.close();
-  }
-});
+test.each(['focus', 'pointer', 'Tab'] as const)(
+  'next-edit orientation is cancelled by %s navigation while reading',
+  async (navigation) => {
+    const f = await fixture(),
+      ui = await mount(f);
+    const elsewhere = document.body.appendChild(document.createElement('button'));
+    try {
+      await act(async () => {
+        f.visit.setTitle('Part');
+        await f.visit.review();
+        await f.visit.submit();
+      });
+      const pending = deferred<StudioResult<HostedOwnedBook>>();
+      f.native.readOwn.mockImplementationOnce(() => pending.promise);
+      const next = getByRole(ui.host, 'button', { name: 'Next edit' }) as HTMLButtonElement;
+      next.focus();
+      await ui.click('Next edit');
+      if (navigation === 'focus') elsewhere.focus();
+      else if (navigation === 'pointer') elsewhere.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      const focus = document.activeElement;
+      await act(async () => pending.resolve(ok(f.owner)));
+      expect(active(f).phase).toBe('idle');
+      expect(document.activeElement).toBe(focus?.isConnected ? focus : document.body);
+    } finally {
+      elsewhere.remove();
+      await ui.close();
+    }
+  },
+);
 
 test('next-edit owner reads abort on session, viewer, source, CSRF or credential retirement and departure', async () => {
   const changes: (Partial<HistoricalReaderObservation> | null)[] = [
