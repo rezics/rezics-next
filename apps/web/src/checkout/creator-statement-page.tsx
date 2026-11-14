@@ -7,6 +7,10 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorStatementData, CreatorStatementLine } from './creator-statements';
 import type { StatementWindowControls } from './creator-statement-windows';
+import {
+  StatementAccountingSummaryFrame,
+  StatementLineHistoryFrame,
+} from './creator-statement-workspace';
 import { recordedMoneyUnit } from './money-schema';
 import {
   StatementAmount,
@@ -111,30 +115,29 @@ export function CreatorStatementPage({
       ) : (
         <>
           <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.statements_intro()}</p>
-          <section
-            className="space-y-4 rounded-xl border bg-card p-5 text-card-foreground"
-            aria-labelledby="statement-summary"
-          >
-            <h2 id="statement-summary" className="text-lg font-semibold">
-              {m.statements_summary()}
-            </h2>
-            <p className="text-sm text-muted-foreground">{m.statements_amount_note()}</p>
-            <dl className="grid min-w-0 gap-x-6 gap-y-3 sm:grid-cols-2">
-              {summary.map(([label, value]) => (
-                <div key={label} className="flex min-w-0 flex-wrap justify-between gap-x-3 gap-y-1">
-                  <dt className="text-sm text-muted-foreground">{label}</dt>
-                  <dd>
-                    <StatementAmount
-                      value={value}
-                      currency={page.statement.currency}
-                      moneyUnit={recordedMoneyUnit(page.statement)}
-                      locale={locale}
-                    />
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <p className="text-sm leading-relaxed text-muted-foreground">{m.statements_accounting_note()}</p>
+          <section className="min-w-0" aria-labelledby="statement-summary">
+            <StatementAccountingSummaryFrame>
+              <h2 id="statement-summary" className="text-lg font-semibold">
+                {m.statements_summary()}
+              </h2>
+              <p className="text-sm leading-relaxed text-muted-foreground">{m.statements_amount_note()}</p>
+              <dl className="grid min-w-0 gap-x-6 gap-y-4 sm:grid-cols-2">
+                {summary.map(([label, value]) => (
+                  <div key={label} className="min-w-0 space-y-1 border-b pb-3 last:border-0 last:pb-0 sm:border-0 sm:pb-0">
+                    <dt className="text-sm text-muted-foreground">{label}</dt>
+                    <dd className="break-words text-base font-semibold tabular-nums">
+                      <StatementAmount
+                        value={value}
+                        currency={page.statement.currency}
+                        moneyUnit={recordedMoneyUnit(page.statement)}
+                        locale={locale}
+                      />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-sm leading-relaxed text-muted-foreground">{m.statements_accounting_note()}</p>
+            </StatementAccountingSummaryFrame>
           </section>
           {payment ?? <StatementPayment statement={page.statement} locale={locale} />}
           <section className="min-w-0 space-y-4" aria-labelledby="statement-lines">
@@ -142,129 +145,131 @@ export function CreatorStatementPage({
               {m.statements_lines()}
             </h2>
             <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.statements_lines_note()}</p>
-            {page.lines.kind !== 'ready' ? (
-              <>
-                <StatementNotice kind={page.lines.kind} retryHref={href} {...noticeRetry} />
-                <StatementLinePagination id={id} page={page} {...pagination} />
-              </>
-            ) : (
-              <>
-                {page.lines.lines.length === 0 ? (
-                  <div className="min-w-0 space-y-2 rounded-xl border bg-card p-5 text-card-foreground">
-                    <h3 className="break-words font-medium">
-                      {cursor || page.lines.next
-                        ? m.statement_line_page_reader_page_empty()
-                        : m.statement_line_page_reader_first_empty()}
-                    </h3>
-                    <p className="text-sm leading-relaxed text-muted-foreground" role="status">
-                      {m.statements_lines_empty()}
-                    </p>
-                  </div>
-                ) : (
-                  <ul className="min-w-0 space-y-2">
-                    {page.lines.lines.map((line) => (
-                      <li key={line.balanceTransactionId} className="min-w-0">
-                        <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
-                          <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-6 gap-y-2">
-                            <ContentItemHeading
-                              level={3}
-                              className="min-w-0 break-words text-[17px] leading-snug font-semibold sm:text-lg md:text-xl"
-                            >
-                              {lineKind(line.kind)}
-                            </ContentItemHeading>
-                            <dl className="min-w-0 sm:text-right">
-                              <dt className="text-sm text-muted-foreground">{m.statements_net()}</dt>
-                              <dd className="break-words font-semibold">
-                                <StatementAmount
-                                  moneyUnit={recordedMoneyUnit(line)}
-                                  value={line.netReceiptsMinor}
-                                  currency={line.currency}
-                                  locale={locale}
-                                />
-                              </dd>
-                            </dl>
-                          </div>
-                          <dl className="grid min-w-0 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                            {[
-                              [m.statements_recording_month(), line.period],
-                              [
-                                m.statements_royalty_basis(),
-                                new Intl.NumberFormat(locale).format(line.royaltyBasisPoints),
-                              ],
-                            ].map(([label, value]) => (
-                              <div key={label} className="min-w-0">
-                                <dt className="text-muted-foreground">{label}</dt>
-                                <dd className="break-words tabular-nums">{value}</dd>
-                              </div>
-                            ))}
-                            <div className="min-w-0">
-                              <dt className="text-muted-foreground">{m.statements_created()}</dt>
-                              <dd className="break-words">
-                                <StatementTime value={line.created} locale={locale} />
-                              </dd>
-                            </div>
-                            <div className="min-w-0">
-                              <dt className="text-muted-foreground">{m.statements_recorded()}</dt>
-                              <dd className="break-words">
-                                <StatementTime value={line.recordedAt} locale={locale} />
-                              </dd>
-                            </div>
-                            {(
-                              [
-                                [m.statements_gross(), line.grossMinor],
-                                [m.statements_tax(), line.taxMinor],
-                                [m.statements_fee(), line.feeMinor],
-                                [m.statements_dispute_fee(), line.disputeFeeMinor],
-                              ] satisfies readonly (readonly [string, number])[]
-                            ).map(([label, value]) => (
-                              <div key={label} className="min-w-0">
-                                <dt className="text-muted-foreground">{label}</dt>
-                                <dd className="break-words">
+            <StatementLineHistoryFrame>
+              {page.lines.kind !== 'ready' ? (
+                <>
+                  <StatementNotice kind={page.lines.kind} retryHref={href} {...noticeRetry} />
+                  <StatementLinePagination id={id} page={page} {...pagination} />
+                </>
+              ) : (
+                <>
+                  {page.lines.lines.length === 0 ? (
+                    <div className="min-w-0 space-y-2 rounded-xl border bg-card p-5 text-card-foreground">
+                      <h3 className="break-words font-medium">
+                        {cursor || page.lines.next
+                          ? m.statement_line_page_reader_page_empty()
+                          : m.statement_line_page_reader_first_empty()}
+                      </h3>
+                      <p className="text-sm leading-relaxed text-muted-foreground" role="status">
+                        {m.statements_lines_empty()}
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="min-w-0 space-y-2">
+                      {page.lines.lines.map((line) => (
+                        <li key={line.balanceTransactionId} className="min-w-0">
+                          <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
+                            <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-6 gap-y-3">
+                              <ContentItemHeading
+                                level={3}
+                                className="min-w-0 break-words text-[17px] leading-snug font-semibold sm:text-lg md:text-xl"
+                              >
+                                {lineKind(line.kind)}
+                              </ContentItemHeading>
+                              <dl className="min-w-0 sm:text-right">
+                                <dt className="text-sm text-muted-foreground">{m.statements_net()}</dt>
+                                <dd className="break-words text-base font-semibold tabular-nums">
                                   <StatementAmount
                                     moneyUnit={recordedMoneyUnit(line)}
-                                    value={value}
+                                    value={line.netReceiptsMinor}
                                     currency={line.currency}
                                     locale={locale}
                                   />
                                 </dd>
-                              </div>
-                            ))}
-                          </dl>
-                          <Accordion className="min-w-0">
-                            <AccordionItem value="source">
-                              <AccordionTrigger className="min-h-11">
-                                {m.statements_line_source_details()}
-                              </AccordionTrigger>
-                              <AccordionContent keepMounted>
-                                <dl className="grid min-w-0 gap-3 text-sm">
-                                  {[
-                                    [m.statements_transaction(), line.balanceTransactionId],
-                                    [m.statements_order_source(), line.orderId],
-                                    [m.statements_offer_source(), line.offerId],
-                                  ].map(([label, value]) => (
-                                    <div key={label} className="min-w-0">
-                                      <dt className="text-muted-foreground">{label}</dt>
-                                      <dd className="select-all break-all">{value}</dd>
+                              </dl>
+                            </div>
+                            <dl className="grid min-w-0 gap-x-4 gap-y-1 border-t pt-3 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-6">
+                              <dt className="text-muted-foreground">{m.statements_recorded()}</dt>
+                              <dd className="break-words tabular-nums sm:text-right">
+                                <StatementTime value={line.recordedAt} locale={locale} />
+                              </dd>
+                            </dl>
+                            <Accordion className="min-w-0">
+                              <AccordionItem value="source">
+                                <AccordionTrigger className="min-h-11">
+                                  {m.statements_line_source_details()}
+                                </AccordionTrigger>
+                                <AccordionContent keepMounted>
+                                  <dl className="grid min-w-0 gap-3 text-sm sm:grid-cols-2">
+                                    <div className="min-w-0">
+                                      <dt className="text-muted-foreground">{m.statements_recording_month()}</dt>
+                                      <dd className="break-words tabular-nums">
+                                        {statementMonth(line.period, locale)}
+                                      </dd>
                                     </div>
-                                  ))}
-                                </dl>
-                                <a
-                                  href={`/${locale}/offers/${line.offerId}`}
-                                  className="inline-flex min-h-11 items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-                                >
-                                  {m.creator_sale_open_offer()}
-                                </a>
-                              </AccordionContent>
-                            </AccordionItem>
-                          </Accordion>
-                        </ContentItemFrame>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <StatementLinePagination id={id} page={page} {...pagination} />
-              </>
-            )}
+                                    <div className="min-w-0">
+                                      <dt className="text-muted-foreground">{m.statements_royalty_basis()}</dt>
+                                      <dd className="break-words tabular-nums">
+                                        {new Intl.NumberFormat(locale).format(line.royaltyBasisPoints)}
+                                      </dd>
+                                    </div>
+                                    <div className="min-w-0">
+                                      <dt className="text-muted-foreground">{m.statements_created()}</dt>
+                                      <dd className="break-words">
+                                        <StatementTime value={line.created} locale={locale} />
+                                      </dd>
+                                    </div>
+                                    {(
+                                      [
+                                        [m.statements_gross(), line.grossMinor],
+                                        [m.statements_tax(), line.taxMinor],
+                                        [m.statements_fee(), line.feeMinor],
+                                        [m.statements_dispute_fee(), line.disputeFeeMinor],
+                                      ] satisfies readonly (readonly [string, number])[]
+                                    ).map(([label, value]) => (
+                                      <div key={label} className="min-w-0">
+                                        <dt className="text-muted-foreground">{label}</dt>
+                                        <dd className="break-words tabular-nums">
+                                          <StatementAmount
+                                            moneyUnit={recordedMoneyUnit(line)}
+                                            value={value}
+                                            currency={line.currency}
+                                            locale={locale}
+                                          />
+                                        </dd>
+                                      </div>
+                                    ))}
+                                  </dl>
+                                  <dl className="mt-4 grid min-w-0 gap-3 border-t pt-4 text-sm sm:grid-cols-2">
+                                    {[
+                                      [m.statements_transaction(), line.balanceTransactionId],
+                                      [m.statements_order_source(), line.orderId],
+                                      [m.statements_offer_source(), line.offerId],
+                                    ].map(([label, value]) => (
+                                      <div key={label} className="min-w-0">
+                                        <dt className="text-muted-foreground">{label}</dt>
+                                        <dd className="select-all break-all">{value}</dd>
+                                      </div>
+                                    ))}
+                                  </dl>
+                                  <a
+                                    href={`/${locale}/offers/${line.offerId}`}
+                                    className="inline-flex min-h-11 items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                                  >
+                                    {m.creator_sale_open_offer()}
+                                  </a>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
+                          </ContentItemFrame>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <StatementLinePagination id={id} page={page} {...pagination} />
+                </>
+              )}
+            </StatementLineHistoryFrame>
           </section>
           <Accordion className="min-w-0 bg-card text-card-foreground">
             <AccordionItem value="provenance">
