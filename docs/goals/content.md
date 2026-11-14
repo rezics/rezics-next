@@ -88,6 +88,10 @@ small acyclic reader for Copy/census/relocated mapping and narrow binding/import
 semantics, Library and showcase Collections. Content retains census, reaction/Rating, native compiler,
 installed-root, original mapping and growth acceptance.
 
+Decision: Each own-draft census and source-home snapshot uses the active request deadline or a fresh 5,000 ms
+maintenance-read budget. Expiry leaves the page frontier unconsumed; repair keeps key order and advances progress only
+after every locator has completed the existing receiver-before-acknowledgement sequence.
+
 Content's existing `document-public.ts` owns the public document schema, type and mapper consumed by routes and
 Semantic. One official-client publisher owns compiler and construction inputs, schema/module/bootstrap/dependency
 closure, generated callables, declarations and exports. Web consumes installed contracts without local DTOs, casts,
