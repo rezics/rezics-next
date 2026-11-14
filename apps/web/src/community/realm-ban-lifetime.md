@@ -133,7 +133,7 @@ and reauthorizes every command natively. Explicit new intent creates a new key; 
 the original key. Successful commands refresh the ordinary list. Native accepted removal remains pending
 until Accounts establishes completion, including after unban or reban.
 
-Decision: retain the latest accepted ban and unban command receipts separately within the visit (at most two), replacing only the same action's prior receipt; label earlier receipts as historical without current-state assurances.
+Decision: retain the latest accepted ban and unban command receipts separately within the visit (at most two), replacing only the same action's prior receipt; label all accepted receipts as historical without current-state assurances.
 
 Each retained receipt keeps its original immutable command and idempotency key and a copied native result.
 Starting another command, an uncertain retry, exact absence or a replacement current episode does not erase
