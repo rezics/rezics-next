@@ -2482,6 +2482,11 @@ the page limit, continuation cursor and `hasMore`. The exported `SharedInboxQuer
 `thread` and `digest` reads to operations reports after they have actually been delivered; it does not schedule or send
 an hourly report.
 
+Worktree dependency setup failures store full diagnostics on the attempt's `launch-failed` event. The task owner's
+inbox history retains a short task reference. Only the operations owner receives a waking notice; repeats are
+folded by shared cause without path or task ID in the wake. Offloaded starts do not emit a second background error
+for an attempt already settled and reported by the child.
+
 A delivery identical to one made to the same recipient within the last hour is not stored again: the earlier row's
 `delivery_count` and `last_delivered_at` change, nobody is woken, and `inbox read` shows the count as `deliveries`.
 Identity is the recipient, kind, sender, task, reply target and the summary's first line, so the same alarm for two
