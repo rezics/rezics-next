@@ -287,14 +287,15 @@ async function siblingAtPosition(
   notebookId: string,
   parentId: string | null,
   movingPlacementId: string,
+  beforePlacementId: string | null,
   beforePosition: bigint | null,
 ): Promise<Readonly<{ placement_id: string; position: string }> | null> {
   const result = await tx.query<{ placement_id: string; position: string }>(
     `SELECT placement_id,position::text AS position FROM content.knowledge_placement
      WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
-       AND placement_id<>$4 AND ($5::numeric IS NULL OR position < $5)
+       AND placement_id<>$4 AND ($5::numeric IS NULL OR (position,placement_id) < ($5,$6))
      ORDER BY position DESC,placement_id DESC LIMIT 1`,
-    [route, notebookId, parentId, movingPlacementId, beforePosition?.toString() ?? null],
+    [route, notebookId, parentId, movingPlacementId, beforePosition?.toString() ?? null, beforePlacementId],
   );
   return result.rows[0] ?? null;
 }
@@ -309,14 +310,24 @@ async function rebalanceKnowledgeSiblings(
   beforePlacementId: string | null,
   beforePosition: bigint | null,
 ): Promise<readonly KnowledgePositionChange[]> {
-  const parameters = [route, notebookId, parentId, moving.placement_id, beforePosition?.toString() ?? null];
+  // Reuse the existing change budget on either side of the insertion. Each side
+  // needs one unselected boundary row, even when the whole budget is spent there.
+  const siblingLimit = KNOWLEDGE_REBALANCE_SIDE_LIMIT * 2;
+  const parameters = [
+    route,
+    notebookId,
+    parentId,
+    moving.placement_id,
+    beforePosition?.toString() ?? null,
+    beforePlacementId,
+  ];
   const [leftResult, rightResult] = await Promise.all([
     tx.query<{ placement_id: string; document_id: string; parent_id: string | null; position: string }>(
       `SELECT placement_id,document_id,parent_id,position::text AS position FROM content.knowledge_placement
        WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
-         AND placement_id<>$4 AND ($5::numeric IS NULL OR position < $5)
-       ORDER BY position DESC,placement_id DESC LIMIT $6`,
-      [...parameters, KNOWLEDGE_REBALANCE_SIDE_LIMIT + 1],
+         AND placement_id<>$4 AND ($5::numeric IS NULL OR (position,placement_id) < ($5,$6))
+       ORDER BY position DESC,placement_id DESC LIMIT $7`,
+      [...parameters, siblingLimit + 1],
     ),
     beforePosition === null
       ? Promise.resolve({
@@ -325,34 +336,52 @@ async function rebalanceKnowledgeSiblings(
       : tx.query<{ placement_id: string; document_id: string; parent_id: string | null; position: string }>(
           `SELECT placement_id,document_id,parent_id,position::text AS position FROM content.knowledge_placement
            WHERE route=$1 AND notebook_id=$2 AND parent_id IS NOT DISTINCT FROM $3
-             AND placement_id<>$4 AND position >= $5
-           ORDER BY position,placement_id LIMIT $6`,
-          [...parameters.slice(0, 4), beforePosition.toString(), KNOWLEDGE_REBALANCE_SIDE_LIMIT + 1],
+             AND placement_id<>$4 AND (position,placement_id) >= ($5,$6)
+           ORDER BY position,placement_id LIMIT $7`,
+          [...parameters, siblingLimit + 1],
         ),
   ]);
 
   const leftRows = leftResult.rows;
   const rightRows = rightResult.rows;
-  const selectedLeft = leftRows.slice(0, KNOWLEDGE_REBALANCE_SIDE_LIMIT).reverse();
-  const selectedRight = rightRows.slice(0, KNOWLEDGE_REBALANCE_SIDE_LIMIT);
-  const lower =
-    leftRows.length > KNOWLEDGE_REBALANCE_SIDE_LIMIT ? BigInt(leftRows[KNOWLEDGE_REBALANCE_SIDE_LIMIT]!.position) : -1n;
-  const upper =
-    rightRows.length > KNOWLEDGE_REBALANCE_SIDE_LIMIT
-      ? BigInt(rightRows[KNOWLEDGE_REBALANCE_SIDE_LIMIT]!.position)
-      : MAX_KNOWLEDGE_POSITION + 1n;
+  if (beforePlacementId !== null && rightRows[0]?.placement_id !== beforePlacementId)
+    throw new KnowledgeNotFoundError();
+  const leftPositions = leftRows.map((row) => BigInt(row.position));
+  const rightPositions = rightRows.map((row) => BigInt(row.position));
+  const windowAt = (leftCount: number, rightCount: number) => {
+    const lower = leftPositions[leftCount] ?? -1n;
+    const upper = rightPositions[rightCount] ?? MAX_KNOWLEDGE_POSITION + 1n;
+    return { leftCount, rightCount, lower, step: (upper - lower) / BigInt(leftCount + rightCount + 2) };
+  };
+  let window = windowAt(
+    Math.min(KNOWLEDGE_REBALANCE_SIDE_LIMIT, leftRows.length),
+    Math.min(KNOWLEDGE_REBALANCE_SIDE_LIMIT, rightRows.length),
+  );
+  // A full symmetric window can hide a nearby gap. Try smaller, asymmetric
+  // windows within the same write/history budget, without scanning more rows.
+  for (let count = 0; window.step < 1n && count <= siblingLimit; count++) {
+    const firstLeft = Math.max(0, count - rightRows.length);
+    const lastLeft = Math.min(count, leftRows.length);
+    for (let leftCount = firstLeft; leftCount <= lastLeft; leftCount++) {
+      const candidate = windowAt(leftCount, count - leftCount);
+      if (candidate.step >= 1n) {
+        window = candidate;
+        break;
+      }
+    }
+  }
+  const { lower, step } = window;
+  if (step < 1n) throw new KnowledgeInvalidInputError();
+  const selectedLeft = leftRows.slice(0, window.leftCount).reverse();
+  const selectedRight = rightRows.slice(0, window.rightCount);
   const ordered = [...selectedLeft, ...selectedRight];
-  const insertAt =
-    beforePlacementId === null ? ordered.length : ordered.findIndex((row) => row.placement_id === beforePlacementId);
-  if (insertAt < 0) throw new KnowledgeNotFoundError();
+  const insertAt = selectedLeft.length;
   type RebalanceSibling = (typeof ordered)[number] | (typeof moving & Readonly<{ moving: true }>);
   const desired: RebalanceSibling[] = [
     ...ordered.slice(0, insertAt),
     { ...moving, moving: true },
     ...ordered.slice(insertAt),
   ];
-  const step = (upper - lower) / BigInt(desired.length + 1);
-  if (step < 1n) throw new KnowledgeInvalidInputError();
   const changes: KnowledgePositionChange[] = [];
   for (const [index, row] of desired.entries()) {
     const position = lower + step * BigInt(index + 1);
@@ -771,6 +800,7 @@ export async function moveKnowledgePlacement(
         notebookId,
         input.destinationParentPlacementId,
         placementId,
+        input.beforePlacementId,
         beforePosition,
       );
       const leftPosition = left ? BigInt(left.position) : null;
