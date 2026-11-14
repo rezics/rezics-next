@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createCompilerApplication, type CompilerHost } from '../src/compiler/application.ts';
-import { nativeCompiler } from '../src/adapters/compiler-host.ts';
+import { createCompilerHost, nativeCompiler } from '../src/adapters/compiler-host.ts';
 import { bundledRelease } from '../src/bundled.ts';
 import { RELEASE_FORMAT } from '../src/portable.ts';
 
@@ -71,12 +71,13 @@ test('nested nonempty Filter operations keep the supplied compiler after another
   );
   const outer = createCompilerApplication(
     fakeHost({
-      filterConstruction: () => {
+      filterConstruction: (release) => {
         inner.validateRelease(releaseWithFilter);
         nested = true;
+        const construction = createCompilerHost().filterConstruction(release);
         return {
           validateFilter: () => [],
-          qualifiers: () => new Set(),
+          qualifiers: (property) => construction.qualifiers(property),
         };
       },
     }),
