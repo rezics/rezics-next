@@ -1312,7 +1312,7 @@ safe.
 Decision: retain each exact imported Source-fence read cut with its taken-key
 result and include every fence home in copy-work cut reconciliation and
 `current()`. Conflicting observations of one home make the batch unavailable;
-a later provider-field takedown or restoration makes the old witness stale.
+any later provider-field state change makes the old witness stale.
 
 Decision: the bundled `schema:exampleOfWork` slot is single-valued, so native
 writes admit one work per edition. The producer still proves a three-plus-
@@ -1340,6 +1340,9 @@ or two different partition cuts for one home during assembly answers
   work are charged. Output bytes are the typed results plus selected labels.
 - Growth check: `test/semantic/growth-copy-work-disclosure.test.ts` at
   64/512/4096 unrelated subjects and growing old relation history.
+- Current witness acceptance: `test/semantic/copy-work-source-fence-current.test.ts`
+  proves cross-home staleness after native takedown, identity-free withholding,
+  and membership from a replacement imported source tuple.
 
 `contract/index.ts` owns disclosed Subject/Cover schemas, types and summary observations; HTTP consumes them.
 `readSubjectSummaries` remains the native display producer, with trusted route key, pool and Access/Actor/deadline
