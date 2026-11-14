@@ -127,21 +127,32 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
         </h2>
         <p className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]">{sale.title}</p>
         <p className="text-sm text-muted-foreground">{m.creator_review_recorded_title_hint()}</p>
+        <dl className="grid min-w-0 gap-4 pt-2 sm:grid-cols-2">
+          <Fact label={m.creator_sale_unit_price()}>
+            <span className="font-serif text-xl tabular-nums">{amount ?? m.statements_amount_unavailable()}</span>
+          </Fact>
+          <Fact label={m.creator_sale_currency()}>{sale.currency.toUpperCase()}</Fact>
+        </dl>
       </div>
       {returned && (
         <p role="status" className="text-sm">
           {m.creator_review_returned()}
         </p>
       )}
-      <section className="space-y-3" aria-labelledby="creator-sale-terms">
+      <section className="space-y-3 border-t pt-4" aria-labelledby="creator-sale-settlement">
+        <h3 id="creator-sale-settlement" className="font-medium">
+          {m.creator_sale_settlement()}
+        </h3>
+        <p>{creatorSaleSettlementLabel(sale.settlement)}</p>
+        <p className="text-sm text-muted-foreground">{settlementMeaning(sale.settlement)}</p>
+        <p className="text-sm text-muted-foreground">{m.creator_sale_statements_hint()}</p>
+      </section>
+      <CreatorSaleReturn close={close} returned={returned} locale={locale} cursor={cursor} orderId={sale.orderId} />
+      <section className="space-y-3 border-t pt-4" aria-labelledby="creator-sale-terms">
         <h3 id="creator-sale-terms" className="font-medium">
           {m.creator_sale_terms()}
         </h3>
         <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
-          <Fact label={m.creator_sale_unit_price()}>
-            <span className="font-serif text-xl tabular-nums">{amount ?? m.statements_amount_unavailable()}</span>
-          </Fact>
-          <Fact label={m.creator_sale_currency()}>{sale.currency.toUpperCase()}</Fact>
           <Fact label={m.creator_sale_raw_amount()}>
             <span className="font-mono">{String(sale.unitAmountMinor)}</span>
           </Fact>
@@ -174,14 +185,6 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
           <p className="text-sm text-muted-foreground">{m.creator_review_timestamp_hint()}</p>
         </div>
       </details>
-      <section className="space-y-3 border-t pt-4" aria-labelledby="creator-sale-settlement">
-        <h3 id="creator-sale-settlement" className="font-medium">
-          {m.creator_sale_settlement()}
-        </h3>
-        <p>{creatorSaleSettlementLabel(sale.settlement)}</p>
-        <p className="text-sm text-muted-foreground">{settlementMeaning(sale.settlement)}</p>
-        <p className="text-sm text-muted-foreground">{m.creator_sale_statements_hint()}</p>
-      </section>
       <section className="space-y-3 border-t pt-4" aria-labelledby="creator-sale-identities">
         <h3 id="creator-sale-identities" className="font-medium">
           {m.creator_sale_identities()}
@@ -320,7 +323,6 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareD
           )}
         </div>
       </nav>
-      <CreatorSaleReturn close={close} returned={returned} locale={locale} cursor={cursor} orderId={sale.orderId} />
     </section>
   );
 }
