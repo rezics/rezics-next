@@ -135,6 +135,11 @@ export class ManagerSessionTransport {
     void client.catch(() => this.pools.delete(key));
     return client;
   }
+  async applyModelOverride(client: AppServer, spec: CodexTurnSpec, threadId: string): Promise<void> {
+    const model = this.services.codexManagerModel?.(spec.id) ?? spec.model;
+    if (model === undefined) return;
+    await client.request('thread/settings/update', { threadId, model, effort: spec.effort });
+  }
   async startThread(client: AppServer, spec: CodexThreadSpec & Pick<ManagerSpec, 'cwd'>): Promise<string> {
     const started = await client.request('thread/start', {
       ...FULL_ACCESS,
