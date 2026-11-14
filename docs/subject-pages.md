@@ -1971,6 +1971,14 @@ For one complete visit, the mounted controller retains only the selected current
 
 ## Scores on pages
 
+Decision: an uncertain personal score or clear retains one immutable original question/Subject/units/key envelope,
+sender, credential and owning mounted reader lease. Explicit replay uses that command even after question or answer
+observations change; a new choice creates a new intent. Reloading the current answer preserves the unresolved request
+and useful private draft, labels the reading separately and never confirms the command. Reader retirement releases
+private intent and callbacks, including account/credential replacement and A-to-B-to-A. Each explicit action sends
+one original command with only its existing exact readback, or one current-answer read; there is no polling,
+persistence, per-row hydration or shared private intent cache.
+
 A score is never shown without its population, question, scale and count. The installed public headline is the
 standard question's eligible Global published figure, in its documented 0–10 display domain. A Realm-routed page
 never relabels that Global figure as a Realm result. Exact selected Realm populations appear separately; figures

@@ -2,7 +2,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Slider } from '@base-ui/react/slider';
 import { Field } from '@base-ui/react/field';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { QuestionBoundRatingInput } from './rating-actions';
 import { sessionQueryKey, type BrowserSession } from '../../session';
@@ -67,10 +67,11 @@ export async function applyOptimisticRatingChange(input: {
   const operation = binding.beginRatingWrite(before, optimistic);
   if (!operation || !binding.isCurrent()) return false;
   queryClient.setQueryData(ownKey, optimistic);
-  const command = personalScoreWriteCommand(input.pendingCommand ?? null, units);
-  const request = input.request
-    ? { ...input.request, units, idempotencyKey: command.key }
-    : { units, idempotencyKey: command.key, expectedReader: binding.reader };
+  const request = input.request ?? {
+    units,
+    idempotencyKey: personalScoreWriteCommand(input.pendingCommand ?? null, units).key,
+    expectedReader: binding.reader,
+  };
 
   let outcome: PersonalScoreWriteResult = 'uncertain';
   try {
@@ -464,18 +465,13 @@ function boundRatingCommand(
   });
 }
 
-export function SubjectRatingControl({
-  question,
-  subjectId,
-  locale,
-  returnTo,
-  session,
-  own,
-  binding,
-  initialFailure = false,
-  hideQuestionLabel = false,
-  write,
-}: {
+type PendingRatingCommand = Readonly<{
+  request: QuestionBoundRatingInput;
+  sender: RatingWrite;
+  binding: SubjectPersonalLease;
+}>;
+
+type SubjectRatingControlProps = {
   subjectId: string;
   locale: string;
   returnTo: string;
@@ -486,35 +482,43 @@ export function SubjectRatingControl({
   initialFailure?: boolean;
   hideQuestionLabel?: boolean;
   write?: RatingWrite;
-}) {
+};
+
+export function SubjectRatingControl(props: SubjectRatingControlProps) {
+  // Question and answer observations can change within a reader's lifetime. Only that lifetime owns private intent.
+  const lifetime = JSON.stringify([props.binding?.key, props.subjectId, props.locale, props.session]);
+  return <MountedSubjectRatingControl key={lifetime} {...props} />;
+}
+
+function MountedSubjectRatingControl({
+  question,
+  subjectId,
+  locale,
+  returnTo,
+  session,
+  own,
+  binding,
+  initialFailure = false,
+  hideQuestionLabel = false,
+  write,
+}: SubjectRatingControlProps) {
   const queryClient = useQueryClient();
-  const bindingKey = JSON.stringify([binding?.key ?? `inactive:${subjectId}:${locale}`, question]);
-  const sourceRef = useRef(bindingKey);
-  sourceRef.current = bindingKey;
   const mounted = useRef(true);
-  useEffect(() => {
+  const pendingCommand = useRef<PendingRatingCommand | null>(null);
+  const activePending = useRef<object | null>(null);
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      pendingCommand.current = null;
+      activePending.current = null;
     };
   }, []);
-  const bindingRef = useRef(binding);
-  bindingRef.current = binding;
-  const pendingId = useRef(0);
-  const activePending = useRef<{ scope: string; id: number } | null>(null);
-  const pendingCommand = useRef<PersonalScoreWriteCommand | null>(null);
-  const boundCommand = useRef<QuestionBoundRatingInput | null>(null);
-  const [pendingState, setPendingState] = useState<{ scope: string; id: number } | null>(null);
-  const [failureState, setFailureState] = useState<{ scope: string; message: string } | null>(null);
-  const [retryableState, setRetryableState] = useState<{ scope: string } | null>(null);
-  const pending = pendingState?.scope === bindingKey;
-  const retryable = retryableState?.scope === bindingKey;
-  const failure =
-    failureState?.scope === bindingKey
-      ? failureState.message
-      : initialFailure
-        ? m.subject_rating_control_error({}, { locale: locale as never })
-        : null;
+  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState<string | null>(
+    initialFailure ? m.subject_rating_control_error({}, { locale: locale as never }) : null,
+  );
+  const [retryable, setRetryable] = useState(false);
   const state: RatingControlState =
     session === 'unknown'
       ? { kind: 'unknown' }
@@ -529,64 +533,58 @@ export function SubjectRatingControl({
               : { kind: 'ready', units: own.units };
 
   const change = async (units: number | null) => {
-    const originatingBinding = bindingRef.current;
-    if (!originatingBinding) return;
-    const scope = bindingKey;
-    const isCurrentBinding = () => mounted.current && originatingBinding.isCurrent() && sourceRef.current === scope;
-    if (!isCurrentBinding()) return;
-    if (activePending.current?.scope === scope) return;
-    const command = personalScoreWriteCommand(pendingCommand.current, units);
-    pendingCommand.current = command;
-    const expectedCredential = queryClient.getQueryData<BrowserSession>(sessionQueryKey)?.csrfToken ?? '';
-    const request = boundRatingCommand(subjectId, units, originatingBinding, question, command.key, expectedCredential);
-    boundCommand.current = request;
-    const id = ++pendingId.current;
-    activePending.current = { scope, id };
-    setPendingState({ scope, id });
-    setFailureState(null);
+    if (!binding?.isCurrent() || !mounted.current || activePending.current) return;
+    let intent = pendingCommand.current;
+    if (!intent || intent.request.units !== units) {
+      const command = personalScoreWriteCommand(null, units);
+      const expectedCredential = queryClient.getQueryData<BrowserSession>(sessionQueryKey)?.csrfToken ?? '';
+      const request = boundRatingCommand(subjectId, units, binding, question, command.key, expectedCredential);
+      // Capture the sender as well as the envelope: neither lazy loading nor later props may replace this request.
+      const sender: RatingWrite = write ?? (async () => {
+        const { changeQuestionBoundRating } = await import('./rating-actions');
+        return changeQuestionBoundRating({ data: request });
+      });
+      intent = Object.freeze({ request, sender, binding });
+      pendingCommand.current = intent;
+    }
+    const original = intent;
+    const attempt = {};
+    const isCurrent = () => mounted.current && original.binding.isCurrent() &&
+      pendingCommand.current === original && activePending.current === attempt;
+    activePending.current = attempt;
+    setPending(true);
+    setFailure(null);
     try {
       const saved = await applyOptimisticRatingChange({
         queryClient,
-        subjectId,
+        subjectId: original.request.subjectId,
         locale,
-        binding: { ...originatingBinding, isCurrent: isCurrentBinding },
-        units,
-        pendingCommand: command,
-        request,
-        write:
-          write ??
-          (async () => {
-            const { changeQuestionBoundRating } = await import('./rating-actions');
-            return changeQuestionBoundRating({ data: boundCommand.current ?? request });
-          }),
+        binding: { ...original.binding, isCurrent },
+        units: original.request.units,
+        request: original.request,
+        write: original.sender,
         onFailure: (result) => {
-          if (!isCurrentBinding()) return;
+          if (!isCurrent()) return;
           const notice = personalScoreWriteNotice(result.stale ? 'stale' : result.uncertain ? 'uncertain' : 'rejected');
-          if (notice === 'uncertain') setRetryableState({ scope });
-          else {
-            pendingCommand.current = null;
-            boundCommand.current = null;
-            setRetryableState(null);
-          }
-          setFailureState({ scope, message: ratingNotice(locale, notice) });
+          setRetryable(notice === 'uncertain');
+          if (notice !== 'uncertain') pendingCommand.current = null;
+          setFailure(ratingNotice(locale, notice));
         },
       });
-      if (saved) {
+      if (saved && isCurrent()) {
         pendingCommand.current = null;
-        boundCommand.current = null;
-        setRetryableState(null);
+        setRetryable(false);
       }
     } finally {
-      if (isCurrentBinding() && activePending.current?.scope === scope && activePending.current.id === id) {
+      if (mounted.current && original.binding.isCurrent() && activePending.current === attempt) {
         activePending.current = null;
-        setPendingState(null);
+        setPending(false);
       }
     }
   };
 
   return (
     <RatingControlView
-      key={`${bindingKey}:${question.id}:${question.revision}`}
       question={question}
       hideQuestionLabel={hideQuestionLabel}
       failure={failure}
