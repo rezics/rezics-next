@@ -64,6 +64,7 @@ type LifecycleCommand = {
 type LifecycleIntent = Readonly<{
   data: Readonly<LifecycleCommand>;
   send: typeof changeOccurrenceLifecycle;
+  context: string;
 }>;
 
 type PrivateJournal = Extract<JournalReadResult, { kind: 'ready' }>['journal'];
@@ -74,10 +75,10 @@ type JournalCustody = {
   listeners?: Set<() => void>;
   lifecycle?: LifecycleIntent;
   lifecycleFlight?: object;
-  lifecycleConflictRevision?: number;
+  lifecycleConflict?: LifecycleIntent;
 };
 // Only the existing progress-reader lifetime can retain a dispatched command through a read replacement.
-// Only a dispatched command and its original comparison survive here. Neither authorizes a current read.
+// Only dispatched commands and their recovery comparisons survive here. Neither authorizes a current read.
 const journalCommands = new WeakMap<object, JournalCustody>();
 function journalCustody(lifetime: object | undefined): JournalCustody {
   if (!lifetime) return {};
@@ -156,18 +157,19 @@ export function PrivateOccurrenceControls(props: {
     const previous = source.current.lifetime && journalCommands.get(source.current.lifetime);
     if (previous) {
       delete previous.lifecycle;
-      delete previous.lifecycleConflictRevision;
+      delete previous.lifecycleConflict;
     }
     source.current = { lifetime: props.lifetime, identity, generation: source.current.generation + 1 };
   }
-  if (owner.state !== 'signed-in' || !owner.csrfToken || !read || !journalRead || !props.isCurrent()) {
+  if (owner.state !== 'signed-in' || !owner.csrfToken || !read || !journalRead) {
     const previous = props.lifetime && journalCommands.get(props.lifetime);
     if (previous) {
       delete previous.lifecycle;
-      delete previous.lifecycleConflictRevision;
+      delete previous.lifecycleConflict;
     }
     return <p role="status">{m.library_occurrence_unavailable()}</p>;
   }
+  if (!props.isCurrent()) return <p role="status">{m.library_occurrence_unavailable()}</p>;
   return (
     <PrivateJournalDraftNavigation
       key={JSON.stringify([
@@ -302,19 +304,18 @@ function OccurrenceControls({
   const [refusedField, setRefusedField] = useState<string | null>(null);
   const [conflictRevision, setConflictRevision] = useState<number | null>(null);
   const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
-  const heldLifecycle = custody.lifecycle;
-  const retainedLifecycle =
-    heldLifecycle &&
-    heldLifecycle.data.sessionId === session.id &&
-    heldLifecycle.data.viewer === currentViewer &&
-    heldLifecycle.data.csrfToken === csrfToken &&
-    (heldLifecycle.data.action === 'reopen' ? reopenAllowed : retireAllowed)
-      ? heldLifecycle
-      : null;
-  if (heldLifecycle && !retainedLifecycle) {
-    delete custody.lifecycle;
-    delete custody.lifecycleConflictRevision;
-  }
+  const lifecycleContext = JSON.stringify([
+    currentViewer,
+    csrfToken,
+    session.id,
+    location.search.history,
+  ]);
+  const lifecyclePermitted = (intent: LifecycleIntent) =>
+    intent.context === lifecycleContext && (intent.data.action === 'reopen' ? reopenAllowed : retireAllowed);
+  if (custody.lifecycle && !lifecyclePermitted(custody.lifecycle)) delete custody.lifecycle;
+  if (custody.lifecycleConflict && !lifecyclePermitted(custody.lifecycleConflict))
+    delete custody.lifecycleConflict;
+  const retainedLifecycle = custody.lifecycle ?? null;
   const [lifecycleCommand, setLifecycleCommand] = useState<LifecycleIntent | null>(retainedLifecycle);
   // This ref closes the gap between activation and rendering: no second review can replace the first intent.
   const lifecycleChoice = useRef<LifecycleIntent | null>(retainedLifecycle);
@@ -324,28 +325,23 @@ function OccurrenceControls({
   const lifecycleSubmit = useRef<HTMLButtonElement>(null);
   const lifecycleLauncher = useRef<HTMLButtonElement | null>(null);
   const lifecycleRecovery = useRef<HTMLButtonElement>(null);
-  const lifecycleFocus = useRef<{ from: Element | null; to: 'submit' | 'launcher' | 'recovery' } | null>(null);
+  const lifecycleResult = useRef<HTMLParagraphElement>(null);
+  const lifecycleFocus = useRef<{
+    from: Element | null;
+    to: 'submit' | 'launcher' | 'recovery' | 'result';
+  } | null>(null);
   const lifecycleReading = useRef(false);
   const [readingLifecycle, setReadingLifecycle] = useState(false);
-  const [lifecycleNotice, setLifecycleNotice] = useState<
-    'conflict' | 'uncertain' | 'saved' | null
-  >(retainedLifecycle ? 'uncertain' : null);
+  const [lifecycleNotice, setLifecycleNotice] = useState<'conflict' | 'uncertain' | 'saved' | null>(
+    retainedLifecycle ? 'uncertain' : null,
+  );
   const [lifecycleConflictRevision, setLifecycleConflictRevision] = useState<number | null>(
-    custody.lifecycleConflictRevision ?? null,
+    custody.lifecycleConflict?.data.revision ?? null,
   );
   const [terminal, setTerminal] = useState(false);
-  const authority = useRef({ journalUpdateAllowed, reopenAllowed, retireAllowed, generation: 0 });
-  if (
-    authority.current.journalUpdateAllowed !== journalUpdateAllowed ||
-    authority.current.reopenAllowed !== reopenAllowed ||
-    authority.current.retireAllowed !== retireAllowed
-  )
-    authority.current = {
-      journalUpdateAllowed,
-      reopenAllowed,
-      retireAllowed,
-      generation: authority.current.generation + 1,
-    };
+  const authority = useRef({ journalUpdateAllowed, generation: 0 });
+  if (authority.current.journalUpdateAllowed !== journalUpdateAllowed)
+    authority.current = { journalUpdateAllowed, generation: authority.current.generation + 1 };
   useEffect(() => {
     // Admission replacement can retire rendering, but cannot settle a dispatched command.
     setReview(custody.command ?? null);
@@ -354,28 +350,18 @@ function OccurrenceControls({
     setJournalNotice(custody.command ? 'uncertain' : null);
     setConflictRevision(null);
     setReviewedRevision(null);
-  }, [journalUpdateAllowed, reopenAllowed, retireAllowed]);
+  }, [journalUpdateAllowed]);
 
-  const lifecycleAuthority = useRef({ reopenAllowed, retireAllowed, generation: 0 });
-  if (
-    lifecycleAuthority.current.reopenAllowed !== reopenAllowed ||
-    lifecycleAuthority.current.retireAllowed !== retireAllowed
-  ) {
-    lifecycleAuthority.current = {
-      reopenAllowed,
-      retireAllowed,
-      generation: lifecycleAuthority.current.generation + 1,
-    };
-    delete custody.lifecycle;
-    delete custody.lifecycleConflictRevision;
+  if (lifecycleChoice.current && !lifecyclePermitted(lifecycleChoice.current)) {
     lifecycleChoice.current = null;
     lifecycleFocus.current = null;
   }
   useEffect(() => {
-    setLifecycleCommand(custody.lifecycle ?? null);
-    lifecycleChoice.current = custody.lifecycle ?? null;
-    setLifecycleNotice(custody.lifecycle ? 'uncertain' : null);
-    setLifecycleConflictRevision(custody.lifecycleConflictRevision ?? null);
+    if (lifecycleCommand && !lifecyclePermitted(lifecycleCommand)) {
+      setLifecycleCommand(null);
+      setLifecycleNotice(null);
+    }
+    if (!custody.lifecycleConflict) setLifecycleConflictRevision(null);
   }, [reopenAllowed, retireAllowed]);
 
   const leaving = useRef(false);
@@ -423,8 +409,10 @@ function OccurrenceControls({
         ? lifecycleSubmit.current
         : request.to === 'launcher'
           ? lifecycleLauncher.current
-          : lifecycleRecovery.current;
-    if (target?.isConnected && !target.disabled) target.focus();
+          : request.to === 'recovery'
+            ? lifecycleRecovery.current
+            : lifecycleResult.current;
+    if (target?.isConnected && !('disabled' in target && target.disabled)) target.focus();
   }, [lifecycleCommand, lifecycleNotice, lifecycleConflictRevision, session.revision]);
 
   usePrivateJournalDraftNavigation({
@@ -579,7 +567,7 @@ function OccurrenceControls({
     setRefusedField(null);
   }
 
-  function restoreLifecycleFocus(to: 'launcher' | 'recovery') {
+  function restoreLifecycleFocus(to: 'launcher' | 'recovery' | 'result') {
     if (lifecyclePanel.current?.contains(document.activeElement))
       lifecycleFocus.current = { from: document.activeElement, to };
   }
@@ -603,7 +591,6 @@ function OccurrenceControls({
     custody.lifecycleFlight = attempt;
     custody.listeners?.forEach((listener) => listener());
     flight.current = true;
-    const generation = lifecycleAuthority.current.generation;
     setBusy(true);
     setLifecycleNotice(null);
     const result = await intent.send({ data: command }).catch(() => ({ kind: 'uncertain' as const }));
@@ -612,7 +599,7 @@ function OccurrenceControls({
     flight.current = false;
     if (!stillCurrent(command)) return;
     setBusy(false);
-    if (generation !== lifecycleAuthority.current.generation || custody.lifecycle !== intent) return;
+    if (custody.lifecycle !== intent) return;
     if (result.kind === 'uncertain') {
       setLifecycleNotice('uncertain');
       return;
@@ -621,8 +608,8 @@ function OccurrenceControls({
     lifecycleChoice.current = null;
     setLifecycleCommand(null);
     if (result.kind === 'saved') {
-      restoreLifecycleFocus('launcher');
-      delete custody.lifecycleConflictRevision;
+      restoreLifecycleFocus('result');
+      delete custody.lifecycleConflict;
       setLifecycleConflictRevision(null);
       if (result.session.state === 'retired') {
         leaveRetiredDetail();
@@ -634,7 +621,7 @@ function OccurrenceControls({
     }
     if (result.kind === 'conflict') {
       restoreLifecycleFocus('recovery');
-      custody.lifecycleConflictRevision = command.revision;
+      custody.lifecycleConflict = intent;
       setLifecycleConflictRevision(command.revision);
       setLifecycleNotice('conflict');
       void router.invalidate();
@@ -674,6 +661,7 @@ function OccurrenceControls({
         key: crypto.randomUUID(),
       }),
       send: changeOccurrenceLifecycle,
+      context: lifecycleContext,
     });
     lifecycleLauncher.current = launcher;
     lifecycleFocus.current = { from: document.activeElement, to: 'submit' };
@@ -980,7 +968,7 @@ function OccurrenceControls({
               </button>
             ) : null}
           </div>
-          {lifecycleCommand ? (
+          {lifecycleCommand && lifecyclePermitted(lifecycleCommand) ? (
             <div
               ref={lifecyclePanel}
               className="min-w-0 space-y-3 rounded-md border p-3"
@@ -1037,7 +1025,7 @@ function OccurrenceControls({
               {lifecycleDispatched ? <LifecycleObservation session={session} /> : null}
             </div>
           ) : null}
-          {lifecycleConflictRevision !== null ? (
+          {lifecycleConflictRevision !== null && custody.lifecycleConflict ? (
             <div
               role="group"
               aria-label={m.library_occurrence_conflict()}
@@ -1053,7 +1041,8 @@ function OccurrenceControls({
                 onClick={() => {
                   if (!enabled || !isCurrent() || departed.current || leaving.current) return;
                   if (session.revision !== lifecycleConflictRevision) {
-                    delete custody.lifecycleConflictRevision;
+                    lifecycleFocus.current = { from: document.activeElement, to: 'launcher' };
+                    delete custody.lifecycleConflict;
                     setLifecycleConflictRevision(null);
                     setLifecycleNotice(null);
                   } else void readLifecycleCurrent();
@@ -1065,7 +1054,11 @@ function OccurrenceControls({
               </button>
             </div>
           ) : null}
-          {lifecycleNotice === 'saved' ? <p role="status">{m.library_occurrence_reopened()}</p> : null}
+          {lifecycleNotice === 'saved' ? (
+            <p ref={lifecycleResult} role="status" tabIndex={-1}>
+              {m.library_occurrence_reopened()}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </section>

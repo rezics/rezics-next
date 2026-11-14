@@ -82,7 +82,8 @@ journal's submitted comparison, original save, newer selections or shared Stay/L
 uses the existing terminal history navigation. A lifecycle conflict releases the refused request, rereads the existing
 selected occurrence and exposes recovery outside the journal editor. A fresh revision must be explicitly reviewed
 before another lifecycle review captures a new command. Viewer, credential, source or mutation permission replacement
-retires inappropriate controls and late effects without reporting a failed mutation. Reader retirement cannot restore
+retires inappropriate controls and late effects without reporting a failed mutation. An unrelated permission change
+does not replace either original request or its known acknowledgement. Reader retirement cannot restore
 old controls. Focus follows deliberate review/cancel or response recovery only while the person stays in that control.
 
 Design sources read before implementation: this owner, the linked Library journal/history owner,

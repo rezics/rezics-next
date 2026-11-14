@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { userEvent, within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 import { ReportedYearPanel } from '../library/private-diary/year-summary';
 import type { ReportedYearSummary } from '../library/private-diary/native';
 import { PageStory, PatternStory } from './page';
@@ -156,4 +158,17 @@ export const HistoryUnavailable: Story = {
     'The first history read is unavailable while the independent native summary remains readable. Retry rereads the current address and supplies the original page; it never claims an empty history.',
   ),
   name: 'History · unavailable and retry',
+};
+
+export const OccurrenceRetirementReview: Story = {
+  ...diaryRoute(
+    'reading',
+    occurrencePath,
+    'An unsent retirement review shows its captured occurrence revision and deliberate confirmation. Cancel returns focus to the launcher without a mutation or any change to the independent journal draft. Reopen has its own review. After dispatch, recovery retains the original action and key, separates Retry from reading the current occurrence, and requires a fresh revision review after conflict. This story stops at unsent review; it does not supply a lifecycle response or establish native recovery acceptance.',
+  ),
+  name: 'Occurrence · cancel before dispatch',
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.library_occurrence_retire() }));
+  },
 };
