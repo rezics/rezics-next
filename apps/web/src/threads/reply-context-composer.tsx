@@ -50,7 +50,11 @@ export function ThreadReplyComposer({
       slowModeCredentialMode={credentialMode}
       replyContext={
         parentId === null || !canSubmit ? null : (
-          <div className="mb-3 flex min-w-0 flex-wrap items-start gap-2" role="status" aria-atomic="true">
+          <div
+            className="mb-4 flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-muted/20 p-3 sm:p-4 [overflow-wrap:anywhere]"
+            role="status"
+            aria-atomic="true"
+          >
             <div className="min-w-0 flex-1 basis-48">
               <ReplyContext parentId={parentId} parents={parents} />
             </div>
