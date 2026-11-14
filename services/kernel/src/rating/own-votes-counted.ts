@@ -24,6 +24,15 @@ import {
 
 export const OWN_COUNTED_VOTE_TARGET_LIMIT = 100;
 
+/** The selected question's native units; no conversion to the standard scale. */
+export type OwnCountedVoteMeasurement = Readonly<{
+  questionId: string;
+  revision: number;
+  minimumUnits: number;
+  maximumUnits: number;
+  stepUnits: number;
+}>;
+
 export type StandardRatingMeasurement = Readonly<{
   questionId: typeof STANDARD_QUESTION_ID;
   revision: 1;
@@ -40,9 +49,11 @@ export const STANDARD_RATING_MEASUREMENT: StandardRatingMeasurement = Object.fre
   stepUnits: 1,
 });
 
-export type OwnCountedVoteRequest = Readonly<{
+/** Omission keeps the standard contract. Use <string> for a dynamic exact question selection. */
+export type OwnCountedVoteRequest<QuestionId extends string = typeof STANDARD_QUESTION_ID> = Readonly<{
   actor: Actor;
   targetIds: readonly string[];
+  questionId?: QuestionId;
 }>;
 
 export type OwnCountedVoteIdentity = Readonly<{
@@ -98,7 +109,7 @@ export type OwnCountedVotePrepareResult =
   | Readonly<{ status: 'prepared'; preparation: OwnCountedVotePreparation }>
   | Readonly<{
       status: 'preparing';
-      reason: 'identity-pending' | 'identity-changed' | 'question-changed';
+      reason: 'request-changed' | 'identity-pending' | 'identity-changed' | 'question-changed';
       retry: 'same-input';
       targets: readonly Readonly<{ requestedTargetId: string; state: 'pending' }>[];
     }>;
@@ -129,12 +140,12 @@ export type OwnCountedVoteReadResult =
       retry: 'same-input';
     }>;
 
-export type OwnCountedVoteObservation =
+export type OwnCountedVoteObservation<Measurement extends OwnCountedVoteMeasurement = StandardRatingMeasurement> =
   | (OwnCountedVoteIdentity &
       Readonly<{
         state: 'counted';
         review: VoteReviewGuard;
-        measurement: StandardRatingMeasurement;
+        measurement: Measurement;
         originalTargetId: string;
         units: number;
         revision: number;
@@ -146,7 +157,7 @@ export type OwnCountedVoteObservation =
       Readonly<{
         state: 'clear';
         review: VoteReviewGuard;
-        measurement: StandardRatingMeasurement;
+        measurement: Measurement;
         originalTargetId: string;
         units: null;
         revision: number;
@@ -158,16 +169,16 @@ export type OwnCountedVoteObservation =
       Readonly<{
         state: 'absent';
         review: VoteReviewGuard;
-        measurement: StandardRatingMeasurement;
+        measurement: Measurement;
       }>)
   | Readonly<{ requestedTargetId: string; state: 'unavailable' }>;
 
-export type OwnCountedVoteResult =
+export type OwnCountedVoteResult<Measurement extends OwnCountedVoteMeasurement = StandardRatingMeasurement> =
   | Readonly<{
       status: 'current';
-      measurement: StandardRatingMeasurement;
+      measurement: Measurement;
       requestedTargetIds: readonly string[];
-      observations: readonly OwnCountedVoteObservation[];
+      observations: readonly OwnCountedVoteObservation<Measurement>[];
     }>
   | Readonly<{
       status: 'preparing';
@@ -184,10 +195,10 @@ export type OwnCountedVoteResult =
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 export type OwnCountedVoteReaderDependencies = Readonly<{ pool: Pool; access: Access; semantic?: RatingVoteSemantic }>;
 export type OwnCountedVoteReader = Readonly<{
-  prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult>;
+  prepare(request: OwnCountedVoteRequest<string>, deadline: number): Promise<OwnCountedVotePrepareResult>;
   read(
     client: Pick<PoolClient, 'query'>,
-    request: OwnCountedVoteRequest,
+    request: OwnCountedVoteRequest<string>,
     preparation: OwnCountedVotePreparation,
   ): Promise<OwnCountedVoteReadResult>;
   finish(
@@ -196,6 +207,12 @@ export type OwnCountedVoteReader = Readonly<{
     readResult: OwnCountedVoteReadResult,
     deadline: number,
   ): Promise<OwnCountedVoteResult>;
+  finish(
+    request: OwnCountedVoteRequest<string>,
+    preparation: OwnCountedVotePreparation,
+    readResult: OwnCountedVoteReadResult,
+    deadline: number,
+  ): Promise<OwnCountedVoteResult<OwnCountedVoteMeasurement>>;
 }>;
 type QueryRow = NonNullable<Awaited<ReturnType<typeof countedVotes.run>>>[number];
 
@@ -249,10 +266,34 @@ function actorFingerprint(actor: Actor): string {
   ]);
 }
 
-function requestFingerprint(request: OwnCountedVoteRequest): string {
+function captureRequest(request: OwnCountedVoteRequest<string>): OwnCountedVoteRequest<string> {
+  const actor = owner(request.actor);
+  if (request.targetIds.length > OWN_COUNTED_VOTE_TARGET_LIMIT) throw new VoteInvalidError('targetIds');
+  const questionId = request.questionId;
+  if (questionId !== undefined && (typeof questionId !== 'string' || routeOf(questionId) === null))
+    throw new VoteInvalidError('questionId');
+  // Keep the original Actor proof; only the caller-owned selector and target list are copied.
+  return Object.freeze({
+    actor,
+    ...(questionId === undefined ? {} : { questionId }),
+    targetIds: Object.freeze([...request.targetIds]),
+  });
+}
+
+function requestFingerprint(request: OwnCountedVoteRequest<string>): string {
   return createHash('sha256')
-    .update(JSON.stringify([actorFingerprint(request.actor), [...request.targetIds]]))
+    .update(
+      JSON.stringify([
+        actorFingerprint(request.actor),
+        request.questionId === undefined ? [] : [request.questionId],
+        [...request.targetIds],
+      ]),
+    )
     .digest('hex');
+}
+
+function sameRequest(request: OwnCountedVoteRequest<string>, actor: Actor, fingerprint: string): boolean {
+  return request.actor === actor && requestFingerprint(request) === fingerprint;
 }
 
 function questionObservation(
@@ -276,9 +317,10 @@ function questionObservation(
 async function readQuestionObservation(
   deps: OwnCountedVoteReaderDependencies,
   actor: Actor,
+  questionId: string,
   deadline: number,
 ): Promise<OwnCountedVoteQuestionObservation> {
-  const row = await readVisibleRatingQuestion(deps, actor, STANDARD_QUESTION_ID, deadline);
+  const row = await readVisibleRatingQuestion(deps, actor, questionId, deadline);
   if (!row) throw new ProblemError('not_found');
   return questionObservation(row);
 }
@@ -304,7 +346,7 @@ function accountObservationsEqual(left: OwnCountedVoteAccountObservation, right:
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function targetIds(request: OwnCountedVoteRequest): string[] {
+function targetIds(request: OwnCountedVoteRequest<string>): string[] {
   const actor = owner(request.actor);
   if (request.targetIds.length > OWN_COUNTED_VOTE_TARGET_LIMIT) throw new VoteInvalidError('targetIds');
   if (routeOf(STANDARD_QUESTION_ID) === null) throw new Error('Standard Rating question has no native route');
@@ -325,6 +367,22 @@ function validStandardQuestion(row: OwnCountedVoteQuestionObservation): boolean 
     row.maximumUnits === STANDARD_RATING_MEASUREMENT.maximumUnits &&
     row.stepUnits === STANDARD_RATING_MEASUREMENT.stepUnits
   );
+}
+
+function validQuestion(row: OwnCountedVoteQuestionObservation, questionId: string): boolean {
+  return row.questionId === questionId && (questionId !== STANDARD_QUESTION_ID || validStandardQuestion(row));
+}
+
+function measurement(question: OwnCountedVoteQuestionObservation | null): OwnCountedVoteMeasurement {
+  // Only the standard empty request can omit a question observation.
+  if (question === null || question.questionId === STANDARD_QUESTION_ID) return STANDARD_RATING_MEASUREMENT;
+  return Object.freeze({
+    questionId: question.questionId,
+    revision: question.revision,
+    minimumUnits: question.minimumUnits,
+    maximumUnits: question.maximumUnits,
+    stepUnits: question.stepUnits,
+  });
 }
 
 function preparationFingerprint(
@@ -354,6 +412,7 @@ function readFingerprint(
 async function readRows(
   client: Queryable,
   actor: AccountActor,
+  questionId: string,
   countingTargetIds: readonly string[],
 ): Promise<OwnCountedVoteRow[]> {
   if (!countingTargetIds.length) return [];
@@ -362,7 +421,7 @@ async function readRows(
   const rows = await countedVotes.run(client, {
     route,
     voter_id: actor.accountId,
-    question_id: STANDARD_QUESTION_ID,
+    question_id: questionId,
     counted_target_ids: [...new Set(countingTargetIds)],
   });
   const result = rows.map((row: QueryRow): OwnCountedVoteRow => {
@@ -413,6 +472,16 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
   const identityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly IdentityMapping[]>();
   const visibilityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly string[]>();
   const epochWitnesses = new WeakMap<OwnCountedVotePreparation, readonly VoteReviewEpoch[]>();
+  const requestWitnesses = new WeakMap<
+    OwnCountedVotePreparation,
+    Readonly<{
+      actor: AccountActor;
+      questionId: string;
+      requestFingerprint: string;
+      preparationFingerprint: string;
+      deadline: number;
+    }>
+  >();
 
   function homes(targets: readonly OwnCountedVotePreparedTarget[]) {
     return targets.flatMap((target) =>
@@ -428,9 +497,16 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     );
   }
 
-  async function prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult> {
-    const ids = targetIds(request);
-    const actor = owner(request.actor);
+  async function prepare(
+    request: OwnCountedVoteRequest<string>,
+    deadline: number,
+  ): Promise<OwnCountedVotePrepareResult> {
+    const input = captureRequest(request);
+    const ids = targetIds(input);
+    const actor = owner(input.actor);
+    const questionId = input.questionId ?? STANDARD_QUESTION_ID;
+    const requestHash = requestFingerprint(input);
+    const requestWitness = { actor, questionId, requestFingerprint: requestHash, deadline };
     const account = await semantic.snapshot(
       deps.pool,
       async (client) => {
@@ -439,8 +515,15 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
       },
       deadline,
     );
+    const question =
+      ids.length || questionId !== STANDARD_QUESTION_ID
+        ? await readQuestionObservation(deps, actor, questionId, deadline)
+        : null;
+    if (question && !validQuestion(question, questionId))
+      return { status: 'preparing', reason: 'question-changed', retry: 'same-input', targets: [] };
     if (!ids.length) {
-      const requestHash = requestFingerprint(request);
+      if (!sameRequest(request, actor, requestHash))
+        return { status: 'preparing', reason: 'request-changed', retry: 'same-input', targets: [] };
       const targets: OwnCountedVotePreparedTarget[] = [];
       const identities: IdentityMapping[] = [];
       const identityHash = identityFingerprint(identities);
@@ -453,18 +536,25 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
         requestedTargetIds: targets.map((target) => target.requestedTargetId),
         targets,
         account,
-        question: null,
-        preparationFingerprint: preparationFingerprint(requestHash, targets, account, null, identityHash, visibleHash),
+        question,
+        preparationFingerprint: preparationFingerprint(
+          requestHash,
+          targets,
+          account,
+          question,
+          identityHash,
+          visibleHash,
+        ),
       } satisfies OwnCountedVotePreparation;
       identityWitnesses.set(preparation, identities);
       visibilityWitnesses.set(preparation, visibleIds);
       epochWitnesses.set(preparation, []);
+      requestWitnesses.set(preparation, {
+        ...requestWitness,
+        preparationFingerprint: preparation.preparationFingerprint,
+      });
       return { status: 'prepared', preparation };
     }
-
-    const question = await readQuestionObservation(deps, actor, deadline);
-    if (!validStandardQuestion(question))
-      return { status: 'preparing', reason: 'question-changed', retry: 'same-input', targets: [] };
 
     const first = await semantic.mappings(deps.pool, ids, deadline);
     const visible = new Set(
@@ -512,7 +602,8 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
         targets: [],
       };
     }
-    const requestHash = requestFingerprint(request);
+    if (!sameRequest(request, actor, requestHash))
+      return { status: 'preparing', reason: 'request-changed', retry: 'same-input', targets: [] };
     const identityHash = identityFingerprint(last);
     const visibleIds = ids.filter((id) => visible.has(id));
     const visibleHash = visibilityFingerprint(visibleIds);
@@ -536,20 +627,34 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     identityWitnesses.set(preparation, last);
     visibilityWitnesses.set(preparation, visibleIds);
     epochWitnesses.set(preparation, epochs);
+    requestWitnesses.set(preparation, {
+      ...requestWitness,
+      preparationFingerprint: preparation.preparationFingerprint,
+    });
     return { status: 'prepared', preparation };
   }
 
   async function read(
     client: Pick<PoolClient, 'query'>,
-    request: OwnCountedVoteRequest,
+    request: OwnCountedVoteRequest<string>,
     preparation: OwnCountedVotePreparation,
   ): Promise<OwnCountedVoteReadResult> {
-    const requestHash = requestFingerprint(request);
+    const input = captureRequest(request);
+    const requestHash = requestFingerprint(input);
     if (requestHash !== preparation.requestFingerprint)
       return { status: 'preparing', reason: 'request-changed', retry: 'same-input' };
-    if (!validPreparation(preparation) || !identityWitnesses.has(preparation) || !visibilityWitnesses.has(preparation))
+    const requestWitness = requestWitnesses.get(preparation);
+    if (
+      !requestWitness ||
+      requestWitness.preparationFingerprint !== preparation.preparationFingerprint ||
+      !validPreparation(preparation) ||
+      !identityWitnesses.has(preparation) ||
+      !visibilityWitnesses.has(preparation)
+    )
       return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
-    const actor = owner(request.actor);
+    if (!sameRequest(input, requestWitness.actor, requestWitness.requestFingerprint))
+      return { status: 'preparing', reason: 'request-changed', retry: 'same-input' };
+    const actor = owner(requestWitness.actor);
     await partitionReadClient(client, partitionOf(routeOf(actor.accountId)!));
     const account = await readAccountObservation(client, actor);
     if (!accountObservationsEqual(account, preparation.account))
@@ -557,12 +662,19 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     const countingTargetIds = preparation.targets.flatMap((target) =>
       'countingTargetId' in target ? [target.countingTargetId] : [],
     );
-    const rows = await readRows(client, actor, countingTargetIds);
+    const rows = await readRows(client, actor, requestWitness.questionId, countingTargetIds);
     const slots = await readVoteReviewSlots(client, {
       ownerId: actor.accountId,
-      questionId: STANDARD_QUESTION_ID,
+      questionId: requestWitness.questionId,
       targetIds: slotIds(preparation.targets),
     });
+    if (!sameRequest(request, actor, requestHash))
+      return { status: 'preparing', reason: 'request-changed', retry: 'same-input' };
+    if (
+      requestWitness.preparationFingerprint !== preparation.preparationFingerprint ||
+      !validPreparation(preparation)
+    )
+      return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
     return {
       status: 'read',
       requestFingerprint: requestHash,
@@ -574,26 +686,44 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     };
   }
 
-  async function finish(
+  function finish(
     request: OwnCountedVoteRequest,
     preparation: OwnCountedVotePreparation,
     readResult: OwnCountedVoteReadResult,
     deadline: number,
-  ): Promise<OwnCountedVoteResult> {
-    const requestHash = requestFingerprint(request);
+  ): Promise<OwnCountedVoteResult>;
+  function finish(
+    request: OwnCountedVoteRequest<string>,
+    preparation: OwnCountedVotePreparation,
+    readResult: OwnCountedVoteReadResult,
+    deadline: number,
+  ): Promise<OwnCountedVoteResult<OwnCountedVoteMeasurement>>;
+  async function finish(
+    request: OwnCountedVoteRequest<string>,
+    preparation: OwnCountedVotePreparation,
+    readResult: OwnCountedVoteReadResult,
+    deadline: number,
+  ): Promise<OwnCountedVoteResult<OwnCountedVoteMeasurement>> {
+    const input = captureRequest(request);
+    const requestHash = requestFingerprint(input);
     if (requestHash !== preparation.requestFingerprint)
       return { status: 'preparing', reason: 'request-changed', retry: 'same-input' };
     if (readResult.status === 'preparing')
       return { status: 'preparing', reason: readResult.reason, retry: 'same-input' };
     if (readResult.requestFingerprint !== requestHash)
       return { status: 'preparing', reason: 'request-changed', retry: 'same-input' };
+    const requestWitness = requestWitnesses.get(preparation);
     if (
+      !requestWitness ||
+      requestWitness.preparationFingerprint !== preparation.preparationFingerprint ||
       !validPreparation(preparation) ||
       !identityWitnesses.has(preparation) ||
       !visibilityWitnesses.has(preparation) ||
       readResult.preparationFingerprint !== preparation.preparationFingerprint
     )
       return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
+    if (!sameRequest(input, requestWitness.actor, requestWitness.requestFingerprint))
+      return { status: 'preparing', reason: 'request-changed', retry: 'same-input' };
     if (!accountObservationsEqual(readResult.account, preparation.account))
       return { status: 'preparing', reason: 'account-changed', retry: 'same-input' };
     if (
@@ -602,11 +732,16 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     )
       return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
 
-    const actor = owner(request.actor);
-    const ids = targetIds(request);
-    if (ids.length) {
-      const question = await readQuestionObservation(deps, actor, deadline);
-      if (!validStandardQuestion(question) || JSON.stringify(question) !== JSON.stringify(preparation.question))
+    const actor = owner(requestWitness.actor);
+    const ids = targetIds(input);
+    deadline = Math.min(deadline, requestWitness.deadline);
+    if (preparation.question !== null) {
+      const question = await readQuestionObservation(deps, actor, requestWitness.questionId, deadline);
+      // Retired questions still describe retained votes; any lifecycle change invalidates this observation.
+      if (
+        !validQuestion(question, requestWitness.questionId) ||
+        JSON.stringify(question) !== JSON.stringify(preparation.question)
+      )
         return { status: 'preparing', reason: 'question-changed', retry: 'same-input' };
     }
 
@@ -657,16 +792,23 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
         const countingTargetIds = preparation.targets.flatMap((target) =>
           'countingTargetId' in target ? [target.countingTargetId] : [],
         );
-        const rows = await readRows(client, actor, countingTargetIds);
+        const rows = await readRows(client, actor, requestWitness.questionId, countingTargetIds);
         const slots = await readVoteReviewSlots(client, {
           ownerId: actor.accountId,
-          questionId: STANDARD_QUESTION_ID,
+          questionId: requestWitness.questionId,
           targetIds: slotIds(preparation.targets),
         });
         return { account, rows, slots };
       },
       deadline,
     );
+    if (!sameRequest(request, actor, requestHash))
+      return { status: 'preparing', reason: 'request-changed', retry: 'same-input' };
+    if (
+      requestWitness.preparationFingerprint !== preparation.preparationFingerprint ||
+      !validPreparation(preparation)
+    )
+      return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
     if (!accountObservationsEqual(current.account, preparation.account))
       return { status: 'preparing', reason: 'account-changed', retry: 'same-input' };
     if (
@@ -677,7 +819,8 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
 
     const rowsByCountingTarget = new Map(current.rows.map((row) => [row.countingTargetId, row]));
     const slotsByTarget = new Map(current.slots.map((slot) => [slot.targetId, slot.vote]));
-    const observations: OwnCountedVoteObservation[] = preparation.targets.map((target) => {
+    const selectedMeasurement = measurement(preparation.question);
+    const observations: OwnCountedVoteObservation<OwnCountedVoteMeasurement>[] = preparation.targets.map((target) => {
       if (!('countingTargetId' in target)) return target;
       const row = rowsByCountingTarget.get(target.countingTargetId);
       const review: VoteReviewGuard = {
@@ -692,7 +835,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
         },
         ownVote: ownVoteReviewWitness({
           ownerId: actor.accountId,
-          questionId: STANDARD_QUESTION_ID,
+          questionId: requestWitness.questionId,
           requestedTargetId: target.requestedTargetId,
           canonicalId: target.countingTargetId,
           original: slotsByTarget.get(target.requestedTargetId) ?? null,
@@ -704,7 +847,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
         requestedTargetId: target.requestedTargetId,
         countingTargetId: target.countingTargetId,
         sourceEpoch: target.sourceEpoch,
-        measurement: STANDARD_RATING_MEASUREMENT,
+        measurement: selectedMeasurement,
         review,
       };
       if (!row) return { ...base, state: 'absent' };
@@ -732,7 +875,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     });
     return {
       status: 'current',
-      measurement: STANDARD_RATING_MEASUREMENT,
+      measurement: selectedMeasurement,
       requestedTargetIds: preparation.requestedTargetIds,
       observations,
     };
