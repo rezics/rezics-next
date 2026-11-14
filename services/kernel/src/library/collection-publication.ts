@@ -2,19 +2,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient, commandAccessContext, resourceAuthorization } from './access-port.ts';
+import { commandAccessContext, resourceAuthorization } from './access-port.ts';
 import { shareAccount } from './access-port.ts';
 import { GrantDeniedError, LifecycleDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
+  commandAttemptDeadline,
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
   type CommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccessCheck, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -26,6 +26,7 @@ import {
 } from './collection-publication-history.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+import { withCollectionReadSnapshot } from './collection-read-connection.ts';
 import {
   authorizeCollectionRule,
   prepareCollectionRuleAuthority,
@@ -184,25 +185,17 @@ async function prepareSelection(
   collectionId: string,
   raw: readonly string[],
   attempt: CommandAttempt,
-  deadline: number,
   plan: CollectionSelectedPublicationPlan,
   expected?: Pick<Prepared, 'header' | 'rule'>,
 ): Promise<Prepared> {
-  const saved = await withConnection(deps.pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const current = await header(client, route, collectionId, actor.accountId);
-      if (!current) throw new ProblemError('not_found');
-      const rule = await readSavedCollectionRule(client, route, collectionId);
-      if (!rule || rule.collectionRevision !== current.revision || rule.sourceGeneration !== current.sourceGeneration)
-        throw unavailable();
-      await client.query('COMMIT');
-      return { header: current, rule };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
+  const deadline = commandAttemptDeadline(attempt);
+  const saved = await withCollectionReadSnapshot(deps.pool, deadline, async (client) => {
+    const current = await header(client, route, collectionId, actor.accountId);
+    if (!current) throw new ProblemError('not_found');
+    const rule = await readSavedCollectionRule(client, route, collectionId);
+    if (!rule || rule.collectionRevision !== current.revision || rule.sourceGeneration !== current.sourceGeneration)
+      throw unavailable();
+    return { header: current, rule };
   });
   // Core retries acquire fresh authority, but a changed definition must still refuse this selection.
   if (
@@ -314,18 +307,9 @@ async function prepareSelection(
               snapshot.dispatch();
               let match;
               try {
-                match = await withConnection(deps.pool, async (connection) => {
-                  const client = deadlineClient(connection, deadline);
-                  await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-                  try {
-                    const result = await readOwnerFilterCandidate(client, admission, closure.closure, work);
-                    await client.query('COMMIT');
-                    return result;
-                  } catch (error) {
-                    await client.query('ROLLBACK');
-                    throw error;
-                  }
-                });
+                match = await withCollectionReadSnapshot(deps.pool, deadline, (client) =>
+                  readOwnerFilterCandidate(client, admission, closure.closure, work),
+                );
               } finally {
                 snapshot.settle();
               }
@@ -414,7 +398,6 @@ export function createCollectionPublications(deps: Dependencies) {
                 collectionId,
                 input.subjectIds,
                 attempt,
-                deadline,
                 plan,
                 initialDefinition,
               );
