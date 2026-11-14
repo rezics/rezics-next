@@ -816,7 +816,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   const binding = config.binding;
   const custody = createPublicFilterCustody(config.pool, binding);
   const pending = new Set<Promise<unknown>>();
-  const owned = new Map<string, PublicFilterQueriedObservation>();
+  const owned = new Map<
+    string,
+    Readonly<{ queried: PublicFilterQueriedObservation; context: PublicFilterConsumerContext; m: Meter }>
+  >();
   let closed = false;
   let closing: Promise<void> | undefined;
   const track = <T>(context: PublicFilterConsumerContext, run: () => Promise<T>): Promise<T> => {
@@ -947,7 +950,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       },
     };
     const rollback = (query: string | NativeReadQueryConfig) =>
-      /^\s*ROLLBACK\b/i.test(typeof query === 'string' ? query : query.text);
+      /^\s*ROLLBACK(?:\s+(?:WORK|TRANSACTION))?\s*;?\s*$/i.test(typeof query === 'string' ? query : query.text);
     const reserveQuery = (query: string | NativeReadQueryConfig, values?: unknown[]): NativeReadQueryConfig => {
       const text = typeof query === 'string' ? query : query.text;
       const cleanup = rollback(query);
@@ -955,7 +958,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const parameters = values ?? (typeof query === 'string' ? [] : (query.values ?? []));
       cost.statements++;
       cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encodeState(parameters));
-      const timeout = cleanup ? 1000 : remaining(context);
+      const timeout = remaining(context);
       const supplied = typeof query === 'string' ? undefined : query.query_timeout;
       return {
         ...(typeof query === 'string' ? {} : query),
@@ -979,21 +982,33 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       mapError: (error: unknown) => (Date.now() >= context.deadline ? new ConsumerFailure('deadline') : error),
       isUncertainSettledQueryError: () => true,
     };
+    const queryMethod = (
+      run: (query: string | NativeReadQueryConfig, values?: unknown[]) => Promise<import('pg').QueryResult>,
+    ): Pool['query'] =>
+      ((query: string | NativeReadQueryConfig, valuesOrCallback?: unknown, callbackArgument?: unknown) => {
+        const callback = typeof valuesOrCallback === 'function' ? valuesOrCallback : callbackArgument;
+        const completion = run(query, Array.isArray(valuesOrCallback) ? valuesOrCallback : undefined);
+        if (typeof callback !== 'function') return completion;
+        void completion.then(
+          (result) => Reflect.apply(callback, undefined, [null, result]),
+          (error: unknown) => Reflect.apply(callback, undefined, [error]),
+        );
+        return undefined;
+      }) as Pool['query'];
     async function connect(observeQuery = wrapQuery): Promise<PoolClient> {
       check();
       return new Promise<PoolClient>((resolve, reject) => {
         let physical: PoolClient | undefined;
         let metered: PoolClient;
-        let handedOut = false;
         let released = false;
         let retired = false;
         let uncertainty: Error | undefined;
-        let cleanupQueries = 0;
+        let unfinished = false;
+        let activeQueries = 0;
         let finish!: () => void;
         const returned = new Promise<void>((resolve) => {
           finish = resolve;
         });
-        const cleanupDeadline = context.deadline + 1000;
         const discard = (_client: PoolClient, error: Error) => {
           uncertainty ??= error;
           discardConnection(physical!, uncertainty);
@@ -1009,61 +1024,70 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
               const observedQuery = observeQuery(raw);
               metered.query = (async (query: string | NativeReadQueryConfig, values?: unknown[]) => {
                 if (released || retired) throw new ConsumerFailure('deadline');
-                return observedQuery(query, values);
+                if (uncertainty) throw uncertainty;
+                remaining(context);
+                const statement = typeof query === 'string' ? query : query.text;
+                const terminal =
+                  /^\s*(COMMIT|END|ROLLBACK|ABORT)(?:\s+(?:WORK|TRANSACTION))?\s*;?\s*$/i.exec(statement);
+                const expected = terminal
+                  ? /^(COMMIT|END)$/i.test(terminal[1]!)
+                    ? 'COMMIT'
+                    : 'ROLLBACK'
+                  : undefined;
+                // A terminal command is uncertain until its exact native reply. In
+                // particular, COMMIT in an aborted transaction replies ROLLBACK.
+                if (/^\s*(BEGIN|START\s+TRANSACTION|COMMIT|END|ROLLBACK|ABORT)\b/i.test(statement))
+                  unfinished = true;
+                const result = await observedQuery(query, values);
+                if (expected) {
+                  if (result.command !== expected) {
+                    const error = new ConsumerFailure('source_pending');
+                    discard(raw, error);
+                    throw error;
+                  }
+                  unfinished = false;
+                } else if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(result.command)) {
+                  // Chained transactions and savepoint rollback are not evidence
+                  // that the session is safe to return to the Pool.
+                  unfinished = true;
+                }
+                return result;
               }) as PoolClient['query'];
               try {
                 return await work(metered);
               } catch (error) {
                 discard(raw, error instanceof Error ? error : new Error(String(error)));
-                if (handedOut && !released) {
-                  // The expired callback may still be unwinding its own transaction.
-                  // Retain only cleanup custody, bounded from the original deadline.
-                  await withBoundedReadLifetime(
-                    (cleanup) => cleanup(metered),
-                    discard,
-                    cleanupDeadline,
-                    () => returned,
-                    lifetimeOptions,
-                  ).catch(() => {});
-                }
                 throw error;
               } finally {
+                if (unfinished || activeQueries > 0) discard(raw, new ConsumerFailure('source_pending'));
                 retired = true;
+                // Physical custody ends here even when the native owner resumes
+                // later. Its retained client can no longer submit cleanup or work.
+                finish();
               }
             }),
           discard,
           context.deadline,
           async (bounded) => {
             const client = Object.create(bounded) as PoolClient;
-            client.query = (async (query: string | NativeReadQueryConfig, values?: unknown[]) => {
+            client.query = queryMethod(async (query, values) => {
               if (released || retired) throw new ConsumerFailure('deadline');
-              if (!rollback(query)) {
-                if (Date.now() >= context.deadline) throw new ConsumerFailure('deadline');
-                if (uncertainty) throw uncertainty;
-                return bounded.query(query, values);
-              }
-              cleanupQueries++;
+              if (Date.now() >= context.deadline) throw new ConsumerFailure('deadline');
+              if (uncertainty) throw uncertainty;
+              activeQueries++;
               try {
-                // Only the owner's ROLLBACK may bypass the retired request client.
-                return await withBoundedReadLifetime(
-                  (cleanup) => cleanup(metered),
-                  discard,
-                  Math.min(cleanupDeadline, Date.now() + 1000),
-                  (cleanup) => cleanup.query(query, values),
-                  lifetimeOptions,
-                );
+                return await bounded.query(query, values);
               } finally {
-                cleanupQueries--;
+                activeQueries--;
               }
-            }) as PoolClient['query'];
+            });
             client.release = (error) => {
               if (released) return;
               released = true;
-              if (error || cleanupQueries > 0)
+              if (error || unfinished || activeQueries > 0)
                 discard(client, error instanceof Error ? error : new Error('Consumer connection became uncertain'));
               finish();
             };
-            handedOut = true;
             resolve(client);
             await returned;
           },
@@ -1077,7 +1101,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const pool = new Proxy(config.pool, {
       get(db, key) {
         if (key === 'query')
-          return async (query: string | NativeReadQueryConfig, values?: unknown[]) => {
+          return queryMethod(async (query, values) => {
             const request = reserveQuery(query, values);
             const client = await connect((connection) => wrapQuery(connection, true));
             try {
@@ -1085,8 +1109,17 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             } finally {
               client.release();
             }
+          });
+        if (key === 'connect')
+          return (callback?: Parameters<Pool['connect']>[0]) => {
+            const completion = connect();
+            if (!callback) return completion;
+            void completion.then(
+              (client) => callback(null as never, client, client.release),
+              (error: Error) => callback(error, undefined as never, undefined as never),
+            );
+            return undefined;
           };
-        if (key === 'connect') return () => connect();
         const value = Reflect.get(db, key);
         return typeof value === 'function' ? value.bind(db) : value;
       },
@@ -1094,6 +1127,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     return { cost, add, check, sql, unavailable, take, takePreparation, native, pool };
   }
   type Meter = ReturnType<typeof meter>;
+  function own(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext, m: Meter) {
+    owned.set(queried.snapshot.observation, { queried, context: Object.freeze({ deadline: context.deadline }), m });
+  }
+  async function releaseUse(use: CustodyUse, context: PublicFilterConsumerContext, m: Meter) {
+    const released = m.take(await custody.release(use, context));
+    if (released.status !== 'released')
+      throw new ConsumerFailure(released.reason === 'deadline' ? 'deadline' : 'source_pending');
+  }
   type Page = {
     context: PublicFilterConsumerContext;
     m: Meter;
@@ -1615,7 +1656,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       const retained = m.take(await custody.retainPit({ use, queried: current, pit }, context));
       if (retained.status !== 'retained') throw new ConsumerFailure('observation_lost');
       current = retained.queried;
-      owned.set(current.snapshot.observation, current);
+      own(current, context, m);
     };
     if ('representation' in plan) {
       if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
@@ -1785,7 +1826,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       if (retained.status !== 'retained') return m.unavailable('observation_lost');
       if (work.bootstrap.snapshot === 'prepared') work.materializing = retained.queried;
       else work.queried = retained.queried;
-      owned.set(retained.queried.snapshot.observation, retained.queried);
+      own(retained.queried, context, m);
       encoded = await save(work, encoded, true, m);
     }
     if (work.materializing && !work.queried) {
@@ -1859,9 +1900,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           if (prepared.status !== 'retained') return m.unavailable('observation_lost');
           work.queried = prepared.queried;
           encoded = await save(work, encoded, true, m);
-          owned.set(prepared.queried.snapshot.observation, prepared.queried);
+          own(prepared.queried, context, m);
         } finally {
-          m.add((await custody.release(acquired.use, context)).cost);
+          await releaseUse(acquired.use, context, m);
         }
       } else {
         // A PIT renewal and the segment commit are separate owners. Re-read its
@@ -1993,10 +2034,10 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             outputCount = nextOutputOrdinal;
             exhausted = result.exhausted;
             work.materializing = result.queried;
-            owned.set(result.queried.snapshot.observation, result.queried);
+            own(result.queried, context, m);
             encoded = await save(work, encoded, true, m);
           } finally {
-            m.add((await custody.release(acquired.use, context)).cost);
+            await releaseUse(acquired.use, context, m);
           }
         }
         if (!exhausted) return { status: 'preparing', repair: job, cost: m.cost };
@@ -2017,7 +2058,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (prepared.status !== 'retained') return m.unavailable('observation_lost');
         work.queried = prepared.queried;
         encoded = await save(work, encoded, true, m);
-        owned.set(prepared.queried.snapshot.observation, prepared.queried);
+        own(prepared.queried, context, m);
       }
     }
     if (publication && work.materializing && work.queried) {
@@ -2223,7 +2264,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const m = page?.m ?? meter(context);
     const preparing = () => ({ status: 'preparing' as const, queried: q, cost: m.cost });
     let use: CustodyUse | undefined;
-    try {
+    const run = async (): Promise<PublicFilterConsumerQuery | DiscoveryConsumerQuery> => {
       m.check();
       // This installed factory is the finite registry family. A retained
       // catalogue consumer needs its actual root-bound native resolver; it
@@ -2412,10 +2453,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         window: retainedWindow,
         cost: m.cost,
       };
+    };
+    try {
+      return await run().finally(async () => {
+        if (use && page?.use !== use) await releaseUse(use, context, m);
+      });
     } catch (error) {
       return failure(error, m);
-    } finally {
-      if (use && page?.use !== use) m.add((await custody.release(use, context)).cost);
     }
   }
   async function readStatus(
@@ -2467,7 +2511,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   async function repairStep(input: PublicFilterConsumerJob, context: PublicFilterConsumerContext, m = meter(context)) {
     const job = structuredClone(input);
     let use: CustodyUse | undefined;
-    try {
+    const run = async () => {
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const loaded = await load(job, m);
       const { work } = loaded;
@@ -2721,10 +2765,13 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       // Changed-since-start remains a disclosure barrier for the old execution in query/readStatus.
       // It does not undo genuinely completed repair; settled is only a maintenance diagnostic.
       return { status: 'settled' as const, job, cost: m.cost };
+    };
+    try {
+      return await run().finally(async () => {
+        if (use) await releaseUse(use, context, m);
+      });
     } catch (error) {
       return failure(error, m);
-    } finally {
-      if (use) m.add((await custody.release(use, context)).cost);
     }
   }
   async function mixedRepairWriter(q: PublicFilterQueriedObservation, m: Meter) {
@@ -2916,16 +2963,21 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       closed = true;
       return (closing = (async () => {
         await Promise.allSettled([...pending]);
-        const context = { deadline: Date.now() + 300_000 };
         const results = await Promise.allSettled(
-          [...owned.values()].map((q) => custody.closeObservation(q, config.search, context)),
+          [...owned.values()].map(async ({ queried, context, m }) => {
+            // Disposal shares the last admitted operation's time and accounting.
+            // Expiry retains native custody for recovery; close cannot mint a budget.
+            const result = await custody.closeObservation(queried, config.search, context);
+            m.add(result.cost);
+            if (result.status === 'closed') owned.delete(queried.snapshot.observation);
+            return result;
+          }),
         );
         await custody.close();
         for (const result of results) {
           if (result.status === 'rejected') throw result.reason;
           if (result.value.status !== 'closed') throw new ConsumerFailure('observation_lost');
         }
-        owned.clear();
       })());
     },
   };
@@ -2997,7 +3049,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
             );
             if (appended.status !== 'appended') return m.unavailable('observation_lost');
           } finally {
-            m.add((await custody.release(acquired.use, context)).cost);
+            await releaseUse(acquired.use, context, m);
           }
         }
         work.execution = input.job;
@@ -3039,6 +3091,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     const page = retained ?? newPage(Object.freeze({ deadline: incoming.deadline }));
     const context = page.context;
+    let disposal: Promise<void> | undefined;
     async function run<T>(body: () => Promise<T>): Promise<T> {
       if (page.busy || page.failed || page.finished || page.disposed) throw new ConsumerFailure('observation_lost');
       page.busy = true;
@@ -3136,30 +3189,30 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           page.m.check();
           page.finished = true;
         }),
-      async dispose() {
-        if (page.busy) throw new ConsumerFailure('observation_lost');
-        if (page.disposed) return;
+      dispose() {
+        if (page.busy) return Promise.reject(new ConsumerFailure('observation_lost'));
+        if (disposal) return disposal;
         page.disposed = true;
-        try {
-          if (!page.finished && page.id) {
-            // A lost result retains pending and every attempted child. Cleanup
-            // never clears an uncertain dispatch, extends time or grants coverage.
-            await pageSql(
-              page,
-              { points: 1, keys: 2, writes: 1 },
-              `UPDATE search.public_filter_coverage_page SET state='failed',revision=revision+1,work=$3
+        return (disposal = (async () => {
+          try {
+            if (!page.finished && page.id) {
+              // A lost result retains pending and every attempted child. Cleanup
+              // never clears an uncertain dispatch, extends time or grants coverage.
+              await pageSql(
+                page,
+                { points: 1, keys: 2, writes: 1 },
+                `UPDATE search.public_filter_coverage_page SET state='failed',revision=revision+1,work=$3
              WHERE (partition_no,id)=($1,$2) AND state IN ('planned','open','sealed') RETURNING id`,
-              () => [locatorHome(page.queried!.snapshot.observation), page.id, encodeState(page.m.cost)],
-            );
+                () => [locatorHome(page.queried!.snapshot.observation), page.id, encodeState(page.m.cost)],
+              );
+            }
+          } finally {
+            if (page.use) {
+              await releaseUse(page.use, context, page.m);
+              page.use = null;
+            }
           }
-        } finally {
-          if (page.use) {
-            const use = page.use;
-            page.use = null;
-            page.m.add((await custody.release(use, context)).cost);
-            page.m.check();
-          }
-        }
+        })());
       },
     };
   }
@@ -3171,16 +3224,18 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   ) {
     const page = openPage(Object.freeze({ deadline: context.deadline }));
     try {
-      const result = mixed ? await page.queryDiscovery(q, refill) : await page.query(q, refill);
-      if (result.status === 'queried') {
-        await page.consume(result.execution, result.window.examined);
-        await page.finish();
+      try {
+        const result = mixed ? await page.queryDiscovery(q, refill) : await page.query(q, refill);
+        if (result.status === 'queried') {
+          await page.consume(result.execution, result.window.examined);
+          await page.finish();
+        }
+        return result;
+      } finally {
+        await page.dispose();
       }
-      return result;
     } catch (error) {
       return page.failure(error);
-    } finally {
-      await page.dispose();
     }
   }
   installPublicFilterCoveragePage(operations, openPage);

@@ -9,6 +9,8 @@ import type {
 } from './public-filter-consumer-contract.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import { classifyUnavailability } from '../access/unavailable.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
@@ -30,7 +32,7 @@ import { readIdentityIndexIncarnation, readSearchWriterPhysicalTarget } from './
 import enroll from './identity-epoch-participant-enroll.sql';
 import settle from './identity-epoch-participant-settle.sql';
 import fence from './identity-epoch-participant-fence.sql';
-import { OpenSearchError, type OpenSearch } from './opensearch.ts';
+import { OpenSearchError, type OpenSearch, type SearchRequestOptions } from './opensearch.ts';
 import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
 import { writeIndexActions, validateRefreshResponse, validateIndexWriteReceipt } from './write-actions.ts';
 import {
@@ -934,7 +936,8 @@ export function createSearchWriterGuard(options: {
     publication_after: string | null;
     publication_revision: string;
   };
-  const publicationCost = (): SearchPublicFilterCost => ({
+  type PublicationCost = { -readonly [K in keyof SearchPublicFilterCost]: number };
+  const publicationCost = (): PublicationCost => ({
     inputKeys: 0,
     candidates: 0,
     accessPoints: 0,
@@ -955,17 +958,31 @@ export function createSearchWriterGuard(options: {
   }
   async function publicationCall<T>(
     context: PublicFilterConsumerContext,
-    work: (cost: SearchPublicFilterCost) => Promise<T>,
+    work: (cost: PublicationCost, context: PublicFilterConsumerContext) => Promise<T>,
   ): Promise<T | PublicFilterConsumerUnavailable> {
     const cost = publicationCost();
     try {
       publicationDeadline(context);
-      return await work(cost);
+      // Preserve an earlier ambient caller lifetime; outside a request the supplied deadline wins.
+      context = Object.freeze({
+        ...context,
+        deadline: Math.min(context.deadline, deadlineFor(Math.max(1, context.deadline - Date.now()))),
+      });
+      return await withRequestDeadline(context.deadline, async () => {
+        publicationDeadline(context);
+        const result = await work(cost, context);
+        publicationDeadline(context);
+        return result;
+      });
     } catch (error) {
       if (error instanceof TypeError) throw error;
+      const expired =
+        Date.now() >= context.deadline ||
+        classifyUnavailability(error) === 'deadline' ||
+        (error instanceof PublicationPending && error.message === 'deadline');
       return {
-        status: error instanceof PublicationPending ? 'unready' : 'unavailable',
-        reason: error instanceof PublicationPending && error.message === 'deadline' ? 'deadline' : 'source_pending',
+        status: expired || error instanceof PublicationPending ? 'unready' : 'unavailable',
+        reason: expired ? 'deadline' : 'source_pending',
         cost,
       };
     }
@@ -990,7 +1007,9 @@ export function createSearchWriterGuard(options: {
   async function publicationJob(
     tx: CommandTransaction,
     request: Readonly<{ consumer: PublicFilterConsumer; job: string }>,
+    context: PublicFilterConsumerContext,
   ) {
+    publicationDeadline(context);
     if (request.consumer.physicalTarget !== options.index || !/^[0-9a-f-]{36}$/.test(request.job))
       return pendingPublication();
     const result = await tx.query<{ phase: string }>(
@@ -998,6 +1017,7 @@ export function createSearchWriterGuard(options: {
        AND physical_target=$2 AND consumer=$3 AND native_incarnation=$4`,
       [request.job, options.index, request.consumer, request.consumer.incarnation],
     );
+    publicationDeadline(context);
     if (result.rowCount === 1) return { ...result.rows[0]!, barrier: null };
     // Erasure is an actual retained operational job in this same physical home, not an identity job
     // or a caller token. Match the immutable consumer, incarnation and committed Account locator.
@@ -1006,42 +1026,61 @@ export function createSearchWriterGuard(options: {
        AND physical_target=$2 AND consumer=$3 AND incarnation=$4`,
       [request.job, options.index, request.consumer, request.consumer.incarnation],
     );
+    publicationDeadline(context);
     if (erasure.rowCount !== 1) return pendingPublication();
     return erasure.rows[0]!;
   }
   async function publicationSource(
     value: SearchWriterPublicationFence,
     context: PublicFilterConsumerContext,
-    cost: SearchPublicFilterCost,
+    cost: PublicationCost,
   ) {
-    const job = await withReadTransaction(options.pool, (tx) => publicationJob(tx, value));
+    // Finish the local snapshot before entering either native Source owner on the original Pool.
+    const job = await withReadTransaction(options.pool, (tx) => publicationJob(tx, value, context), context.deadline);
+    publicationDeadline(context);
     if (!job.barrier) {
       const readCompletion = publicationReaders.get(guard);
       if (!readCompletion) return pendingPublication();
       const completion = await readCompletion({ job: value.job }, context);
-      for (const key of Object.keys(cost) as (keyof SearchPublicFilterCost)[])
-        (cost as { -readonly [K in keyof SearchPublicFilterCost]: number })[key] += completion.cost[key];
-      if (completion.status !== 'complete') return pendingPublication();
+      for (const key of Object.keys(cost) as (keyof SearchPublicFilterCost)[]) cost[key] += completion.cost[key];
+      publicationDeadline(context);
+      if (completion.status !== 'complete') {
+        if ('reason' in completion && completion.reason === 'deadline') throw new PublicationPending('deadline');
+        return pendingPublication();
+      }
       return;
     }
     const proof = await readSubjectErasureSourceProof({ pool: options.pool }, job.barrier, context);
+    publicationDeadline(context);
     if (!proof) return pendingPublication();
     const verified = await runCommand(
       options.pool,
       { partition: job.barrier.accountRoute >> 4, deadline: context.deadline },
-      async (tx) => noEffect(await verifySubjectErasureSourceProof(tx, job.barrier, proof)),
+      async (tx) => {
+        publicationDeadline(context);
+        const valid = await verifySubjectErasureSourceProof(tx, job.barrier, proof);
+        publicationDeadline(context);
+        return noEffect(valid);
+      },
     );
+    publicationDeadline(context);
     if (!verified.value) return pendingPublication();
   }
-  async function publicationRetained(tx: CommandTransaction, value: SearchWriterPublicationFence) {
-    await publicationJob(tx, value);
+  async function publicationRetained(
+    tx: CommandTransaction,
+    value: SearchWriterPublicationFence,
+    context: PublicFilterConsumerContext,
+  ) {
+    await publicationJob(tx, value, context);
     const owner = await readPartition(tx, 0);
+    publicationDeadline(context);
     const row = (
       await tx.query<PublicationRow>(
         'SELECT * FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1',
         [options.index],
       )
     ).rows[0];
+    publicationDeadline(context);
     if (
       !owner ||
       owner.writeState !== 'active' ||
@@ -1056,70 +1095,146 @@ export function createSearchWriterGuard(options: {
       return pendingPublication();
     return row;
   }
-  async function publicationPhysical(value: Readonly<{ consumer: PublicFilterConsumer }>) {
-    const target = await readSearchWriterPhysicalTarget(options.search, options.index);
-    if (target.incarnation !== value.consumer.incarnation) return pendingPublication();
-    return target;
+  function publicationQueries(tx: CommandTransaction, context: PublicFilterConsumerContext): CommandTransaction {
+    // Local SQL helpers may span several waits. Native receipt readers still receive the original tx.
+    return {
+      query: new Proxy(tx.query, {
+        async apply(query, _receiver, args) {
+          publicationDeadline(context);
+          const result: unknown = await Reflect.apply(query, tx, args);
+          publicationDeadline(context);
+          return result;
+        },
+      }),
+    };
+  }
+  async function publicationPhysical(
+    value: Readonly<{ consumer: PublicFilterConsumer }>,
+    context: PublicFilterConsumerContext,
+  ) {
+    publicationDeadline(context);
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expire = () => {
+      const remaining = context.deadline - Date.now();
+      if (remaining > 0) timer = setTimeout(expire, Math.min(remaining, 2_147_483_647));
+      else controller.abort(new PublicationPending('deadline'));
+    };
+    expire();
+    try {
+      const target = await readSearchWriterPhysicalTarget(
+        {
+          ...options.search,
+          request<T = unknown>(
+            method: Parameters<OpenSearch['request']>[0],
+            path: string,
+            body?: unknown,
+            requestOptions?: SearchRequestOptions,
+          ) {
+            publicationDeadline(context);
+            return options.search.request<T>(method, path, body, {
+              ...requestOptions,
+              timeoutMs: Math.min(
+                requestOptions?.timeoutMs ?? Infinity,
+                Math.max(1, context.deadline - Date.now()),
+                2_147_483_647,
+              ),
+              signal: controller.signal,
+            });
+          },
+        },
+        options.index,
+      );
+      // Await native cancellation/settlement; a detached race is not transport custody.
+      publicationDeadline(context);
+      if (target.incarnation !== value.consumer.incarnation) return pendingPublication();
+      return target;
+    } finally {
+      clearTimeout(timer);
+    }
   }
   const publication: Omit<SearchWriterPublicationGuard, 'write'> = {
     fencePublication(request, context) {
       const input = structuredClone(request);
-      return publicationCall(context, async (cost) => {
-        const target = await publicationPhysical(input);
-        const result = await runCommand(options.pool, { partition: 0 }, async (tx, command) => {
-          publicationDeadline(context);
-          const receipt = await native(tx, command.transactionId);
-          await publicationLock(tx, true);
-          await publicationJob(tx, input);
-          await gate(tx, receipt, target.incarnation, target.writeAlias);
-          const row = (
-            await tx.query<PublicationRow>(
-              'SELECT * FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1 FOR UPDATE',
-              [options.index],
+      return publicationCall(context, async (cost, context) => {
+        const target = await publicationPhysical(input, context);
+        const result = await runCommand(
+          options.pool,
+          { partition: 0, deadline: context.deadline },
+          async (tx, command) => {
+            publicationDeadline(context);
+            // Charge attempted native work even if a later wait expires or the command retries.
+            cost.frontierWrites++;
+            const receipt = await native(tx, command.transactionId);
+            publicationDeadline(context);
+            await publicationLock(tx, true);
+            publicationDeadline(context);
+            await publicationJob(tx, input, context);
+            await gate(publicationQueries(tx, context), receipt, target.incarnation, target.writeAlias);
+            publicationDeadline(context);
+            const row = (
+              await tx.query<PublicationRow>(
+                'SELECT * FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1 FOR UPDATE',
+                [options.index],
+              )
+            ).rows[0]!;
+            publicationDeadline(context);
+            if (
+              row.publication_job === input.job &&
+              row.publication_fence &&
+              isDeepStrictEqual(row.publication_consumer, input.consumer)
             )
-          ).rows[0]!;
-          if (
-            row.publication_job === input.job &&
-            row.publication_fence &&
-            isDeepStrictEqual(row.publication_consumer, input.consumer)
-          )
-            return noEffect(row.publication_fence);
-          if (row.publication_fence) return pendingPublication();
-          const token = crypto.randomUUID();
-          await tx.query(
-            `UPDATE search.identity_writer_gate SET publication_job=$2,publication_consumer=$3,
-            publication_fence=$4,publication_home=0,publication_after=NULL,publication_revision=publication_revision+1
-            WHERE partition_no=0 AND physical_target=$1`,
-            [options.index, input.job, input.consumer, token],
-          );
-          return { value: token, events: changed() };
-        });
-        await publicationPhysical(input);
+              return noEffect(row.publication_fence);
+            if (row.publication_fence) return pendingPublication();
+            const token = crypto.randomUUID();
+            await tx.query(
+              `UPDATE search.identity_writer_gate SET publication_job=$2,publication_consumer=$3,
+               publication_fence=$4,publication_home=0,publication_after=NULL,publication_revision=publication_revision+1
+               WHERE partition_no=0 AND physical_target=$1`,
+              [options.index, input.job, input.consumer, token],
+            );
+            publicationDeadline(context);
+            return { value: token, events: changed() };
+          },
+        );
+        await publicationPhysical(input, context);
         return {
           status: 'fenced' as const,
           fence: { ...input, fence: result.value },
-          cost: { ...cost, frontierWrites: 1 },
+          cost,
         };
       });
     },
     drainPublication(value, context) {
       const input = structuredClone(value);
-      return publicationCall(context, async (cost) => {
-        await publicationPhysical(input);
-        const before = await withReadTransaction(options.pool, (tx) => publicationRetained(tx, input));
+      return publicationCall(context, async (cost, context) => {
+        await publicationPhysical(input, context);
+        const before = await withReadTransaction(
+          options.pool,
+          (tx) => publicationRetained(tx, input, context),
+          context.deadline,
+        );
+        publicationDeadline(context);
         if (before.publication_home === 4096) {
           await publicationSource(input, context, cost);
           return { status: 'drained' as const, fence: input, cost };
         }
         const home = before.publication_home;
-        const result = await runCommand(options.pool, { partition: home }, async (tx, command) => {
+        const homeOptions = { partition: home, deadline: context.deadline };
+        // Core retains checkout/COMMIT/ROLLBACK custody. Do not race a command or substitute its Pool.
+        const result = await runCommand(options.pool, homeOptions, async (tx, command) => {
           publicationDeadline(context);
           const receipt = await native(tx, command.transactionId);
+          publicationDeadline(context);
           await publicationLock(tx, false);
-          const retained = await publicationRetained(tx, input);
+          publicationDeadline(context);
+          const retained = await publicationRetained(tx, input, context);
           if (retained.publication_revision !== before.publication_revision) return pendingPublication();
-          const proofDrained = await drainGenerationPublicationProofCopy(tx, home, options.index, input.job);
-          const copiesPending = await hasRetainedWriterPublicationCopies(tx, home, options.index, input.job);
+          const copies = publicationQueries(tx, context);
+          const proofDrained = await drainGenerationPublicationProofCopy(copies, home, options.index, input.job);
+          publicationDeadline(context);
+          const copiesPending = await hasRetainedWriterPublicationCopies(copies, home, options.index, input.job);
+          publicationDeadline(context);
           const page = (
             await tx.query<{
               copies: {
@@ -1142,6 +1257,8 @@ export function createSearchWriterGuard(options: {
               [home, options.index, before.publication_after],
             )
           ).rows[0]!;
+          cost.inputKeys += page.copies.length + Number(page.more);
+          publicationDeadline(context);
           if (
             page.copies.some(
               (row) => row.incarnation !== input.consumer.incarnation || row.owner_epoch !== receipt.epoch,
@@ -1151,6 +1268,7 @@ export function createSearchWriterGuard(options: {
           const revocable = page.copies
             .filter((row) => row.writer_token && row.dispatch_state === 'enrolled')
             .map((row) => row.original_id);
+          cost.resultWrites += revocable.length;
           if (revocable.length)
             await tx.query(
               `UPDATE search.identity_writer SET writer_token=NULL,dispatch_state='cancelled',settled_transaction_id=$4,
@@ -1158,23 +1276,26 @@ export function createSearchWriterGuard(options: {
              AND dispatch_state='enrolled'`,
               [home, options.index, revocable, receipt.transactionId, receipt.position.toString()],
             );
+          publicationDeadline(context);
           const progress = {
             page,
             uncertain:
               copiesPending || page.copies.some((row) => row.writer_token && row.dispatch_state === 'dispatched'),
-            revoked: revocable.length,
-            proofDrained,
           };
           return revocable.length || proofDrained ? { value: progress, events: changed() } : noEffect(progress);
         });
-        const { page, uncertain, revoked } = result.value;
-        await runCommand(options.pool, { partition: 0 }, async (tx, command) => {
+        publicationDeadline(context);
+        const { page, uncertain } = result.value;
+        await runCommand(options.pool, { partition: 0, deadline: context.deadline }, async (tx, command) => {
           publicationDeadline(context);
           await native(tx, command.transactionId);
+          publicationDeadline(context);
           await publicationLock(tx, true);
-          const row = await publicationRetained(tx, input);
+          publicationDeadline(context);
+          const row = await publicationRetained(tx, input, context);
           if (row.publication_revision !== before.publication_revision) return pendingPublication();
           if (uncertain) return noEffect(null);
+          cost.frontierWrites++;
           await tx.query(
             `UPDATE search.identity_writer_gate SET publication_home=$3,publication_after=$4,
             publication_revision=publication_revision+1 WHERE partition_no=0 AND physical_target=$1 AND publication_fence=$2`,
@@ -1185,48 +1306,54 @@ export function createSearchWriterGuard(options: {
               page.more ? page.copies.at(-1)!.original_id : null,
             ],
           );
+          publicationDeadline(context);
           return { value: null, events: changed() };
         });
-        await publicationPhysical(input);
+        await publicationPhysical(input, context);
         return {
           status: 'draining' as const,
           fence: input,
-          cost: {
-            ...cost,
-            inputKeys: page.copies.length + Number(page.more),
-            resultWrites: revoked,
-            frontierWrites: Number(!uncertain),
-          },
+          cost,
         };
       });
     },
     adoptPublication(value, context) {
       const input = structuredClone(value);
-      return publicationCall(context, async (cost) => {
+      return publicationCall(context, async (cost, context) => {
         await publicationSource(input, context, cost);
-        await publicationPhysical(input);
-        const row = await withReadTransaction(options.pool, (tx) => publicationRetained(tx, input));
+        await publicationPhysical(input, context);
+        const row = await withReadTransaction(
+          options.pool,
+          (tx) => publicationRetained(tx, input, context),
+          context.deadline,
+        );
+        publicationDeadline(context);
         if (row.publication_home !== 4096) return pendingPublication();
         return { status: 'held' as const, fence: input, cost };
       });
     },
     releasePublication(value, context) {
       const input = structuredClone(value);
-      return publicationCall(context, async (cost) => {
-        await publicationPhysical(input);
-        await runCommand(options.pool, { partition: 0 }, async (tx, command) => {
+      return publicationCall(context, async (cost, context) => {
+        await publicationPhysical(input, context);
+        await runCommand(options.pool, { partition: 0, deadline: context.deadline }, async (tx, command) => {
           publicationDeadline(context);
+          cost.frontierWrites++;
           await native(tx, command.transactionId);
+          publicationDeadline(context);
           await publicationLock(tx, true);
-          const job = await publicationJob(tx, input);
+          publicationDeadline(context);
+          const job = await publicationJob(tx, input, context);
           const row = (
             await tx.query<PublicationRow>(
               'SELECT * FROM search.identity_writer_gate WHERE partition_no=0 AND physical_target=$1 FOR UPDATE',
               [options.index],
             )
           ).rows[0];
+          publicationDeadline(context);
           // A released locator remains retained for idempotent replay; another job cannot release it.
           const owner = await readPartition(tx, 0);
+          publicationDeadline(context);
           if (
             owner?.writeState === 'active' &&
             row?.owner_epoch === owner.epoch &&
@@ -1238,7 +1365,7 @@ export function createSearchWriterGuard(options: {
             isDeepStrictEqual(row.publication_consumer, input.consumer)
           )
             return noEffect(null);
-          await publicationRetained(tx, input);
+          await publicationRetained(tx, input, context);
           // Erasure never switches an alias. A fully drained gate can also be safely aborted
           // when a current Source page changes, before repairing the replacement page.
           if (job.barrier ? row!.publication_home !== 4096 : job.phase === 'intent') return pendingPublication();
@@ -1247,9 +1374,10 @@ export function createSearchWriterGuard(options: {
             publication_revision=publication_revision+1 WHERE partition_no=0 AND physical_target=$1`,
             [options.index],
           );
+          publicationDeadline(context);
           return { value: null, events: changed() };
         });
-        return { status: 'released' as const, cost: { ...cost, frontierWrites: 1 } };
+        return { status: 'released' as const, cost };
       });
     },
   };

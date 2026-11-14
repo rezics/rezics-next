@@ -206,6 +206,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               search: openSearch,
               prefix: searchConfig.prefix,
               tokens: config.tokens,
+              source: rated.source,
             }),
             realmSubjectsForReader: (reader) => createRealmSubjectSearchSource({ pool, reader }),
             cursors: config.tokens,

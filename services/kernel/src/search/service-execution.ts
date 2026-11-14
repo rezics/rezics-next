@@ -13,6 +13,7 @@ import {
   type SpoilerThreshold,
 } from '@rezics/filter';
 import { createHash, randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
 import { systemClock } from '../clock.ts';
@@ -21,6 +22,7 @@ import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { compileKinds, kindDigest, retainCurrent, type KindSnapshot } from './query.ts';
 import { activeRelease } from '../semantic/definitions.ts';
+import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import type { FacetDiscoveryScope } from './facet-discovery-contract.ts';
 import {
   decodeSearchCursor,
@@ -68,7 +70,7 @@ import {
 } from './release-search-source.ts';
 import { bindReleaseSearchText } from './release-search-text.ts';
 import { ReleaseSearchCursorInvalid } from './release-search-cursor.ts';
-import { OpenSearchError, SearchUnavailableError } from './opensearch.ts';
+import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
 import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
 import { observeSearchIdentityEpoch, resolveCanonicalKeyset } from './canonical-keyset.ts';
@@ -88,7 +90,7 @@ import { collectUsefulPage } from './useful-page.ts';
 import { readPublicSearchPage } from './public-runtime.ts';
 import type { PublicFilterConsumerOperations, PublicFilterConsumerCapture } from './public-filter-consumer-contract.ts';
 import type { SearchHit as NativeSearchHit } from './query.ts';
-import { deadlineFor } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import {
   admitFacetPage,
   authenticateFacetCursors,
@@ -184,6 +186,18 @@ function indexNotReady(): ProblemError {
   return new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 }
 
+function requireRequestTime(deadline: number): void {
+  if (!Number.isFinite(deadline) || Date.now() >= deadline) throw indexNotReady();
+}
+
+/** Native owners receive the ambient deadline; their terminal result must still belong to this request. */
+async function requestStep<T>(operation: () => Promise<T>, deadline = deadlineFor(10_000)): Promise<T> {
+  requireRequestTime(deadline);
+  const result = await operation();
+  requireRequestTime(deadline);
+  return result;
+}
+
 /** An undecidable candidate cannot be skipped by a page, aggregate or suggestion continuation. */
 async function requireCurrentTextMatch(result: Promise<RelationFacetMatch>): Promise<boolean> {
   const match = await result;
@@ -193,7 +207,7 @@ async function requireCurrentTextMatch(result: Promise<RelationFacetMatch>): Pro
 
 /** Preserve already classified adapter failures while native evidence recovery owns preparation. */
 function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
-  return runSearchSource(operation, (error) => error instanceof ProblemError);
+  return runSearchSource(() => requestStep(operation), (error) => error instanceof ProblemError);
 }
 
 function containsOwnerPredicate(value: unknown): boolean {
@@ -262,7 +276,7 @@ function missingTemplate(error: unknown): boolean {
 export function createSearchExecution(config: SearchServiceOptions, modules: SearchServiceModules) {
   const {
     pool,
-    client,
+    client: rawClient,
     prefix,
     source,
     ratings,
@@ -277,23 +291,71 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     publicFilters,
     preparePublic,
     suggestionWorkContext,
-    disclosure = createSearchDisclosureApplication({
-      analyze: (index, analyzer, texts) => analyzeInstalledMany(client, index, { analyzer, text: texts }),
-    }),
+    disclosure: suppliedDisclosure,
     facetAccess,
     library,
     // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
     release: releaseOverride,
   } = config;
+  type RequestLifetime = {
+    deadline: number;
+    ended: boolean;
+    indexRequest: ReturnType<typeof createSearchIndexRequest>;
+  };
+  const requests = new AsyncLocalStorage<RequestLifetime>();
+  function requestDeadline(): number {
+    const request = requests.getStore();
+    if (request?.ended) throw indexNotReady();
+    const deadline = Math.min(request?.deadline ?? Infinity, deadlineFor(10_000));
+    requireRequestTime(deadline);
+    return deadline;
+  }
+  async function transport<T>(
+    options: { timeoutMs?: number; work?: { deadline: number } } | undefined,
+    send: (timeoutMs: number) => Promise<T>,
+  ): Promise<T> {
+    const deadline = Math.min(requestDeadline(), options?.work?.deadline ?? Infinity);
+    // OpenSearch owns cancellation and response-body cleanup for this timeout. Never race its promise.
+    return requestStep(
+      () => send(Math.min(options?.timeoutMs ?? Infinity, Math.max(1, Math.floor(deadline - Date.now())))),
+      deadline,
+    );
+  }
+  const client: OpenSearch = {
+    request<T>(...args: Parameters<OpenSearch['request']>) {
+      const [method, path, body, options] = args;
+      return transport(options, (timeoutMs) => rawClient.request<T>(method, path, body, { ...options, timeoutMs }));
+    },
+    bulk<T>(...args: Parameters<OpenSearch['bulk']>) {
+      const [lines, options] = args;
+      return transport(options, (timeoutMs) => rawClient.bulk<T>(lines, { ...options, timeoutMs }));
+    },
+  };
+  if (rawClient.bulkRaw)
+    client.bulkRaw = <T>(...args: Parameters<NonNullable<OpenSearch['bulkRaw']>>) => {
+      const [body, options] = args;
+      return transport(options, (timeoutMs) => rawClient.bulkRaw!<T>(body, { ...options, timeoutMs }));
+    };
+  const disclosure =
+    suppliedDisclosure ??
+    createSearchDisclosureApplication({
+      analyze: (index, analyzer, texts) => analyzeInstalledMany(client, index, { analyzer, text: texts }),
+    });
+  const readActiveRelease = () =>
+    withBoundedReadOnlyTransaction(pool, requestDeadline(), activeRelease, {
+      deadlineError: indexNotReady,
+      isUncertainSettledQueryError: () => true,
+    });
   const { request: requestPlanner, cursor: cursorPlanner, result: resultAssembler } = modules;
   const scopedFacets = createScopedFacetApplication({
     ...(facetAccess === undefined ? {} : { access: facetAccess }),
   });
-  const release =
-    releaseOverride ?? (async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null);
+  const release = releaseOverride
+    ? () => requestStep(releaseOverride)
+    : async () => ((await readActiveRelease())?.release as FilterRelease | undefined) ?? null;
   const realmRelease = releaseOverride
     ? async (expected?: string) => {
-        const current = await releaseOverride();
+        const current = await release();
         if (!current) return null;
         const digest = kindDigest(current);
         return expected !== undefined && expected !== digest ? null : { digest, release: current };
@@ -301,17 +363,62 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     : undefined;
   if (!Number.isSafeInteger(facetSample) || facetSample < 1)
     throw new RangeError('facetSample must be a positive safe integer');
-  let aliasRead: Promise<number> | undefined;
   const freshness = new Map<number, ReturnType<typeof createFreshness>>();
 
-  const indexRequest = createSearchIndexRequest({
-    install: () => installTemplates(client, prefix),
-    unavailable(error) {
-      if (!(error instanceof OpenSearchError)) return false;
-      const body = error.body as { error?: unknown } | null;
-      return error.type === 'index_not_found_exception' || missingTemplate(body?.error);
-    },
-  });
+  let templatesInstalled = false;
+  function requestIndex() {
+    return createSearchIndexRequest({
+      async install() {
+        if (templatesInstalled) return;
+        await installTemplates(client, prefix);
+        templatesInstalled = true;
+      },
+      unavailable(error) {
+        if (!(error instanceof OpenSearchError)) return false;
+        const body = error.body as { error?: unknown } | null;
+        return error.type === 'index_not_found_exception' || missingTemplate(body?.error);
+      },
+    });
+  }
+
+  async function indexRequest<T>(operation: () => Promise<T>): Promise<T> {
+    const deadline = requestDeadline();
+    try {
+      return await (requests.getStore()?.indexRequest ?? requestIndex())(() => requestStep(operation, deadline));
+    } catch (error) {
+      templatesInstalled = false;
+      throw error;
+    }
+  }
+
+  async function executeRequest<T, Context extends { deadline: number; scope?: LeafOptions }>(
+    context: Context | undefined,
+    operation: (context: Context | undefined) => Promise<T>,
+    budgetMs = 10_000,
+  ): Promise<T> {
+    const requested = context?.deadline ?? deadlineFor(budgetMs);
+    requireRequestTime(requested);
+    // An explicit caller supplies the fallback budget when there is no ambient request.
+    const deadline = Math.min(
+      requested,
+      deadlineFor(Math.max(1, requested - Date.now())),
+      context?.scope?.deadline ?? Infinity,
+    );
+    requireRequestTime(deadline);
+    const request: RequestLifetime = { deadline, ended: false, indexRequest: requestIndex() };
+    const bounded = context
+      ? { ...context, deadline, ...(context.scope ? { scope: { ...context.scope, deadline } } : {}) }
+      : undefined;
+    return withRequestDeadline(deadline, () =>
+      requests.run(request, async () => {
+        try {
+          return await requestStep(() => operation(bounded), deadline);
+        } finally {
+          request.ended = true;
+        }
+      }),
+    );
+  }
 
   async function freshAliasGeneration(): Promise<number> {
     const { active } = await subjectGenerations(client, prefix);
@@ -319,19 +426,13 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     return active;
   }
 
-  function aliasGeneration(): Promise<number> {
-    if (aliasRead) return aliasRead;
-    const read = freshAliasGeneration().finally(() => {
-      if (aliasRead === read) aliasRead = undefined;
-    });
-    aliasRead = read;
-    return read;
-  }
+  // Physical alias reads and in-flight template installation belong to one caller's deadline.
+  const aliasGeneration = freshAliasGeneration;
 
   async function ratingEpoch(): Promise<PublicRatingEpoch> {
     try {
       if (!ratings) throw indexNotReady();
-      const value = await ratings.epoch();
+      const value = await requestStep(() => ratings.epoch());
       if (
         !value ||
         typeof value !== 'object' ||
@@ -358,7 +459,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     for (const [partition, ids] of partitions) {
       let snapshot;
       try {
-        snapshot = await ratings!.read(partition, [...new Set(ids)]);
+        snapshot = await requestStep(() => ratings!.read(partition, [...new Set(ids)]));
         if (
           snapshot.partition !== partition ||
           typeof snapshot.position !== 'bigint' ||
@@ -406,17 +507,21 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     return generation;
   }
 
-  async function observation(generation: number) {
+  async function observation(generation: number, deadline: number) {
     const reader = retainCurrent(freshness, generation, () =>
       createFreshness(pool, subjectConsumer(prefix, generation)),
     );
-    const observed = await reader.current();
-    if (publicFilters && observed.behind > 0 && Date.now() - observed.asOf.getTime() > 300_000) throw indexNotReady();
-    return searchObservation(observed);
+    try {
+      const observed = await reader.current({ deadline });
+      if (publicFilters && observed.behind > 0 && Date.now() - observed.asOf.getTime() > 300_000) throw indexNotReady();
+      return searchObservation(observed);
+    } catch {
+      throw indexNotReady();
+    }
   }
 
-  async function asOf(generation: number): Promise<string> {
-    return (await observation(generation)).as_of;
+  async function asOf(generation: number, deadline: number): Promise<string> {
+    return (await observation(generation, deadline)).as_of;
   }
 
   async function executedIdentity(deadline: number): Promise<string> {
@@ -499,6 +604,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     active?: { digest: string; head?: number; release: FilterRelease } | null,
     readContext?: PublicSearchReadContext,
   ) {
+    const deadline = readContext?.deadline ?? deadlineFor(10_000);
     const child = submitted.work !== undefined;
     const childCursor = submitted.childCursor;
     if ((childCursor !== undefined && !child) || (child && submitted.cursor !== undefined))
@@ -514,7 +620,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     if (sort !== 'name' && sort !== 'relevance') unsupported('/sort');
     if (!filter || containsRealmPredicate(filter) || containsOwnerPredicate(filter)) unsupported('/filter');
 
-    const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
+    const native = active === undefined && !releaseOverride ? await readActiveRelease() : active;
     const current = native?.release ?? (releaseOverride ? await release() : undefined);
     if (!current || (publicFilters && !native)) throw indexNotReady();
     const releaseDigest = native?.digest ?? kindDigest(current);
@@ -578,7 +684,6 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       childLimit: RELEASE_GROUPING_LIMITS.children,
       previewLimit: RELEASE_GROUPING_LIMITS.preview,
     } as const;
-    const deadline = readContext?.deadline ?? Date.now() + 10_000;
     const reservations = new Map<string, ReleaseSearchCandidateReservation>();
     const reserve = (value: ReleaseSearchCandidateReservation) => {
       const fields = [
@@ -632,7 +737,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         if (!latest || kindDigest(latest) !== releaseDigest) throw new ReleaseGroupingRestartRequired();
         return;
       }
-      const latest = await sourceRequest(() => activeRelease(pool));
+      const latest = await sourceRequest(readActiveRelease);
       if (latest?.digest !== releaseDigest || (releaseHead !== undefined && latest.head !== releaseHead))
         throw new ReleaseGroupingRestartRequired();
     };
@@ -744,7 +849,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           });
       await assertRelease();
       await assertPhysical();
-      return { ...page, as_of: await asOf(generation) };
+      return { ...page, as_of: await asOf(generation, deadline) };
     } catch (error) {
       if (error instanceof ReleaseSearchCursorInvalid) invalid(child ? '/childCursor' : '/cursor', 'invalid_format');
       if (error instanceof ReleaseGroupingRestartRequired) throw new ProblemError('search_restart_required');
@@ -766,14 +871,15 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       active?: { digest: string; head?: number; release: FilterRelease } | null,
       readContext?: PublicSearchReadContext,
     ) {
+      const deadline = readContext?.deadline ?? deadlineFor(10_000);
       request = ownSubjectRequest(request);
       const admission = requestPlanner.admit(request);
       const { text, filter, sort, limit, hitOptions, spoilerThreshold } = admission;
       // One lookup serves filter admission and the requested properties.
-      const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
+      const native = active === undefined && !releaseOverride ? await readActiveRelease() : active;
       const current = native?.release ?? (releaseOverride ? await release() : undefined);
       if (publicFilters && !native) throw indexNotReady();
-      const identityEpoch = await executedIdentity(readContext?.deadline ?? now + 10_000);
+      const identityEpoch = await executedIdentity(deadline);
       const executedRequest = cursorPlanner.bindExecutionRequest(admission, identityEpoch);
       const bindingRequest = executedRequest.bindingRequest;
       const kinds: KindSnapshot | undefined = current
@@ -787,7 +893,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             // The saved rule's immutable release remains its meaning after activation changes.
             return;
           }
-          const latest = await sourceRequest(() => activeRelease(pool));
+          const latest = await sourceRequest(readActiveRelease);
           if (
             latest?.digest !== releaseBinding.digest ||
             (releaseBinding.head !== undefined && latest.head !== releaseBinding.head)
@@ -842,7 +948,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             meaningDigest: kinds?.digest,
             text,
             filter: admitted === undefined ? undefined : catalogueFilter(admitted),
-            deadline: readContext?.deadline ?? Date.now() + 10_000,
+            deadline,
             ...(readContext?.realmAuthority ? { authority: readContext.realmAuthority } : {}),
           },
         });
@@ -864,8 +970,8 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           as_of: ordered.as_of,
           freshness: { state: 'unavailable' },
         }).page;
-        await readContext?.complete(response);
-        await ordered.finalize();
+        await requestStep(async () => readContext?.complete(response));
+        await requestStep(() => ordered.finalize());
         await assertCurrentRelease();
         return response;
       }
@@ -951,7 +1057,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             results.forEach((hit, index) => (hit.facts = facts[index]!));
           }
           const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
-          const observed = await observation(generation);
+          const observed = await observation(generation, deadline);
           const metadata = kinds?.page(
             kindAfter,
             hitOptions.languages ?? [],
@@ -990,7 +1096,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
               : await encodeSearchCursor(cursors, binding, { generation, after: [...nextAfter!] }, now),
             ...observed,
           }).page;
-          await readContext?.complete(response);
+          await requestStep(async () => readContext?.complete(response));
           const currentHits = await sourceRequest(() => disclosure.checkHits(source, page.hits, new Map()));
           if (
             currentHits.passed.length !== shown.length ||
@@ -1347,7 +1453,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           }),
         );
         const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
-        const observed = await observation(generation!);
+        const observed = await observation(generation!, deadline);
         const metadata = kinds?.page(
           kindAfter,
           hitOptions.languages ?? [],
@@ -1384,7 +1490,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             : await encodeSearchCursor(cursors, binding, { generation: generation!, after: after ?? [] }, now),
           ...observed,
         }).page;
-        await readContext?.complete(response);
+        await requestStep(async () => readContext?.complete(response));
         const finalValues = await evaluateScope(shown.map((subject) => subject.id));
         if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
         if ((await indexRequest(freshAliasGeneration)) !== generation)
@@ -1394,7 +1500,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       }
       const runtime = publicFilters?.();
       if (publicFilters && (!runtime || !readContext)) throw indexNotReady();
-      const context = { deadline: readContext?.deadline ?? Date.now() + 10_000 };
+      const context = { deadline };
       const capturePlan = {
         ...plan,
         generation,
@@ -1505,7 +1611,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         }
         const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
         // Exactly one freshness observation; verify dynamic context after all response work, even for empty pages.
-        const observed = await observation(generation!);
+        const observed = await observation(generation!, deadline);
         if (rating) {
           const currentRating = await ratingEpoch();
           if (
@@ -1561,7 +1667,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         }).page;
         // This operation's final observation must follow all query and source work;
         // another request's in-flight alias read cannot bracket this response.
-        await readContext?.complete(response);
+        await requestStep(async () => readContext?.complete(response));
         if (scope && preparedScope && shown.length) {
           const finalValues = await evaluateScope(shown.map((subject) => subject.id));
           if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
@@ -1759,12 +1865,12 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         complete(page: { subjects: Result[]; as_of: string }): Promise<void>;
       },
     ) {
+      const contextDeadline = read?.deadline ?? deadlineFor(10_000);
       languages = ownSubjectRequest(languages);
       if (typeof q !== 'string' || q.length > 128 || [...q].length < 1 || [...q].length > 64)
         invalid('/q', 'out_of_range');
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
       const options = validateHitOptions({ languages });
-      const contextDeadline = read?.deadline ?? Date.now() + 10_000;
       await executedIdentity(contextDeadline);
       let currentTextDisclosure: ReturnType<SearchDisclosureApplication['currentText']> | undefined;
       const verifySuggestionHits = async (hits: readonly CheckedHit[], expected: readonly Result[]) => {
@@ -1786,31 +1892,39 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           expected.every((subject) => isDeepStrictEqual(projected.get(subject.id), subject))
         );
       };
+      const contextReader = read?.suggestionWorkContext ?? suggestionWorkContext;
       const completePage = <T extends Result>(
         page: { subjects: readonly T[]; as_of: string },
         hits?: readonly CheckedHit[],
       ) =>
-        completeSuggestionWorkContext(page, {
-          ...((read?.suggestionWorkContext ?? suggestionWorkContext)
-            ? { reader: read?.suggestionWorkContext ?? suggestionWorkContext }
-            : {}),
-          languages: options.languages ?? [],
-          deadline: contextDeadline,
-          ...(read?.complete ? { complete: read.complete } : {}),
-          ...(hits
-            ? {
-                verifyCurrent: () =>
-                  verifySuggestionHits(
-                    hits,
-                    page.subjects.map(({ id, type, labels }) => ({ id, type, labels })),
-                  ),
-              }
-            : {}),
-        });
+        requestStep(() =>
+          completeSuggestionWorkContext(page, {
+            ...(contextReader
+              ? {
+                  reader: async (input: Parameters<SuggestionWorkContextReader>[0]) => {
+                    const snapshot = await requestStep(() => contextReader(input));
+                    return { ...snapshot, isCurrent: () => requestStep(() => snapshot.isCurrent()) };
+                  },
+                }
+              : {}),
+            languages: options.languages ?? [],
+            deadline: contextDeadline,
+            complete: (page) => requestStep(async () => read?.complete(page)),
+            ...(hits
+              ? {
+                  verifyCurrent: () =>
+                    verifySuggestionHits(
+                      hits,
+                      page.subjects.map(({ id, type, labels }) => ({ id, type, labels })),
+                    ),
+                }
+              : {}),
+          }),
+        );
       const generation = await discoveryGeneration();
       currentTextDisclosure = disclosure.currentText(subjectIndexName(prefix, generation));
       const parsed = read?.filter === undefined ? undefined : requestPlanner.admit({ filter: read.filter }).filter;
-      const current = parsed ? await activeRelease(pool) : undefined;
+      const current = parsed ? await readActiveRelease() : undefined;
       const admitted = parsed ? await admitQuery(undefined, parsed, current?.release, false) : undefined;
       const catalogue = admitted === undefined ? undefined : catalogueFilter(admitted);
       if (parsed && !admitted) throw indexNotReady();
@@ -1818,7 +1932,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
 
       if (admitted && publicFilters) {
         if (!current) throw indexNotReady();
-        const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
+        const context = { deadline: contextDeadline };
         const bound = await indexRequest(() =>
           publicFilters().bindSuggestion(
             {
@@ -1872,9 +1986,9 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             ...(scopeWork ? { scopeWork } : {}),
             readSource: sourceRequest,
             project: (subject) => project(subject, options.languages),
-            asOf: () => asOf(generation),
+            asOf: () => asOf(generation, contextDeadline),
             freshGeneration: () => indexRequest(freshAliasGeneration),
-            releaseIsCurrent: async () => (await activeRelease(pool))?.digest === current.digest,
+            releaseIsCurrent: async () => (await readActiveRelease())?.digest === current.digest,
             complete: async (page) => {
               completed = await completePage(page);
             },
@@ -1892,7 +2006,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         }
       }
       if (publicFilters) {
-        const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
+        const context = { deadline: contextDeadline };
         const bound = await indexRequest(() =>
           publicFilters().bindSuggestion(
             {
@@ -1934,7 +2048,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           });
           const page = {
             subjects: visible.map((subject) => project(subject, options.languages)),
-            as_of: await asOf(generation),
+            as_of: await asOf(generation, contextDeadline),
           };
           const response = await completePage(page, visibleHits);
           if ((await indexRequest(freshAliasGeneration)) !== generation)
@@ -1973,13 +2087,25 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       });
       const page = {
         subjects: visible.map((subject) => project(subject, options.languages)),
-        as_of: await asOf(generation),
+        as_of: await asOf(generation, contextDeadline),
       };
       const response = await completePage(page, visibleHits);
       if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
       return response;
     },
   };
+  const search = service.search;
+  service.search = (principal, request, now, active, context) =>
+    executeRequest(context, (bounded) => search(principal, request, now, active, bounded));
+  service.releaseGroups = (principal, request, now, active, context) =>
+    executeRequest(context, (bounded) => groupedReleaseSearch(principal, request, now, active, bounded));
+  const facets = service.facets;
+  service.facets = (principal, request, now, context) =>
+    executeRequest(context, (bounded) => facets(principal, request, now, bounded), 30_000);
+  const suggest = service.suggest;
+  service.suggest = (q, limit, languages, context) =>
+    executeRequest(context, (bounded) => suggest(q, limit, languages, bounded));
+  service.savedCatalogueMembers = (input) => executeRequest(input.scope, () => savedCatalogueMembers(input));
   registerSearchScopeRuntime(service, {
     pool,
     client,

@@ -2,8 +2,13 @@ import { relationFacetProperty } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import type { RealmRankOrderObservation, RealmRankOrderSource } from '../rating/realm-rank.ts';
+import type {
+  RealmRankOrderObservation,
+  RealmRankOrderSource,
+  RealmRankScoredCanonicalKey,
+} from '../rating/realm-rank.ts';
 import { accessCheck } from '../request/access.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
@@ -28,6 +33,15 @@ const restart = () => new ProblemError('search_restart_required');
 const BATCH_SIZE = 16;
 type NameKey = { name: string | null; id: string };
 type NativePage = Awaited<ReturnType<RealmRankOrderSource['readCanonicalPartition']>>;
+type ScoredPage = Awaited<ReturnType<RealmRankOrderSource['readScoredCanonicalPartition']>>;
+
+/** Each release observation closes its local snapshot before any native owner work. */
+export function readRealmRatingRelease(pool: Pool, deadline: number): ReturnType<typeof activeRelease> {
+  return withBoundedReadOnlyTransaction(pool, deadline, (client) => activeRelease(client), {
+    deadlineError: () => new ProblemError('deadline_exceeded'),
+    isUncertainSettledQueryError: () => true,
+  });
+}
 
 function compareNames(left: NameKey, right: NameKey): number {
   if (left.name !== right.name) {
@@ -36,6 +50,167 @@ function compareNames(left: NameKey, right: NameKey): number {
     return Buffer.compare(Buffer.from(left.name), Buffer.from(right.name));
   }
   return Buffer.compare(Buffer.from(left.id), Buffer.from(right.id));
+}
+
+function compareScored(left: RealmRankScoredCanonicalKey, right: RealmRankScoredCanonicalKey): number {
+  return (
+    Number(right.score) - Number(left.score) ||
+    compareNames({ name: left.name, id: left.subjectId }, { name: right.name, id: right.subjectId })
+  );
+}
+
+function scoredHit(
+  candidate: ScoredPage['candidates'][number],
+  page: ScoredPage,
+  context: RealmRatingContext,
+  index: string,
+): RealmRatingHit {
+  const { key } = candidate;
+  if (
+    !key ||
+    typeof key.score !== 'string' ||
+    !/^(?:[0-9](?:\.[0-9]{1,4})?|10(?:\.0{1,4})?)$/.test(key.score) ||
+    Number(key.score) !== candidate.score ||
+    key.name !== candidate.name ||
+    key.subjectId !== candidate.subjectId ||
+    subjectPartition(candidate.subjectId) !== page.partition ||
+    !Number.isSafeInteger(candidate.securityRevision) ||
+    candidate.securityRevision < 0 ||
+    candidate.updating !== false
+  )
+    throw notReady();
+  const hit: RealmRatingHit = {
+    id: candidate.subjectId,
+    index,
+    partition: page.partition,
+    securityRevision: candidate.securityRevision,
+    matched: [],
+    sort: [candidate.score, candidate.name, candidate.subjectId],
+    ratingPhase: 'scored',
+    position: page.position,
+    threshold: 5,
+    figure: {
+      subjectId: candidate.subjectId,
+      questionId: context.questionId,
+      populationId: context.populationId,
+      count: candidate.count,
+      mean: candidate.mean,
+      score: candidate.score,
+      priorEpoch: candidate.priorEpoch,
+      revision: candidate.revision,
+      asOf: candidate.asOf,
+    },
+  };
+  normalizeRealmRatingHit(hit, context);
+  return hit;
+}
+
+/**
+ * Retain one native scored head per home through predicate refills. The global
+ * continuation is a comparison key, independent of the home being sought.
+ * Every occupied canonical or scored home must prove its current coverage,
+ * including empty reads. Only an empty native seek retires a frontier.
+ */
+export function createRealmRatingScoredReader(input: {
+  native: RealmRankOrderSource;
+  observed: RealmRankOrderObservation;
+  query: RealmRatingQuery;
+  context: RealmRatingContext;
+  after: RealmRankScoredCanonicalKey | null;
+  size: number;
+  prefix: string;
+  reserve: (rows: number) => void;
+}): (size: number) => Promise<RealmRatingHit[]> {
+  const { native, observed, query, context } = input;
+  const publications = new Map(observed.scoredHomes.map((home) => [home.partition, home]));
+  const canonical = new Map(observed.canonicalPopulation.homes.map((home) => [home.partition, home]));
+  const partitions = new Set([...canonical.keys(), ...publications.keys()]);
+  if (
+    publications.size !== observed.scoredHomes.length ||
+    canonical.size !== observed.canonicalPopulation.homes.length ||
+    partitions.size > 4096 ||
+    !Number.isInteger(input.size) ||
+    input.size < 1 ||
+    input.size > 200
+  )
+    throw notReady();
+  // One head per home preserves the existing inclusive seek/row allowance.
+  const limit = 1;
+  const index = subjectIndexName(input.prefix, context.searchGeneration);
+  type Frontier = {
+    partition: number;
+    after: RealmRankScoredCanonicalKey | null;
+    rows: { key: RealmRankScoredCanonicalKey; hit: RealmRatingHit }[];
+    offset: number;
+    exhausted: boolean;
+  };
+  const frontiers: Frontier[] = [...partitions].map((partition) => {
+    if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw notReady();
+    return { partition, after: input.after, rows: [], offset: 0, exhausted: false };
+  });
+  const fill = async (frontier: Frontier) => {
+    input.reserve(limit);
+    const page = await native.readScoredCanonicalPartition(
+      query.authority!.actor,
+      {
+        realmId: query.populationId,
+        questionId: context.questionId,
+        partition: frontier.partition,
+        after: frontier.after,
+        limit,
+      },
+      observed,
+      { deadline: query.deadline },
+    );
+    if (typeof page.position !== 'bigint' || page.position < 0n) throw notReady();
+    const publication = publications.get(frontier.partition);
+    const home = canonical.get(frontier.partition);
+    if (
+      page.partition !== frontier.partition ||
+      page.generation !== (publication?.generation ?? '0') ||
+      [publication, home].some((expected) =>
+        expected && (page.epoch !== expected.epoch || page.position.toString() !== expected.position),
+      )
+    )
+      throw restart();
+    if (
+      !Array.isArray(page.candidates) ||
+      page.candidates.length > limit ||
+      (page.candidates.length > 0 && (!publication || !home))
+    )
+      throw notReady();
+    let previous = frontier.after;
+    frontier.rows = page.candidates.map((candidate) => {
+      const hit = scoredHit(candidate, page, context, index);
+      // Preserve native decimal strings (including trailing zeros), names and IDs.
+      // Neither displayed scores nor another partition's ID replace these keys.
+      const key = { ...candidate.key };
+      if (previous && compareScored(previous, key) >= 0) throw notReady();
+      previous = key;
+      return { key, hit };
+    });
+    frontier.after = previous;
+    frontier.offset = 0;
+    frontier.exhausted = page.candidates.length === 0;
+  };
+  return async (size) => {
+    if (!Number.isInteger(size) || size < 1 || size > input.size) throw notReady();
+    const hits: RealmRatingHit[] = [];
+    while (hits.length < size) {
+      let selected: Frontier | undefined;
+      for (const frontier of frontiers) {
+        if (frontier.exhausted) continue;
+        if (frontier.offset === frontier.rows.length) await fill(frontier);
+        if (frontier.exhausted) continue;
+        const row = frontier.rows[frontier.offset]!;
+        const current = selected?.rows[selected.offset];
+        if (!current || compareScored(row.key, current.key) < 0) selected = frontier;
+      }
+      if (!selected) break;
+      hits.push(selected.rows[selected.offset++]!.hit);
+    }
+    return hits;
+  };
 }
 
 function realmRatingNameAfter(request: SearchFrontier & { size: number }): NameKey | null {
@@ -254,19 +429,23 @@ export async function discloseRealmRatingWindow(input: {
         analyzer, text: texts,
       }),
     );
-    const checked = await checkHits(source, candidates, clauses, {
-      ...(query.filter ? { filter: query.filter, relationProperties } : {}),
-      ...(query.text ? { currentText: (subject: IndexedSubject) => text.matchesText(subject, query.text!) } : {}),
-      includeOutcomes: true,
-      ...(query.release
-        ? { observeRelationRelease: async () => {
-            const release = await activeRelease(pool);
-            if (!release) throw notReady();
-            if (release.digest !== context.meaningDigest) throw restart();
-            return release;
-          } }
-        : {}),
-    });
+    // Carry the original deadline through the configured source and retained
+    // relation work. Do not hold a local transaction around these owners.
+    const checked = await withRequestDeadline(query.deadline, () =>
+      checkHits(source, candidates, clauses, {
+        ...(query.filter ? { filter: query.filter, relationProperties } : {}),
+        ...(query.text ? { currentText: (subject: IndexedSubject) => text.matchesText(subject, query.text!) } : {}),
+        includeOutcomes: true,
+        ...(query.release
+          ? { observeRelationRelease: async () => {
+              const release = await readRealmRatingRelease(pool, query.deadline);
+              if (!release) throw notReady();
+              if (release.digest !== context.meaningDigest) throw restart();
+              return release;
+            } }
+          : {}),
+      }),
+    );
     if (!checked.outcomes || checked.outcomes.length !== candidates.length || checked.outcomes.includes('not_proven'))
       throw notReady();
     accepted = new Set(checked.passed.map(({ hit }) => hit));

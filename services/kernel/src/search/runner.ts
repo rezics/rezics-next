@@ -1,9 +1,6 @@
 import { createReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
 import type { ReviewDiscoverySource } from '../content/index.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
-import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
-import { withRequestDeadline } from '../request/deadline.ts';
-import { withSingleCommandAttempt } from '../command/command.ts';
+import { discardConnection } from '../database/pool.ts';
 import { readErasureStatus, resolveLateErasureItem } from './native-bindings.ts';
 import {
   nativeDiscoveryRegistry,
@@ -16,6 +13,14 @@ import {
   discoveryGenerations,
   discoveryConsumer,
   DiscoveryProducerCoverageError,
+  admitSearchTurn,
+  runSearchTurn,
+  outsideSearchTurn,
+  searchForTurn,
+  searchTurnMetadataProducers,
+  withSearchConnection,
+  type SearchTurn,
+  type SearchTurnContext,
   type DiscoveryGeneration,
 } from './generations.ts';
 import { createDiscoveryIndexer } from './indexer.ts';
@@ -63,19 +68,40 @@ function runnerSearch(search: OpenSearch, signal: AbortSignal): OpenSearch {
       body?: unknown,
       options?: SearchRequestOptions,
     ) {
-      return search.request<T>(method, path, body, { ...options, signal: combined(options?.signal) });
+      return searchForTurn(search).request<T>(method, path, body, { ...options, signal: combined(options?.signal) });
     },
     bulk<T>(lines: readonly unknown[], options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal }) {
-      return search.bulk<T>(lines, { ...options, signal: combined(options?.signal) });
+      return searchForTurn(search).bulk<T>(lines, { ...options, signal: combined(options?.signal) });
     },
     ...(search.bulkRaw
       ? {
           bulkRaw<T>(body: string, options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal }) {
-            return search.bulkRaw!<T>(body, { ...options, signal: combined(options?.signal) });
+            return searchForTurn(search).bulkRaw!<T>(body, { ...options, signal: combined(options?.signal) });
           },
         }
       : {}),
   };
+}
+
+/** The caller may leave a queue on expiry; the supervisor still owns the actual dispatched drain. */
+function queueSearchTurn(
+  previous: Promise<void>,
+  context: SearchTurnContext | undefined,
+  signal: AbortSignal,
+  work: (turn: SearchTurn) => Promise<void>,
+) {
+  const turn = admitSearchTurn({
+    ...context,
+    signal: context?.signal ? AbortSignal.any([signal, context.signal]) : signal,
+  });
+  const queued = previous.then(() => runSearchTurn(turn, () => work(turn))).finally(() => turn.close());
+  const result = new Promise<void>((resolve, reject) => {
+    const cancel = () => reject(turn.signal.reason);
+    if (turn.signal.aborted) cancel();
+    else turn.signal.addEventListener('abort', cancel, { once: true });
+    void queued.then(resolve, reject).finally(() => turn.signal.removeEventListener('abort', cancel));
+  });
+  return { queued, result };
 }
 
 export async function startSearchIndexing(options: {
@@ -94,7 +120,12 @@ export async function startSearchIndexing(options: {
     producers: DiscoveryProducerEntry;
   };
   publicPreparation?: PublicPreparation;
-}): Promise<{ pause(): Promise<void>; resume(): void; stop(): Promise<void>; refresh(): Promise<void> }> {
+}): Promise<{
+  pause(): Promise<void>;
+  resume(): void;
+  stop(): Promise<void>;
+  refresh(context?: SearchTurnContext): Promise<void>;
+}> {
   const discoverMs = options.discoverMs ?? 5000;
   if (!Number.isInteger(discoverMs) || discoverMs < 1) throw new RangeError('discoverMs must be a positive integer');
   const retireAfterMs = options.retireAfterMs ?? 15 * 60_000;
@@ -127,7 +158,7 @@ export async function startSearchIndexing(options: {
     timer = undefined;
   };
 
-  const discover = async () => {
+  const discover = async (turn: SearchTurn) => {
     if (stopped) return;
     try {
       let state = await subjectGenerations(search, options.prefix);
@@ -169,9 +200,9 @@ export async function startSearchIndexing(options: {
       if (options.publicPreparation) {
         for (const generation of state.generations)
           if (state.active === null || generation > state.active)
-            await options.publicPreparation.initialize(generation, lifetime.signal);
+            await turn.call(() => options.publicPreparation!.initialize(generation, turn.signal, turn.deadline));
         if (stopped) return;
-        await options.publicPreparation.discover();
+        await turn.call(() => options.publicPreparation!.discover(turn.deadline));
       }
       let activatedAt: number | undefined;
       if (state.active !== null) {
@@ -217,12 +248,7 @@ export async function startSearchIndexing(options: {
             await ensureSubjectRatingMapping(search, options.prefix, generation);
         }
         if (stopped) return;
-        const previous = current;
-        current = undefined;
-        currentGenerations = undefined;
-        if (previous) await previous.stop();
-        if (stopped) return;
-        const relays = await Promise.all(
+        const prepared = await Promise.allSettled(
           liveGenerations.map(async (generation) => {
             const calendarFormat = await readSubjectCalendarMappingFormat(search, options.prefix, generation);
             const creditFormat = await readSubjectCreditMappingFormat(search, options.prefix, generation);
@@ -249,12 +275,25 @@ export async function startSearchIndexing(options: {
             });
           }),
         );
-        const next = startRelays(options.pool, relays, {
-          // A replacement must inherit intent before its first partition scan can run.
-          paused,
-          ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
-          ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
+        const relays = prepared.map((result) => {
+          if (result.status === 'rejected') throw result.reason;
+          return result.value;
         });
+        turn.check();
+        const previous = current;
+        if (previous) await previous.stop();
+        current = undefined;
+        currentGenerations = undefined;
+        if (stopped) return;
+        turn.check();
+        const next = outsideSearchTurn(() =>
+          startRelays(options.pool, relays, {
+            // A replacement must inherit intent before its first partition scan can run.
+            paused,
+            ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
+            ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
+          }),
+        );
         current = next;
         currentGenerations = liveGenerations;
       }
@@ -269,7 +308,9 @@ export async function startSearchIndexing(options: {
           } catch (error) {
             if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
           }
-          await retire.run(options.pool, { consumer: subjectConsumer(options.prefix, generation) });
+          await withSearchConnection(options.pool, (client) =>
+            retire.run(client, { consumer: subjectConsumer(options.prefix, generation) }),
+          );
           pendingRetirements.delete(generation);
         } catch (error) {
           console.error(`Search generation retirement failed for ${options.prefix} generation ${generation}`, error);
@@ -277,25 +318,28 @@ export async function startSearchIndexing(options: {
       }
     } catch (error) {
       if (!stopped) console.error(`Search index discovery failed for ${options.prefix}`, error);
+      throw error;
     }
   };
 
-  const refresh = () => {
+  const refresh = (context?: SearchTurnContext) => {
     if (stopped) return Promise.resolve();
-    const next = discovery.then(discover, discover);
-    discovery = next;
-    return next;
+    const { queued, result } = queueSearchTurn(discovery, context, lifetime.signal, discover);
+    discovery = queued.catch(() => undefined);
+    return result;
   };
   const schedule = () => {
     if (stopped || paused || timer !== undefined) return;
     timer = setTimeout(() => {
       timer = undefined;
       if (stopped || paused) return;
-      void refresh().then(schedule, schedule);
+      void refresh().catch(() => undefined);
+      void discovery.then(schedule);
     }, discoverMs);
   };
   // Keep the initial inventory refresh owned without making worker registration wait for it.
-  void refresh().then(schedule, schedule);
+  void refresh().catch(() => undefined);
+  void discovery.then(schedule);
 
   return {
     pause() {
@@ -321,7 +365,7 @@ export async function startSearchIndexing(options: {
           resumeAfter = undefined;
           paused = false;
           options.publicPreparation?.resume();
-          current?.resume();
+          outsideSearchTurn(() => current?.resume());
           mixed?.resume();
           schedule();
         },
@@ -348,8 +392,19 @@ export async function startSearchIndexing(options: {
       });
       return closing;
     },
-    async refresh() {
-      await Promise.all([refresh(), mixed?.refresh()]);
+    async refresh(context?: SearchTurnContext) {
+      // Both families spend the same admission time, even when one is queued behind maintenance.
+      const turn = admitSearchTurn(context);
+      try {
+        // Keep the caller connected to each drain if its peer rejects before this refresh finishes.
+        const signal = context?.signal ?? turn.signal;
+        await Promise.all([
+          refresh({ deadline: turn.deadline, signal }),
+          mixed?.refresh({ deadline: turn.deadline, signal }),
+        ]);
+      } finally {
+        turn.close();
+      }
     },
   };
 }
@@ -372,6 +427,8 @@ export function startDiscoveryIndexing(options: {
   if (!Number.isInteger(configuredConcurrency) || configuredConcurrency < 1)
     throw new RangeError('concurrency must be a positive integer below the pool size');
   const relayConcurrency = Math.min(configuredConcurrency, relayConcurrencyForPool(options.pool));
+  const lifetime = new AbortController();
+  const search = runnerSearch(options.search, lifetime.signal);
   type Installation = {
     bindings: Map<number, string>;
     receivers: Map<number, ReturnType<typeof createReviewDiscoveryReceiving>>;
@@ -391,22 +448,31 @@ export function startDiscoveryIndexing(options: {
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
   };
-  const step = async () => {
+  const maintain = async (turn: SearchTurn) => {
     if (stopped || paused) return;
     const producers = options.producers;
-    const ownerAdapters = producers ? await resolveDiscoveryOwnerAdapters(producers) : undefined;
+    const ownerAdapters = producers
+      ? await turn.call(() =>
+          resolveDiscoveryOwnerAdapters({
+            ...producers,
+            metadataProducers: searchTurnMetadataProducers(producers.metadataProducers),
+          }),
+        )
+      : undefined;
     if (stopped || paused) return;
-    const registry = await nativeDiscoveryRegistry(
-      options.pool,
-      options.routeKey,
-      options.source,
-      ownerAdapters && producers
-        ? {
-            ownerAdapters: ownerAdapters.ownerAdapters,
-            accounts: producers.accounts,
-            omittedKinds: ownerAdapters.omittedKinds,
-          }
-        : undefined,
+    const registry = await turn.call(() =>
+      nativeDiscoveryRegistry(
+        options.pool,
+        options.routeKey,
+        options.source,
+        ownerAdapters && producers
+          ? {
+              ownerAdapters: ownerAdapters.ownerAdapters,
+              accounts: producers.accounts,
+              omittedKinds: ownerAdapters.omittedKinds,
+            }
+          : undefined,
+      ),
     );
     if (stopped || paused) return;
     const metadataProducers = ownerAdapters?.metadataProducers;
@@ -415,6 +481,7 @@ export function startDiscoveryIndexing(options: {
     try {
       await advanceDiscovery({
         ...options,
+        search,
         registry,
         requiredKinds: options.requiredKinds ?? Object.keys(metadataProducers ?? {}),
         ...(metadataProducers ? { metadataProducers } : {}),
@@ -436,7 +503,7 @@ export function startDiscoveryIndexing(options: {
     const relayTargets: (DiscoveryGeneration & { uuid: string })[] = [];
     for (const target of generations) {
       if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
-      if (await discoveryPhysicalTargetMatches(options.search, target)) relayTargets.push(target);
+      if (await discoveryPhysicalTargetMatches(search, target)) relayTargets.push(target);
     }
     const bindings = new Map<number, string>(
       relayTargets.map((target) => [target.generation, target.uuid + ':' + target.incarnation]),
@@ -458,6 +525,7 @@ export function startDiscoveryIndexing(options: {
         if (stopped || paused) return;
         const projection = createDiscoveryProjection({
           ...options,
+          search,
           target,
           registry,
           ...(metadataProducers ? { metadataProducers } : {}),
@@ -475,13 +543,22 @@ export function startDiscoveryIndexing(options: {
         if (
           reviewSource &&
           registry.ownerAdapters?.review?.readiness === 'ready' &&
-          (await projection.hasMetadataPopulation?.('review'))
+          (await withSearchConnection(options.pool, async (client) =>
+            (
+              await client.query(
+                `SELECT 1 FROM search.discovery_population
+               WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND owner='review'`,
+                [target.prefix, target.generation],
+              )
+            ).rowCount === 1,
+          ))
         ) {
           if (stopped || paused) return;
           nextReceivers.set(
             target.generation,
             createReviewDiscoveryReceiving({
               ...options,
+              search,
               projection,
               source: reviewSource,
             }),
@@ -493,14 +570,18 @@ export function startDiscoveryIndexing(options: {
       // All generations sharing this Pool share one relay budget. Per-generation
       // supervisors could each pass the local pool guard while exhausting the
       // connection reserved for source reads, receiving and lifecycle commands.
+      turn.check();
       const previous = installation;
       if (previous) await previous.relay.stop();
       if (installation === previous) installation = undefined;
       if (stopped) return;
-      const relay = startRelays(
-        options.pool,
-        prepared.map(({ relay }) => relay),
-        { paused, intervalMs: options.intervalMs ?? 100, concurrency: relayConcurrency },
+      turn.check();
+      const relay = outsideSearchTurn(() =>
+        startRelays(
+          options.pool,
+          prepared.map(({ relay }) => relay),
+          { paused, intervalMs: options.intervalMs ?? 100, concurrency: relayConcurrency },
+        ),
       );
       installation = { bindings, receivers: nextReceivers, relay };
     } else if (relayTargets.length === 0 && installation) {
@@ -513,38 +594,54 @@ export function startDiscoveryIndexing(options: {
     for (const target of generations) {
       if (stopped || paused) return;
       if (target.uuid && !['allocated', 'retiring', 'retired', 'quarantined'].includes(target.state))
-        await installation?.receivers.get(target.generation)?.next();
+        await turn.call(async () => {
+          await installation?.receivers.get(target.generation)?.next();
+        });
     }
     if (stopped || paused) return;
-    // One bounded retirement per tick; an unavailable old copy must not starve other generations.
-    const retiring = generations.filter((row) => row.state === 'retiring');
-    const target = retiring.find((row) => row.generation > lastRetirement) ?? retiring[0];
-    if (target) {
-      lastRetirement = target.generation;
-      await retireDiscovery(
-        options.pool,
-        options.search,
-        target,
-        generations.find((row) => row.state === 'active'),
-      );
-    }
     if (readiness) throw readiness;
   };
-  const refresh = () => {
-    const next = running.then(step);
-    running = next.catch((error) => {
+  let retirementFirst = false;
+  const retireOne = async (turn: SearchTurn) => {
+    const generations = await discoveryGenerations(options.pool, options.prefix);
+    const retiring = generations.filter((row) => row.state === 'retiring');
+    const target = retiring.find((row) => row.generation > lastRetirement) ?? retiring[0];
+    if (!target) return;
+    lastRetirement = target.generation;
+    await retireDiscovery(options.pool, search, target, generations.find((row) => row.state === 'active'), turn);
+  };
+  const step = async (turn: SearchTurn) => {
+    if (stopped || paused) return;
+    // Neither a broken producer nor a slow retired copy owns every future turn's first budget.
+    const work = retirementFirst ? [retireOne, maintain] : [maintain, retireOne];
+    retirementFirst = !retirementFirst;
+    const failures: unknown[] = [];
+    for (const next of work) {
+      if (stopped || paused) return;
+      try {
+        turn.check();
+        await next(turn);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length) throw failures[0];
+  };
+  const refresh = (context?: SearchTurnContext) => {
+    if (stopped) return Promise.resolve();
+    const { queued, result } = queueSearchTurn(running, context, lifetime.signal, step);
+    running = queued.catch((error) => {
+      delay = options.intervalMs ?? 100;
       if (!stopped) console.error('Discovery maintenance failed', error);
     });
-    return next;
+    return result;
   };
   const schedule = (waitMs: number) => {
     if (stopped || paused || timer !== undefined) return;
     timer = setTimeout(() => {
       timer = undefined;
-      void refresh().then(
-        () => schedule(delay),
-        () => schedule(options.intervalMs ?? 100),
-      );
+      void refresh().catch(() => undefined);
+      void running.then(() => schedule(delay));
     }, waitMs);
   };
   schedule(0);
@@ -572,7 +669,7 @@ export function startDiscoveryIndexing(options: {
           if (stopped || resumeAfter !== after) return;
           resumeAfter = undefined;
           paused = false;
-          installation?.relay.resume();
+          outsideSearchTurn(() => installation?.relay.resume());
           schedule(0);
         },
         (error) => {
@@ -585,10 +682,13 @@ export function startDiscoveryIndexing(options: {
       if (closing) return closing;
       stopped = true;
       paused = true;
+      lifetime.abort(new Error('Discovery runner stopped'));
       resumeAfter = undefined;
       clearSchedule();
-      return (closing = running.then(async () => {
-        await installation?.relay.stop();
+      const previous = installation;
+      const projection = previous?.relay.stop();
+      return (closing = Promise.all([running, projection]).then(async () => {
+        if (installation && installation !== previous) await installation.relay.stop();
         installation = undefined;
       }));
     },
@@ -596,136 +696,9 @@ export function startDiscoveryIndexing(options: {
 }
 
 const DISCOVERY_RETIREMENT_MS = 5000;
-// A timed-out checkout can still be queued in pg. Do not queue another retirement behind it.
-const pendingRetirementCheckouts = new WeakSet<Pool>();
 
 function retirementFailure(error: unknown): Error {
   return error instanceof Error ? error : new Error('Discovery retirement session became uncertain');
-}
-
-/** Admit before checkout; native commands and engine work spend the same finite maintenance turn. */
-async function withDiscoveryRetirement<T>(
-  pool: Pool,
-  search: OpenSearch,
-  work: (pool: Pool, search: OpenSearch) => Promise<T>,
-): Promise<T> {
-  const deadline = Date.now() + DISCOVERY_RETIREMENT_MS;
-  const expired = new SearchUnavailableError('Discovery retirement deadline expired');
-  const controller = new AbortController();
-  let closed = false;
-  const remaining = () => {
-    if (closed || Date.now() >= deadline) throw expired;
-    return Math.max(1, Math.floor(deadline - Date.now()));
-  };
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const expiration = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      controller.abort(expired);
-      reject(expired);
-    }, DISCOVERY_RETIREMENT_MS);
-  });
-
-  // The native hooks accept a Pool, including legacy commands whose checkout is otherwise unbounded.
-  // Each lease retains the real checkout until release or expiry; late work only sees a retired client.
-  const boundedPool = Object.create(pool) as Pool;
-  const connect = () =>
-    new Promise<PoolClient>((resolve, reject) => {
-      remaining();
-      void withBoundedReadLifetime(
-        (read) => {
-          remaining();
-          if (pendingRetirementCheckouts.has(pool))
-            throw new SearchUnavailableError('Discovery retirement checkout is still pending');
-          pendingRetirementCheckouts.add(pool);
-          let acquired = false;
-          return withConnection(pool, async (client) => {
-            acquired = true;
-            pendingRetirementCheckouts.delete(pool);
-            try {
-              remaining();
-              return await read(client);
-            } catch (error) {
-              // Expiry between queries may still own a session lock or an open manual transaction.
-              discardConnection(client, retirementFailure(error));
-              throw error;
-            }
-          }).finally(() => {
-            if (!acquired) pendingRetirementCheckouts.delete(pool);
-          });
-        },
-        discardConnection,
-        deadline,
-        (client) =>
-          new Promise<void>((release, fail) => {
-            remaining();
-            const lease = Object.create(client) as PoolClient;
-            let released = false;
-            lease.release = (error?: Error | boolean) => {
-              if (released) throw new Error('Discovery retirement connection was already released');
-              released = true;
-              if (error) fail(retirementFailure(error));
-              else release();
-            };
-            resolve(lease);
-          }),
-        { deadlineError: () => expired, isUncertainSettledQueryError: () => true },
-      ).catch(reject);
-    });
-  boundedPool.connect = ((callback?: Parameters<Pool['connect']>[0]) => {
-    const connection = connect();
-    if (!callback) return connection;
-    void connection.then(
-      (client) => callback(undefined, client, client.release),
-      (error: Error) => callback(error, undefined as never, undefined as never),
-    );
-    return undefined;
-  }) as Pool['connect'];
-  // createPool's query method closes over the original pool. Route even direct queries through the lease.
-  boundedPool.query = new Proxy(pool.query, {
-    apply(_query, _receiver, args: unknown[]) {
-      const callback = typeof args.at(-1) === 'function' ? args.pop() : undefined;
-      const result = withConnection(boundedPool, (client) =>
-        Reflect.apply(client.query, client, args) as Promise<unknown>,
-      );
-      if (typeof callback !== 'function') return result;
-      void result.then(
-        (value) => Reflect.apply(callback, undefined, [null, value]),
-        (error: unknown) => Reflect.apply(callback, undefined, [error]),
-      );
-      return undefined;
-    },
-  });
-  const boundedSearch: OpenSearch = {
-    ...search,
-    async request<T>(
-      method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
-      path: string,
-      body?: unknown,
-      options?: SearchRequestOptions,
-    ) {
-      const result = await Promise.race([
-        search.request<T>(method, path, body, {
-          ...options,
-          timeoutMs: Math.min(remaining(), options?.timeoutMs ?? Infinity),
-          signal: options?.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal,
-        }),
-        expiration,
-      ]);
-      remaining();
-      return result;
-    },
-  };
-  try {
-    // Keep the original deadline in late native continuations, even after the runner stops awaiting them.
-    return await Promise.race([
-      withRequestDeadline(deadline, () => withSingleCommandAttempt(() => work(boundedPool, boundedSearch))),
-      expiration,
-    ]);
-  } finally {
-    closed = true;
-    clearTimeout(timer);
-    controller.abort(expired);
-  }
 }
 
 async function retireDiscovery(
@@ -733,123 +706,133 @@ async function retireDiscovery(
   search: OpenSearch,
   target: DiscoveryGeneration,
   active: DiscoveryGeneration | undefined,
+  parent: SearchTurn,
 ) {
-  return withDiscoveryRetirement(pool, search, async (pool, search) => {
-    if (!target.uuid || !target.incarnation)
-      throw new SearchUnavailableError('Discovery retirement identity is unavailable');
-    const index = discoveryIndexName(target.prefix, target.generation);
-    const due = async (client: PoolClient) =>
-      (
-        await client.query<{ due: boolean }>(
-          `SELECT (activated_at IS NULL OR EXISTS (
-             SELECT 1 FROM search.discovery_generation a WHERE a.partition_no=0 AND a.prefix=$1
-               AND a.generation=$3 AND a.state='active' AND a.activated_at < clock_timestamp()-interval '15 minutes'
-           )) AS due FROM search.discovery_generation
-           WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'
-             AND index_uuid=$4 AND incarnation=$5::uuid`,
-          [target.prefix, target.generation, active?.generation ?? null, target.uuid, target.incarnation],
-        )
-      ).rows[0]?.due === true;
-    const gone = await withConnection(pool, async (client) => {
-      // Grace-period ticks need only one bounded read, without taking writer custody.
-      if (!(await due(client))) return false;
-      const lock = await client.query<{ locked: boolean }>(
-        'SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS locked',
-        [index],
-      );
-      if (lock.rows[0]?.locked !== true) return false;
-      try {
-        // Recheck grace, state and the captured identity while holding physical-target custody.
+  const turn = admitSearchTurn({
+    deadline: Math.min(parent.deadline, Date.now() + DISCOVERY_RETIREMENT_MS),
+    signal: parent.signal,
+  });
+  search = turn.search(search);
+  try {
+    return await runSearchTurn(turn, async () => {
+      if (!target.uuid || !target.incarnation)
+        throw new SearchUnavailableError('Discovery retirement identity is unavailable');
+      const index = discoveryIndexName(target.prefix, target.generation);
+      const due = async (client: PoolClient) =>
+        (
+          await client.query<{ due: boolean }>(
+            `SELECT (activated_at IS NULL OR EXISTS (
+               SELECT 1 FROM search.discovery_generation a WHERE a.partition_no=0 AND a.prefix=$1
+                 AND a.generation=$3 AND a.state='active' AND a.activated_at < clock_timestamp()-interval '15 minutes'
+             )) AS due FROM search.discovery_generation
+             WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'
+               AND index_uuid=$4 AND incarnation=$5::uuid`,
+            [target.prefix, target.generation, active?.generation ?? null, target.uuid, target.incarnation],
+          )
+        ).rows[0]?.due === true;
+      const gone = await withSearchConnection(pool, async (client) => {
+        // Grace-period ticks need only one bounded read, without taking writer custody.
         if (!(await due(client))) return false;
-        const physical = await readDiscoveryPhysicalIdentity(search, index);
-        // A different UUID proves the old copy gone. An unchanged UUID with changed metadata does not.
-        if (physical?.uuid === target.uuid) {
-          if (physical.incarnation !== target.incarnation)
-            throw new SearchUnavailableError('Discovery retirement physical incarnation changed');
-          try {
-            const deleted = await search.request<{ acknowledged?: boolean }>('DELETE', `/${index}`);
-            if (deleted.status !== 404 && (deleted.status !== 200 || deleted.body?.acknowledged !== true))
-              throw new SearchUnavailableError('Discovery retirement deletion is unconfirmed');
-          } catch (error) {
-            if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
-          }
-          if ((await readDiscoveryPhysicalIdentity(search, index))?.uuid === target.uuid)
-            throw new SearchUnavailableError('Discovery retirement physical copy remains');
-        }
-        return true;
-      } finally {
+        const lock = await client.query<{ locked: boolean }>(
+          'SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS locked',
+          [index],
+        );
+        if (lock.rows[0]?.locked !== true) return false;
         try {
-          const unlocked = await client.query<{ unlocked: boolean }>(
-            'SELECT pg_advisory_unlock(hashtextextended($1,0)) AS unlocked',
-            [index],
+          // Recheck grace, state and the captured identity while holding physical-target custody.
+          if (!(await due(client))) return false;
+          const physical = await readDiscoveryPhysicalIdentity(search, index);
+          // A different UUID proves the old copy gone. An unchanged UUID with changed metadata does not.
+          if (physical?.uuid === target.uuid) {
+            if (physical.incarnation !== target.incarnation)
+              throw new SearchUnavailableError('Discovery retirement physical incarnation changed');
+            try {
+              const deleted = await search.request<{ acknowledged?: boolean }>('DELETE', `/${index}`);
+              if (deleted.status !== 404 && (deleted.status !== 200 || deleted.body?.acknowledged !== true))
+                throw new SearchUnavailableError('Discovery retirement deletion is unconfirmed');
+            } catch (error) {
+              if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+            }
+            if ((await readDiscoveryPhysicalIdentity(search, index))?.uuid === target.uuid)
+              throw new SearchUnavailableError('Discovery retirement physical copy remains');
+          }
+          return true;
+        } finally {
+          try {
+            const unlocked = await client.query<{ unlocked: boolean }>(
+              'SELECT pg_advisory_unlock(hashtextextended($1,0)) AS unlocked',
+              [index],
+            );
+            if (unlocked.rows[0]?.unlocked !== true) throw new Error('Discovery retirement lock was not held');
+          } catch (error) {
+            discardConnection(client, retirementFailure(error));
+            throw error;
+          }
+        }
+      });
+      if (!gone) return;
+      // Reclaim a bounded locator page only after physical deletion. Late items still resolve through Access.
+      const copies = await withSearchConnection(
+        pool,
+        async (client) =>
+          (
+            await client.query<{ route: number; id: string; kind: string }>(
+              `SELECT route,source_id::text AS id,kind FROM search.discovery_copy WHERE prefix=$1 AND generation=$2 ORDER BY route,source_id,kind LIMIT 100`,
+              [target.prefix, target.generation],
+            )
+          ).rows,
+      );
+      for (const copy of copies) {
+        if (copy.kind === 'account') {
+          const status = await withSearchConnection(pool, (client) => readErasureStatus(client, copy.id));
+          if (status) {
+            await turn.call(() => registerRetiredErasure(pool, target, copy.id));
+            await turn.call(() => resolveLateErasureItem(
+              { pool },
+              { accountId: copy.id, participant: 'search', locator: copyLocator(target) },
+            ));
+          }
+        }
+        await withSearchConnection(pool, (client) =>
+          client.query(
+            'DELETE FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',
+            [copy.route, copy.id, target.prefix, target.generation, copy.kind],
+          ),
+        );
+      }
+      if (copies.length) return;
+      await withSearchConnection(pool, async (client) => {
+        try {
+          await client.query('BEGIN');
+          const retired = await client.query(
+            `UPDATE search.discovery_generation SET state='retired'
+             WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'
+               AND index_uuid=$3 AND incarnation=$4::uuid
+               AND NOT EXISTS (SELECT 1 FROM search.discovery_copy WHERE prefix=$1 AND generation=$2)
+             RETURNING generation`,
+            [target.prefix, target.generation, target.uuid, target.incarnation],
           );
-          if (unlocked.rows[0]?.unlocked !== true) throw new Error('Discovery retirement lock was not held');
+          if (retired.rowCount) {
+            await client.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND generation=$2', [
+              target.prefix,
+              target.generation,
+            ]);
+            await client.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1', [
+              discoveryConsumer(target.prefix, target.generation),
+            ]);
+          }
+          await client.query('COMMIT');
         } catch (error) {
-          discardConnection(client, retirementFailure(error));
+          try {
+            await client.query('ROLLBACK');
+          } catch (cleanupError) {
+            discardConnection(client, retirementFailure(cleanupError));
+          }
           throw error;
         }
-      }
+      });
     });
-    if (!gone) return;
-    // Reclaim a bounded locator page only after physical deletion. Late items still resolve through Access.
-    const copies = await withConnection(
-      pool,
-      async (client) =>
-        (
-          await client.query<{ route: number; id: string; kind: string }>(
-            `SELECT route,source_id::text AS id,kind FROM search.discovery_copy WHERE prefix=$1 AND generation=$2 ORDER BY route,source_id,kind LIMIT 100`,
-            [target.prefix, target.generation],
-          )
-        ).rows,
-    );
-    for (const copy of copies) {
-      if (copy.kind === 'account') {
-        const status = await withConnection(pool, (client) => readErasureStatus(client, copy.id));
-        if (status) {
-          await registerRetiredErasure(pool, target, copy.id);
-          await resolveLateErasureItem(
-            { pool },
-            { accountId: copy.id, participant: 'search', locator: copyLocator(target) },
-          );
-        }
-      }
-      await withConnection(pool, (client) =>
-        client.query(
-          'DELETE FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',
-          [copy.route, copy.id, target.prefix, target.generation, copy.kind],
-        ),
-      );
-    }
-    if (copies.length) return;
-    await withConnection(pool, async (client) => {
-      try {
-        await client.query('BEGIN');
-        const retired = await client.query(
-          `UPDATE search.discovery_generation SET state='retired'
-           WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'
-             AND index_uuid=$3 AND incarnation=$4::uuid
-             AND NOT EXISTS (SELECT 1 FROM search.discovery_copy WHERE prefix=$1 AND generation=$2)
-           RETURNING generation`,
-          [target.prefix, target.generation, target.uuid, target.incarnation],
-        );
-        if (retired.rowCount) {
-          await client.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND generation=$2', [
-            target.prefix,
-            target.generation,
-          ]);
-          await client.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1', [
-            discoveryConsumer(target.prefix, target.generation),
-          ]);
-        }
-        await client.query('COMMIT');
-      } catch (error) {
-        try {
-          await client.query('ROLLBACK');
-        } catch (cleanupError) {
-          discardConnection(client, retirementFailure(cleanupError));
-        }
-        throw error;
-      }
-    });
-  });
+  } finally {
+    turn.close();
+  }
 }
