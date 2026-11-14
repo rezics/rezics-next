@@ -14,15 +14,7 @@ import {
   type OwnDraftSelectionRequest,
 } from '../src/threads/own-drafts/model';
 
-import {
-  accountId,
-  identity,
-  mountOwnDrafts,
-  postId,
-  row,
-  selected,
-  threadId,
-} from './own-drafts-fixture';
+import { accountId, identity, mountOwnDrafts, postId, row, selected, threadId } from './own-drafts-fixture';
 const revisionId = row().revisionId;
 
 test('explicit selection reads one exact current draft; stale or concealed revisions stay unavailable', async () => {
@@ -271,9 +263,9 @@ test('browser writing stays separate until the person names it as the editor sou
       m.document_footnotes({}, { locale }),
     );
     expect(previews[0]?.querySelector('summary')?.textContent).toContain(m.document_footnote({}, { locale }));
-    expect([...previews[0]!.querySelectorAll('a[aria-label]')].map((link) => link.getAttribute('aria-label'))).toContain(
-      `${m.document_go_to_footnote({}, { locale })} Server-1`,
-    );
+    expect(
+      [...previews[0]!.querySelectorAll('a[aria-label]')].map((link) => link.getAttribute('aria-label')),
+    ).toContain(`${m.document_go_to_footnote({}, { locale })} Server-1`);
     const openFootnote = async (preview: Element) =>
       act(async () => {
         const details = preview.querySelector('details') as HTMLDetailsElement;
