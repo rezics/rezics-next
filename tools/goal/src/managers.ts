@@ -1485,6 +1485,13 @@ export class ManagerSessions {
   private hasActiveNativeRefillDuty(state: ManagedManagerState, goal: GoalState): boolean {
     const objective = state.objective;
     const turn = state.turnDisposition;
+    // Keep automatic renewals inside the original objective's finite manager window.
+    const refillWindowEndsAt = (state.history ?? [])
+      .filter((session) => session.objective === objective)
+      .reduce(
+        (end, session) => Math.min(end, session.startedAt + session.limits.wallMs),
+        state.startedAt + state.limits.wallMs,
+      );
     return (
       state.status === 'running' &&
       state.engine === 'codex' &&
@@ -1505,7 +1512,7 @@ export class ManagerSessions {
       state.turns > 0 &&
       state.turns <= state.limits.turns &&
       state.turnsWithoutDecision <= state.limits.turnsWithoutDecision &&
-      this.now() - state.startedAt <= state.limits.wallMs
+      this.now() <= refillWindowEndsAt
     );
   }
   private async pauseRemote(state: ManagerState, origin: GoalMutationOrigin): Promise<void> {
