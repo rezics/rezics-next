@@ -1,6 +1,5 @@
 import type { AuthoritativeTime } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
 import { withConnection } from '../database/pool.ts';
 import type { AccessClient, Actor } from '../request/access.ts';
 import { accessCheck, deadlineClient } from './access-port.ts';
@@ -12,22 +11,7 @@ import { contentPostBenefitForPost } from '../access/authenticated-benefit.ts';
 import type { ContentPostSaleAuthority, ContentPostSaleDependencies } from './post-benefit.ts';
 import sourceRead from './post-benefit-source.sql';
 
-type SourceRow = {
-  route: number;
-  threadId: string;
-  postId: string;
-  creatorAccountId: string;
-  revisionId: string;
-  sha256: string;
-  licence: string;
-  subjectIds: string[];
-  postVisibility: string;
-  postAvailability: string;
-  deletedAt: string | null;
-  threadVisibility: string;
-  threadAvailability: string;
-  boardVisibility: string;
-};
+type SourceRow = NonNullable<Awaited<ReturnType<typeof sourceRead.run>>>;
 
 function sourceOf(row: SourceRow, targetSubjectId: string): ContentEditionSource {
   return {
@@ -44,9 +28,7 @@ function sourceOf(row: SourceRow, targetSubjectId: string): ContentEditionSource
 async function readSource(client: AccessClient, postId: string): Promise<SourceRow | null> {
   const route = routeOf(postId);
   if (route === null) return null;
-  const rows = await sourceRead.run(client, { route, post_id: postId });
-  if (rows.length > 1) throw new AccessUnavailableError('overloaded');
-  const row = rows[0];
+  const row = await sourceRead.run(client, { route, post_id: postId });
   if (
     !row ||
     row.route !== route ||
@@ -61,7 +43,7 @@ async function readSource(client: AccessClient, postId: string): Promise<SourceR
     row.threadAvailability !== 'available' ||
     row.boardVisibility !== 'published' ||
     !Array.isArray(row.subjectIds) ||
-    row.subjectIds.some((id) => routeOf(id) === null) ||
+    row.subjectIds.some((id) => id === null || routeOf(id) === null) ||
     !/^[a-f0-9]{64}$/.test(row.sha256) ||
     typeof row.licence !== 'string'
   )
@@ -70,7 +52,7 @@ async function readSource(client: AccessClient, postId: string): Promise<SourceR
 }
 
 function selectSubject(row: SourceRow, requested?: string): string | null {
-  const subject = requested ?? [...row.subjectIds].sort()[0];
+  const subject = requested ?? row.subjectIds.filter((id): id is string => id !== null).sort()[0];
   if (subject === undefined || routeOf(subject) === null || !row.subjectIds.includes(subject)) return null;
   return subject;
 }
@@ -111,36 +93,30 @@ export async function readContentPostSaleAuthority(
   context: ReadContext,
   targetSubjectId?: string,
 ): Promise<ContentPostSaleAuthority | null> {
-  if (routeOf(postId) === null || context.actor.kind !== 'account') return null;
+  const actor = context.actor;
+  if (routeOf(postId) === null || actor.kind !== 'account') return null;
   const deadline = Math.min(context.deadline, Date.now() + 1000);
   return withEditionReadTime(dependencies, { deadline }, async (time) => {
     const row = (await editionSnapshot(dependencies, postId, { deadline }, (client) => readSource(client, postId)))
       .value;
-    if (!row || row.creatorAccountId !== context.actor.accountId) return null;
+    if (!row || row.creatorAccountId !== actor.accountId) return null;
     const subjectId = selectSubject(row, targetSubjectId);
     if (!subjectId) return null;
     const source = sourceOf(row, subjectId);
     const accessContext = { pool: dependencies.pool, deadline, time };
-    const guard = await prepareEditionSource(
-      dependencies,
-      source,
-      { actor: context.actor, deadline },
-      time,
-      accessContext,
-      true,
-    );
+    const guard = await prepareEditionSource(dependencies, source, { actor, deadline }, time, accessContext, true);
     if (!guard || !(await guard.final())) return null;
-    if (!(await checkOnSnapshot(dependencies, row, context.actor, deadline, time))) return null;
+    if (!(await checkOnSnapshot(dependencies, row, actor, deadline, time))) return null;
     const finalRow = (await editionSnapshot(dependencies, postId, { deadline }, (client) => readSource(client, postId)))
       .value;
     if (
       !finalRow ||
-      finalRow.creatorAccountId !== context.actor.accountId ||
+      finalRow.creatorAccountId !== actor.accountId ||
       finalRow.revisionId !== row.revisionId ||
       finalRow.sha256 !== row.sha256 ||
       finalRow.licence !== row.licence ||
       !(await guard.final()) ||
-      !(await checkOnSnapshot(dependencies, finalRow, context.actor, deadline, time))
+      !(await checkOnSnapshot(dependencies, finalRow, actor, deadline, time))
     )
       return null;
     return noQueryAuthority(finalRow, subjectId);

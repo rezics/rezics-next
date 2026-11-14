@@ -320,7 +320,11 @@ test('selector changes, later read objects, stale attempts and repurposed pages 
     } finally {
       releaseOperationalTime(later);
     }
-    (selected.authenticatedBenefit!.version as { sha256: string }).sha256 = 'b'.repeat(64);
+    const selectedBenefit = selected.authenticatedBenefit;
+    if (!selectedBenefit || selectedBenefit.kind !== 'content-edition') {
+      throw new Error('Expected the exact-edition read benefit');
+    }
+    selectedBenefit.version.sha256 = 'b'.repeat(64);
     expect(await access.authorize(pool, who, action, selected, proof, time)).toBe(false);
     expect(
       await access.authorizePage!(

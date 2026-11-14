@@ -8,6 +8,7 @@ import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { checkout } from '../../src/commerce/checkout.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
+import type { CapturedContentPost } from '../../src/commerce/model.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { createKernel, type Kernel } from '../../src/http/kernel.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -190,12 +191,7 @@ test('one Post purchase covers eligible history and future revisions while fixed
     offer: {
       id: string;
       revision: number;
-      contentPost: {
-        benefit: { kind: string; action: string; resource: { route: number; id: string } };
-        saleTermsReference: string;
-        delivery: string;
-        quantity: number;
-      };
+      contentPost: CapturedContentPost;
       contentEdition: null;
     };
   }>(

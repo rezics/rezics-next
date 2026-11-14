@@ -245,6 +245,7 @@ export async function readBuyerOrdersCurrent(
   return rows.map((row) => ({
     ...row,
     contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    contentPost: decodeCapturedContentPost(row.contentPost),
     moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
     taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),

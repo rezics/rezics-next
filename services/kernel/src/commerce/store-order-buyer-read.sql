@@ -1,7 +1,8 @@
 WITH input AS (SELECT :receipt::boolean AS receipt)
 SELECT p.order_id AS id, p.buyer_account_id AS "buyerAccountId", p.offer_id AS "offerId",
        p.offer_revision AS "offerRevision", p.target_subject_id AS "targetSubjectId",
-       p.content_edition::text AS "contentEdition", p.creator_account_id AS "creatorAccountId", p.title,
+       p.content_edition::text AS "contentEdition", p.content_post::text AS "contentPost",
+       p.creator_account_id AS "creatorAccountId", p.title,
        p.currency, p.money_unit::text AS "moneyUnit", p.tax_behavior AS "taxBehavior",
        p.unit_amount_minor::text AS "unitAmountMinor", p.amount_tax_minor::text AS "amountTaxMinor",
        p.tax_code AS "taxCode", p.royalty_basis_points AS "royaltyBasisPoints", p.settlement,
