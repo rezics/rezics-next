@@ -64,7 +64,22 @@ export type ProductLineMeasurement = {
   filterVersion: string;
 };
 
+export type ReportStageObserver = (stage: string, event: 'start' | 'finish', wallMs: number, cpuMs: number) => void;
+
+export function hourlyReportStage<T>(observe: ReportStageObserver | undefined, stage: string, action: () => T): T {
+  const started = Date.now();
+  const cpu = process.cpuUsage();
+  observe?.(stage, 'start', 0, 0);
+  try {
+    return action();
+  } finally {
+    const used = process.cpuUsage(cpu);
+    observe?.(stage, 'finish', Date.now() - started, Math.round((used.user + used.system) / 1000));
+  }
+}
+
 export type ReportOptions = {
+  observeStage?: ReportStageObserver;
   policy?: ControlPolicy | undefined;
   bucket?: string;
   now?: Date | number;
@@ -944,8 +959,12 @@ function buildHourlyEfficiencyReport(
   if (flowAvailable) ensureFlow(db);
   const asOf = options.now ?? Date.now();
   const openWorkAvailable = hasTable(db, 'worker_tasks');
-  const metrics = openWorkAvailable ? lifecycleMetrics(db, asOf, options.policy) : null;
-  const bucketSummary = aggregateBucket(db, bucket, flowAvailable, openWorkAvailable, policy);
+  const metrics = openWorkAvailable
+    ? hourlyReportStage(options.observeStage, 'lifecycle', () => lifecycleMetrics(db, asOf, options.policy))
+    : null;
+  const bucketSummary = hourlyReportStage(options.observeStage, 'bucket', () =>
+    aggregateBucket(db, bucket, flowAvailable, openWorkAvailable, policy),
+  );
   const checkWaitLine = !flowAvailable
     ? 'Check-slot wait in bucket: unknown (flow history unavailable).'
     : bucketSummary.checkWaitCount
@@ -988,7 +1007,9 @@ function buildHourlyEfficiencyReport(
       ? `Legacy managed urgent worker starts / finishes in bucket (excluded from throughput): ${bucketSummary.urgentStarts} / ${bucketSummary.urgentFinishes}.`
       : 'Legacy managed urgent worker starts / finishes in bucket: unknown (task or flow history unavailable).',
     workSummary(db, openWorkAvailable, policy),
-    ...nativeUnitReportLines(db, bucket, isAggregateProductPath),
+    ...hourlyReportStage(options.observeStage, 'native', () =>
+      nativeUnitReportLines(db, bucket, isAggregateProductPath),
+    ),
     landingQueueAge(metrics, landingQueueAvailable),
     waitIdentities(metrics, waitsAvailable, policy),
     checkWaitLine,
