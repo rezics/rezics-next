@@ -114,12 +114,14 @@ function startIsolatedTmux(socket: string, session: string, cwd: string): void {
   const result = spawnSync('tmux', ['-u', '-S', socket, 'new-session', '-d', '-s', session, '-c', cwd, 'sleep', '300'], {
     encoding: 'utf8',
   });
-  if (result.status !== 0) throw new Error(result.stderr || `tmux exited ${result.status}`);
+  if (result.status !== 0)
+    throw new Error(result.error?.message || result.stderr || `tmux exited ${result.status}${result.signal ? ` (${result.signal})` : ''}`);
 }
 
 function tmux(socket: string, ...argv: string[]): string {
   const result = spawnSync('tmux', ['-u', '-S', socket, ...argv], { encoding: 'utf8' });
-  if (result.status !== 0) throw new Error(result.stderr || `tmux ${argv.join(' ')} exited ${result.status}`);
+  if (result.status !== 0)
+    throw new Error(result.error?.message || result.stderr || `tmux ${argv.join(' ')} exited ${result.status}`);
   return result.stdout.trim();
 }
 
@@ -285,7 +287,9 @@ test('a host that finds a recorded app-server of a dead host stops it before res
 
 test('a routine Goal host restart keeps the pool server endpoint and its tmux viewer', async () => {
   const f = fixture();
-  const tmuxSocket = join(f.path, 'tmux.sock');
+  const tmuxDirectory = join(process.cwd(), '.temp');
+  mkdirSync(tmuxDirectory, { recursive: true });
+  const tmuxSocket = join(tmuxDirectory, `goal-tmux-${randomUUID()}.sock`);
   const session = 'goal-host-lifecycle';
   const rpcPath = join(f.path, 'rpc.jsonl');
   const viewerPath = join(f.path, 'viewers.jsonl');
@@ -316,17 +320,19 @@ test('a routine Goal host restart keeps the pool server endpoint and its tmux vi
     );
     const originalThread = jsonLines(rpcPath).find((message) => message.method === 'thread/start');
     expect(originalThread).toBeDefined();
+    const originalState = storedManagerState(f.path);
+    const originalThreadId = originalState.threadId as string;
+    expect(originalThreadId).toBeTruthy();
     const originalWindow = managerWindow(tmuxSocket, session);
     expect(originalWindow).not.toBe('');
     const originalPanes = tmux(tmuxSocket, 'list-panes', '-t', originalWindow, '-F', '#{pane_id}');
     const original = appServerRegistryEntry(f.path);
     const originalViewerIdentity = processIdentity(originalViewer.pid);
     expect(originalViewerIdentity).toBeDefined();
-    const originalState = storedManagerState(f.path);
     expect(originalViewer.codexHome).toBe(join(f.path, 'codex'));
     expect(originalViewer.argv).toEqual([
       'resume',
-      originalThread.params.threadId,
+      originalThreadId,
       '--remote',
       original.attachment.endpoint,
     ]);
@@ -353,11 +359,11 @@ test('a routine Goal host restart keeps the pool server endpoint and its tmux vi
       rpcPath,
       (message) =>
         message.method === 'thread/resume' &&
-        message.params.threadId === originalThread.params.threadId &&
+        message.params.threadId === originalThreadId &&
         message.params.model === 'gpt-6.1-sol',
       'the original manager thread to resume',
     );
-    expect(resumed.params.threadId).toBe(originalThread.params.threadId);
+    expect(resumed.params.threadId).toBe(originalThreadId);
     const adopted = appServerRegistryEntry(f.path);
     expect(sameIdentityForTest(adopted.identity, original.identity)).toBe(true);
     expect(sameProcess(adopted.identity)).toBe(true);
@@ -395,6 +401,7 @@ test('a routine Goal host restart keeps the pool server endpoint and its tmux vi
     await cleanHosted(f.path, second);
     await cleanHosted(f.path, first);
     if (existsSync(tmuxSocket)) spawnSync('tmux', ['-u', '-S', tmuxSocket, 'kill-server'], { stdio: 'ignore' });
+    rmSync(tmuxSocket, { force: true });
     f.close();
   }
 }, 30_000);
@@ -466,6 +473,8 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
     expect((await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000')).code).toBe(0);
     const originalThread = jsonLines(rpcPath).find((message) => message.method === 'thread/start');
     expect(originalThread).toBeDefined();
+    const originalThreadId = storedManagerState(f.path).threadId as string;
+    expect(originalThreadId).toBeTruthy();
     const initial = appServerRegistryEntry(f.path);
 
     signal(initial.identity, 'SIGTERM');
@@ -481,7 +490,7 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
       rpcPath,
       (message) =>
         message.method === 'thread/resume' &&
-        message.params.threadId === originalThread.params.threadId &&
+        message.params.threadId === originalThreadId &&
         message.params.model === 'gpt-6.1-sol',
       'thread recovery after provider replacement',
     );
@@ -505,7 +514,7 @@ test('an explicit provider restart and one failed loopback reconnect each rejoin
       rpcPath,
       (message) =>
         message.method === 'thread/resume' &&
-        message.params.threadId === originalThread.params.threadId &&
+        message.params.threadId === originalThreadId &&
         message.params.model === 'gpt-6.1-sol',
       'bounded clean rejoin after a failed private endpoint',
     );
