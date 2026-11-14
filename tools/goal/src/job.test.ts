@@ -84,6 +84,7 @@ async function typingRetryFixture(
     legacySourceRepair?: boolean;
     staleProgress?: boolean;
     unknownCustody?: boolean;
+    unavailableCompilerReceipt?: boolean;
     misclassified?: boolean;
     stale?: boolean;
     foreign?: boolean;
@@ -97,7 +98,8 @@ async function typingRetryFixture(
     throw new Error('Migration setup fixture models an exited non-emitting compiler attempt');
   const brief = readFileSync(h.briefFile, 'utf8')
     .replace(/^goal: fixture$/m, 'goal: web')
-    .replace(/^kind: implementation$/m, 'kind: interface');
+    .replace(/^kind: implementation$/m, 'kind: interface')
+    .concat(`\n<!-- retry fixture ${randomUUID()} -->\n`);
   writeFileSync(h.briefFile, brief);
   const task = h.tasks.dispatch(h.briefFile);
   const ref = { taskId: task.id, attempt: 1 };
@@ -242,7 +244,8 @@ async function typingRetryFixture(
       bundleSha256: outputTreeDigest(bundle),
     });
   }
-  complete?.(options.legacySourceRepair ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1);
+  if (!options.unavailableCompilerReceipt)
+    complete?.(options.legacySourceRepair ? WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT : 1);
 
   const log = join(worktree, '.temp/goal/checks', `${checkId}.log`);
   mkdirSync(join(worktree, '.temp/goal/checks'), { recursive: true });
@@ -435,8 +438,8 @@ test('an accepted source-only amendment waits for terminal proof, then starts it
   try {
     const retained = await typingRetryFixture(h, {
       exited: true,
-      setupFailure: 'generic',
       unknownCustody: true,
+      unavailableCompilerReceipt: true,
     });
     writeFileSync(join(h.settings.stateDirectory, 'verification-mode'), 'source-only\n');
     const landings: LandingRequest[] = [];
