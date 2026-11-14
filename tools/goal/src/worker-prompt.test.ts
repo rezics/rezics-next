@@ -71,7 +71,7 @@ test('product prompts hand off fixture choices and route adopted contract change
     { kind: 'research', paths: ['src/a.ts'] },
   ];
   for (const item of cases) {
-    const prompt = renderWorkerPrompt({ task: worker(contract(item)), mainCheckout: MAP_MAIN }).prompt;
+    const prompt = renderWorkerPrompt({ task: mapTask(item.paths, { kind: item.kind }), mainCheckout: MAP_MAIN }).prompt;
     expect(prompt).toContain(
       'fixture-only choices get one summary line and a manager inbox handoff through `bun tools/goal/src/cli.ts inbox send web info "<decision>"`',
     );
