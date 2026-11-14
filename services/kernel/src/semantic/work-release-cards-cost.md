@@ -16,8 +16,10 @@ read per release, search the catalogue, or walk statement history.
 The fixed allowlist covers platform, language, release date/status, age, publisher, producer and developer. The
 producer opens one local read transaction and routes its keyed field reads to `H` release homes; transaction controls
 remain constant per producer invocation, with no transaction per field or release. Each scalar
-`(release, property)` slot uses the existing current slot resolver: compact access examines at most 33 fact-log rows,
-and expanded selection admits at most 32 candidates. Each relation `(release, property)` uses the existing keyed
+`(release, property)` slot uses the native effective-selection resolver: compact access examines at most 33 fact-log
+rows, and expanded selection admits at most 32 adopted candidates without reading display-only rejected candidates.
+Context inheritance filters the current Global selection by Context rejections; Context defaults, suppression and
+replacement retain their existing semantics. Each relation `(release, property)` uses the existing keyed
 outbound-link projection with a 33rd row as an overflow witness. More than 32 rows makes that field unavailable;
 values are never truncated. For every supplied relation candidate, `currentRelationFacts` is called in batches of at
 most 500 keys. Its existing limits remain 33 compact facts per slot, 32 expanded candidates per slot, provenance
