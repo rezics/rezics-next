@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, useEffect, useState } from 'react';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import type { CollectionReadMember } from '../src/library/collection-member-details';
@@ -13,7 +13,7 @@ import * as start from '../.storybook/react-start';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
-const { CollectionReadMembers } = await import('../src/library/collection-page');
+const { CollectionReadMembers, CollectionReadingTools } = await import('../src/library/collection-page');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const search = { type: 'work', 'f.genre': 'fiction', 'l.genre': 'Fiction' };
 const directoryReturn = '/en/library/collections?cursor=directory-next&layout=previews';
@@ -147,6 +147,71 @@ for (const layout of ['list', 'grid'] as const) {
         control.click();
       });
     try {
+      // Closing a native disclosure must keep the supplied command owner, draft and uncertain intent alive.
+      let retired = 0;
+      const sends: string[] = [];
+      function ActionOwner() {
+        const [intent] = useState(() => crypto.randomUUID());
+        useEffect(
+          () => () => {
+            retired++;
+          },
+          [],
+        );
+        return createElement(
+          'section',
+          null,
+          createElement('input', { 'aria-label': 'Requested status', defaultValue: '' }),
+          createElement('p', { role: 'alert' }, 'Unknown outcome for original population'),
+          createElement('button', { onClick: () => sends.push(intent) }, 'Retry original intent'),
+        );
+      }
+      const renderTools = (owner: string) =>
+        act(async () =>
+          root.render(
+            createElement(CollectionReadingTools, {
+              key: owner,
+              actions: createElement(ActionOwner),
+              details: createElement('p', null, 'Supplied view explanation'),
+            }),
+          ),
+        );
+      await renderTools('original');
+      const disclosures = [...host.querySelectorAll<HTMLDetailsElement>('details')];
+      expect(disclosures).toHaveLength(2);
+      expect(disclosures.every((item) => !item.open)).toBe(true);
+      expect(disclosures.map((item) => item.querySelector('summary')!.textContent)).toEqual([
+        m.collection_reading_bulk_actions(),
+        m.collection_reading_view_details(),
+      ]);
+      const actions = disclosures[0]!;
+      const draft = actions.querySelector<HTMLInputElement>('input')!;
+      const retry = actions.querySelector<HTMLButtonElement>('button')!;
+      const warning = actions.querySelector('[role="alert"]');
+      // Native activation/focus is covered by the browser story; this DOM case pins owner retention.
+      actions.open = true;
+      draft.value = 'completed';
+      retry.click();
+      actions.open = false;
+      disclosures[1]!.open = true;
+      await renderTools('original');
+      expect(actions.isConnected).toBe(true);
+      expect(actions.open).toBe(false);
+      expect(disclosures[1]!.open).toBe(true);
+      expect(retired).toBe(0);
+      actions.open = true;
+      expect(actions.querySelector('input')).toBe(draft);
+      expect(draft.value).toBe('completed');
+      expect(actions.querySelector('[role="alert"]')).toBe(warning);
+      retry.click();
+      expect(sends).toHaveLength(2);
+      expect(sends[1]).toBe(sends[0]);
+      await renderTools('replacement-owner');
+      expect(retired).toBe(1);
+      expect(retry.isConnected).toBe(false);
+      expect(host.querySelector<HTMLInputElement>('input')!.value).toBe('');
+      expect([...host.querySelectorAll<HTMLDetailsElement>('details')].every((item) => !item.open)).toBe(true);
+
       await render();
       expect(host.querySelector('[data-slot="collection-member-note"]')).toBeNull();
       expect(host.querySelector('[data-slot="cover-card-actions-row"]')).toBeNull();

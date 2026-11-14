@@ -6,6 +6,17 @@ keeps the existing visual, context, title, metadata, preview, state, action and 
 buttons. Titles and supplied context wrap at narrow widths. The control rail moves beside the text only when the
 row has at least 40 rem of width; its width stays bounded so actions cannot consume the title column.
 
+## Reading hierarchy
+
+Lead with the item's identity and primary destination. Keep supplied context and distinguishing facts beside that
+identity, with independent personal actions in the action rail. Long notes, full supplied facts and technical
+references belong to deliberate detail selection rather than every compact summary. Preserve essential warnings,
+affected identity, confirmation and uncertain outcomes beside the action that owns them.
+
+The [member reading contract](list-presentation.mdx#member-reading) owns occurrence-local detail placement,
+selection and focus/return. A destination row does not acquire selected detail automatically: `ContentItem`,
+`Cover` and `ListLayout` callers keep their existing navigation unless their owner composes that selection.
+
 ## Public API
 
 `@rezics/ui/content-item` exports `ContentItem` and `ContentItemProps`. Props include ordinary `li` attributes

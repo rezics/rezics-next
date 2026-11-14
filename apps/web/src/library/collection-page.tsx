@@ -67,7 +67,16 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session';
@@ -1713,6 +1722,39 @@ function CollectionPageLifetime({
     page.revision,
     readMembers,
   );
+  const filteredOccurrenceActions = (
+    <>
+      {ownerCurrent && isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview') ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="my-3"
+          onClick={previewFilteredOccurrenceRemoval}
+          disabled={
+            pending ||
+            draftFrozen ||
+            conflict ||
+            memberDraftChanged ||
+            transfer !== null ||
+            !!bulkOccurrenceRemove ||
+            !!filteredRemoval ||
+            !!page.filterStatus ||
+            !!page.filterIgnored?.length ||
+            (!!page.filterActive && !page.filter)
+          }
+        >
+          {m.library_filtered_occurrence_remove_action()}
+        </Button>
+      ) : null}
+      {filteredRemoval && isCurrent() ? (
+        <FilteredOccurrenceRemovalReview
+          journey={filteredRemoval}
+          canPreview={isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview')}
+          canConfirm={isCurrent('collection_member.batch_remove') && admission.current('library_operation.confirm')}
+        />
+      ) : null}
+    </>
+  );
   return (
     <div className="w-full min-w-0 text-foreground">
       {draftNavigation}
@@ -1762,13 +1804,6 @@ function CollectionPageLifetime({
             ]}
           />
           {!editing ? <CollectionDescriptionReader description={page.description} /> : null}
-          {!editing ? (
-            <CollectionPresentationSummary
-              layout={layout}
-              kind={page.presentationKindSource === 'owner' ? page.presentationKind : null}
-              types={page.presentationTypes}
-            />
-          ) : null}
           <div data-slot="collection-actions" className="flex min-w-0 flex-wrap items-center gap-2">
             <ResourceAccessLink resourceId={page.id} />
             {addAdmitted ? (
@@ -1830,37 +1865,7 @@ function CollectionPageLifetime({
         {page.viewerActions?.state === 'unavailable' ? (
           <p role="status">{m.library_collection_actions_unavailable()}</p>
         ) : null}
-        {ownerCurrent &&
-        isCurrent('collection_member.batch_remove') &&
-        admission.current('library_operation.preview') ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="my-3"
-            onClick={previewFilteredOccurrenceRemoval}
-            disabled={
-              pending ||
-              draftFrozen ||
-              conflict ||
-              memberDraftChanged ||
-              transfer !== null ||
-              !!bulkOccurrenceRemove ||
-              !!filteredRemoval ||
-              !!page.filterStatus ||
-              !!page.filterIgnored?.length ||
-              (!!page.filterActive && !page.filter)
-            }
-          >
-            {m.library_filtered_occurrence_remove_action()}
-          </Button>
-        ) : null}
-        {filteredRemoval && isCurrent() ? (
-          <FilteredOccurrenceRemovalReview
-            journey={filteredRemoval}
-            canPreview={isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview')}
-            canConfirm={isCurrent('collection_member.batch_remove') && admission.current('library_operation.confirm')}
-          />
-        ) : null}
+        {editing ? filteredOccurrenceActions : null}
         <AlertDialog
           open={deletion !== null && isCurrent()}
           onOpenChange={(open, details) => {
@@ -2033,32 +2038,6 @@ function CollectionPageLifetime({
           unavailable={page.memberState === 'unavailable'}
           emptyLabel={m.library_collection_empty()}
         />
-        {!editing ? (
-          <>
-            <BulkFilteredAdd
-              source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
-              address={JSON.stringify([page.id, cursor, search, queryKey])}
-              disabled={
-                page.filterStatus !== undefined ||
-                (page.filterIgnored?.length ?? 0) > 0 ||
-                (page.memberState ?? 'ready') !== 'ready'
-              }
-              isCurrent={() => admission.retained() && (sourceCurrent?.() ?? true)}
-            />
-            <FilteredLibraryRemovalControl
-              source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
-              boundary={JSON.stringify([page.visibility, cursor, search, queryKey])}
-              eligible={(page.memberState ?? 'ready') === 'ready' && !page.filterStatus && !page.filterIgnored?.length}
-              isCurrent={() => isCurrent()}
-            />
-            <CollectionFilteredStatus
-              page={page}
-              address={JSON.stringify([page.id, cursor, search, queryKey])}
-              ready={(page.memberState ?? 'ready') === 'ready'}
-              isCurrent={() => admission.retained() && (sourceCurrent?.() ?? true)}
-            />
-          </>
-        ) : null}
         {editing && ownerCurrent ? (
           <section className="min-w-0 space-y-2 border-b border-border pb-4" data-collection-authoring-heading>
             <h2 className="text-xl font-semibold tracking-tight">{m.collection_workbench_heading()}</h2>
@@ -2627,6 +2606,46 @@ function CollectionPageLifetime({
           </nav>
         ) : null}
         {!editing ? (
+          <CollectionReadingTools
+            actions={
+              <>
+                {filteredOccurrenceActions}
+                <BulkFilteredAdd
+                  source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
+                  address={JSON.stringify([page.id, cursor, search, queryKey])}
+                  disabled={
+                    page.filterStatus !== undefined ||
+                    (page.filterIgnored?.length ?? 0) > 0 ||
+                    (page.memberState ?? 'ready') !== 'ready'
+                  }
+                  isCurrent={() => admission.retained() && (sourceCurrent?.() ?? true)}
+                />
+                <FilteredLibraryRemovalControl
+                  source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
+                  boundary={JSON.stringify([page.visibility, cursor, search, queryKey])}
+                  eligible={
+                    (page.memberState ?? 'ready') === 'ready' && !page.filterStatus && !page.filterIgnored?.length
+                  }
+                  isCurrent={() => isCurrent()}
+                />
+                <CollectionFilteredStatus
+                  page={page}
+                  address={JSON.stringify([page.id, cursor, search, queryKey])}
+                  ready={(page.memberState ?? 'ready') === 'ready'}
+                  isCurrent={() => admission.retained() && (sourceCurrent?.() ?? true)}
+                />
+              </>
+            }
+            details={
+              <CollectionPresentationSummary
+                layout={layout}
+                kind={page.presentationKindSource === 'owner' ? page.presentationKind : null}
+                types={page.presentationTypes}
+              />
+            }
+          />
+        ) : null}
+        {!editing ? (
           <CollectionExport
             page={page}
             context={{ origin: publicOrigin(), locale: getLocale() }}
@@ -2634,6 +2653,26 @@ function CollectionPageLifetime({
           />
         ) : null}
       </article>
+    </div>
+  );
+}
+
+/** Native disclosures keep command owners mounted, including drafts and uncertain original intents. */
+export function CollectionReadingTools({ actions, details }: { actions: ReactNode; details: ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-2 border-t border-border pt-3" data-collection-reading-tools>
+      <details className="min-w-0" data-collection-reading-disclosure="actions">
+        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.collection_reading_bulk_actions()}
+        </summary>
+        <div className="min-w-0 space-y-4 pb-3 pt-2">{actions}</div>
+      </details>
+      <details className="min-w-0" data-collection-reading-disclosure="details">
+        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.collection_reading_view_details()}
+        </summary>
+        <div className="min-w-0 pb-3 pt-2">{details}</div>
+      </details>
     </div>
   );
 }

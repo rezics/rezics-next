@@ -338,7 +338,7 @@ Decision: a grid `MemberReadingItem` places its summary, position, action eviden
 same card content flow. The entire item contributes to its grid row, so continuation follows every item and its
 controls stay directly hittable for covered, placeholder and unavailable subjects.
 
-The [member reading contract](src/components/list-presentation.md) owns occurrence-local Inspect detail,
+The [member reading contract](src/components/list-presentation.mdx#member-reading) owns occurrence-local Inspect detail,
 opening and closing focus, replacement retirement and supplied evidence. Render the selected detail in that
 `MemberReadingItem`'s outlet, after the compact row or inside the grid card's measured content flow.
 

@@ -34,6 +34,36 @@ Ready import results can leave for browsing without cancellation commands; uncer
 departure protection. Any session, credential, browser observation, source, locale, admission or visit replacement
 retires pending reads permanently, including A/B/A and equal successful observation replacements.
 
+## Collection reading entrance
+
+Decision: read mode places collapsed native Bulk actions and About this Collection view disclosures after members
+and their continuation; closing either keeps its children mounted, and existing command admission stays decisive.
+
+Identity, curator, description, member count, filters, layout choice and members lead the page. Bulk add, filtered
+Library removal, filtered status and the owner's filtered occurrence removal keep their existing scope, review,
+confirmation, affected identity, warnings and truthful outcomes together inside Bulk actions. Layout, Type and
+native ordering explanations use About this Collection view. Member-read failures and viewer-action availability
+remain at their reading locations. The editing organizer keeps its separate canvas and owner controls.
+
+Disclosures add no reads, scans, hydration or command paths. Signed-out readers can browse without entering the
+bulk forms; opening a form never grants authority or replaces native unavailable text. Closing and reopening retains
+the original draft, frozen review and uncertain intent. Native summaries support pointer and keyboard activation
+without moving focus into the panel; closing keeps the summary as the return target. Page/viewer/locale replacement
+continues to retire command and detail state through the existing owners, including late results and A/B/A.
+
+All public, owned and dynamic list/grid readers composed through `CollectionPage` inherit this entrance, including
+the original Books showcase. `MemberReadingDetail` has no other production caller. `Cover`/`ListLayout` and ordinary
+`ContentItem` destination rows are not selected-detail migrations. Following's selected visit remains with its own
+owner; this contract makes no sitewide migration claim. The shared [member reading rules](../../../../packages/ui/src/components/list-presentation.mdx#member-reading)
+own occurrence placement and focus/return; [item rules](../../../../packages/ui/src/components/content-item.md#reading-hierarchy)
+own identity, context and action hierarchy.
+
+Focused acceptance source covers the collapsed default entrance, signed-out unavailable actions, disclosure
+open/close with retained draft and unknown intent, and the existing exact-occurrence regression. The Collection
+comparison stories exercise deliberate details with keyboard and pointer while preserving the member inspection
+journey. Execution, original Books URL, phone/desktop/theme/locale/keyboard and original native acceptance belong
+to the separate verifier; source completion does not establish those results.
+
 ## Collection occurrence inspection
 
 Decision: inspection supplies one occurrence-local detail outlet, after the selected compact list row or inside
@@ -42,7 +72,7 @@ its grid card's normal flow, and preserves the opener's focus and viewport when 
 `CollectionReadMembers` keeps selection by exact native occurrence key, never by Subject ID. Duplicate Subjects
 retain their own notes, facts and exact `via` return anchors. Filtered projections without native occurrence IDs
 keep display-only keys and a page return without a fabricated occurrence anchor. Shared layout and focus behavior
-belongs to the [member reading contract](../../../../packages/ui/src/components/list-presentation.md).
+belongs to the [member reading contract](../../../../packages/ui/src/components/list-presentation.mdx#member-reading).
 
 Page/address, supplied members, reader/source, locale, layout and page-readiness replacement retire the selected
 projection and any focus still owned by its obsolete opener. Close and Escape are deliberate returns to the same

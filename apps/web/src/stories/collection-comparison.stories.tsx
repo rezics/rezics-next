@@ -94,7 +94,19 @@ function ComparisonVisit({
   );
 }
 
-function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | 'grid'; unavailable?: boolean }) {
+function Example({
+  layout = 'list',
+  unavailable = false,
+  ready = false,
+  visitor = 'Signed Out',
+  commandsUnavailable = false,
+}: {
+  layout?: 'list' | 'grid';
+  unavailable?: boolean;
+  ready?: boolean;
+  visitor?: 'Signed In' | 'Signed Out';
+  commandsUnavailable?: boolean;
+}) {
   const [layoutChoice, setLayoutChoice] = useState<{ initial: 'list' | 'grid'; value: 'list' | 'grid' }>();
   const view = layoutChoice?.initial === layout ? layoutChoice.value : layout;
   const [replaced, replace] = useState(false);
@@ -115,7 +127,8 @@ function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | '
     following: null,
     next: 'later-page',
     publicExport: false,
-    memberState: recovered ? 'ready' : 'unavailable',
+    memberState: ready || recovered ? 'ready' : 'unavailable',
+    ...(commandsUnavailable ? { viewerActions: { state: 'unavailable' as const } } : {}),
     cursor: 'same-page',
     updatedAt: '2026-10-01T00:00:00Z',
     members: replaced
@@ -137,7 +150,7 @@ function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | '
     comparisonDefinitions: unavailable ? {} : definitions.release.properties,
   };
   return (
-    <PatternStory visitor="Signed Out" path={reference?.href ?? returnedTo ?? comparisonAddress(view)}>
+    <PatternStory visitor={visitor} path={reference?.href ?? returnedTo ?? comparisonAddress(view)}>
       <ComparisonVisit onReference={visit}>
         <div className="flex flex-wrap gap-4">
           <button type="button" className="min-h-11 underline" onClick={() => recover(true)}>
@@ -409,6 +422,66 @@ async function recoverExample(canvasElement: HTMLElement, missingDefinitions = f
   const departure = await departReference(canvasElement, 0);
   await returnToComparison(canvasElement, departure.via);
 }
+
+async function readingEntrance(canvasElement: HTMLElement, commandsUnavailable = false) {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('heading', { name: 'Compare this Collection' });
+  await mountedPresentation(canvasElement, 'list');
+  const actions = canvasElement.querySelector<HTMLDetailsElement>('[data-collection-reading-disclosure="actions"]')!;
+  const details = canvasElement.querySelector<HTMLDetailsElement>('[data-collection-reading-disclosure="details"]')!;
+  const members = canvasElement.querySelector('[data-collection-members]')!;
+  const following = canvasElement.ownerDocument.defaultView!.Node.DOCUMENT_POSITION_FOLLOWING;
+  await expect(actions.open).toBe(false);
+  await expect(details.open).toBe(false);
+  await expect(members.compareDocumentPosition(actions) & following).not.toBe(0);
+  await expect(canvas.getByRole('combobox', { name: m.library_layout() })).toBeVisible();
+  const scope = within(actions).getByText(m.library_filtered_status_scope());
+  await expect(scope).not.toBeVisible();
+  const explanation = within(details).getByText(m.collection_presentation_ordered_help());
+  await expect(explanation).not.toBeVisible();
+  if (commandsUnavailable) {
+    const warning = canvas.getByText(m.library_collection_actions_unavailable());
+    await expect(warning).toBeVisible();
+    await expect(warning.closest('details')).toBeNull();
+  }
+  const summary = within(actions).getByText(m.collection_reading_bulk_actions());
+  summary.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect(summary).toHaveFocus();
+  await expect(actions.open).toBe(true);
+  await expect(scope).toBeVisible();
+  await expect(within(actions).getByText(m.library_filtered_status_help())).toBeVisible();
+  const draft = within(actions).getByRole('textbox', { name: m.library_filtered_status_state() });
+  await userEvent.type(draft, 'completed');
+  if (!commandsUnavailable)
+    await expect(within(actions).getByRole('button', { name: m.library_filtered_status_prepare() })).toBeDisabled();
+  await userEvent.click(summary);
+  await expect(actions.open).toBe(false);
+  await expect(summary).toHaveFocus();
+  await userEvent.click(within(details).getByText(m.collection_reading_view_details()));
+  await expect(explanation).toBeVisible();
+  await expect(actions.open).toBe(false);
+  await userEvent.click(summary);
+  await expect(within(actions).getByRole('textbox', { name: m.library_filtered_status_state() })).toBe(draft);
+  await expect(draft).toHaveValue('completed');
+  await userEvent.click(summary);
+  await userEvent.click(within(details).getByText(m.collection_reading_view_details()));
+  await expect(details.open).toBe(false);
+  await expect(members).toBeVisible();
+  boundedWidth(canvasElement);
+}
+
+export const ReadingEntrance: Story = {
+  name: 'Read before opening bulk actions',
+  args: { ready: true },
+  play: async ({ canvasElement }) => readingEntrance(canvasElement),
+};
+
+export const UnavailableActions: Story = {
+  name: 'Unavailable actions preserve reading',
+  args: { ready: true, visitor: 'Signed In', commandsUnavailable: true },
+  play: async ({ canvasElement }) => readingEntrance(canvasElement, true),
+};
 
 export const RecoveredComparison: Story = {
   name: 'Compare a recovered collection',
