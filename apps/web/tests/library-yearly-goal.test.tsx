@@ -97,9 +97,11 @@ async function mountPage(api: YearlyGoalPageApi, year = 2026, viewerSubject = 'o
   });
   return {
     container,
-    async render(nextYear: number, nextViewer: string) {
+    async render(nextYear: number, nextViewer: string, nextApi = api) {
       await act(async () => {
-        root.render(<YearlyGoalPage year={nextYear} sessionState="signed-in" viewerSubject={nextViewer} api={api} />);
+        root.render(
+          <YearlyGoalPage year={nextYear} sessionState="signed-in" viewerSubject={nextViewer} api={nextApi} />,
+        );
       });
       await act(async () => {
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -269,6 +271,11 @@ test('an unset goal remains editable when native summary progress is unavailable
     expect(page.container.querySelector('input#yearly-goal-target-value')).toBeNull();
     await click(page.container, m.library_yearly_goal_edit());
     expect(page.container.querySelector('input#yearly-goal-target-value')).not.toBeNull();
+    await setTargetInput(page.container, '12');
+    await submitTarget(page.container);
+    expect(page.container.textContent).toContain('Target revision 1');
+    expect(page.container.textContent).toContain(m.library_yearly_goal_saved());
+    expect(page.container.textContent).toContain(m.library_diary_year_unavailable());
   } finally {
     await page.dispose();
   }
@@ -285,7 +292,7 @@ test('uncertain delivery retries the exact native command and resolves its recei
       if (first) {
         first = false;
         expect(await native.api.write(command)).toEqual({ state: 'applied' });
-        return { state: 'uncertain' };
+        throw new TypeError('Response lost after commit');
       }
       return native.api.write(command);
     },
@@ -378,6 +385,154 @@ test('year and viewer replacement retire late callbacks and the prior private ta
     expect(page.container.textContent).toContain('Target revision 2');
     expect(page.container.textContent).not.toContain('Target revision 5');
     expect(page.container.textContent).not.toContain('99');
+  } finally {
+    await page.dispose();
+  }
+});
+
+test('same-stack double submit and retry each dispatch once without minting another intent', async () => {
+  const native = nativeApi();
+  const first = deferred<YearlyGoalWriteResult>();
+  const second = deferred<YearlyGoalWriteResult>();
+  const commands: YearlyGoalCommand[] = [];
+  const api: YearlyGoalPageApi = {
+    read: native.api.read,
+    write: (command) => {
+      commands.push(command);
+      return commands.length === 1 ? first.promise : second.promise;
+    },
+  };
+  const page = await mountPage(api);
+  try {
+    await click(page.container, m.library_yearly_goal_edit());
+    await setTargetInput(page.container, '8');
+    const form = page.container.querySelector<HTMLFormElement>('#yearly-goal-target-value')!.form!;
+    await act(async () => {
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(commands).toHaveLength(1);
+    expect(Object.isFrozen(commands[0])).toBe(true);
+    await act(async () => {
+      first.resolve({ state: 'uncertain' });
+      await first.promise;
+    });
+    const retry = [...page.container.querySelectorAll('button')].find(
+      (button) => button.textContent === m.library_yearly_goal_retry_exact(),
+    )!;
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(commands[0]);
+    expect(native.order).toEqual(['read:2026']);
+    await act(async () => {
+      second.resolve({ state: 'applied' });
+      await second.promise;
+    });
+    expect(native.order).toEqual(['read:2026', 'read:2026']);
+  } finally {
+    await page.dispose();
+  }
+});
+
+test('acknowledgement survives failed readback; explicit refresh never resends the accepted command', async () => {
+  const native = nativeApi();
+  let reads = 0;
+  const api: YearlyGoalPageApi = {
+    read: (year) => (++reads === 2 ? Promise.reject(new TypeError('Readback failed')) : native.api.read(year)),
+    write: native.api.write,
+  };
+  const page = await mountPage(api);
+  try {
+    await click(page.container, m.library_yearly_goal_edit());
+    await setTargetInput(page.container, '8');
+    await submitTarget(page.container);
+    expect(page.container.textContent).toContain(m.library_yearly_goal_saved());
+    expect(page.container.textContent).not.toContain(m.library_yearly_goal_uncertain());
+    expect(native.calls).toHaveLength(1);
+    await click(page.container, m.library_selection_retry());
+    expect(page.container.textContent).toContain('Target revision 1');
+    expect(page.container.textContent).toContain(m.library_yearly_goal_saved());
+    expect(native.calls).toHaveLength(1);
+  } finally {
+    await page.dispose();
+  }
+});
+
+test('source, locale and same-account reader replacement retire drafts and late write acknowledgements', async () => {
+  const writing = deferred<YearlyGoalWriteResult>();
+  const oldApi: YearlyGoalPageApi = {
+    read: async (year) => ({ state: 'ready', value: nativeYearlyGoalSnapshot(year) }),
+    write: () => writing.promise,
+  };
+  const next = nativeApi({ state: 'set', target: 7, revision: '2' });
+  const page = await mountPage(oldApi);
+  try {
+    await click(page.container, m.library_yearly_goal_edit());
+    await setTargetInput(page.container, '99');
+    await submitTarget(page.container);
+    await page.render(2026, 'owner', next.api);
+    expect(page.container.querySelector('#yearly-goal-target-value')).toBeNull();
+    expect(page.container.textContent).toContain('Target revision 2');
+    await act(async () => {
+      writing.resolve({ state: 'applied' });
+      await writing.promise;
+    });
+    expect(page.container.textContent).not.toContain(m.library_yearly_goal_saved());
+    expect(page.container.textContent).not.toContain('99');
+    await click(page.container, m.library_yearly_goal_edit());
+    await setTargetInput(page.container, '98');
+    overwriteGetLocale(() => 'fr');
+    await page.render(2026, 'owner', next.api);
+    expect(page.container.querySelector('#yearly-goal-target-value')).toBeNull();
+    expect(page.container.textContent).not.toContain('98');
+    expect(page.container.querySelector('a[href="/fr/library/history?year=2026"]')).not.toBeNull();
+  } finally {
+    await page.dispose();
+  }
+});
+
+test('native actions and target limits keep denied controls out while progress zero remains a count', async () => {
+  const native = nativeApi();
+  const api: YearlyGoalPageApi = {
+    read: async (year) => ({
+      state: 'ready',
+      value: nativeYearlyGoalSnapshot(year, { state: 'none', revision: null }, 'available', '0'),
+    }),
+    write: native.api.write,
+  };
+  const page = await mountPage(api);
+  try {
+    expect(page.container.querySelectorAll('a[href*="month="]')).toHaveLength(13);
+    expect(page.container.querySelectorAll('dd')[0]?.textContent).toBe('0');
+    expect(
+      [...page.container.querySelectorAll('button')].some(
+        (button) => button.textContent === m.library_yearly_goal_clear(),
+      ),
+    ).toBe(false);
+    await click(page.container, m.library_yearly_goal_edit());
+    for (const input of ['0', '1001', '1.5', '-1', '']) {
+      await setTargetInput(page.container, input);
+      await submitTarget(page.container);
+      expect(page.container.textContent).toContain(m.library_yearly_goal_invalid_target());
+    }
+    expect(native.calls).toHaveLength(0);
+    const denied = nativeYearlyGoalSnapshot(2026, { state: 'unavailable', reason: 'not_installed' });
+    denied.viewer.actions.editTarget = { allowed: false, reason: 'target_unavailable' };
+    denied.viewer.actions.clearTarget = { allowed: false, reason: 'target_unavailable' };
+    await page.render(2026, 'owner', {
+      read: async () => ({ state: 'ready', value: denied }),
+      write: native.api.write,
+    });
+    expect(page.container.textContent).toContain(m.library_yearly_goal_target_unavailable());
+    expect(page.container.querySelector('#yearly-goal-target-value')).toBeNull();
+    expect(
+      [...page.container.querySelectorAll('button')].some(
+        (button) => button.textContent === m.library_yearly_goal_edit(),
+      ),
+    ).toBe(false);
   } finally {
     await page.dispose();
   }

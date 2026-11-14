@@ -1318,6 +1318,10 @@
         "apps/web/src/library/subject-slot-return-context.ts",
         "apps/web/src/library/title.tsx",
         "apps/web/src/library/archive-progress-recovery/page.tsx",
+        "apps/web/src/library/yearly-goal-address.ts",
+        "apps/web/src/library/yearly-goal-page.tsx",
+        "apps/web/src/library/yearly-goal-native.ts",
+        "apps/web/src/library/yearly-goal-current.tsx",
         "apps/web/src/library/copies-query.ts"
       ],
       "allowedDependencies": [

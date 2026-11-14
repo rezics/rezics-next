@@ -48,6 +48,7 @@ export function nativeYearlyGoalSnapshot(
   };
   return {
     year,
+    metric: 'completed_consumption_occurrences',
     viewer: {
       state: 'owner',
       actions: {
