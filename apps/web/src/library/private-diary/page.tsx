@@ -430,29 +430,46 @@ export function PrivateDiaryPage({
             <h2 id="library-diary-occurrences" ref={occurrencesHeading} tabIndex={-1} className="text-lg font-semibold">
               {m.library_diary_occurrences()}
             </h2>
-
           </div>
           {visiblePage.occurrences.length === 0 ? (
             <div className="space-y-3 rounded-xl border border-dashed p-6 sm:p-8">
               <p className="font-medium">{m.library_diary_page_empty()}</p>
-              {!address.cursor && !visiblePage.next && address.year === undefined ? <>
-                <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.library_history_first_use()}</p>
-                <Link to="/library" className="inline-flex min-h-11 items-center rounded-md border px-4 text-sm text-primary">{m.library_history_open_library()}</Link>
-              </> : null}
+              {!address.cursor && !visiblePage.next && address.year === undefined ? (
+                <>
+                  <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+                    {m.library_history_first_use()}
+                  </p>
+                  <Link
+                    to="/library"
+                    className="inline-flex min-h-11 items-center rounded-md border px-4 text-sm text-primary"
+                  >
+                    {m.library_history_open_library()}
+                  </Link>
+                </>
+              ) : null}
             </div>
           ) : (
             <div className="space-y-7">
               {chronologicalGroups(visiblePage.occurrences, (row) => row.recordedStartedAt).map((group) => (
-                <section key={`${group.date}:${group.offset}`} aria-label={recordedDayLabel(group.date, getLocale())} className="space-y-3">
+                <section
+                  key={`${group.date}:${group.offset}`}
+                  aria-label={recordedDayLabel(group.date, getLocale())}
+                  className="space-y-3"
+                >
                   <p className="flex items-center gap-3 text-sm font-medium text-muted-foreground">
                     <time dateTime={group.date}>{recordedDayLabel(group.date, getLocale())}</time>
                     <span aria-hidden="true" className="h-px flex-1 bg-border" />
                   </p>
                   <ol className="space-y-3">
-                    {group.rows.map((occurrence, index) => <ReadingOccurrence
-                      key={`${reviewPageKey}:${group.offset + index}:${occurrence.id}`}
-                      occurrence={occurrence} page={visiblePage} address={address} returnTo={currentReturn}
-                    />)}
+                    {group.rows.map((occurrence, index) => (
+                      <ReadingOccurrence
+                        key={`${reviewPageKey}:${group.offset + index}:${occurrence.id}`}
+                        occurrence={occurrence}
+                        page={visiblePage}
+                        address={address}
+                        returnTo={currentReturn}
+                      />
+                    ))}
                   </ol>
                 </section>
               ))}
@@ -514,9 +531,14 @@ export function PrivateDiaryPage({
               </>
             ) : null}
           </div>
-          {visiblePage.occurrences.length ? <aside aria-label={m.library_history_window_details()} className="text-xs text-muted-foreground">
-            {m.library_diary_page_bound({ count: Math.min(PRIVATE_DIARY_PAGE_LIMIT, visiblePage.occurrences.length), bytes: PRIVATE_DIARY_PAGE_BYTES })}
-          </aside> : null}
+          {visiblePage.occurrences.length ? (
+            <aside aria-label={m.library_history_window_details()} className="text-xs text-muted-foreground">
+              {m.library_diary_page_bound({
+                count: Math.min(PRIVATE_DIARY_PAGE_LIMIT, visiblePage.occurrences.length),
+                bytes: PRIVATE_DIARY_PAGE_BYTES,
+              })}
+            </aside>
+          ) : null}
         </section>
       ) : null}
     </main>

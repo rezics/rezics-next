@@ -21,8 +21,13 @@ test('date grouping preserves native order, duplicate occurrences and adjacent b
 
 test('recorded date headings use an explicit UTC day in all supported locales', () => {
   for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
-    expect(recordedDayLabel('2026-11-13', locale)).toBe(new Intl.DateTimeFormat(locale, {
-      year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC',
-    }).format(new Date('2026-11-13T00:00:00Z')));
+    expect(recordedDayLabel('2026-11-13', locale)).toBe(
+      new Intl.DateTimeFormat(locale, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'UTC',
+      }).format(new Date('2026-11-13T00:00:00Z')),
+    );
   }
 });

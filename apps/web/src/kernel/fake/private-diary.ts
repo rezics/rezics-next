@@ -52,7 +52,10 @@ const baseSession: NativeProgressSession = {
   subject: { id: subjectId, type: 'schema:Book', label: '夜の図書館 — Notes from a quiet city' },
   versionSubject: { id: versionId, type: 'schema:Book', label: '文庫版 · 2024' },
   presentation: {
-    meaning: 'known', unitLabel: 'chapters', unitLabelLanguage: 'en', structure: 'unverified',
+    meaning: 'known',
+    unitLabel: 'chapters',
+    unitLabelLanguage: 'en',
+    structure: 'unverified',
     recording: { state: 'supported', inputRules: { min: '0', step: '1', total: 'optional' } },
   },
 };
@@ -63,7 +66,8 @@ function initialJournal(id: string, scenario: PrivateDiaryScenario): ProgressSes
     revision: 3,
     startDate: { year: 2026, month: 11 },
     finishDate: { year: 2026, month: 11, day: 14 },
-    reflection: scenario === 'first-use' ? null : scenario === 'long-note' ? diaryLongReflection : diaryOriginalReflection,
+    reflection:
+      scenario === 'first-use' ? null : scenario === 'long-note' ? diaryLongReflection : diaryOriginalReflection,
     assessment: { meaningRevision: 1, units: 17 },
   };
 }
@@ -71,29 +75,58 @@ function initialJournal(id: string, scenario: PrivateDiaryScenario): ProgressSes
 function occurrences(): DiaryOccurrence[] {
   return [
     {
-      id: diarySessionId, subjectId, versionSubjectId: versionId, state: 'completed', revision: 7,
-      recordedStartedAt: baseSession.startedAt, recordedCompletedAt: baseSession.completedAt,
+      id: diarySessionId,
+      subjectId,
+      versionSubjectId: versionId,
+      state: 'completed',
+      revision: 7,
+      recordedStartedAt: baseSession.startedAt,
+      recordedCompletedAt: baseSession.completedAt,
       subject: { id: subjectId, label: '夜の図書館 — Notes from a quiet city', language: 'ja' },
       versionSubject: { id: versionId, label: '文庫版 · 2024', language: 'ja' },
-      reportedDates: { availability: 'available', revision: 3, startDate: { year: 2026, month: 11 }, finishDate: { year: 2026, month: 11, day: 14 } },
+      reportedDates: {
+        availability: 'available',
+        revision: 3,
+        startDate: { year: 2026, month: 11 },
+        finishDate: { year: 2026, month: 11, day: 14 },
+      },
       assessment: { meaningRevision: 1, units: 17 },
     },
     {
-      id: secondId, subjectId, versionSubjectId: null, state: 'active', revision: 2,
-      recordedStartedAt: '2026-11-13T08:20:00.000Z', recordedCompletedAt: null,
-      subject: { id: subjectId, label: 'The listening room — a second visit', language: 'en' }, versionSubject: null,
+      id: secondId,
+      subjectId,
+      versionSubjectId: null,
+      state: 'active',
+      revision: 2,
+      recordedStartedAt: '2026-11-13T08:20:00.000Z',
+      recordedCompletedAt: null,
+      subject: { id: subjectId, label: 'The listening room — a second visit', language: 'en' },
+      versionSubject: null,
       reportedDates: { availability: 'available', revision: 1, startDate: { year: 2026 }, finishDate: null },
       assessment: { meaningRevision: 1, units: null },
     },
     {
-      id: thirdId, subjectId, versionSubjectId: null, state: 'abandoned', revision: 5,
-      recordedStartedAt: '2026-11-02T09:00:00.000Z', recordedCompletedAt: null,
-      subject: null, versionSubject: null, reportedDates: { availability: 'unavailable' },
+      id: thirdId,
+      subjectId,
+      versionSubjectId: null,
+      state: 'abandoned',
+      revision: 5,
+      recordedStartedAt: '2026-11-02T09:00:00.000Z',
+      recordedCompletedAt: null,
+      subject: null,
+      versionSubject: null,
+      reportedDates: { availability: 'unavailable' },
     },
     {
-      id: olderId, subjectId, versionSubjectId: null, state: 'completed', revision: 4,
-      recordedStartedAt: '2026-10-21T20:10:00.000Z', recordedCompletedAt: '2026-10-30T21:00:00.000Z',
-      subject: { id: subjectId, label: '再読：秋の余白', language: 'ja' }, versionSubject: null,
+      id: olderId,
+      subjectId,
+      versionSubjectId: null,
+      state: 'completed',
+      revision: 4,
+      recordedStartedAt: '2026-10-21T20:10:00.000Z',
+      recordedCompletedAt: '2026-10-30T21:00:00.000Z',
+      subject: { id: subjectId, label: '再読：秋の余白', language: 'ja' },
+      versionSubject: null,
       reportedDates: { availability: 'available', revision: 2, startDate: null, finishDate: { year: 2026 } },
       assessment: { meaningRevision: 1, units: 0 },
     },
@@ -111,9 +144,18 @@ type State = {
 };
 let state: State | undefined;
 export function setPrivateDiaryScenario(scenario?: PrivateDiaryScenario) {
-  state = scenario === undefined ? undefined : {
-    scenario, journals: new Map(), reads: 0, patches: [], replays: new Map(), failed: false, conflicted: false,
-  };
+  state =
+    scenario === undefined
+      ? undefined
+      : {
+          scenario,
+          journals: new Map(),
+          reads: 0,
+          patches: [],
+          replays: new Map(),
+          failed: false,
+          conflicted: false,
+        };
 }
 export function privateDiaryStoryActivity() {
   return { reads: state?.reads ?? 0, patches: state?.patches.slice() ?? [] };
@@ -126,43 +168,72 @@ function journal(current: State, id: string) {
   }
   return value;
 }
-function rowFor(id: string) { return occurrences().find((row) => row.id === id); }
+function rowFor(id: string) {
+  return occurrences().find((row) => row.id === id);
+}
 function sessionFor(id: string, scenario: PrivateDiaryScenario): NativeProgressSession {
   const row = rowFor(id)!;
   const unavailable = scenario === 'subject-unavailable' || row.subject === null;
   return {
-    ...baseSession, id, state: row.state, revision: row.revision, startedAt: row.recordedStartedAt,
-    completedAt: row.recordedCompletedAt, versionSubjectId: row.versionSubjectId,
+    ...baseSession,
+    id,
+    state: row.state,
+    revision: row.revision,
+    startedAt: row.recordedStartedAt,
+    completedAt: row.recordedCompletedAt,
+    versionSubjectId: row.versionSubjectId,
     subject: unavailable ? null : { id: subjectId, type: 'schema:Book', label: row.subject!.label! },
     versionSubject: row.versionSubject ? baseSession.versionSubject : null,
-    ...(id === thirdId ? {
-      unit: 'historic-leaf-x', amount: '12.250001', total: null,
-      presentation: { meaning: 'unknown', structure: 'unverified', recording: { state: 'unavailable' } },
-    } as const : {}),
+    ...(id === thirdId
+      ? ({
+          unit: 'historic-leaf-x',
+          amount: '12.250001',
+          total: null,
+          presentation: { meaning: 'unknown', structure: 'unverified', recording: { state: 'unavailable' } },
+        } as const)
+      : {}),
   };
 }
 const summary: ConsumptionSummary = {
-  scope: 'retained_native_sessions', completedOccurrences: '2', distinctCompletedSubjects: '1', repeatOccurrences: '1',
+  scope: 'retained_native_sessions',
+  completedOccurrences: '2',
+  distinctCompletedSubjects: '1',
+  repeatOccurrences: '1',
   completedOccurrencesWithUnknownProfile: '0',
   coverage: { nativeSessions: 'complete', otherHistory: 'unavailable', unitMeaning: 'not_evaluated' },
   currentness: { state: 'snapshot', revision: 'diary-constructed-1' },
 };
 const counts = (count = '0') => ({
-  completedOccurrences: count, distinctCompletedSubjects: count, repeatOccurrences: '0',
-  completedOccurrencesWithUnknownProfile: '0', finishPrecision: { year: '0', month: '0', day: count },
+  completedOccurrences: count,
+  distinctCompletedSubjects: count,
+  repeatOccurrences: '0',
+  completedOccurrencesWithUnknownProfile: '0',
+  finishPrecision: { year: '0', month: '0', day: count },
 });
 function yearSummary(year: number): ReportedYearSummary {
   const selected = year === 2026 && state?.scenario !== 'first-use';
   return {
-    ...counts(selected ? '2' : '0'), distinctCompletedSubjects: selected ? '1' : '0', repeatOccurrences: selected ? '1' : '0',
+    ...counts(selected ? '2' : '0'),
+    distinctCompletedSubjects: selected ? '1' : '0',
+    repeatOccurrences: selected ? '1' : '0',
     finishPrecision: { year: selected ? '1' : '0', month: '0', day: selected ? '1' : '0' },
-    scope: 'retained_native_sessions', year, calendar: 'gregorian', dateSource: 'explicitly_reported_journal_finish',
+    scope: 'retained_native_sessions',
+    year,
+    calendar: 'gregorian',
+    dateSource: 'explicitly_reported_journal_finish',
     months: Array.from({ length: 12 }, (_, i) => ({ ...counts(selected && i === 10 ? '1' : '0'), month: i + 1 })),
-    monthUnallocated: { ...counts(selected ? '1' : '0'), finishPrecision: { year: selected ? '1' : '0', month: '0', day: '0' } },
+    monthUnallocated: {
+      ...counts(selected ? '1' : '0'),
+      finishPrecision: { year: selected ? '1' : '0', month: '0', day: '0' },
+    },
     coverage: {
-      nativeSessions: 'complete', initializedSessions: '4', retainedSessions: '4',
-      completedOccurrencesWithMissingFinish: '0', completedOccurrencesWithUnsupportedFinish: '0',
-      otherHistory: 'unavailable', unitMeaning: 'not_evaluated',
+      nativeSessions: 'complete',
+      initializedSessions: '4',
+      retainedSessions: '4',
+      completedOccurrencesWithMissingFinish: '0',
+      completedOccurrencesWithUnsupportedFinish: '0',
+      otherHistory: 'unavailable',
+      unitMeaning: 'not_evaluated',
     },
     currentness: summary.currentness,
   };
@@ -170,40 +241,91 @@ function yearSummary(year: number): ReportedYearSummary {
 const headers = { 'cache-control': 'private, no-store' };
 export const routes: FakeRoute[] = [
   {
-    method: 'GET', path: '/v1/libraryDiary',
+    method: 'GET',
+    path: '/v1/libraryDiary',
     story: ({ request }) => {
       if (!state) return;
       state.reads++;
-      if (state.scenario === 'unavailable' && state.reads === 1) return { status: 503, code: 'dependency_unavailable', headers };
+      if (state.scenario === 'unavailable' && state.reads === 1)
+        return { status: 503, code: 'dependency_unavailable', headers };
       const query = new URL(request.url).searchParams;
       const cursor = query.get('cursor');
       let rows = state.scenario === 'first-use' ? [] : occurrences();
-      if (query.has('year')) rows = rows.filter((row) => row.reportedDates.availability === 'available' && row.reportedDates.finishDate?.year === Number(query.get('year')));
-      if (query.has('month')) rows = rows.filter((row) => row.reportedDates.availability === 'available' && (query.get('month') === 'unallocated' ? row.reportedDates.finishDate?.month === undefined : row.reportedDates.finishDate?.month === Number(query.get('month'))));
+      if (query.has('year'))
+        rows = rows.filter(
+          (row) =>
+            row.reportedDates.availability === 'available' &&
+            row.reportedDates.finishDate?.year === Number(query.get('year')),
+        );
+      if (query.has('month'))
+        rows = rows.filter(
+          (row) =>
+            row.reportedDates.availability === 'available' &&
+            (query.get('month') === 'unallocated'
+              ? row.reportedDates.finishDate?.month === undefined
+              : row.reportedDates.finishDate?.month === Number(query.get('month'))),
+        );
       const sparse = state.scenario === 'sparse' && !cursor;
       const page: DiaryPage = {
         occurrences: sparse ? [] : cursor === diaryOlderCursor ? rows.slice(3) : rows.slice(0, 3),
-        order: 'recorded_started_desc_id_desc', currentness: summary.currentness,
-        next: sparse ? diarySparseCursor : !cursor && rows.length > 3 ? diaryOlderCursor : cursor === diarySparseCursor ? diaryOlderCursor : null,
-        continuation: 'diary-constructed-continuation', expiresAt: '2099-01-01T00:00:00.000Z',
+        order: 'recorded_started_desc_id_desc',
+        currentness: summary.currentness,
+        next: sparse
+          ? diarySparseCursor
+          : !cursor && rows.length > 3
+            ? diaryOlderCursor
+            : cursor === diarySparseCursor
+              ? diaryOlderCursor
+              : null,
+        continuation: 'diary-constructed-continuation',
+        expiresAt: '2099-01-01T00:00:00.000Z',
       };
       return { status: 200, ...page, headers };
     },
   },
-  { method: 'POST', path: '/v1/libraryDiary:cancel', story: () => state ? { status: 200, cancelled: true, headers } : undefined },
-  { method: 'GET', path: '/v1/libraryConsumptionSummary', story: () => state ? {
-    status: 200, ...summary,
-    ...(state.scenario === 'first-use' ? { completedOccurrences: '0', distinctCompletedSubjects: '0', repeatOccurrences: '0' } : {}), headers,
-  } : undefined },
-  { method: 'GET', path: '/v1/libraryReportedYearSummary', story: ({ request }) => state ? {
-    status: 200, ...yearSummary(Number(new URL(request.url).searchParams.get('year'))), headers,
-  } : undefined },
   {
-    method: 'GET', path: /^\/v1\/progressSessions\/([^/]+)$/,
-    story: ({ match }) => state && rowFor(match![1]!) ? { status: 200, progressSession: sessionFor(match![1]!, state.scenario), headers } : undefined,
+    method: 'POST',
+    path: '/v1/libraryDiary:cancel',
+    story: () => (state ? { status: 200, cancelled: true, headers } : undefined),
   },
   {
-    method: 'GET', path: /^\/v1\/progressSessions\/([^/]+)\/changes$/,
+    method: 'GET',
+    path: '/v1/libraryConsumptionSummary',
+    story: () =>
+      state
+        ? {
+            status: 200,
+            ...summary,
+            ...(state.scenario === 'first-use'
+              ? { completedOccurrences: '0', distinctCompletedSubjects: '0', repeatOccurrences: '0' }
+              : {}),
+            headers,
+          }
+        : undefined,
+  },
+  {
+    method: 'GET',
+    path: '/v1/libraryReportedYearSummary',
+    story: ({ request }) =>
+      state
+        ? {
+            status: 200,
+            ...yearSummary(Number(new URL(request.url).searchParams.get('year'))),
+            headers,
+          }
+        : undefined,
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/progressSessions\/([^/]+)$/,
+    story: ({ match }) =>
+      state && rowFor(match![1]!)
+        ? { status: 200, progressSession: sessionFor(match![1]!, state.scenario), headers }
+        : undefined,
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/progressSessions\/([^/]+)\/changes$/,
     story: ({ match }) => {
       if (!state) return;
       const id = match![1]!;
@@ -218,17 +340,28 @@ export const routes: FakeRoute[] = [
           createdAt: new Date(new Date(row.recordedStartedAt).getTime() + (3 - index) * 3_600_000).toISOString(),
           intent,
         })),
-        next: null, headers,
+        next: null,
+        headers,
       };
     },
   },
-  { method: 'GET', path: /^\/v1\/progressSessions\/([^/]+)\/completedUnits$/, story: ({ match }) => state && rowFor(match![1]!) ? { status: 200, completedUnits: [], next: null, headers } : undefined },
   {
-    method: 'GET', path: /^\/v1\/progressSessions\/([^/]+)\/journal$/,
-    story: ({ match }) => state && rowFor(match![1]!) ? { status: 200, journal: structuredClone(journal(state, match![1]!)), headers } : undefined,
+    method: 'GET',
+    path: /^\/v1\/progressSessions\/([^/]+)\/completedUnits$/,
+    story: ({ match }) =>
+      state && rowFor(match![1]!) ? { status: 200, completedUnits: [], next: null, headers } : undefined,
   },
   {
-    method: 'PATCH', path: /^\/v1\/progressSessions\/([^/]+)\/journal$/,
+    method: 'GET',
+    path: /^\/v1\/progressSessions\/([^/]+)\/journal$/,
+    story: ({ match }) =>
+      state && rowFor(match![1]!)
+        ? { status: 200, journal: structuredClone(journal(state, match![1]!)), headers }
+        : undefined,
+  },
+  {
+    method: 'PATCH',
+    path: /^\/v1\/progressSessions\/([^/]+)\/journal$/,
     story: async ({ request, match }) => {
       const current = state;
       const id = match![1]!;
@@ -237,24 +370,41 @@ export const routes: FakeRoute[] = [
       const key = request.headers.get('idempotency-key')!;
       current.patches.push({ key, body });
       const replay = current.replays.get(key);
-      if (replay) return replay.body === body ? structuredClone(replay.response) : { status: 409, code: 'idempotency_conflict', headers };
+      if (replay)
+        return replay.body === body
+          ? structuredClone(replay.response)
+          : { status: 409, code: 'idempotency_conflict', headers };
       const value = journal(current, id);
       if (current.scenario === 'conflict' && !current.conflicted) {
         current.conflicted = true;
-        current.journals.set(id, { ...value, revision: value.revision + 1, reflection: 'A private correction from another device.', finishDate: { year: 2026 } });
+        current.journals.set(id, {
+          ...value,
+          revision: value.revision + 1,
+          reflection: 'A private correction from another device.',
+          finishDate: { year: 2026 },
+        });
         return { status: 409, code: 'conflict', headers };
       }
       const patch = JSON.parse(body) as ProgressSessionJournalPatch;
       if (patch.revision !== value.revision) return { status: 409, code: 'conflict', headers };
       const proposed: ProgressSessionJournal = {
-        ...value, ...patch,
-        assessment: patch.assessment === undefined ? value.assessment : { meaningRevision: 1, units: patch.assessment?.units ?? null },
+        ...value,
+        ...patch,
+        assessment:
+          patch.assessment === undefined
+            ? value.assessment
+            : { meaningRevision: 1, units: patch.assessment?.units ?? null },
       };
-      const changed = (['startDate', 'finishDate', 'reflection', 'assessment'] as const)
-        .some((field) => JSON.stringify(value[field]) !== JSON.stringify(proposed[field]));
+      const changed = (['startDate', 'finishDate', 'reflection', 'assessment'] as const).some(
+        (field) => JSON.stringify(value[field]) !== JSON.stringify(proposed[field]),
+      );
       const next = { ...proposed, revision: value.revision + (changed ? 1 : 0) };
       current.journals.set(id, next);
-      const response: KernelRecording = { status: 200, journal: { sessionId: id, revision: next.revision, changed }, headers };
+      const response: KernelRecording = {
+        status: 200,
+        journal: { sessionId: id, revision: next.revision, changed },
+        headers,
+      };
       current.replays.set(key, { body, response });
       if (current.scenario === 'failed-save' && !current.failed) {
         current.failed = true;

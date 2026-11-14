@@ -304,13 +304,22 @@ export function PublishedLogPageView({
           <span>{stateLabel(log.sessionState)}</span>
           <RelativeTime value={log.publishedAt} />
         </div>
-        {log.note ? <div className="space-y-2 border-t pt-5">
-          <h2 className="text-sm font-medium text-muted-foreground">{m.library_logs_note()}</h2>
-          <p dir="auto" className="max-w-prose whitespace-pre-wrap text-base leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]">{log.note}</p>
-        </div> : null}
+        {log.note ? (
+          <div className="space-y-2 border-t pt-5">
+            <h2 className="text-sm font-medium text-muted-foreground">{m.library_logs_note()}</h2>
+            <p
+              dir="auto"
+              className="max-w-prose whitespace-pre-wrap text-base leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]"
+            >
+              {log.note}
+            </p>
+          </div>
+        ) : null}
       </section>
       <details className="rounded-lg border px-4">
-        <summary className="min-h-11 cursor-pointer content-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">{m.library_logs_dates()}</summary>
+        <summary className="min-h-11 cursor-pointer content-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.library_logs_dates()}
+        </summary>
         <section aria-label={m.library_logs_dates()} className="space-y-2 border-t py-4 text-sm">
           <SnapshotTime label={m.library_logs_started()} value={log.startedAt} />
           {log.completedAt ? <SnapshotTime label={m.library_logs_completed()} value={log.completedAt} /> : null}

@@ -130,7 +130,9 @@ function PublishLog({
   return (
     <details className="min-w-0 space-y-3 rounded-xl border bg-card p-4 sm:p-5">
       <summary className="min-h-11 cursor-pointer content-center rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-        <h2 id="publish-log-heading" className="inline text-lg font-semibold">{m.library_logs_publish_heading()}</h2>
+        <h2 id="publish-log-heading" className="inline text-lg font-semibold">
+          {m.library_logs_publish_heading()}
+        </h2>
       </summary>
       <p className="max-w-prose text-sm text-muted-foreground">{m.library_journal_public_boundary()}</p>
       <p className="max-w-prose text-sm text-muted-foreground">{m.library_logs_description()}</p>

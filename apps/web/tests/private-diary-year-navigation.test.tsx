@@ -939,26 +939,56 @@ test('late replacement cancellation cannot show stale retry state after the peri
 test('history groups supplied occurrences by recorded day and distinguishes sparse continuation from first use', async () => {
   const h = await mount({});
   const row: DiaryPage['occurrences'][number] = {
-    id: '00000000-0000-4000-8000-000000000011', subjectId: 'retained-subject', versionSubjectId: null,
-    state: 'completed', revision: 4, recordedStartedAt: '2026-11-13T23:00:00Z',
+    id: '00000000-0000-4000-8000-000000000011',
+    subjectId: 'retained-subject',
+    versionSubjectId: null,
+    state: 'completed',
+    revision: 4,
+    recordedStartedAt: '2026-11-13T23:00:00Z',
     recordedCompletedAt: '2026-11-14T01:00:00Z',
     reportedDates: { availability: 'available', revision: 2, startDate: { year: 2026 }, finishDate: null },
-    subject: { id: 'retained-subject', label: '夜の記録', language: 'ja' }, versionSubject: null,
+    subject: { id: 'retained-subject', label: '夜の記録', language: 'ja' },
+    versionSubject: null,
   };
   const value: PrivateDiaryLoad = {
-    ...loaded, address: {}, reportedYear: null, summary: { kind: 'ready', value: allTimeSummary },
-    diary: { kind: 'ready', page: {
-      order: 'recorded_started_desc_id_desc', next: 'opaque-sparse-frontier', continuation: 'retained-slot', expiresAt: null,
-      occurrences: [row,
-        { ...row, id: '00000000-0000-4000-8000-000000000012', state: 'active', recordedStartedAt: '2026-11-13T08:00:00Z', recordedCompletedAt: null },
-        { ...row, id: '00000000-0000-4000-8000-000000000013', state: 'abandoned', recordedStartedAt: '2026-11-02T08:00:00Z', recordedCompletedAt: null, subject: null },
-      ],
-    } },
+    ...loaded,
+    address: {},
+    reportedYear: null,
+    summary: { kind: 'ready', value: allTimeSummary },
+    diary: {
+      kind: 'ready',
+      page: {
+        order: 'recorded_started_desc_id_desc',
+        next: 'opaque-sparse-frontier',
+        continuation: 'retained-slot',
+        expiresAt: null,
+        occurrences: [
+          row,
+          {
+            ...row,
+            id: '00000000-0000-4000-8000-000000000012',
+            state: 'active',
+            recordedStartedAt: '2026-11-13T08:00:00Z',
+            recordedCompletedAt: null,
+          },
+          {
+            ...row,
+            id: '00000000-0000-4000-8000-000000000013',
+            state: 'abandoned',
+            recordedStartedAt: '2026-11-02T08:00:00Z',
+            recordedCompletedAt: null,
+            subject: null,
+          },
+        ],
+      },
+    },
   };
   try {
     await h.show(value);
     expect([...h.host.querySelectorAll('ol > li h3')].map((heading) => heading.textContent)).toEqual([
-      '夜の記録', '夜の記録', m.library_diary_subject_unavailable(),
+      '夜の記録',
+      '夜の記録',
+      m.library_diary_subject_unavailable(),
     ]);
     expect(h.host.querySelectorAll('time[datetime="2026-11-13"]')).toHaveLength(1);
     expect(h.host.querySelectorAll('time[datetime="2026-11-02"]')).toHaveLength(1);
@@ -968,9 +998,15 @@ test('history groups supplied occurrences by recorded day and distinguishes spar
     const page = value.diary.kind === 'ready' ? value.diary.page : null;
     await h.show({ ...value, diary: { kind: 'ready', page: { ...page!, occurrences: [] } } });
     expect(h.host.textContent).not.toContain(m.library_history_first_use());
-    expect([...h.host.querySelectorAll('button')].some((button) => button.textContent === m.library_diary_next())).toBe(true);
+    expect([...h.host.querySelectorAll('button')].some((button) => button.textContent === m.library_diary_next())).toBe(
+      true,
+    );
     await h.show({ ...value, diary: { kind: 'ready', page: { ...page!, occurrences: [], next: null } } });
     expect(h.host.textContent).toContain(m.library_history_first_use());
-    expect([...h.host.querySelectorAll('a')].some((link) => link.textContent === m.library_history_open_library())).toBe(true);
-  } finally { await h.close(); }
+    expect(
+      [...h.host.querySelectorAll('a')].some((link) => link.textContent === m.library_history_open_library()),
+    ).toBe(true);
+  } finally {
+    await h.close();
+  }
 });

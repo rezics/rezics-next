@@ -404,10 +404,13 @@ export function MyLogsPageView({
                     title={title.text}
                     {...(title.lang === undefined ? {} : { titleLang: title.lang })}
                     headingLevel={2}
-                    context={index === 0 || page.logs[index - 1]!.publishedAt.slice(0, 10) !== log.publishedAt.slice(0, 10)
-                      ? <p data-log-date-group className="mb-2 border-b pb-3 text-sm font-medium text-muted-foreground">
+                    context={
+                      index === 0 || page.logs[index - 1]!.publishedAt.slice(0, 10) !== log.publishedAt.slice(0, 10) ? (
+                        <p data-log-date-group className="mb-2 border-b pb-3 text-sm font-medium text-muted-foreground">
                           {recordedDayLabel(log.publishedAt.slice(0, 10), getLocale())}
-                        </p> : null}
+                        </p>
+                      ) : null
+                    }
                     className="rounded-xl border bg-card px-4 [overflow-wrap:anywhere]"
                     visual={<SubjectCover subject={log.subject} ratio={ratio} />}
                     state={
@@ -462,7 +465,12 @@ export function MyLogsPageView({
                               {m.library_my_logs_full_note()}
                             </span>
                           </summary>
-                          <p dir="auto" className="max-w-prose whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]">{log.note}</p>
+                          <p
+                            dir="auto"
+                            className="max-w-prose whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]"
+                          >
+                            {log.note}
+                          </p>
                         </details>
                       ) : null
                     }

@@ -526,13 +526,25 @@ function OccurrenceControls({
         </div>
       ) : null}
 
-      {journal ? <>
-        <JournalSavedReadout journal={journal} observedOnly={journalCommand !== null} />
-        {!editing ? <Button ref={editButton} type="button" variant="outline" className="min-h-11 w-full sm:w-auto"
-          disabled={!journalUpdateAllowed || busy}
-          onClick={() => { if (enabled && isCurrent()) setEditing(true); }}
-        >{m.library_journal_edit_entry()}</Button> : null}
-      </> : null}
+      {journal ? (
+        <>
+          <JournalSavedReadout journal={journal} observedOnly={journalCommand !== null} />
+          {!editing ? (
+            <Button
+              ref={editButton}
+              type="button"
+              variant="outline"
+              className="min-h-11 w-full sm:w-auto"
+              disabled={!journalUpdateAllowed || busy}
+              onClick={() => {
+                if (enabled && isCurrent()) setEditing(true);
+              }}
+            >
+              {m.library_journal_edit_entry()}
+            </Button>
+          ) : null}
+        </>
+      ) : null}
       {journal && editing ? (
         <form className="min-w-0 space-y-5 rounded-xl border bg-card p-4 sm:p-6" onSubmit={submitJournal} noValidate>
           <h3 className="text-lg font-semibold">{m.library_journal_edit_entry()}</h3>
@@ -540,25 +552,36 @@ function OccurrenceControls({
           <p className="text-sm text-muted-foreground">{m.library_journal_selection_help()}</p>
           <div className="grid gap-4 md:grid-cols-2">
             {(['reflection', 'startDate', 'finishDate', 'assessment'] as const).map((field) => (
-              <div key={field} ref={field === 'reflection' ? reflectionField : undefined} className={field === 'reflection' ? 'min-w-0 md:col-span-2' : 'min-w-0'}>
+              <div
+                key={field}
+                ref={field === 'reflection' ? reflectionField : undefined}
+                className={field === 'reflection' ? 'min-w-0 md:col-span-2' : 'min-w-0'}
+              >
                 <JournalFieldEditor
-                field={field}
-                selection={draft[field]}
-                value={working[field]}
-                disabled={!journalUpdateAllowed || journalCommand !== null || busy || review !== null}
-                invalid={!parsedDraft.ok && parsedDraft.field === field}
-                refused={refusedField === field}
-                onChange={(selection) => {
-                  if (!enabled || !isCurrent() || !journalUpdateAllowed || custody.command || custody.flight || review)
-                    return;
-                  setDraft((current) => ({ ...current, [field]: selection }));
-                  // Editing a retained field cannot remove the only current-read/re-review recovery.
-                  setJournalNotice(
-                    conflictRevision !== null && reviewedRevision !== journal.revision ? 'conflict' : null,
-                  );
-                  setRefusedField(null);
-                }}
-              />
+                  field={field}
+                  selection={draft[field]}
+                  value={working[field]}
+                  disabled={!journalUpdateAllowed || journalCommand !== null || busy || review !== null}
+                  invalid={!parsedDraft.ok && parsedDraft.field === field}
+                  refused={refusedField === field}
+                  onChange={(selection) => {
+                    if (
+                      !enabled ||
+                      !isCurrent() ||
+                      !journalUpdateAllowed ||
+                      custody.command ||
+                      custody.flight ||
+                      review
+                    )
+                      return;
+                    setDraft((current) => ({ ...current, [field]: selection }));
+                    // Editing a retained field cannot remove the only current-read/re-review recovery.
+                    setJournalNotice(
+                      conflictRevision !== null && reviewedRevision !== journal.revision ? 'conflict' : null,
+                    );
+                    setRefusedField(null);
+                  }}
+                />
               </div>
             ))}
           </div>
@@ -566,7 +589,11 @@ function OccurrenceControls({
             <p role="alert">{m.library_journal_native_refusal({ field: journalFieldLabel(refusedField) })}</p>
           ) : null}
           {review ? (
-            <JournalDraftReview journal={reviewBasis ?? journal} draft={draftFromPatch(review.body)} revision={review.body.revision}>
+            <JournalDraftReview
+              journal={reviewBasis ?? journal}
+              draft={draftFromPatch(review.body)}
+              revision={review.body.revision}
+            >
               <Button
                 type="button"
                 disabled={busy || !journalUpdateAllowed || !!custody.flight}
@@ -601,22 +628,30 @@ function OccurrenceControls({
               {m.library_journal_review()}
             </Button>
           )}
-          {!journalCommand ? <div className="flex justify-end border-t pt-3">
-            <Button type="button" variant="ghost" disabled={busy} className="min-h-11 w-full sm:w-auto"
-              onClick={() => {
-                if (!isCurrent() || custody.command || custody.flight) return;
-                setDraft(emptyJournalDraft());
-                setReview(null);
-                setReviewBasis(null);
-                setRefusedField(null);
-                setConflictRevision(null);
-                setReviewedRevision(null);
-                setJournalNotice(null);
-                returningToRead.current = true;
-                setEditing(false);
-              }}
-            >{m.library_progress_cancel()}</Button>
-          </div> : null}
+          {!journalCommand ? (
+            <div className="flex justify-end border-t pt-3">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                className="min-h-11 w-full sm:w-auto"
+                onClick={() => {
+                  if (!isCurrent() || custody.command || custody.flight) return;
+                  setDraft(emptyJournalDraft());
+                  setReview(null);
+                  setReviewBasis(null);
+                  setRefusedField(null);
+                  setConflictRevision(null);
+                  setReviewedRevision(null);
+                  setJournalNotice(null);
+                  returningToRead.current = true;
+                  setEditing(false);
+                }}
+              >
+                {m.library_progress_cancel()}
+              </Button>
+            </div>
+          ) : null}
           {journalCommand ? (
             <div className="space-y-2">
               <p role="status">
@@ -911,7 +946,14 @@ function JournalFieldEditor({
 function JournalValue({ value }: { value: string | null }) {
   if (value === null) return <span className="text-muted-foreground">{m.library_journal_no_value()}</span>;
   if (value === '') return <span className="text-muted-foreground">{m.library_journal_empty_text()}</span>;
-  return <span dir="auto" className="block max-w-prose whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]">{value}</span>;
+  return (
+    <span
+      dir="auto"
+      className="block max-w-prose whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]"
+    >
+      {value}
+    </span>
+  );
 }
 
 /** Review shows every preserved field as well as the deliberately addressed changes. */
@@ -955,7 +997,11 @@ function JournalDraftReview({
           </div>
         ))}
       </dl>
-      {children ? <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t bg-card px-4 py-3 sm:flex-row [&_button]:min-h-11 [&_button]:whitespace-normal">{children}</div> : null}
+      {children ? (
+        <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t bg-card px-4 py-3 sm:flex-row [&_button]:min-h-11 [&_button]:whitespace-normal">
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }
