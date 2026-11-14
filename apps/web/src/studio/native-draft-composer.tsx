@@ -142,6 +142,7 @@ export function NativeDraftComposer({
     );
   }
   function changeView(mode: DraftView['mode']) {
+    if (currentView.current.mode === mode) return;
     const next = { mode };
     currentView.current = next;
     setView(next);

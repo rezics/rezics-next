@@ -37,7 +37,8 @@ Sources read for this preview decision: `native-draft-composer.tsx`, this owner 
 `threads/post-reading-body.tsx`, the declared module map and the read-only main checkout's `.reference/INDEX.md`.
 Focused acceptance source covers rich preview, wide/reference retirement, editor undo lifetime and acknowledgement
 preserving newer edits. Existing creation, privacy, snapshot and departure assertions remain in place. Illustrative
-stories cover ready rich preview and departure from a wide inspector; they establish no native or visual acceptance.
+stories cover ready rich preview, working reference inspection and departure from a wide inspector; they establish
+no native or visual acceptance.
 Source-only review covers the diff and formatting. Test execution, compiler/build checks, Storybook/browser captures,
 native creation and eight-locale phone/desktop/theme/keyboard acceptance remain unverified with the separate verifier.
 

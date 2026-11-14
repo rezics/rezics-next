@@ -271,7 +271,7 @@ test('Studio leads with the document and starts its draft navigation as a compac
 });
 
 const structuredHtml =
-  '<h2>First structured heading</h2><p>A <strong>formatted</strong> opening.</p><ul><li><p>First point</p></li><li><p>Second point</p></li></ul><table><tbody><tr><th><p>Column</p></th></tr><tr><td><p>Preserved cell</p></td></tr></tbody></table>';
+  '<h2>First structured heading</h2><p>A <strong>formatted</strong> opening with a <a href="https://example.org/source">source</a>.</p><ul><li><p>First point</p></li><li><p>Second point</p></li></ul><table><tbody><tr><th><p>Column</p></th></tr><tr><td><p>Preserved cell</p></td></tr></tbody></table><pre><code>const draft = "unsaved";</code></pre>';
 
 async function mountComposer(fixture = port()) {
   const host = document.createElement('div');
@@ -306,9 +306,8 @@ async function mountComposer(fixture = port()) {
       field(name).dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     });
   };
-  const paste = async (html: string) => {
+  const paste = async (html: string, editor = field(m.studio_account_body())) => {
     await act(async () => {
-      const editor = field(m.studio_account_body());
       editor.focus();
       const clipboardData = new dom.window.DataTransfer();
       clipboardData.setData('text/html', html);
@@ -357,18 +356,32 @@ test('real initial composer previews and creates one structured snapshot with al
     expect(preview.querySelector('strong')?.textContent).toBe('formatted');
     expect(preview.querySelectorAll('li')).toHaveLength(2);
     expect(preview.querySelector('td')?.textContent).toBe('Preserved cell');
+    const reader = preview.querySelector('[data-slot="post-reading-body"]');
+    expect(reader).not.toBeNull();
+    expect(v.button(m.wide_document_table_inspect())).toBeTruthy();
+    expect(v.button(m.wide_document_code_inspect())).toBeTruthy();
+    expect(v.button(m.post_references_title())).toBeTruthy();
+    expect(preview.textContent).toContain(m.studio_workspace_preview_unsaved());
+    await v.change(m.studio_account_title(), 'Reviewed opening');
+    expect(preview.querySelector('[data-slot="post-reading-body"]')).toBe(reader);
     await v.click(m.studio_workspace_write());
     expect(v.field(m.studio_account_body())).toBe(editor);
+    await v.click(m.editor_undo());
+    expect(editor.querySelector('table')).toBeNull();
+    await v.click(m.editor_redo());
+    await waitFor(() => expect(v.button(m.studio_account_create()).disabled).toBe(false));
     await act(async () => getByText(v.form(), m.studio_native_metadata()).click());
     await v.change(m.own_drafts_licence(), licence);
     await v.change(m.own_drafts_subjects(), 'subject-a, subject-b');
     await v.change(m.own_drafts_media(), 'media-a, media-b');
+    await v.click(m.studio_workspace_preview());
     await v.click(m.studio_account_create());
     await waitFor(() => expect(f.createCalls).toHaveLength(1));
     await waitFor(() => expect((v.field(m.studio_account_title()) as HTMLInputElement).value).toBe(''));
     const command = f.createCalls[0]!;
     expect(command).toMatchObject({
       boardId,
+      title: 'Reviewed opening',
       licence,
       subjectIds: ['subject-a', 'subject-b'],
       mediaIds: ['media-a', 'media-b'],
@@ -392,18 +405,91 @@ test('pending and invalid editor snapshots cannot preview or submit a stale body
   const v = await mountComposer(f);
   try {
     await v.fill();
-    await v.paste(`<p>${'x'.repeat(2 * 1024 * 1024)}</p>`);
+    const editor = v.field(m.studio_account_body());
+    await v.click(m.studio_workspace_preview());
+    await v.paste(`<p>${'x'.repeat(2 * 1024 * 1024)}</p>`, editor);
+    expect(v.form().querySelector('[data-slot="post-reading-body"]')).toBeNull();
     expect(v.button(m.studio_account_create()).disabled).toBe(true);
     expect(v.button(m.studio_workspace_preview()).disabled).toBe(true);
     await act(async () => v.form().dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })));
     expect(f.createCalls).toHaveLength(0);
     await waitFor(() => expect(v.form().textContent).toContain(m.studio_workspace_snapshot_error()));
     expect(v.button(m.studio_account_create()).disabled).toBe(true);
-    expect(v.field(m.studio_account_body()).textContent).toContain('xxxx');
+    expect(editor.textContent).toContain('xxxx');
+    await v.click(m.studio_workspace_write());
+    await v.click(m.editor_undo());
+    await v.paste('<p>Recovered working text</p>');
+    await waitFor(() => expect(v.button(m.studio_account_create()).disabled).toBe(false));
+    expect((v.field(m.studio_account_title()) as HTMLInputElement).value).toBe('Structured before save');
+    await v.click(m.studio_workspace_preview());
+    expect(v.form().querySelector('[data-slot="post-reading-body"]')).not.toBeNull();
   } finally {
     await v.close();
   }
 });
+
+test.each(['references', 'code'] as const)(
+  'unsent %s inspection retires on body, Write, visit and locale replacement without late copy focus',
+  async (panel) => {
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    let finishCopy!: () => void;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: () =>
+          new Promise<void>((resolve) => {
+            finishCopy = resolve;
+          }),
+      },
+    });
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    try {
+      for (const departure of ['body', 'write', 'visit', 'locale'] as const) {
+        const f = port();
+        const v = await mountComposer(f);
+        try {
+          await v.fill();
+          const editor = v.field(m.studio_account_body());
+          const write = v.button(m.studio_workspace_write());
+          await v.click(m.studio_workspace_preview());
+          await v.click(panel === 'references' ? m.post_references_title() : m.wide_document_code_inspect());
+          const dialog = getByRole(document.body, 'dialog');
+          if (panel === 'references')
+            await act(async () =>
+              getByRole(dialog, 'button', { name: m.post_references_entry({ number: 1, label: 'source' }) }).click(),
+            );
+          await act(async () =>
+            getByRole(dialog, 'button', {
+              name: panel === 'references' ? m.post_references_copy() : m.wide_document_code_copy(),
+              exact: true,
+            }).click(),
+          );
+          if (departure === 'write') await act(async () => write.click());
+          else if (departure === 'body') await v.paste('<p>A newer working snapshot</p>', editor);
+          else {
+            if (departure === 'locale') setLocale('ja', { reload: false });
+            await v.replace({ ...input(), visitKey: departure });
+          }
+          await waitFor(() => expect(queryByRole(document.body, 'dialog')).toBeNull());
+          outside.focus();
+          await act(async () => finishCopy());
+          expect(document.activeElement).toBe(outside);
+          expect(v.host.textContent).not.toContain(m.post_references_copy_success({}, { locale: 'en' }));
+          expect(v.host.textContent).not.toContain(m.wide_document_code_copied({}, { locale: 'en' }));
+          expect(f.createCalls).toHaveLength(0);
+        } finally {
+          await v.close();
+          setLocale('en', { reload: false });
+        }
+      }
+    } finally {
+      outside.remove();
+      if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  },
+);
 
 test('unknown creation replays its original structured intent and preserves later local edits after acknowledgement', async () => {
   const f = port({ uncertainCreate: true });
@@ -450,8 +536,10 @@ test('definite failure retains the document and cancellation uses explicit disca
     await v.click(m.studio_workspace_discard_review());
     await v.click(m.studio_workspace_keep_changes());
     expect(v.field(m.studio_account_body()).querySelector('h2')).not.toBeNull();
+    await v.click(m.studio_workspace_preview());
     await v.click(m.studio_workspace_discard_review());
     await v.click(m.studio_workspace_discard());
+    expect(v.form().querySelector('[data-slot="post-reading-body"]')).toBeNull();
     expect((v.field(m.studio_account_title()) as HTMLInputElement).value).toBe('');
     expect(v.field(m.studio_account_body()).textContent).toBe('');
     expect(v.risks.at(-1)).toBe(false);
@@ -541,10 +629,15 @@ test('a delayed first acknowledgement keeps edits made while creation is sending
     await v.click(m.studio_account_create());
     await v.change(m.studio_account_title(), 'Written while sending');
     await v.paste('<p>Later working body</p>');
+    await waitFor(() => expect(v.button(m.studio_workspace_preview()).disabled).toBe(false));
+    await v.click(m.studio_workspace_preview());
+    const reader = v.form().querySelector('[data-slot="post-reading-body"]');
     await act(async () => release());
     await waitFor(() => expect(v.form().textContent).toContain(m.studio_native_retained()));
     expect((v.field(m.studio_account_title()) as HTMLInputElement).value).toBe('Written while sending');
-    expect(v.field(m.studio_account_body()).textContent).toContain('Later working body');
+    expect(reader?.textContent).toContain('Later working body');
+    expect(v.form().querySelector('[data-slot="post-reading-body"]')).toBe(reader);
+    expect(v.form().textContent).toContain(m.studio_workspace_preview_unsaved());
     expect(f.current()?.revision.title).toBe('Structured before save');
     expect(JSON.stringify(f.current()?.revision.body)).not.toContain('Later working body');
   } finally {

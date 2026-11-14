@@ -291,6 +291,69 @@ async function openDraftNavigation(canvasElement: HTMLElement) {
 export const Populated: Story = { args: { scenario: 'populated' } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 
+async function previewWorkingDraft(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await openDraftNavigation(canvasElement);
+  const form = within(await canvas.findByRole('form', { name: m.studio_account_create() }));
+  await userEvent.type(form.getByRole('textbox', { name: m.studio_account_board() }), 'community/fiction');
+  await userEvent.type(
+    form.getByRole('textbox', { name: m.studio_account_title(), exact: true }),
+    'Before the first save',
+  );
+  const editor = form.getByRole('textbox', { name: m.studio_account_body(), exact: true });
+  const clipboardData = new DataTransfer();
+  clipboardData.setData(
+    'text/html',
+    '<h2>Wide content and sources</h2><p>A <strong>working</strong> opening with a <a href="https://example.org/source">source</a>.</p><table><tbody><tr><th><p>Chapter</p></th><th><p>Reading notes</p></th></tr><tr><td><p>Opening</p></td><td><p>A wide working table before the first save.</p></td></tr></tbody></table><pre><code>const workingDraft = { saved: false, reviewed: true };</code></pre>',
+  );
+  editor.focus();
+  editor.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
+  await waitFor(() =>
+    expect(form.getByRole('button', { name: m.studio_workspace_preview(), exact: true })).toBeEnabled(),
+  );
+  await userEvent.click(form.getByRole('button', { name: m.studio_workspace_preview(), exact: true }));
+  await expect(form.getByText(m.studio_workspace_preview_unsaved())).toBeVisible();
+  return { form, editor };
+}
+
+export const RichWorkingPreview: Story = {
+  args: { scenario: 'creation-review' },
+  play: async ({ canvasElement }) => {
+    const { form } = await previewWorkingDraft(canvasElement);
+    await expect(form.getByRole('heading', { name: 'Wide content and sources' })).toBeVisible();
+    await expect(form.getByRole('button', { name: m.wide_document_table_inspect() })).toBeVisible();
+    await expect(form.getByRole('button', { name: m.wide_document_code_inspect() })).toBeVisible();
+  },
+};
+
+export const WorkingReferences: Story = {
+  args: { scenario: 'creation-review' },
+  play: async ({ canvasElement }) => {
+    const { form } = await previewWorkingDraft(canvasElement);
+    await userEvent.click(form.getByRole('button', { name: m.post_references_title() }));
+    const dialog = within(await within(document.body).findByRole('dialog', { name: m.post_references_title() }));
+    await userEvent.click(dialog.getByRole('button', { name: m.post_references_entry({ number: 1, label: 'source' }) }));
+    await expect(dialog.getByRole('textbox', { name: m.post_references_destination() })).toHaveValue(
+      'https://example.org/source',
+    );
+  },
+};
+
+export const ReturnFromWideInspection: Story = {
+  args: { scenario: 'creation-review' },
+  play: async ({ canvasElement }) => {
+    const { form, editor } = await previewWorkingDraft(canvasElement);
+    await userEvent.click(form.getByRole('button', { name: m.wide_document_code_inspect() }));
+    const inspector = await within(document.body).findByRole('dialog', { name: m.wide_document_code_title() });
+    const dialog = within(inspector);
+    await expect(inspector.querySelector('pre')?.textContent).toContain('const workingDraft');
+    await userEvent.click(dialog.getByRole('button', { name: m.wide_document_inspector_close() }));
+    await userEvent.click(form.getByRole('button', { name: m.studio_workspace_write(), exact: true }));
+    await expect(form.getByRole('textbox', { name: m.studio_account_body(), exact: true })).toBe(editor);
+    await expect(form.getByRole('button', { name: m.editor_undo(), exact: true })).toBeEnabled();
+  },
+};
+
 export const CreationAndReview: Story = {
   args: { scenario: 'creation-review' },
   play: async ({ canvasElement }) => {
