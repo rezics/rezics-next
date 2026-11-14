@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { PageStory, pagePaths, pageReady } from '../page';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { RatingControlView } from '../../features/pages/rating-control';
+import { RatingControlView, RatingRecoveryView, type RatingAnswerRecovery } from '../../features/pages/rating-control';
+import type { QuestionBoundRatingInput } from '../../features/pages/rating-actions';
 import { RatingsView } from '../../features/pages/subject-ratings-view';
 import { GLOBAL, type PublicFigure, type Ratings } from '../../features/pages/subject-ratings';
 import { independentSourceStatistics, ratingsFixtures, standardRatingQuestion } from '../../kernel/fake/ratings';
@@ -208,28 +209,98 @@ export const SaveFailure: Story = {
     await expect(view.getByRole('button', { name: m.subject_rating_control_clear() })).toBeDisabled();
   },
 };
-export const UncertainSave: Story = {
-  render: () => (
-    <div className="mx-auto max-w-lg p-4 sm:p-6">
+// Illustrative native-format command and own-answer payloads; these states make no connected-delivery claim.
+function UncertainVote({
+  units = 15,
+  initialReading = { kind: 'idle' },
+}: {
+  units?: number | null;
+  initialReading?: RatingAnswerRecovery;
+}) {
+  const locale = getLocale();
+  const [original] = useState<QuestionBoundRatingInput>(() => ({
+    subjectId: subject,
+    units,
+    idempotencyKey: '00000000-0000-4000-8000-000000000002',
+    expectedReader: 'illustrative-reader',
+    expectedCredential: 'illustrative-credential',
+    question: {
+      id: standardRatingQuestion.id,
+      revision: standardRatingQuestion.revision,
+      grain: standardRatingQuestion.grain,
+      meaning: standardRatingQuestion.meaning ?? standardRatingQuestion.label,
+      scale: standardRatingQuestion.scale,
+    },
+  }));
+  const [own, setOwn] = useState({ reader: original.expectedReader, kind: 'ready' as const, units });
+  const [unresolved, setUnresolved] = useState(true);
+  const [reading, setReading] = useState(initialReading);
+  return (
+    <div className="mx-auto max-w-lg space-y-3 p-4 sm:p-6">
       <RatingControlView
         question={standardRatingQuestion}
         subjectId={subject}
-        locale={getLocale()}
-        returnTo={`/${getLocale()}/subjects/${subject}/kokoro`}
-        state={{ kind: 'ready', units: 15 }}
-        pending={false}
-        retryable
-        failure={m.subject_rating_control_uncertain()}
-        onSet={() => {}}
-        onClear={() => {}}
+        locale={locale}
+        returnTo={`/${locale}/subjects/${subject}/kokoro`}
+        state={own}
+        pending={reading.kind === 'loading'}
+        preserveDraft={unresolved}
+        failure={null}
+        onSet={(value) => { setOwn({ ...own, units: value }); setUnresolved(false); }}
+        onClear={() => { setOwn({ ...own, units: null }); setUnresolved(false); }}
       />
+      {unresolved && (
+        <RatingRecoveryView
+          original={original}
+          currentScale={standardRatingQuestion.scale}
+          locale={locale}
+          pending={false}
+          reading={reading}
+          onRetry={() => setUnresolved(false)}
+          onRead={() => setReading({ kind: 'ready', units: own.units })}
+        />
+      )}
     </div>
-  ),
+  );
+}
+
+export const UncertainSave: Story = {
+  render: () => <UncertainVote />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await expect(view.getByRole('status')).toHaveTextContent(m.subject_rating_control_uncertain());
-    await expect(view.getByRole('button', { name: m.subject_rating_control_save() })).toBeEnabled();
+    const retry = view.getByRole('button', { name: m.subject_rating_control_retry_save() });
+    const read = view.getByRole('button', { name: m.subject_rating_control_read_current() });
+    await expectComfortableAction(retry);
+    await expectComfortableAction(read);
+    await expect(view.getByRole('button', { name: m.subject_rating_control_save() })).toBeDisabled();
+    read.focus();
+    await expectKeyboardFocus(read);
+    await userEvent.keyboard('{Enter}');
+    await expect(view.getByText(m.subject_rating_control_read_separate())).toBeVisible();
+    await expect(retry).toBeEnabled();
+    await expect(view.getByRole('status')).toHaveTextContent(m.subject_rating_control_uncertain());
   },
+};
+export const UncertainClear: Story = {
+  render: () => <UncertainVote units={null} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expectComfortableAction(view.getByRole('button', { name: m.subject_rating_control_retry_clear() }));
+    await expect(view.getByRole('button', { name: m.subject_rating_control_clear() })).toBeDisabled();
+    await userEvent.click(view.getByRole('button', { name: m.subject_rating_control_read_current() }));
+    await expect(view.getByText(m.subject_rating_control_current_clear())).toBeVisible();
+    await expect(view.getByRole('button', { name: m.subject_rating_control_retry_clear() })).toBeEnabled();
+  },
+};
+export const CurrentAnswerDiffers: Story = {
+  render: () => <UncertainVote initialReading={{ kind: 'ready', units: 0 }} />,
+};
+export const CurrentAnswerUnavailable: Story = {
+  render: () => <UncertainVote initialReading={{ kind: 'unavailable' }} />,
+};
+export const ReadingCurrentAnswer: Story = {
+  render: () => <UncertainVote initialReading={{ kind: 'loading' }} />,
 };
 export const StaleReview: Story = {
   render: () => (

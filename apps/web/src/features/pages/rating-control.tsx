@@ -118,7 +118,7 @@ export function RatingControlView({
   onClear,
   nativeFallback = true,
   hideValue = false,
-  retryable = false,
+  preserveDraft = false,
   hideQuestionLabel = false,
 }: {
   question: RatingQuestion;
@@ -132,7 +132,7 @@ export function RatingControlView({
   onClear: () => void;
   nativeFallback?: boolean;
   hideValue?: boolean;
-  retryable?: boolean;
+  preserveDraft?: boolean;
   hideQuestionLabel?: boolean;
 }) {
   const options = { locale: locale as never };
@@ -153,8 +153,8 @@ export function RatingControlView({
   ) : null;
 
   useEffect(() => {
-    if (!editing.current && !pending) setDraft(state.kind === 'ready' ? state.units : null);
-  }, [pending, state.kind, state.kind === 'ready' ? state.units : null]);
+    if (!editing.current && !pending && !preserveDraft) setDraft(state.kind === 'ready' ? state.units : null);
+  }, [pending, preserveDraft, state.kind, state.kind === 'ready' ? state.units : null]);
 
   if (state.kind === 'unavailable')
     return <div aria-hidden="true" className="min-h-12" data-slot="rating-control-reserved" />;
@@ -222,7 +222,7 @@ export function RatingControlView({
             method="post"
             onSubmit={(event) => {
               event.preventDefault();
-              if (pending || value === null || (value === state.units && !retryable)) return;
+              if (pending || value === null || value === state.units) return;
               editing.current = false;
               onSet(value);
             }}
@@ -298,11 +298,11 @@ export function RatingControlView({
         <div className="flex flex-wrap gap-2">
           <Button
             className={actionClassName}
-            disabled={nativeFallback && (pending || value === null || (value === state.units && !retryable))}
-            aria-disabled={pending || value === null || (value === state.units && !retryable)}
+            disabled={nativeFallback && (pending || value === null || value === state.units)}
+            aria-disabled={pending || value === null || value === state.units}
             onClick={() => {
               editing.current = false;
-              if (!pending && value !== null && (value !== state.units || retryable)) onSet(value);
+              if (!pending && value !== null && value !== state.units) onSet(value);
             }}
             type="button"
           >
@@ -331,6 +331,70 @@ export function RatingControlView({
         )}
       </Field.Root>
       {fallback}
+    </div>
+  );
+}
+
+export type RatingAnswerRecovery =
+  | { kind: 'idle' | 'loading' | 'unavailable' }
+  | { kind: 'ready'; units: number | null };
+
+/** An answer observation is useful independently of the original command's delivery result. */
+export function RatingRecoveryView({
+  original,
+  currentScale,
+  locale,
+  pending,
+  reading,
+  onRetry,
+  onRead,
+}: {
+  original: Pick<QuestionBoundRatingInput, 'units' | 'question'>;
+  currentScale: RatingQuestion['scale'];
+  locale: string;
+  pending: boolean;
+  reading: RatingAnswerRecovery;
+  onRetry: () => void;
+  onRead: () => void;
+}) {
+  const options = { locale: locale as never };
+  const number = (units: number) => new Intl.NumberFormat(locale).format(units);
+  const busy = pending || reading.kind === 'loading';
+  return (
+    <div className="min-w-0 space-y-2" data-slot="rating-recovery" aria-busy={busy}>
+      <p className="text-sm" role="status">{m.subject_rating_control_uncertain({}, options)}</p>
+      <p className="text-sm font-medium wrap-anywhere" data-slot="rating-original-request">
+        {original.units === null
+          ? m.subject_rating_control_original_clear({}, options)
+          : m.subject_rating_control_original_save(
+              { score: number(original.units), max: number(original.question.scale.max) }, options,
+            )}
+      </p>
+      <p className="text-xs text-muted-foreground wrap-anywhere">{original.question.meaning}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button className={actionClassName} disabled={busy} onClick={onRetry} type="button">
+          {original.units === null
+            ? m.subject_rating_control_retry_clear({}, options)
+            : m.subject_rating_control_retry_save({}, options)}
+        </Button>
+        <Button className={actionClassName} disabled={busy} onClick={onRead} type="button" variant="outline">
+          {m.subject_rating_control_read_current({}, options)}
+        </Button>
+      </div>
+      <div aria-live="polite" className="text-sm" data-slot="rating-current-answer">
+        {reading.kind === 'loading' && m.subject_rating_control_reading({}, options)}
+        {reading.kind === 'unavailable' && m.subject_rating_control_read_failed({}, options)}
+        {reading.kind === 'ready' && (
+          <>
+            <p>{reading.units === null
+              ? m.subject_rating_control_current_clear({}, options)
+              : m.subject_rating_control_current_save(
+                  { score: number(reading.units), max: number(currentScale.max) }, options,
+                )}</p>
+            <p className="text-muted-foreground">{m.subject_rating_control_read_separate({}, options)}</p>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -486,7 +550,12 @@ type SubjectRatingControlProps = {
 
 export function SubjectRatingControl(props: SubjectRatingControlProps) {
   // Question and answer observations can change within a reader's lifetime. Only that lifetime owns private intent.
-  const lifetime = JSON.stringify([props.binding?.key, props.subjectId, props.locale, props.session]);
+  const owner = useRef({ binding: props.binding, incarnation: 0 });
+  if (owner.current.binding !== props.binding)
+    owner.current = { binding: props.binding, incarnation: owner.current.incarnation + 1 };
+  const lifetime = JSON.stringify([
+    props.binding?.key, owner.current.incarnation, props.subjectId, props.locale, props.session,
+  ]);
   return <MountedSubjectRatingControl key={lifetime} {...props} />;
 }
 
@@ -519,6 +588,7 @@ function MountedSubjectRatingControl({
     initialFailure ? m.subject_rating_control_error({}, { locale: locale as never }) : null,
   );
   const [retryable, setRetryable] = useState(false);
+  const [reading, setReading] = useState<RatingAnswerRecovery>({ kind: 'idle' });
   const state: RatingControlState =
     session === 'unknown'
       ? { kind: 'unknown' }
@@ -532,22 +602,27 @@ function MountedSubjectRatingControl({
               ? { kind: 'unavailable' }
               : { kind: 'ready', units: own.units };
 
-  const change = async (units: number | null) => {
+  const change = (units: number | null) => {
     if (!binding?.isCurrent() || !mounted.current || activePending.current) return;
-    let intent = pendingCommand.current;
-    if (!intent || intent.request.units !== units) {
-      const command = personalScoreWriteCommand(null, units);
-      const expectedCredential = queryClient.getQueryData<BrowserSession>(sessionQueryKey)?.csrfToken ?? '';
-      const request = boundRatingCommand(subjectId, units, binding, question, command.key, expectedCredential);
-      // Capture the sender as well as the envelope: neither lazy loading nor later props may replace this request.
-      const sender: RatingWrite = write ?? (async () => {
-        const { changeQuestionBoundRating } = await import('./rating-actions');
-        return changeQuestionBoundRating({ data: request });
-      });
-      intent = Object.freeze({ request, sender, binding });
-      pendingCommand.current = intent;
-    }
-    const original = intent;
+    const command = personalScoreWriteCommand(null, units);
+    const expectedCredential = queryClient.getQueryData<BrowserSession>(sessionQueryKey)?.csrfToken ?? '';
+    const request = boundRatingCommand(subjectId, units, binding, question, command.key, expectedCredential);
+    // Capture the sender as well as the envelope: neither lazy loading nor later props may replace this request.
+    const sender: RatingWrite = write ?? (async () => {
+      const { changeQuestionBoundRating } = await import('./rating-actions');
+      if (!mounted.current || !binding.isCurrent()) return 'rejected';
+      return changeQuestionBoundRating({ data: request });
+    });
+    const original = Object.freeze({ request, sender, binding });
+    pendingCommand.current = original;
+    setRetryable(false);
+    setReading({ kind: 'idle' });
+    void dispatch(original);
+  };
+
+  const dispatch = async (original: PendingRatingCommand) => {
+    if (!mounted.current || !original.binding.isCurrent() || activePending.current ||
+      pendingCommand.current !== original) return;
     const attempt = {};
     const isCurrent = () => mounted.current && original.binding.isCurrent() &&
       pendingCommand.current === original && activePending.current === attempt;
@@ -583,19 +658,55 @@ function MountedSubjectRatingControl({
     }
   };
 
+  const readCurrentAnswer = async (original: PendingRatingCommand) => {
+    if (!mounted.current || !original.binding.isCurrent() || activePending.current ||
+      pendingCommand.current !== original) return;
+    const attempt = {};
+    activePending.current = attempt;
+    const isCurrent = () => mounted.current && original.binding.isCurrent() &&
+      pendingCommand.current === original && activePending.current === attempt;
+    setReading({ kind: 'loading' });
+    try {
+      const result = await queryClient.fetchQuery(
+        subjectOwnRatingQuery(original.request.subjectId, locale, original.binding.scope),
+      );
+      if (!isCurrent()) return;
+      setReading(result.kind === 'ready' ? { kind: 'ready', units: result.units } : { kind: 'unavailable' });
+    } catch {
+      if (isCurrent()) setReading({ kind: 'unavailable' });
+    } finally {
+      if (mounted.current && original.binding.isCurrent() && activePending.current === attempt)
+        activePending.current = null;
+    }
+  };
+
+  const original = retryable ? pendingCommand.current : null;
   return (
-    <RatingControlView
-      question={question}
-      hideQuestionLabel={hideQuestionLabel}
-      failure={failure}
-      locale={locale}
-      onClear={() => void change(null)}
-      onSet={(units) => void change(units)}
-      pending={pending}
-      retryable={retryable}
-      returnTo={returnTo}
-      state={state}
-      subjectId={subjectId}
-    />
+    <div className="min-w-0 space-y-3">
+      <RatingControlView
+        question={question}
+        hideQuestionLabel={hideQuestionLabel}
+        failure={original ? null : failure}
+        locale={locale}
+        onClear={() => change(null)}
+        onSet={change}
+        pending={pending || reading.kind === 'loading'}
+        preserveDraft={retryable}
+        returnTo={returnTo}
+        state={state}
+        subjectId={subjectId}
+      />
+      {original && (
+        <RatingRecoveryView
+          original={original.request}
+          currentScale={question.scale}
+          locale={locale}
+          pending={pending}
+          reading={reading}
+          onRetry={() => void dispatch(original)}
+          onRead={() => void readCurrentAnswer(original)}
+        />
+      )}
+    </div>
   );
 }
