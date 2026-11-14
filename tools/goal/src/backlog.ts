@@ -71,7 +71,7 @@ import { confirmedBacklogOwner, requireUrgentDispatch, type AuthenticatedManager
 
 export { backlogDirectory };
 
-/** A manager is woken when its Goal has fewer ready briefs than this. */
+/** Configured source low-water remains an independent wake threshold. */
 export const BACKLOG_LOW_WATER = defaultPolicy.backlog.lowWater;
 /** Ordinary low-backlog repeats wait this long unless scoped evidence changes or the owner clears its disposition. */
 export const BACKLOG_WAKE_INTERVAL_MS = defaultPolicy.backlog.wakeIntervalMs;
@@ -1569,17 +1569,18 @@ function runnableSourceSupply(runtime: BacklogRuntime, goal: string): { ready: n
   return { ready, files: files.length };
 }
 
-/** Wake each running Goal manager below runnable-source low-water, at most once an hour unless its scope changed. */
+/** Wake an eligible Goal manager when runnable source is below low-water or its estimated share of eligible width. */
 async function wakeLowBacklogs(runtime: BacklogRuntime, now: number, eligibleWidth: number): Promise<string[]> {
   const { db } = runtime;
   if (!tableExists(db, 'manager_sessions')) return [];
   const woken: string[] = [];
-  let width: WidthSnapshot | undefined;
+  const owners: { row: ManagerRow; goals: string[] }[] = [];
   for (const row of db.query('SELECT id, state FROM manager_sessions ORDER BY id').all() as ManagerRow[]) {
     let state: {
       kind?: string;
       status?: string;
       goal?: string;
+      goals?: string[];
       waitingForInbox?: boolean;
       goalPauseOrigin?: string;
       goalState?: { status?: string } | null;
@@ -1598,17 +1599,56 @@ async function wakeLowBacklogs(runtime: BacklogRuntime, now: number, eligibleWid
       (goalStatus === 'paused' && !controllerParked)
     )
       continue;
-    const goals = ownedGoals(state);
-    if (!goals.length) continue;
+    const goals = ownedGoals(state)
+      .sort((left, right) => left.localeCompare(right))
+      .filter((goal) => {
+        const previous = db
+          .query(
+            `SELECT low_wake_at, low_work_manager, low_work_session, low_work_scope
+             FROM backlog_goals WHERE goal = ?`,
+          )
+          .get(goal) as LowWorkDispositionRow | null;
+        if (!previous?.low_work_scope) return true;
+        const authority = currentGoalManagerAuthority(db, goal);
+        if (
+          !authority ||
+          authority.id !== row.id ||
+          previous.low_work_manager !== authority.id ||
+          previous.low_work_session !== authority.sessionId
+        )
+          return true;
+        return previous.low_work_scope !== backlogNoWorkScope(db, runtime.stateDirectory, goal, authority);
+      });
+    if (goals.length) owners.push({ row, goals });
+  }
+
+  // eligibleWidth is a shared post-admission snapshot, not capacity granted to each Goal.
+  // Divide whole openings evenly across eligible managers and then their Goals; stable order owns remainders.
+  const divide = (total: number, parts: number): number[] => {
+    if (parts === 0) return [];
+    const base = Math.floor(total / parts);
+    const remainder = total % parts;
+    return Array.from({ length: parts }, (_, index) => base + (index < remainder ? 1 : 0));
+  };
+  const managerShares = divide(Math.max(0, eligibleWidth), owners.length);
+  const ownerOpenings = new Map<string, number>();
+  owners.forEach(({ row, goals }, managerIndex) => {
+    const goalShares = divide(managerShares[managerIndex]!, goals.length);
+    goals.forEach((goal, goalIndex) => ownerOpenings.set(`${row.id}\0${goal}`, goalShares[goalIndex]!));
+  });
+
+  let width: WidthSnapshot | undefined;
+  for (const { row, goals } of owners) {
     let delivered = false;
     for (const goal of goals) {
       const directory = backlogDirectory(runtime.stateDirectory, goal);
       const supply = runnableSourceSupply(runtime, goal);
-      if (
-        supply.ready >= (runtime.policy ?? defaultPolicy).backlog.lowWater &&
-        !(supply.ready === 0 && eligibleWidth > 0)
-      )
-        continue;
+      const lowWater = (runtime.policy ?? defaultPolicy).backlog.lowWater;
+      const openings = ownerOpenings.get(`${row.id}\0${goal}`) ?? 0;
+      const target = Math.max(lowWater, openings);
+      const sourceDeficit = Math.max(0, openings - supply.ready);
+      const lowWaterDeficit = Math.max(0, lowWater - supply.ready);
+      if (sourceDeficit === 0 && lowWaterDeficit === 0) continue;
       const previous = db
         .query(
           `SELECT low_wake_at, low_work_manager, low_work_session, low_work_scope
@@ -1671,10 +1711,12 @@ async function wakeLowBacklogs(runtime: BacklogRuntime, now: number, eligibleWid
             goalId: goal,
             kind: 'instruction',
             summary:
-              `Runnable source low: ${supply.ready} ready source brief(s) in ${directory} (${supply.files} Markdown backlog file(s)); eligible width ${eligibleWidth} worker slot(s). ` +
+              `Runnable source low: ${supply.ready} ready source brief(s) in ${directory} (${supply.files} Markdown backlog file(s)); ` +
+              `target ${target} source brief(s) (low-water ${lowWater}; estimated openings ${openings} of ${eligibleWidth} shared eligible slots); ` +
+              `opening deficit ${sourceDeficit}; low-water deficit ${lowWaterDeficit}. ` +
               `Registered source starts ${registered?.sourceReady ?? 0} (${registered?.sourcePendingStarts ?? 0} durable pending); held ${registered?.sourceHolds ?? 0} (${registered?.sourceDependencyHolds ?? 0} dependencies, ${registered?.sourceWaiting ?? 0} check or custody waits); live source writers ${registered?.sourceWriters ?? 0}. ` +
               'Refill with complete source outcomes before current writers finish; low-water is an alert, not a quota. ' +
-              'Source supply and eligible width are separate observations; ordinary source starts continue under existing admission.',
+              'Estimated owner openings are a bounded share of shared width, not a capacity grant; ordinary source starts continue under existing admission.',
           });
           return true;
         })

@@ -752,7 +752,9 @@ test('a controller-parked manager below eight ready briefs is woken at most once
   const events = f.inbox.pending('web');
   expect(events).toHaveLength(1);
   expect(events[0]!.event.summary).toContain('Runnable source low: 7 ready source brief(s)');
-  expect(events[0]!.event.summary).toContain('eligible width 0 worker slot(s)');
+  expect(events[0]!.event.summary).toContain(
+    'target 8 source brief(s) (low-water 8; estimated openings 0 of 0 shared eligible slots); opening deficit 0; low-water deficit 1.',
+  );
   expect(events[0]!.event.summary).toContain('low-water is an alert, not a quota');
   expect(events[0]!.event.summary).toContain(join(f.state, 'backlog', 'web'));
   for (const id of [
@@ -802,9 +804,59 @@ test('zero runnable source with eligible width wakes once while docs, proof, dup
   expect(notices).toHaveLength(1);
   expect(notices[0]!.event.summary).toContain('0 ready source brief(s)');
   expect(notices[0]!.event.summary).toContain('5 Markdown backlog file(s)');
-  expect(notices[0]!.event.summary).toContain('eligible width 1 worker slot(s)');
+  expect(notices[0]!.event.summary).toContain(
+    'target 8 source brief(s) (low-water 8; estimated openings 1 of 1 shared eligible slots); opening deficit 1; low-water deficit 8.',
+  );
   expect(notices[0]!.event.summary).toContain('Registered source starts 0 (0 durable pending)');
   expect(notices[0]!.event.summary).toContain('live source writers 0');
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
+  expect(f.inbox.pending('web')).toHaveLength(1);
+});
+
+test('a nonempty ready queue can leave an eligible source deficit after dispatch', async () => {
+  const f = fixture({ workerCap: 8, perSweep: 4 });
+  f.runtime.policy = readControlPolicy({ backlog: { lowWater: 1 } });
+  manager(f.db, 'web', { kind: 'managed', status: 'running', goal: 'web', goalState: { status: 'active' } });
+  for (let index = 0; index < 6; index++) brief(f.state, 'web', `${index}.md`, 60_000);
+
+  const sweep = await sweepBacklog(f.runtime);
+
+  expect(sweep.dispatched).toHaveLength(4);
+  expect(backlogStatus(f.state).find(({ goal }) => goal === 'web')?.ready).toBe(2);
+  const notice = f.inbox.pending('web')[0]!.event.summary;
+  expect(notice).toContain('Runnable source low: 2 ready source brief(s)');
+  expect(notice).toContain(
+    'target 4 source brief(s) (low-water 1; estimated openings 4 of 4 shared eligible slots); opening deficit 2; low-water deficit 0.',
+  );
+});
+
+test('shared eligible openings exclude no-work owners; sufficient source stays quiet', async () => {
+  const f = fixture({ workerCap: 8 });
+  f.runtime.perSweep = 0;
+  f.runtime.policy = readControlPolicy({ backlog: { lowWater: 1 } });
+  manager(f.db, 'search', { kind: 'managed', status: 'running', goal: 'search', goalState: { status: 'active' } });
+  manager(f.db, 'web', { kind: 'managed', status: 'running', goal: 'web', goalState: { status: 'active' } });
+  manager(f.db, 'parked', {
+    kind: 'managed',
+    status: 'running',
+    engine: 'codex',
+    threadId: 'parked-session',
+    goal: 'parked',
+    goals: ['parked'],
+    goalState: { status: 'active' },
+  });
+  await backlogDisposition(f, 'parked', 'no-work', 'parked', 'parked-session');
+  for (let index = 0; index < 4; index++) brief(f.state, 'search', `${index}.md`, 60_000);
+  for (let index = 0; index < 3; index++) brief(f.state, 'web', `${index}.md`, 60_000);
+
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  expect(f.inbox.pending('parked')).toHaveLength(0);
+  expect(f.inbox.pending('search')).toHaveLength(0);
+  const notice = f.inbox.pending('web')[0]!.event.summary;
+  expect(notice).toContain(
+    'target 4 source brief(s) (low-water 1; estimated openings 4 of 8 shared eligible slots); opening deficit 1; low-water deficit 0.',
+  );
+  expect(notice).toContain('Registered source starts 0 (0 durable pending)');
   expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
   expect(f.inbox.pending('web')).toHaveLength(1);
 });

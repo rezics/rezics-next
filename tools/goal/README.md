@@ -3018,16 +3018,22 @@ host's socket. The host skips the minute while the previous child is still runni
   receives one event per run listing those tasks. Control-plane, stabilize and verification tasks are exempt.
 - **Chained briefs.** Before the dispatch above, each landed session's offer is answered; see
   [Chained briefs](#chained-briefs).
-- **Low backlog.** A running Goal manager below the configured low-water count of runnable source briefs receives the
-  existing event at most once an hour unless its scoped no-work disposition becomes stale or is cleared. A controller-parked native Goal remains
+- **Low backlog.** A running Goal manager receives the existing event when its runnable source is below the larger of
+  configured low-water and its estimated share of eligible coding openings. `eligibleWidth` is the shared remaining
+  worker capacity after admission, not capacity assigned to each Goal. The bounded fallback divides whole openings
+  evenly across eligible running managers without a current scoped no-work disposition, then across each manager's
+  owned Goals; stable manager and Goal order takes any indivisible remainder. This estimate only drives the signal and
+  never changes dispatch or admission. The notice reports shared width, estimated owner openings, ready source, opening
+  deficit and low-water shortfall, plus registered starts,
+  dependency and check or custody holds, and live source writers, so later admission pressure remains visible.
+  The existing event is sent at most once an hour unless its scoped no-work disposition becomes stale or is cleared.
+  A controller-parked native Goal remains
   eligible only with persisted inbox-wait intent and automatic pause origin; explicit pauses and complete, budget-limited
-  or usage-limited Goals stay quiet. The notice separates source supply from eligible worker width and names registered
-  source starts, dependency and check or custody holds, and live source writers. It uses the existing capacity and
-  allowance observations without gating starts. Only implementation, interface, bulk-text and claim briefs
+  or usage-limited Goals stay quiet. The signal uses existing capacity and allowance observations without gating starts.
+  Only implementation, interface, bulk-text and claim briefs
   with writable non-documentation paths count; proof-only, documentation-only, continuation duplicates and unresolved
   dependencies do not. Treat low-water as an alert, not a quota. Only non-hidden `*.md` files directly in the Goal
-  backlog are candidates; at or above the count, no low-backlog event is sent unless source supply is zero while width
-  remains eligible.
+  backlog are candidates.
 
 Decision: `goal backlog disposition <goal> no-work` lets only the authenticated, unique running owner record that no
 additional writable outcome exists for the current scoped Goal evidence. The durable record binds to that owner
@@ -3544,7 +3550,7 @@ retain their meaning. Blocked Goals accept admitted explicit inbox turns without
 recovery leave idle threads parked. See the
 [OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex).
 
-Decision: Zero runnable source with eligible width is actionable; the backlog sweep reports source supply separately from width, excludes documentation, proof, existing continuation duplicates and unresolved dependencies, and uses the existing cooldown plus authenticated no-work dedupe. The same notice identifies registered source starts, dependency and check or custody holds, and live source writers; automatic inbox parks may wake while operator pauses and complete, budget-limited or usage-limited Goals stay quiet.
+Decision: Wake below the larger of configured low-water and a deterministic even-share estimate of shared post-admission eligible openings; report shared width, estimated openings, ready supply, opening deficit, low-water shortfall, registered starts, holds and live writers. The estimate is signal-only and retains the existing cooldown, authenticated no-work dedupe and pause eligibility; it never gates starts.
 
 Decision: An inbox-parked Codex turn waits 250 ms to allow the common `turn/started` then UserMessage item ordering;
 this timing window alone never authorizes an interrupt. Same-thread, same-turn `item/started` or `item/completed`
