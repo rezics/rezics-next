@@ -14,10 +14,23 @@ owns a native kernel and a production web Worker; all served-page assertions cro
 Owner suites listed below remain their owners' acceptance; a served-page binding marked pending does not become
 covered merely by linking a kernel test.
 
-Decision: pin the 35 first-public-scope path IDs in one focused walk-source test; add no extra stories. Native host
-coverage stays in `stack.host`, `auth-stack.host`, `native-agent-identity.host` and `web-publication-interrupt.host`.
+Decision: the active first-public-scope walk names 36 paths. It preserves the original in-scope IDs and excludes
+closed financial Commerce paths W27/W28. The focused walk-source test pins that catalogue; the existing
+`stack.host`, `auth-stack.host`, `native-agent-identity.host` and `web-publication-interrupt.host` coverage remains.
 
-## Current-dev first-public-scope walk
+## First-public-scope walk
+
+Required W36 (Book catalogue), W37 (hosted Book author/reader) and W38 (knowledge workspaces) have separate
+native/browser entrypoints under `apps/web/tests/native/`: `book-catalogue-journey.host.test.ts`,
+`hosted-book-journey.host.test.ts` and `knowledge-journey.host.test.ts`, respectively. Run them through
+`bun apps/web/scripts/check.ts --host` with their explicit `tests/native/` paths. They own isolated fixtures and
+do not attach to the seeded walk. That walk reports them as `FAIL-unreached` with exact acceptance commands;
+source presence and a successful independent suite do not manufacture a seeded-walk result.
+
+### Historical observation (2026-11-07)
+
+The following 35-path table records the dated observation below, including financial paths that are now closed.
+It is not current acceptance of the active 36 paths and supplies no result for W36–W38.
 
 Observed source `8529d3359d` on base `76ee0200bf`. One admitted walk slot (2/6) ran
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-scope-walk.ts`.
@@ -32,11 +45,9 @@ then worker exit 1 and `walk: the identity phase did not start: walk: "Worker re
 Readiness probes to native JWKS and Kernel `/v1/definitions` reported `ECONNREFUSED`. No seeded UUID or mounted page
 was obtained.
 
-Hourly: **0/35**. Slowest failing path: **W01** (shared 349.874 s identity startup). Anonymous paths did not proceed:
-Kernel never became ready. Signed-in paths remain unreached for the same prerequisite; urgent **ce33aabc** is the
-single issuer/JWKS sign-in startup repair and is not implemented here. No other reached product failure was observed,
-so no additional repair brief is opened. Original `stack.host`, `auth-stack.host`, `native-agent-identity.host` and
-`web-publication-interrupt.host` coverage is unchanged. Rerun after ce33aabc lands.
+Historical result: **0/35**. Slowest failing path: **W01** (shared 349.874 s identity startup). Anonymous and signed-in
+paths were unreached because Kernel never became ready. No reached product failure was observed. Original
+`stack.host`, `auth-stack.host`, `native-agent-identity.host` and `web-publication-interrupt.host` coverage is unchanged.
 
 | Path | User-visible path                                                                           | Persona |   Elapsed | Result         | First wrong result                                                                    |
 | ---- | ------------------------------------------------------------------------------------------- | ------- | --------: | -------------- | ------------------------------------------------------------------------------------- |

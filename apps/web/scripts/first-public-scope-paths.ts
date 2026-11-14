@@ -1,4 +1,4 @@
-/** First-public-scope Web walk paths. The driver and capability table share this catalog. */
+/** Active first-public Web paths. Closed financial Commerce is excluded; historical IDs stay stable. */
 export const FIRST_PUBLIC_SCOPE_PATHS = [
   { id: 'W01', job: 'All public pages → localized shell → navigate on phone and desktop', auth: 'anonymous' },
   { id: 'W02', job: 'Public Subject → each released work, release and agent reader', auth: 'anonymous' },
@@ -87,16 +87,6 @@ export const FIRST_PUBLIC_SCOPE_PATHS = [
     auth: 'signed-in',
   },
   {
-    id: 'W27',
-    job: 'Subject → admitted offer → checkout → payment return with authoritative fulfilment',
-    auth: 'signed-in',
-  },
-  {
-    id: 'W28',
-    job: 'Orders or entitlements → captured fixed Edition → same-tab reader → exact detail return',
-    auth: 'signed-in',
-  },
-  {
     id: 'W29',
     job: 'Board → thread → post or reply → current native conversation and history',
     auth: 'mixed',
@@ -130,6 +120,24 @@ export const FIRST_PUBLIC_SCOPE_PATHS = [
     id: 'W35',
     job: 'Anonymous page → canonical, sharing and JSON-LD → robots and every eligible sitemap shard',
     auth: 'anonymous',
+  },
+  {
+    id: 'W36',
+    job: 'Books → canonical Book, Series and Edition discovery → public reader → exact-type personal shelf',
+    auth: 'mixed',
+    nativeHost: 'tests/native/book-catalogue-journey.host.test.ts',
+  },
+  {
+    id: 'W37',
+    job: 'Studio → nested hosted Book drafts → exact publication → public chapters → progress and Continue',
+    auth: 'mixed',
+    nativeHost: 'tests/native/hosted-book-journey.host.test.ts',
+  },
+  {
+    id: 'W38',
+    job: 'Private nested notebook → Subject attachment → exact public revision → reuse into another notebook',
+    auth: 'mixed',
+    nativeHost: 'tests/native/knowledge-journey.host.test.ts',
   },
 ] as const;
 
