@@ -496,7 +496,12 @@ async function readableSubject(dependencies: ReportDependencies, id: string, con
   });
   try {
     return !!(await within(context.deadline, () =>
-      readSubjectReference(dependencies.pool, id, (client) => check(deadlineClient(client, context.deadline))),
+      readSubjectReference(
+        dependencies.pool,
+        id,
+        (client) => check(deadlineClient(client, context.deadline)),
+        context.deadline,
+      ),
     ));
   } catch (error) {
     if (error instanceof SubjectRedirectError) return false;

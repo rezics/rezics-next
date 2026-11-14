@@ -510,13 +510,15 @@ Semantic writes use the route action and authority below. When the authority and
 
 ## Identity references
 
-`readSubjectReference(pool: Pool, id: string, authorize: (client: PoolClient) => Promise<boolean>): Promise<{ id: string; component: SubjectComponent } | null>`
+`readSubjectReference(pool: Pool, id: string, authorize: (client: PoolClient) => Promise<boolean>, requestDeadline?: number): Promise<{ id: string; component: SubjectComponent } | null>`
 returns only a visible, authorized source identity and its partition anchor. The mandatory callback runs on the same
 repeatable-read, read-only client as the identity and partition reads. Callers close over their actual Access check
 and native command acceptance time when present. Missing, invalid, hidden, taken-down and denied sources return null;
 deadline and unavailable failures propagate. An authorized visible redirect throws `SubjectRedirectError` without
 following its target. Each survivor needs a separately anchored current authorization check, including after revocation.
 The component is an observation of source identity, not authorization evidence or a display-freshness promise.
+An optional absolute `requestDeadline` is forwarded to the existing read transaction and narrowed by any inherited
+snapshot deadline; omission retains the transaction executor's current default.
 
 This boundary does not prepare types or read display metadata. Fresh profile writers use `readItemTypes` independently.
 Full subject display readers retain their existing projection freshness and deadline behavior.
