@@ -69,6 +69,22 @@ $$;
 
 
 --
+-- Name: guard_content_post(); Type: FUNCTION; Schema: commerce; Owner: -
+--
+
+CREATE FUNCTION commerce.guard_content_post() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.content_post IS DISTINCT FROM OLD.content_post THEN
+    RAISE EXCEPTION 'Captured Content Post is immutable, including unknown historical mapping' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_creation_attempt(); Type: FUNCTION; Schema: commerce; Owner: -
 --
 
@@ -365,6 +381,52 @@ $_$;
 
 
 --
+-- Name: valid_content_post(jsonb); Type: FUNCTION; Schema: commerce; Owner: -
+--
+
+CREATE FUNCTION commerce.valid_content_post(value jsonb) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE STRICT
+    AS $_$
+DECLARE benefit jsonb; resource jsonb; native_id uuid; native_route integer;
+BEGIN
+  IF octet_length(value::text) > 4096 OR jsonb_typeof(value) <> 'object'
+     OR NOT value ?& ARRAY['benefit','creatorAccountId','targetSubjectId','saleTermsReference','delivery','acquisition','quantity']
+     OR value - ARRAY['benefit','creatorAccountId','targetSubjectId','saleTermsReference','delivery','acquisition','quantity'] <> '{}'::jsonb
+     OR value->>'saleTermsReference' IS DISTINCT FROM 'content-post-revisions-v1'
+     OR value->>'delivery' IS DISTINCT FROM 'eligible-post-revisions'
+     OR value->>'acquisition' IS DISTINCT FROM 'one-time-account-bound'
+     OR value->'quantity' IS DISTINCT FROM '1'::jsonb THEN RETURN false; END IF;
+  benefit := value->'benefit';
+  IF jsonb_typeof(benefit) <> 'object'
+     OR NOT benefit ?& ARRAY['kind','resourceType','resource','action']
+     OR benefit - ARRAY['kind','resourceType','resource','action'] <> '{}'::jsonb
+     OR benefit->>'kind' IS DISTINCT FROM 'content-post'
+     OR benefit->>'resourceType' IS DISTINCT FROM 'content.post'
+     OR benefit->>'action' IS DISTINCT FROM 'post:read' THEN RETURN false; END IF;
+  resource := benefit->'resource';
+  IF jsonb_typeof(resource) <> 'object'
+     OR NOT resource ?& ARRAY['route','id']
+     OR resource - ARRAY['route','id'] <> '{}'::jsonb
+     OR jsonb_typeof(resource->'route') IS DISTINCT FROM 'number'
+     OR jsonb_typeof(resource->'id') IS DISTINCT FROM 'string'
+     OR jsonb_typeof(value->'creatorAccountId') IS DISTINCT FROM 'string'
+     OR jsonb_typeof(value->'targetSubjectId') IS DISTINCT FROM 'string'
+     OR resource->>'id' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+     OR value->>'creatorAccountId' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+     OR value->>'targetSubjectId' !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
+    RETURN false;
+  END IF;
+  native_id := (resource->>'id')::uuid;
+  native_route := get_byte(uuid_send(native_id), 10) * 256 + get_byte(uuid_send(native_id), 11);
+  RETURN (resource->>'route')::integer = native_route
+     AND (resource->>'route')::numeric = native_route;
+EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range THEN
+  RETURN false;
+END;
+$_$;
+
+
+--
 -- Name: valid_money_unit(jsonb); Type: FUNCTION; Schema: commerce; Owner: -
 --
 
@@ -571,12 +633,16 @@ CREATE TABLE commerce.entitlement (
     revision integer NOT NULL,
     transaction_id uuid NOT NULL,
     content_edition jsonb,
+    content_post jsonb,
     CONSTRAINT entitlement_check CHECK ((route = ((get_byte(uuid_send(entitlement_id), 10) * 256) + get_byte(uuid_send(entitlement_id), 11)))),
     CONSTRAINT entitlement_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT entitlement_check2 CHECK ((route = ((get_byte(uuid_send(order_id), 10) * 256) + get_byte(uuid_send(order_id), 11)))),
     CONSTRAINT entitlement_check3 CHECK (((revoked_at IS NULL) = (revoke_reason IS NULL))),
     CONSTRAINT entitlement_content_edition_check CHECK (((content_edition IS NULL) OR commerce.valid_content_edition(content_edition))),
+    CONSTRAINT entitlement_content_post_check CHECK (((content_post IS NULL) OR commerce.valid_content_post(content_post))),
     CONSTRAINT entitlement_edition_subject CHECK (((content_edition IS NULL) OR ((content_edition ->> 'targetSubjectId'::text) = (target_subject_id)::text))),
+    CONSTRAINT entitlement_native_benefit_exclusive CHECK (((content_post IS NULL) OR (content_edition IS NULL))),
+    CONSTRAINT entitlement_post_subject CHECK (((content_post IS NULL) OR ((content_post ->> 'targetSubjectId'::text) = (target_subject_id)::text))),
     CONSTRAINT entitlement_revision_check CHECK ((revision >= 1)),
     CONSTRAINT entitlement_revoke_reason_check CHECK ((revoke_reason = ANY (ARRAY['refund'::text, 'dispute'::text]))),
     CONSTRAINT entitlement_route_check CHECK (((route >= 0) AND (route <= 65535)))
@@ -661,13 +727,18 @@ CREATE TABLE commerce.offer (
     content_edition jsonb,
     money_unit jsonb,
     tax_behavior text,
+    content_post jsonb,
     CONSTRAINT offer_check CHECK ((route = ((get_byte(uuid_send(offer_id), 10) * 256) + get_byte(uuid_send(offer_id), 11)))),
     CONSTRAINT offer_check1 CHECK ((route = ((get_byte(uuid_send(creator_account_id), 10) * 256) + get_byte(uuid_send(creator_account_id), 11)))),
     CONSTRAINT offer_content_edition_check CHECK (((content_edition IS NULL) OR commerce.valid_content_edition(content_edition))),
+    CONSTRAINT offer_content_post_check CHECK (((content_post IS NULL) OR commerce.valid_content_post(content_post))),
     CONSTRAINT offer_currency_check CHECK ((currency ~ '^[a-z]{3}$'::text)),
     CONSTRAINT offer_edition_creator CHECK (((content_edition IS NULL) OR ((content_edition ->> 'creatorAccountId'::text) = (creator_account_id)::text))),
     CONSTRAINT offer_edition_subject CHECK (((content_edition IS NULL) OR ((content_edition ->> 'targetSubjectId'::text) = (target_subject_id)::text))),
     CONSTRAINT offer_money_unit_check CHECK (((money_unit IS NULL) OR commerce.valid_money_unit(money_unit))),
+    CONSTRAINT offer_native_benefit_exclusive CHECK (((content_post IS NULL) OR (content_edition IS NULL))),
+    CONSTRAINT offer_post_creator CHECK (((content_post IS NULL) OR ((content_post ->> 'creatorAccountId'::text) = (creator_account_id)::text))),
+    CONSTRAINT offer_post_subject CHECK (((content_post IS NULL) OR ((content_post ->> 'targetSubjectId'::text) = (target_subject_id)::text))),
     CONSTRAINT offer_revision_check CHECK ((revision >= 1)),
     CONSTRAINT offer_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT offer_royalty_basis_points_check CHECK (((royalty_basis_points >= 0) AND (royalty_basis_points <= 10000))),
@@ -778,6 +849,10 @@ CREATE TABLE commerce.purchase_order (
     tax_behavior text,
     acquisition_release text,
     checkout_minimized_at timestamp with time zone,
+    content_post jsonb,
+    CONSTRAINT order_native_benefit_exclusive CHECK (((content_post IS NULL) OR (content_edition IS NULL))),
+    CONSTRAINT order_post_creator CHECK (((content_post IS NULL) OR ((content_post ->> 'creatorAccountId'::text) = (creator_account_id)::text))),
+    CONSTRAINT order_post_subject CHECK (((content_post IS NULL) OR ((content_post ->> 'targetSubjectId'::text) = (target_subject_id)::text))),
     CONSTRAINT purchase_order_acquisition_release_check CHECK ((acquisition_release = ANY (ARRAY['no-creation'::text, 'cancelled-no-charge'::text, 'refunded'::text, 'lost-dispute'::text]))),
     CONSTRAINT purchase_order_amount_tax_minor_check CHECK ((amount_tax_minor >= 0)),
     CONSTRAINT purchase_order_check CHECK ((route = ((get_byte(uuid_send(order_id), 10) * 256) + get_byte(uuid_send(order_id), 11)))),
@@ -785,6 +860,7 @@ CREATE TABLE commerce.purchase_order (
     CONSTRAINT purchase_order_checkout_session_id_check CHECK ((checkout_session_id ~ '^cs_(test|live)_[A-Za-z0-9]{1,250}$'::text)),
     CONSTRAINT purchase_order_checkout_state_check CHECK ((((checkout_session_id IS NULL) AND (checkout_url IS NULL) AND (checkout_expires_at IS NULL) AND (checkout_minimized_at IS NULL)) OR ((checkout_session_id IS NOT NULL) AND (checkout_url IS NOT NULL) AND (checkout_expires_at IS NOT NULL) AND (checkout_minimized_at IS NULL)) OR ((checkout_session_id IS NOT NULL) AND (checkout_url IS NULL) AND (checkout_expires_at IS NULL) AND (checkout_minimized_at IS NOT NULL)))),
     CONSTRAINT purchase_order_content_edition_check CHECK (((content_edition IS NULL) OR commerce.valid_content_edition(content_edition))),
+    CONSTRAINT purchase_order_content_post_check CHECK (((content_post IS NULL) OR commerce.valid_content_post(content_post))),
     CONSTRAINT purchase_order_currency_check CHECK ((currency ~ '^[a-z]{3}$'::text)),
     CONSTRAINT purchase_order_edition_creator CHECK (((content_edition IS NULL) OR ((content_edition ->> 'creatorAccountId'::text) = (creator_account_id)::text))),
     CONSTRAINT purchase_order_edition_subject CHECK (((content_edition IS NULL) OR ((content_edition ->> 'targetSubjectId'::text) = (target_subject_id)::text))),
@@ -1131,6 +1207,13 @@ CREATE INDEX entitlement_edition_buyer_lookup ON commerce.entitlement USING btre
 
 
 --
+-- Name: entitlement_post_active; Type: INDEX; Schema: commerce; Owner: -
+--
+
+CREATE INDEX entitlement_post_active ON commerce.entitlement USING btree (route, account_id, ((content_post -> 'benefit'::text)), entitlement_id) WHERE ((content_post IS NOT NULL) AND (revoked_at IS NULL) AND (revoke_reason IS NULL));
+
+
+--
 -- Name: money_observation_buyer; Type: INDEX; Schema: commerce; Owner: -
 --
 
@@ -1208,6 +1291,13 @@ CREATE INDEX purchase_order_erasure_buyer ON commerce.purchase_order USING btree
 
 
 --
+-- Name: purchase_order_post_unresolved; Type: INDEX; Schema: commerce; Owner: -
+--
+
+CREATE INDEX purchase_order_post_unresolved ON commerce.purchase_order USING btree (route, buyer_account_id, ((content_post -> 'benefit'::text)), order_id) WHERE ((content_post IS NOT NULL) AND (acquisition_release IS NULL));
+
+
+--
 -- Name: purchase_order_retained_buyer_page; Type: INDEX; Schema: commerce; Owner: -
 --
 
@@ -1261,6 +1351,13 @@ CREATE TRIGGER checkout_creation_attempt_money_guard BEFORE UPDATE ON commerce.c
 --
 
 CREATE TRIGGER entitlement_content_edition_guard BEFORE UPDATE ON commerce.entitlement FOR EACH ROW EXECUTE FUNCTION commerce.guard_content_edition();
+
+
+--
+-- Name: entitlement entitlement_content_post_guard; Type: TRIGGER; Schema: commerce; Owner: -
+--
+
+CREATE TRIGGER entitlement_content_post_guard BEFORE UPDATE ON commerce.entitlement FOR EACH ROW EXECUTE FUNCTION commerce.guard_content_post();
 
 
 --
@@ -1320,6 +1417,13 @@ CREATE TRIGGER offer_content_edition_guard BEFORE UPDATE ON commerce.offer FOR E
 
 
 --
+-- Name: offer offer_content_post_guard; Type: TRIGGER; Schema: commerce; Owner: -
+--
+
+CREATE TRIGGER offer_content_post_guard BEFORE UPDATE ON commerce.offer FOR EACH ROW EXECUTE FUNCTION commerce.guard_content_post();
+
+
+--
 -- Name: offer offer_money_guard; Type: TRIGGER; Schema: commerce; Owner: -
 --
 
@@ -1331,6 +1435,13 @@ CREATE TRIGGER offer_money_guard BEFORE UPDATE ON commerce.offer FOR EACH ROW EX
 --
 
 CREATE TRIGGER offer_target_guard BEFORE UPDATE ON commerce.offer FOR EACH ROW EXECUTE FUNCTION commerce.guard_offer_target();
+
+
+--
+-- Name: purchase_order order_content_post_guard; Type: TRIGGER; Schema: commerce; Owner: -
+--
+
+CREATE TRIGGER order_content_post_guard BEFORE UPDATE ON commerce.purchase_order FOR EACH ROW EXECUTE FUNCTION commerce.guard_content_post();
 
 
 --

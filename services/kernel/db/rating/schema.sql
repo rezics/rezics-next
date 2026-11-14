@@ -175,9 +175,9 @@ $$;
 -- Name: rebuild_realm_rank_canonical_order(integer, integer, boolean); Type: FUNCTION; Schema: rating; Owner: -
 --
 
-CREATE FUNCTION rating.rebuild_realm_rank_canonical_order(p_partition integer, p_limit integer, p_restart boolean DEFAULT false)
-RETURNS TABLE(complete boolean, consumed integer, canonical_generation bigint, revision bigint)
-LANGUAGE plpgsql AS $$
+CREATE FUNCTION rating.rebuild_realm_rank_canonical_order(p_partition integer, p_limit integer, p_restart boolean DEFAULT false) RETURNS TABLE(complete boolean, consumed integer, canonical_generation bigint, revision bigint)
+    LANGUAGE plpgsql
+    AS $$
 DECLARE
   current_generation bigint;
   build rating.realm_rank_canonical_state%ROWTYPE;
@@ -837,13 +837,11 @@ CREATE TABLE rating.realm_rank_canonical_state (
     after_population uuid,
     after_subject uuid,
     revision bigint DEFAULT 1 NOT NULL,
-    CONSTRAINT realm_rank_canonical_state_partition_no_check CHECK (partition_no BETWEEN 0 AND 4095),
-    CONSTRAINT realm_rank_canonical_state_canonical_generation_check CHECK (canonical_generation > 0),
-    CONSTRAINT realm_rank_canonical_state_building_generation_check CHECK (building_generation > 0),
-    CONSTRAINT realm_rank_canonical_state_revision_check CHECK (revision > 0),
-    CONSTRAINT realm_rank_canonical_state_check CHECK (
-      (after_question IS NULL AND after_population IS NULL AND after_subject IS NULL)
-      OR (after_question IS NOT NULL AND after_population IS NOT NULL AND after_subject IS NOT NULL))
+    CONSTRAINT realm_rank_canonical_state_building_generation_check CHECK ((building_generation > 0)),
+    CONSTRAINT realm_rank_canonical_state_canonical_generation_check CHECK ((canonical_generation > 0)),
+    CONSTRAINT realm_rank_canonical_state_check CHECK ((((after_question IS NULL) AND (after_population IS NULL) AND (after_subject IS NULL)) OR ((after_question IS NOT NULL) AND (after_population IS NOT NULL) AND (after_subject IS NOT NULL)))),
+    CONSTRAINT realm_rank_canonical_state_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT realm_rank_canonical_state_revision_check CHECK ((revision > 0))
 );
 
 
@@ -1538,9 +1536,7 @@ CREATE INDEX realm_rank_score_idx ON rating.realm_rank USING btree (partition_no
 -- Name: realm_rank_scored_canonical_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
-CREATE INDEX realm_rank_scored_canonical_idx ON rating.realm_rank USING btree
-  (partition_no,question_id,population_id,question_identity,prior_generation,prior_epoch,
-   (-score),(canonical_name IS NULL),(COALESCE(canonical_name,'') COLLATE "C"),subject_id);
+CREATE INDEX realm_rank_scored_canonical_idx ON rating.realm_rank USING btree (partition_no, question_id, population_id, question_identity, prior_generation, prior_epoch, ((- score)), ((canonical_name IS NULL)), COALESCE(canonical_name, ''::text), subject_id);
 
 
 --
@@ -1633,8 +1629,7 @@ CREATE TRIGGER question_label_revision_immutable BEFORE UPDATE ON rating.questio
 -- Name: realm_rank realm_rank_canonical_name; Type: TRIGGER; Schema: rating; Owner: -
 --
 
-CREATE TRIGGER realm_rank_canonical_name BEFORE INSERT OR UPDATE ON rating.realm_rank
-  FOR EACH ROW EXECUTE FUNCTION rating.capture_realm_rank_canonical_name();
+CREATE TRIGGER realm_rank_canonical_name BEFORE INSERT OR UPDATE ON rating.realm_rank FOR EACH ROW EXECUTE FUNCTION rating.capture_realm_rank_canonical_name();
 
 
 --
