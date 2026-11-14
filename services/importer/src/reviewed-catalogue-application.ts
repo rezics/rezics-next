@@ -38,6 +38,10 @@ import { remainingRequestFromPreparedCommand } from './seed-remaining-request.ts
 
 type CurrentReviewedCandidate = Extract<ReviewedCandidatePage['candidates'][number], { statement: unknown }>;
 
+function isCurrentReviewedRank(rank: unknown): rank is 'normal' | 'preferred' {
+  return rank === 'normal' || rank === 'preferred';
+}
+
 export type ReviewedCatalogueApplication = Readonly<{
   seed(input: ReviewedCatalogueSeedInput): Promise<ReviewedCatalogueResult>;
   inspect(
@@ -128,11 +132,11 @@ async function select(
   );
   assertReviewedCatalogue(row.decision !== 'rejected' && row.rank !== 'deprecated');
   assertReviewedCatalogue(
-    !page.candidates.some((c) => 'statement' in c && c.id !== candidate && c.rank !== null),
+    !page.candidates.some((c) => 'statement' in c && c.id !== candidate && isCurrentReviewedRank(c.rank)),
     'Existing editorial selection must not be replaced',
   );
   assertReviewedCatalogue(
-    !page.adoption || (page.adoption.mode === 'replace' && row.rank !== null),
+    !page.adoption || (page.adoption.mode === 'replace' && isCurrentReviewedRank(row.rank)),
     'Existing editorial head requires an explicit operator decision',
   );
   const acceptance = await port.acceptReviewedCandidate(
@@ -148,12 +152,13 @@ async function select(
   assertReviewedCatalogue(acceptance.acceptance.candidate === candidate && acceptance.acceptance.decision === 'accept');
   page = await port.reviewedCandidates(subject, query, signal);
   assertReviewedCatalogue(
-    page.next === null && !page.candidates.some((c) => 'statement' in c && c.id !== candidate && c.rank !== null),
+    page.next === null &&
+      !page.candidates.some((c) => 'statement' in c && c.id !== candidate && isCurrentReviewedRank(c.rank)),
   );
   assertReviewedCatalogue(
     !page.adoption ||
       (page.adoption.mode === 'replace' &&
-        page.candidates.some((c) => 'statement' in c && c.id === candidate && c.rank !== null)),
+        page.candidates.some((c) => 'statement' in c && c.id === candidate && isCurrentReviewedRank(c.rank))),
   );
   const adoption = await port.adoptReviewedCandidates(
     subject,
@@ -345,7 +350,8 @@ async function inspect(
       items[seed.key] = read.subject;
     }
     if (subjects['source-harem'] === subjects['canonical-harem']) return { state: 'withdrawn' };
-    if ((items['source-harem']!.statements['schema:sameAs'] ?? []).length) return { state: 'withdrawn' };
+    if ((items['source-harem']!.statements['schema:sameAs'] ?? []).some((statement) => isCurrentReviewedRank(statement.rank)))
+      return { state: 'withdrawn' };
     const vocabularyRows = new Map<
       string,
       {
@@ -373,7 +379,7 @@ async function inspect(
         const selected = currentCandidates.filter(
           (c) =>
             c.decision === 'accepted' &&
-            (c.rank === 'preferred' || c.rank === 'normal') &&
+            isCurrentReviewedRank(c.rank) &&
             c.retracted === null &&
             c.retraction === null &&
             currentReviewedCatalogueSource(c.source, seed, vocabulary.revision) &&
@@ -383,8 +389,10 @@ async function inspect(
         if (
           selected.length !== 1 ||
           !sameStatementProvenance(selected[0]!.statement, expected) ||
-          currentCandidates.some((c) => c.id !== selected[0]!.id && c.rank !== null) ||
-          !items[seed.key]!.statements[fact.property]?.some((s) => s.id === selected[0]!.id)
+          currentCandidates.some((c) => c.id !== selected[0]!.id && isCurrentReviewedRank(c.rank)) ||
+          !items[seed.key]!.statements[fact.property]?.some(
+            (s) => s.id === selected[0]!.id && isCurrentReviewedRank(s.rank),
+          )
         )
           return { state: 'withdrawn' };
         const local = bindings.candidates(reviewedCatalogueSeedOwner(seed), 'facts', { limit: 100 });
