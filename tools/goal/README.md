@@ -1,6 +1,6 @@
 # goal
 
-The Goal control plane and the REZICS workflow—managers, workers, briefs, checks, landing, verification and
+The Goal control plane and the REZICS workflow—one resident manager, execution units, briefs, checks, landing, verification and
 promotion—are a REZICS product, developed and measured like the others. The
 [agent work systems research](research/agent-work-systems.md) compares established systems and ranks improvements
 by expected gain in landed useful work per allowance.
@@ -1011,7 +1011,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.watchdog.processPollingCommands`              | `2`                                                                        | Recent process-inspection commands before reporting repeated polling.                                                                                                                       |
 | `policy.watchdog.longAttemptReportMs`                 | `3600000`                                                                  | Minimum interval between reports for the same long attempt (ms).                                                                                                                            |
 | `policy.width.workerThreshold`                        | `10`                                                                       | Confirmed live workers below which an eligible Goal receives a width event.                                                                                                                 |
-| `policy.width.residentSourceMinimum`                  | `60`                                                                       | Confirmed source writers below which the configured resident receives one native width event per low episode.                                                                                |
+| `policy.width.residentSourceMinimum`                  | `60`                                                                       | Confirmed source writers below which the configured resident receives one native width event per low episode.                                                                               |
 | `policy.width.bucketMs`                               | `900000`                                                                   | Width-event deduplication bucket duration (ms).                                                                                                                                             |
 | `policy.width.pageSize`                               | `64`                                                                       | Active task rows per width-snapshot database page.                                                                                                                                          |
 | `policy.width.sweepYieldItems`                        | `8`                                                                        | Goal snapshots processed before yielding the width sweep.                                                                                                                                   |
@@ -1772,16 +1772,18 @@ using `worker-result.schema.json`, including any concrete blocker and the approa
 
 ### Prompts
 
-Workers, managers and researchers receive prompts rendered from `tools/goal/prompts/`: `worker.md`, `manager.md`,
-`research.md`, and `conditions/<id>.md`. The renderer reads those files from disk at each launch, cached by
-modification time and size. Budgets are `policy.prompt` (worker role 10,000 bytes, conditions 1,500, worker total
-20,000, manager role 5,000, manager opening 30,000, research role 9,000) and `policy.brief.bytes` 12,288. Worker
-and manager renders always launch when a size exceeds its budget. Manager openings replace full owner Goal documents
-with their first complete Outcome and Scope paragraphs, plus links to the full Goal file and its scope, ownership,
-Done when and acceptance sections. The opening follows the configured brief and includes each current continuation
-once. If the manager opening budget is tight, the renderer omits whole Scope paragraphs, then Outcome paragraphs,
-in Goal order; it never cuts a requirement mid-text. Managers read linked owner detail on demand. Required role,
-brief, continuation and owner links remain intact, so those inputs can still exceed the budget by themselves.
+Active role openings are rendered from `tools/goal/prompts/supermanager.md`, `goal-author.md` and `unit.md` by
+`renderSupermanagerOpening`, `renderGoalAuthorOpening` and `renderUnitOpening`. The unit CLI consumes the unit and
+Goal-author renderers; the resident role is the only manager role. `manager.md` is removed, and the dormant
+`renderManagerOpening` rejects managed launches rather than aliasing an active role. Existing task workers and
+researchers retain `worker.md`, `research.md` and `conditions/<id>.md`.
+
+The renderer reads templates from disk at each launch, cached by modification time and size. Budgets are
+`policy.prompt` (worker role 10,000 bytes, conditions 1,500, worker total 20,000, resident/native role 5,000,
+opening 30,000, research role 9,000) and `policy.brief.bytes` 12,288. Size excess is recorded rather than blocking
+launch. Unit and Goal-author openings contain the assigned brief and owner links only; they do not load historical
+manager continuations or unrelated owner documents. Resident openings contain the assigned brief and only an explicitly supplied resident continuation. They do not
+automatically load historical domain continuations or owner summaries; assignment links are read on demand.
 Manifests retain per-layer sizes, budgets and over-budget layer names; hourly flow reports count over-budget launches
 by layer. The brief lints for byte size,
 `.temp/goal/`, main-checkout paths and superseded check instructions are stored on the task and included in backlog
@@ -1790,9 +1792,6 @@ caught during development. Each worker attempt records the git blob SHAs of `AGE
 condition and the brief, plus the policy hash and layer measurements; manager sessions retain their opening
 measurements. `attempts --json` exports worker manifests.
 Decision: concise shared worker guidance keeps the largest current architecture map under the unchanged 10,000-byte role budget with at least 200 bytes of headroom; preserve all selected dependency rows and required workflow guidance.
-Decision: renewed manager openings keep the configured brief and each current continuation once, replace full Goal
-documents with complete Scope then Outcome paragraphs plus owner-detail links, and omit whole summary paragraphs when
-the existing opening budget is tight; managers read omitted detail on demand.
 Decision: task-specific worker guidance renders after the contract to keep the reusable role within its byte budget while retaining the frozen repair line in the role template.
 Decision: Worker prompts render architecture-map rows for the modules that own the brief's paths and those modules' allowed dependencies, with a one-line pointer to `docs/architecture/modules.json`; a Kernel-only brief carries no web rows. The map is computed from `scripts/architecture-map.ts` without loading oxc-parser.
 Decision: Refresh only the `interface-stories.txt` prompt golden when its generated `wapp` row omits the current `w/knowledge/route.tsx` entry; prompt behavior, budgets and other goldens stay unchanged.
@@ -2505,57 +2504,53 @@ Task attempt selection and page bounds use that same parser before runtime creat
 
 ### Roles and delegation
 
-The supermanager sets direction and the managers own the work. This applies to every supermanager and every Goal.
+The resident supermanager is the sole manager. Goal authors and execution units are workers, not additional
+management tiers. Domain names identify product contracts and module owners; existing domain-manager records remain
+paused historical data.
 
-- **Workers own the how; managers own the what.** A brief states the outcome in user terms, its owner links and what
-  done means. A product worker on dev verifies the brief's premises against its base, designs the change and writes
-  the acceptance tests the brief does not name. If a frozen assertion contradicts the contract, an owner document or
-  delivered code, it changes the smallest side and lists the reason; ordinary dev product landings may carry that
-  repair, while control-plane, stabilize and verification landings retain the frozen refusal. Only cross-Goal
-  contracts are frozen in advance. It decides ambiguities itself, including product choices the brief does not make,
-  by taking the reversible option most consistent with owner documents and decided references. It records routine
-  implementation and fixture choices in its summary and
-  manager inbox; fixture-only choices do not require an owner-document edit. For an adopted contract change, it records
-  the choice in its summary and edits the owner document only when that path is declared in the brief; otherwise it
-  sends the owner the exact proposed change through the manager inbox and continues independent source. It uses
-  `bun tools/goal/src/cli.ts inbox send <manager> info "<decision>" --task <task>` for manager handoffs. When
-  requirements conflict, it follows the owner documents and delivered code and changes the smaller side. A blocker is only a
-  conflict where every choice breaks an owner-document rule, a tool or infrastructure failure, or a large survey of
-  products or sources. Undelivered code from another Goal, absent receipts and unfinished work are not blockers. The
-  worker does its own research and stops only for a large survey.
-  It may change any file its outcome needs outside risk areas, merges or cherry-picks only branches its brief names,
-  lands committed, type-checking increments, and writes the rest of a larger outcome as a continuation brief. Workers
-  build on their brief and the owner READMEs and do not read other workers' tasks.
-- **Managers own delivery.** Follow the [manager role](prompts/manager.md) and
-  [delivery ownership](../../docs/development/delivery.md#delivery-ownership). A manager is responsible for real worker
-  starts and follow-through; the controller executes admission, retries and landings.
-- **Managers talk to each other first.** Any manager may message any other with
-  `bun tools/goal/src/cli.ts inbox send <manager> instruction "<message>"`. A question about another Goal's contract goes
-  to that Goal's manager. The producer decides its interface and the consumer adapts; the two settle it within one
-  exchange and record it in the owner document.
-- **Managers decide inside their Goal.** Contract details, frozen expectations the Goal owns, design choices within the
-  maintainer's references, and which slices to run are the manager's decisions. When unsure, research primary sources
-  first, then decide. Managers are resident roles. If the supermanager or maintainer is unreachable, concerned managers
-  decide after one exchange: the producer chooses its interface and the outcome owner decides shared choices. Record
-  reasons and proceed with independent work; park only items that genuinely depend on an unavailable decision.
-- **Escalate rarely and once.** A manager sends the supermanager only a deadlock that one exchange between owners did
-  not settle, a change to the maintainer's direction or scope, or something only the maintainer can provide, with the
-  options and a recommendation.
-- **Operations belong to the delivery-system Goal.** Manager-host liveness, stuck or stale checks, hung remote runs,
-  worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal and promotion
-  are owned by the manager of the Goal that owns `tools/goal`; damaged host retry journals are replaced with the
-  persisted maximum configured backoff before recovery. Check-host health is owned by the Goal
-  that owns the check scripts. System alerts go to those owners.
-- **Efficiency is measured by scripts.** The hourly report, operational alarms and the supermanager watchdog run without
-  model tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). The supermanager acts on
-  alarms; Performance owns check-host health and its own Goal.
-- **Visual review belongs to the design-authority Goal.** The Goal that owns the shell and design system reviews every
-  visible slice by screenshot against the maintainer's references and reopens defects with the owning Goal; each
-  product Goal owns its user journeys end to end, pages included.
-- **The supermanager keeps direction.** [Resident supervision and recovery](../../docs/development/supermanager.md).
-  Direction, priorities and scope with the maintainer, the allowance runway,
-  critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not
-  every slice. When a detail reaches the supermanager, it forwards it to the owner instead of doing it.
+- **The resident owns delivery.** It adopts Goal scope and acceptance, allocates write boundaries, settles cross-unit
+  priorities and conflicts, owns live runtime changes and publication, and reads and acknowledges its native inbox.
+  Follow [delivery ownership](../../docs/development/delivery.md#delivery-ownership).
+- **Goal authors produce concrete contracts.** From the assigned brief and linked owner documents, name one useful
+  outcome, its first editable files, write boundary, real dependencies, Done when and the smallest useful acceptance.
+  Scope and acceptance stay in owner documents. Authors return the proposal to the resident for adoption; they do not
+  launch managers or maintain per-domain backlogs.
+- **Execution units own implementation.** Each unit runs one autonomous native Codex Goal and may use native subagents
+  and Grok CLI in that unit's shared worktree. Different units use separate worktrees. The unit assigns helper write
+  boundaries and one integration writer, preserves peers' unfinished changes, and follows
+  [direct source integration](../../docs/development/delivery.md#direct-source-integration) when it applies.
+  It resolves routine ambiguity reversibly from its brief and owner documents, implements the complete assigned
+  outcome, and returns source revisions, observations and concrete owner actions. It may propose independent work;
+  allocation remains with the resident. Units do not maintain manager continuations, domain inboxes or recurring
+  management turns.
+- **Owners settle their interfaces.** Units communicate directly for routine reversible choices, record lasting
+  decisions in the owner within their write boundary, and escalate cross-unit conflicts to the resident while
+  continuing independent source. Workers and authors read only their assigned brief and linked owner context.
+
+#### Native execution-unit entrypoints
+
+Create the native Codex Goal and its termspaces viewer in the unit's assigned worktree, then register the actual
+thread and pane. Registration verifies existing native Goal/thread state and the termspaces-owned `codex resume`
+viewer; it creates no worktree, Goal, thread or turn.
+
+```sh
+bun tools/goal/src/cli.ts unit register <unit> --thread <native-thread> --pane <%id> --worktree <path> --brief <Goal-file> --pool <configured-Codex-pool>
+bun tools/goal/src/cli.ts unit status [unit]
+bun tools/goal/src/cli.ts unit prompt <unit>
+bun tools/goal/src/cli.ts unit author-prompt --brief <assignment-file>
+bun tools/goal/src/cli.ts unit resident-prompt --brief <assignment-file>
+bun tools/goal/src/cli.ts unit context <unit>
+bun tools/goal/src/cli.ts unit run <unit> [-- <focused-check-argv>]
+```
+
+The Goal file's front matter names explicit `acceptance.command` arguments and `acceptance.requires` as the applicable
+subset of `native`, `browser` and `root`. `unit context` returns `{cwd,environment,command}`; `unit run` executes the
+registered acceptance by default, or a focused check chosen within the adopted Goal, in that context. Named checks
+do not require another Goal registration. Each run records its actual argv and committed source checkpoint.
+Native acceptance receives `REZICS_NATIVE_UNIT_CONTEXT` without a fabricated worker task identity. The source driver
+freezes that committed checkpoint while the unit's subagents continue writing. Its native pass or failure belongs to
+the captured revision and source hash; a newer local candidate remains unverified. Generated compiler outputs retain
+their source-matching restoration rules.
 
 #### Resident event delivery
 
@@ -3303,11 +3298,8 @@ bun tools/goal/src/cli.ts report [--json]
 bun tools/goal/src/cli.ts land <task>
 bun tools/goal/src/cli.ts train
 bun tools/goal/src/cli.ts verify
-bun tools/goal/src/cli.ts manager start <goal> --engine codex --budget 20000
-bun tools/goal/src/cli.ts manager assign <goal> <manager>
 bun tools/goal/src/cli.ts manager status
 bun tools/goal/src/cli.ts manager register-supermanager [--replace-session <previous-thread-id>]
-bun tools/goal/src/cli.ts manager renew <manager>
 bun tools/goal/src/cli.ts manager stop <manager>
 bun tools/goal/src/cli.ts manager complete <manager>
 bun tools/goal/src/cli.ts inbox wait <manager>
@@ -3319,12 +3311,9 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 `status`, `attempts` and `report` are read-only: they do not recover orphans, record manager commands or drain queued
 work. `status` lists each manager's owned Goals, held-task `waitingFor` plus `dependencies` (unknown if missing), and
 `trains` (`running`/`stopped`/`missing`, with captured `tools/goal` `codeVersion` for a recorded owner).
-`manager assign <goal> <manager>` moves a Goal to another running managed manager: inbox, wake-ups, width and landing
-notices, and dispatch and retry authority follow; running tasks keep handles and land as before, with `brief.manager`
-set to the current owner; the old session for that Goal stops. Assigning to the current owner or a manager that is not
-running is refused. A manager may own several Goals and reads each brief and continuation at its next turn.
-Decision: Goal ownership is the managed session `goals` list; assign is the transfer; the live owner rewrites
-`brief.manager` without restarting workers. Status still projects one task cohort and one incident-history read.
+`manager start`, `manager renew` and `manager assign` are retired. Register an actual native execution unit instead;
+`manager status`, resident registration, inbox inspection and `manager stop` retain historical records and controls.
+Stopping a historical domain-manager session does not authorize restarting it.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Comparison canonicalizes LF endings and ignores trailing EOF whitespace. An unchanged contract is reported and not restarted; a changed brief records both SHA-256 hashes on the new attempt. A stopped task still restarts with plain `retry <task>`.
 An authenticated configured operations manager may submit a rewritten ordinary retry that retains normal priority,
@@ -3372,10 +3361,10 @@ than a second wake scheduler.
 
 `inbox send` delivers a one-line decision event to another manager and records the sending manager as its source.
 
-`land` and `train` use the same queue and sink as dispatch. Every `manager` command starts the manager host when needed;
-the host persists until stopped and exits when its 60-second sweep finds its state directory missing. An untracked
-`<managerDirectory>/<goal>.json` can select a local `pool`, `objective`, `brief`, `effort`, `supermanager` and `limits`;
-otherwise scoped task briefs and a matching local manager pool supply the defaults. Termspaces owns the tmux windows.
+`land` and `train` use the same queue and sink as dispatch. Resident registration and supported historical
+controls start the manager host when needed; `manager status` is read-only. Historical managed-session transport
+records below remain available for inspection and recovery diagnostics, not as instructions to launch domain managers.
+Termspaces owns native session viewers.
 Each manager host starts a loopback WebSocket app-server for its Codex pool and records its process birth, pool
 identity, executable, environment fingerprint and endpoint in the private state directory. The app-server leads its own
 process group, so its helpers and thread writers share that group. A routine host restart hands off the live server and
@@ -3544,23 +3533,10 @@ runs have matching result and flow receipts with valid boundaries, no duplicate 
 outcomes reported as passed. Compare round time and integrations at comparable work supply. Timing coverage alone
 does not establish a delivery or allowance saving. This uses the existing verifier and does not run additional checks.
 
-When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
-`.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
-owner documents, and next actions), without appending to the old file. Include one concrete progress bullet:
-`- Decision: ...`, `- Next action: ...`, or `- Result: ...`, then message its supermanager with `continuation written`.
-Automatic renewal requires that handshake from the current thread, a changed continuation file within the character
-limit, and one of those concrete progress bullets. If the Goal reaches `budgetLimited` without that evidence, the host
-pauses the same thread and sends the supermanager one actionable blocker with the explicit renew command. After a
-valid handshake, the new thread's first prompt names the continuation file; the supermanager receives one environment
-event with the old token count and new thread. A manual `manager renew` also accepts Codex Goals in `budgetLimited` or
-`blocked` status without a separate stop.
+Historical managed-session continuation and automatic renewal records remain retained for diagnosis. New work
+uses autonomous native execution-unit Goals; `manager renew` cannot resume a paused domain manager.
 
-Decision: Automatic renewal requires a fresh, bounded continuation from the current manager thread with concrete progress; unchanged exhaustion parks that thread and requires explicit operator renewal.
-
-When an automatic renewal fails, the host delivers a `blocker` to the supermanager with the manager id and the error's
-first line, keeps that manager in `renewal-failed` (distinct from a pause), records each attempt on the manager, and
-retries every `policy.manager.renewalRetryMs` (ten minutes by default) until the renewal succeeds. A manual
-`manager renew` accepts `renewal-failed` as well as `paused`. Window lookups pass `-u` to every tmux invocation and
+Window lookups pass `-u` to every tmux invocation and
 accept the underscore field separators tmux prints when the host has no locale.
 
 Manager events commit to SQLite; filesystem signals are wakeup hints. Managers end their turn when no decision is
@@ -3800,18 +3776,17 @@ To pause:
 
 1. Back up `<state>/capacity.json`, then write `{"maxWorkers": 0, "minAvailableMiB": 999999999}` to it. It is read on
    every capacity check, so no worker starts, critical-path and stabilize starts included.
-2. Tell every manager to dispatch, retry, reshape, stop, cancel and gate nothing, and to bring its
-   `<state>/<goal>/CONTINUATION.md` up to date.
+2. The resident stops allocating new work and asks execution units to preserve coherent source and native Goal
+   continuation state. Keep the resident continuation current.
 3. Stop every running attempt with `stop <task>`, or let them finish when the remaining allowance allows it.
-4. Stop the managers whose engine must not run (`manager stop <manager>`); a stopped Codex manager resumes with
-   `manager renew <manager>`, which starts a fresh thread from its continuation file.
+4. Pause native execution-unit Goals whose engines must not run through their native session controls. Keep old
+   domain managers paused; `manager stop <manager>` remains available for historical session cleanup.
 5. `touch <state>/promotion.paused` to keep promotion from starting gates.
 6. Confirm no attempt is running or pending, no worker CLI process remains, and the main checkout's `tools/goal` matches
    HEAD. Record the state, the reasons and the restart order in `<state>/PAUSED.md`.
 
-To resume, reverse the steps: set the pools' pacing (`policy.maxBurnPerHour`) and the worker cap, renew the stopped
-managers, tell every manager to resume and retry its stopped tasks, and remove `promotion.paused` once the gate fixes
-are in. A local `<state>/resume.sh` can script these steps for one pause; it is local configuration, not a repository
+To resume, the resident restores the pools' pacing (`policy.maxBurnPerHour`) and worker cap, resumes authorized native
+execution-unit Goals and retries their stopped tasks, and removes `promotion.paused` once the gate fixes are in. A local `<state>/resume.sh` can script these steps for one pause; it is local configuration, not a repository
 file.
 
 ## Promotion placement and observations

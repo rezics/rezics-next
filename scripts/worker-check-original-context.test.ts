@@ -17,6 +17,15 @@ test('remote handoff keeps original argv when the launcher has no task context',
   expect(withOriginalContext(command, {})).toEqual(command);
 });
 
+test('remote handoff retains native unit context without inventing a managed task', () => {
+  const context = JSON.stringify({ version: 1, unit: 'book-unit', threadId: 'native-thread', goalId: 'native-goal' });
+  expect(withOriginalContext(command, { REZICS_NATIVE_UNIT_CONTEXT: context })).toEqual([
+    'env',
+    `REZICS_NATIVE_UNIT_CONTEXT=${context}`,
+    ...command,
+  ]);
+});
+
 test('remote handoff prefixes original task, attempt and acceptance without rewriting the walk command', () => {
   expect(
     withOriginalContext(command, {

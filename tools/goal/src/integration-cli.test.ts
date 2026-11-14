@@ -53,7 +53,7 @@ test('goal inbox wait blocks in a separate process and exits promptly on another
   }
 });
 
-test('registered CLI commands enqueue, train and start and stop a manager through a durable host', async () => {
+test('registered CLI commands enqueue and train through a durable host', async () => {
   const repo = repository();
   const stateAbsolute = join(repo.path, 'state');
   mkdirSync(stateAbsolute);
@@ -88,10 +88,6 @@ test('registered CLI commands enqueue, train and start and stop a manager throug
     expect((await command('land', 'alpha')).code).toBe(0);
     expect((await command('land', 'beta')).code).toBe(0);
     expect((await command('train')).code).toBe(0);
-    const start = await command('manager', 'start', 'manager', '--engine', 'codex', '--budget', '20000');
-    expect(start.code).toBe(0);
-    expect(JSON.parse(start.stdout).threadId).toBe('thread-1');
-    expect((await command('manager', 'stop', 'manager')).code).toBe(0);
   } finally {
     host.kill('SIGTERM');
     await exited;
@@ -244,7 +240,7 @@ test('false integration recovery preserves provenance, reopens the same queue en
   }
 }, 60_000);
 
-test('manager startup reports a systemd activation failure without a detached fallback', async () => {
+test('retired manager startup rejects before systemd activation', async () => {
   const t = temporaryDirectory();
   const bin = join(t.path, 'bin');
   mkdirSync(bin);
@@ -260,7 +256,9 @@ test('manager startup reports a systemd activation failure without a detached fa
       },
     );
     expect(await child.exited).toBe(1);
-    expect(await new Response(child.stderr).text()).toContain('fixture systemd activation failed');
+    const stderr = await new Response(child.stderr).text();
+    expect(stderr).toContain('Managed manager launches and assignments are retired');
+    expect(stderr).not.toContain('fixture systemd activation failed');
     expect(existsSync(join(t.path, 'manager-host-liveness.json'))).toBe(false);
   } finally {
     t.close();

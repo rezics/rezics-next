@@ -28,31 +28,15 @@ export const widthGovernorMigrations = [
       manager TEXT NOT NULL,
       delivered_at TEXT NOT NULL,
       PRIMARY KEY(goal, bucket)
-    );`,
-  },
-  {
-    module: 'width-governor',
-    version: 2,
-    sql: `CREATE TABLE width_governor_receiver_deliveries (
-      goal TEXT NOT NULL,
-      bucket INTEGER NOT NULL,
-      manager TEXT NOT NULL,
-      delivered_at TEXT NOT NULL,
-      PRIMARY KEY(goal, bucket, manager)
-    );`,
-  },
-  {
-    module: 'width-governor',
-    version: 3,
-    // Version 2 exists with either table; converge both databases without losing delivery history.
-    sql: `CREATE TABLE IF NOT EXISTS width_governor_receiver_deliveries (
+    );
+    CREATE TABLE width_governor_receiver_deliveries (
       goal TEXT NOT NULL,
       bucket INTEGER NOT NULL,
       manager TEXT NOT NULL,
       delivered_at TEXT NOT NULL,
       PRIMARY KEY(goal, bucket, manager)
     );
-    CREATE TABLE IF NOT EXISTS width_resident_episodes (
+    CREATE TABLE width_resident_episodes (
       manager TEXT PRIMARY KEY,
       episode INTEGER NOT NULL,
       low INTEGER NOT NULL,
@@ -333,9 +317,7 @@ function tableExists(db: Database, name: string): boolean {
 }
 
 function readCodeOnlyWriterRegistry(stateDirectory: string | undefined): CodeOnlyRegistry {
-  const unavailable = (
-    reason: NonNullable<WidthEvidence['codeOnlyRegistry']['reason']>,
-  ): CodeOnlyRegistry => ({
+  const unavailable = (reason: NonNullable<WidthEvidence['codeOnlyRegistry']['reason']>): CodeOnlyRegistry => ({
     evidence: {
       status: 'unavailable',
       reason,
@@ -668,6 +650,8 @@ function finishSnapshot(
         const owners = ownership.owners.get(goal.goal) ?? [];
         return {
           ...counts(goal, goal.goal),
+          goal: goal.goal,
+          evidenceReceiverActions: goal.evidenceReceiverActions,
           sourceManagerIds: [...sourceManagers].sort((left, right) => left.localeCompare(right)),
           sourceManagerConflict: sourceManagerMissing || sourceManagers.size > 1,
           managerId: ownership.evidence.status === 'available' && owners.length === 1 ? owners[0]! : null,
@@ -714,15 +698,7 @@ function readSnapshotSync(
   );
   const ownership = readCurrentGoalOwnership(db);
   const date = at instanceof Date ? at : new Date(at);
-  return finishSnapshot(
-    date.toISOString(),
-    system,
-    goals,
-    sourceIdentities,
-    registry,
-    ownership,
-    codeOnlyWriters,
-  );
+  return finishSnapshot(date.toISOString(), system, goals, sourceIdentities, registry, ownership, codeOnlyWriters);
 }
 
 async function readSnapshotAsync(
@@ -760,15 +736,7 @@ async function readSnapshotAsync(
   );
   const ownership = readCurrentGoalOwnership(db);
   const date = at instanceof Date ? at : new Date(at);
-  return finishSnapshot(
-    date.toISOString(),
-    system,
-    goals,
-    sourceIdentities,
-    registry,
-    ownership,
-    codeOnlyWriters,
-  );
+  return finishSnapshot(date.toISOString(), system, goals, sourceIdentities, registry, ownership, codeOnlyWriters);
 }
 
 /** Read bounded indexed pages from the shared current-attempt projection. */
@@ -853,8 +821,7 @@ function receivingActionText(
 
 function registryEvidenceText(evidence: WidthEvidence['codeOnlyRegistry']): string {
   if (evidence.status === 'available') return 'available';
-  if (evidence.status === 'partial')
-    return `partial (${evidence.malformedRows} malformed writing or registry row(s))`;
+  if (evidence.status === 'partial') return `partial (${evidence.malformedRows} malformed writing or registry row(s))`;
   switch (evidence.reason) {
     case 'state-directory-not-configured':
       return 'unavailable (state directory not configured)';
@@ -916,10 +883,6 @@ export type WidthGovernorOptions = WidthSnapshotOptions & {
 
 type SourceOwnerCounts = { live: number; ready: number };
 type CodeOnlySourceWriters = { live: number; owners: Map<string, number>; unavailable?: string };
-
-function identityKey(identity: ProcessIdentity): string {
-  return JSON.stringify([identity.pid, identity.start, identity.boot, identity.group]);
-}
 
 /** The code-only launcher publishes writing identities atomically; other lifecycle phases never count. */
 function readCodeOnlySourceWriters(
@@ -1002,9 +965,10 @@ function notifyResidentLowWidth(
   const live = snapshot.system.sourceWriters + external.live;
   const minimum = policy.width.residentSourceMinimum;
   db.transaction(() => {
-    const previous = db
-      .query('SELECT episode, low FROM width_resident_episodes WHERE manager=?')
-      .get(manager) as { episode: number; low: number } | null;
+    const previous = db.query('SELECT episode, low FROM width_resident_episodes WHERE manager=?').get(manager) as {
+      episode: number;
+      low: number;
+    } | null;
     if (live >= minimum) {
       if (previous?.low)
         db.query('UPDATE width_resident_episodes SET low=0, observed_at=? WHERE manager=?').run(snapshot.asOf, manager);
@@ -1023,8 +987,11 @@ function notifyResidentLowWidth(
       .map(([owner, counts]) => `${owner} ${counts.live}/${counts.ready}`)
       .join('; ');
     db.query(`INSERT INTO width_resident_episodes(manager, episode, low, observed_at) VALUES (?, ?, 1, ?)
-      ON CONFLICT(manager) DO UPDATE SET episode=excluded.episode, low=1, observed_at=excluded.observed_at`)
-      .run(manager, episode, snapshot.asOf);
+      ON CONFLICT(manager) DO UPDATE SET episode=excluded.episode, low=1, observed_at=excluded.observed_at`).run(
+      manager,
+      episode,
+      snapshot.asOf,
+    );
     inbox.deliver({
       managerId: manager,
       kind: 'width',
@@ -1054,7 +1021,7 @@ export async function sweepWidthGovernor(
   const snapshot = await readWidthSnapshot(db, at, {
     yieldBetweenPages: true,
     policy,
-    stateDirectory: options.stateDirectory,
+    ...(options.stateDirectory === undefined ? {} : { stateDirectory: options.stateDirectory }),
     ...(options.processIsLive ? { processIsLive: options.processIsLive } : {}),
   });
   const date = at instanceof Date ? at : new Date(at);

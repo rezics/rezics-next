@@ -15,6 +15,7 @@ import { developmentCollectionScopes } from '../../../scripts/datasets/developme
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
 import type { StackSlot } from '../../../scripts/stack-lease.ts';
 import { walkStackRequired } from '../../../scripts/stack-run.ts';
+import { nativeUnitContext } from '../../../tools/goal/src/native-unit-context.ts';
 import {
   ownerProcessIdentity,
   runDocker,
@@ -1628,7 +1629,7 @@ export async function runWalk(
   command: string[],
   portsAvailable: typeof walkStackPortsAvailable = walkStackPortsAvailable,
 ): Promise<number> {
-  const task = process.env.GOAL_TASK_ID;
+  const task = process.env.GOAL_TASK_ID ?? nativeUnitContext(process.env)?.unit;
   if (!task || !walkStackRequired(process.env))
     throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
   if (command.length === 0) throw new Error('Usage: bun services/auth/scripts/dev-stack.ts walk -- <command...>');

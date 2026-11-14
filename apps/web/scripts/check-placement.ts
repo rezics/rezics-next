@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { constants } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { hostsLocation, mainCheckout, type StackRun } from '../../../scripts/stack-run.ts';
+import { nativeUnitContext } from '../../../tools/goal/src/native-unit-context.ts';
 import { hasWebCheckCustody, requireWebCheckCustody } from './web-check-custody.ts';
 import {
   createWebCheckPrivateFiles,
@@ -444,7 +445,7 @@ export async function routeWebCheck(
   if (env.WEB_CHECK_EVENTS) returns.push(workspacePath(workspace, resolve(run.cwd, env.WEB_CHECK_EVENTS)));
   const driverRoot = adapter.driver(workspace, env);
   const hosts = adapter.hosts(workspace, env);
-  const revision = adapter.revision(workspace);
+  const revision = nativeUnitContext(env)?.sourceRevision ?? adapter.revision(workspace);
   const semantic = webCheckEnvironment(env, workspace, run.cwd);
   const file = adapter.environment(semantic);
   try {
