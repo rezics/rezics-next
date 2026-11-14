@@ -38,6 +38,16 @@ export const CATALOGUE_ACTIVATED = 'com.rezics.definitions.catalogue.activated.v
 
 export const SUBJECT_MERGED = 'com.rezics.subject.merged.v1' as const;
 export const SUBJECT_REVISED = 'com.rezics.subject.revised.v1' as const;
+export const CANONICAL_GENERATION_COMMITTED = 'com.rezics.semantic.canonical-generation.committed.v1' as const;
+export const CANONICAL_GENERATION_CONTINUATION = 'com.rezics.semantic.canonical-generation.continuation.v1' as const;
+export const CANONICAL_GENERATION_DELIVERED = 'com.rezics.semantic.canonical-generation.delivered.v1' as const;
+const canonicalGeneration = Type.Object(
+  {
+    partition: Type.Integer({ minimum: 0, maximum: 4095 }),
+    generation: Type.String({ pattern: '^[1-9][0-9]{0,18}$' }),
+  },
+  { additionalProperties: false },
+);
 export const LINKS_MOVING = 'com.rezics.semantic.links.moving.v1' as const;
 
 export const LINKS_CHANGED = 'com.rezics.semantic.links.changed.v1' as const;
@@ -103,6 +113,15 @@ const publicationComponent = Type.Object(
 
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
+  [CANONICAL_GENERATION_COMMITTED]: canonicalGeneration,
+  [CANONICAL_GENERATION_DELIVERED]: canonicalGeneration,
+  [CANONICAL_GENERATION_CONTINUATION]: Type.Object(
+    {
+      after: Type.Integer({ minimum: 0, maximum: 4095 }),
+      limit: Type.Integer({ minimum: 1, maximum: 200 }),
+    },
+    { additionalProperties: false },
+  ),
   [IDENTITY_SCOPE_RETIREMENT]: Type.Object(
     {
       sourceKey: Type.String({ minLength: 1, maxLength: 256 }),

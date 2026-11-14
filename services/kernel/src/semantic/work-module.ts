@@ -42,6 +42,20 @@ import { registerSemanticErasureWork } from './account-erasure-work.ts';
 import { registerRecordRetentionWork } from './retention-work.ts';
 import { registerIdentityScopedObservationWork } from './identity-scoped-observations.ts';
 import { providerReviewProjection, registerProviderReviewWork } from './provider-review-queue.ts';
+import {
+  createCanonicalGenerationWakeEffect,
+  resumeCanonicalGenerationDelivery,
+} from './canonical-generation-delivery.ts';
+
+// Content binds delivery into its existing canonical-work effect and owns WorkClient/rebuild resumption.
+export {
+  deliverCanonicalGenerationEvent,
+  readCanonicalGenerationDeliveryPage,
+  resumeCanonicalGenerationDelivery,
+  type CanonicalGenerationDelivery,
+  type CanonicalGenerationReceiver,
+} from './canonical-generation-delivery.ts';
+export { CANONICAL_GENERATION_COMMITTED } from './events.ts';
 
 const ACCOUNT_TOMBSTONED = 'com.rezics.access.account-tombstoned.v1';
 
@@ -114,6 +128,7 @@ export function createSemanticWorkModule(
       registerIdentityEpochCoordinator(context, participants);
       await registerContextDirectoryWork(context);
       context.addEffects([
+        createCanonicalGenerationWakeEffect(context.pool),
         contextDirectoryEffect(context.pool, context.clock),
         createSemanticErasureEffect(context.pool),
         createSemanticLocatorEffect(context.pool),
@@ -171,6 +186,7 @@ export function createSemanticWorkModule(
         },
       ]);
       context.addService(async () => {
+        await resumeCanonicalGenerationDelivery(context.pool);
         await populateContextDirectory(context.pool, context.clock);
         await runCommand(context.pool, { partition: 0 }, async () => ({
           value: null,
