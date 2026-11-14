@@ -1,8 +1,8 @@
 import { readManagedAuthActions } from './account-management-auth-actions.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
-import type { Pool } from 'pg';
-import { withConnection } from '../database/pool.ts';
+import type { Pool, PoolClient } from 'pg';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
 import { accessCheck, type Access, type Actor } from './check.ts';
 import { routeOf } from '../route/route.ts';
@@ -11,7 +11,7 @@ import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { readAccount, readOrganizationRole, readPublicIdentities } from './account-data.ts';
 import { readMembershipInverse, MembershipInverseIncompleteError } from './membership-inverse.ts';
-import { classifyUnavailability } from './unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability } from './unavailable.ts';
 import operatorPage from './operator-page.sql';
 import membersPage from './management-members.sql';
 import relationRead from './management-relation.sql';
@@ -122,6 +122,14 @@ export type ManagementQuery = { organizationsCursor?: string; membersCursor?: st
 const limit = 20;
 const start = '00000000-0000-0000-0000-000000000000';
 
+function boundedRead<T>(pool: Pool, deadline: number, read: (client: PoolClient) => Promise<T>) {
+  return withBoundedReadConnection(pool, deadline, read, {
+    deadlineError: () => new AccessUnavailableError('deadline'),
+    isUncertainError: (error: unknown) => classifyUnavailability(error) !== undefined,
+    isUncertainSettledQueryError: () => true,
+  });
+}
+
 function presentation(account: {
   accountId: string;
   kind: string;
@@ -172,7 +180,7 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
   if (actor.kind !== 'account') throw new ProblemError('forbidden');
   const actorId = actor.accountId;
   const context = { pool: deps.pool, deadline };
-  const time = await withConnection(deps.pool, (client) => mintReadTime(client, deps.clock));
+  const time = await boundedRead(deps.pool, deadline, (client) => mintReadTime(client, deps.clock));
   const at = new Date(authoritativeTimeValue(time));
   const human = await readAccount(deps.pool, routeOf(actorId)!, actorId);
   if (!human || human.kind !== 'actor' || human.state !== 'active' || human.fenced || human.operatorAccountId !== null)
@@ -289,7 +297,7 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
       let candidates: string[];
       try {
         candidates = (
-          await withConnection(deps.pool, (client) => readMembershipInverse(client, { accountId: actorId }))
+          await boundedRead(deps.pool, deadline, (client) => readMembershipInverse(client, { accountId: actorId }))
         )
           .filter((item) => item.kind === 'organization')
           .map((item) => item.id)
