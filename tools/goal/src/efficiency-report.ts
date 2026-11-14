@@ -240,11 +240,7 @@ function sourceNeutralSideHistory(repository: string, revision: string): SourceH
 
 type ProductLineCounts = { productLines: number; webProductLines: number | null };
 
-function productNumstat(
-  repository: string,
-  selected: readonly string[],
-  ignoreWhitespace: boolean,
-): string | null {
+function productNumstat(repository: string, selected: readonly string[], ignoreWhitespace: boolean): string | null {
   const args = ['diff-tree', '--root', '--numstat', '-r'];
   if (ignoreWhitespace) args.push('--ignore-all-space', '--ignore-blank-lines');
   args.push('--stdin');

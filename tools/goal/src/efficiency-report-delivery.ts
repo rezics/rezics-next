@@ -164,7 +164,7 @@ type DeliveryRow = {
 };
 
 function deliveryRow(db: Database, bucket: string): DeliveryRow | null {
-  return (db
+  return db
     .query(
       `SELECT hour_bucket, report_ref, report, status, claimed_at, finished_at, detail,
               product_lines, attribution, web_product_lines, web_attribution,
@@ -174,7 +174,7 @@ function deliveryRow(db: Database, bucket: string): DeliveryRow | null {
               rolling_product_lines, rolling_attribution, alerts_json
        FROM efficiency_report_deliveries WHERE hour_bucket=?`,
     )
-    .get(bucket) as DeliveryRow | null);
+    .get(bucket) as DeliveryRow | null;
 }
 
 function snapshot(db: Database, row: DeliveryRow): FrozenHourlyEfficiencyReport {
@@ -341,7 +341,9 @@ export function captureFrozenHourlyEfficiencyReport(
         throw new Error('hourly observation window must match its UTC bucket');
       if (
         observation.attribution === 'measured' &&
-        (!Number.isSafeInteger(observation.productLines) || observation.productLines! < 0 || !observation.sourceRevision)
+        (!Number.isSafeInteger(observation.productLines) ||
+          observation.productLines! < 0 ||
+          !observation.sourceRevision)
       )
         throw new Error('measured hourly observation requires product lines and a source revision');
       if (
@@ -525,7 +527,9 @@ export async function sendHourlyEfficiencyReport(
   const claim = db
     .transaction(() => {
       let row = db
-        .query('SELECT report_ref, report, status, claimed_at, detail FROM efficiency_report_deliveries WHERE hour_bucket=?')
+        .query(
+          'SELECT report_ref, report, status, claimed_at, detail FROM efficiency_report_deliveries WHERE hour_bucket=?',
+        )
         .get(bucket.start) as {
         report_ref: string;
         report: string;
