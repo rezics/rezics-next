@@ -41,7 +41,7 @@ import { SqliteLandingQueue } from './land.ts';
 import { requestManagerLanding } from './manager-landing.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SharedInboxQueries } from './inbox-shared.ts';
-import { deliverDueReminders } from './notes.ts';
+import { deliverDueReminders, managerDutyRecipients, readManagerDutySessions } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch, sshProbe } from './watchdog.ts';
 import { readRiskOwnership } from './briefs.ts';
@@ -376,11 +376,17 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     pump,
     deliverReminders: async () => {
       const probes: Promise<void>[] = [];
-      const deliver = (summary: string) =>
-        inbox.deliver({ managerId: settings.integration.supermanager, kind: 'instruction', summary } as never);
+      const deliver = (summary: string, managerId = settings.integration.supermanager) =>
+        inbox.deliver({ managerId, kind: 'instruction', summary } as never);
       refreshCodexSchedule(settings.stateDirectory, Date.now(), undefined, settings.policy?.pacing);
       const delivered =
-        deliverDueReminders(settings.notes ?? [], settings.stateDirectory, deliver) +
+        deliverDueReminders(
+          settings.notes ?? [],
+          settings.stateDirectory,
+          deliver,
+          Date.now(),
+          managerDutyRecipients(settings.integration.supermanager, readManagerDutySessions(db)),
+        ) +
         alertUnspentAllowances(
           settings.pools,
           (pool) => tasks.reader(pool),
