@@ -87,7 +87,13 @@ function nativeRows(): FollowEdge[] {
       reason: 'explicit',
       updatedAt: followsRecording.follows[2]!.updatedAt,
       ownerId: rows[0]!.ownerId,
-      target: subjectRecording.summary,
+      target: {
+        ...subjectRecording.summary,
+        cover: {
+          ...subjectRecording.summary.cover,
+          variants: subjectRecording.summary.cover.variants.map((variant) => ({ ...variant, format: 'webp' as const })),
+        },
+      },
     },
   ];
 }

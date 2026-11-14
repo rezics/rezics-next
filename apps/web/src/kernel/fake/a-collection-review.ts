@@ -237,7 +237,9 @@ const searchAnswer: NonNullable<FakeRoute['story']> = async ({ request }) => {
       descriptions: { en: entry.description },
       facts: reviewFacts(entry),
       figure: rating(entry),
-      listPresentation: definitions.release.types[entry.type].listPresentation as CatalogueHit['listPresentation'],
+      listPresentation: definitions.release.types[entry.type].listPresentation as NonNullable<
+        CatalogueHit['listPresentation']
+      >,
     })),
     kinds: {
       values: ['schema:Book', 'schema:BookSeries', 'bf:Instance'].map((id) => ({

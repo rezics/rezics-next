@@ -43,7 +43,7 @@ function capturePage(context: PageStoryContext) {
   };
 }
 
-function FollowingStory(mode: LibraryFollowingStoryMode = 'recorded', path = pagePaths['library-following']) {
+function FollowingStory(mode: LibraryFollowingStoryMode = 'recorded', path: string = pagePaths['library-following']) {
   setLibraryFollowingStoryMode(mode);
   return <PageStory visitor="Signed In" path={path} onReady={capturePage} />;
 }

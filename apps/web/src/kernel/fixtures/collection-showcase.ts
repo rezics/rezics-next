@@ -308,7 +308,8 @@ function statement(property: string, content: unknown, index: number): Statement
     id: reviewId(10000 + index),
     property: {
       id: property,
-      data_type: definitions.release.properties[property as keyof typeof definitions.release.properties]!.datatype,
+      data_type: definitions.release.properties[property as keyof typeof definitions.release.properties]!
+        .datatype as Statement['property']['data_type'],
     },
     value: { type: 'value', content },
     rank: 'normal',
