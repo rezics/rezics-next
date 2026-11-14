@@ -103,8 +103,10 @@ export type SearchTurn = ReturnType<typeof admitSearchTurn>;
 
 /** Admission belongs to the caller, before queueing. Closing a turn never renews its deadline. */
 export function admitSearchTurn(context: SearchTurnContext = {}) {
-  const deadline = context.deadline ?? deadlineFor(SEARCH_TURN_MS);
-  if (!Number.isFinite(deadline)) throw new RangeError('Search turn deadline must be finite');
+  const requestedDeadline = context.deadline ?? deadlineFor(SEARCH_TURN_MS);
+  if (!Number.isFinite(requestedDeadline)) throw new RangeError('Search turn deadline must be finite');
+  // An explicit maintenance deadline cannot renew an earlier ambient request.
+  const deadline = Math.min(requestedDeadline, deadlineFor(Math.max(1, requestedDeadline - Date.now())));
   const outside: <T>(work: () => T) => T = searchTurns.getStore()?.outside ?? AsyncLocalStorage.snapshot();
   const expired = new SearchUnavailableError('Search maintenance deadline expired');
   const controller = new AbortController();
