@@ -17,10 +17,9 @@ import { problemSchema } from '../http/problem-schema.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
-import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { languageRanges } from '../semantic/language.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
@@ -98,6 +97,7 @@ import { attachCollectionListFacts } from './collection-list-facts.ts';
 import { assertShelfPageCurrent } from './shelf-viewer-currentness.ts';
 import { followContributionTarget, withFollowContribution } from './follow-contribution.ts';
 import { followResponse as serializeFollowResponse, withFollowWork } from './follow-operation-bounds.ts';
+import { admitPrivateFollowRead } from './follow-read-admission.ts';
 import {
   basicQuery,
   embedded,
@@ -2199,8 +2199,18 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         point(actor, params.targetId, 'follow:read');
         return withFollowWork(job.deadline, () =>
           admission.run('normal', job, async () => {
-            const follow = await command(() => follows().readFollow(actor, params.targetId, job.deadline), 'not_found');
-            if (!follow) throw new ProblemError('not_found');
+            const selectedAt = await admitPrivateFollowRead(dependencies.pool, actor, job.deadline);
+            const follow = await command(
+              () => follows().readFollow(actor, params.targetId, job.deadline, selectedAt),
+              'not_found',
+            );
+            if (!follow) {
+              await command(
+                () => admitPrivateFollowRead(dependencies.pool, actor, job.deadline, selectedAt),
+                'not_found',
+              );
+              throw new ProblemError('not_found');
+            }
             const shown = await fullView(
               config(),
               actor,
@@ -2217,6 +2227,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             const contribution = sourceWithheld
               ? null
               : await followContributionTarget(dependencies.pool, follow.targetId, follow.targetType);
+            await command(
+              () => admitPrivateFollowRead(dependencies.pool, actor, job.deadline, selectedAt),
+              'not_found',
+            );
             return serializeFollowResponse({
               follow: withFollowContribution(shown.follow, contribution, query.view === 'FULL'),
             });
@@ -2249,7 +2263,6 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         return withFollowWork(job.deadline, () =>
           admission.run('normal', job, () =>
             command(async () => {
-              const route = routeOf(owner.accountId)!;
               const binding = {
                 operation: 'follow.list',
                 parameters: { accountId: owner.accountId, targetType: query.targetType ?? 'all', state: 'following' },
@@ -2270,10 +2283,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                 cursorEpoch = cursor.epoch;
                 after = { updatedAt: cursor.after[0], targetId: cursor.after[1] };
               }
-              const partition = await withConnection(dependencies.pool, (client) =>
-                readPartition(deadlineClient(client, job.deadline), partitionOf(route)),
-              );
-              if (query.cursor !== undefined && cursorEpoch !== partition?.epoch)
+              const selectedAt = await admitPrivateFollowRead(dependencies.pool, actor, job.deadline);
+              if (query.cursor !== undefined && cursorEpoch !== selectedAt.epoch)
                 throw new ProblemError('stale_cursor');
               const size = query.limit ?? 20;
               const targetType = query.targetType;
@@ -2285,6 +2296,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                   ...(targetType === undefined ? {} : { targetType }),
                 },
                 job.deadline,
+                selectedAt,
               );
               const shown = rows.slice(0, size),
                 last = shown.at(-1);
@@ -2300,33 +2312,34 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                         ...(targetType === undefined ? {} : { targetType }),
                       },
                       job.deadline,
+                      selectedAt,
                     )
                   ).length > 0;
-              return serializeFollowResponse(
-                await fullView(
-                  config(),
-                  actor,
-                  query.view,
-                  {
-                    follows: shown.map(followView),
-                    next:
-                      more && last && partition
-                        ? encodeCursor(dependencies.tokens, binding, {
-                            epoch: partition.epoch,
-                            after: [last.updatedAt, last.targetId],
-                          })
-                        : null,
-                  },
-                  {
-                    deadline: job.deadline,
-                    follow: true,
-                    ...(dependencies.followTargets ? { nativeFollowTargets: dependencies.followTargets } : {}),
-                    ...(dependencies.followingSpaceTargets
-                      ? { followingSpaces: dependencies.followingSpaceTargets }
-                      : {}),
-                  },
-                ),
+              const response = await fullView(
+                config(),
+                actor,
+                query.view,
+                {
+                  follows: shown.map(followView),
+                  next:
+                    more && last
+                      ? encodeCursor(dependencies.tokens, binding, {
+                          epoch: selectedAt.epoch,
+                          after: [last.updatedAt, last.targetId],
+                        })
+                      : null,
+                },
+                {
+                  deadline: job.deadline,
+                  follow: true,
+                  ...(dependencies.followTargets ? { nativeFollowTargets: dependencies.followTargets } : {}),
+                  ...(dependencies.followingSpaceTargets
+                    ? { followingSpaces: dependencies.followingSpaceTargets }
+                    : {}),
+                },
               );
+              await admitPrivateFollowRead(dependencies.pool, actor, job.deadline, selectedAt);
+              return serializeFollowResponse(response);
             }),
           ),
         );

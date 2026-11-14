@@ -262,6 +262,9 @@ export function followPagePlan(input: Input<typeof page> & { limit: number }) {
 export function followAccountWork(accountId: string): Bound {
   return sqlWork(account.sql, [routeOf(accountId)!, accountId], point(size(accountProjection)));
 }
+export function followAccountShareWork(accountId: string): Bound {
+  return sqlWork(accountShare.sql, [routeOf(accountId)!, accountId], point(size({ state: 'suspended', fenced: false })));
+}
 /** Each Library-owned literal dispatch retains its original positional binds. */
 function targetStatement(sql: string, operands: readonly unknown[]): Bound | undefined {
   if (sql === collection.sql) {
@@ -435,10 +438,7 @@ export function followCommandPlan(original: FollowCommandOriginal, deadline: num
 }
 
 export function followAccountAuthorizationWork(accountId: string): Bound {
-  return sumBounds(
-    followAccountWork(accountId),
-    sqlWork(accountShare.sql, [routeOf(accountId)!, accountId], point(size({ state: 'suspended', fenced: false }))),
-  );
+  return sumBounds(followAccountWork(accountId), followAccountShareWork(accountId));
 }
 
 /** Owner declarations for the complete Follow subject hydration path, reused by Label tiles. */

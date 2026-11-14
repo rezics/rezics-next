@@ -4,13 +4,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { Value } from 'typebox/value';
 import type pg from 'pg';
-import { GrantDeniedError } from '../../src/access/contract/errors.ts';
+import { CommandUnavailableError, GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import type { CollectionVisibility } from '../../src/library/collection-model.ts';
 import * as collections from '../../src/library/collection-store.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { createFollowCommands } from '../../src/library/follows.ts';
 import * as followStore from '../../src/library/follow-store.ts';
+import { admitPrivateFollowRead } from '../../src/library/follow-read-admission.ts';
 import type { FollowTargetType } from '../../src/library/follow-model.ts';
 import { accessCommandAuthorization, type Access, type AccountActor, type Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -169,6 +170,31 @@ async function seedUnfollow(accountId: string, targetId: string, targetType: Fol
         reason: 'explicit',
         transactionId: newId(route),
         time: '2026-10-26T11:00:00.000Z',
+      }),
+    ).toBe(true);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function seedFollow(accountId: string, targetId: string, targetType: FollowTargetType): Promise<void> {
+  const route = routeOf(accountId)!;
+  const client = await admin.connect();
+  try {
+    await client.query('BEGIN');
+    expect(
+      await followStore.applyFollow(client, route, {
+        accountId,
+        targetId,
+        targetType,
+        intent: 'follow',
+        reason: 'explicit',
+        transactionId: newId(route),
+        time: clock().toISOString(),
       }),
     ).toBe(true);
     await client.query('COMMIT');
@@ -567,15 +593,14 @@ test("another account reads none of the owner's follows", async () => {
   await followCommands.follow(owner, { targetId: subjectId, targetType: 'subject' }, requestKey());
   tick();
   await followCommands.follow(owner, { targetId: shelf.id, targetType: 'collection' }, requestKey());
+  await seedFollow(suspended.accountId, subjectId, 'subject');
   expect(await followCommands.readFollow(other, subjectId)).toBeNull();
   expect(await followCommands.readFollow(other, shelf.id)).toBeNull();
-  expect(await followCommands.readFollow(suspended, subjectId)).toBeNull();
+  expect(await refusal(() => followCommands.readFollow(suspended, subjectId))).toBeInstanceOf(GrantDeniedError);
   expect(await followCommands.listFollows(other, { cursor: null, limit: 100 })).toEqual([]);
-  expect(
-    (await followCommands.listFollows(suspended, { cursor: null, limit: 100 })).some(
-      (row) => row.accountId === owner.accountId,
-    ),
-  ).toBe(false);
+  expect(await refusal(() => followCommands.listFollows(suspended, { cursor: null, limit: 100 }))).toBeInstanceOf(
+    GrantDeniedError,
+  );
 
   tick();
   await followCommands.follow(other, { targetId: subjectId, targetType: 'subject' }, requestKey());
@@ -592,6 +617,81 @@ test("another account reads none of the owner's follows", async () => {
     [ownerRoute, subjectId],
   );
   expect(rows.rows.map((row) => row.account_id).sort()).toEqual([other.accountId, owner.accountId].sort());
+});
+
+test('an admitted owner keeps valid empty Follow reads and stale owner or home evidence refuses private reads', async () => {
+  const emptyId = newId(ownerRoute);
+  await admin.query(
+    "INSERT INTO access.account(route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','active',$2)",
+    [ownerRoute, emptyId],
+  );
+  const emptyOwner = { ...owner, accountId: emptyId };
+  expect(await followCommands.readFollow(emptyOwner, newId(collectionRoute))).toBeNull();
+  expect(await followCommands.listFollows(emptyOwner, { cursor: null, limit: 10 })).toEqual([]);
+
+  const subjectId = await createReadableSubject('Owner authority fence');
+  await followCommands.follow(owner, subjectId, requestKey());
+  await seedFollow(suspended.accountId, subjectId, 'subject');
+  expect(await refusal(() => followCommands.readFollow(suspended, subjectId))).toBeInstanceOf(GrantDeniedError);
+  expect(await refusal(() => followCommands.listFollows(suspended, { cursor: null, limit: 10 }))).toBeInstanceOf(
+    GrantDeniedError,
+  );
+
+  const ownerEpoch = await admin.query<{ minimum_authn_epoch: string }>(
+    'SELECT minimum_authn_epoch::text FROM access.account WHERE route=$1 AND account_id=$2',
+    [ownerRoute, owner.accountId],
+  );
+  try {
+    await admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2', [
+      ownerRoute,
+      owner.accountId,
+    ]);
+    expect(await refusal(() => followCommands.readFollow(owner, subjectId))).toBeInstanceOf(GrantDeniedError);
+    expect(await refusal(() => followCommands.listFollows(owner, { cursor: null, limit: 10 }))).toBeInstanceOf(
+      GrantDeniedError,
+    );
+  } finally {
+    await admin.query('UPDATE access.account SET minimum_authn_epoch=$3 WHERE route=$1 AND account_id=$2', [
+      ownerRoute,
+      owner.accountId,
+      ownerEpoch.rows[0]!.minimum_authn_epoch,
+    ]);
+  }
+
+  const deadline = Date.now() + 30_000;
+  const admitted = await admitPrivateFollowRead(pool, owner, deadline);
+  const original = await admin.query<{ epoch: number; write_state: string; moved_to: string | null }>(
+    'SELECT epoch,write_state,moved_to FROM core.partition WHERE partition_no=$1',
+    [admitted.partition],
+  );
+  const home = original.rows[0]!;
+  try {
+    await admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [admitted.partition]);
+    expect(
+      await refusal(() => admitPrivateFollowRead(pool, owner, deadline, admitted)),
+    ).toBeInstanceOf(CommandUnavailableError);
+    for (const [state, movedTo] of [
+      ['fenced', null],
+      ['moved', 'new-home'],
+    ] as const) {
+      await admin.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [
+        admitted.partition,
+        state,
+        movedTo,
+      ]);
+      expect(await refusal(() => followCommands.readFollow(owner, subjectId))).toBeInstanceOf(
+        CommandUnavailableError,
+      );
+      expect(await refusal(() => followCommands.listFollows(owner, { cursor: null, limit: 10 }))).toBeInstanceOf(
+        CommandUnavailableError,
+      );
+    }
+  } finally {
+    await admin.query(
+      'UPDATE core.partition SET epoch=$2,write_state=$3,moved_to=$4 WHERE partition_no=$1',
+      [admitted.partition, home.epoch, home.write_state, home.moved_to],
+    );
+  }
 });
 
 test('statements per follow, membership step and page stay equal as unrelated follows grow', async () => {

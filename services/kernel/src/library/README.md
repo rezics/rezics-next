@@ -6,6 +6,10 @@ Follow and Collection readers through the public adapter index. Existing Continu
 
 # Library
 
+Decision: private Follow point/list reads admit the active, unfenced actor account and current authentication floor
+with its active home epoch before selection; native reads recheck after selection, and mounted reads recheck the same
+epoch after enrichment immediately before serialization. Account locks end before foreign target work.
+
 Decision: a successful revisioned write to a historical NULL-incarnation entry stamps and returns its new
 incarnation before storing the receipt; the exact caller body remains the digest. A fresh entry may add one
 type-preparation create receipt and one no-effect revalidation receipt; only creation and entry emit events.
