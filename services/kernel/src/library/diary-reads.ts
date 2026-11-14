@@ -1,14 +1,16 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount, deadlineClient, within, admitGroup } from './access-port.ts';
+import { readAccount, within, admitGroup } from './access-port.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadLifetime } from '../database/bounded-read-lifetime.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
-import { withRequestDeadline } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
@@ -172,13 +174,50 @@ export function createDiaryReads(deps: Dependencies) {
     deadline: number,
     body: (client: Client, epoch: number, now: Date) => Promise<T>,
   ) {
-    const at = await withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
-    try {
-      const route = routeOf(owner.accountId)!;
-      return await withConnection(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN');
+    const route = routeOf(owner.accountId)!;
+    let transaction: 'none' | 'beginning' | 'open' | 'committing' | 'rolling-back' | 'closed' = 'none';
+    let uncertain = false;
+    let failed = false;
+    let failure: unknown;
+    const remember = (error: unknown) => {
+      if (!failed) {
+        failed = true;
+        failure = error;
+      }
+      return failure;
+    };
+    const discard = (connection: PoolClient, error: Error) => {
+      uncertain = true;
+      discardConnection(connection, error);
+    };
+    return withBoundedReadLifetime(
+      (work) =>
+        withConnection(pool, async (connection) => {
+          try {
+            return await work(connection);
+          } finally {
+            // The native read lifetime does not own this read/write transaction.
+            if (transaction !== 'none' && transaction !== 'closed')
+              discard(
+                connection,
+                failure instanceof Error ? failure : new Error('Diary navigation transaction did not settle'),
+              );
+          }
+        }),
+      discard,
+      deadline,
+      async (client) => {
+        const at = await mintReadTime(client, clock);
+        let now: Date;
         try {
+          now = new Date(authoritativeTimeValue(at));
+        } finally {
+          releaseOperationalTime(at);
+        }
+        try {
+          transaction = 'beginning';
+          await client.query('BEGIN');
+          transaction = 'open';
           // Serializes slot allocation and prevents terminal erasure from racing a retained navigation write.
           await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE', [
             route,
@@ -198,17 +237,38 @@ export function createDiaryReads(deps: Dependencies) {
           const partition = await readPartition(client, partitionOf(route));
           if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
             throw new ProblemError('partition_unavailable');
-          const result = await body(client, partition.epoch, new Date(authoritativeTimeValue(at)));
+          const result = await body(client, partition.epoch, now);
+          transaction = 'committing';
           await client.query('COMMIT');
+          transaction = 'closed';
           return result;
         } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
+          remember(error);
+          if (transaction === 'open' && !uncertain && Date.now() < deadline) {
+            transaction = 'rolling-back';
+            try {
+              await client.query('ROLLBACK');
+              transaction = 'closed';
+            } catch {
+              // The lifetime discards uncertain cleanup; the first failure remains authoritative.
+            }
+          }
+          throw failure;
         }
-      });
-    } finally {
-      releaseOperationalTime(at);
-    }
+      },
+      {
+        deadlineError: () => new AccessUnavailableError('deadline'),
+        mapError(error) {
+          try {
+            throwAccessUnavailable(error);
+          } catch (mapped) {
+            return remember(mapped);
+          }
+          return remember(error);
+        },
+        isUncertainSettledQueryError: () => true,
+      },
+    );
   }
 
   async function currentNavigation(
@@ -230,124 +290,126 @@ export function createDiaryReads(deps: Dependencies) {
       const limit = sizeOf(options);
       const filter = filterOf(options);
       const route = routeOf(owner.accountId)!;
+      deadline = Math.min(deadline, deadlineFor(Math.max(1, deadline - Date.now())));
       const alive = () => {
         if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
       };
       alive();
-      return withRequestDeadline(deadline, () =>
-        within(deadline, async () => {
-          await admitGroup({
+      return withRequestDeadline(deadline, async () => {
+        await within(deadline, () =>
+          admitGroup({
             ...deps,
             access: () => access,
             actor: owner,
             group: 'reading_progress',
             clientAction: 'progress_session:list',
             deadline,
-          });
-          let after: DiaryKey | null = null;
-          let navigation: DiaryNavigation | null = null;
-          const before = await snapshot(owner, deadline, async (client, epoch, now) => {
-            alive();
-            const revision = filter ? await reportedYearRevision(client, route, owner.accountId) : null;
-            if (options.cursor !== undefined) {
-              const decoded = decode(owner, options.cursor, now, limit, filter);
-              if (decoded.epoch !== epoch || decoded.revision !== revision) throw new ProblemError('stale_cursor');
-              navigation = await currentNavigation(client, owner, decoded.id, epoch, now);
-              after = decoded.after;
-            }
-            return {
-              epoch,
-              revision,
-              rows: await diaryRows(client, route, owner.accountId, after, limit + 1, filter),
-            };
-          });
-          const shown = before.rows.slice(0, limit);
-          const ids = [
-            ...new Set(
-              shown.flatMap((row) => (row.versionSubjectId ? [row.subjectId, row.versionSubjectId] : [row.subjectId])),
-            ),
-          ];
-          // Shared native summary projection batches current disclosure, including redirects and missing subjects.
-          const summaries = await readSubjectSummaries({ ...deps, actor: owner, deadline }, ids);
-          const occurrences = shown.map((row) => ({
-            ...row,
-            subject: subjectView(summaries.get(row.subjectId)),
-            versionSubject: row.versionSubjectId ? subjectView(summaries.get(row.versionSubjectId)) : null,
-          }));
-          const more = before.rows.length > limit;
-          navigation = await snapshot(owner, deadline, async (client, epoch, now) => {
-            alive();
-            if (epoch !== before.epoch) throw new ProblemError('stale_cursor');
-            const current = await diaryRows(client, route, owner.accountId, after, limit + 1, filter);
-            if (filter && (await reportedYearRevision(client, route, owner.accountId)) !== before.revision)
-              throw new ProblemError('conflict');
-            if (JSON.stringify(current) !== JSON.stringify(before.rows)) throw new ProblemError('conflict');
-            alive();
-            if (navigation) return currentNavigation(client, owner, navigation.id, epoch, now);
-            return more ? createDiaryNavigation(client, route, owner.accountId, callerOf(owner), epoch, now) : null;
-          });
-          const last = shown.at(-1);
-          const token = (keys: (string | number)[]) =>
-            navigation
-              ? encodeCursor(
-                  tokens,
-                  binding(owner),
-                  {
-                    epoch: navigation.epoch,
-                    after: [navigation.id, limit, ...(filter ? [...filterKey(filter), before.revision!] : []), ...keys],
-                  },
-                  Date.parse(navigation.createdAt),
-                )
-              : null;
-          const result: DiaryPage = {
-            occurrences,
-            order: 'recorded_started_desc_id_desc',
-            ...(before.revision
-              ? {
-                  currentness: {
-                    state: 'snapshot' as const,
-                    revision: before.revision,
-                  },
-                }
-              : {}),
-            next: more && last ? token([last.recordedStartedAt, last.id]) : null,
-            continuation: token([]),
-            expiresAt: navigation?.expiresAt ?? null,
-          };
-          if (Buffer.byteLength(JSON.stringify(result)) > DIARY_PAYLOAD_BYTES) throw new ProblemError('overloaded');
+          }),
+        );
+        let after: DiaryKey | null = null;
+        let navigation: DiaryNavigation | null = null;
+        const before = await snapshot(owner, deadline, async (client, epoch, now) => {
           alive();
-          return result;
-        }),
-      );
+          const revision = filter ? await reportedYearRevision(client, route, owner.accountId) : null;
+          if (options.cursor !== undefined) {
+            const decoded = decode(owner, options.cursor, now, limit, filter);
+            if (decoded.epoch !== epoch || decoded.revision !== revision) throw new ProblemError('stale_cursor');
+            navigation = await currentNavigation(client, owner, decoded.id, epoch, now);
+            after = decoded.after;
+          }
+          return {
+            epoch,
+            revision,
+            rows: await diaryRows(client, route, owner.accountId, after, limit + 1, filter),
+          };
+        });
+        const shown = before.rows.slice(0, limit);
+        const ids = [
+          ...new Set(
+            shown.flatMap((row) => (row.versionSubjectId ? [row.subjectId, row.versionSubjectId] : [row.subjectId])),
+          ),
+        ];
+        // Shared native summary projection batches current disclosure, including redirects and missing subjects.
+        const summaries = await within(deadline, () => readSubjectSummaries({ ...deps, actor: owner, deadline }, ids));
+        const occurrences = shown.map((row) => ({
+          ...row,
+          subject: subjectView(summaries.get(row.subjectId)),
+          versionSubject: row.versionSubjectId ? subjectView(summaries.get(row.versionSubjectId)) : null,
+        }));
+        const more = before.rows.length > limit;
+        navigation = await snapshot(owner, deadline, async (client, epoch, now) => {
+          alive();
+          if (epoch !== before.epoch) throw new ProblemError('stale_cursor');
+          const current = await diaryRows(client, route, owner.accountId, after, limit + 1, filter);
+          if (filter && (await reportedYearRevision(client, route, owner.accountId)) !== before.revision)
+            throw new ProblemError('conflict');
+          if (JSON.stringify(current) !== JSON.stringify(before.rows)) throw new ProblemError('conflict');
+          alive();
+          if (navigation) return currentNavigation(client, owner, navigation.id, epoch, now);
+          return more ? createDiaryNavigation(client, route, owner.accountId, callerOf(owner), epoch, now) : null;
+        });
+        const last = shown.at(-1);
+        const token = (keys: (string | number)[]) =>
+          navigation
+            ? encodeCursor(
+                tokens,
+                binding(owner),
+                {
+                  epoch: navigation.epoch,
+                  after: [navigation.id, limit, ...(filter ? [...filterKey(filter), before.revision!] : []), ...keys],
+                },
+                Date.parse(navigation.createdAt),
+              )
+            : null;
+        const result: DiaryPage = {
+          occurrences,
+          order: 'recorded_started_desc_id_desc',
+          ...(before.revision
+            ? {
+                currentness: {
+                  state: 'snapshot' as const,
+                  revision: before.revision,
+                },
+              }
+            : {}),
+          next: more && last ? token([last.recordedStartedAt, last.id]) : null,
+          continuation: token([]),
+          expiresAt: navigation?.expiresAt ?? null,
+        };
+        if (Buffer.byteLength(JSON.stringify(result)) > DIARY_PAYLOAD_BYTES) throw new ProblemError('overloaded');
+        alive();
+        return result;
+      });
     },
 
     /** Authenticated, caller-bound and idempotent, including an already cancelled/expired navigation. */
     async cancel(actor: Actor, token: string, deadline: number): Promise<{ cancelled: true }> {
       const owner = ownerOf(actor);
-      return withRequestDeadline(deadline, () =>
-        within(deadline, async () => {
-          await admitGroup({
+      deadline = Math.min(deadline, deadlineFor(Math.max(1, deadline - Date.now())));
+      return withRequestDeadline(deadline, async () => {
+        await within(deadline, () =>
+          admitGroup({
             ...deps,
             access: () => access,
             actor: owner,
             group: 'reading_progress',
             clientAction: 'progress_session:list',
             deadline,
-          });
-          await snapshot(owner, deadline, async (client, _epoch, now) => {
-            let decoded: ReturnType<typeof decode>;
-            try {
-              decoded = decode(owner, token, now);
-            } catch (error) {
-              // Expiration is already retirement; a malformed or foreign token is still invalid.
-              if (error instanceof ProblemError && error.code === 'stale_cursor') return;
-              throw error;
-            }
-            await cancelDiaryNavigation(client, routeOf(owner.accountId)!, owner.accountId, decoded.id);
-          });
-          return { cancelled: true };
-        }),
-      );
+          }),
+        );
+        await snapshot(owner, deadline, async (client, _epoch, now) => {
+          let decoded: ReturnType<typeof decode>;
+          try {
+            decoded = decode(owner, token, now);
+          } catch (error) {
+            // Expiration is already retirement; a malformed or foreign token is still invalid.
+            if (error instanceof ProblemError && error.code === 'stale_cursor') return;
+            throw error;
+          }
+          await cancelDiaryNavigation(client, routeOf(owner.accountId)!, owner.accountId, decoded.id);
+        });
+        return { cancelled: true };
+      });
     },
   };
 }
