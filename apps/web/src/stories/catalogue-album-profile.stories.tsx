@@ -2,8 +2,11 @@ import { chooseSelectValue } from './select-option';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
+import { createKernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { AlbumProfile } from '../features/catalogue/album-profile-view';
+import { MusicAlbumOverview } from '../features/catalogue/music-reader-view';
+import { readAlbumEditions, type AlbumEditionRead } from '../features/catalogue/music-reader';
 import {
   albumFixture,
   albumId,
@@ -415,6 +418,135 @@ export const CorrectionUncertain: Story = {
   args: { correction: true, scenario: 'uncertain' },
   play: ({ canvasElement }) => correctionFailure(canvasElement, m.facts_uncertain()),
 };
+
+function AlbumEditionStory({ sparseRetry = false }: { sparseRetry?: boolean }) {
+  const locale = getLocale();
+  const fixture = useMemo(() => {
+    const album = albumFixture('ready', locale);
+    const firstCursor = 'opaque:editions/+?港';
+    const lastCursor = 'opaque:editions/last+?港';
+    let failed = false;
+    const row = (suffix: string, label: string): Extract<AlbumEditionRead, { ok: true }>['rows'][number] => ({
+      subject: `00000000-0000-4000-8000-00000000e1${suffix}`,
+      statement: `00000000-0000-4000-8000-00000000e2${suffix}`,
+      property: 'schema:releaseOf',
+      type: 'schema:MusicRelease',
+      label,
+      summary: {
+        id: `00000000-0000-4000-8000-00000000e1${suffix}`,
+        type: 'schema:MusicRelease',
+        types: ['schema:MusicRelease'],
+        label: { language: 'en', value: label },
+        creativeWork: true,
+        cover: null,
+      },
+    });
+    // Declared native examples use the generated client and the production window reader.
+    const client = createKernelClient('https://album-editions.example', {
+      fetch: (async (input) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname === `/v1/subjects/${albumId}`) return Response.json(album.publicRead);
+        if (url.pathname !== `/v1/subjects/${albumId}/links`) throw new Error('Unexpected album example request');
+        const cursor = url.searchParams.get('cursor');
+        if (sparseRetry && cursor === firstCursor && !failed) {
+          failed = true;
+          return Response.json({}, { status: 503 });
+        }
+        return Response.json({
+          links: !cursor
+            ? [row('01', 'Z vinyl'), row('02', 'A CD')]
+            : sparseRetry && cursor === firstCursor
+              ? []
+              : [row('03', 'Digital edition')],
+          next: !cursor ? firstCursor : sparseRetry && cursor === firstCursor ? lastCursor : null,
+          freshness: { caught_up: !!cursor && (!sparseRetry || cursor === lastCursor) },
+        });
+      }) as typeof fetch,
+    });
+    return {
+      ...album,
+      read: (address: Parameters<typeof readAlbumEditions>[2]) =>
+        readAlbumEditions(client, { ...album.release, digest: album.publicRead.subject.release }, address, locale),
+    };
+  }, [locale, sparseRetry]);
+  return (
+    <PatternStory path={`/subjects/${albumId}/harbour-sessions`} visitor="Signed Out">
+      <AppShell>
+        <main className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-8">
+          <h1 className="text-3xl font-semibold">Harbour sessions</h1>
+          <MusicAlbumOverview
+            source={fixture}
+            locale={locale}
+            public={fixture.publicRead}
+            release={fixture.release}
+            transport={fixture.read}
+          />
+        </main>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+function editionWindowStory(viewport: 'desktop1280' | 'phone390', sparseRetry = false): Story {
+  return {
+    render: () => <AlbumEditionStory sparseRetry={sparseRetry} />,
+    globals: { viewport: { value: viewport, isRotated: false } },
+    play: async ({ canvasElement }) => {
+      const canvas = within(canvasElement);
+      await canvas.findByRole('link', { name: 'Z vinyl' });
+      const section = canvasElement.querySelector<HTMLElement>('[data-slot="music-album-editions"]')!;
+      const editions = within(section);
+      const facts = canvasElement.querySelector('[data-slot="profile-group-credits"]');
+      await expect(facts?.textContent).toContain('The Harbour Ensemble');
+      await expect(Array.from(section.querySelectorAll('a'), (link) => link.textContent)).toEqual(['Z vinyl', 'A CD']);
+      const next = editions.getByRole('button', { name: m.music_context_next_page() });
+      next.focus();
+      await userEvent.keyboard('{Enter}');
+      if (sparseRetry) {
+        await editions.findByText(m.album_tracks_unavailable());
+        await expect(editions.getByText(m.music_context_last_good())).toBeVisible();
+        await expect(editions.getByRole('link', { name: 'Z vinyl' })).toBeVisible();
+        const retry = editions.getByRole('button', { name: m.music_context_retry_page() });
+        retry.focus();
+        await userEvent.keyboard('{Enter}');
+        await editions.findByText(m.music_context_empty_page());
+        await expect(editions.getByText(m.work_parts_pending())).toBeVisible();
+        await expect(next).toBeEnabled();
+        next.focus();
+        await userEvent.keyboard('{Enter}');
+      }
+      const destination = await editions.findByRole('link', { name: 'Digital edition' });
+      await expect(destination).toHaveAttribute('target', '_blank');
+      await expect(editions.getByText(m.album_tracks_return())).toBeVisible();
+      await expect(editions.getByText(m.album_tracks_current())).toBeVisible();
+      await expect(next).toBeDisabled();
+      await expect(section.querySelector('h2, h3')).toHaveFocus();
+      const previous = editions.getByRole('button', { name: m.music_context_previous_page() });
+      previous.focus();
+      await userEvent.keyboard('{Enter}');
+      if (sparseRetry) {
+        await editions.findByText(m.music_context_empty_page());
+        await userEvent.keyboard('{Enter}');
+      }
+      await editions.findByRole('link', { name: 'Z vinyl' });
+      await expect(previous).toBeDisabled();
+      await expect(section.querySelector('h2, h3')).toHaveFocus();
+      await expect(canvasElement.querySelector('[data-slot="profile-group-credits"]')).toBe(facts);
+      for (const control of section.querySelectorAll<HTMLElement>('button, a')) {
+        const box = control.getBoundingClientRect();
+        await expect(box.width).toBeGreaterThanOrEqual(44);
+        await expect(box.height).toBeGreaterThanOrEqual(viewport === 'phone390' ? 44 : 32);
+      }
+      const main = canvas.getByRole('main');
+      await expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth + 1);
+    },
+  };
+}
+
+export const EditionsDesktop = editionWindowStory('desktop1280');
+export const EditionsPhone = editionWindowStory('phone390');
+export const EditionsSparseRetryDesktop = editionWindowStory('desktop1280', true);
+export const EditionsSparseRetryPhone = editionWindowStory('phone390', true);
 
 // UNRUN browser oracles for the ordinary phone390/desktop1280 and locale/theme globals.
 async function inspectCorrectionIdentity(canvasElement: HTMLElement) {

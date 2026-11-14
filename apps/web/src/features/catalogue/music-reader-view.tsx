@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSubjectCommunityReading } from '../pages/subject-community-lifetime';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -30,6 +30,11 @@ import type { SubjectRead } from '@rezics/client';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+
+type EditionNavigation = {
+  window: AlbumEditionWindow;
+  move: (move: AlbumEditionMove, keyboardOrigin?: HTMLButtonElement) => void;
+};
 
 function options(locale: string) {
   return { locale: locale as never };
@@ -245,7 +250,7 @@ function EditionList({
   editions: AlbumEditionRead | undefined;
   locale: string;
   onRetry?: () => void;
-  navigation?: { window: AlbumEditionWindow; move: (move: AlbumEditionMove) => void };
+  navigation?: EditionNavigation;
 }) {
   const o = options(locale);
   const failure = navigation?.window.failure ?? (editions && !editions.ok ? editions : undefined);
@@ -258,7 +263,11 @@ function EditionList({
       aria-busy={pending}
       className="min-w-0 space-y-3"
     >
-      <ContentItemHeading level={2} className="text-xl font-semibold">
+      <ContentItemHeading
+        level={2}
+        tabIndex={-1}
+        className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         {m.subject_editions({}, o)}
       </ContentItemHeading>
       {failure ? (
@@ -314,7 +323,7 @@ function EditionList({
             type="button"
             className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
             disabled={pending || !navigation.window.history.length}
-            onClick={() => navigation.move('previous')}
+            onClick={(event) => navigation.move('previous', event.detail === 0 ? event.currentTarget : undefined)}
           >
             {m.music_context_previous_page({}, o)}
           </button>
@@ -322,7 +331,7 @@ function EditionList({
             type="button"
             className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
             disabled={pending || !!failure || !editions?.ok || !editions.admitted || !editions.next}
-            onClick={() => navigation.move('next')}
+            onClick={(event) => navigation.move('next', event.detail === 0 ? event.currentTarget : undefined)}
           >
             {m.music_context_next_page({}, o)}
           </button>
@@ -330,7 +339,7 @@ function EditionList({
             type="button"
             className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}
             disabled={pending || failure?.reason !== 'unavailable'}
-            onClick={() => navigation.move('retry')}
+            onClick={(event) => navigation.move('retry', event.detail === 0 ? event.currentTarget : undefined)}
           >
             {m.music_context_retry_page({}, o)}
           </button>
@@ -366,7 +375,7 @@ export function MusicAlbumReader({
   loading?: boolean;
   onRetry?: () => void;
   onEditionRetry?: () => void;
-  editionNavigation?: { window: AlbumEditionWindow; move: (move: AlbumEditionMove) => void };
+  editionNavigation?: EditionNavigation;
   link?: PageLink;
 }) {
   const visit: MusicReaderVisit = musicReaderVisit({
@@ -493,7 +502,17 @@ function AlbumOverviewWindow({
   const current = useRef(isCurrent);
   current.current = isCurrent;
   const read = useRef(transport).current;
+  const opener = useRef<HTMLButtonElement | undefined>(undefined);
   const pending = window.pending;
+  useLayoutEffect(() => {
+    if (pending) return;
+    const target = opener.current;
+    opener.current = undefined;
+    if (!target?.isConnected || !current.current()) return;
+    if (document.activeElement !== target && document.activeElement !== document.body) return;
+    if (!target.disabled) target.focus();
+    else target.closest('section')?.querySelector<HTMLElement>('h2, h3')?.focus();
+  }, [pending]);
   useEffect(() => {
     if (!pending || !current.current()) return;
     let retired = false;
@@ -520,8 +539,11 @@ function AlbumOverviewWindow({
         ? {
             editionNavigation: {
               window,
-              move: (move: AlbumEditionMove) => {
-                if (current.current()) setWindow((window) => moveAlbumEditionWindow(window, move));
+              move: (move: AlbumEditionMove, keyboardOrigin?: HTMLButtonElement) => {
+                if (current.current() && !window.pending) {
+                  opener.current = keyboardOrigin;
+                  setWindow((window) => moveAlbumEditionWindow(window, move));
+                }
               },
             },
           }

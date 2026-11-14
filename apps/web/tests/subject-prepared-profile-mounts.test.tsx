@@ -8,11 +8,12 @@ import { ui } from './game-reader-view.test';
 import { gameExample } from '../src/features/catalogue/game-reader/examples';
 import type { GameReaderRead, GameReaderTransport } from '../src/features/catalogue/game-reader/model';
 import {
+  albumEditionHistoryLimit,
   readAlbumEditions,
   type AlbumEditionRead,
   type AlbumEditionAddress,
 } from '../src/features/catalogue/music-reader';
-import { albumFixture } from '../src/kernel/fake/catalogue-album-profile';
+import { albumFixture, albumId } from '../src/kernel/fake/catalogue-album-profile';
 import { readingOverviewExample } from '../src/kernel/fake/reading-overview';
 import { defaultReader, type Reader } from '../src/subject/reader';
 import { m } from '../src/paraglide/messages.js';
@@ -41,6 +42,21 @@ const settle = (action: () => void) =>
     action();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+
+function editionRow(label: string, suffix = '01') {
+  const row = gameExample().first.links[0]!;
+  row.property = row.assertion!.property.id = 'schema:releaseOf';
+  row.assertion!.value.content = albumId;
+  row.subject = row.summary!.id = `00000000-0000-4000-8000-00000000b1${suffix}`;
+  row.statement = row.assertion!.id = `00000000-0000-4000-8000-00000000b2${suffix}`;
+  row.type = row.summary!.type = 'schema:MusicRelease';
+  row.summary!.types = ['schema:MusicRelease'];
+  row.label = row.summary!.label!.value = label;
+  return row;
+}
+
+const editionButton = (scope: Element, label: string) =>
+  Array.from(scope.querySelectorAll('button')).find((button) => button.textContent === label)!;
 
 function pageFor(publicRead: SubjectRead, release: Release, links?: ReturnType<typeof gameExample>['first']): Page {
   const page = readingOverviewExample('game').page;
@@ -164,6 +180,7 @@ test('Subject Album shows page facts before native Editions, retries its exact a
   try {
     const album = () => mounted.host.querySelector('[data-slot="music-album-reader"]')!;
     const window = () => album().querySelector('[data-slot="music-album-editions"]')!;
+    const facts = album().querySelector('[data-slot="profile-group-credits"]');
     expect(album().querySelector('[data-slot="profile-group-credits"]')?.textContent).toContain('The Harbour Ensemble');
     expect(window().textContent).toContain(m.candidate_loading());
     expect(window().textContent).not.toContain(m.music_reader_empty());
@@ -172,12 +189,13 @@ test('Subject Album shows page facts before native Editions, retries its exact a
     expect(window().textContent).toContain(m.album_tracks_unavailable());
     expect(album().textContent).toContain('The Harbour Ensemble');
     reply = Response.json({ links: [], next: null, freshness: { caught_up: true } });
-    const retry = window().querySelector<HTMLButtonElement>('button')!;
+    const retry = editionButton(window(), m.music_context_retry_page());
     await settle(() => {
       retry.click();
       retry.click();
     });
     expect(window().textContent).toContain(m.music_context_empty_page());
+    expect(album().querySelector('[data-slot="profile-group-credits"]')).toBe(facts);
     expect(editions.mock.calls.map(([call]) => call.data)).toEqual(
       Array(2).fill({ id: fixture.publicRead.subject.id, context: fixture.publicRead.subject.context }),
     );
@@ -186,17 +204,49 @@ test('Subject Album shows page facts before native Editions, retries its exact a
     );
     expect(calls[1]!.searchParams.get('limit')).toBe('20');
     expect(calls[1]!.searchParams.get('cursor')).toBeNull();
-    const row = gameExample().first.links[0]!;
-    row.property = row.assertion!.property.id = 'schema:releaseOf';
-    row.assertion!.value.content = fixture.publicRead.subject.id;
-    row.type = row.summary!.type = 'schema:MusicRelease';
-    row.summary!.types = ['schema:MusicRelease'];
-    row.label = row.summary!.label!.value = 'Japan CD';
+    const row = editionRow('Japan CD');
     reply = Response.json({ links: [row], next: 'opaque:album/?+曲', freshness: { caught_up: false } });
     await mounted.render(undefined, { ...page });
     expect(window().querySelector('a')?.textContent).toBe('Japan CD');
     expect(album().textContent).toContain(m.profile_reader_page_incomplete({ label: 'schema:releaseOf' }));
     expect(calls.filter((url) => url.pathname.endsWith('/links'))).toHaveLength(3);
+    const credits = album().querySelector('[data-slot="profile-group-credits"]');
+    reply = Response.json({}, { status: 503 });
+    await settle(() => {
+      editionButton(window(), m.music_context_next_page()).click();
+      editionButton(window(), m.music_context_next_page()).click();
+    });
+    expect(window().textContent).toContain(m.music_context_last_good());
+    expect(window().textContent).toContain(m.album_tracks_unavailable());
+    expect(window().querySelector('a')?.textContent).toBe('Japan CD');
+    expect(window().textContent).not.toContain(m.music_context_empty_page());
+    const sparse = { links: [], next: 'native:second/+?曲', freshness: { caught_up: false } };
+    reply = Response.json(sparse);
+    await mounted.click(m.music_context_retry_page());
+    expect(window().textContent).toContain(m.music_context_empty_page());
+    expect(window().textContent).toContain(m.work_parts_pending());
+    expect(editionButton(window(), m.music_context_next_page()).disabled).toBe(false);
+    const rows = [editionRow('Z vinyl', '02'), editionRow('A digital', '03')];
+    reply = Response.json({ links: rows, next: null, freshness: { caught_up: true } });
+    await mounted.click(m.music_context_next_page());
+    expect(Array.from(window().querySelectorAll('a'), (link) => link.textContent)).toEqual(['Z vinyl', 'A digital']);
+    expect(window().querySelector('a')?.getAttribute('target')).toBe('_blank');
+    expect(window().textContent).toContain(m.album_tracks_return());
+    expect(window().textContent).toContain(m.album_tracks_current());
+    expect(editionButton(window(), m.music_context_next_page()).disabled).toBe(true);
+    reply = Response.json(sparse);
+    await mounted.click(m.music_context_previous_page());
+    reply = Response.json({ links: [row], next: 'opaque:album/?+曲', freshness: { caught_up: false } });
+    await mounted.click(m.music_context_previous_page());
+    expect(window().querySelector('a')?.textContent).toBe('Japan CD');
+    expect(editionButton(window(), m.music_context_previous_page()).disabled).toBe(true);
+    expect(
+      calls
+        .filter((url) => url.pathname.endsWith('/links'))
+        .slice(3)
+        .map((url) => url.searchParams.get('cursor')),
+    ).toEqual(['opaque:album/?+曲', 'opaque:album/?+曲', 'native:second/+?曲', 'opaque:album/?+曲', null]);
+    expect(album().querySelector('[data-slot="profile-group-credits"]')).toBe(credits);
     const unsupported = structuredClone(fixture.release);
     delete unsupported.properties['schema:releaseOf'];
     unsupported.properties['schema:contributor']!.labels.en = 'Replacement credit label';
@@ -212,12 +262,77 @@ test('Subject Album shows page facts before native Editions, retries its exact a
   }
 });
 
-test.each(['source', 'viewer', 'locale', 'context', 'definitions', 'withdrawal'] as const)(
-  'Album %s replacement fences pending Editions and stale facts',
-  async (replacement) => {
+test('Album Previous rereads only the bounded address history without retaining page bodies or refilling', async () => {
+  const fixture = albumFixture();
+  const calls: AlbumEditionAddress[] = [];
+  editionTransport = async (address) => {
+    calls.push(address);
+    const index = address.cursor ? Number(address.cursor.split(':').at(-1)) : 0;
+    return {
+      ok: true,
+      admitted: true,
+      rows: [editionRow(`Edition ${index}`)],
+      next: `opaque:/+曲:${index + 1}`,
+      caughtUp: false,
+    };
+  };
+  const mounted = await mount(pageFor(fixture.publicRead, fixture.release));
+  try {
+    const facts = mounted.host.querySelector('[data-slot="profile-group-credits"]');
+    for (let index = 0; index < albumEditionHistoryLimit + 2; index++) await mounted.click(m.music_context_next_page());
+    for (let index = 0; index < albumEditionHistoryLimit; index++) await mounted.click(m.music_context_previous_page());
+    const window = mounted.host.querySelector('[data-slot="music-album-editions"]')!;
+    expect(window.querySelector('a')?.textContent).toBe('Edition 2');
+    expect(editionButton(window, m.music_context_previous_page()).disabled).toBe(true);
+    expect(calls.map((address) => address.cursor)).toEqual([
+      undefined,
+      ...Array.from({ length: 10 }, (_, index) => `opaque:/+曲:${index + 1}`),
+      ...Array.from({ length: 8 }, (_, index) => `opaque:/+曲:${9 - index}`),
+    ]);
+    expect(mounted.host.querySelector('[data-slot="profile-group-credits"]')).toBe(facts);
+  } finally {
+    await mounted.close();
+  }
+});
+
+test.each(['withheld', 'invalid'] as const)(
+  'Album %s continuation clears rows without claiming empty or offering retry',
+  async (reason) => {
+    const fixture = albumFixture();
+    editionTransport = async (address) =>
+      address.cursor
+        ? { ok: false, reason }
+        : { ok: true, admitted: true, rows: [editionRow('Japan CD')], next: 'opaque:next', caughtUp: true };
+    const mounted = await mount(pageFor(fixture.publicRead, fixture.release));
+    try {
+      await mounted.click(m.music_context_next_page());
+      const window = mounted.host.querySelector('[data-slot="music-album-editions"]')!;
+      expect(window.textContent).toContain(
+        reason === 'withheld' ? m.music_reader_denied() : m.music_context_invalid_address(),
+      );
+      expect(window.querySelector('a')).toBeNull();
+      expect(window.textContent).not.toContain(m.music_context_empty_page());
+      expect(editionButton(window, m.music_context_retry_page()).disabled).toBe(true);
+      expect(mounted.host.textContent).toContain('The Harbour Ensemble');
+    } finally {
+      await mounted.close();
+    }
+  },
+);
+
+test.each(
+  (['source', 'viewer', 'session', 'locale', 'context', 'definitions', 'withdrawal'] as const).flatMap((replacement) =>
+    [false, true].map((continuation) => ({ replacement, continuation })),
+  ),
+)(
+  'Album $replacement replacement fences pending Editions and stale facts (continuation=$continuation)',
+  async ({ replacement, continuation }) => {
     const fixture = albumFixture();
     const flight = Promise.withResolvers<AlbumEditionRead>();
-    editionTransport = () => flight.promise;
+    editionTransport = async (address) =>
+      continuation && !address.cursor
+        ? { ok: true, admitted: true, rows: [editionRow('Retired edition')], next: 'opaque:retired', caughtUp: false }
+        : flight.promise;
     const { MusicAlbumOverview } = await import('../src/features/catalogue/music-reader-view');
     const mounted = await ui();
     const source = {};
@@ -231,30 +346,52 @@ test.each(['source', 'viewer', 'locale', 'context', 'definitions', 'withdrawal']
     try {
       await mounted.renderContent(<MusicAlbumOverview {...props} />);
       expect(mounted.host.textContent).toContain('The Harbour Ensemble');
+      if (continuation) await mounted.click(m.music_context_next_page());
       const next = {
         ...props,
-        ...(replacement === 'source'
-          ? { source: {} }
-          : replacement === 'viewer'
-            ? { reader: 'other' }
-            : replacement === 'locale'
-              ? { locale: 'ja' }
-              : replacement === 'context'
-                ? {
-                    public: {
-                      ...fixture.publicRead,
-                      subject: { ...fixture.publicRead.subject, context: '00000000-0000-4000-8000-000000000099' },
-                    },
-                  }
-                : { release: structuredClone(fixture.release) }),
+        ...(replacement === 'session'
+          ? {}
+          : replacement === 'source'
+            ? { source: {} }
+            : replacement === 'viewer'
+              ? { reader: 'other' }
+              : replacement === 'locale'
+                ? { locale: 'ja' }
+                : replacement === 'context'
+                  ? {
+                      public: {
+                        ...fixture.publicRead,
+                        subject: { ...fixture.publicRead.subject, context: '00000000-0000-4000-8000-000000000099' },
+                      },
+                    }
+                  : { release: structuredClone(fixture.release) }),
       };
       if (replacement === 'source')
         editionTransport = async () => ({ ok: true, admitted: true, rows: [], next: null, caughtUp: true });
+      if (replacement === 'session')
+        await act(async () => {
+          mounted.client.setQueryData(['session'], { state: 'signed-in', subject: 'other', csrfToken: 'replacement' });
+          mounted.client.setQueryData(['session'], { state: 'signed-out' });
+        });
       await mounted.renderContent(replacement === 'withdrawal' ? null : <MusicAlbumOverview {...next} />);
-      await settle(() => flight.resolve({ ok: false, reason: 'withheld' }));
+      const focus = document.createElement('button');
+      mounted.host.append(focus);
+      focus.focus();
+      await settle(() =>
+        flight.resolve(
+          continuation
+            ? { ok: true, admitted: true, rows: [editionRow('Retired edition')], next: null, caughtUp: true }
+            : { ok: false, reason: 'withheld' },
+        ),
+      );
+      expect(document.activeElement).toBe(focus);
+      focus.remove();
       expect(mounted.host.textContent).not.toContain(m.music_reader_denied());
-      if (replacement === 'source') expect(mounted.host.textContent).toContain(m.music_context_empty_page());
-      else if (replacement === 'withdrawal') expect(mounted.host.textContent).toBe('');
+      expect(mounted.host.textContent).not.toContain('Retired edition');
+      if (replacement === 'source') {
+        expect(mounted.host.textContent).toContain(m.music_context_empty_page());
+        expect(editionButton(mounted.host, m.music_context_previous_page()).disabled).toBe(true);
+      } else if (replacement === 'withdrawal') expect(mounted.host.textContent).toBe('');
       else {
         expect(mounted.host.querySelector('[data-slot="music-album-reader"]')).toBeNull();
         await mounted.renderContent(<MusicAlbumOverview {...props} />);
