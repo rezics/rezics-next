@@ -28,6 +28,13 @@ type Source = {
   filterStatus?: string | undefined;
   filterIgnored?: string[] | undefined;
 };
+type FocusStage = 'preview' | 'confirm' | 'read';
+type FocusIntent = {
+  stage: FocusStage;
+  activator: HTMLElement | null;
+  beforePhase: string | null;
+  beforeRead: unknown;
+};
 
 /** Reader action, independent of loaded selection and editor operations. */
 export function CollectionFilteredStatus({
@@ -83,19 +90,68 @@ function FilteredStatusForm({
   latest.current = owner;
   const mounted = useRef(false);
   const intent = useRef<FilteredStatusJourney | null>(null);
+  const focusRegion = useRef<HTMLElement | null>(null);
+  const focusIntent = useRef<FocusIntent | null>(null);
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      focusIntent.current = null;
       intent.current?.retire();
     };
   }, []);
+  useLayoutEffect(() => {
+    const retireOnMove = (event: FocusEvent) => {
+      const pending = focusIntent.current;
+      const next = event.target;
+      if (
+        !pending ||
+        !(next instanceof HTMLElement) ||
+        next === document.body ||
+        next === document.documentElement ||
+        next === pending.activator
+      )
+        return;
+      focusIntent.current = null;
+    };
+    document.addEventListener('focusin', retireOnMove);
+    return () => document.removeEventListener('focusin', retireOnMove);
+  }, []);
+  useLayoutEffect(() => {
+    const pending = focusIntent.current;
+    const currentState = journey?.state;
+    if (!pending) return;
+    if (!currentState || currentState.phase === 'retired') {
+      focusIntent.current = null;
+      return;
+    }
+    const changed =
+      pending.stage === 'read'
+        ? !currentState.reading && currentState.read !== pending.beforeRead
+        : pending.stage === 'confirm'
+          ? currentState.phase !== pending.beforePhase &&
+            ['confirming', 'confirmation_uncertain', 'confirmed'].includes(currentState.phase)
+          : currentState.phase !== pending.beforePhase;
+    if (!changed) return;
+    const target = focusRegion.current;
+    if (!target?.isConnected) return;
+    focusIntent.current = null;
+    target.focus();
+  });
+  const captureFocusIntent = (stage: FocusStage, activator: HTMLElement | null) => {
+    focusIntent.current = {
+      stage,
+      activator,
+      beforePhase: journey?.state.phase ?? null,
+      beforeRead: journey?.state.read,
+    };
+  };
   const current = () => mounted.current && latest.current.isCurrent() && ready && (sourceCurrent?.() ?? true);
   const write = (kind: 'preview' | 'confirm') =>
     current() &&
     !!latest.current.credential() &&
     latest.current.operationCurrent(kind === 'preview' ? 'library_operation.preview' : 'library_operation.confirm');
-  function prepare() {
+  function prepare(activator: HTMLElement | null) {
     if (!write('preview') || intent.current || !owner.subject) return;
     try {
       const capture = captureFilteredStatus(page.id, page.filter, requestedState);
@@ -123,6 +179,7 @@ function FilteredStatusForm({
       intent.current = value;
       setJourney(value);
       setInvalid(false);
+      captureFocusIntent('preview', activator);
       void value.preview();
     } catch {
       setInvalid(true);
@@ -137,7 +194,13 @@ function FilteredStatusForm({
     owner.operationCurrent('library_operation.outcomes');
   const result = state?.read;
   return (
-    <section className="space-y-3 border-t border-border pt-4" aria-labelledby={`${id}-heading`} aria-busy={busy}>
+    <section
+      ref={focusRegion}
+      tabIndex={-1}
+      className="space-y-3 border-t border-border pt-4 [overflow-wrap:anywhere]"
+      aria-labelledby={`${id}-heading`}
+      aria-busy={busy}
+    >
       <h2 id={`${id}-heading`} className="font-semibold">
         {m.library_filtered_status_heading()}
       </h2>
@@ -150,7 +213,7 @@ function FilteredStatusForm({
         className="flex flex-wrap items-end gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          prepare();
+          prepare(document.activeElement instanceof HTMLElement ? document.activeElement : null);
         }}
       >
         <div className="space-y-1">
@@ -159,9 +222,11 @@ function FilteredStatusForm({
             id={`${id}-state`}
             value={requestedState}
             maxLength={64}
+            className="min-h-11"
             disabled={!!state && ['confirming', 'confirmation_uncertain', 'confirmed'].includes(state.phase)}
             aria-describedby={`${id}-help`}
             onChange={(event) => {
+              focusIntent.current = null;
               intent.current?.retire();
               intent.current = null;
               setJourney(null);
@@ -176,6 +241,7 @@ function FilteredStatusForm({
         <Button
           type="submit"
           variant="outline"
+          className="min-h-11"
           disabled={!write('preview') || !libraryEntryStateWrite(requestedState) || !!journey}
         >
           {m.library_filtered_status_prepare()}
@@ -204,8 +270,12 @@ function FilteredStatusForm({
             <Button
               type="button"
               variant="outline"
+              className="min-h-11"
               disabled={!write('preview') || busy}
-              onClick={() => void journey?.preview()}
+              onClick={(event) => {
+                captureFocusIntent('preview', event.currentTarget);
+                void journey?.preview();
+              }}
             >
               {m.library_filtered_status_retry_preview()}
             </Button>
@@ -218,7 +288,16 @@ function FilteredStatusForm({
         </p>
       ) : null}
       {state?.operation && !operation ? (
-        <Button type="button" variant="outline" disabled={!canRead || busy} onClick={() => void journey?.read()}>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11"
+          disabled={!canRead || busy}
+          onClick={(event) => {
+            captureFocusIntent('read', event.currentTarget);
+            void journey?.read();
+          }}
+        >
           {m.library_filtered_status_read()}
         </Button>
       ) : null}
@@ -229,8 +308,11 @@ function FilteredStatusForm({
           <p>
             {m.library_filtered_status_state()}: {journey!.capture.state}
           </p>
+          <p className="break-all">
+            <code>{operation.id}</code>
+          </p>
           <details>
-            <summary>{m.library_filtered_status_predicate()}</summary>
+            <summary className="flex min-h-11 items-center">{m.library_filtered_status_predicate()}</summary>
             <pre className="whitespace-pre-wrap break-all">
               {operation.selectionSource?.filter ?? m.library_filtered_status_no_predicate()}
             </pre>
@@ -246,8 +328,12 @@ function FilteredStatusForm({
           {state?.phase === 'previewed' ? (
             <Button
               type="button"
+              className="min-h-11"
               disabled={!write('confirm') || !journey?.canConfirm || busy}
-              onClick={() => void journey?.confirm().then(() => journey.read())}
+              onClick={(event) => {
+                captureFocusIntent('confirm', event.currentTarget);
+                void journey?.confirm().then(() => journey.read());
+              }}
             >
               {m.library_filtered_status_confirm()}
             </Button>
@@ -258,8 +344,12 @@ function FilteredStatusForm({
               <p>{m.library_filtered_status_confirmation_uncertain()}</p>
               <Button
                 type="button"
+                className="min-h-11"
                 disabled={!write('confirm') || busy}
-                onClick={() => void journey?.confirm().then(() => journey.read())}
+                onClick={(event) => {
+                  captureFocusIntent('confirm', event.currentTarget);
+                  void journey?.confirm().then(() => journey.read());
+                }}
               >
                 {m.library_filtered_status_retry_confirm()}
               </Button>
@@ -297,14 +387,23 @@ function FilteredStatusForm({
               {m.library_filtered_status_pending()}: {operation.counts.pending + operation.counts.reconciling}
             </li>
           </ul>
-          <Button type="button" variant="outline" disabled={!canRead || busy} onClick={() => void journey?.read()}>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={!canRead || busy}
+            onClick={(event) => {
+              captureFocusIntent('read', event.currentTarget);
+              void journey?.read();
+            }}
+          >
             {m.library_filtered_status_read()}
           </Button>
           {result?.state === 'ready' ? (
             <>
               <ol>
                 {result.page.outcomes.map((outcome) => (
-                  <li key={outcome.ordinal}>
+                  <li key={outcome.ordinal} className="break-all">
                     {outcome.subjectId}:{' '}
                     {outcome.state === 'conflict'
                       ? m.library_filtered_status_changed()
@@ -326,9 +425,13 @@ function FilteredStatusForm({
               {result.page.next ? (
                 <Button
                   type="button"
+                  className="min-h-11"
                   variant="outline"
                   disabled={!canRead || busy}
-                  onClick={() => void journey?.read(result.page.next!)}
+                  onClick={(event) => {
+                    captureFocusIntent('read', event.currentTarget);
+                    void journey?.read(result.page.next!);
+                  }}
                 >
                   {m.library_filtered_status_more()}
                 </Button>

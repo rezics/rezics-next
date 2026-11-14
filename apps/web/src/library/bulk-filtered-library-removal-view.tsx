@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -14,6 +14,15 @@ import {
 import type { BulkUndoOutcome } from './bulk-operation-undo-evidence';
 
 type Props = { source: FilteredRemovalSource; boundary: string; eligible: boolean; isCurrent?: () => boolean };
+type FocusStage = 'preview' | 'confirm' | 'read';
+type FocusIntent = {
+  stage: FocusStage;
+  activator: HTMLElement | null;
+  beforePhase: string | null;
+  beforePage: unknown;
+  beforeReadFailure: unknown;
+};
+type FocusTarget = { current: HTMLElement | null };
 export function FilteredLibraryRemovalControl(props: Props) {
   const address = JSON.stringify([getLocale(), props.source, props.boundary]);
   return <FilteredRemovalLifetime key={address} {...props} address={address} />;
@@ -27,19 +36,75 @@ function FilteredRemovalLifetime({ source, eligible, address, isCurrent = () => 
   const journey = useRef<FilteredLibraryRemoval | null>(null);
   const [, redraw] = useState(0);
   const mounted = useRef(false);
+  const focusTarget = useRef<HTMLElement | null>(null);
+  const focusIntent = useRef<FocusIntent | null>(null);
   useEffect(() => {
     mounted.current = true;
     const stop = router?.subscribe('onBeforeNavigate', () => {
       mounted.current = false;
+      focusIntent.current = null;
       journey.current?.retire();
       redraw((value) => value + 1);
     });
     return () => {
       mounted.current = false;
+      focusIntent.current = null;
       journey.current?.retire();
       stop?.();
     };
   }, [router]);
+  useLayoutEffect(() => {
+    const retireOnMove = (event: FocusEvent) => {
+      const pending = focusIntent.current;
+      const next = event.target;
+      if (
+        !pending ||
+        !(next instanceof HTMLElement) ||
+        next === document.body ||
+        next === document.documentElement ||
+        next === pending.activator
+      )
+        return;
+      focusIntent.current = null;
+    };
+    document.addEventListener('focusin', retireOnMove);
+    return () => document.removeEventListener('focusin', retireOnMove);
+  }, []);
+  useLayoutEffect(() => {
+    const pending = focusIntent.current;
+    const state = journey.current?.state;
+    if (!pending || !state) return;
+    if (!mounted.current || state.phase === 'retired') {
+      focusIntent.current = null;
+      return;
+    }
+    if (!latest.current.owner.isCurrent() || !latest.current.isCurrent()) {
+      focusIntent.current = null;
+      return;
+    }
+    const changed =
+      pending.stage === 'read'
+        ? !state.reading && (state.page !== pending.beforePage || state.readFailure !== pending.beforeReadFailure)
+        : pending.stage === 'confirm'
+          ? state.phase !== pending.beforePhase &&
+            ['confirming', 'confirmation_uncertain', 'confirmed'].includes(state.phase)
+          : state.phase !== pending.beforePhase;
+    if (!changed) return;
+    const target = focusTarget.current;
+    if (!target?.isConnected) return;
+    focusIntent.current = null;
+    target.focus();
+  });
+  const captureFocusIntent = (stage: FocusStage, activator: HTMLElement | null) => {
+    const state = journey.current?.state;
+    focusIntent.current = {
+      stage,
+      activator,
+      beforePhase: state?.phase ?? null,
+      beforePage: state?.page,
+      beforeReadFailure: state?.readFailure,
+    };
+  };
   const admitted = (kind: 'preview' | 'confirm' | 'read', origin = latest.current) => {
     if (!origin.isCurrent()) return false;
     if (kind === 'read')
@@ -55,7 +120,7 @@ function FilteredRemovalLifetime({ source, eligible, address, isCurrent = () => 
       )
     );
   };
-  const start = () => {
+  const start = (activator: HTMLElement | null) => {
     if (!mounted.current || !latest.current.eligible || !owner.subject || !admitted('preview') || journey.current)
       return;
     try {
@@ -77,9 +142,11 @@ function FilteredRemovalLifetime({ source, eligible, address, isCurrent = () => 
           if (mounted.current) redraw((value) => value + 1);
         },
       );
+      captureFocusIntent('preview', activator);
       journey.current = intent;
       void intent.preview();
     } catch {
+      focusIntent.current = null;
       setCaptureFailed(true);
     }
   };
@@ -88,12 +155,20 @@ function FilteredRemovalLifetime({ source, eligible, address, isCurrent = () => 
     <div className="space-y-3">
       {captureFailed ? <p role="alert">{m.library_filtered_entry_remove_unavailable()}</p> : null}
       {!journey.current ? (
-        <Button variant="outline" disabled={!eligible || !admitted('preview')} onClick={start}>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11"
+          disabled={!eligible || !admitted('preview')}
+          onClick={(event) => start(event.currentTarget)}
+        >
           {m.library_filtered_entry_remove_action()}
         </Button>
       ) : (
         <FilteredLibraryRemovalReview
           journey={journey.current}
+          focusTarget={focusTarget}
+          onFocusIntent={captureFocusIntent}
           canWrite={admitted(
             journey.current.state.phase === 'review' || journey.current.state.phase === 'confirmation_uncertain'
               ? 'confirm'
@@ -119,11 +194,16 @@ export function FilteredLibraryRemovalReview({
   journey,
   canWrite,
   canRead,
+  focusTarget,
+  onFocusIntent,
 }: {
   journey: FilteredLibraryRemoval;
   canWrite: boolean;
   canRead: boolean;
+  focusTarget: FocusTarget;
+  onFocusIntent: (stage: FocusStage, activator: HTMLElement | null) => void;
 }) {
+  const id = useId();
   const [acknowledged, setAcknowledged] = useState(false);
   const { phase, operation, page, reading, readFailure } = journey.state;
   const progress = journey.state.observedOperation ?? operation;
@@ -131,10 +211,16 @@ export function FilteredLibraryRemovalReview({
   if (phase === 'retired') return null;
   return (
     <section
+      ref={focusTarget}
+      tabIndex={-1}
       className="space-y-3 rounded-lg border border-border p-4 text-sm [overflow-wrap:anywhere]"
-      aria-label={m.library_filtered_entry_remove_action()}
+      aria-labelledby={`${id}-heading`}
+      aria-busy={journey.busy}
       aria-live="polite"
     >
+      <h3 id={`${id}-heading`} className="font-semibold">
+        {m.library_filtered_entry_remove_action()}
+      </h3>
       <p>{m.library_filtered_entry_remove_scope()}</p>
       <p>{m.library_filtered_entry_remove_bounds()}</p>
       {['capturing', 'previewing'].includes(phase) ? (
@@ -152,7 +238,16 @@ export function FilteredLibraryRemovalReview({
         </p>
       ) : null}
       {retryPreview ? (
-        <Button variant="outline" disabled={!canWrite || journey.busy} onClick={() => void journey.preview()}>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11"
+          disabled={!canWrite || journey.busy}
+          onClick={(event) => {
+            onFocusIntent('preview', event.currentTarget);
+            void journey.preview();
+          }}
+        >
           {m.library_filtered_entry_remove_retry_preview()}
         </Button>
       ) : null}
@@ -178,16 +273,22 @@ export function FilteredLibraryRemovalReview({
               <label className="flex min-h-11 items-center gap-3">
                 <input
                   type="checkbox"
+                  className="size-5"
                   checked={acknowledged}
                   onChange={(event) => setAcknowledged(event.target.checked)}
                 />
                 {m.library_filtered_entry_remove_acknowledge()}
               </label>
               <Button
+                type="button"
                 variant="destructive"
+                className="min-h-11"
                 disabled={!canWrite || !acknowledged || journey.busy}
-                onClick={() => {
-                  if (acknowledged) void journey.confirm();
+                onClick={(event) => {
+                  if (acknowledged) {
+                    onFocusIntent('confirm', event.currentTarget);
+                    void journey.confirm();
+                  }
                 }}
               >
                 {m.library_filtered_entry_remove_confirm({ count: operation.counts.targets })}
@@ -198,12 +299,30 @@ export function FilteredLibraryRemovalReview({
           {phase === 'confirmation_uncertain' ? (
             <>
               <p role="status">{m.library_filtered_entry_remove_confirmation_uncertain()}</p>
-              <Button variant="outline" disabled={!canWrite || journey.busy} onClick={() => void journey.confirm(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={!canWrite || journey.busy}
+                onClick={(event) => {
+                  onFocusIntent('confirm', event.currentTarget);
+                  void journey.confirm(true);
+                }}
+              >
                 {m.library_filtered_entry_remove_retry_confirmation()}
               </Button>
             </>
           ) : null}
-          <Button variant="outline" disabled={!canRead || journey.busy} onClick={() => void journey.read()}>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={!canRead || journey.busy}
+            onClick={(event) => {
+              onFocusIntent('read', event.currentTarget);
+              void journey.read();
+            }}
+          >
             {m.library_filtered_entry_remove_read()}
           </Button>
           {reading ? <p role="status">{m.library_filtered_entry_remove_reading()}</p> : null}
@@ -213,8 +332,8 @@ export function FilteredLibraryRemovalReview({
               {page.outcomes.length === 0 ? <p>{m.library_filtered_entry_remove_empty_page()}</p> : null}
               <ul className="space-y-2">
                 {page.outcomes.map((outcome) => (
-                  <li key={outcome.ordinal}>
-                    <code>{outcome.subjectId}</code>
+                  <li key={outcome.ordinal} className="break-all">
+                    <code className="break-all">{outcome.subjectId}</code>
                     {' · '}
                     {outcomeLabel(outcome)}
                     {outcome.deletion ? (
@@ -228,9 +347,14 @@ export function FilteredLibraryRemovalReview({
               </ul>
               {page.next ? (
                 <Button
+                  type="button"
                   variant="outline"
+                  className="min-h-11"
                   disabled={!canRead || journey.busy}
-                  onClick={() => void journey.read(page.next!)}
+                  onClick={(event) => {
+                    onFocusIntent('read', event.currentTarget);
+                    void journey.read(page.next!);
+                  }}
                 >
                   {m.library_filtered_entry_remove_more()}
                 </Button>

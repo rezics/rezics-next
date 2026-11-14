@@ -1,7 +1,16 @@
+import { useId, useLayoutEffect, useRef } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { bulkOccurrenceRemoveResultKind } from './bulk-occurrence-remove';
 import type { FilteredOccurrenceRemoval, RemovalOutcome } from './bulk-filtered-occurrence-removal';
+
+type FocusStage = 'preview' | 'confirm' | 'read';
+type FocusIntent = {
+  stage: FocusStage;
+  activator: HTMLElement | null;
+  beforePhase: string;
+  beforeRead: unknown;
+};
 
 const label = (outcome: RemovalOutcome) => {
   switch (bulkOccurrenceRemoveResultKind(outcome)) {
@@ -30,15 +39,78 @@ export function FilteredOccurrenceRemovalReview({
   canPreview: boolean;
   canConfirm: boolean;
 }) {
+  const id = useId();
   const { state, source, busy } = journey;
+  const focusRegion = useRef<HTMLElement | null>(null);
+  const focusIntent = useRef<FocusIntent | null>(null);
+  const launchedIntoPreview = useRef(state.phase === 'previewing');
+  useLayoutEffect(() => {
+    if (!launchedIntoPreview.current) return;
+    launchedIntoPreview.current = false;
+    const active = document.activeElement;
+    if (active === document.body || active === document.documentElement) focusRegion.current?.focus();
+  }, []);
+  useLayoutEffect(() => {
+    const retireOnMove = (event: FocusEvent) => {
+      const pending = focusIntent.current;
+      const next = event.target;
+      if (
+        !pending ||
+        !(next instanceof HTMLElement) ||
+        next === document.body ||
+        next === document.documentElement ||
+        next === pending.activator
+      )
+        return;
+      focusIntent.current = null;
+    };
+    document.addEventListener('focusin', retireOnMove);
+    return () => document.removeEventListener('focusin', retireOnMove);
+  }, []);
+  useLayoutEffect(() => {
+    const pending = focusIntent.current;
+    if (!pending) return;
+    if (state.phase === 'retired') {
+      focusIntent.current = null;
+      return;
+    }
+    const changed =
+      pending.stage === 'read'
+        ? !state.reading && state.read !== pending.beforeRead
+        : pending.stage === 'confirm'
+          ? state.phase !== pending.beforePhase &&
+            ['confirming', 'confirmation_uncertain', 'confirmed'].includes(state.phase)
+          : state.phase !== pending.beforePhase;
+    if (!changed) return;
+    const target = focusRegion.current;
+    if (!target?.isConnected) return;
+    focusIntent.current = null;
+    target.focus();
+  });
+  const captureFocusIntent = (stage: FocusStage, activator: HTMLElement | null) => {
+    focusIntent.current = {
+      stage,
+      activator,
+      beforePhase: state.phase,
+      beforeRead: state.read,
+    };
+  };
   if (!source || state.phase === 'retired') return null;
   const operation = state.operation;
   const read = state.read;
   const result = read?.state === 'ready' ? read : null;
   const retryPreview = ['preparing', 'unavailable', 'preview_uncertain'].includes(state.phase);
   return (
-    <section className="space-y-3 rounded-xl border p-4" aria-label={m.library_filtered_occurrence_remove_title()}>
-      <h3 className="font-medium">{m.library_filtered_occurrence_remove_title()}</h3>
+    <section
+      ref={focusRegion}
+      tabIndex={-1}
+      className="space-y-3 rounded-xl border p-4 [overflow-wrap:anywhere]"
+      aria-labelledby={`${id}-heading`}
+      aria-busy={busy}
+    >
+      <h3 id={`${id}-heading`} className="font-medium">
+        {m.library_filtered_occurrence_remove_title()}
+      </h3>
       <p>{m.library_filtered_occurrence_remove_source({ title: source.title, id: source.id })}</p>
       <p className="text-sm text-muted-foreground">{m.library_filtered_occurrence_remove_scope()}</p>
       {operation ? (
@@ -66,19 +138,31 @@ export function FilteredOccurrenceRemovalReview({
         <p role="status">{m.library_filtered_occurrence_remove_preview_uncertain()}</p>
       ) : null}
       {retryPreview ? (
-        <Button variant="outline" disabled={busy || !canPreview} onClick={() => void journey.preview(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11"
+          disabled={busy || !canPreview}
+          onClick={(event) => {
+            captureFocusIntent('preview', event.currentTarget);
+            void journey.preview(true);
+          }}
+        >
           {m.library_filtered_occurrence_remove_retry_preview()}
         </Button>
       ) : null}
       {state.phase === 'previewed' && operation && operation.counts.targets > 0 ? (
         <Button
+          type="button"
           variant="destructive"
+          className="min-h-11"
           disabled={busy || !canConfirm || !(Date.parse(operation.expiresAt) > Date.now())}
-          onClick={() =>
+          onClick={(event) => {
+            captureFocusIntent('confirm', event.currentTarget);
             void journey.confirm().then((ok) => {
               if (ok) void journey.read();
-            })
-          }
+            });
+          }}
         >
           {m.library_filtered_occurrence_remove_confirm()}
         </Button>
@@ -88,20 +172,32 @@ export function FilteredOccurrenceRemovalReview({
         <>
           <p role="status">{m.library_filtered_occurrence_remove_confirmation_uncertain()}</p>
           <Button
+            type="button"
             variant="outline"
+            className="min-h-11"
             disabled={busy || !canConfirm}
-            onClick={() =>
+            onClick={(event) => {
+              captureFocusIntent('confirm', event.currentTarget);
               void journey.confirm(true).then((ok) => {
                 if (ok) void journey.read();
-              })
-            }
+              });
+            }}
           >
             {m.library_filtered_occurrence_remove_retry_confirmation()}
           </Button>
         </>
       ) : null}
       {operation ? (
-        <Button variant="outline" disabled={busy} onClick={() => void journey.read()}>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11"
+          disabled={busy}
+          onClick={(event) => {
+            captureFocusIntent('read', event.currentTarget);
+            void journey.read();
+          }}
+        >
           {m.library_filtered_occurrence_remove_read()}
         </Button>
       ) : null}
@@ -114,9 +210,9 @@ export function FilteredOccurrenceRemovalReview({
           <ol className="space-y-2" data-filtered-occurrence-remove-results>
             {result.page.outcomes.map((outcome) => (
               <li key={outcome.ordinal} className="break-all text-sm">
-                <code>{outcome.memberId}</code>
+                <code className="break-all">{outcome.memberId}</code>
                 {' · '}
-                <code>{outcome.subjectId}</code>
+                <code className="break-all">{outcome.subjectId}</code>
                 {' · '}
                 {label(outcome)}
                 {outcome.state === 'applied' && outcome.memberDeletion ? (
@@ -132,7 +228,16 @@ export function FilteredOccurrenceRemovalReview({
             ))}
           </ol>
           {result.page.next ? (
-            <Button variant="outline" disabled={busy} onClick={() => void journey.read(result.page.next!)}>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={busy}
+              onClick={(event) => {
+                captureFocusIntent('read', event.currentTarget);
+                void journey.read(result.page.next!);
+              }}
+            >
               {m.library_filtered_occurrence_remove_more()}
             </Button>
           ) : null}
