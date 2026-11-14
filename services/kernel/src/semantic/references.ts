@@ -15,15 +15,19 @@ export async function readSubjectReference(
 ): Promise<{ id: string; component: SubjectComponent } | null> {
   const route = routeOf(id);
   if (route === null) return null;
-  return withReadTransaction(pool, async (client) => {
-    const partition = await readPartition(client, partitionOf(route));
-    if (!partition) return null;
-    const source = await readReference.run(client, { route, subject_id: id });
-    if (!source || !(await authorize(client))) return null;
-    if (source.redirect) throw new SubjectRedirectError(id, source.redirect);
-    return {
-      id: source.id,
-      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-    };
-  }, requestDeadline);
+  return withReadTransaction(
+    pool,
+    async (client) => {
+      const partition = await readPartition(client, partitionOf(route));
+      if (!partition) return null;
+      const source = await readReference.run(client, { route, subject_id: id });
+      if (!source || !(await authorize(client))) return null;
+      if (source.redirect) throw new SubjectRedirectError(id, source.redirect);
+      return {
+        id: source.id,
+        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+      };
+    },
+    requestDeadline,
+  );
 }

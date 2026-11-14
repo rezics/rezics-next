@@ -11,7 +11,9 @@ import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
-afterAll(async () => { await pool.end(); });
+afterAll(async () => {
+  await pool.end();
+});
 
 function statementTimeout(observer: SqlObserver, from: number) {
   const record = observer.records.slice(from).find(({ statement }) => /SET LOCAL statement_timeout/.test(statement));
