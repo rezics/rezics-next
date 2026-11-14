@@ -242,14 +242,22 @@ export async function lockHostedPublicationStagingForActivation(
   await lockStage(client, locator);
 }
 
-async function refreshExpiry(client: AccessClient, row: StageRow): Promise<StageRow> {
-  if (!row.is_expired || row.status === 'cancelled' || row.status === 'expired' || row.status === 'failed') return row;
-  await client.query(
+async function refreshExpiryWithEvidence(
+  client: AccessClient,
+  row: StageRow,
+): Promise<Readonly<{ stage: StageRow; expired: boolean }>> {
+  if (!row.is_expired || row.status === 'cancelled' || row.status === 'expired' || row.status === 'failed')
+    return { stage: row, expired: false };
+  const updated = await client.query(
     `UPDATE content.hosted_publication_staging SET status='expired'
      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND expires_at<=clock_timestamp()`,
     [row.route, row.catalogue_id, row.stage_id],
   );
-  return { ...row, status: 'expired' };
+  if (!updated.rowCount) return { stage: row, expired: false };
+  return { stage: { ...row, status: 'expired' }, expired: true };
+}
+async function refreshExpiry(client: AccessClient, row: StageRow): Promise<StageRow> {
+  return (await refreshExpiryWithEvidence(client, row)).stage;
 }
 async function requireLiveStage(client: AccessClient, row: StageRow): Promise<StageRow> {
   const refreshed = await refreshExpiry(client, row);
@@ -1483,10 +1491,20 @@ export async function readHostedPublicationStagingProgress(
   actorInput: Actor,
   locator: HostedPublicationStagingLocator,
 ): Promise<HostedPublicationStagingCheckpoint> {
+  return (await readHostedPublicationStagingProgressWithExpiry(client, actorInput, locator)).progress;
+}
+
+/** Reports whether this locked observation itself persisted the terminal expiry transition. */
+export async function readHostedPublicationStagingProgressWithExpiry(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+): Promise<Readonly<{ progress: HostedPublicationStagingCheckpoint; expired: boolean }>> {
   const actor = accountActor(actorInput);
   const stage = await lockStage(client, locator);
   assertActorBinding(stage, actor);
-  return checkpoint(await refreshExpiry(client, stage));
+  const refreshed = await refreshExpiryWithEvidence(client, stage);
+  return { progress: checkpoint(refreshed.stage), expired: refreshed.expired };
 }
 
 async function advanceClosure(client: AccessClient, stage: StageRow): Promise<HostedPublicationStagingStepResult> {

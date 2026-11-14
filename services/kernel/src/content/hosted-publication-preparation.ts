@@ -1,6 +1,7 @@
 import type { Actor, AccessClient } from '../request/access.ts';
 import {
   authoritativeTimeValue,
+  noEffect,
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
@@ -26,6 +27,7 @@ import {
   cancelHostedPublicationStaging,
   freezeHostedPublicationSelection,
   readHostedPublicationStagingProgress,
+  readHostedPublicationStagingProgressWithExpiry,
   sealHostedPublicationStaging,
 } from './hosted-publication-staging.ts';
 import type {
@@ -63,10 +65,13 @@ export type HostedPublicationPreparationProgress = Readonly<{
   candidateReady: boolean;
 }>;
 
+type PreparationWorkResult =
+  | HostedPublicationPreparationProgress
+  | Readonly<{ value: HostedPublicationPreparationProgress; changed: boolean }>;
 type PreparationWork = (
   tx: CommandTransaction,
   time: AuthoritativeTime,
-) => Promise<HostedPublicationPreparationProgress>;
+) => Promise<PreparationWorkResult>;
 type StageBinding = Readonly<{ stageId: string; allowMissing: boolean }>;
 
 const PREPARATION_LIFETIME_MS = 24 * 60 * 60 * 1000;
@@ -166,7 +171,9 @@ function preparationCommand(
         authorization,
       },
       async (tx, { time }) => {
-        const value = await work(tx, time);
+        const result = await work(tx, time);
+        if ('changed' in result && !result.changed) return noEffect(result.value);
+        const value = 'changed' in result ? result.value : result;
         return {
           value,
           events: [
@@ -369,14 +376,17 @@ export function readHostedPublicationPreparationProgress(
     { stageId },
     context,
     async (tx) => {
-      const stage = await readHostedPublicationStagingProgress(
+      const stageRead = await readHostedPublicationStagingProgressWithExpiry(
         tx as AccessClient,
         actor,
         locator(catalogueId, stageId),
       );
-      if (stage.state !== 'sealed') return progress(catalogueId, stage);
+      const stage = stageRead.progress;
+      if (stage.state !== 'sealed')
+        return { value: progress(catalogueId, stage), changed: stageRead.expired };
       const candidate = await readHostedVersionReleaseCandidateProgress(tx, actor, locator(catalogueId, stageId));
-      return progress(catalogueId, stage, candidate === null ? null : candidateProgress(candidate));
+      const value = progress(catalogueId, stage, candidate === null ? null : candidateProgress(candidate));
+      return { value, changed: stageRead.expired };
     },
     { stageId, allowMissing: false },
   );
