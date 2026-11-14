@@ -6,7 +6,12 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { relayEffects } from '../../src/events/effects.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { HistoryRegistry, COMMAND_HISTORY_KINDS, decodeLocator, type HistoryBarrier } from '../../src/history/contract/index.ts';
+import {
+  HistoryRegistry,
+  COMMAND_HISTORY_KINDS,
+  decodeLocator,
+  type HistoryBarrier,
+} from '../../src/history/contract/index.ts';
 import { minimizeHistoryOutbox } from '../../src/history/adapters/outbox.ts';
 import { minimizeHistoryReceipt, RECEIPT_OWNER_DISPOSITIONS } from '../../src/history/adapters/receipt.ts';
 import { registerWatchHistoryConsumers } from '../../src/history/adapters/watch-consumers.ts';
@@ -83,13 +88,17 @@ test('watch copies minimize only after the real account barrier and effects sett
       [partition, owner.accountId],
     )
   ).rows[0]!;
-  const sourceLocators = await f.db.admin.query<{ artifact_type: 'command-receipt/v1' | 'outbox-event/v1'; locator: Buffer }>(
+  const sourceLocators = await f.db.admin.query<{
+    artifact_type: 'command-receipt/v1' | 'outbox-event/v1';
+    locator: Buffer;
+  }>(
     `SELECT artifact_type,locator FROM core.history_locator
      WHERE partition_no=$1 AND account_id=$2 AND artifact_type IN ('command-receipt/v1','outbox-event/v1')`,
     [partition, owner.accountId],
   );
   const receipt = sourceLocators.rows.find(
-    (row) => row.artifact_type === 'command-receipt/v1' &&
+    (row) =>
+      row.artifact_type === 'command-receipt/v1' &&
       decodeLocator('command-receipt/v1', row.locator).artifactType === 'command-receipt/v1' &&
       decodeLocator('command-receipt/v1', row.locator).commandKindId === COMMAND_HISTORY_KINDS['content.watch.remove'],
   )!;
@@ -112,8 +121,12 @@ test('watch copies minimize only after the real account barrier and effects sett
     'com.rezics.content.board.watch.changed.v1',
     'com.rezics.content.watch.removed.v1',
   ]);
-  expect(RECEIPT_OWNER_DISPOSITIONS['content.board.watch'].commandKindId).toBe(COMMAND_HISTORY_KINDS['content.board.watch']);
-  expect(RECEIPT_OWNER_DISPOSITIONS['content.watch.remove'].commandKindId).toBe(COMMAND_HISTORY_KINDS['content.watch.remove']);
+  expect(RECEIPT_OWNER_DISPOSITIONS['content.board.watch'].commandKindId).toBe(
+    COMMAND_HISTORY_KINDS['content.board.watch'],
+  );
+  expect(RECEIPT_OWNER_DISPOSITIONS['content.watch.remove'].commandKindId).toBe(
+    COMMAND_HISTORY_KINDS['content.watch.remove'],
+  );
   expect(registry.owner('outbox-event/v1', 'com.rezics.content.post.published.v1')).toBeUndefined();
   await deletePersona({ pool: f.db.pool, auth: f.auth }, owner);
   const erasure = (
@@ -133,8 +146,9 @@ test('watch copies minimize only after the real account barrier and effects sett
   do delivered = await relayEffects(f.db.pool, work.effects, partition);
   while (delivered.status === 'read' && delivered.envelopes > 0);
   expect(delivered.status).toBe('read');
-  expect((await f.db.admin.query('SELECT 1 FROM core.preference_history_job WHERE account_id=$1', [owner.accountId])).rows)
-    .toHaveLength(1);
+  expect(
+    (await f.db.admin.query('SELECT 1 FROM core.preference_history_job WHERE account_id=$1', [owner.accountId])).rows,
+  ).toHaveLength(1);
   expect(await transaction((tx) => minimizeHistoryOutbox(tx, job, event.locator, registry, barrier))).toBeNull();
 
   const receiptAfter = (
@@ -153,18 +167,30 @@ test('watch copies minimize only after the real account barrier and effects sett
     request_digest: receiptBefore.request_digest,
     idempotency_key: receiptBefore.idempotency_key,
   });
-  expect((await f.db.admin.query('SELECT payload_state,data,subject FROM core.outbox WHERE partition_no=$1 AND position=$2', [
-    partition,
-    command.result.position.toString(),
-  ])).rows).toEqual([{ payload_state: 'minimized', data: {}, subject: null }]);
-  expect((await f.db.admin.query('SELECT watching,revision FROM content.board_watch WHERE route=$1 AND watch_id=$2', [
-    command.route,
-    command.watchId,
-  ])).rows).toEqual([{ watching: false, revision: 2 }]);
-  expect((await f.db.admin.query(
-    `SELECT h.state,r.payload_state FROM core.history_locator h JOIN core.receipt r
+  expect(
+    (
+      await f.db.admin.query(
+        'SELECT payload_state,data,subject FROM core.outbox WHERE partition_no=$1 AND position=$2',
+        [partition, command.result.position.toString()],
+      )
+    ).rows,
+  ).toEqual([{ payload_state: 'minimized', data: {}, subject: null }]);
+  expect(
+    (
+      await f.db.admin.query('SELECT watching,revision FROM content.board_watch WHERE route=$1 AND watch_id=$2', [
+        command.route,
+        command.watchId,
+      ])
+    ).rows,
+  ).toEqual([{ watching: false, revision: 2 }]);
+  expect(
+    (
+      await f.db.admin.query(
+        `SELECT h.state,r.payload_state FROM core.history_locator h JOIN core.receipt r
        ON r.partition_no=h.partition_no AND r.principal_id=h.account_id AND r.command_kind='content.watch.remove'
      WHERE h.account_id=$1 AND h.artifact_type='command-receipt/v1'`,
-    [other.accountId],
-  )).rows).toEqual([{ state: 'pending', payload_state: 'present' }]);
+        [other.accountId],
+      )
+    ).rows,
+  ).toEqual([{ state: 'pending', payload_state: 'present' }]);
 }, 180_000);

@@ -11,10 +11,7 @@ const WATCH_RECEIPTS = [
   ['content.watch.remove', COMMAND_HISTORY_KINDS['content.watch.remove']],
 ] as const;
 
-const WATCH_EVENTS = [
-  'com.rezics.content.board.watch.changed.v1',
-  'com.rezics.content.watch.removed.v1',
-] as const;
+const WATCH_EVENTS = ['com.rezics.content.board.watch.changed.v1', 'com.rezics.content.watch.removed.v1'] as const;
 
 /** These copies have no durable response, projection, or work consumer. The minimizers still
  * require the exact source and association, this account's committed barrier, and (for events)
