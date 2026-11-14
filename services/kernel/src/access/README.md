@@ -1886,6 +1886,11 @@ items in a read-only snapshot. It never advances the coordinator, writes ACKs, c
 manual retry, cleanup or retention-resolution rights. The original native/root completion proof and deployment
 consent remain separate obligations; this read supplies no new proof of physical custody or backup expiry.
 
+Decision: the erasure progress reader owns one absolute deadline across time minting, current actor and exact Global
+checks, and its native snapshot. Late checkouts issue no SQL; uncertain snapshot phases discard their client, while
+failed bounded rollback preserves the source error. The fixed eleven-participant projection and existing root,
+frontier and late-item probes remain unchanged.
+
 - Each purge is idempotent and bounded per step, so durable retries and replay are safe.
 - Deletion never waits for consumers. Authority ends at T; consumer data goes asynchronously and durably.
 - Each consumer lists its purge, trigger and retained data in its owner's retention inventory.
