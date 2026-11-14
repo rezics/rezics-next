@@ -563,16 +563,18 @@ Current implementation evidence is narrower than the capability:
 - `createCollectionSource` composes current native authorization, scoped observations and indexed canonical
   generations. `canonical-source-bounds.ts` is the closed nine-axis repair/publication/readback plan the store
   dispatches, Work consumes for the step ceiling, and receiving getters reuse. Missing Semantic scope/public
-  capture remains retryable unavailability; the provisional Semantic factory returns `source_unready`, never
-  current/ready-empty. Native useful outcomes remain pending.
+  capture remains typed unavailability. The installed Semantic scoped-observation factory reads retained native
+  scope state and revalidates the exact capture, committed revision and source; public-output observations use
+  the native public-output capture contract. Missing or stale evidence does not become current/ready-empty.
 - `collection-kind.ts` projects mixed defaults or stored explicit choices without member observations.
   Owner overrides bypass observation access. Metadata reads do not enqueue work. Raw-original input is one
   nine-axis Library plan (`COLLECTION_KIND_INPUT_DECLARATION`): admission, two collision reads, one predecessor
   retirement, Source size-point/range, INSERT fence and native adapter invocation; `engineRequests` stays 0 at
   NativeCollectionWork. A raw original is not a Type vote. Missing scoped Type/disclosure stays typed unavailable
   and cannot certify a winner. Account-fenced operational transactions retain work with its owning account; the
-  existing Library erasure inventory includes all four local kind stores. The Semantic scoped-observation factory
-  remains a provisional typed unavailable adapter using its closed declarations.
+  existing Library erasure inventory includes all four local kind stores. `collectionKindSourceBindings` installs
+  the Semantic scoped-observation factory. A current scope observation does not itself supply the complete-definition
+  native receipt or audience dependency closures required by `collection-kind-work-admission.ts`.
 - `work-module.ts` registers Collection listing effects and ordinary entry, label and copy retention. `account-fact-purge.ts` exports
   `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
 - Decision: due-command and default-worker retention growth at 256/1024/4096 uses complete `cost-folded` captures,
