@@ -10,4 +10,6 @@ export const HOSTED_CHAPTER_EVENTS = {
   'com.rezics.content.hosted-catalogue.revise.v1': changed,
   'com.rezics.content.hosted-catalogue.publish.v1': changed,
   'com.rezics.content.hosted-catalogue.preparation.changed.v1': preparationChanged,
+  'com.rezics.content.hosted-catalogue.activation.changed.v1': preparationChanged,
+  'com.rezics.content.hosted-catalogue.publication.activated.v1': preparationChanged,
 } as const;
