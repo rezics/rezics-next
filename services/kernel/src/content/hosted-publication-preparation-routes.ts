@@ -27,6 +27,14 @@ import {
   HostedVersionReleaseCandidateNotFoundError,
 } from './hosted-version-release-candidate-model.ts';
 import {
+  activateHostedPublicationCandidate,
+  advanceHostedPublicationActivationAuthority,
+  HostedPublicationActivationConflictError,
+  HostedPublicationActivationIneligibleError,
+  HostedPublicationActivationNotFoundError,
+  startHostedPublicationActivation,
+} from './hosted-publication-activation.ts';
+import {
   advanceHostedPublicationPreparation,
   appendHostedPublicationPreparationBatch,
   cancelHostedPublicationPreparation,
@@ -37,6 +45,7 @@ import {
   type HostedPublicationPreparationDependencies,
 } from './hosted-publication-preparation.ts';
 import {
+  HostedPublicationActivationProgressSchema,
   HostedPublicationPreparationAdvanceSchema,
   HostedPublicationPreparationBatchSchema,
   HostedPublicationPreparationEmptySchema,
@@ -95,7 +104,8 @@ async function operation<T>(run: () => Promise<T>): Promise<T> {
     if (
       error instanceof CommandNotFoundError ||
       error instanceof HostedPublicationStagingNotFoundError ||
-      error instanceof HostedVersionReleaseCandidateNotFoundError
+      error instanceof HostedVersionReleaseCandidateNotFoundError ||
+      error instanceof HostedPublicationActivationNotFoundError
     )
       throw new ProblemError('not_found');
     if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError)
@@ -103,7 +113,9 @@ async function operation<T>(run: () => Promise<T>): Promise<T> {
     if (
       error instanceof RevisionPreconditionError ||
       error instanceof HostedPublicationStagingConflictError ||
-      error instanceof HostedPublicationStagingExpiredError
+      error instanceof HostedPublicationStagingExpiredError ||
+      error instanceof HostedPublicationActivationConflictError ||
+      error instanceof HostedPublicationActivationIneligibleError
     )
       throw new ProblemError('precondition_failed');
     if (error instanceof HostedVersionReleaseCandidateError && error.code !== 'invalid-tree')
@@ -123,6 +135,11 @@ function context(request: Request, deadline: number) {
 function record<T>(result: T, session: { record: (value: T) => void }) {
   session.record(result);
 }
+
+const activationResponse = {
+  200: withHeaders(strictContentSchema(HostedPublicationActivationProgressSchema()), responseHeaders),
+  ...failures(),
+};
 
 /** Adds only the private preparation author API. It is registered by the
  * existing hosted chapter route owner and never changes publication pointers. */
@@ -293,6 +310,78 @@ export function hostedPublicationPreparationRoutes(
         const result = await operation(() =>
           admission.run('normal', job, () =>
             sealHostedPublicationPreparation(deps, actor, id, stageId, context(request, job.deadline)),
+          ),
+        );
+        record(result, session);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    );
+}
+
+/** Typed startActivation, advanceActivation and activate. Ordinary Kernel
+ * composition does not register these; the later mount reuses this factory. */
+export function hostedPublicationActivationRoutes(
+  app: ReturnType<typeof hostedPublicationPreparationRoutes>,
+  deps: HostedPublicationPreparationDependencies,
+) {
+  return app
+    .post(
+      customMethod('/v1/hostedCatalogues/:id/publicationPreparations/:stageId', 'startActivation'),
+      {
+        params: stageParams(),
+        headers,
+        body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
+        response: activationResponse,
+        detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_start_activation' },
+      },
+      async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            startHostedPublicationActivation(deps, actor, id, stageId, context(request, job.deadline)),
+          ),
+        );
+        record(result, session);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/hostedCatalogues/:id/publicationPreparations/:stageId', 'advanceActivation'),
+      {
+        params: stageParams(),
+        headers,
+        body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
+        response: activationResponse,
+        detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_advance_activation' },
+      },
+      async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            advanceHostedPublicationActivationAuthority(deps, actor, id, stageId, context(request, job.deadline)),
+          ),
+        );
+        record(result, session);
+        set.headers['cache-control'] = 'private, no-store';
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/hostedCatalogues/:id/publicationPreparations/:stageId', 'activate'),
+      {
+        params: stageParams(),
+        headers,
+        body: strictContentSchema(HostedPublicationPreparationEmptySchema()),
+        response: activationResponse,
+        detail: { ...authorDetail(), operationId: 'hosted_catalogue.prepare_release_activate' },
+      },
+      async ({ actor, params: { id, stageId }, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const result = await operation(() =>
+          admission.run('normal', job, () =>
+            activateHostedPublicationCandidate(deps, actor, id, stageId, context(request, job.deadline)),
           ),
         );
         record(result, session);

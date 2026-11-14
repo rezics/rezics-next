@@ -119,3 +119,23 @@ export function HostedPublicationPreparationProgressSchema() {
     ),
   );
 }
+
+/** Exact native activation progress; `publicationId` stays null until the pointer CAS commits. */
+export function HostedPublicationActivationProgressSchema() {
+  return memoizedValue(HostedPublicationActivationProgressSchema, () =>
+    t.Object(
+      {
+        catalogueId: HostedIdSchema,
+        stageId: HostedIdSchema,
+        state: t.Union([t.Literal('checking'), t.Literal('ready'), t.Literal('restart'), t.Literal('activated')]),
+        passId: HostedIdSchema,
+        checkedTargetCount: t.String(),
+        totalTargetCount: t.String(),
+        candidateGenerationId: HostedIdSchema,
+        publicationId: t.Union([HostedIdSchema, t.Null()]),
+        restartRequired: t.Boolean(),
+      },
+      closed,
+    ),
+  );
+}

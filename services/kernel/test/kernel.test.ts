@@ -5,6 +5,8 @@ import { createPool } from '../src/database/pool.ts';
 import { createKernel, type Kernel } from '../src/http/kernel.ts';
 import { openApiDocument } from '../src/http/openapi.ts';
 import { actionCatalogue } from '../src/http/request.ts';
+import { hostedPublicationActivationRoutes } from '../src/content/hosted-publication-preparation-routes.ts';
+import type { HostedPublicationPreparationDependencies } from '../src/content/hosted-publication-preparation.ts';
 import { bootstrapRelease } from '../src/semantic/definitions.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -688,6 +690,53 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
   });
   expect([complete, precise]).toEqual([true, true]);
   expect(served.sort()).toEqual([...typed].sort());
+});
+
+const activationPaths = [
+  'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$startActivation',
+  'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$advanceActivation',
+  'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$activate',
+] as const;
+
+test('the unmounted activation factory registers three commands that createKernel does not serve', () => {
+  const served = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
+  const servedPaths = served.routes.map(({ method, path }) => `${method} ${path}`);
+  expect(activationPaths.filter((path) => servedPaths.includes(path))).toEqual([]);
+
+  const deps: HostedPublicationPreparationDependencies = {
+    pool,
+    access: {} as HostedPublicationPreparationDependencies['access'],
+    tokens: {} as HostedPublicationPreparationDependencies['tokens'],
+    clock: () => new Date(),
+    routeKey: new Uint8Array(32),
+  };
+  const candidate = createKernel({
+    receiptKeys: testReceiptKeys(),
+    pool,
+    routeKey: new Uint8Array(32),
+    modules: [
+      (app) => {
+        hostedPublicationActivationRoutes(app as Parameters<typeof hostedPublicationActivationRoutes>[0], deps);
+      },
+    ],
+  });
+  const candidatePaths = candidate.routes.map(({ method, path }) => `${method} ${path}`);
+  expect(activationPaths.every((path) => candidatePaths.includes(path))).toBe(true);
+  const paths = openApiDocument(candidate).paths;
+  const stage = paths['/v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:startActivation']?.post;
+  expect(stage).toMatchObject({
+    operationId: 'hosted_catalogue.prepare_release_start_activation',
+    'x-action': 'post:revise',
+    'x-exposure': 'public',
+    'x-rate-limit': { family: 'write', units: 1 },
+    security: [{ bearerAuth: [] }],
+  });
+  expect(paths['/v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:advanceActivation']?.post?.operationId).toBe(
+    'hosted_catalogue.prepare_release_advance_activation',
+  );
+  expect(paths['/v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:activate']?.post?.operationId).toBe(
+    'hosted_catalogue.prepare_release_activate',
+  );
 });
 
 test('semantic editorial listings document their default page size', () => {
