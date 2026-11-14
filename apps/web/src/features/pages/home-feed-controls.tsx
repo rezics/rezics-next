@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
@@ -8,6 +8,13 @@ import type { FeedStream } from './home-feed-read';
 const focusable = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], [tabindex="0"]';
 function targets(panel: HTMLElement) {
   return [...panel.querySelectorAll<HTMLElement>(focusable)].filter((node) => !node.closest('[hidden], [inert]'));
+}
+
+function visibleFocusTarget(node: HTMLElement | null): node is HTMLElement {
+  if (!node?.isConnected || node.matches(':disabled') || node.closest('[hidden], [inert], [aria-hidden="true"]'))
+    return false;
+  const style = node.ownerDocument.defaultView?.getComputedStyle(node);
+  return node.getClientRects().length > 0 && style?.display !== 'none' && style?.visibility !== 'hidden';
 }
 
 /** One mounted control tree: changing the surface never remounts or reads a selector. */
@@ -41,7 +48,15 @@ export function HomeFeedControls({
   const popup = useRef<HTMLDivElement>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const returnTo = useRef<HTMLElement | null>(null);
+  const closeIntent = useRef<'restore' | 'preserve' | null>(null);
   const [phone, setPhone] = useState(false);
+  const changeOpen = useCallback(
+    (next: boolean, intent: 'restore' | 'preserve' = 'preserve') => {
+      closeIntent.current = next ? null : intent;
+      onOpenChange(next);
+    },
+    [onOpenChange],
+  );
   useEffect(() => {
     const media = window.matchMedia('(max-width: 639px)');
     const update = () => setPhone(media.matches);
@@ -49,21 +64,21 @@ export function HomeFeedControls({
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const panel = popup.current;
     if (!panel) return;
-    returnTo.current = panel.ownerDocument.activeElement as HTMLElement | null;
+    if (returnTo.current === null) {
+      const document = panel.ownerDocument;
+      const active = document.activeElement;
+      returnTo.current =
+        active instanceof HTMLElement && active !== document.body && active !== document.documentElement
+          ? active
+          : trigger.current;
+    }
+    closeIntent.current = null;
     // Focus the existing selector first, including recovery opened from an empty result.
-    (panelRef.current?.querySelector<HTMLElement>(focusable) ?? close.current)?.focus();
-    return () => {
-      const previous = returnTo.current;
-      queueMicrotask(() => {
-        if (panel.isConnected && !panel.hidden) return;
-        const target = previous?.isConnected ? previous : trigger.current;
-        if (target?.isConnected) target.focus();
-      });
-    };
+    (panelRef.current?.querySelector<HTMLElement>(focusable) ?? close.current ?? panel).focus({ preventScroll: true });
   }, [open, panelRef]);
   useEffect(() => {
     if (!open || !phone || !popup.current) return;
@@ -104,12 +119,12 @@ export function HomeFeedControls({
     if (!open) return;
     const document = popup.current!.ownerDocument;
     const outside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !wrapper.current?.contains(event.target)) onOpenChange(false);
+      if (event.target instanceof Node && !wrapper.current?.contains(event.target)) changeOpen(false, 'preserve');
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault();
-        onOpenChange(false);
+        changeOpen(false, 'restore');
       }
     };
     document.addEventListener('pointerdown', outside);
@@ -118,11 +133,38 @@ export function HomeFeedControls({
       document.removeEventListener('pointerdown', outside);
       document.removeEventListener('keydown', escape);
     };
-  }, [open, onOpenChange]);
+  }, [open, changeOpen]);
+  useEffect(() => {
+    if (!open || !popup.current) return;
+    const panel = popup.current;
+    const document = panel.ownerDocument;
+    return () => {
+      if (!panel.isConnected || !panel.hidden) return;
+      const intent = closeIntent.current;
+      closeIntent.current = null;
+      const returnTarget = returnTo.current;
+      returnTo.current = null;
+      if (intent !== 'restore') return;
+      const focusedAtClose = document.activeElement;
+      const focusWasInPanel = focusedAtClose instanceof Node && panel.contains(focusedAtClose);
+      const focusWasClearedByClose = focusedAtClose === document.body || focusedAtClose === document.documentElement;
+      if (!focusWasInPanel && !focusWasClearedByClose) return;
+      queueMicrotask(() => {
+        if (!panel.isConnected || !panel.hidden || document.activeElement !== focusedAtClose) return;
+        const currentTrigger = trigger.current;
+        const target = visibleFocusTarget(returnTarget)
+          ? returnTarget
+          : visibleFocusTarget(currentTrigger)
+            ? currentTrigger
+            : null;
+        target?.focus({ preventScroll: true });
+      });
+    };
+  }, [open]);
   const streamLabel = stream === 'following' ? m.home_feed_following({}, options) : m.nav_home({}, options);
   const context = selections.length ? m.home_filter_context({ stream: streamLabel }, options) : streamLabel;
   return (
-    <div ref={wrapper} className="relative min-w-0 flex-1 space-y-2">
+    <section ref={wrapper} aria-label={m.search_filters({}, options)} className="relative min-w-0 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button
           ref={trigger}
@@ -132,7 +174,7 @@ export function HomeFeedControls({
           aria-expanded={open}
           aria-controls={id}
           aria-haspopup="dialog"
-          onClick={() => onOpenChange(!open)}
+          onClick={() => changeOpen(!open, 'preserve')}
         >
           {open ? m.search_close_filters({}, options) : m.search_filters({}, options)}
           {selections.length ? (
@@ -143,23 +185,30 @@ export function HomeFeedControls({
         </Button>
         <p className="min-w-0 text-sm text-muted-foreground">{context}</p>
       </div>
-      <HomeFeedFilterSummary selections={selections} locale={locale} onClear={onClear} fallback={trigger} />
-      {legacySummary?.length ? (
-        <ul
-          aria-label={m.refinement_selected({}, options)}
-          className="flex flex-wrap gap-2 text-sm text-muted-foreground"
-        >
-          {legacySummary.map((label, index) => (
-            <li key={index}>{label}</li>
-          ))}
-        </ul>
+      {selections.length || legacySummary?.length ? (
+        <div className="space-y-2 border-t border-border pt-3">
+          <h2 className="text-sm font-semibold">{m.refinement_selected({}, options)}</h2>
+          {selections.length ? (
+            <HomeFeedFilterSummary selections={selections} locale={locale} onClear={onClear} fallback={trigger} />
+          ) : null}
+          {legacySummary?.length ? (
+            <ul
+              aria-label={m.refinement_selected({}, options)}
+              className="flex flex-wrap gap-2 text-sm text-muted-foreground"
+            >
+              {legacySummary.map((label, index) => (
+                <li key={index}>{label}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
       {open && phone ? (
         <div
           data-home-filter-backdrop
           aria-hidden="true"
           className="fixed inset-0 z-40 bg-black/40"
-          onClick={() => onOpenChange(false)}
+          onClick={() => changeOpen(false, 'preserve')}
         />
       ) : null}
       <div
@@ -178,7 +227,7 @@ export function HomeFeedControls({
             : 'hidden'
         }
         onKeyDown={(event) => {
-          if (event.key !== 'Tab' || !popup.current) return;
+          if (!phone || event.key !== 'Tab' || !popup.current) return;
           const buttons = targets(popup.current);
           const first = buttons[0];
           const last = buttons.at(-1);
@@ -205,7 +254,7 @@ export function HomeFeedControls({
               type="button"
               variant="ghost"
               className="min-h-11 whitespace-normal"
-              onClick={() => onOpenChange(false)}
+              onClick={() => changeOpen(false, 'restore')}
             >
               {m.search_close_filters({}, options)}
             </Button>
@@ -219,9 +268,14 @@ export function HomeFeedControls({
         </div>
         <div className="max-h-[35dvh] shrink-0 space-y-2 overflow-y-auto border-t border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <p className="text-sm text-muted-foreground">{context}</p>
-          <HomeFeedFilterSummary selections={selections} locale={locale} onClear={onClear} fallback={close} />
+          {selections.length ? (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">{m.refinement_selected({}, options)}</h3>
+              <HomeFeedFilterSummary selections={selections} locale={locale} onClear={onClear} fallback={close} />
+            </div>
+          ) : null}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
