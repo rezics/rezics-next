@@ -326,6 +326,7 @@ test('selection progress exposes only its pinned binding and rejects new batches
   const firstKey = crypto.randomUUID();
   const firstBatch = await f.native.call('POST', `${draftStage}:appendSelectionBatch`, firstBody, { key: firstKey });
   expect(firstBatch.status).toBe(200);
+  const draftBatchEvents = await preparationEventCount(draftBook.catalogueId);
 
   const revised = await f.native.call('POST', `${draftBook.path}:appendRootChapter`, {
     expectedRevisionId: draftBook.created.revisionId,
@@ -337,6 +338,13 @@ test('selection progress exposes only its pinned binding and rejects new batches
   const replayed = await f.native.call('POST', `${draftStage}:appendSelectionBatch`, firstBody, { key: firstKey });
   expect(replayed.status).toBe(200);
   expect(replayed.value).toEqual(firstBatch.value);
+  const freshReceiptReplay = await f.native.call('POST', `${draftStage}:appendSelectionBatch`, firstBody, {
+    key: crypto.randomUUID(),
+  });
+  expect(freshReceiptReplay.status).toBe(200);
+  expect(freshReceiptReplay.value.batch.replayed).toBe(true);
+  expect(freshReceiptReplay.value.stage.inputCount).toBe('1');
+  expect(await preparationEventCount(draftBook.catalogueId)).toBe(draftBatchEvents);
 
   const blockedDraftBatch = await f.native.call('POST', `${draftStage}:appendSelectionBatch`, {
     batchId: draftBook.newId(),
@@ -360,12 +368,28 @@ test('selection progress exposes only its pinned binding and rejects new batches
   });
   expect(releaseStart.status).toBe(202);
   const releaseStage = prepPath(releaseBook.path, releaseStart.value.stageId as string);
+  const releaseBatchBody = { batchId: releaseBook.newId(), occurrenceIds: [releaseBook.rootPart] };
+  const releaseBatch = await f.native.call('POST', `${releaseStage}:appendSelectionBatch`, releaseBatchBody, {
+    key: crypto.randomUUID(),
+  });
+  expect(releaseBatch.status).toBe(200);
+  const releaseBatchEvents = await preparationEventCount(releaseBook.catalogueId);
   const changedRelease = await f.native.call('POST', `${releaseBook.path}:publish`, {
     expectedRevisionId: releaseBook.created.revisionId,
     expectedPublicationId: releaseBook.published.revisionId,
     occurrenceIds: [releaseBook.nestedChapter],
   });
   expect(changedRelease.status).toBe(200);
+  const replayedReleaseBatch = await f.native.call(
+    'POST',
+    `${releaseStage}:appendSelectionBatch`,
+    releaseBatchBody,
+    { key: crypto.randomUUID() },
+  );
+  expect(replayedReleaseBatch.status).toBe(200);
+  expect(replayedReleaseBatch.value.batch.replayed).toBe(true);
+  expect(replayedReleaseBatch.value.stage.inputCount).toBe('1');
+  expect(await preparationEventCount(releaseBook.catalogueId)).toBe(releaseBatchEvents);
   const blockedReleaseBatch = await f.native.call('POST', `${releaseStage}:appendSelectionBatch`, {
     batchId: releaseBook.newId(),
     occurrenceIds: [releaseBook.rootPart],
