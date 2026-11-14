@@ -406,17 +406,21 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     return generation;
   }
 
-  async function observation(generation: number) {
+  async function observation(generation: number, deadline: number) {
     const reader = retainCurrent(freshness, generation, () =>
       createFreshness(pool, subjectConsumer(prefix, generation)),
     );
-    const observed = await reader.current();
-    if (publicFilters && observed.behind > 0 && Date.now() - observed.asOf.getTime() > 300_000) throw indexNotReady();
-    return searchObservation(observed);
+    try {
+      const observed = await reader.current({ deadline });
+      if (publicFilters && observed.behind > 0 && Date.now() - observed.asOf.getTime() > 300_000) throw indexNotReady();
+      return searchObservation(observed);
+    } catch {
+      throw indexNotReady();
+    }
   }
 
-  async function asOf(generation: number): Promise<string> {
-    return (await observation(generation)).as_of;
+  async function asOf(generation: number, deadline: number): Promise<string> {
+    return (await observation(generation, deadline)).as_of;
   }
 
   async function executedIdentity(deadline: number): Promise<string> {
@@ -499,6 +503,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
     active?: { digest: string; head?: number; release: FilterRelease } | null,
     readContext?: PublicSearchReadContext,
   ) {
+    const deadline = readContext?.deadline ?? deadlineFor(10_000);
     const child = submitted.work !== undefined;
     const childCursor = submitted.childCursor;
     if ((childCursor !== undefined && !child) || (child && submitted.cursor !== undefined))
@@ -578,7 +583,6 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       childLimit: RELEASE_GROUPING_LIMITS.children,
       previewLimit: RELEASE_GROUPING_LIMITS.preview,
     } as const;
-    const deadline = readContext?.deadline ?? Date.now() + 10_000;
     const reservations = new Map<string, ReleaseSearchCandidateReservation>();
     const reserve = (value: ReleaseSearchCandidateReservation) => {
       const fields = [
@@ -744,7 +748,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           });
       await assertRelease();
       await assertPhysical();
-      return { ...page, as_of: await asOf(generation) };
+      return { ...page, as_of: await asOf(generation, deadline) };
     } catch (error) {
       if (error instanceof ReleaseSearchCursorInvalid) invalid(child ? '/childCursor' : '/cursor', 'invalid_format');
       if (error instanceof ReleaseGroupingRestartRequired) throw new ProblemError('search_restart_required');
@@ -766,6 +770,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       active?: { digest: string; head?: number; release: FilterRelease } | null,
       readContext?: PublicSearchReadContext,
     ) {
+      const deadline = readContext?.deadline ?? deadlineFor(10_000);
       request = ownSubjectRequest(request);
       const admission = requestPlanner.admit(request);
       const { text, filter, sort, limit, hitOptions, spoilerThreshold } = admission;
@@ -773,7 +778,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
       const current = native?.release ?? (releaseOverride ? await release() : undefined);
       if (publicFilters && !native) throw indexNotReady();
-      const identityEpoch = await executedIdentity(readContext?.deadline ?? now + 10_000);
+      const identityEpoch = await executedIdentity(deadline);
       const executedRequest = cursorPlanner.bindExecutionRequest(admission, identityEpoch);
       const bindingRequest = executedRequest.bindingRequest;
       const kinds: KindSnapshot | undefined = current
@@ -842,7 +847,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             meaningDigest: kinds?.digest,
             text,
             filter: admitted === undefined ? undefined : catalogueFilter(admitted),
-            deadline: readContext?.deadline ?? Date.now() + 10_000,
+            deadline,
             ...(readContext?.realmAuthority ? { authority: readContext.realmAuthority } : {}),
           },
         });
@@ -951,7 +956,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             results.forEach((hit, index) => (hit.facts = facts[index]!));
           }
           const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
-          const observed = await observation(generation);
+          const observed = await observation(generation, deadline);
           const metadata = kinds?.page(
             kindAfter,
             hitOptions.languages ?? [],
@@ -1347,7 +1352,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           }),
         );
         const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
-        const observed = await observation(generation!);
+        const observed = await observation(generation!, deadline);
         const metadata = kinds?.page(
           kindAfter,
           hitOptions.languages ?? [],
@@ -1394,7 +1399,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       }
       const runtime = publicFilters?.();
       if (publicFilters && (!runtime || !readContext)) throw indexNotReady();
-      const context = { deadline: readContext?.deadline ?? Date.now() + 10_000 };
+      const context = { deadline };
       const capturePlan = {
         ...plan,
         generation,
@@ -1505,7 +1510,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         }
         const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
         // Exactly one freshness observation; verify dynamic context after all response work, even for empty pages.
-        const observed = await observation(generation!);
+        const observed = await observation(generation!, deadline);
         if (rating) {
           const currentRating = await ratingEpoch();
           if (
@@ -1759,12 +1764,12 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         complete(page: { subjects: Result[]; as_of: string }): Promise<void>;
       },
     ) {
+      const contextDeadline = read?.deadline ?? deadlineFor(10_000);
       languages = ownSubjectRequest(languages);
       if (typeof q !== 'string' || q.length > 128 || [...q].length < 1 || [...q].length > 64)
         invalid('/q', 'out_of_range');
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
       const options = validateHitOptions({ languages });
-      const contextDeadline = read?.deadline ?? Date.now() + 10_000;
       await executedIdentity(contextDeadline);
       let currentTextDisclosure: ReturnType<SearchDisclosureApplication['currentText']> | undefined;
       const verifySuggestionHits = async (hits: readonly CheckedHit[], expected: readonly Result[]) => {
@@ -1818,7 +1823,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
 
       if (admitted && publicFilters) {
         if (!current) throw indexNotReady();
-        const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
+        const context = { deadline: contextDeadline };
         const bound = await indexRequest(() =>
           publicFilters().bindSuggestion(
             {
@@ -1872,7 +1877,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
             ...(scopeWork ? { scopeWork } : {}),
             readSource: sourceRequest,
             project: (subject) => project(subject, options.languages),
-            asOf: () => asOf(generation),
+            asOf: () => asOf(generation, contextDeadline),
             freshGeneration: () => indexRequest(freshAliasGeneration),
             releaseIsCurrent: async () => (await activeRelease(pool))?.digest === current.digest,
             complete: async (page) => {
@@ -1892,7 +1897,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
         }
       }
       if (publicFilters) {
-        const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
+        const context = { deadline: contextDeadline };
         const bound = await indexRequest(() =>
           publicFilters().bindSuggestion(
             {
@@ -1934,7 +1939,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           });
           const page = {
             subjects: visible.map((subject) => project(subject, options.languages)),
-            as_of: await asOf(generation),
+            as_of: await asOf(generation, contextDeadline),
           };
           const response = await completePage(page, visibleHits);
           if ((await indexRequest(freshAliasGeneration)) !== generation)
@@ -1973,7 +1978,7 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
       });
       const page = {
         subjects: visible.map((subject) => project(subject, options.languages)),
-        as_of: await asOf(generation),
+        as_of: await asOf(generation, contextDeadline),
       };
       const response = await completePage(page, visibleHits);
       if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
