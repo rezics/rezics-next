@@ -36,9 +36,7 @@ function readerHarness(
   const native = createNativeIdentityCapabilities().read;
   const captured: number[] = [];
   const forwarded: number[] = [];
-  const pool = fakePool(async () =>
-    fakeClient(query, (error) => releaseErrors.push(error)),
-  );
+  const pool = fakePool(async () => fakeClient(query, (error) => releaseErrors.push(error)));
   const read = {
     requestDeadline() {
       const deadline = native.requestDeadline();

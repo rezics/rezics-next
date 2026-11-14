@@ -411,38 +411,46 @@ async function readIdentityMappingsWith(
       currentRows: IdentityControlEvidence[] = [];
     for (const home of new Set(routes.map(partitionOf))) {
       const indices = routes.flatMap((route, index) => (partitionOf(route) === home ? [index] : []));
-      await capabilities.read.withReadTransaction(pool, async (tx) => {
-        sourceOwners.push(...(await tx.query(owners.sql, [[home]])).rows);
-        sourceRows.push(
-          ...(
-            await tx.query(sources.sql, [
-              indices.map((index) => originals[index]),
-              indices.map((index) => routes[index]),
-            ])
-          ).rows,
-        );
-      }, deadline);
+      await capabilities.read.withReadTransaction(
+        pool,
+        async (tx) => {
+          sourceOwners.push(...(await tx.query(owners.sql, [[home]])).rows);
+          sourceRows.push(
+            ...(
+              await tx.query(sources.sql, [
+                indices.map((index) => originals[index]),
+                indices.map((index) => routes[index]),
+              ])
+            ).rows,
+          );
+        },
+        deadline,
+      );
     }
     const available = sourceRows.filter((row) => row.original && row.control_partition !== null && row.control_group);
     for (const home of new Set(available.map((row) => row.control_partition!))) {
       const group = available.filter((row) => row.control_partition === home);
-      await capabilities.read.withReadTransaction(pool, async (tx) => {
-        controlOwners.push(...(await tx.query(owners.sql, [[home]])).rows);
-        pendingRows.push(
-          ...(await tx.query(pending.sql, [group.map(() => home), group.map((row) => row.control_group)])).rows.map(
-            selectedPendingEvidence,
-          ),
-        );
-        currentRows.push(
-          ...(
-            await tx.query(current.sql, [
-              group.map(() => home),
-              group.map((row) => row.control_group),
-              group.map((row) => row.original),
-            ])
-          ).rows,
-        );
-      }, deadline);
+      await capabilities.read.withReadTransaction(
+        pool,
+        async (tx) => {
+          controlOwners.push(...(await tx.query(owners.sql, [[home]])).rows);
+          pendingRows.push(
+            ...(await tx.query(pending.sql, [group.map(() => home), group.map((row) => row.control_group)])).rows.map(
+              selectedPendingEvidence,
+            ),
+          );
+          currentRows.push(
+            ...(
+              await tx.query(current.sql, [
+                group.map(() => home),
+                group.map((row) => row.control_group),
+                group.map((row) => row.original),
+              ])
+            ).rows,
+          );
+        },
+        deadline,
+      );
     }
     return { sourceOwners, sourceRows, controlOwners, pendingRows, currentRows };
   }
