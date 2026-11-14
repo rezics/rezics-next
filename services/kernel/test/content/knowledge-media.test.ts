@@ -127,6 +127,16 @@ test('prepared Knowledge images disclose only exact admitted sources and close a
   const publicImage = await download(image.id, publicSource, { anonymous: true });
   expect(publicImage.status).toBe(200);
   expect(publicImage.value).toMatchObject({ sha256: image.variantDigest, publicCache: false });
+  // A prepared avatar remains independently readable, but cannot impersonate a
+  // Knowledge source merely because the caller supplied valid source coordinates.
+  const avatar = await preparedMedia(document.documentId);
+  await fixture.pool.query(
+    `UPDATE content.media SET purpose='avatar',container_id=uploader_id WHERE route=$1 AND media_id=$2`,
+    [routeOf(avatar.id), avatar.id],
+  );
+  expect((await download(avatar.id, undefined, { anonymous: true })).status).toBe(200);
+  expect((await download(avatar.id, publicSource, { anonymous: true })).status).toBe(404);
+  expect((await presentations(avatar.id, publicSource, true)).value.images).toEqual([]);
   const page = await presentations(image.id, publicSource, true);
   expect(page.status).toBe(200);
   expect(page.value.images.map((item: { id: string }) => item.id)).toEqual([image.id]);

@@ -186,6 +186,7 @@ async function authorizeDownload(
       !initial ||
       !usable(initial) ||
       routeOf(initial.container_id) !== r ||
+      (context.knowledge !== undefined && initial.purpose !== 'knowledge-image') ||
       (expected !== undefined && signature(initial) !== signature(expected))
     )
       return null;
