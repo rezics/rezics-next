@@ -116,6 +116,7 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
           members: order.map((family) => ({
             family,
             path: { author: 'authors.txt', work: 'works.txt', edition: 'editions.txt' }[family],
+            compression: 'none',
           })),
         }),
         { mode: 0o600 },

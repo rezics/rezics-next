@@ -53,7 +53,7 @@ async function writeSet(
     JSON.stringify({
       version: 1,
       source: 'openlibrary',
-      members: order.map((family) => ({ family, path: names[family] })),
+      members: order.map((family) => ({ family, path: names[family], compression: 'none' })),
     }),
     { mode: 0o600 },
   );
@@ -314,10 +314,10 @@ test('duplicate keys across members do not publish a partial capture', async () 
         version: 1,
         source: 'openlibrary',
         members: [
-          { family: 'author', path: 'authors.txt' },
-          { family: 'work', path: 'works-a.txt' },
-          { family: 'work', path: 'works-b.txt' },
-          { family: 'edition', path: 'editions.txt' },
+          { family: 'author', path: 'authors.txt', compression: 'none' },
+          { family: 'work', path: 'works-a.txt', compression: 'none' },
+          { family: 'work', path: 'works-b.txt', compression: 'none' },
+          { family: 'edition', path: 'editions.txt', compression: 'none' },
         ],
       }),
       { mode: 0o600 },
@@ -342,17 +342,17 @@ test('duplicate keys across members do not publish a partial capture', async () 
 
 async function writeMixedSet(root: string, files: { authors: Uint8Array; works: Uint8Array; editions: Uint8Array }) {
   await writeFile(join(root, 'authors.txt.gz'), files.authors, { mode: 0o600 });
-  await writeFile(join(root, 'works.txt'), files.works, { mode: 0o600 });
+  await writeFile(join(root, 'works.txt.gz'), files.works, { mode: 0o600 });
   await writeFile(join(root, 'editions.txt.gz'), files.editions, { mode: 0o600 });
   const path = join(root, 'manifest.json');
   await writeFile(
     path,
     JSON.stringify({
-      version: 2,
+      version: 1,
       source: 'openlibrary',
       members: [
         { family: 'author', path: 'authors.txt.gz', compression: 'gzip' },
-        { family: 'work', path: 'works.txt', compression: 'none' },
+        { family: 'work', path: 'works.txt.gz', compression: 'none' },
         { family: 'edition', path: 'editions.txt.gz', compression: 'gzip' },
       ],
     }),
@@ -377,7 +377,7 @@ test('mixed gzip and plain members match the plain-equivalent keys and digest co
     expect(stream.decodedBytes()).toBe(Buffer.byteLength(authors + works + `${row(editionSource)}\n`));
     const files = [
       await readFile(join(root, 'authors.txt.gz')),
-      await readFile(join(root, 'works.txt')),
+      await readFile(join(root, 'works.txt.gz')),
       await readFile(join(root, 'editions.txt.gz')),
     ];
     const hash = createHash('sha256');

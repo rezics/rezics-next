@@ -41,9 +41,9 @@ async function manifest(root: string, files: { authors?: string; works?: string;
       version: 1,
       source: 'openlibrary',
       members: [
-        { family: 'author', path: 'authors.txt' },
-        { family: 'work', path: 'works.txt' },
-        { family: 'edition', path: 'editions.txt' },
+        { family: 'author', path: 'authors.txt', compression: 'none' },
+        { family: 'work', path: 'works.txt', compression: 'none' },
+        { family: 'edition', path: 'editions.txt', compression: 'none' },
       ],
     }),
     { mode: 0o600 },

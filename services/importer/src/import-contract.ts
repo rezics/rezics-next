@@ -152,7 +152,7 @@ export type StagingCaptureIdentity = Readonly<{
   disappearanceThreshold: number;
   decodeBudget?: number;
   inputKind?: 'file' | 'dump-set';
-  manifestVersion?: 1 | 2;
+  manifestVersion?: 1;
   members?: readonly StagingMemberIdentity[];
 }>;
 

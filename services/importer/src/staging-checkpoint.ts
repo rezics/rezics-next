@@ -38,7 +38,7 @@ export type StagingCaptureIdentity = Readonly<{
   disappearanceThreshold: number;
   decodeBudget?: number;
   inputKind?: StagingInputKind;
-  manifestVersion?: 1 | 2;
+  manifestVersion?: 1;
   members?: readonly StagingMemberIdentity[];
 }>;
 
@@ -175,8 +175,7 @@ function admitV2Extras(
   if (inputKind === 'dump-set') {
     if (value.decoderId !== STAGING_DECODER_DUMP_SET_ID || value.sourceKind !== 'openlibrary')
       throw new StagingCheckpointError('unsupported-format', STAGING_UNSUPPORTED_INPUT);
-    if (value.manifestVersion !== 1 && value.manifestVersion !== 2)
-      throw new StagingCheckpointError('configuration', STAGING_INCOMPATIBLE);
+    if (value.manifestVersion !== 1) throw new StagingCheckpointError('configuration', STAGING_INCOMPATIBLE);
   } else if (value.manifestVersion !== undefined)
     throw new StagingCheckpointError('configuration', STAGING_INCOMPATIBLE);
   if (value.decoderId === STAGING_DECODER_ZSTD_ID && value.sourceKind !== 'wikidata')
@@ -332,7 +331,7 @@ export function captureDumpSetIdentity(input: {
   converterRevision: string;
   disappearanceThreshold: number;
   decodeBudget?: number;
-  manifestVersion: 1 | 2;
+  manifestVersion: 1;
 }): StagingCaptureIdentity {
   const admitted = input.members.map((member, index) => admitMember(member, index));
   const digest = dumpSetIdentityDigest(admitted);
@@ -414,7 +413,7 @@ export function parseStagingIdentityJson(
   const value = parsed as {
     decodeBudget?: number;
     inputKind?: StagingInputKind;
-    manifestVersion?: 1 | 2;
+    manifestVersion?: 1;
     members?: StagingMemberIdentity[];
   };
   return {

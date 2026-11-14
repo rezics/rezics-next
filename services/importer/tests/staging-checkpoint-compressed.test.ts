@@ -150,7 +150,7 @@ async function mixedSet(root: string, works = [{ ...workSource, covers: [] }, ex
   await writeFile(
     path,
     JSON.stringify({
-      version: 2,
+      version: 1,
       source: 'openlibrary',
       members: [
         { family: 'author', path: 'authors.txt.gz', compression: 'gzip' },
@@ -201,7 +201,7 @@ test('version-2 identity binds gzip, zstd, dump-set members and the whole-set bu
     sourceAlias: 'openlibrary',
     converterRevision: 'ol@1',
     disappearanceThreshold: 0.2,
-    manifestVersion: 2,
+    manifestVersion: 1,
   });
   expect(set.decoderId).toBe(STAGING_DECODER_DUMP_SET_ID);
   expect(set.inputKind).toBe('dump-set');
@@ -218,7 +218,7 @@ test('version-2 identity binds gzip, zstd, dump-set members and the whole-set bu
         sourceAlias: 'openlibrary',
         converterRevision: 'ol@1',
         disappearanceThreshold: 0.2,
-        manifestVersion: 2,
+        manifestVersion: 1,
       }),
     ),
   ).toBe(false);
@@ -240,7 +240,7 @@ test('version-2 identity binds gzip, zstd, dump-set members and the whole-set bu
       sourceAlias: 'openlibrary',
       converterRevision: 'ol@1',
       disappearanceThreshold: 0.2,
-      manifestVersion: 2,
+      manifestVersion: 1,
     }),
   ).toThrow(/Checkpointed staging admits/);
   expect(
@@ -339,7 +339,7 @@ test('dump-set frames complete authors without records, resume skips the prefix,
       sourceAlias: 'openlibrary',
       converterRevision: createSourceRegistration('openlibrary').converter_revision,
       disappearanceThreshold: 0.2,
-      manifestVersion: 2,
+      manifestVersion: 1,
     });
     const frames = [];
     for await (const event of readOpenLibraryDumpSet(admission, {
@@ -458,7 +458,7 @@ test('dump-set frames complete authors without records, resume skips the prefix,
               sourceAlias: 'openlibrary',
               converterRevision: createSourceRegistration('openlibrary').converter_revision,
               disappearanceThreshold: 0.2,
-              manifestVersion: 2,
+              manifestVersion: 1,
             }),
           },
         },

@@ -62,7 +62,28 @@ Decision: a waiter for a staged same-run dependency owned by another active reco
 
 ## Command line, metadata and recovery
 
-Run `bun services/importer/src/cli.ts` with `--source`, `--dump`, `--state`, `--api`, `--account-key`, `--account`, `--client` and `--auth`. `--help` needs no credentials, SQLite or network. `--dump -` reads plain stdin. Compression is explicit: gzip for Open Library/Wikidata, zstd for VNDB/Wikidata; it is never inferred from names. zstd requires one local regular file and trusted executable. Decoded input defaults to 256 GiB with at most one-window overshoot. gzip is refused for VNDB/Bangumi and zstd for Bangumi/Open Library before credentials or state; dump-set members remain none/gzip.
+Run `bun services/importer/src/cli.ts` with `--source`, `--dump`, `--state`, `--api`, `--account-key`, `--account`, `--client` and `--auth`. `--help` needs no credentials, SQLite or network. `--dump -` reads plain stdin. Compression is explicit: gzip for Open Library/Wikidata, zstd for VNDB/Wikidata; it is never inferred from names. zstd requires one local regular file and trusted executable. Decoded input defaults to 256 GiB with at most one-window overshoot. gzip is refused for VNDB/Bangumi and zstd for Bangumi/Open Library before credentials or state; canonical v1 dump-set members require explicit `none`/`gzip`.
+
+An Open Library `--dump-set` names one local JSON manifest, with all author/work/edition families and at most 64
+explicit regular-file members. Compression is mandatory per member and never inferred from a filename:
+
+```json
+{
+  "version": 1,
+  "source": "openlibrary",
+  "members": [
+    {"family": "author", "path": "authors.txt.gz", "compression": "gzip"},
+    {"family": "work", "path": "works.txt", "compression": "none"},
+    {"family": "edition", "path": "editions.txt.gz", "compression": "gzip"}
+  ]
+}
+```
+
+Relative paths resolve beside the manifest. Admission caps the manifest at 64 KiB and each path at 4,096 UTF-8
+bytes; reserved paths, duplicates, URLs, expansions and symlink/special-file members are refused before capture.
+The ordinary import and preview paths share this admission and read each member sequentially with the existing
+whole-set decode budget, exact original-byte member digests, file-change checks and cancellation cleanup.
+
 
 Single-source and batch CLI share one Import application. The process entry binds clock, fetch, stdin, progress,
 identity and factories once per attempt. Batch uses the same single-source executor, and nested jobs keep the

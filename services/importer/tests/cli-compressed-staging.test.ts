@@ -250,7 +250,7 @@ test('dump-set CLI resumes the same generation and a changed budget keeps the ch
     await writeFile(
       manifest,
       JSON.stringify({
-        version: 2,
+        version: 1,
         source: 'openlibrary',
         members: [
           { family: 'author', path: 'authors.txt.gz', compression: 'gzip' },
