@@ -19,6 +19,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { readerSessionSource, useReaderVisit } from '../../reader/lifetime';
 import { ShellContextNavigation } from '../../shell/contextual-navigation';
 import { BookOutlineView } from './outline';
+import { ReaderWorkspace } from './reader-workspace';
 import { PostReadingBody } from '../../threads/post-reading-body';
 import type { BookContentsMovement, BookContentsNavigation } from './contents-navigation';
 import { createCheckpointPosition, type CheckpointPosition } from './checkpoint-position';
@@ -394,22 +395,27 @@ function BookReaderView({
           }}
         />
       </ShellContextNavigation>
-      <section
-        ref={root}
-        aria-labelledby={headingId}
-        aria-busy={state.state === 'loading'}
-        className="mx-auto grid w-full min-w-0 max-w-[52rem] gap-6 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 sm:gap-8 sm:px-8 sm:pt-10"
-        lang={locale}
-        data-slot="hosted-book-reader"
-        data-reading-mode={pinNavigation ? 'pinned' : 'flow'}
-      >
-        <header className="grid min-w-0 gap-4 [overflow-wrap:anywhere]">
-          {page && !rootPage ? (
+      <ReaderWorkspace
+        rootRef={root}
+        headingId={headingId}
+        headingRef={heading}
+        title={<bdi>{title}</bdi>}
+        titleLabel={
+          page ? (
+            <p className="text-xs font-medium text-muted-foreground">
+              {page.kind === 'chapter' ? labels.chapter : labels.contents}
+            </p>
+          ) : null
+        }
+        identity={
+          page && !rootPage ? (
             <p className="text-sm leading-relaxed text-muted-foreground">
               <bdi>{page.publicationTitle}</bdi>
             </p>
-          ) : null}
-          {page && rootContents ? (
+          ) : null
+        }
+        contents={
+          page && rootContents ? (
             <nav aria-label={m.book_reader_context({}, options)} className="-mx-1.5">
               <ol className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-sm">
                 <li className="min-w-0 max-w-full">
@@ -426,24 +432,9 @@ function BookReaderView({
                 ))}
               </ol>
             </nav>
-          ) : null}
-          <div className="grid min-w-0 gap-2">
-            {page ? (
-              <p className="text-xs font-medium text-muted-foreground">
-                {page.kind === 'chapter' ? labels.chapter : labels.contents}
-              </p>
-            ) : null}
-            <h1
-              ref={heading}
-              id={headingId}
-              tabIndex={-1}
-              className={`text-pretty text-3xl font-semibold leading-tight tracking-tight sm:text-4xl ${focusable}`}
-            >
-              <bdi>{title}</bdi>
-            </h1>
-          </div>
-        </header>
-        {page?.kind === 'chapter' ? (
+          ) : null
+        }
+        controls={page?.kind === 'chapter' ? (
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b pb-3">
             <Button
               className={`${control} gap-2 px-2`}
@@ -468,7 +459,7 @@ function BookReaderView({
             </Button>
           </div>
         ) : null}
-        {page && renderCheckpoint ? (
+        readingPosition={page && renderCheckpoint ? (
           <ProgressRegion
             key={JSON.stringify(page.address)}
             unavailable={m.book_reader_progress_unavailable({}, options)}
@@ -481,6 +472,10 @@ function BookReaderView({
             />
           </ProgressRegion>
         ) : null}
+        busy={state.state === 'loading'}
+        locale={locale}
+        readingMode={pinNavigation ? 'pinned' : 'flow'}
+      >
         {page?.kind === 'chapter' ? (
           <>
             <article
@@ -603,7 +598,7 @@ function BookReaderView({
             ) : null}
           </div>
         )}
-      </section>
+      </ReaderWorkspace>
     </>
   );
 }
