@@ -22,6 +22,11 @@ export class ReplyIntent<Context = undefined> {
     return this.uncertain;
   }
 
+  /** Retrieval is independent of the working draft. The caller retains the original sender and authority. */
+  original(): ReplyCommand<Context> | undefined {
+    return this.attempt;
+  }
+
   selectParent(parentId: string | null): string {
     if (this.uncertain) return this.key;
     if (parentId !== this.parentId) {

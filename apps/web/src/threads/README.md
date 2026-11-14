@@ -128,6 +128,18 @@ retires that image's recovery. Network uncertainty stays unknown. Submissions re
 retain the exact immutable command and key for current-editor retry. Leaving only retires local continuations; an
 already accepted native command is neither cancelled nor undone.
 
+Decision: Create, reply, save and publish recovery retain one immutable original request beside one editable working
+draft. Original Retry retrieves that request independently of draft preparation and uses its original sender,
+credential/context, action, target/parent, revision, title, document, media and key. A changed working draft is local
+writing, never another command while the original outcome is unknown. The recovery reader shows the submitted
+document and action separately from current writing; imports and media changes cannot replace the request. Known
+refusal releases the attempt for correction; stale edit review retains its exact-current flow. Acknowledgement clears
+only the submitted working version. Newer writing and its upload ownership stay mounted, with the acknowledged
+result retained until deliberate completion through the existing success/departure owner. No read proves an unknown
+request, and no polling, persistent request copy or history scan is added. Session, credential, locale and target
+retirement remove private late effects. Source assertions and stories describe this contract; native replay and mounted
+accessibility verification remain separate acceptance.
+
 The composer joins the editor's admitted image occurrences to `ComposerAttachmentEpisode` under
 `thread-upload-episode`. Each occurrence retains its exact File, native command, caller and target independently,
 including identical filenames or repeated selection of the same File. Current rows announce observed reservation,
