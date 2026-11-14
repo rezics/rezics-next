@@ -3238,6 +3238,10 @@ child lifecycle remain with the transports ([control-plane simplification resear
 Decision: Goal host restarts hand off the same loopback app-server per pool and adopt only an exact live process and
 private endpoint; a dead or failed attachment gets one bounded same-pool rejoin. The installed Codex daemon is not used
 because its shared inherited environment and remote-management settings do not fit per-pool ownership.
+Decision: on a new provider start, its identity-only registry record remains provisional until readyz, the private
+WebSocket connection and JSON-RPC initialization succeed; the host then publishes the complete pool attachment before
+returning the client to manager thread recovery. Lifecycle checks count only recovery RPCs written after each host
+boundary and read that host's complete attachment after its fresh resume event.
 Decision: ManagerSessions is the durable Goal coordinator; `manager-session-transport.ts` owns the provider connection
 cache, concrete Codex/Claude session requests, viewer argv and window prompt/respawn. Prompt rendering, launch-manifest
 accounting, inbox delivery, renewal and budget stay with ManagerSessions. Extraction tests pin saved-thread ordering,
