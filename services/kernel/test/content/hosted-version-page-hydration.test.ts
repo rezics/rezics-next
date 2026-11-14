@@ -11,8 +11,13 @@ import { observeSql, type SqlObserver } from './support/sql-observer.ts';
 setDefaultTimeout(360_000);
 let f: Awaited<ReturnType<typeof hostedChaptersFixture>>;
 let observer: SqlObserver | undefined;
-beforeAll(async () => { f = await hostedChaptersFixture(); });
-afterAll(async () => { await observer?.close(); await f?.close(); });
+beforeAll(async () => {
+  f = await hostedChaptersFixture();
+});
+afterAll(async () => {
+  await observer?.close();
+  await f?.close();
+});
 
 async function convertDraft(path: string, expectedRevisionId: string): Promise<string> {
   const route = `${path}:convertDraft`;
@@ -110,10 +115,7 @@ test('outline and chapter windows hydrate only visible rows with bounded tempora
       position,
       ordinal,
     ]),
-  ).toEqual([
-    [partId, null, 0, 0],
-    ...chapterIds.slice(0, 9).map((id, index) => [id, partId, index, index + 1]),
-  ]);
+  ).toEqual([[partId, null, 0, 0], ...chapterIds.slice(0, 9).map((id, index) => [id, partId, index, index + 1])]);
   expect(outlineTen).toMatchObject({ lastAfter: 10, hasMore: true });
 
   const nextOne = await page('next', chapterIds[4]!, 1, [chapterIds[5]!], [partId]);
@@ -128,6 +130,11 @@ test('outline and chapter windows hydrate only visible rows with bounded tempora
   expect(previousOne).toMatchObject({ origin: 15, lastAfter: 14, hasMore: true });
   expect(
     previousTen.placements.map(({ occurrenceId, position, ordinal }) => [occurrenceId, position, ordinal]),
-  ).toEqual(chapterIds.slice(5, 15).reverse().map((id) => [id, chapterIds.indexOf(id), chapterIds.indexOf(id)]));
+  ).toEqual(
+    chapterIds
+      .slice(5, 15)
+      .reverse()
+      .map((id) => [id, chapterIds.indexOf(id), chapterIds.indexOf(id)]),
+  );
   expect(previousTen.lastAfter).toBe(5);
 });
