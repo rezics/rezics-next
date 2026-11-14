@@ -7,7 +7,7 @@ import { GrantDeniedError } from '../access/contract/errors.ts';
 import { mintReadTime, noEffect, type CommandTransaction, type CommandOutcome } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck } from '../request/access-check.ts';
 import type { Access, Actor, AccountActor } from '../request/access.ts';
@@ -563,7 +563,7 @@ export function createMalImport(deps: Dependencies) {
       route = routeOf(a.accountId);
     if (route === null) throw missing();
     const check = await accessCheck(access, a, 'library_entry:update', { route, id: a.accountId }, { pool, deadline });
-    return withConnection(pool, async (client) => {
+    return withBoundedReadConnection(pool, deadline, async (client) => {
       const db = deadlineClient(client, deadline),
         current = await readAccount(db, route, a.accountId);
       if (
@@ -583,9 +583,11 @@ export function createMalImport(deps: Dependencies) {
   }
   async function load(actor: Actor, id: string, deadline: number) {
     const a = await authority(actor, deadline);
-    const result = await deadlineClient(pool, deadline).query<{ document: Document }>(
-      `SELECT document FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp()`,
-      [a.route, a.actor.accountId, id],
+    const result = await withBoundedReadConnection(pool, deadline, (client) =>
+      deadlineClient(client, deadline).query<{ document: Document }>(
+        `SELECT document FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp()`,
+        [a.route, a.actor.accountId, id],
+      ),
     );
     const doc = result.rows[0]?.document;
     if (!doc) throw missing();
@@ -690,11 +692,13 @@ export function createMalImport(deps: Dependencies) {
     const a = await authority(actor, deadline),
       identifier = row.identifier;
     const route = tupleRoute(deps.routeKey, identifier.source, identifier.value);
-    const claim = await readClaim.run(deadlineClient(pool, deadline), {
-      route,
-      source: identifier.source,
-      external_id: identifier.value,
-    });
+    const claim = await withBoundedReadConnection(pool, deadline, (client) =>
+      readClaim.run(deadlineClient(client, deadline), {
+        route,
+        source: identifier.source,
+        external_id: identifier.value,
+      }),
+    );
     const target = chosen ?? claim?.subject_id ?? null;
     const binding: Binding | null =
       chosen === null && claim
@@ -1017,13 +1021,17 @@ export function createMalImport(deps: Dependencies) {
           }
         : {}),
     };
-    if (input.labels !== undefined)
-      proposed.labels = await reviewMalLabels(
-        deadlineClient(pool, deadline),
-        { route: routeOf(owner(actor).accountId)!, accountId: owner(actor).accountId },
-        row,
-        input.labels,
+    if (input.labels !== undefined) {
+      const selections = input.labels;
+      proposed.labels = await withBoundedReadConnection(pool, deadline, (client) =>
+        reviewMalLabels(
+          deadlineClient(client, deadline),
+          { route: routeOf(owner(actor).accountId)!, accountId: owner(actor).accountId },
+          row,
+          selections,
+        ),
       );
+    }
     const result = await mutate(actor, id, key, 'review', input, (doc) => {
       const prior = doc.intents[input.row];
       if (prior?.score?.started && !prior.score.outcome) throw stale();
@@ -1263,10 +1271,12 @@ export function createMalImport(deps: Dependencies) {
           }
           await save(index, 'label');
         }
-        const parent = await deadlineClient(pool, deadline).query<{ revision: number; name: string }>(
-          `SELECT revision,normalized_name AS name FROM library.personal_label
-           WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL`,
-          [route, a.accountId, item.label.id],
+        const parent = await withBoundedReadConnection(pool, deadline, (client) =>
+          deadlineClient(client, deadline).query<{ revision: number; name: string }>(
+            `SELECT revision,normalized_name AS name FROM library.personal_label
+             WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL`,
+            [route, a.accountId, item.label.id],
+          ),
         );
         if (
           parent.rows[0]?.revision !== item.label.revision ||
@@ -1278,11 +1288,13 @@ export function createMalImport(deps: Dependencies) {
           continue;
         }
         if (item.before === undefined) {
-          const before = await deadlineClient(pool, deadline).query(
-            `SELECT assignment_id FROM library.label_assignment
-             WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4
-               AND deleted_at IS NULL AND slot_no IS NOT NULL`,
-            [route, a.accountId, review.target, item.label.id],
+          const before = await withBoundedReadConnection(pool, deadline, (client) =>
+            deadlineClient(client, deadline).query(
+              `SELECT assignment_id FROM library.label_assignment
+               WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4
+                 AND deleted_at IS NULL AND slot_no IS NOT NULL`,
+              [route, a.accountId, review.target, item.label.id],
+            ),
           );
           item.before = before.rows.length > 0;
           await save(index, 'before');
