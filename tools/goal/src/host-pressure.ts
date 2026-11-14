@@ -39,7 +39,9 @@ const unavailableReclaimCodes = new Set([
 export const WORKER_SLICE_ROOT = `/sys/fs/cgroup/user.slice/user-${process.getuid?.()}.slice/user@${process.getuid?.()}.service/rezics.slice/rezics-workers.slice`;
 /** cgroup directory identity prevents a stale name-based exemption from applying to a later scope incarnation. */
 export type WorkerScopeIncarnation = { device: string; inode: string; ctimeNs: string };
-export type WorkerScopeMembership = ReadonlyMap<string, WorkerScopeIncarnation>;
+/** A working set is discounted only after the current task and process own this exact scope incarnation. */
+export type WorkerScopeReservation = WorkerScopeIncarnation & { reservationMiB?: number };
+export type WorkerScopeMembership = ReadonlyMap<string, WorkerScopeReservation>;
 export function workerScopeIncarnation(root: string, name: string): WorkerScopeIncarnation | undefined {
   try {
     const stats = statSync(join(root, name), { bigint: true });
@@ -99,7 +101,11 @@ export function workerHeadroomMiB(
         const active = matchingScope(activeScopes, entry.name, incarnation);
         if (parked && !active) continue;
         const peak = read(join(scope, 'memory.peak'));
-        reserved += Math.max(0, Math.max(HEAVY_WORKER_MIB * MIB, peak) - current);
+        const reservationMiB =
+          active && activeScopes?.get(entry.name)?.reservationMiB === CODE_WORKER_MIB
+            ? CODE_WORKER_MIB
+            : HEAVY_WORKER_MIB;
+        reserved += Math.max(0, Math.max(reservationMiB * MIB, peak) - current);
         // An old or unidentified scope keeps its own reserve, but cannot replace an unreconciled current writer.
         if (!activeScopes || active) scopes++;
       } catch (error) {

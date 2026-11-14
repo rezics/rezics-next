@@ -1387,7 +1387,9 @@ Decision: host-capacity tickets, waiters, memory/cap policy and `releaseWhenStar
 identity, width snapshots and launch evidence stay with their current owners.
 The existing admission lease also serializes both lanes' working-set reservations and pressure brake. A finite
 operator worker slice enables aggregate memory admission: product code starts reserve 2 GiB initially, control-plane
-and unknown starts 4 GiB. Existing worker scopes reserve at least 4 GiB or their measured peak, whichever is larger;
+and unknown starts 4 GiB. A current product writer with exact process ownership of the same cgroup incarnation
+retains its 2 GiB reservation; control-plane, unclassified, stale and foreign scopes retain 4 GiB. Every scope
+reserves at least its measured peak, and aggregate actual use remains charged;
 support services' current memory and admitted reservations are included. The 12 GiB per-worker hard limit remains a
 burst safety ceiling, not an expected working set. Support growth can still compete within the hard aggregate.
 Decision: positive terminal proof retires only the writing reserve of its exact task, attempt and scope incarnation.
@@ -1402,6 +1404,9 @@ Linux memory-full PSI at 1% or I/O-full at 10% pauses new starts. Recovery requi
 0.2% and 2% respectively, sampled in the existing admission loop without another watcher or model turn.
 Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`
 projection; admission counts only each task's current attempt, while width retains its process-identity classification.
+Legacy SQLite numeric process-start values are read as decimal strings only when they are exact safe integers;
+unsafe or malformed values remain unknown. Decimal strings retain their exact value, and PID, boot and process-group
+identity checks still determine liveness. These observations never rewrite attempt evidence or restart writers.
 
 Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count current
 running attempts through the `worker_current_attempts_state` index. An admitted start keeps its queue ticket in an
