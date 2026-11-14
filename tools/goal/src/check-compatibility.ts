@@ -116,25 +116,6 @@ type RunResult = {
   error?: string;
 };
 
-type CachedExecutableRun = Pick<RunResult, 'status' | 'stdout' | 'stderr' | 'error'>;
-type ExecutableObservation = {
-  signature: string;
-  sha256?: string;
-  probes: Map<string, CachedExecutableRun>;
-};
-
-/** Call-local observations for one dependency preparation; callers must create a new cache for later preparations. */
-export type BunExecutableValidationCache = {
-  entries: Map<string, ExecutableObservation>;
-  physicalIdentities: Set<string>;
-  bytesHashed: number;
-  runtimeProbes: number;
-};
-
-export function createBunExecutableValidationCache(): BunExecutableValidationCache {
-  return { entries: new Map(), physicalIdentities: new Set(), bytesHashed: 0, runtimeProbes: 0 };
-}
-
 type WorkerRecord = Record<string, unknown>;
 
 function commandExists(file: string): boolean {
@@ -178,51 +159,6 @@ function displayResult(result: RunResult, policy = defaultPolicy.nativeCommands)
   };
 }
 
-function executableObservation(
-  executable: string,
-  cache: BunExecutableValidationCache,
-): ExecutableObservation {
-  const stat = statSync(executable, { bigint: true });
-  const identity = `${stat.dev}:${stat.ino}`;
-  const signature = `${identity}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
-  cache.physicalIdentities.add(identity);
-  const previous = cache.entries.get(identity);
-  if (previous?.signature === signature) return previous;
-  const observation: ExecutableObservation = { signature, probes: new Map() };
-  cache.entries.set(identity, observation);
-  return observation;
-}
-
-function executableSha256(executable: string, cache?: BunExecutableValidationCache): string {
-  if (!cache) return createHash('sha256').update(readFileSync(executable)).digest('hex');
-  const observation = executableObservation(executable, cache);
-  if (observation.sha256 !== undefined) return observation.sha256;
-  const bytes = readFileSync(executable);
-  observation.sha256 = createHash('sha256').update(bytes).digest('hex');
-  cache.bytesHashed += bytes.byteLength;
-  return observation.sha256;
-}
-
-function executableRun(
-  command: string[],
-  cwd: string,
-  policy: typeof defaultPolicy.nativeCommands,
-  cache: BunExecutableValidationCache | undefined,
-  observation: ExecutableObservation | undefined,
-): RunResult {
-  if (!cache || !observation) return run(command, cwd, process.env, policy);
-  const key = JSON.stringify([command.slice(1), policy.commandTimeoutMs, policy.commandBufferBytes]);
-  const cached = observation.probes.get(key);
-  if (cached) return { ...cached, command, cwd };
-  const result = run(command, cwd, process.env, policy);
-  cache.runtimeProbes++;
-  if (result.status === 0 && !result.error) {
-    const { command: _command, cwd: _cwd, ...captured } = result;
-    observation.probes.set(key, captured);
-  }
-  return result;
-}
-
 function pushCheck(
   checks: CompatibilityCheck[],
   field: string,
@@ -247,15 +183,13 @@ function runtimeCheck(
   contract: CheckCompatibilityContract,
   artifact?: BunArtifact,
   policy = defaultPolicy.nativeCommands,
-  cache?: BunExecutableValidationCache,
 ): CompatibilityCheck[] {
   const checks: CompatibilityCheck[] = [];
-  const observation = cache ? executableObservation(executable, cache) : undefined;
   const versionArgs = contract.workerCheck.bun.versionArgv;
   const revisionArgs = contract.workerCheck.bun.revisionArgv;
   const versionCommand = [executable, ...versionArgs];
   const revisionCommand = [executable, ...revisionArgs];
-  const version = executableRun(versionCommand, scriptsRoot, policy, cache, observation);
+  const version = run(versionCommand, scriptsRoot, process.env, policy);
   const actualVersion = version.stdout.trim();
   const pinShapeOk =
     expectedPin.startsWith(contract.workerCheck.bun.versionPrefix) &&
@@ -281,7 +215,7 @@ function runtimeCheck(
     { expected: expectedVersion || null, actual: actualVersion || null, ...displayResult(version, policy) },
   );
 
-  const revision = executableRun(revisionCommand, scriptsRoot, policy, cache, observation);
+  const revision = run(revisionCommand, scriptsRoot, process.env, policy);
   const actualRevision = revision.stdout.trim();
   const revisionOk =
     revision.status === 0 &&
@@ -749,7 +683,6 @@ function checkBunPin(
   scriptsRoot: string,
   contract: CheckCompatibilityContract,
   policy = defaultPolicy.nativeCommands,
-  cache?: BunExecutableValidationCache,
 ): boolean {
   const firstCheck = checks.length;
   const pin = parsePackageManager(scriptsRoot, checks, contract);
@@ -873,11 +806,11 @@ function checkBunPin(
       const installedBinary = platformBinaryPresent ? realpathSync(platformBinaryPath) : undefined;
       const packageBinaryPath = join(dirname(packageManifest), 'bin/bun.exe');
       const packageBinary = realpathSync(packageBinaryPath);
-      const actualSha256 = executableSha256(resolved, cache);
+      const actualSha256 = createHash('sha256').update(readFileSync(resolved)).digest('hex');
       const platformSha256 =
         installedBinary === undefined
           ? undefined
-          : executableSha256(installedBinary, cache);
+          : createHash('sha256').update(readFileSync(installedBinary)).digest('hex');
       const layoutOk = platformBinaryPresent
         ? (resolved === packageBinary || resolved === installedBinary) && platformSha256 === binary.executableSha256
         : resolved === packageBinaryPath &&
@@ -913,7 +846,7 @@ function checkBunPin(
       `Could not establish installed package/lockfile custody: ${String(error)}.`,
     );
   }
-  for (const check of runtimeCheck(scriptsRoot, pin, lookup, contract, artifact, policy, cache)) checks.push(check);
+  for (const check of runtimeCheck(scriptsRoot, pin, lookup, contract, artifact, policy)) checks.push(check);
   pushCheck(
     checks,
     'workerCheck.bun.lookup',
@@ -929,10 +862,9 @@ function checkBunPin(
 export function checkPinnedBunInstallation(
   scriptsRoot: string,
   policy = defaultPolicy.nativeCommands,
-  cache = createBunExecutableValidationCache(),
 ): CompatibilityCheck[] {
   const checks: CompatibilityCheck[] = [];
-  checkBunPin(checks, resolve(scriptsRoot), CHECK_COMPATIBILITY_CONTRACT, policy, cache);
+  checkBunPin(checks, resolve(scriptsRoot), CHECK_COMPATIBILITY_CONTRACT, policy);
   return checks;
 }
 
