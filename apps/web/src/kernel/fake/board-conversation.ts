@@ -3,7 +3,6 @@ import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import type { FakeRoute } from '../fake-modules';
 import type { KernelRecording } from '../fake';
 import { authoredReadingPage } from './thread-reading-page';
-import recordedBoard from '../recorded/board.json';
 import recordedSubject from '../recorded/subject.json';
 
 /** Authored examples for the mounted routes. Counts and advice describe these fixtures only. */
@@ -28,8 +27,14 @@ const authors = [
     avatar: null,
   },
 ];
-type AvailablePost = Extract<ReadingPageResponse['thread']['firstPost'], { availability: 'available' }>;
-type Thread = Extract<ReadingPageResponse['thread'], { availability: 'available' }>;
+type SuppliedReactions = { reactions: { like: number }; viewerReaction: null };
+type AvailablePost = Extract<ReadingPageResponse['thread']['firstPost'], { availability: 'available' }> &
+  SuppliedReactions;
+type Thread = Omit<ReadingPageResponse['thread'], 'firstPost'> &
+  SuppliedReactions & {
+    availability: 'available';
+    firstPost: AvailablePost;
+  };
 
 function post(threadId: string, index: number, text: string, parentId: string | null = null): AvailablePost {
   return {
@@ -61,9 +66,32 @@ function thread(
   title: string | null,
   text: string,
   kind: 'discussion' | 'review' = 'discussion',
+  illustration?: { id: string; alt: string },
 ): Thread {
   const threadId = id(100 + index);
   const opening = post(threadId, index * 20, text);
+  const firstPost: AvailablePost = {
+    ...opening,
+    voteCitation: kind === 'review' ? { questionId: conversationQuestionId, units: 0, revision: 3 } : null,
+    ...(illustration
+      ? {
+          mediaIds: [illustration.id],
+          body: {
+            ...opening.body,
+            doc: {
+              type: 'doc',
+              content: [
+                ...opening.body.doc.content!,
+                {
+                  type: 'image',
+                  attrs: { id: 'unavailable-illustration', src: illustration.id, alt: illustration.alt },
+                },
+              ],
+            },
+          },
+        }
+      : {}),
+  };
   return {
     id: threadId,
     boardId: conversationBoardId,
@@ -77,7 +105,7 @@ function thread(
     securityRevision: '1',
     availability: 'available',
     createdAt,
-    firstPost: opening,
+    firstPost,
     reactions: { like: 3 },
     viewerReaction: null,
   };
@@ -112,32 +140,14 @@ export const conversationFailure = thread(
   3,
   'An illustration we can still discuss',
   'The text remains available while the illustration and activity summary cannot be loaded. You can still follow the supplied replies and keep writing a response.',
+  'discussion',
+  { id: id(80), alt: 'A sketch of the opening scene' },
 );
 export const conversationUntitled = thread(
   4,
   null,
   'A question from the margins: what did you notice on your last reading?',
 );
-if (conversationFailure.firstPost.availability === 'available') {
-  const opening = conversationFailure.firstPost;
-  const illustrationId = id(80);
-  opening.mediaIds = [illustrationId];
-  opening.body = {
-    ...opening.body,
-    doc: {
-      type: 'doc',
-      content: [
-        ...opening.body.doc.content!,
-        {
-          type: 'image',
-          attrs: { id: 'unavailable-illustration', src: illustrationId, alt: 'A sketch of the opening scene' },
-        },
-      ],
-    },
-  };
-}
-if (conversationReview.firstPost.availability === 'available')
-  conversationReview.firstPost.voteCitation = { questionId: conversationQuestionId, units: 0, voteRevision: 3 };
 const allThreads = [
   conversationDiscussion,
   conversationReview,
@@ -146,10 +156,18 @@ const allThreads = [
   conversationUntitled,
 ];
 const board: BoardPageResponse['board'] = {
-  ...recordedBoard.board,
   id: conversationBoardId,
+  realmId: null,
+  community: null,
+  route: 0,
   title: conversationBoardTitle,
+  purpose: 'discussion',
+  visibility: 'published',
+  securityRevision: '1',
+  availability: 'available',
+  createdAt,
 };
+
 export const conversationDiscussionReplies = [
   post(
     conversationDiscussion.id,
@@ -282,7 +300,7 @@ function readingPage(value: Thread, request: Request): ReadingPageResponse {
               : { kind: 'exact', value: currentReplies.length },
           lastActivityAt: currentReplies.length ? createdAt : null,
         };
-  const operationState = signedIn ? 'available' : 'sign_in_required';
+  const operationState: 'available' | 'sign_in_required' = signedIn ? 'available' : 'sign_in_required';
   page.actions = {
     state: 'current',
     retryable: false,

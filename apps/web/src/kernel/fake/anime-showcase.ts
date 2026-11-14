@@ -245,7 +245,7 @@ export function animeShowcasePage(
         body: communityThreadPage(read.threadKind, { id, label: item.labels.en! }, page.items, page.next, read.place),
       };
     } else if (read.kind === 'collections') {
-      const page = windowOf(collections(id), read.limit, node, read.cursor);
+      const page = windowOf(collections(id), read.limit, node);
       reads[key] = { status: 200, body: { collections: page.items, count: page.count, next: page.next } };
     }
   }
