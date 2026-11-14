@@ -16,10 +16,13 @@ export type SignupCredentialErrors = {
 const ids = {
   handle: 'signup-handle',
   handleError: 'signup-handle-error',
+  handleHint: 'signup-handle-hint',
   email: 'signup-email',
   emailError: 'signup-email-error',
+  emailHint: 'signup-email-hint',
   password: 'signup-password',
   passwordError: 'signup-password-error',
+  passwordHint: 'signup-password-hint',
   confirmation: 'signup-confirm-password',
   confirmationError: 'signup-confirm-password-error',
 };
@@ -46,17 +49,20 @@ export function SignupCredentials({
         <Input
           id={ids.handle}
           name="handle"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           minLength={requirements.handle.minLength}
           maxLength={requirements.handle.maxLength}
           value={values.handle}
           onChange={(event) => onChange('handle', event.target.value)}
           aria-invalid={errors.handle ? true : undefined}
-          aria-describedby={errors.handle ? ids.handleError : undefined}
+          aria-describedby={[ids.handleHint, errors.handle ? ids.handleError : null].filter(Boolean).join(' ')}
           readOnly={readOnly}
           required
         />
         {errors.handle ? <FieldError id={ids.handleError}>{errors.handle}</FieldError> : null}
-        <p className="text-sm text-muted-foreground">
+        <p id={ids.handleHint} className="text-sm leading-relaxed text-muted-foreground">
           {m.auth_signup_handle_requirement({
             minimum: String(requirements.handle.minLength),
             maximum: String(requirements.handle.maxLength),
@@ -75,12 +81,12 @@ export function SignupCredentials({
           value={values.email}
           onChange={(event) => onChange('email', event.target.value)}
           aria-invalid={errors.email ? true : undefined}
-          aria-describedby={errors.email ? ids.emailError : undefined}
+          aria-describedby={[ids.emailHint, errors.email ? ids.emailError : null].filter(Boolean).join(' ')}
           readOnly={readOnly}
           required
         />
         {errors.email ? <FieldError id={ids.emailError}>{errors.email}</FieldError> : null}
-        <p className="text-sm text-muted-foreground">
+        <p id={ids.emailHint} className="text-sm leading-relaxed text-muted-foreground">
           {m.auth_signup_email_requirement({ maximum: String(requirements.email.maxLength) })}
         </p>
       </Field>
@@ -97,10 +103,10 @@ export function SignupCredentials({
           value={values.password}
           onChange={(event) => onChange('password', event.target.value)}
           aria-invalid={errors.password ? true : undefined}
-          aria-describedby={errors.password ? ids.passwordError : undefined}
+          aria-describedby={[ids.passwordHint, errors.password ? ids.passwordError : null].filter(Boolean).join(' ')}
         />
         {errors.password ? <FieldError id={ids.passwordError}>{errors.password}</FieldError> : null}
-        <p className="text-sm text-muted-foreground">
+        <p id={ids.passwordHint} className="text-sm leading-relaxed text-muted-foreground">
           {m.auth_signup_password_requirement({
             minimum: String(requirements.password.minLength),
             maximum: String(requirements.password.maxLength),

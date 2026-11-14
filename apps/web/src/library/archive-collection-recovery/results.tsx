@@ -1,6 +1,8 @@
 import { localizeHref } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import type { MouseEvent } from 'react';
+import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
+import { EvidenceDetails } from '../archive-progress-recovery/review';
 import { actionClass } from '../private-export/controls';
 import type { RecoveryOutcomesPage, RecoveryStatus } from './contract';
 import type { ReceivingCollectionReadback } from './readback';
@@ -17,8 +19,10 @@ function stateText(state: string): string {
       return m.library_archive_recovery_effect_unresolved();
     case 'unsupported':
       return m.library_archive_recovery_effect_unsupported();
-    default:
+    case 'none':
       return m.library_archive_recovery_effect_not_applicable();
+    default:
+      return m.library_archive_present_unknown();
   }
 }
 
@@ -51,8 +55,10 @@ function outcomeText(state: string): string {
       return m.library_archive_recovery_effect_unresolved();
     case 'unsupported':
       return m.library_archive_recovery_effect_unsupported();
-    default:
+    case 'none':
       return m.library_archive_recovery_effect_not_applicable();
+    default:
+      return m.library_archive_present_unknown();
   }
 }
 
@@ -64,18 +70,29 @@ function pinText(state: string): string {
       return m.library_archive_recovery_effect_pending();
     case 'unsupported':
       return m.library_archive_recovery_effect_unsupported();
-    default:
+    case 'none':
       return m.library_archive_recovery_effect_not_applicable();
+    default:
+      return m.library_archive_present_unknown();
   }
 }
 
-function OutcomeRow({ item }: { item: RecoveryOutcomesPage['outcomes'][number] }) {
+function OutcomeRow({
+  item,
+  index,
+  title,
+}: {
+  item: RecoveryOutcomesPage['outcomes'][number];
+  index: number;
+  title?: string;
+}) {
   const reason = reasonText(item.outcomeReason);
   return (
     <li className="grid min-w-0 gap-2 rounded-lg border p-4">
-      <p className="break-all text-xs text-muted-foreground">
-        {m.library_archive_recovery_occurrence_id({ id: item.sourceOccurrenceId })}
-      </p>
+      <h3 className="font-semibold">
+        {m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} ·{' '}
+        {title || m.library_archive_present_title_unavailable()}
+      </h3>
       <p className="text-sm font-medium">{outcomeText(item.outcome)}</p>
       <dl className="grid gap-1 text-sm sm:grid-cols-3">
         <div>
@@ -91,8 +108,35 @@ function OutcomeRow({ item }: { item: RecoveryOutcomesPage['outcomes'][number] }
           <dd>{stateText(item.orderState)}</dd>
         </div>
       </dl>
+      <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+        <span className="font-medium">
+          {!item.notePresent
+            ? m.library_archive_recovery_note_missing()
+            : !item.noteValid
+              ? m.library_archive_recovery_note_invalid()
+              : item.sourceNoteState === 'cleared'
+                ? m.library_archive_recovery_note_cleared()
+                : item.sourceNoteState === 'empty'
+                  ? m.library_archive_recovery_note_empty()
+                  : m.library_archive_recovery_note_value()}
+          :{' '}
+        </span>
+        {item.note}
+      </p>
       {reason ? <p className="text-sm text-muted-foreground">{reason}</p> : null}
+      <EvidenceDetails value={item} />
     </li>
+  );
+}
+
+export function ArchiveRecoveryUnknown({ busy, onRetry }: { busy: boolean; onRetry: () => void }) {
+  return (
+    <section className="space-y-3 rounded-lg border p-4" aria-label={m.library_archive_present_unknown()}>
+      <p role="status">{m.library_archive_recovery_uncertain()}</p>
+      <button type="button" className={actionClass} disabled={busy} onClick={onRetry}>
+        {m.library_archive_recovery_retry_original()}
+      </button>
+    </section>
   );
 }
 
@@ -119,8 +163,12 @@ export function ArchiveRecoveryResults({
   onPrevious,
   onNext,
   onReadCollection,
+  targets,
+  sourceTitle,
 }: {
   status: RecoveryStatus;
+  targets?: ReadonlyMap<string, EntityPickerSubject>;
+  sourceTitle?: string | null;
   page: RecoveryOutcomesPage | null;
   receiving: ReceivingCollectionReadback | null;
   busy: boolean;
@@ -133,6 +181,8 @@ export function ArchiveRecoveryResults({
 }) {
   const collectionId = page?.collection?.id ?? status.collectionId;
   const state = status.state;
+  const titles = new Map<string, string>([...(targets?.values() ?? [])].map((target) => [target.id, target.title]));
+  const targetTitle = (id: string | null) => (id ? titles.get(id) : undefined);
   const heading =
     state === 'complete'
       ? m.library_archive_recovery_complete_title()
@@ -149,6 +199,7 @@ export function ArchiveRecoveryResults({
         <h2 id="recovery-results-title" tabIndex={-1} className="text-lg font-semibold">
           {heading}
         </h2>
+        {sourceTitle ? <p className="font-medium">{sourceTitle}</p> : null}
         <p role="status">
           {state === 'complete'
             ? m.library_archive_recovery_complete_help()
@@ -179,18 +230,28 @@ export function ArchiveRecoveryResults({
           <section className="grid gap-3 rounded-lg border p-4" data-receiving-collection={receiving.id}>
             <h3 className="font-semibold">{receiving.title}</h3>
             <p>
-              {receiving.visibility ?? m.library_archive_recovery_effect_not_applicable()} · {receiving.memberCount}
+              {receiving.visibility === 'private'
+                ? m.library_visibility_private()
+                : receiving.visibility === 'public'
+                  ? m.library_visibility_public()
+                  : receiving.visibility === 'unlisted'
+                    ? m.library_visibility_unlisted()
+                    : m.library_archive_present_unavailable()}
+              {' · '}
+              {m.library_archive_recovery_collection_members({ count: receiving.memberCount })}
             </p>
             <ol className="grid gap-2">
               {receiving.members.map((member, index) => (
                 <li key={member.id} className="rounded-md border p-3 text-sm">
                   <p>
-                    {index + 1}. {member.subjectId ?? member.id}
+                    {m.library_archive_recovery_occurrence_number({ occurrence: index + 1 })} ·{' '}
+                    {targetTitle(member.subjectId) || m.library_archive_present_title_unavailable()}
                   </p>
                   {member.note ? <p>{member.note}</p> : null}
                 </li>
               ))}
             </ol>
+            <EvidenceDetails value={receiving} title={m.library_archive_entry_current()} />
             {receiving.next ? (
               <button
                 className={actionClass}
@@ -231,10 +292,16 @@ export function ArchiveRecoveryResults({
           </button>
         ) : null}
       </div>
+      <EvidenceDetails value={status} />
       {page?.outcomes.length ? (
         <ol className="grid gap-3">
-          {page.outcomes.map((item) => (
-            <OutcomeRow key={item.sourceOccurrenceId} item={item} />
+          {page.outcomes.map((item, index) => (
+            <OutcomeRow
+              key={item.sourceOccurrenceId}
+              item={item}
+              index={index}
+              title={targetTitle(item.targetSubjectId)}
+            />
           ))}
         </ol>
       ) : page ? (

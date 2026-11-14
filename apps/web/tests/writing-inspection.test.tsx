@@ -373,7 +373,7 @@ test('connected new-thread, reply and inline edit inspect exact unsent writing, 
       expect(window.document.body.textContent).toContain(m.thread_inspection_unknown());
       await click(m.thread_inspection_return());
       await settle(() => !window.document.querySelector('[role="dialog"]'));
-      await click(mode === 'edit' ? m.thread_edit_save() : m.thread_write_retry());
+      await click(m.thread_recovery_retry_original());
       await settle(() => commands.length === 2);
       expect(commands[1]!.idempotencyKey).toBe(commands[0]!.idempotencyKey);
       expect(serializeDocument(commands[1]!.body)).toBe(serialized);

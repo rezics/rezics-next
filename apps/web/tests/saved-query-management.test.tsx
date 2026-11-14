@@ -417,3 +417,77 @@ test('mounted manager callbacks keep their originating controller state and port
     await harness.browser.happyDOM.close();
   }
 });
+
+test('management focuses only from its initiating control and closes to its own surviving opener', async () => {
+  const harness = await installBrowser();
+  const host = harness.browser.document.createElement('div');
+  harness.browser.document.body.append(host);
+  const root = createRoot(host);
+  const pages = [dynamicPage(), dynamicPage({ id: 'saved-query-2', title: 'Second query' })];
+  const finishes: ((page: DynamicCollectionPage) => void)[] = [];
+  try {
+    await act(async () =>
+      root.render(
+        <>
+          <button type="button" data-reader-destination>
+            Elsewhere in results
+          </button>
+          {pages.map((page, index) => (
+            <SavedQueryManagement
+              key={page.id}
+              page={page}
+              viewerId="alice"
+              readCurrent={() =>
+                new Promise((resolve) => {
+                  finishes[index] = resolve;
+                })
+              }
+              onMetadata={() => {}}
+            />
+          ))}
+        </>,
+      ),
+    );
+    const sections = host.querySelectorAll<HTMLElement>('[data-saved-query-management]');
+    const openers = [...sections].map((section) => section.querySelector('button')!);
+    const elsewhere = host.querySelector<HTMLButtonElement>('[data-reader-destination]')!;
+
+    // The second manager cannot target the first manager's identically named field.
+    await act(async () => {
+      openers[1]!.focus();
+      openers[1]!.click();
+    });
+    expect(openers[1]!.isConnected).toBe(true);
+    await act(async () => finishes[1]!(pages[1]!));
+    expect(harness.browser.document.activeElement).toBe(sections[1]!.querySelector('input'));
+    await clickButton(harness.browser.document, m.library_collection_cancel(), sections[1]!);
+    expect(harness.browser.document.activeElement).toBe(openers[1]);
+    expect(openers[1]!.isConnected).toBe(true);
+
+    // A pending read must respect a deliberate move to another control.
+    await act(async () => {
+      openers[0]!.focus();
+      openers[0]!.click();
+    });
+    elsewhere.focus();
+    await act(async () => finishes[0]!(pages[0]!));
+    expect(harness.browser.document.activeElement).toBe(elsewhere);
+    await clickButton(harness.browser.document, m.library_collection_cancel(), sections[0]!);
+    expect(harness.browser.document.activeElement).toBe(openers[0]);
+
+    // Even returning to the opener does not erase an intervening reader move.
+    await act(async () => {
+      openers[0]!.focus();
+      openers[0]!.click();
+    });
+    elsewhere.focus();
+    openers[0]!.focus();
+    await act(async () => finishes[0]!(pages[0]!));
+    expect(harness.browser.document.activeElement).toBe(openers[0]);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    harness.restore();
+    await harness.browser.happyDOM.close();
+  }
+});

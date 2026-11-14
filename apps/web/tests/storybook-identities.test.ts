@@ -47,6 +47,28 @@ test('canonical fixtures leave viewport and theme selection to the toolbar', () 
   }
 });
 
+const staticSourcePreview = /docs:\s*\{\s*codePanel:\s*false,\s*source:\s*\{\s*type:\s*'code'/s;
+const staticStorySource = /parameters:\s*\{\s*docs:\s*\{\s*codePanel:\s*true,\s*source:\s*\{\s*code:/s;
+
+test('rich page Code panels use concise static source under shared preview defaults', () => {
+  for (const preview of ['apps/web/.storybook/preview.tsx', 'packages/ui/.storybook/preview.tsx'])
+    expect(readFileSync(resolve(root, preview), 'utf8')).toMatch(staticSourcePreview);
+  for (const [file, key, code] of [
+    ['apps/web/src/stories/literary-grain-visit.stories.tsx', 'RemovedVolumeOnReturn', '<Addressed args={args} />'],
+    [
+      'apps/web/src/stories/subject.stories.tsx',
+      'SignedIn',
+      '<PageStory visitor="Signed In" path={pagePaths.subject} />',
+    ],
+  ] as const) {
+    const source = readFileSync(resolve(root, file), 'utf8');
+    const story = source.split(`export const ${key}: Story = {`)[1]?.split('\n};')[0] ?? '';
+    expect(story).toMatch(staticStorySource);
+    expect(story).toContain(code);
+  }
+  expect(readFileSync(resolve(root, 'apps/web/.storybook/main.ts'), 'utf8')).toContain("'@storybook/addon-docs'");
+});
+
 test('semantic language, continuation and recovery outcomes retain separate canonical stories', () => {
   for (const [file, keys] of [
     [

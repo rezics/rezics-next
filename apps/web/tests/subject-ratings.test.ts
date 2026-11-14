@@ -303,11 +303,16 @@ test('Subject rating presents one primary result and an accessible bounded distr
       for (const disclosure of document.querySelectorAll('details')) {
         expect(disclosure.open).toBe(false);
         expect(disclosure.querySelector('summary')?.textContent?.trim()).toBeTruthy();
-        expect(action.compareDocumentPosition(disclosure) & window.Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        if (disclosure.getAttribute('data-slot') !== 'rating-distribution')
+          expect(action.compareDocumentPosition(disclosure) & window.Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       }
-      const sources = document.querySelector('[data-slot="rating-provenance"]')!;
-      for (const detail of ['Example', '84', '100', '50', '2025', 'ODbL-1.0', 'Example contributors', 'Bayesian'])
+      const sources = document.querySelector('[data-slot="rating-imported"]')!;
+      expect(sources.closest('details')).toBeNull();
+      for (const detail of ['Example', '84', '100', '50', '2025', 'ODbL-1.0', 'Example contributors'])
         expect(sources.textContent).toContain(detail);
+      expect(document.querySelector('[data-slot="rating-provenance"]')!.textContent).toContain('Bayesian');
+      expect(primary.closest('[data-slot="rating-public"]')).not.toBeNull();
+      expect(action.closest('[data-slot="rating-personal"]')).not.toBeNull();
     } finally {
       cache.clear();
       await window.happyDOM.close();
@@ -476,4 +481,20 @@ test('a vote write quotes its command key and treats 503 atomic_guard_unavailabl
       idempotencyKey: key,
     }),
   ).toBe('stale');
+});
+
+test('own exact units, public scores and independent imported scales keep separate regions', async () => {
+  const statistics = [imported, { ...imported, source: 'Second source', mean: 7.2, scale: { min: 1, max: 10 } }];
+  const window = await ratingDocument(render({ ...hierarchyData, own: 0, statistics }));
+  try {
+    const document = window.document;
+    expect(document.querySelector('[data-slot="rating-personal"]')!.textContent).toContain('0 / 20');
+    expect(document.querySelector('[data-slot="rating-public"]')!.textContent).toContain('8.4 out of 10');
+    expect(document.querySelectorAll('[data-slot="imported-score"]')).toHaveLength(2);
+    for (const row of document.querySelectorAll('[data-slot="imported-score"]'))
+      expect(row.closest('details')).toBeNull();
+    expect(document.querySelector('[data-provider="Second source"]')!.textContent).toContain('7.2 (1–10)');
+  } finally {
+    await window.happyDOM.close();
+  }
 });

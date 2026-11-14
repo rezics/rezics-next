@@ -48,6 +48,25 @@ Decision: replay recorded visits at their captured clock in stories and tests, p
 response fields, cursor tokens and artifact bytes; production continues to use the live clock and local delivery.
 Provider upload identities and parsed evidence have distinct localized labels beside their own section totals.
 
+## Export presentation and focus
+
+Decision: review, capture progress and the completed artifact form the primary task. Download or exact save retry
+stays beside completion and its warnings; every native omission remains visible. Labelled native disclosure holds
+the full manifest and all supplied section totals, indexed once per manifest. Restore destinations follow the task,
+explain their independent purposes and retain the existing owner-bound original-archive reuse. Creating or
+saving an archive never implies restoration. Export-to-restore links use router navigation so the completed
+original bytes remain in memory; the completed departure message explains that reuse separately from device save.
+
+Keyboard activation may orient to the persistent task heading only in its immediate render when the initiating
+control disappears or becomes disabled and focus intent is still current. Pointer, keyboard or focus movement
+revokes that intent. Background stage, notice, busy and page updates announce through one stable polite status
+without moving focus. The same rule covers capture, cancel, exact command retry, replay, save and restart.
+Default opening stays still; viewport selection is manual. Stories distinguish producer recordings from illustrative
+states. The mounted cancellation case in the [export regressions](../../../tests/private-library-export.test.tsx)
+expects asynchronous outcomes to preserve moved focus. The same file pins ordering, disclosure, immediate keyboard
+intent, exact save retry and original replay identity. Execution and native keyboard/eight-locale phone and desktop
+acceptance belong to integration verification.
+
 ## Capture and local file
 
 The person starts a capture explicitly. Web binds every page and final manifest to the original capture ID, version,

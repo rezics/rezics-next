@@ -1376,6 +1376,51 @@ CREATE TABLE search.recent_search_state (
 
 
 --
+-- Name: release_relevance_execution; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.release_relevance_execution (
+    id uuid NOT NULL,
+    principal text NOT NULL,
+    request_hash text NOT NULL,
+    generation integer NOT NULL,
+    source_cut_hash text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT release_relevance_execution_generation_check CHECK ((generation > 0)),
+    CONSTRAINT release_relevance_execution_principal_check CHECK ((octet_length(principal) <= 256)),
+    CONSTRAINT release_relevance_execution_request_hash_check CHECK ((request_hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT release_relevance_execution_source_cut_hash_check CHECK ((source_cut_hash ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: release_relevance_position; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.release_relevance_position (
+    execution_id uuid NOT NULL,
+    id uuid NOT NULL,
+    parent_id uuid,
+    branch_hash text NOT NULL,
+    work_digest text NOT NULL,
+    CONSTRAINT release_relevance_position_branch_hash_check CHECK ((branch_hash ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT release_relevance_position_work_digest_check CHECK ((work_digest ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: release_relevance_work; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.release_relevance_work (
+    execution_id uuid NOT NULL,
+    position_id uuid NOT NULL,
+    work_id text NOT NULL COLLATE pg_catalog."C",
+    CONSTRAINT release_relevance_work_work_id_check CHECK ((work_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text))
+);
+
+
+--
 -- Name: review_discovery_receiving; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1997,6 +2042,30 @@ ALTER TABLE ONLY search.recent_search_state
 
 
 --
+-- Name: release_relevance_execution release_relevance_execution_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.release_relevance_execution
+    ADD CONSTRAINT release_relevance_execution_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: release_relevance_position release_relevance_position_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.release_relevance_position
+    ADD CONSTRAINT release_relevance_position_pkey PRIMARY KEY (execution_id, id);
+
+
+--
+-- Name: release_relevance_work release_relevance_work_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.release_relevance_work
+    ADD CONSTRAINT release_relevance_work_pkey PRIMARY KEY (execution_id, position_id, work_id);
+
+
+--
 -- Name: review_discovery_receiving review_discovery_receiving_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -2333,6 +2402,20 @@ CREATE INDEX recent_search_expiry ON search.recent_search USING btree (partition
 --
 
 CREATE INDEX recent_search_page ON search.recent_search USING btree (partition_no, route, account_id, last_used DESC, id DESC);
+
+
+--
+-- Name: release_relevance_execution_expiry; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX release_relevance_execution_expiry ON search.release_relevance_execution USING btree (expires_at, id);
+
+
+--
+-- Name: release_relevance_position_branch; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX release_relevance_position_branch ON search.release_relevance_position USING btree (execution_id, parent_id, branch_hash) WHERE (parent_id IS NOT NULL);
 
 
 --
@@ -2681,6 +2764,22 @@ ALTER TABLE ONLY search.public_filter_repair_page
 
 ALTER TABLE ONLY search.recent_search
     ADD CONSTRAINT recent_search_partition_no_route_account_id_fkey FOREIGN KEY (partition_no, route, account_id) REFERENCES search.recent_search_state(partition_no, route, account_id) ON DELETE CASCADE;
+
+
+--
+-- Name: release_relevance_position release_relevance_position_execution_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.release_relevance_position
+    ADD CONSTRAINT release_relevance_position_execution_id_fkey FOREIGN KEY (execution_id) REFERENCES search.release_relevance_execution(id) ON DELETE CASCADE;
+
+
+--
+-- Name: release_relevance_work release_relevance_work_execution_id_position_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.release_relevance_work
+    ADD CONSTRAINT release_relevance_work_execution_id_position_id_fkey FOREIGN KEY (execution_id, position_id) REFERENCES search.release_relevance_position(execution_id, id) ON DELETE CASCADE;
 
 
 --

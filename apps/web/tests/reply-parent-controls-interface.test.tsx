@@ -337,7 +337,7 @@ test('reply parent controls keep independent associations, private failures and 
     unchanged();
     await act(async () => pendingWrite.resolve({ ok: false, reason: 'unavailable' }));
     await settle(() => !!region.querySelector('[role="alert"]'));
-    await click(button(region, m.thread_write_retry()));
+    await click(button(region, m.thread_recovery_retry_original()));
     await settle(() => commands.length === 2 && !cancel.disabled);
     expect(commands[1]).toEqual(commands[0]);
     expect(commands[0]).toMatchObject({ parentId: first.id });

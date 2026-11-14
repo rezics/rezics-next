@@ -1,10 +1,10 @@
-import type { VersionedOutlineSequenceReadWriteSet } from './versioned-outline-sequence.ts';
+import type { VersionedOutlineSequenceReadAccess } from './versioned-outline-sequence.ts';
 
 export type HostedVersionReadIndex<Value> = Readonly<{
   /** The exact sibling, preorder or chapter root selected by the owning snapshot. */
   rootId: string | null;
   /** Reader pinned by the owner to that same immutable snapshot and index. */
-  access: VersionedOutlineSequenceReadWriteSet<Value>;
+  access: VersionedOutlineSequenceReadAccess<Value>;
 }>;
 
 export type HostedVersionReadDirection = 'forward' | 'reverse';

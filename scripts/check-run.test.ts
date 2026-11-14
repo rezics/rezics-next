@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,8 +14,21 @@ import {
   type CandidateSnapshot,
   type CheckRunArguments,
 } from './check-run.ts';
-import { cancelCheckRunInvocation, getCheckRunStatus, readCheckRunPreparedDescriptor } from './check-run-settlement.ts';
-import { repositoryBun, runScript, type RemoteCheck, type RemotePhysicalRunReceipt } from './remote-check.ts';
+import {
+  allocateCheckRunPhysical,
+  cancelCheckRunInvocation,
+  getCheckRunStatus,
+  markCheckRunQueued,
+  readCheckRunPreparedDescriptor,
+  registerCheckRunInvocation,
+} from './check-run-settlement.ts';
+import {
+  repositoryBun,
+  runScript,
+  type RemoteCheck,
+  type RemotePhysicalRunReceipt,
+  type reconcileRemoteRun,
+} from './remote-check.ts';
 import type { RemoteCheckSettlement } from './remote-check.ts';
 
 import {
@@ -192,6 +205,89 @@ function remoteSettlement(
     ...overrides,
   };
 }
+
+test('cleanup-only receiving settles the exact original remote run without inventing a native result', async () => {
+  const fixture = candidate();
+  const stateDirectory = fixture.parent;
+  const hosts = readFileSync(fixture.hosts);
+  const registration = await registerCheckRunInvocation(
+    {
+      sourceRevision: fixture.revision,
+      indexTree: '1'.repeat(40),
+      sourceSha256: '2'.repeat(64),
+      argvSha256: '3'.repeat(64),
+      cwd: 'apps/web',
+      semanticEnvironmentSha256: '4'.repeat(64),
+      relocatedEnvironmentSha256: '5'.repeat(64),
+      producerClosureSha256: '6'.repeat(64),
+      hostsSha256: createHash('sha256').update(hosts).digest('hex'),
+      preparationCommandsSha256: '7'.repeat(64),
+      returnsSha256: createHash('sha256').update('[]').digest('hex'),
+    },
+    { stateDirectory },
+  );
+  await markCheckRunQueued(registration.invocationId, registration.nonce, { stateDirectory });
+  await allocateCheckRunPhysical(registration.invocationId, registration.nonce, 'b', 'startup75-original-run', {
+    stateDirectory,
+  });
+
+  const cleanup = {
+    schema: 1 as const,
+    host: 'b',
+    run: 'startup75-original-run',
+    status: 'verified' as const,
+    supervisorStopped: true,
+    commandGroupTerminal: true,
+    containersRemoved: true,
+    runDirectoryRemoved: true,
+    failures: [],
+  };
+  const reconciliations: Array<Parameters<typeof reconcileRemoteRun>[0]> = [];
+  const reconcileRemote = async (request: Parameters<typeof reconcileRemoteRun>[0]) => {
+    reconciliations.push(request);
+    return {
+      schema: 1 as const,
+      host: cleanup.host,
+      run: cleanup.run,
+      native: null,
+      preparedInputs: null,
+      returns: { schema: 1 as const, status: 'empty' as const, entries: [], missing: [], failures: [] },
+      cleanup,
+      transportChildReaped: true,
+    } satisfies RemoteCheckSettlement;
+  };
+  const receive = () =>
+    reconcileRegisteredCheckRun(
+      registration.invocationId,
+      fixture.hosts,
+      { stateDirectory, cleanupOnly: true },
+      { reconcileRemote },
+    );
+
+  const settled = await receive();
+  expect(reconciliations).toHaveLength(1);
+  expect(reconciliations[0]).toMatchObject({
+    physical: { host: 'b', run: 'startup75-original-run' },
+    allowedHosts: ['b'],
+    returns: [],
+    cleanupOnly: true,
+  });
+  expect(settled).toMatchObject({
+    phase: 'unknown',
+    physical: { host: 'b', run: 'startup75-original-run' },
+    native: null,
+    final: null,
+    physicalCleanup: {
+      physical: { host: 'b', run: 'startup75-original-run' },
+      remote: cleanup,
+      reconciliationTransportChildReaped: true,
+      transportIdentity: 'unknown',
+      transportChildReaped: false,
+    },
+  });
+  expect(await receive()).toEqual(settled);
+  expect(reconciliations).toHaveLength(1);
+});
 
 function removeRetainedSnapshot(fixture: ReturnType<typeof candidate>, snapshot: CandidateSnapshot): void {
   spawnSync(

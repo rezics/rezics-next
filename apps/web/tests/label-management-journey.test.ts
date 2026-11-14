@@ -3,6 +3,7 @@ import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SessionEnv } from '../src/session/client';
+import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { LabelsPageView } = await import('../src/library/labels-page');
@@ -213,4 +214,70 @@ test('Default private label management keeps filter rename delete undo and conti
   expect(page.labels).toEqual([]);
   expect(page.next).toBeNull();
   expect(markup(page)).not.toContain('cursor=');
+});
+
+test('directory counts only its received page and keeps member links private and separate from name forms', async () => {
+  const fake = createLibraryLabelsFake({
+    labels: [
+      { id: 'first', name: 'Winter reads', revision: 9 },
+      { id: 'second', name: 'Same text, independent identity', revision: 3 },
+    ],
+    next: 'more-labels',
+  });
+  const client = createKernelClient('https://kernel.example.test', { fetch: fake.fetch });
+  const page = await loadLabelsPage(
+    client,
+    new Request(`${origin}/en/library/labels?q=`, {
+      headers: { cookie: sessionCookie },
+    }),
+    env,
+  );
+  const html = markup(page);
+  expect(html).toContain(m.library_labels_directory_count({ count: 2 }));
+  expect(html).toContain(m.library_labels_directory_description());
+  expect(html).toContain(m.library_labels_view_members());
+  expect(html).toContain('href="/en/library?label=first"');
+  expect(html).toContain('href="/en/library?label=second"');
+  expect(html).not.toContain('memberCount');
+  expect(html).toContain('data-label-create');
+  expect(fake.calls.filter((call) => call.path === '/v1/libraryLabels')).toHaveLength(1);
+  for (const operation of ['rename', 'delete']) {
+    const { body } = selectedForm(html, operation, 'first');
+    expect(body.get('library_label_revision')).toBe('9');
+    expect(body.get('name')).toBe('Winter reads');
+  }
+});
+
+test('changed and off-page name recovery keep the exact original command and explain the current observation', async () => {
+  const fake = createLibraryLabelsFake({ labels: [{ id: 'first', name: 'Changed elsewhere', revision: 10 }] });
+  const client = createKernelClient('https://kernel.example.test', { fetch: fake.fetch });
+  const page = await loadLabelsPage(
+    client,
+    new Request(`${origin}/en/library/labels`, {
+      headers: { cookie: sessionCookie },
+    }),
+    env,
+  );
+  page.feedback = {
+    ok: false,
+    operation: 'rename',
+    id: 'first',
+    name: 'My retained draft',
+    reason: 'conflict',
+    retry: { idempotencyKey: '00000000-0000-4000-8000-000000000007', revision: 9 },
+  };
+  let html = markup(page);
+  expect(html).toContain(m.library_labels_current_name({ name: 'Changed elsewhere' }));
+  let form = selectedForm(html, 'rename', 'first').body;
+  expect(form.get('library_label_revision')).toBe('9');
+  expect(form.get('name')).toBe('My retained draft');
+  page.labels = [];
+  page.feedback.reason = 'unavailable';
+  html = markup(page);
+  expect(html).toContain(m.library_labels_recovery_off_page());
+  expect(html).toContain(m.library_label_unconfirmed());
+  form = selectedForm(html, 'rename', 'first').body;
+  expect(form.get('idempotencyKey')).toBe('00000000-0000-4000-8000-000000000007');
+  expect(form.get('library_label_revision')).toBe('9');
+  expect(form.get('name')).toBe('My retained draft');
 });

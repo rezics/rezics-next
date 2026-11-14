@@ -349,17 +349,19 @@ test('actual authoring family keeps form operands, recovery, independent instanc
     });
     expect(firstReply.snapshot.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
     await finish(1, { ok: false, reason: 'unavailable' });
-    ownControl(button('reply', m.thread_write_retry()));
+    ownControl(button('reply', m.thread_recovery_retry_original()));
     await act(async () => update([opening, { ...reply, parent: id(99) }]));
     expect(button('reply', m.thread_write_send()).disabled).toBe(true);
     expect(
-      [...region('reply').querySelectorAll('button')].some((item) => item.textContent === m.thread_write_retry()),
-    ).toBe(false);
+      [...region('reply').querySelectorAll('button')].some(
+        (item) => item.textContent === m.thread_recovery_retry_original(),
+      ),
+    ).toBe(true);
     expect(region('reply').textContent).toContain(m.thread_write_uncertain_changed());
     await submitTwice('reply');
     expect(calls).toHaveLength(2);
     await act(async () => update([opening, reply]));
-    await submitTwice('reply');
+    await click('reply', m.thread_recovery_retry_original());
     expect(calls).toHaveLength(3);
     expect(calls[2]!.input).toBe(firstReply.input);
     expect(calls[2]!.snapshot).toEqual(firstReply.snapshot);

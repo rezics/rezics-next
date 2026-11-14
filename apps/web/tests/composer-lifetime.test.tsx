@@ -172,10 +172,10 @@ test('real reply and inline composers retire pending copies and submissions, whi
   let client: InstanceType<typeof QueryClient> | undefined;
   let resetPage: (config: Configuration) => void;
   let config: Configuration;
-  let calls: { command: Command; outcome: ReturnType<typeof gate<Outcome>> }[];
+  let calls: { command: Command; sender: Configuration; outcome: ReturnType<typeof gate<Outcome>> }[];
   let callbacks: { kind: string; epoch: number; blocked?: boolean }[];
 
-  const mount = async (kind: Configuration['kind'], knownSession = true) => {
+  const mount = async (kind: Configuration['kind'], knownSession = true, navigateOnSuccess = true) => {
     await act(async () => root.render(null));
     client?.clear();
     originals.length = 0;
@@ -200,12 +200,12 @@ test('real reply and inline composers retire pending copies and submissions, whi
       };
       const onSubmit = (command: Command) => {
         const outcome = gate<Outcome>();
-        calls.push({ command: structuredClone(command), outcome });
+        calls.push({ command: structuredClone(command), sender: current, outcome });
         return outcome.promise;
       };
       const onSuccess = () => {
         callbacks.push({ kind: 'success', epoch: current.epoch, blocked: blocked() });
-        void router.navigate({ href: '/done' });
+        if (navigateOnSuccess) void router.navigate({ href: '/done' });
       };
       return (
         <AuthoringDepartureProvider key={current.epoch}>
@@ -361,7 +361,10 @@ test('real reply and inline composers retire pending copies and submissions, whi
         expect(calls).toHaveLength(1);
         await act(async () => resetPage({ ...config, parent: null }));
       }
-      await submitTwice();
+      await act(async () => {
+        button(m.thread_recovery_retry_original()).click();
+        button(m.thread_recovery_retry_original()).click();
+      });
       expect(calls).toHaveLength(2);
       expect(calls[1]!.command).toEqual(originalCommand);
       await act(async () => calls[1]!.outcome.resolve(success));
@@ -370,6 +373,91 @@ test('real reply and inline composers retire pending copies and submissions, whi
         { kind: 'success', epoch: 0, blocked: false },
       ]);
       expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+    }
+
+    // Local text/title changes never strand original replay or get cleared by its late acknowledgement.
+    for (const kind of ['reply', 'inline', 'new-thread'] as const) {
+      const router = await mount(kind, true, kind !== 'reply');
+      await submitTwice();
+      const originalCommand = structuredClone(calls[0]!.command);
+      const originalSender = calls[0]!.sender;
+      await act(async () => calls[0]!.outcome.resolve({ ok: false, reason: 'unavailable' }));
+      await act(async () => {
+        await user.click(editor()!);
+        await user.keyboard(' newer private writing');
+        if (kind === 'new-thread') await user.type(host.querySelector('#thread-title')!, ' with a newer title');
+        await user.tab();
+        resetPage({ ...config, parent: kind === 'reply' ? id(55) : null });
+      });
+      await submitTwice();
+      expect(calls).toHaveLength(1);
+      await act(async () => {
+        button(m.thread_recovery_retry_original()).click();
+        button(m.thread_recovery_retry_original()).click();
+      });
+      expect(calls).toHaveLength(2);
+      expect(calls[1]!.command).toEqual(originalCommand);
+      expect(calls[1]!.sender).toBe(originalSender);
+      // More writing is admitted even while the exact retry is in flight.
+      await act(async () => {
+        await user.click(editor()!);
+        await user.keyboard(' during retry');
+      });
+      await act(async () => calls[1]!.outcome.resolve(success));
+      expect(router.state.location.pathname).toBe('/compose');
+      expect(callbacks.filter((item) => item.kind === 'success')).toHaveLength(0);
+      expect(editor()?.textContent).toContain('newer private writing');
+      expect(editor()?.textContent).toContain('during retry');
+      if (kind === 'new-thread')
+        expect((host.querySelector('#thread-title') as HTMLInputElement).value).toContain('with a newer title');
+      expect(blocked()).toBe(true);
+      expect(button(m.thread_recovery_retry_original()).disabled).toBe(true);
+      await click(m.thread_recovery_working());
+      expect(window.document.activeElement).toBe(editor());
+      await click(m.thread_recovery_complete());
+      await click(m.thread_authoring_stay());
+      expect(editor()?.textContent).toContain('newer private writing');
+      await click(m.thread_recovery_complete());
+      await click(m.thread_authoring_discard());
+      await settle(() => router.state.location.pathname === (kind === 'reply' ? '/compose' : '/done'));
+      if (kind === 'reply') {
+        // Reply acknowledgement commonly keeps the composer mounted; deliberate completion opens a fresh draft.
+        expect(editor()?.textContent?.trim()).toBe('');
+        expect(blocked()).toBe(false);
+        expect(host.textContent).not.toContain(m.thread_recovery_acknowledged());
+        await act(async () => {
+          await user.click(editor()!);
+          await user.keyboard('A fresh reply after deliberate completion.');
+        });
+        await submitTwice();
+        expect(calls).toHaveLength(3);
+        expect(calls[2]!.command.idempotencyKey).not.toBe(originalCommand.idempotencyKey);
+        await act(async () => calls[2]!.outcome.resolve({ ok: false, reason: 'invalid' }));
+      }
+      expect(callbacks.filter((item) => item.kind === 'success')).toEqual([
+        { kind: 'success', epoch: 0, blocked: false },
+      ]);
+    }
+
+    // A known refusal releases only its attempt; correction uses the working draft and a fresh key.
+    for (const kind of ['reply', 'inline', 'new-thread'] as const) {
+      await mount(kind);
+      await submitTwice();
+      const originalCommand = structuredClone(calls[0]!.command);
+      await act(async () => calls[0]!.outcome.resolve({ ok: false, reason: 'unavailable' }));
+      await act(async () => {
+        await user.click(editor()!);
+        await user.keyboard(' corrected after uncertainty');
+      });
+      await click(m.thread_recovery_retry_original());
+      await act(async () => calls[1]!.outcome.resolve({ ok: false, reason: 'invalid' }));
+      expect(editor()?.textContent).toContain('corrected after uncertainty');
+      expect(host.textContent).not.toContain(m.thread_recovery_heading());
+      await submitTwice();
+      expect(calls).toHaveLength(3);
+      expect(calls[2]!.command.idempotencyKey).not.toBe(originalCommand.idempotencyKey);
+      expect(JSON.stringify(calls[2]!.command.body)).toContain('corrected after uncertainty');
+      await act(async () => calls[2]!.outcome.resolve(success));
     }
 
     for (const kind of ['reply', 'inline'] as const) {

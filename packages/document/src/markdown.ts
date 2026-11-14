@@ -23,8 +23,7 @@ const nodeNames: Record<string, string> = {
 const markNames: Record<string, string> = { strong: 'bold', em: 'italic' };
 
 const tokenizer = new MarkdownIt('commonmark', { html: false });
-// Obtain the built-in rule through the public parser API; package internals
-// are not exported by markdown-it 15.
+// Obtain the built-in rule through the public parser API; package internals are not exported by markdown-it 15.
 const quoteRules = new MarkdownIt.ParserBlock().ruler;
 quoteRules.enableOnly('blockquote');
 const blockquote = quoteRules.getRules('')[0]!;
@@ -42,6 +41,16 @@ tokenizer.block.ruler.at(
   },
   { alt: ['paragraph', 'reference', 'blockquote', 'list'] },
 );
+tokenizer.inline.ruler.before('text', 'rezics_footnote_reference', (state, silent) => {
+  const match = /^\[\^([A-Za-z0-9][A-Za-z0-9_.:-]{0,127})\]/.exec(state.src.slice(state.pos, state.posMax));
+  if (!match) return false;
+  if (!silent) {
+    const token = state.push('footnote_reference', '', 0);
+    token.meta = match[1];
+  }
+  state.pos += match[0].length;
+  return true;
+});
 tokenizer.inline.ruler.before('text', 'rezics_spoiler', (state, silent) => {
   if (!state.src.startsWith('>!', state.pos)) return false;
   const close = state.src.indexOf('!<', state.pos + 2);
@@ -57,14 +66,22 @@ tokenizer.inline.ruler.before('text', 'rezics_spoiler', (state, silent) => {
       next.children = token.children;
       next.markup = token.markup;
       next.info = token.info;
+      next.meta = token.meta;
     }
     state.push('spoiler_close', 'span', -1);
   }
   state.pos = close + 2;
   return true;
 });
+
 const importSchema = new Schema({
-  nodes: defaultMarkdownParser.schema.spec.nodes,
+  nodes: defaultMarkdownParser.schema.spec.nodes.addToEnd('footnoteReference', {
+    inline: true,
+    group: 'inline',
+    atom: true,
+    attrs: { label: {} },
+    toDOM: (node) => ['sup', { 'data-footnote-reference': node.attrs.label }, node.attrs.label],
+  }),
   marks: defaultMarkdownParser.schema.spec.marks.addToEnd('spoiler', {
     toDOM: () => ['span', { 'data-spoiler': 'true' }, 0],
   }),
@@ -74,13 +91,74 @@ const markdownParser = new MarkdownParser(
   tokenizer as unknown as ConstructorParameters<typeof MarkdownParser>[1],
   {
     ...defaultMarkdownParser.tokens,
+    footnote_reference: {
+      node: 'footnoteReference',
+      getAttrs: (token) => ({ label: token.meta }),
+    },
     spoiler: { mark: 'spoiler' },
   },
 );
 
+interface FootnoteDefinitionSource {
+  label: string;
+  body: string;
+}
+
+/** Remove top-level Markdown footnote definitions while retaining their source order and bodies. */
+function extractFootnoteDefinitions(markdown: string): { body: string; definitions: FootnoteDefinitionSource[] } {
+  const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
+  const body: string[] = [];
+  const definitions: FootnoteDefinitionSource[] = [];
+  let fence: { character: string; length: number } | null = null;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    const openingFence = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (fence) {
+      body.push(line);
+      const closing = new RegExp(`^ {0,3}${fence.character}{${fence.length},}[ \\t]*$`);
+      if (closing.test(line)) fence = null;
+      continue;
+    }
+    if (openingFence) {
+      const marker = openingFence[1]!;
+      fence = { character: marker[0]!, length: marker.length };
+      body.push(line);
+      continue;
+    }
+
+    const match = /^ {0,3}\[\^([A-Za-z0-9][A-Za-z0-9_.:-]{0,127})\]:[ \t]*(.*)$/.exec(line);
+    if (!match) {
+      body.push(line);
+      continue;
+    }
+
+    const continuation = [match[2]!];
+    let next = index + 1;
+    while (next < lines.length) {
+      const candidate = lines[next]!;
+      if (/^ {4}/.test(candidate)) {
+        continuation.push(candidate.slice(4));
+        next++;
+        continue;
+      }
+      if (!candidate.trim() && /^ {4}/.test(lines[next + 1] ?? '')) {
+        continuation.push('');
+        next++;
+        continue;
+      }
+      break;
+    }
+    definitions.push({ label: match[1]!, body: continuation.join('\n') });
+    body.push('');
+    index = next - 1;
+  }
+  return { body: body.join('\n'), definitions };
+}
+
 /** CommonMark import uses the maintained ProseMirror parser. HTML remains literal text. */
 export function fromMarkdown(markdown: string, profile: DocumentProfile = 'blocks'): DocumentSnapshot {
-  const source = markdownParser.parse(markdown).toJSON() as DocumentNode;
+  const extracted = extractFootnoteDefinitions(markdown);
+  const source = markdownParser.parse(extracted.body).toJSON() as DocumentNode;
   const marks = (items: DocumentMark[] | undefined): DocumentMark[] | undefined =>
     items?.map((mark) => ({
       ...mark,
@@ -92,6 +170,7 @@ export function fromMarkdown(markdown: string, profile: DocumentProfile = 'block
     if (type === 'orderedList') attrs = { start: node.attrs?.order ?? 1 };
     if (type === 'heading') attrs = { level: node.attrs?.level ?? 1 };
     if (type === 'codeBlock') attrs = { language: node.attrs?.params || null };
+    if (type === 'footnoteReference') attrs = { label: node.attrs?.label ?? '' };
     if (type === 'image')
       attrs = {
         src: node.attrs?.src ?? '',
@@ -129,6 +208,18 @@ export function fromMarkdown(markdown: string, profile: DocumentProfile = 'block
     }
     return [translated];
   };
-  const doc = withDocumentIds(convert(source)[0]!);
+
+  const root = convert(source)[0]!;
+  const content = [...(root.content ?? [])];
+  for (const definition of extracted.definitions) {
+    const parsedBody = markdownParser.parse(definition.body).toJSON() as DocumentNode;
+    const body = parsedBody.content?.flatMap(convert) ?? [];
+    content.push({
+      type: 'footnoteDefinition',
+      attrs: { label: definition.label },
+      content: body.length ? body : [{ type: 'paragraph' }],
+    });
+  }
+  const doc = withDocumentIds({ type: 'doc', content });
   return normalizeDocument({ version: documentVersion, profile, doc });
 }

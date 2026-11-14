@@ -10,7 +10,8 @@ import type { ReportQueueAction } from '../reports-view-action';
 import { WorkbenchAppeal } from '../workbench-appeal';
 import { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistory } from '../workbench-history';
 import { WorkbenchReportSelect, WorkbenchSelection } from '../workbench-selection';
-import { WorkbenchTriageCase, workbenchTriageIdentity } from '../workbench-triage';
+import { WorkbenchTriageSummary, WorkbenchTriageDetails, workbenchTriageIdentity } from '../workbench-triage';
+import { ModerationScope, moderationControl } from '../presentation';
 import {
   workbenchDirectorySearch,
   workbenchCaseHref,
@@ -27,8 +28,7 @@ import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import { reportReviewDepartureMessages, reportReviewNavigationContext } from '../reports-bulk-controls';
 import type { WorkbenchWindowMove, WorkbenchWindowRetry, WorkbenchWindowView } from './window-history';
 
-const control =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words px-3 py-2 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const control = moderationControl;
 
 export type WorkbenchViewProps = {
   page: Pick<WorkbenchRead, 'state' | 'realms' | 'realmsNext' | 'boards' | 'boardsNext' | 'cases' | 'next' | 'search'> &
@@ -91,36 +91,40 @@ function CaseRow({
   return (
     <li
       id={item.kind === 'report' ? `workbench-case-${encodeURIComponent(item.id)}` : undefined}
-      className="min-w-0 border-b py-3"
+      className="min-w-0 space-y-3 border-b py-5 sm:py-6"
     >
       {selection && item.kind === 'report' ? (
         <WorkbenchReportSelect controller={selection} reportId={item.id} number={number} />
       ) : null}
-      <a
-        className={`${control} justify-start text-left font-medium underline-offset-4 hover:underline`}
-        href={href}
-        onClick={(event) => {
-          if (isCurrent && !isCurrent()) event.preventDefault();
-          else if (
-            onOpenCase &&
-            event.button === 0 &&
-            !event.metaKey &&
-            !event.ctrlKey &&
-            !event.shiftKey &&
-            !event.altKey
-          ) {
-            event.preventDefault();
-            const source = event.currentTarget;
-            const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
-            const open = () => onOpenCase(item, href, source, keyboard);
-            requestDeparture(open);
-          }
-        }}
-        {...(item.kind === 'appeal' ? { 'data-workbench-appeal-activator': encodeURIComponent(item.id) } : {})}
-      >
-        {m.moderation_workbench_open_case({ id: item.id })}
-      </a>
-      <WorkbenchTriageCase item={item} identity={identity} />
+      <WorkbenchTriageSummary item={item} />
+      <div className="flex min-w-0 flex-wrap items-start gap-x-3 gap-y-1">
+        <a
+          aria-label={m.moderation_workbench_open_case({ id: item.id })}
+          className={`${control} justify-start px-0 text-left font-medium underline underline-offset-4`}
+          href={href}
+          onClick={(event) => {
+            if (isCurrent && !isCurrent()) event.preventDefault();
+            else if (
+              onOpenCase &&
+              event.button === 0 &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.shiftKey &&
+              !event.altKey
+            ) {
+              event.preventDefault();
+              const source = event.currentTarget;
+              const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
+              const open = () => onOpenCase(item, href, source, keyboard);
+              requestDeparture(open);
+            }
+          }}
+          {...(item.kind === 'appeal' ? { 'data-workbench-appeal-activator': encodeURIComponent(item.id) } : {})}
+        >
+          {m.moderation_case_open()}
+        </a>
+        <WorkbenchTriageDetails item={item} identity={identity} />
+      </div>
     </li>
   );
 }
@@ -205,14 +209,19 @@ export function WorkbenchView({
   return (
     <article
       tabIndex={-1}
-      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]"
+      className="mx-auto w-full min-w-0 max-w-5xl space-y-6 text-foreground [overflow-wrap:anywhere]"
     >
       <header className="space-y-3">
         <PageHeading>{m.moderation_workbench_heading()}</PageHeading>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
-          {m.moderation_workbench_membership_hint()}
-        </p>
+        {queueScope ? (
+          <ModerationScope
+            kind={queueScope.kind}
+            {...(boardId ? { id: boardId, label: page.boards.find((board) => board.id === boardId)?.title } : {})}
+            admitted={page.state === 'ready' && isCurrent?.() !== false}
+          />
+        ) : (
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>
+        )}
       </header>
       {status && !search.history ? (
         <p
@@ -246,7 +255,7 @@ export function WorkbenchView({
         </Button>
       ) : null}
       {isWindowQueue ? (
-        <h2 tabIndex={-1} data-workbench-current-queue className="sr-only">
+        <h2 tabIndex={-1} data-workbench-current-queue className="text-xl font-semibold">
           {search.queue === 'resolved'
             ? m.moderation_workbench_queue_resolved()
             : m.moderation_workbench_queue_reports()}
@@ -264,9 +273,6 @@ export function WorkbenchView({
           {m.moderation_directory_return()}
         </Button>
       ) : null}
-      {queueScope && search.directory ? (
-        <p className="text-sm text-muted-foreground">{m.moderation_directory_return_hint()}</p>
-      ) : null}
       {page.state === 'ready' && (scope.kind === 'none' || scope.kind === 'realm') ? (
         <>
           <ManualModerationScope search={search} onSearch={onSearch} {...(isCurrent ? { isCurrent } : {})} />
@@ -281,52 +287,6 @@ export function WorkbenchView({
       ) : null}
       {(page.state === 'ready' || search.history) && queueScope ? (
         <section className="space-y-4" aria-label={m.moderation_workbench_heading()}>
-          {isWindowQueue ? (
-            <>
-              <nav aria-label={m.moderation_workbench_heading()} className="flex flex-wrap gap-2">
-                {windowControl('previous', m.moderation_workbench_previous(), Boolean(queueWindow?.previous))}
-                {next ? windowControl('next', m.threads_next_page(), true) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={control}
-                  disabled={!queueWindow?.refresh}
-                  onClick={(event) => {
-                    leaveFor(event, (source, keyboard) => onWindowMove?.('refresh', source, keyboard));
-                  }}
-                >
-                  {m.moderation_workbench_refresh_window()}
-                </Button>
-                {windowControl('first', m.moderation_workbench_first(), Boolean(queueWindow?.first))}
-                {queueWindow?.retry && onRetryWindow ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={control}
-                    data-workbench-retry
-                    onClick={(event) => {
-                      const source = event.currentTarget;
-                      const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
-                      departure.requestNavigation(() => onRetryWindow(source, keyboard));
-                    }}
-                  >
-                    {queueWindow.retry === 'previous'
-                      ? m.moderation_workbench_retry_previous()
-                      : queueWindow.retry === 'next'
-                        ? m.moderation_workbench_retry_next()
-                        : queueWindow.retry === 'refresh'
-                          ? m.moderation_workbench_retry_refresh()
-                          : queueWindow.retry === 'first'
-                            ? m.moderation_workbench_retry_first()
-                            : m.moderation_workbench_retry_current()}
-                  </Button>
-                ) : null}
-              </nav>
-              <p role="status" className="sr-only">
-                {m.moderation_workbench_window_loaded()}
-              </p>
-            </>
-          ) : null}
           <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">
             {(['reports', 'appeals', 'resolved'] as const)
               .filter((queue) => scope.kind !== 'catalogue' || queue !== 'appeals')
@@ -367,7 +327,7 @@ export function WorkbenchView({
               </Button>
             ) : null}
           </nav>
-          {!search.history && queueScope.kind === 'board' && search.queue !== 'appeals' ? (
+          {!search.history && !search.case && queueScope.kind === 'board' && search.queue !== 'appeals' ? (
             <fieldset className="flex min-w-0 flex-wrap items-end gap-3">
               <legend className="sr-only">{m.moderation_filter_kind()}</legend>
               <Field className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
@@ -499,6 +459,52 @@ export function WorkbenchView({
               </ul>
             </>
           )}
+          {isWindowQueue ? (
+            <>
+              <nav aria-label={m.moderation_workbench_heading()} className="flex flex-wrap gap-2">
+                {windowControl('previous', m.moderation_workbench_previous(), Boolean(queueWindow?.previous))}
+                {next ? windowControl('next', m.threads_next_page(), true) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={control}
+                  disabled={!queueWindow?.refresh}
+                  onClick={(event) => {
+                    leaveFor(event, (source, keyboard) => onWindowMove?.('refresh', source, keyboard));
+                  }}
+                >
+                  {m.moderation_workbench_refresh_window()}
+                </Button>
+                {windowControl('first', m.moderation_workbench_first(), Boolean(queueWindow?.first))}
+                {queueWindow?.retry && onRetryWindow ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={control}
+                    data-workbench-retry
+                    onClick={(event) => {
+                      const source = event.currentTarget;
+                      const keyboard = event.detail === 0 && source.ownerDocument.activeElement === source;
+                      departure.requestNavigation(() => onRetryWindow(source, keyboard));
+                    }}
+                  >
+                    {queueWindow.retry === 'previous'
+                      ? m.moderation_workbench_retry_previous()
+                      : queueWindow.retry === 'next'
+                        ? m.moderation_workbench_retry_next()
+                        : queueWindow.retry === 'refresh'
+                          ? m.moderation_workbench_retry_refresh()
+                          : queueWindow.retry === 'first'
+                            ? m.moderation_workbench_retry_first()
+                            : m.moderation_workbench_retry_current()}
+                  </Button>
+                ) : null}
+              </nav>
+              <p role="status" className="sr-only">
+                {m.moderation_workbench_window_loaded()}
+              </p>
+            </>
+          ) : null}
           {!search.history && !search.case && next && !isWindowQueue ? (
             <Button
               type="button"

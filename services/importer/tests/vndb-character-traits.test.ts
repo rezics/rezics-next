@@ -51,12 +51,16 @@ const traitSchemeId = '00000000-0000-4000-8000-000000000090';
 const hairId = '00000000-0000-4000-8000-000000000091';
 const roleSchemeId = '00000000-0000-4000-8000-000000000092';
 const mainRoleId = '00000000-0000-4000-8000-000000000093';
+const evidence = (content: unknown, rank: 'normal' | 'preferred' | 'deprecated' = 'normal') => ({
+  rank,
+  value: { content },
+});
 const subjects: Record<string, object> = {
   [traitSchemeId]: {
     subject: {
       id: traitSchemeId,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: characterTraitSchemeUri } }] },
+      statements: { 'schema:url': [evidence(characterTraitSchemeUri)] },
     },
   },
   [hairId]: {
@@ -64,8 +68,8 @@ const subjects: Record<string, object> = {
       id: hairId,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: characterTraitConceptUri('i73') } }],
-        'skos:inScheme': [{ value: { content: traitSchemeId } }],
+        'schema:url': [evidence(characterTraitConceptUri('i73'))],
+        'skos:inScheme': [evidence(traitSchemeId)],
       },
     },
   },
@@ -73,7 +77,7 @@ const subjects: Record<string, object> = {
     subject: {
       id: roleSchemeId,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: appearanceRoleSchemeUri } }] },
+      statements: { 'schema:url': [evidence(appearanceRoleSchemeUri)] },
     },
   },
   [mainRoleId]: {
@@ -81,8 +85,8 @@ const subjects: Record<string, object> = {
       id: mainRoleId,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: appearanceRoleConceptUri('main') } }],
-        'skos:inScheme': [{ value: { content: roleSchemeId } }],
+        'schema:url': [evidence(appearanceRoleConceptUri('main'))],
+        'skos:inScheme': [evidence(roleSchemeId)],
       },
     },
   },
@@ -176,11 +180,35 @@ test('operator plans authored COPY character traits and imports exact supported 
     ).toBe(false);
     expect(JSON.stringify(proposed)).not.toContain('sameCharacters');
     const count = commands.length;
+    const readBindings = () =>
+      readVndbCharacterVocabularyBindings(port([]), {
+        traits: { schemeId: traitSchemeId, concepts: [{ code: 'i73', id: hairId }] },
+        roles: { schemeId: roleSchemeId, concepts: [{ code: 'main', id: mainRoleId }] },
+      });
+    const operands = [
+      [traitSchemeId, 'schema:url', characterTraitSchemeUri],
+      [hairId, 'schema:url', characterTraitConceptUri('i73')],
+      [hairId, 'skos:inScheme', traitSchemeId],
+    ] as const;
+    for (const [id, property, content] of operands) {
+      const subject = structuredClone(
+        (subjects[id] as { subject: { id: string; type: string; statements: Record<string, unknown[]> } }).subject,
+      );
+      subject.statements[property] = [evidence(content, 'deprecated')];
+      subjects[id] = { subject };
+      const withheld = await readBindings();
+      expect(withheld.concepts.map((item) => item.code).sort()).toEqual(['main']);
+      subject.statements[property] = [evidence(content, 'deprecated'), evidence(content, 'preferred')];
+      subjects[id] = { subject };
+      const restored = await readBindings();
+      expect(restored.concepts.map((item) => item.code).sort()).toEqual(['i73', 'main']);
+      expect(restored.concepts.map((item) => item.id).sort()).toEqual(bindings.concepts.map((item) => item.id).sort());
+    }
     const again = await importVndbCharacterTraits({
       tables: authoredTables(),
       path: join(directory, 'state.sqlite'),
       port: port(commands),
-      bindings,
+      bindings: await readBindings(),
     });
     expect(again.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
     expect(commands.length).toBeGreaterThanOrEqual(count);

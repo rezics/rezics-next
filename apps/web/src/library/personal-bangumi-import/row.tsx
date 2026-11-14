@@ -1,3 +1,4 @@
+import { ImportChoice, ImportDetails, ImportTarget } from '../personal-list-import/presentation';
 import { useId, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type {
@@ -14,12 +15,19 @@ import {
   bangumiCanChooseTarget,
   bangumiHasUnsupportedProposal,
   bangumiMatchLabel,
+  bangumiOutcomeLabel,
   bangumiMediumLabel,
   bangumiNeedsReplace,
   bangumiTitle,
 } from './meaning';
 import { BangumiTargetSearch } from './target';
-import { BangumiScoreReviewPanel, scoreDraftFrom, scoreSelectionFromDraft, type BangumiScoreDraft } from './score';
+import {
+  BangumiScoreOutcomeView,
+  BangumiScoreReviewPanel,
+  scoreDraftFrom,
+  scoreSelectionFromDraft,
+  type BangumiScoreDraft,
+} from './score';
 import type { BangumiVisit } from './visit';
 
 export type RowDraft = {
@@ -77,6 +85,7 @@ export function BangumiRowReview({
   const scoreSelection = scoreTargetReady
     ? scoreSelectionFromDraft(draft.score, scoreReview, true)
     : { action: 'preserve' as const };
+  const outcome = row.outcome ?? meta?.outcome;
   const replaceable = bangumiNeedsReplace(row) || meta?.match === 'already_matched' || meta?.conflict;
   function update(next: RowDraft) {
     setSavedDraft({ reviewToken, value: next });
@@ -99,8 +108,68 @@ export function BangumiRowReview({
             {m.library_bangumi_identifier({ value: String(row.evidence.source.subject_id) })}
           </p>
         ) : null}
+        <ImportTarget target={draft.target} />
       </header>
-      <BangumiEvidencePanel row={row} />
+      {outcome ? (
+        <section className="space-y-2 border-t pt-3" aria-label={m.library_import_results()}>
+          <p>{bangumiOutcomeLabel(outcome.status)}</p>
+          {outcome.score ? <BangumiScoreOutcomeView outcome={outcome.score} /> : null}
+        </section>
+      ) : null}
+      <ImportChoice title={m.library_import_state()}>
+        {row.review?.current || meta?.current ? (
+          <p>
+            {m.library_bangumi_current({
+              state: (row.review?.current ?? meta?.current)!.state,
+              revision: (row.review?.current ?? meta?.current)!.revision,
+            })}
+          </p>
+        ) : (
+          <p>{m.library_bangumi_absence()}</p>
+        )}
+        {(row.review?.proposedState ?? meta?.proposedState) ? (
+          <p>{m.library_bangumi_proposed({ state: (row.review?.proposedState ?? meta?.proposedState)! })}</p>
+        ) : (
+          <p>{m.library_bangumi_unsupported_status()}</p>
+        )}
+        {row.review?.conflict || meta?.conflict ? <p>{m.library_bangumi_conflict_entry()}</p> : null}
+        {bangumiHasUnsupportedProposal(row) ? <p>{m.library_bangumi_empty_fields()}</p> : null}
+        {meta?.target && row.review?.target && meta.target !== row.review.target ? (
+          <p>{m.library_bangumi_changed_target()}</p>
+        ) : null}
+        {canTarget ? (
+          <BangumiTargetSearch
+            disabled={busy}
+            value={draft.target}
+            onChange={(target) => update({ ...draft, target })}
+          />
+        ) : null}
+        <BangumiCheck
+          id={`${base}-skip`}
+          checked={draft.skip}
+          disabled={busy || !reviewed}
+          label={m.library_bangumi_skip_row()}
+          onToggle={(skip) => update({ ...draft, skip, state: skip ? 'preserve' : draft.state })}
+        />
+        {replaceable && !draft.skip ? (
+          <BangumiCheck
+            id={`${base}-replace`}
+            checked={draft.state === 'replace'}
+            disabled={busy || !reviewed}
+            label={m.library_bangumi_replace()}
+            onToggle={(on) => update({ ...draft, state: on ? 'replace' : 'preserve' })}
+          />
+        ) : null}
+        {reviewed && !draft.skip && !replaceable ? (
+          <BangumiCheck
+            id={`${base}-omit`}
+            checked={draft.state === 'omit'}
+            disabled={busy}
+            label={m.library_bangumi_omit()}
+            onToggle={(on) => update({ ...draft, state: on ? 'omit' : 'preserve' })}
+          />
+        ) : null}
+      </ImportChoice>
       {scoreReview ? (
         <BangumiScoreReviewPanel
           review={scoreReview}
@@ -123,57 +192,12 @@ export function BangumiRowReview({
           disabled={busy}
         />
       ) : null}
-      {row.review?.current || meta?.current ? (
-        <p>
-          {m.library_bangumi_current({
-            state: (row.review?.current ?? meta?.current)!.state,
-            revision: (row.review?.current ?? meta?.current)!.revision,
-          })}
-        </p>
-      ) : (
-        <p>{m.library_bangumi_absence()}</p>
-      )}
-      {(row.review?.proposedState ?? meta?.proposedState) ? (
-        <p>{m.library_bangumi_proposed({ state: (row.review?.proposedState ?? meta?.proposedState)! })}</p>
-      ) : (
-        <p>{m.library_bangumi_unsupported_status()}</p>
-      )}
-      {row.review?.conflict || meta?.conflict ? <p>{m.library_bangumi_conflict_entry()}</p> : null}
-      {bangumiHasUnsupportedProposal(row) ? <p>{m.library_bangumi_empty_fields()}</p> : null}
-      {meta?.target && row.review?.target && meta.target !== row.review.target ? (
-        <p>{m.library_bangumi_changed_target()}</p>
-      ) : null}
-      {canTarget ? (
-        <BangumiTargetSearch disabled={busy} value={draft.target} onChange={(target) => update({ ...draft, target })} />
-      ) : null}
-      <BangumiCheck
-        id={`${base}-skip`}
-        checked={draft.skip}
-        disabled={busy || !reviewed}
-        label={m.library_bangumi_skip_row()}
-        onToggle={(skip) => update({ ...draft, skip, state: skip ? 'preserve' : draft.state })}
-      />
-      {replaceable && !draft.skip ? (
-        <BangumiCheck
-          id={`${base}-replace`}
-          checked={draft.state === 'replace'}
-          disabled={busy || !reviewed}
-          label={m.library_bangumi_replace()}
-          onToggle={(on) => update({ ...draft, state: on ? 'replace' : 'preserve' })}
-        />
-      ) : null}
-      {reviewed && !draft.skip && !replaceable ? (
-        <BangumiCheck
-          id={`${base}-omit`}
-          checked={draft.state === 'omit'}
-          disabled={busy}
-          label={m.library_bangumi_omit()}
-          onToggle={(on) => update({ ...draft, state: on ? 'omit' : 'preserve' })}
-        />
-      ) : null}
       <BangumiAction type="button" disabled={busy || !scoreSelection} onClick={() => onSave(draft)}>
         {m.library_bangumi_save_review()}
       </BangumiAction>
+      <ImportDetails>
+        <BangumiEvidencePanel row={row} />
+      </ImportDetails>
     </article>
   );
 }

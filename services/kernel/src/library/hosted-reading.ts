@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readAccount, deadlineClient, within } from './access-port.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import type { CommandResult } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { boundedReadWindow, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -110,14 +110,33 @@ function hostedReadingRequestAlive(deadline: number, signal?: AbortSignal): void
   if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
 }
 
-async function readHostedReadingCheckpoint(
+const HOSTED_READING_METADATA_CONCURRENCY = 4;
+
+type HostedReadingOwnerHome = Readonly<{ route: number; epoch: number }>;
+
+async function admitHostedReadingOwnerHome(
+  client: { query: Pool['query'] },
+  owner: AccountActor,
+): Promise<HostedReadingOwnerHome> {
+  const route = routeOf(owner.accountId)!;
+  await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+    route,
+    owner.accountId,
+  ]);
+  await authorizeOwner(client, route, owner);
+  const partition = await readPartition(client, partitionOf(route));
+  if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
+    throw new ProblemError('partition_unavailable');
+  return { route, epoch: partition.epoch };
+}
+
+async function withHostedReadingOwnerHome<T>(
   dependencies: HostedReadingDependencies,
   owner: AccountActor,
-  subjectId: string,
   deadline: number,
+  action: (client: { query: Pool['query'] }, home: HostedReadingOwnerHome) => Promise<T>,
   signal?: AbortSignal,
-): Promise<HostedReadingRow | null> {
-  const route = routeOf(owner.accountId)!;
+): Promise<T> {
   hostedReadingRequestAlive(deadline, signal);
   return within(deadline, () =>
     withConnection(dependencies.pool, async (connection) => {
@@ -125,22 +144,13 @@ async function readHostedReadingCheckpoint(
       let committed = false;
       try {
         await client.query('BEGIN');
-        await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
-          route,
-          owner.accountId,
-        ]);
-        await authorizeOwner(client, route, owner);
+        const home = await admitHostedReadingOwnerHome(client, owner);
         hostedReadingRequestAlive(deadline, signal);
-        const row = await readCheckpoint.run(client, {
-          route,
-          account_id: owner.accountId,
-          subject_id: subjectId,
-        });
-        await authorizeOwner(client, route, owner);
+        const result = await action(client, home);
+        hostedReadingRequestAlive(deadline, signal);
         await client.query('COMMIT');
         committed = true;
-        const found = Array.isArray(row) ? row[0] : row;
-        return found ? (found as HostedReadingRow) : null;
+        return result;
       } catch (error) {
         if (!committed) await connection.query('ROLLBACK');
         throw error;
@@ -149,28 +159,48 @@ async function readHostedReadingCheckpoint(
   );
 }
 
+type HostedReadingCheckpointSelection = Readonly<{ epoch: number; row: HostedReadingRow | null }>;
+
+async function readHostedReadingCheckpoint(
+  dependencies: HostedReadingDependencies,
+  owner: AccountActor,
+  subjectId: string,
+  deadline: number,
+  signal?: AbortSignal,
+): Promise<HostedReadingCheckpointSelection> {
+  return withHostedReadingOwnerHome(
+    dependencies,
+    owner,
+    deadline,
+    async (client, home) => {
+      const row = await readCheckpoint.run(client, {
+        route: home.route,
+        account_id: owner.accountId,
+        subject_id: subjectId,
+      });
+      await authorizeOwner(client, home.route, owner);
+      const found = Array.isArray(row) ? row[0] : row;
+      return { epoch: home.epoch, row: found ? (found as HostedReadingRow) : null };
+    },
+    signal,
+  );
+}
+
 async function confirmHostedReadingOwnerCurrent(
   dependencies: HostedReadingDependencies,
   owner: AccountActor,
+  selectedEpoch: number,
   deadline: number,
   signal?: AbortSignal,
 ): Promise<void> {
-  const route = routeOf(owner.accountId)!;
-  hostedReadingRequestAlive(deadline, signal);
-  await within(deadline, () =>
-    withConnection(dependencies.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      let committed = false;
-      try {
-        await client.query('BEGIN');
-        await authorizeOwner(client, route, owner);
-        await client.query('COMMIT');
-        committed = true;
-      } catch (error) {
-        if (!committed) await connection.query('ROLLBACK');
-        throw error;
-      }
-    }),
+  await withHostedReadingOwnerHome(
+    dependencies,
+    owner,
+    deadline,
+    async (_client, current) => {
+      if (current.epoch !== selectedEpoch) throw new ProblemError('stale_cursor');
+    },
+    signal,
   );
 }
 
@@ -199,96 +229,62 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
       alive();
       const now = (dependencies.clock ?? systemClock)().getTime();
       const binding = listBinding(owner, route, limit);
-      const selected = await within(deadline, () =>
-        withConnection(dependencies.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          let committed = false;
-          try {
-            await client.query('BEGIN');
-            await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
-              route,
-              owner.accountId,
-            ]);
-            await authorizeOwner(client, route, owner);
-            const partition = await readPartition(client, partitionOf(route));
-            if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
-              throw new ProblemError('partition_unavailable');
-            let afterSequence: string | null = null;
-            let afterSubjectId: string | null = null;
-            if (query.cursor !== undefined) {
-              const cursor = decodeCursor(dependencies.tokens, binding, query.cursor, now);
-              if (!cursor.ok) throw new ProblemError(cursor.reason === 'expired' ? 'stale_cursor' : 'invalid_cursor');
-              if (cursor.epoch !== partition.epoch) throw new ProblemError('stale_cursor');
-              const [sequence, subjectId] = cursor.after;
-              if (
-                cursor.after.length !== 2 ||
-                typeof sequence !== 'string' ||
-                !/^[1-9][0-9]{0,18}$/.test(sequence) ||
-                BigInt(sequence) > 9_223_372_036_854_775_807n ||
-                !hostedReadingUuid(subjectId)
-              )
-                throw new ProblemError('invalid_cursor');
-              afterSequence = sequence;
-              afterSubjectId = subjectId;
-            }
-            alive();
-            const rows = await checkpointPage.run(client, {
-              route,
-              account_id: owner.accountId,
-              after_sequence: afterSequence,
-              after_subject_id: afterSubjectId,
-              limit: limit + 1,
-            });
-            await authorizeOwner(client, route, owner);
-            await client.query('COMMIT');
-            committed = true;
-            return { epoch: partition.epoch, rows: rows as HostedReadingPageRow[] };
-          } catch (error) {
-            if (!committed) await connection.query('ROLLBACK');
-            throw error;
+      const selected = await withHostedReadingOwnerHome(
+        dependencies,
+        owner,
+        deadline,
+        async (client, home) => {
+          let afterSequence: string | null = null;
+          let afterSubjectId: string | null = null;
+          if (query.cursor !== undefined) {
+            const cursor = decodeCursor(dependencies.tokens, binding, query.cursor, now);
+            if (!cursor.ok) throw new ProblemError(cursor.reason === 'expired' ? 'stale_cursor' : 'invalid_cursor');
+            if (cursor.epoch !== home.epoch) throw new ProblemError('stale_cursor');
+            const [sequence, subjectId] = cursor.after;
+            if (
+              cursor.after.length !== 2 ||
+              typeof sequence !== 'string' ||
+              !/^[1-9][0-9]{0,18}$/.test(sequence) ||
+              BigInt(sequence) > 9_223_372_036_854_775_807n ||
+              !hostedReadingUuid(subjectId)
+            )
+              throw new ProblemError('invalid_cursor');
+            afterSequence = sequence;
+            afterSubjectId = subjectId;
           }
-        }),
+          alive();
+          const rows = await checkpointPage.run(client, {
+            route,
+            account_id: owner.accountId,
+            after_sequence: afterSequence,
+            after_subject_id: afterSubjectId,
+            limit: limit + 1,
+          });
+          await authorizeOwner(client, home.route, owner);
+          return { epoch: home.epoch, rows: rows as HostedReadingPageRow[] };
+        },
+        signal,
       );
 
       const shown = selected.rows.slice(0, limit);
-      const items = [];
-      for (const row of shown) {
-        alive();
-        const address = storedAddress(row);
-        const metadata = await dependencies.content.readMetadata(owner, address, deadline);
-        items.push({
-          subjectId: row.subject_id,
-          revision: row.revision,
-          address,
-          activityAt: row.activity_at,
-          metadata,
-        });
-      }
-      alive();
-      await within(deadline, () =>
-        withConnection(dependencies.pool, async (connection) => {
-          const client = deadlineClient(connection, deadline);
-          let committed = false;
-          try {
-            await client.query('BEGIN');
-            await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
-              route,
-              owner.accountId,
-            ]);
-            await authorizeOwner(client, route, owner);
-            const partition = await readPartition(client, partitionOf(route));
-            if (!partition || partition.writeState !== 'active' || partition.movedTo !== null)
-              throw new ProblemError('partition_unavailable');
-            if (partition.epoch !== selected.epoch) throw new ProblemError('stale_cursor');
-            alive();
-            await client.query('COMMIT');
-            committed = true;
-          } catch (error) {
-            if (!committed) await connection.query('ROLLBACK');
-            throw error;
-          }
-        }),
+      const items = await boundedReadWindow(
+        shown,
+        HOSTED_READING_METADATA_CONCURRENCY,
+        async (row) => {
+          const address = storedAddress(row);
+          const metadata = await dependencies.content.readMetadata(owner, address, deadline);
+          return {
+            subjectId: row.subject_id,
+            revision: row.revision,
+            address,
+            activityAt: row.activity_at,
+            metadata,
+          };
+        },
+        alive,
       );
+      alive();
+      await confirmHostedReadingOwnerCurrent(dependencies, owner, selected.epoch, deadline, signal);
       const last = shown.at(-1);
       return {
         items,
@@ -308,14 +304,17 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
       requireOwner(actor, 'progress_session:list');
       const owner = actor as AccountActor;
       const stored = await readHostedReadingCheckpoint(dependencies, owner, subjectId, deadline, signal);
-      if (!stored) return { state: 'none' as const, subjectId };
-      const address = storedAddress(stored);
+      if (!stored.row) {
+        await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, deadline, signal);
+        return { state: 'none' as const, subjectId };
+      }
+      const address = storedAddress(stored.row);
       const resume = await dependencies.content.resolveExact(owner, address, deadline);
-      await confirmHostedReadingOwnerCurrent(dependencies, owner, deadline, signal);
+      await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, deadline, signal);
       return {
         state: 'saved' as const,
         subjectId,
-        revision: stored.revision,
+        revision: stored.row.revision,
         address,
         resume,
       };
@@ -330,14 +329,17 @@ export function createHostedReadingReads(dependencies: HostedReadingDependencies
       requireOwner(actor, 'progress_session:list');
       const owner = actor as AccountActor;
       const stored = await readHostedReadingCheckpoint(dependencies, owner, subjectId, deadline, signal);
-      if (!stored) return { state: 'none', subjectId };
-      const address = storedAddress(stored);
+      if (!stored.row) {
+        await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, deadline, signal);
+        return { state: 'none', subjectId };
+      }
+      const address = storedAddress(stored.row);
       const metadata = await dependencies.content.readMetadata(owner, address, deadline);
-      await confirmHostedReadingOwnerCurrent(dependencies, owner, deadline, signal);
+      await confirmHostedReadingOwnerCurrent(dependencies, owner, stored.epoch, deadline, signal);
       return {
         state: 'saved',
         subjectId,
-        revision: stored.revision,
+        revision: stored.row.revision,
         address,
         metadata,
       };

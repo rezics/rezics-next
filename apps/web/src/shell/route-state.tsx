@@ -70,12 +70,12 @@ export function RouteState({
   }, [retryFailed]);
   return (
     <section ref={section} data-route-state={kind} className="mx-auto w-full min-w-0 py-4 md:py-10">
-      <Empty className="min-h-80 border border-border bg-card px-4 py-8 md:min-h-96 md:px-10 md:py-14">
+      <Empty className="min-h-72 rounded-none px-0 py-6 md:min-h-80 md:px-6 md:py-10">
         <EmptyHeader className="max-w-xl gap-4">
           <EmptyMedia variant="icon" className="size-14 rounded-2xl bg-muted text-muted-foreground">
             <Icon aria-hidden="true" className="size-7" />
           </EmptyMedia>
-          <PageHeading className="max-w-full break-words text-2xl md:text-3xl">{title}</PageHeading>
+          <PageHeading className="max-w-full break-words text-2xl sm:text-3xl">{title}</PageHeading>
           <EmptyDescription className="max-w-prose break-words text-base leading-7">{description}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="max-w-xl gap-4">

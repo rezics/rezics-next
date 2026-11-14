@@ -1,16 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { expect, userEvent, within } from 'storybook/test';
 import { PrivateLibraryExportPage } from '../library/private-export/page';
 import { LibraryExportPortContext } from '../library/private-export/port';
 import { exportRecording, recordedExportPort } from '../library/private-export/recording';
-import { m } from '../paraglide/messages.js';
 
 const meta = {
   title: 'Library/Private Export/Producer recordings',
   id: 'pages-library-private-export-producer-recordings',
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Manual routed journeys using saved V1/V4 producer HTTP responses at their captured clock. Capture and download start only on your action; delivery is simulated. These stories do not establish current native acceptance. Choose locale and viewport manually.',
+      },
+    },
+  },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -48,27 +54,25 @@ function RecordedVisit({ version = 4, failSave = false }: { version?: 1 | 4; fai
   return <RouterProvider router={router} />;
 }
 
-const capture: NonNullable<Story['play']> = async ({ canvasElement }) => {
-  const canvas = within(canvasElement);
-  await userEvent.click(canvas.getByRole('button', { name: m.library_export_capture() }));
-  await expect(await canvas.findByRole('button', { name: m.library_export_download() })).toBeVisible();
-  await expect(canvas.getByText(m.library_export_no_reimport())).toBeVisible();
-};
-
 export const ProviderEvidence: Story = {
+  name: 'Version 4 capture and download (producer responses)',
   render: () => <RecordedVisit />,
-  play: capture,
 };
 
 export const SaveRetry: Story = {
-  render: () => <RecordedVisit failSave />,
-  play: async (context) => {
-    await capture(context);
-    const canvas = within(context.canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.library_export_download() }));
-    await userEvent.click(await canvas.findByRole('button', { name: m.library_export_retry_save() }));
-    await expect(canvas.getByText(m.library_export_downloaded())).toBeVisible();
+  name: 'Version 4 exact save retry (producer responses)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Create a capture, choose Download JSON, then Retry download. The first local delivery fails; the second receives the same artifact.',
+      },
+    },
   },
+  render: () => <RecordedVisit failSave />,
 };
 
-export const StoredVersion1: Story = { render: () => <RecordedVisit version={1} />, play: capture };
+export const StoredVersion1: Story = {
+  name: 'Stored version 1 (producer responses)',
+  render: () => <RecordedVisit version={1} />,
+};

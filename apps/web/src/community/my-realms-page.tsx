@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { MyRealmsCurrentRowView } from './my-realms-current/states';
+import { MyRealmsLeaveReview } from './my-realms-current/review';
 import type { MyRealmsCurrentController } from './my-realms-current/contract';
 import type { MyRealmsPage } from './space';
 import type { MyRealmsMovement, MyRealmsNavigation } from './my-realms-caller';
@@ -24,6 +25,7 @@ export function MyRealmsPageView({
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const attemptedFocus = useRef(false);
+  const leaveTrigger = useRef<HTMLButtonElement | null>(null);
   const next = page.next;
 
   useEffect(() => {
@@ -35,26 +37,44 @@ export function MyRealmsPageView({
   return (
     <article data-slot="my-realms-page" className="min-w-0 max-w-3xl text-foreground [overflow-wrap:anywhere]">
       <section aria-labelledby={headingId} className="space-y-8">
-        <header>
+        <header className="space-y-3">
           <PageHeading id={headingId} ref={heading} tabIndex={-1}>
             {m.realms_heading()}
           </PageHeading>
+          <p className="max-w-prose leading-relaxed text-muted-foreground">{m.my_realms_page_description()}</p>
         </header>
+        {currentController?.review ? (
+          <MyRealmsLeaveReview
+            key={currentController.review.row.realmId}
+            controller={currentController}
+            id={`${headingId}-leave-review`}
+            onDismiss={() => {
+              if (leaveTrigger.current?.isConnected) leaveTrigger.current.focus();
+            }}
+          />
+        ) : null}
         {page.realms.length ? (
-          <ul aria-labelledby={headingId} className="space-y-1">
+          <ul aria-labelledby={headingId} className="divide-y divide-border border-y border-border">
             {page.realms.map((realm) => (
               <li key={realm.realmId}>
-                <MyRealmsCurrentRowView row={realm} controller={currentController} />
+                <MyRealmsCurrentRowView
+                  row={realm}
+                  controller={currentController}
+                  reviewId={`${headingId}-leave-review`}
+                  onLeaveSelect={(trigger) => {
+                    leaveTrigger.current = trigger;
+                  }}
+                />
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-muted-foreground">
+          <p role="status" className="border-y border-border py-8 leading-relaxed text-muted-foreground">
             {page.next ? m.realm_list_details_sparse_page_empty() : m.realms_empty()}
           </p>
         )}
         {next || navigation?.previous !== undefined || navigation?.first ? (
-          <nav aria-label={m.realms_heading()} className="flex flex-wrap gap-3">
+          <nav aria-label={m.realms_heading()} className="flex flex-wrap gap-3 border-t border-border pt-5">
             {[
               ...(navigation?.previous !== undefined
                 ? [{ kind: 'previous' as const, cursor: navigation.previous, label: m.prq_previous() }]

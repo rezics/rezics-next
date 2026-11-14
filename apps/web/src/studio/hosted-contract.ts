@@ -246,11 +246,18 @@ export const hostedDraftPointUpdate = v.strictObject({
   target: v.nullable(target),
 });
 export const hostedDraftPointRemove = v.strictObject({ expectedRevisionId: hostedId, occurrenceId: hostedId });
+export const hostedDraftPointMove = v.strictObject({
+  expectedRevisionId: hostedId,
+  occurrenceId: hostedId,
+  parentId: nullableId,
+  beforeOccurrenceId: nullableId,
+});
 const pointEnvelope = { catalogueId: hostedId, idempotencyKey: hostedKey, expectedViewer: hostedOwnerViewer };
 export const hostedDraftPointRequest = v.variant('kind', [
   v.strictObject({ ...pointEnvelope, kind: v.literal('insert'), body: hostedDraftPointInsert }),
   v.strictObject({ ...pointEnvelope, kind: v.literal('remove'), body: hostedDraftPointRemove }),
   v.strictObject({ ...pointEnvelope, kind: v.literal('update'), body: hostedDraftPointUpdate }),
+  v.strictObject({ ...pointEnvelope, kind: v.literal('move'), body: hostedDraftPointMove }),
 ]);
 export type HostedDraftPointRequest = v.InferOutput<typeof hostedDraftPointRequest>;
 export interface HostedDraftPointNative {

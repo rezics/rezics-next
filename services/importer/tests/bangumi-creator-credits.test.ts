@@ -10,6 +10,7 @@ import type { ResolvedConcept, ResolvedScheme } from '@rezics/conversion/source-
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import {
+  deliverBangumiCreatorCredits,
   importBangumiCreatorCredits,
   musicLiveActionStaffReason,
   type BangumiCreatorCreditPort,
@@ -110,7 +111,7 @@ function port() {
               type: command.subject.type,
               labels: { en: 'authored' },
               statements: {
-                [property]: [{ value: { type: 'value', content: value } }],
+                [property]: [{ rank: 'normal', value: { type: 'value', content: value } }],
               },
             });
           }
@@ -125,6 +126,10 @@ function port() {
     requests,
     fence(externalId = '12') {
       fencedIds.add(externalId);
+    },
+    setRank(subjectId: string, property: string, rank: string) {
+      for (const statement of subjects.get(subjectId)?.statements[property] ?? [])
+        if (statement !== null && typeof statement === 'object') (statement as { rank?: string }).rank = rank;
     },
     creditCommands(): Extract<BatchCommand, { op: 'propose' }>[] {
       return requests.flatMap((request) =>
@@ -173,17 +178,19 @@ test('operator publishes authored staff and voice credits, keeps keys on reopen,
   const director = authoredPerson(101, 'Authored director');
   const performer = authoredPerson(102, 'Authored voice');
   const character = authoredCharacter(201, 'Authored character');
-  try {
-    const first = await importBangumiCreatorCredits({
-      path: join(root, 'state.sqlite'),
+  const refresh = (path = join(root, 'state.sqlite'), staffPosition = 2) =>
+    importBangumiCreatorCredits({
+      path,
       port: world.transport,
       work,
       people: [director, performer],
       characters: [character],
-      staff: [{ subject_id: 12, person_id: 101, position: 2 }],
+      staff: [{ subject_id: 12, person_id: 101, position: staffPosition }],
       voice: [{ subject_id: 12, person_id: 102, character_id: 201 }],
       bindings,
     });
+  try {
+    const first = await refresh();
     const credits = world.creditCommands();
     expect(first.gaps).toEqual([]);
     expect(credits).toHaveLength(2);
@@ -195,28 +202,28 @@ test('operator publishes authored staff and voice credits, keeps keys on reopen,
     expect(voice.statement.qualifiers?.[0]).toMatchObject({ property: { id: 'wdt:P453' } });
     expect(JSON.stringify(credits)).not.toContain('schema:position');
     const keys = first.keys.slice().sort();
-    const reopen = await importBangumiCreatorCredits({
-      path: join(root, 'state.sqlite'),
-      port: world.transport,
-      work,
-      people: [director, performer],
-      characters: [character],
-      staff: [{ subject_id: 12, person_id: 101, position: 2 }],
-      voice: [{ subject_id: 12, person_id: 102, character_id: 201 }],
-      bindings,
+    expect(first.canonicalPersons).toEqual({
+      'person:101': first.identities['person:101']!.id,
+      'person:102': first.identities['person:102']!.id,
     });
+    const characterSubject = first.identities['character:201']!.id;
+    const workSubject = first.identities['12']!.id;
+    world.setRank(characterSubject, 'wdt:P6296', 'deprecated');
+    const missingCharacter = await refresh();
+    expect(missingCharacter.proposals.map((item) => item.op === 'propose' && item.statement.property.id)).toEqual([
+      'schema:director',
+    ]);
+    world.setRank(characterSubject, 'wdt:P6296', 'preferred');
+    const restored = await refresh();
+    expect(restored.keys.slice().sort()).toEqual(keys);
+    world.setRank(workSubject, 'wdt:P5732', 'deprecated');
+    expect((await refresh()).proposals).toEqual([]);
+    world.setRank(workSubject, 'wdt:P5732', 'preferred');
+    expect((await refresh()).keys.slice().sort()).toEqual(keys);
+    const reopen = await refresh();
     expect(reopen.keys.slice().sort()).toEqual(keys);
     const beforeChange = world.creditCommands().length;
-    const changed = await importBangumiCreatorCredits({
-      path: join(root, 'changed.sqlite'),
-      port: world.transport,
-      work,
-      people: [director, performer],
-      characters: [character],
-      staff: [{ subject_id: 12, person_id: 101, position: 1 }],
-      voice: [{ subject_id: 12, person_id: 102, character_id: 201 }],
-      bindings,
-    });
+    const changed = await refresh(join(root, 'changed.sqlite'), 1);
     expect(changed.keys).not.toEqual(keys);
     expect(world.creditCommands().length).toBeGreaterThan(beforeChange);
     const withheld = await importBangumiCreatorCredits({
@@ -236,6 +243,42 @@ test('operator publishes authored staff and voice credits, keeps keys on reopen,
     rmSync(root, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('Bangumi BookSeries and Organization creator identities retain their source tuple', async () => {
+  const workId = id(501);
+  const organizationId = id(502);
+  const identities = { '12': workId, 'person:13': organizationId };
+  const result = await deliverBangumiCreatorCredits({
+    drafts: [
+      {
+        kind: 'staff',
+        work: '12',
+        workType: 2,
+        person: 'person:13',
+        roleCode: 2,
+        path: '/subject-persons/12/13/position',
+        record: { subject_id: 12, person_id: 13, position: 2 },
+      },
+    ],
+    bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+    claim: ({ external_id }) => ({ state: 'bound', subject: identities[external_id as keyof typeof identities] }),
+    batch: async () => ({ results: [] }) as BatchWriteResult,
+    read: async (subjectId) =>
+      ({
+        subject: {
+          id: subjectId,
+          type: subjectId === workId ? 'schema:BookSeries' : 'schema:Organization',
+          statements: {},
+        },
+      }) as unknown as Awaited<ReturnType<BangumiCreatorCreditPort['readReviewedSubject']>>,
+    expectedNativeType: (externalId) => (externalId === '12' ? 'schema:BookSeries' : 'schema:Organization'),
+    metadataFor: () => ({ digest: 'a'.repeat(64), recordRevision: null, recordUrl: 'https://bgm.tv/subject/12' }),
+  });
+  expect(result.identities).toMatchObject({
+    '12': { id: workId, type: 'schema:BookSeries' },
+    'person:13': { id: organizationId, type: 'schema:Organization' },
+  });
+});
 
 test('a facts fence withholds refresh and music staff reports the exact omitted producer binding', async () => {
   const root = directory();

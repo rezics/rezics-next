@@ -342,7 +342,7 @@ test('the Collection tab bar is bounded to eight pins and the phone shows at mos
   };
   const html = renderToStaticMarkup(createElement(LibraryNavigation, { current: 'tracked', pins, collections: [] }));
   const tabsStart = html.indexOf('data-library-navigation-desktop');
-  const tabsEnd = html.indexOf('</nav>', tabsStart);
+  const tabsEnd = html.indexOf('</div>', tabsStart);
   const tabs = html.slice(tabsStart, tabsEnd);
   expect((tabs.match(/data-library-pin=/g) ?? []).length).toBe(8);
   expect((tabs.match(/href="\/en\/library\/collections"/g) ?? []).length).toBe(1);

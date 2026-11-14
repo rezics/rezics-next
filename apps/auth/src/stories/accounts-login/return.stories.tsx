@@ -8,13 +8,19 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { Route } from '../../routes/login';
-import { AuthShell } from '../../frame';
+import { AuthPage, AuthShell } from '../../frame';
+import { AuthTask } from '../../auth-task-view';
 import { LoginReturnView } from '../../login-return-view';
 import { m } from '../../paraglide/messages.js';
 import { authLocale, reviewParameters, button, fill, waitFor } from '../accounts-operations/story';
 import '../../styles.css';
 
-export default { title: 'Account/Sign in/Return', id: 'pages-account-sign-in-return', parameters: reviewParameters, decorators: [authLocale] };
+export default {
+  title: 'Account/Sign in/Return',
+  id: 'pages-account-sign-in-return',
+  parameters: reviewParameters,
+  decorators: [authLocale],
+};
 
 type Mode = 'dispatched' | 'read-failure' | 'keyboard';
 // Mounted route fixtures. They demonstrate presentation; browser/native acceptance is deferred.
@@ -105,9 +111,32 @@ const Historical = ({
   phase: 'options' | 'prompt' | 'acknowledged';
 }) => (
   <AuthShell>
-    <LoginReturnView records={[{ method, phase }]} onDismiss={() => {}} />
+    <AuthPage heading={m.auth_login_heading()}>
+      <AuthTask>
+        <LoginReturnView records={[{ method, phase }]} onDismiss={() => {}} />
+      </AuthTask>
+    </AuthPage>
   </AuthShell>
 );
 export const ExplicitButtonBeforeDispatch = { render: () => <Historical method="passkey" phase="options" /> };
 export const BrowserAutofillBeforeDispatch = { render: () => <Historical method="autofill" phase="prompt" /> };
 export const SuccessBeforeReadRetirement = { render: () => <Historical method="passkey" phase="acknowledged" /> };
+
+export const LongLocaleUnresolvedHistory = {
+  globals: { locale: 'de' },
+  render: () => (
+    <AuthShell>
+      <AuthPage heading={m.auth_login_heading()}>
+        <AuthTask>
+          <LoginReturnView
+            records={[
+              { method: 'password', phase: 'unknown' },
+              { method: 'passkey', phase: 'refused' },
+            ]}
+            onDismiss={() => {}}
+          />
+        </AuthTask>
+      </AuthPage>
+    </AuthShell>
+  ),
+};

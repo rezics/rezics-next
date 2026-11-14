@@ -41,6 +41,36 @@ independently. Native authorization and all command contracts remain with their 
 This frontend source-only window defers typing, tests, builds, browser, visual and native acceptance to the dev
 verifier. Formatting source is independent of those acceptance claims.
 
+## Revision history navigation
+
+Decision: keep one replacing metadata page, exact left/right revision IDs and a bounded window of successful
+request coordinates; reserve the twenty opaque-cursor slots for previous requests, the current request and native
+continuation. At the retained edge, Previous stops and explicit Restart reads the first page. Keyboard navigation
+alone requests focus, and unrelated movement cancels that request. The parent editor retains its draft and uncertain
+save intent throughout history actions.
+
+Each explicit traversal or Retry performs one read through `history.ts`. Previous rereads the last retained request
+cursor; More uses the admitted native continuation, including on sparse pages. Only a successful read commits its
+coordinates. Failure conceals the former page and retains the exact attempted request for Retry; stale history
+requires explicit Restart. Oldest previous coordinates are dropped to keep at most twenty prior entries and twenty
+opaque cursors in total, each with the existing 4096-character admission cap. No previous page bodies are cached.
+
+Comparison reads one oriented exact pair, including selections made on different pages. Back restores the supplying
+page and its selections without another read. Return to draft and retirement discard pages, comparisons, selections,
+coordinates and deferred focus. Current native status, credentials, exposure and locale remain authoritative; late
+results cannot redisclose a retired page or move focus. Pointer actions do not request focus. Keyboard requests are
+cancelled by pointer use, focus movement, unrelated keys, departure or a superseding action, and land on the visibly
+focused heading or returning control only while their action remains current.
+
+Design sources: `history-panel.tsx`, `history.ts`, the editor caller in `private-page.tsx`, this owner document,
+existing `knowledge-history` tests/harness/stories, the private history contract in
+[Knowledge workspaces](../../../../docs/knowledge-workspaces.md#native-first-loop-contract), and the read-only main
+reference index. Source fixtures cover bounded previous/next, sparse continuation, failed exact retry, comparison
+return and deliberate focus. Test execution, typing, builds, native acceptance and keyboard/phone/desktop browser
+acceptance remain unverified until the separate integration verifier runs them; the single publisher owns publication.
+Existing focus-return assertions use keyboard activation; pointer actions assert no requested heading focus. The
+exact-pair fixture spans pages and retries the same operands while retaining its draft and original-save assertions.
+
 ## Private document lifecycle
 
 The private document URL reads native lifecycle metadata before opening the existing editor. The signed-in viewer
@@ -112,3 +142,35 @@ and installed APIs. Content native first-loop and the focused private, publicati
 source owners. The fixture is `apps/web/tests/native/knowledge-journey.host.test.ts`. Invoke it after integration
 with `bun apps/web/scripts/check.ts --host tests/native/knowledge-journey.host.test.ts`. Native/browser execution
 stays with the Goal verification lane.
+
+## Notebook navigation orientation
+
+Decision: only a focused keyboard page action or deliberate keyboard document return requests orientation;
+pointer actions and ordinary observations preserve the reader's focus. One ephemeral request is cancelled by
+focus movement, pointer use, another key, window departure, a superseding request or owner replacement. Embedded
+navigation leaves orientation to its caller. Each completed current read may orient its result or failure boundary;
+no focus request starts a read. The organization-enabled notebook caller shares this ownership while its
+commands, history and native producer keep their existing state contracts. Native page order, sparse continuation, exact-cursor Retry and explicit first-page
+Restart retain their existing contracts and twenty-row bound.
+
+Sources read before design: this owner document, `navigation-page.tsx`, `navigation.ts`, `navigation-model.ts`,
+`navigation-return.ts`, `navigation-return-link.tsx`, the mounted `knowledge-navigation.test.tsx` and existing
+navigation stories, the writer/reader and organization contracts in [Knowledge workspaces](../../../../docs/knowledge-workspaces.md),
+and the read-only main reference index. The separate history/comparison journey retains its own focus ownership.
+Source review covers every request, arrival and cancellation; execution of mounted regressions, typing, builds,
+native document return, and phone/desktop keyboard and visual acceptance belongs to the integration verifier.
+
+A deliberate return consumes the existing one-slot frontier and selected document once, then makes the existing
+fresh native observation. A matching current result restores the selected document link; a missing selection or a
+failed/changed reading orients its boundary only while the keyboard request still owns focus. Pointer return restores
+the position and selection without orientation. Expired or changed coordinates keep explicit Restart; return stores
+no page rows, body, DOM target or private data in persistent storage. StrictMode reattachment preserves the same live
+request, while actual unmount and reader, locale, source, selected target or embedding replacement cancel it.
+
+The mounted source now exercises plain and organization-enabled outlines, embedded ownership, initial/pointer
+non-interference, keyboard success/failure/exact Retry, focus/pointer/key/window cancellation, selection replacement,
+document return with fresh admission, missing returned selections and retired late results. The existing wire
+return assertion now includes its selected document identity; the frontier, expiry and identity assertions remain.
+KeyboardCompletion and KeyboardRetry stories use the actual entry component with illustrative native DTOs admitted
+through the existing adapter; they are not native acceptance recordings. The extra changed paths are the shared
+`navigation-focus.ts`, existing return seam/link, organization caller, and wire return test.

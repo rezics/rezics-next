@@ -83,6 +83,15 @@ authorization remains decisive when reading the inventory.
 
 ## Saved shelf presentation
 
+Decision: the private Library uses one header/action area, a horizontally scrollable status strip and compact
+filters with the selected type or independent label visible. View details and saved-default guidance are optional;
+Continue follows the shelf. Layout and column changes retain the installed page, cursor and selection. Shared
+shelf primitives keep their existing interfaces. Missing progress meaning and finish history use explicit text,
+never a synthetic percentage, score or date. A supplied progress session without a unit label keeps its exact
+amount text, identifies unavailable unit meaning and omits the visual share. Main review stories mount the actual
+`/library` route with a coherent member population, first use and source-local recovery. Focused acceptance is authored for the deferred verifier;
+the source attempt runs only the final workspace typecheck under the closing verification instruction.
+
 Library presentation resolves explicit valid URL choices first, then the current account's native shelf defaults, then
 the existing application defaults. Layouts use an exact absolute-IRI type scope when the address type is an IRI and
 otherwise use `all`. Settings edits `all` and individual admitted types. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`
@@ -289,11 +298,9 @@ One existing FULL page supplies context: 20 personal rows by default, at most 10
 properties and three values each per row, with at most four displayed values. Continuations repeat that bounded
 page read. This adds no Subject requests, pagination, sorting, commands or private-context cache.
 
-The named unavailable seam is `suppliedShelfFacts`. Kernel's personal FULL list already attaches bounded list facts
-through `attachCollectionListFacts`, but the installed generated personal client has no facts field. The local
-optional adapter consumes that existing producer payload using the generated Collection fact union. Commerce must
-publish its existing personal facts schema in the generated client. FULL label assignments currently supply neither
-facts nor an identifying-context schema: Commerce must add the same optional four-property/three-value facts field
+The named unavailable seam is `suppliedShelfFacts`. The installed personal FULL client publishes optional bounded
+list facts, consumed by the local adapter using the shared generated fact union. FULL label assignments currently
+supply neither facts nor an identifying-context schema: Commerce must add the same optional four-property/three-value facts field
 to `/v1/libraryLabelAssignments?labelId=…&view=FULL`, using the existing bounded attachment with final assignment,
 Entry and reader revalidation. Semantic retains role meaning, accepted source qualification and item disclosure.
 Until those native fields arrive, no alternate endpoint fills the label shelf gap.
@@ -413,6 +420,33 @@ The cursor path and page cost bounds are owned by [Progress index windows](progr
 
 Canonical session and Subject links remain ordinary shareable addresses. Same-tab Progress navigation carries the filtered index selectors and opaque cursor privately, then accepts focus only for the same admitted session ID, Subject ID and start time. A stale or changed source offers a safe restart instead of searching later pages. Subject return context is revalidated against the currently disclosed work before it is used.
 
+## Collection authoring workbench
+
+Decision: put the ordered occurrence canvas before secondary metadata and presentation, keep one visible save area,
+and pair publication candidates with an explicit review and confirmation; preserve the existing writers and lifetimes.
+The current page alone supplies selection and positions. Repeated Subjects keep separate occurrence IDs and notes.
+Transfer tools are a labelled disclosure; the captured source/destination, revisions, exact anchor and every selected
+occurrence stay visible in review. Cancel opens the tools before returning focus to the destination heading, even if
+the tools were collapsed during review. Recovery keeps independent source and destination observations and immutable
+retries. Members/Details links reach both workbench regions without paging through a long phone canvas. Metadata, optional presentation and visibility/history remain in the same local draft. Creating a Collection first
+requires title and visibility; its members are added through the existing owner journey. Saving never publishes.
+
+The design reads were this README, [placement journey](collection-placement-journey.md), the editor, transfer,
+presentation, save and publication components, their route callers and regression/story sources, and the read-only
+main checkout's `.reference/INDEX.md`. Impeccable references were absent from the supplied locations; the documented
+fallback uses installed shared UI and tokens. Focused acceptance source and named authoring stories accompany the
+change; test, typing, build, browser, native and visual execution remain deferred to the verifier.
+
+Decision: new Collection drafts reuse `useCollectionDraftNavigation`; meaningful title/description, explicit
+visibility or a presentation choice requests Stay/Leave. Review disclosure and whitespace alone stay pristine.
+Stay keeps fields and the original sender, credential, key and body, including across same-viewer CSRF rotation.
+A definite native refusal permits correction; a lost response permits only the original exact retry. Creation's
+Leave retires this caller and its recovery intent, with explicit guidance that a pending or uncertain command may
+already have applied; it neither cancels nor recreates that command. Pending Collection edits keep their existing
+Stay-only policy. Successful creation retires departure protection before opening the supplied Collection, and
+retires any older requested destination. Viewer/admission retirement cancels a new caller's unresolved departure;
+late acknowledgements cannot navigate a replacement caller. State is O(1), with no new native calls or persistence.
+
 ## Collection publication
 
 Decision: the publication page offers the mounted whole-query command alongside explicit selection. Whole-query
@@ -508,3 +542,31 @@ public producer entries and keep their implementations, including Continue's ind
 The archive application-lifetime regression retains equal-value replacement, A/B/A, query recreation and synchronous
 completed-byte erasure assertions. Its mounted composition case also pins independent section retirement and
 sign-out erasure before React publishes the replacement; returning to the same account never restores retired bytes.
+
+## Journal and history reading
+
+Decision: group adjacent native rows by recorded UTC day without sorting, accumulating windows or adding row reads;
+open one occurrence for private text and accepted amount meaning. Contextual journal editing keeps explicit
+Cancel, Review, Save and exact Retry. Capture the original journal comparison when reviewing a command, so a later
+current read cannot rewrite its before-values. The current read remains separately labeled and never proves a retry.
+The native reflection remains plain text in the existing Textarea and text reader; it is never converted to a rich
+Document, copied to publication, or placed in a shared cache. Public logs remain explicitly published snapshots.
+
+The timeline uses the supplied native Subject identity and language even when its current Subject is unavailable.
+Reported dates retain partial precision; recorded dates and technical provenance are separate. Empty first use
+links to Library; sparse continuation still offers the exact next window. Full multilingual writing wraps within a
+readable measure, with mobile save/cancel targets in the selected editor. Active progress and session controls keep
+their existing owner; this outcome only composes private journal and explicit publication sections.
+
+Design sources: this owner, `private-diary/{native,address,server,occurrence-server,occurrence-detail,reading-occurrence}`,
+`log-page`, `my-logs-page`, `logs-progress`, their existing regression sources, the installed client diary/journal
+contracts, and the read-only main checkout `.reference/INDEX.md`. Impeccable files are absent from the permitted
+skill/reference roots; use the documented project-context fallback in `docs/development/delivery.md#skill-instructions`.
+Mounted actual-route stories use constructed contract-shaped data; they are manual examples, not native acceptance.
+Focused acceptance source is maintained; test, compiler, build, browser and native execution are deferred.
+
+Acceptance source: `private-diary-timeline`, `private-diary-year-navigation` and
+`private-occurrence-assessment` pin native grouping, sparse/empty distinction, contextual Cancel, literal text and
+original-comparison retry. `my-logs-content-item` adds the public boundary and date headings. Existing
+`library-logs` assertions stay intact; publishing scenarios now open the contextual composer first. The journal
+helper follows explicit edit/review/save and read-after-conflict, targeting the installed decimal text input.

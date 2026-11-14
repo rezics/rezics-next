@@ -370,3 +370,10 @@ The live-cap reconciliation adopts [both](research/library-label-cap-independent
 undo and finite assignment identity with ID-bound CAS. Alternative revision allocators, extra visibility generations
 and duplicated source tables are not adopted. Native admission plan tests and HTTP source exist; complete
 source/HTTP/cleanup acceptance proof remains outstanding.
+
+**WEB DIRECTORY DECISION:** The directory opens the existing private Label shelf as its detail view, reusing member
+controls and exact returns. Directory and member counts describe only the received page; the native catalogue
+supplies no member totals. Contextual rename/delete retain captured revisions and original uncertain commands.
+Assignment and removal show the exact Subject/Label together, separately from Library status and Progress.
+Use the installed UI primitives and tokens when Impeccable references or its CLI are unavailable. Focused acceptance
+sources and actual route stories cover these states; ordinary suites and browser checks run in the dev verifier.

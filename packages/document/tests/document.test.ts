@@ -43,6 +43,79 @@ test('image content attributes and author concealment round-trip', () => {
   expect(checkDocument(snapshot([{ ...image, attrs: { ...image.attrs, conceal: 'yes' } }]))).toBe(false);
 });
 
+test('footnote references resolve to editable definitions in both snapshot profiles', () => {
+  for (const profile of ['text', 'blocks'] as const) {
+    const value = snapshot(
+      [
+        {
+          type: 'paragraph',
+          attrs: { id: 'body' },
+          content: [
+            { type: 'text', text: 'Read ' },
+            { type: 'footnoteReference', attrs: { label: 'Source-1' } },
+          ],
+        },
+        {
+          type: 'footnoteDefinition',
+          attrs: { id: 'definition', label: 'Source-1' },
+          content: [paragraph('note-body', 'Supplied source')],
+        },
+      ],
+      profile,
+    );
+    expect(checkDocument(value)).toBe(true);
+    const normalized = normalizeDocument(value);
+    const definition = normalized.doc.content?.[1]!;
+    const edited = normalizeDocument(snapshot([paragraph('body', 'Edited reading'), definition], profile));
+    expect(edited.doc.content?.[1]?.attrs).toMatchObject({ id: 'definition', label: 'Source-1' });
+    expect(parseDocument(JSON.parse(serializeDocument(edited)))).toEqual(edited);
+  }
+
+  expect(
+    checkDocument(
+      snapshot([
+        {
+          type: 'paragraph',
+          attrs: { id: 'body' },
+          content: [{ type: 'footnoteReference', attrs: { label: 'Missing' } }],
+        },
+      ]),
+    ),
+  ).toBe(false);
+
+  const reference = {
+    type: 'paragraph',
+    attrs: { id: 'body' },
+    content: [{ type: 'footnoteReference', attrs: { label: 'source' } }],
+  } satisfies DocumentNode;
+  const definition = {
+    type: 'footnoteDefinition',
+    attrs: { id: 'definition', label: 'source' },
+    content: [paragraph('note', 'Source')],
+  } satisfies DocumentNode;
+  expect(
+    checkDocument(snapshot([reference, definition, { ...definition, attrs: { id: 'duplicate', label: 'source' } }])),
+  ).toBe(false);
+  expect(
+    checkDocument(
+      snapshot([
+        reference,
+        {
+          ...definition,
+          content: [
+            paragraph('note', ''),
+            {
+              type: 'paragraph',
+              attrs: { id: 'nested-reference' },
+              content: [{ type: 'footnoteReference', attrs: { label: 'source' } }],
+            },
+          ],
+        },
+      ]),
+    ),
+  ).toBe(false);
+});
+
 test('plain text import preserves paragraphs, trailing newline and empty draft', () => {
   const imported = fromPlainText('漢字😀\r\n\r\nlast\n');
   expect(documentText(imported)).toBe('漢字😀\n\nlast\n');
@@ -308,6 +381,33 @@ test('CommonMark import retains marks, ordered list starts and promotes images w
   expect(checkDocument(result)).toBe(true);
   expect(documentText(fromMarkdown('<script>literal</script>'))).toBe('<script>literal</script>');
   expect(() => fromMarkdown('![alt](/image.png)', 'text')).toThrow(TypeError);
+});
+
+test('Markdown footnotes keep formatted definitions in both profiles and leave fenced examples untouched', () => {
+  const markdown =
+    'Read this[^Source-1].\n\n[^Source-1]: **Published findings**\n    Continued detail.\n\n```md\n[^literal]: example\n```';
+  for (const profile of ['text', 'blocks'] as const) {
+    const imported = fromMarkdown(markdown, profile);
+    const definition = imported.doc.content?.find((node) => node.type === 'footnoteDefinition');
+    const reference = imported.doc.content
+      ?.find((node) => node.type === 'paragraph')
+      ?.content?.find((node) => node.type === 'footnoteReference');
+    const emphasized = definition?.content?.[0]?.content?.find((node) => node.text === 'Published findings');
+    const example = imported.doc.content?.find((node) => node.type === 'codeBlock');
+
+    expect(checkDocument(imported)).toBe(true);
+    expect(reference?.attrs?.label).toBe('Source-1');
+    expect(definition?.attrs?.label).toBe('Source-1');
+    expect(
+      definition?.content?.[0]?.content
+        ?.map((node) => node.text)
+        .filter(Boolean)
+        .join(''),
+    ).toContain('Continued detail.');
+    expect(emphasized?.marks?.map((mark) => mark.type)).toContain('bold');
+    expect(example?.content?.[0]?.text).toContain('[^literal]: example');
+  }
+  expect(() => fromMarkdown('Read this[^missing].')).toThrow(TypeError);
 });
 
 test('legacy inline spoilers retain concealment and inner formatting without interpreting code markers', () => {

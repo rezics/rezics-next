@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   AlertDialog,
@@ -12,7 +12,7 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import type { OwnVoteEntry } from './types';
 import { m } from '../../paraglide/messages.js';
-import { ownVoteChangedAt, ownVoteScale, ownVoteValue } from './presentation';
+import { ownVoteScale } from './presentation';
 import { isAdmittedVoteAction } from './intent';
 
 export type OwnVoteFeedback =
@@ -69,7 +69,8 @@ export function OwnVoteEditor({
     isAdmittedVoteAction(entry, entry.actions, 'PUT') && isAdmittedVoteAction(entry, entry.actions, 'GET');
   const canClear =
     isAdmittedVoteAction(entry, entry.actions, 'DELETE') && isAdmittedVoteAction(entry, entry.actions, 'GET');
-  const changedAt = ownVoteChangedAt(entry, locale);
+  const id = useId();
+  const helpId = `${id}-scale`;
   const parsedDraft = draft === '' ? Number.NaN : Number(draft);
   const validDraft =
     Number.isSafeInteger(parsedDraft) &&
@@ -78,38 +79,15 @@ export function OwnVoteEditor({
     (parsedDraft - entry.question.scale.min) % entry.question.scale.displayStep === 0;
 
   return (
-    <section className="space-y-4 rounded-xl border p-4" aria-labelledby="my-ratings-inspection">
-      <div className="space-y-2">
-        <h2 id="my-ratings-inspection" className="text-lg font-semibold">
-          {m.library_my_ratings_inspect()}
-        </h2>
-        <p className="break-words font-medium">{entry.subject.label?.value ?? m.subject_value_unlabelled()}</p>
-        <p className="text-sm text-muted-foreground">{entry.question.label}</p>
-        <dl className="grid gap-2 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="font-medium">{m.library_my_ratings_original_key()}</dt>
-            <dd className="break-all">
-              {entry.targetId} · {entry.questionId}
-            </dd>
-          </div>
-          <div>
-            <dt className="font-medium">{m.library_my_ratings_value()}</dt>
-            <dd>{ownVoteValue(entry, locale)}</dd>
-          </div>
-          <div>
-            <dt className="font-medium">{m.library_my_ratings_scale()}</dt>
-            <dd>{ownVoteScale(entry, locale)}</dd>
-          </div>
-          {changedAt ? (
-            <div>
-              <dt className="font-medium">{m.library_my_ratings_changed()}</dt>
-              <dd>
-                <time dateTime={entry.own.at}>{changedAt}</time>
-              </dd>
-            </div>
-          ) : null}
-        </dl>
-      </div>
+    <section
+      className="min-w-0 space-y-4 border-s-2 border-primary/40 bg-muted/30 p-4 sm:p-5"
+      aria-label={m.library_my_ratings_value()}
+      data-slot="own-vote-editor"
+      aria-busy={busy}
+    >
+      <p id={helpId} className="text-sm text-muted-foreground">
+        {ownVoteScale(entry, locale)}
+      </p>
 
       {entry.actions.state === 'retired' ? <p role="status">{m.library_my_ratings_retired()}</p> : null}
       {entry.actions.state === 'unavailable' && entry.actions.reason === 'merged_source' ? (
@@ -135,19 +113,25 @@ export function OwnVoteEditor({
               step={entry.question.scale.displayStep}
               value={draft}
               disabled={locked || busy}
-              aria-describedby="my-ratings-scale-help"
+              aria-describedby={helpId}
               onChange={(event) => onDraft(event.currentTarget.value)}
             />
           </label>
-          <p id="my-ratings-scale-help" className="text-sm text-muted-foreground">
-            {ownVoteScale(entry, locale)}
-          </p>
           {!validDraft ? <p role="alert">{m.library_my_ratings_choose_value()}</p> : null}
           <div className="flex flex-wrap gap-2">
-            <Button className="min-h-11" disabled={locked || busy || !validDraft} onClick={onSave}>
+            <Button
+              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              disabled={locked || busy || !validDraft}
+              onClick={onSave}
+            >
               {m.library_my_ratings_save()}
             </Button>
-            <Button className="min-h-11" variant="outline" disabled={locked || busy} onClick={onCancel}>
+            <Button
+              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              variant="outline"
+              disabled={locked || busy}
+              onClick={onCancel}
+            >
               {m.library_my_ratings_cancel()}
             </Button>
           </div>
@@ -155,13 +139,17 @@ export function OwnVoteEditor({
       ) : (
         <div className="flex flex-wrap gap-2">
           {editable ? (
-            <Button className="min-h-11" disabled={locked || busy} onClick={onEdit}>
+            <Button
+              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              disabled={locked || busy}
+              onClick={onEdit}
+            >
               {m.library_my_ratings_edit()}
             </Button>
           ) : null}
           {canClear ? (
             <Button
-              className="min-h-11"
+              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
               variant="outline"
               disabled={locked || busy}
               onClick={() => setConfirmingClear(true)}
@@ -173,36 +161,40 @@ export function OwnVoteEditor({
       )}
 
       {feedback ? <Feedback feedback={feedback} locale={locale} /> : null}
-      {feedback?.kind === 'uncertain' ||
-      feedback?.kind === 'readback-unavailable' ||
-      feedback?.kind === 'review-failed' ||
-      feedback?.kind === 'review-missing' ? (
+      {feedback &&
+      ['uncertain', 'readback-unavailable', 'review-failed', 'review-missing', 'review-pending'].includes(
+        feedback.kind,
+      ) ? (
         <div className="flex flex-wrap gap-2">
           {canRetry ? (
-            <Button className="min-h-11" disabled={busy} onClick={onRetry}>
+            <Button
+              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              disabled={busy}
+              onClick={onRetry}
+            >
               {m.library_my_ratings_retry_original()}
             </Button>
           ) : null}
           {isAdmittedVoteAction(entry, entry.actions, 'GET') ? (
-            <Button className="min-h-11" variant="outline" disabled={busy} onClick={onReview}>
-              {m.library_my_ratings_review_original()}
-            </Button>
-          ) : null}
-        </div>
-      ) : feedback?.kind === 'review-pending' ? (
-        <div className="flex flex-wrap gap-2">
-          {canRetry ? (
-            <Button className="min-h-11" disabled={busy} onClick={onRetry}>
-              {m.library_my_ratings_retry_original()}
-            </Button>
-          ) : null}
-          {isAdmittedVoteAction(entry, entry.actions, 'GET') ? (
-            <Button className="min-h-11" variant="outline" disabled={busy} onClick={onReview}>
+            <Button
+              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              variant="outline"
+              disabled={busy}
+              onClick={onReview}
+            >
               {m.library_my_ratings_review_original()}
             </Button>
           ) : null}
         </div>
       ) : null}
+      <details className="text-xs text-muted-foreground">
+        <summary className="min-h-11 cursor-pointer content-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.library_my_ratings_original_key()}
+        </summary>
+        <p className="mt-1 break-all" data-slot="own-vote-original-pair">
+          {entry.targetId} · {entry.questionId}
+        </p>
+      </details>
 
       <AlertDialog open={confirmingClear && canClear} onOpenChange={setConfirmingClear}>
         <AlertDialogContent>
@@ -211,9 +203,11 @@ export function OwnVoteEditor({
             <AlertDialogDescription>{m.library_my_ratings_confirm_clear_text()}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="min-h-11">{m.library_my_ratings_cancel()}</AlertDialogCancel>
+            <AlertDialogCancel className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2">
+              {m.library_my_ratings_cancel()}
+            </AlertDialogCancel>
             <AlertDialogAction
-              className="min-h-11"
+              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
               onClick={(event) => {
                 event.preventDefault();
                 setConfirmingClear(false);

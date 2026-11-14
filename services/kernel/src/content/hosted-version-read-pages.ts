@@ -3,7 +3,7 @@ import {
   rankVersionedOutlineSequenceNode,
   selectVersionedOutlineSequenceNode,
   type VersionedOutlineSequenceNode,
-  type VersionedOutlineSequenceReadWriteSet,
+  type VersionedOutlineSequenceReadAccess,
 } from './versioned-outline-sequence.ts';
 import {
   HostedVersionReadAnchorError,
@@ -19,7 +19,7 @@ import {
 } from './hosted-version-read-pages-model.ts';
 
 type TrackedIndex<Value> = Readonly<{
-  access: VersionedOutlineSequenceReadWriteSet<Value>;
+  access: VersionedOutlineSequenceReadAccess<Value>;
   work: () => HostedVersionReadWork;
 }>;
 
@@ -32,22 +32,24 @@ type WindowQuery = Readonly<{
   expectedRootCount?: bigint;
 }>;
 
-function trackIndex<Value>(source: VersionedOutlineSequenceReadWriteSet<Value>): TrackedIndex<Value> {
+function trackIndex<Value>(source: VersionedOutlineSequenceReadAccess<Value>): TrackedIndex<Value> {
   let logicalNodeReadCalls = 0;
   const distinctLogicalNodeVisits = new Set<string>();
   const initialProbeCount = source.work().snapshotProbeCount;
-  const access: VersionedOutlineSequenceReadWriteSet<Value> = {
+  const access: VersionedOutlineSequenceReadAccess<Value> = {
     async readNode(id) {
       logicalNodeReadCalls += 1;
       const node = await source.readNode(id);
       if (node !== null) distinctLogicalNodeVisits.add(id);
       return node;
     },
-    writeNode(node) {
-      source.writeNode(node);
+    async readNodes(ids) {
+      logicalNodeReadCalls += ids.length;
+      const nodes = await source.readNodes(ids);
+      for (const [id, node] of nodes) if (node !== null) distinctLogicalNodeVisits.add(id);
+      return nodes;
     },
     nodeReads: source.nodeReads,
-    nodeWrites: source.nodeWrites,
     work: () => source.work(),
   };
   return {
@@ -61,7 +63,7 @@ function trackIndex<Value>(source: VersionedOutlineSequenceReadWriteSet<Value>):
 }
 
 async function readRequired<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   id: string,
 ): Promise<VersionedOutlineSequenceNode<Value>> {
   const node = await access.readNode(id);
@@ -81,7 +83,7 @@ function assertChildPointers<Value>(node: VersionedOutlineSequenceNode<Value>): 
 
 async function selectedRoot<Value>(
   index: HostedVersionReadIndex<Value>,
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
 ): Promise<VersionedOutlineSequenceNode<Value> | null> {
   if (index.rootId === null) return null;
   const root = await readRequired(access, index.rootId);
@@ -103,7 +105,7 @@ function schedule<Value>(
 }
 
 async function pushSpine<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+  access: VersionedOutlineSequenceReadAccess<Value>,
   stack: VersionedOutlineSequenceNode<Value>[],
   scheduled: Set<string>,
   firstId: string | null,
@@ -122,9 +124,9 @@ async function pushSpine<Value>(
   }
 }
 
-/** Prepare the in-order candidates strictly after/before an already-proven member. */
-async function pushAfterAnchor<Value>(
-  access: VersionedOutlineSequenceReadWriteSet<Value>,
+/** Prepare eligible in-order ancestors beyond an already-proven member. */
+async function pushDirectionalAncestors<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
   rootId: string,
   anchor: VersionedOutlineSequenceNode<Value>,
   direction: HostedVersionReadDirection,
@@ -151,6 +153,18 @@ async function pushAfterAnchor<Value>(
   // The nearest eligible ancestor must be on top; a nearer subtree, if present,
   // is pushed last and therefore traversed first.
   for (let index = ancestors.length - 1; index >= 0; index -= 1) schedule(stack, scheduled, ancestors[index]!);
+}
+
+/** Prepare the in-order candidates strictly after/before an already-proven member. */
+async function pushAfterAnchor<Value>(
+  access: VersionedOutlineSequenceReadAccess<Value>,
+  rootId: string,
+  anchor: VersionedOutlineSequenceNode<Value>,
+  direction: HostedVersionReadDirection,
+  stack: VersionedOutlineSequenceNode<Value>[],
+  scheduled: Set<string>,
+): Promise<void> {
+  await pushDirectionalAncestors(access, rootId, anchor, direction, stack, scheduled);
   const subtreeId = direction === 'forward' ? anchor.rightId : anchor.leftId;
   await pushSpine(access, stack, scheduled, subtreeId, anchor.id, direction);
 }
@@ -181,9 +195,10 @@ async function readWindow<Value>(
       const selected = await selectVersionedOutlineSequenceNode(access, index.rootId, query.startRank);
       if (selected !== null) {
         nextRank = query.startRank;
-        scheduled.add(selected.id);
-        await pushAfterAnchor(access, index.rootId!, selected, query.direction, stack, scheduled);
-        stack.push(selected);
+        // The selected rank is inclusive. Its directional subtree is added after
+        // the selected node is consumed, while eligible ancestors remain below it.
+        await pushDirectionalAncestors(access, index.rootId!, selected, query.direction, stack, scheduled);
+        schedule(stack, scheduled, selected);
       }
     }
   } else if (root !== null) {

@@ -8,6 +8,7 @@ export {
   personBiographyReturn,
   personBiographyReturnFragment,
   subjectCommunityVisitReturn,
+  subjectGraphVisitReturn,
   subjectRouteSearchLimit,
   subjectVisitReturn,
   subjectVisitReturnHref,

@@ -293,38 +293,40 @@ export function PublishedLogPageView({
     <article className="max-w-4xl space-y-6 text-foreground">
       <header className="space-y-3">
         <PageHeading>{m.library_logs_page_heading()}</PageHeading>
-        <p>{m.library_logs_description()}</p>
+        <p className="max-w-prose text-muted-foreground">{m.library_logs_description()}</p>
+        <p className="text-sm text-muted-foreground">{m.library_journal_public_boundary()}</p>
         <PublishedLogBack logId={log.id} locale={locale} sessionSubject={sessionSubject} />
       </header>
-      <dl className="space-y-3">
-        <div>
-          <dt className="font-medium">{m.library_logs_account()}</dt>
-          <dd>
-            <LogContributor attribution={log.attribution} account={log.account} locale={getLocale()} />
-          </dd>
+      <section className="space-y-4 rounded-xl border bg-card p-4 sm:p-6">
+        <SubjectIdentity subject={log.subject} ratio={rowRatio([log.subject])} size="md" />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+          <LogContributor attribution={log.attribution} account={log.account} locale={getLocale()} />
+          <span>{stateLabel(log.sessionState)}</span>
+          <RelativeTime value={log.publishedAt} />
         </div>
-        <div>
-          <dt className="font-medium">{m.library_logs_subject()}</dt>
-          <dd className="flex items-center gap-3">
-            <SubjectIdentity subject={log.subject} ratio={rowRatio([log.subject])} />
-          </dd>
-        </div>
-        <div>
-          <dt className="font-medium">{m.library_logs_session_state()}</dt>
-          <dd>{stateLabel(log.sessionState)}</dd>
-        </div>
-      </dl>
-      <section aria-label={m.library_logs_dates()} className="space-y-2">
-        <SnapshotTime label={m.library_logs_started()} value={log.startedAt} />
-        {log.completedAt ? <SnapshotTime label={m.library_logs_completed()} value={log.completedAt} /> : null}
-        <SnapshotTime label={m.library_logs_published()} value={log.publishedAt} />
+        {log.note ? (
+          <div className="space-y-2 border-t pt-5">
+            <h2 className="text-sm font-medium text-muted-foreground">{m.library_logs_note()}</h2>
+            <p
+              dir="auto"
+              className="max-w-prose whitespace-pre-wrap text-base leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]"
+            >
+              {log.note}
+            </p>
+          </div>
+        ) : null}
       </section>
-      {log.note ? (
-        <section className="space-y-2">
-          <h2 className="text-xl font-semibold">{m.library_logs_note()}</h2>
-          <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{log.note}</p>
+      <details className="rounded-lg border px-4">
+        <summary className="min-h-11 cursor-pointer content-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.library_logs_dates()}
+        </summary>
+        <section aria-label={m.library_logs_dates()} className="space-y-2 border-t py-4 text-sm">
+          <SnapshotTime label={m.library_logs_started()} value={log.startedAt} />
+          {log.completedAt ? <SnapshotTime label={m.library_logs_completed()} value={log.completedAt} /> : null}
+          <SnapshotTime label={m.library_logs_published()} value={log.publishedAt} />
+          <p className="text-muted-foreground">{m.library_history_published_snapshot()}</p>
         </section>
-      ) : null}
+      </details>
       {error ? (
         <p role="alert" className="rounded-lg border border-border bg-card p-3">
           {error}

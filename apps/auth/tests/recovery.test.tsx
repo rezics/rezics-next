@@ -45,7 +45,7 @@ async function flush(action: () => void) {
     action();
   });
 }
-async function open(fragment = '') {
+async function open(fragment = '', holdAdvice = false) {
   window.history.replaceState(null, '', `/recovery${fragment}`);
   window.sessionStorage.clear();
   const rootRoute = createRootRoute({ component: Outlet });
@@ -54,13 +54,15 @@ async function open(fragment = '') {
   const history = createBrowserHistory({ window: dom });
   const router = createRouter({ history, routeTree: rootRoute.addChildren([recovery, away]) });
   const calls: unknown[] = [];
+  const reads: { stage: 'start' | 'complete'; resolve: (response: Response) => void }[] = [];
   let closed = false;
   let release!: (response: Response) => void;
   globalThis.fetch = (async (_path, init) => {
-    if (_path === '/recovery/page')
-      return Response.json(
-        recoveryPage(JSON.parse(String(init?.body)).stage, { minPasswordLength: 8, maxPasswordLength: 128 }),
-      );
+    if (_path === '/recovery/page') {
+      const stage = JSON.parse(String(init?.body)).stage;
+      if (holdAdvice) return new Promise<Response>((resolve) => reads.push({ stage, resolve }));
+      return Response.json(recoveryPage(stage, { minPasswordLength: 8, maxPasswordLength: 128 }));
+    }
     calls.push(JSON.parse(String(init?.body)));
     return new Promise<Response>((resolve) => {
       release = resolve;
@@ -73,7 +75,18 @@ async function open(fragment = '') {
   return {
     host,
     calls,
+    reads,
     router,
+    async advice(status = 200) {
+      const read = reads.at(-1)!;
+      await flush(() =>
+        read.resolve(
+          status === 200
+            ? Response.json(recoveryPage(read.stage, { minPasswordLength: 8, maxPasswordLength: 128 }))
+            : new Response('', { status }),
+        ),
+      );
+    },
     async submit(value: string) {
       await flush(() => {
         const input = host.querySelector<HTMLInputElement>('input[name="email"], input[name="new_password"]')!;
@@ -222,3 +235,80 @@ test('unknown completion retains an immutable submission for explicit retry and 
     await page.close();
   }
 });
+
+const retryButton = (host: HTMLElement) =>
+  [...host.querySelectorAll('button')].find((control) => control.textContent === 'Try again')!;
+const activate = (control: HTMLElement, detail = 0) => {
+  control.focus();
+  control.dispatchEvent(new dom.MouseEvent('click', { bubbles: true, detail }));
+};
+
+test('initial and observed recovery advice preserve external reading focus through loading and failure', async () => {
+  const reader = document.body.appendChild(document.createElement('button'));
+  reader.focus();
+  const page = await open('', true);
+  try {
+    expect(document.activeElement).toBe(reader);
+    await page.advice();
+    expect(document.activeElement).toBe(reader);
+    await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+    expect(document.activeElement).toBe(reader);
+    await page.advice(503);
+    expect(document.activeElement).toBe(reader);
+    expect(page.calls).toHaveLength(0);
+  } finally {
+    await page.close();
+    reader.remove();
+  }
+});
+
+for (const fragment of ['', link, '#account_id=missing-token'])
+  test(`advice Retry owns only keyboard focus for ${fragment || 'email'} success and equal failure`, async () => {
+    for (const modality of ['keyboard', 'pointer', 'tab', 'observation', 'pointer-away']) {
+      const page = await open(fragment, true);
+      try {
+        await page.advice(503);
+        const trigger = retryButton(page.host);
+        await flush(() => activate(trigger, modality === 'pointer' ? 1 : 0));
+        expect(trigger.isConnected).toBe(true);
+        expect(trigger.disabled).toBe(false);
+        expect(document.activeElement).toBe(trigger);
+        const reader = page.host.querySelector<HTMLAnchorElement>('a[href="/login"]')!;
+        if (modality === 'tab')
+          await flush(() => {
+            trigger.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+            reader.focus(); // DOM fixture does not implement browser Tab traversal.
+          });
+        if (modality === 'pointer-away')
+          await flush(() => document.body.dispatchEvent(new dom.MouseEvent('mousedown', { bubbles: true })));
+        if (modality === 'observation')
+          await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+        await page.advice(503);
+        const boundary = retryButton(page.host).parentElement!;
+        expect(document.activeElement).toBe(modality === 'keyboard' ? boundary : modality === 'tab' ? reader : trigger);
+        await flush(() => activate(retryButton(page.host), modality === 'pointer' ? 1 : 0));
+        if (modality !== 'keyboard' && modality !== 'pointer') await flush(() => reader.focus());
+        await page.advice();
+        const target =
+          fragment === link
+            ? page.host.querySelector('[name="new_password"]')
+            : fragment
+              ? page.host.querySelector('[role="alert"]')
+              : page.host.querySelector('[name="email"]');
+        if (modality === 'keyboard') expect(document.activeElement).toBe(target);
+        else expect(document.activeElement).not.toBe(target);
+        if (fragment === '#account_id=missing-token') {
+          const freshLink = page.host.querySelector<HTMLAnchorElement>('a[href="/recovery"]')!;
+          await flush(() => activate(freshLink, modality === 'pointer' ? 1 : 0));
+          expect(freshLink.isConnected).toBe(true);
+          if (modality !== 'keyboard' && modality !== 'pointer') await flush(() => freshLink.blur());
+          await page.advice();
+          expect(document.activeElement === page.host.querySelector('[name="email"]')).toBe(modality === 'keyboard');
+        }
+        expect(page.calls).toHaveLength(0);
+        expect(window.location.hash).toBe('');
+      } finally {
+        await page.close();
+      }
+    }
+  });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameReaderAddress, GameReaderRead, GameReaderReady, GameReaderTransport } from '../model';
 
-type Intent = 'next' | 'previous' | 'start' | 'section';
+type Intent = 'next' | 'previous' | 'start' | 'section' | 'retry';
 type Request = { address: GameReaderAddress; intent: Intent };
 
 /** Only addresses survive a successful replacement; no former response or row is retained. */
@@ -122,6 +122,12 @@ export function useEditionWindow(input: {
       const target = history.current.at(-1);
       return target ? read({ address: target, intent: 'previous' }) : Promise.resolve(false);
     },
-    retry: () => read(pending.current),
+    retry: () =>
+      read({
+        ...pending.current,
+        // An accepted page can still have unavailable comparison facts. Revisit it without
+        // treating its already accepted cursor as forward traversal or pushing history again.
+        intent: accepted.current === pending.current.address ? 'retry' : pending.current.intent,
+      }),
   };
 }

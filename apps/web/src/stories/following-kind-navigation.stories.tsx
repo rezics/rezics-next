@@ -26,3 +26,18 @@ export const PreviousAvailable: Story = {
     },
   },
 };
+
+export const SparseZoneContinuation: Story = {
+  args: {
+    page: { signedIn: true, follows: [], next: 'opaque/zone-next+' },
+    cursor: 'opaque/zone-current+',
+    kind: 'zone',
+    navigation: {
+      previous: { cursor: null, kind: 'zone' },
+      busy: false,
+      unsettledRemoval: false,
+      move: () => true,
+      removalChanged: () => {},
+    },
+  },
+};

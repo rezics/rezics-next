@@ -34,6 +34,7 @@ import {
 import { readMyPublishedLogHistoryForViewer, type MyLogsViewerHistory } from './logs-server';
 import { SubjectCover, rowRatio } from './subject-row';
 import { displayLibraryTitle } from './title';
+import { recordedDayLabel } from './private-diary/timeline';
 import {
   clearLogsReturn,
   logsDestinationClick,
@@ -342,7 +343,8 @@ export function MyLogsPageView({
         <PageHeading ref={listHeading} tabIndex={-1}>
           {m.library_my_logs_heading()}
         </PageHeading>
-        <p className="text-muted-foreground">{m.library_my_logs_description()}</p>
+        <p className="max-w-prose text-muted-foreground">{m.library_my_logs_description()}</p>
+        <p className="text-sm text-muted-foreground">{m.library_journal_public_boundary()}</p>
       </header>
       {page.state === 'invalid-position' ? (
         <div className="space-y-3">
@@ -386,7 +388,7 @@ export function MyLogsPageView({
           {page.restarted ? <p role="status">{m.library_my_logs_restarted()}</p> : null}
           {page.logs.length ? (
             <ol aria-label={m.library_logs_heading()} className="space-y-2">
-              {page.logs.map((log) => {
+              {page.logs.map((log, index) => {
                 const title = log.subject
                   ? displayLibraryTitle(log.subject.label, getLocale())
                   : { text: m.library_subject_unavailable(), lang: undefined };
@@ -402,7 +404,14 @@ export function MyLogsPageView({
                     title={title.text}
                     {...(title.lang === undefined ? {} : { titleLang: title.lang })}
                     headingLevel={2}
-                    className="px-3 [overflow-wrap:anywhere]"
+                    context={
+                      index === 0 || page.logs[index - 1]!.publishedAt.slice(0, 10) !== log.publishedAt.slice(0, 10) ? (
+                        <p data-log-date-group className="mb-2 border-b pb-3 text-sm font-medium text-muted-foreground">
+                          {recordedDayLabel(log.publishedAt.slice(0, 10), getLocale())}
+                        </p>
+                      ) : null
+                    }
+                    className="rounded-xl border bg-card px-4 [overflow-wrap:anywhere]"
                     visual={<SubjectCover subject={log.subject} ratio={ratio} />}
                     state={
                       <p className="text-sm text-muted-foreground">
@@ -456,7 +465,12 @@ export function MyLogsPageView({
                               {m.library_my_logs_full_note()}
                             </span>
                           </summary>
-                          <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{log.note}</p>
+                          <p
+                            dir="auto"
+                            className="max-w-prose whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere] [unicode-bidi:plaintext]"
+                          >
+                            {log.note}
+                          </p>
                         </details>
                       ) : null
                     }

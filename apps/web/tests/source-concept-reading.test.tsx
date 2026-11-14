@@ -269,6 +269,99 @@ test('mounted native hierarchy retains a failed page, retries its original input
   });
 });
 
+test('Concept companions retain exact graph node and edge returns across replacement and reload', async () => {
+  const { SourceConceptView } = await import('../src/features/pages/source-concept-view');
+  const { graphBrowserReturnHref } = await import('../src/features/pages/graph-browser/view');
+  const { originatingConceptReturn } = await import('../src/features/pages/source-concept-reading/origin');
+  const { conceptTargetHref } = await import('../src/features/pages/source-concept-reading/navigation');
+  const { subjectGraphVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
+  const { candidateContext } = await import('../src/subject/candidates');
+  const query = { property: ['skos:broader', 'schema:genre'], direction: 'in' as const, depth: 2 as const };
+  const visit = {
+    kind: 'origin' as const,
+    origin: {
+      subject: target,
+      context: candidateContext,
+      locale: 'en',
+      returnHref: origin.replace('/graph', '#subject-heading'),
+    },
+  };
+  const addresses = [
+    graphBrowserReturnHref(origin, query, { kind: 'node', id }, visit)!,
+    graphBrowserReturnHref(
+      origin,
+      query,
+      { kind: 'edge', statement: id, from: target, to: id, property: 'skos:broader' },
+      visit,
+    )!,
+  ];
+  const returns = addresses.map((address) => {
+    const href = conceptTargetHref(`/en/subjects/${id}/original-concept/concepts`, undefined, address);
+    const received = new URL(href, 'https://site.invalid').searchParams.get('returnTo');
+    expect(originatingConceptReturn(received, 'en')).toBe(address);
+    expect(subjectGraphVisitReturn(received, 'en')).toBe(address);
+    return address;
+  });
+  await mounted(async ({ host, render }) => {
+    const pending = pendingReads();
+    const show = (returnTo: string, key = 'visit') =>
+      render(h(SourceConceptView, { key, id, locale: 'en', role, returnTo, transport: pending }));
+    const returnLink = () =>
+      [...host.querySelectorAll('a')].find((node) => node.textContent === 'Return to the selected fact')!;
+    await show(returns[0]!);
+    expect(returnLink().getAttribute('href')).toBe(returns[0]);
+    await show(returns[1]!); // The same companion receives a replacement graph selection.
+    await pending.complete(1, { label: 'Current edge', advice: false });
+    await act(async () => returnLink().focus());
+    const focused = document.activeElement;
+    await pending.complete(0, { label: 'Retired node' });
+    expect(links(hierarchy(host))).toEqual(['Current edge']);
+    expect(returnLink().getAttribute('href')).toBe(returns[1]);
+    expect(document.activeElement).toBe(focused);
+    expect(links(host)).not.toContain('Correct this fact');
+    await show(returns[1]!, 'reload');
+    await pending.complete(2, { label: 'Fresh reload', advice: false });
+    expect(links(hierarchy(host))).toEqual(['Fresh reload']);
+    expect(returnLink().getAttribute('href')).toBe(returns[1]);
+    expect(pending.calls.map(({ input }) => input)).toEqual([{}, {}, {}]);
+  });
+});
+
+test('companion HTTP return operands share the bounded graph URL grammar', async () => {
+  const { originatingConceptReturn } = await import('../src/features/pages/source-concept-reading/origin');
+  const { musicContextRouteSearch } = await import('../src/features/catalogue/music-context-profile/navigation');
+  const valid = `${origin}?property=skos%3Abroader&direction=both&depth=2&node=${id}`;
+  for (const returnTo of [
+    `https://outside.test${valid}`,
+    `//outside.test${valid}`,
+    valid.replace('/en/', '/ja/'),
+    valid.replace('/classification/', '/%2e%2e/classification/'),
+    valid.replace('/classification/', '/bad%2fslug/'),
+    valid.replace('/classification/', '/bad%00slug/'),
+    valid.replace('/classification/', '/%ZZ/'),
+    `${valid}&node=${id}`,
+    `${valid}&edge=${target}`,
+    `${origin}?edge=${id}&from=${target}`,
+    valid.replace('direction=both', 'direction=sideways'),
+    valid.replace('depth=2', 'depth=3'),
+    `${valid}&context=${target}`,
+    `${valid}&realm=${target}`,
+    `${valid}&session=private`,
+    `${valid}&returnTo=${encodeURIComponent(origin)}`,
+    `${valid}#selection`,
+    `${valid}&property=%ZZ`,
+    valid.replace('/classification/', `/${'界'.repeat(700)}/`),
+  ]) {
+    const url = new URL(
+      `/en/subjects/${id}/companion/concepts?${new URLSearchParams({ returnTo })}`,
+      'https://site.invalid',
+    );
+    const received = url.searchParams.get('returnTo');
+    expect(originatingConceptReturn(received, 'en')).toBeUndefined();
+    expect(musicContextRouteSearch({ returnTo: received }, 'en', { subjectId: id })).toBeUndefined();
+  }
+});
+
 test('role, subject and reader ABA replacements fence reversed successful and failed completions', async () => {
   const { SourceConceptView } = await import('../src/features/pages/source-concept-view');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
@@ -361,7 +454,7 @@ test('partial refresh retains only the same native revision and receipt, while d
   });
 });
 
-test('native paging history and UTF-8 continuations are bounded; origin validation never widens graph returns', async () => {
+test('native paging history and UTF-8 continuations are bounded; unknown graph intent stays rejected', async () => {
   const { SourceConceptView } = await import('../src/features/pages/source-concept-view');
   const { originatingClassification } = await import('../src/features/pages/source-concept-reading/origin');
   expect(originatingClassification(origin)).toBe(origin);

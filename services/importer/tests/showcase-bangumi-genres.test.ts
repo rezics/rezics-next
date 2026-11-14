@@ -43,6 +43,7 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
   const subjects = new Map<string, Subject>();
   const owners = new Map<string, string>();
   const candidates = new Map<string, Candidate>();
+  const proposalsByKey = new Map<string, string>();
   const adoptions = new Map<
     string,
     { mode: 'replace'; head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }
@@ -89,18 +90,27 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
             return { key: command.key, status: created ? (201 as const) : (200 as const), value: { id, revision: 1 } };
           }
           if (command.op === 'propose') {
-            const id = randomUUID();
-            candidates.set(id, {
-              id,
-              subject: command.subject,
-              source: command.source,
-              statement: command.statement,
-              decision: 'proposed',
-              rank: null,
-              retracted: null,
-              head: null,
-            });
-            return { key: command.key, status: 201 as const, value: { candidate: id, revision: 1 } };
+            let id = proposalsByKey.get(command.key);
+            const created = id === undefined;
+            if (!id) {
+              id = randomUUID();
+              proposalsByKey.set(command.key, id);
+              candidates.set(id, {
+                id,
+                subject: command.subject,
+                source: command.source,
+                statement: command.statement,
+                decision: 'proposed',
+                rank: null,
+                retracted: null,
+                head: null,
+              });
+            }
+            return {
+              key: command.key,
+              status: created ? (201 as const) : (200 as const),
+              value: { candidate: id, revision: 1 },
+            };
           }
           const old = candidates.get(command.candidate);
           if (old) old.retracted = 1;
@@ -121,9 +131,9 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
       for (const [property, adoption] of adoptions) {
         if (!property.startsWith(`${id}\0`)) continue;
         const name = property.slice(id.length + 1);
-        statements[name] = adoption.selection.flatMap(({ candidate }) => {
+        statements[name] = adoption.selection.flatMap(({ candidate, rank }) => {
           const row = candidates.get(candidate);
-          return row && row.retracted === null ? [{ id: row.id, ...row.statement }] : [];
+          return row && row.retracted === null ? [{ id: row.id, rank, ...row.statement }] : [];
         });
       }
       return { subject: { ...subject, context, statements } } as never;
@@ -165,11 +175,17 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
   return port as unknown as ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2];
 }
 
-test('constructed reviewed application seeds, binds and independently reads current vocabulary through its supplied port', async () => {
+test('reviewed tag binding survives deprecated history on unchanged reopen and withdraws for current conflicts', async () => {
   const directory = await mkdtemp(join(import.meta.dir, '../../../.temp/reviewed-binding-'));
   const path = join(directory, 'state.sqlite');
   const native = fakePort();
   let changed = false;
+  let sourceConcept: string | undefined;
+  let alternate: { subject: string; property: string; candidate: string } | undefined;
+  let sameAsRank: 'deprecated' | 'preferred' = 'deprecated';
+  let siblingRank: 'deprecated' | 'normal' = 'deprecated';
+  let promoteSiblingAfterAcceptance = false;
+  let adoptionWrites = 0;
   let readSignal: AbortSignal | undefined;
   let fenceSignal: AbortSignal | undefined;
   const port: ReviewedCataloguePort = {
@@ -180,12 +196,64 @@ test('constructed reviewed application seeds, binds and independently reads curr
     },
     async readReviewedSubject(...args) {
       readSignal = args[1];
-      return native.readReviewedSubject(...args);
+      const result = (await native.readReviewedSubject(...args)) as {
+        subject?: { id: string; statements: Record<string, unknown[]> };
+      };
+      if (sourceConcept && result.subject?.id === sourceConcept)
+        result.subject.statements['schema:sameAs'] = [
+          {
+            id: 'historical-same-as',
+            rank: sameAsRank,
+            property: { id: 'schema:sameAs' },
+            value: { type: 'value', content: 'https://fixture.test/old-source-equivalence' },
+            references: [],
+          },
+        ];
+      if (alternate && result.subject?.id === alternate.subject && siblingRank === 'normal')
+        result.subject.statements[alternate.property] = [
+          ...(result.subject.statements[alternate.property] ?? []),
+          {
+            id: 'historical-alternative',
+            rank: siblingRank,
+            property: { id: alternate.property },
+            value: { type: 'value', content: 'historical alternate value' },
+            references: [],
+          },
+        ];
+      return result as never;
+    },
+    async acceptReviewedCandidate(...args) {
+      const result = await native.acceptReviewedCandidate(...args);
+      if (promoteSiblingAfterAcceptance) {
+        promoteSiblingAfterAcceptance = false;
+        siblingRank = 'normal';
+      }
+      return result;
+    },
+    async adoptReviewedCandidates(...args) {
+      adoptionWrites++;
+      return native.adoptReviewedCandidates(...args);
     },
     async reviewedCandidates(...args) {
       const page = JSON.parse(JSON.stringify(await native.reviewedCandidates(...args)), (_key, value) =>
         value && typeof value === 'object' && !Array.isArray(value) ? Object.setPrototypeOf(value, null) : value,
       );
+      if (alternate && args[0] === alternate.subject && args[1].property === alternate.property) {
+        const selected = page.candidates.find((candidate) => candidate.id === alternate!.candidate);
+        if (selected)
+          page.candidates.push({
+            ...selected,
+            id: 'historical-alternative',
+            decision: 'accepted',
+            rank: siblingRank,
+            statement: { ...selected.statement, value: { type: 'value', content: 'historical alternate value' } },
+          });
+        if (page.adoption)
+          page.adoption.selection = [
+            ...page.adoption.selection,
+            { candidate: 'historical-alternative', rank: siblingRank },
+          ];
+      }
       for (const candidate of page.candidates) {
         const statement = candidate.statement;
         Object.assign(statement, {
@@ -209,6 +277,13 @@ test('constructed reviewed application seeds, binds and independently reads curr
   const signal = new AbortController().signal;
   try {
     const result = await application.seed({ path, port, signal });
+    sourceConcept = result.subjects['source-harem'];
+    const firstFact = result.facts[0]!;
+    alternate = {
+      subject: firstFact.subject,
+      property: firstFact.statement.property.id,
+      candidate: firstFact.candidate,
+    };
     expect(fenceSignal).toBe(signal);
     const session = new ImportSession(path);
     try {
@@ -240,6 +315,33 @@ test('constructed reviewed application seeds, binds and independently reads curr
           signal,
         }),
       ).toEqual({ [reviewedReferenceKey(bangumiPublicTagScheme, '后宫')]: binding.sourceConcept });
+
+      const reopened = await application.seed({ path, port, signal });
+      expect(reopened.facts.map((fact) => fact.candidate)).toEqual(result.facts.map((fact) => fact.candidate));
+      expect((await application.inspect(session.bindings, port, signal)).state).toBe('bound');
+      expect(await application.readBinding(session.bindings, port, signal)).toEqual(binding);
+
+      sameAsRank = 'preferred';
+      expect((await application.inspect(session.bindings, port, signal)).state).toBe('withdrawn');
+      sameAsRank = 'deprecated';
+      expect((await application.inspect(session.bindings, port, signal)).state).toBe('bound');
+
+      siblingRank = 'normal';
+      expect((await application.inspect(session.bindings, port, signal)).state).toBe('withdrawn');
+      const beforeConflict = adoptionWrites;
+      await expect(application.seed({ path, port, signal })).rejects.toThrow();
+      expect(adoptionWrites).toBe(beforeConflict);
+
+      siblingRank = 'deprecated';
+      expect((await application.inspect(session.bindings, port, signal)).state).toBe('bound');
+      promoteSiblingAfterAcceptance = true;
+      await expect(application.seed({ path, port, signal })).rejects.toThrow();
+      expect(adoptionWrites).toBe(beforeConflict);
+      siblingRank = 'deprecated';
+      expect((await application.inspect(session.bindings, port, signal)).state).toBe('bound');
+      const restored = await application.seed({ path, port, signal });
+      expect(restored.facts.map((fact) => fact.candidate)).toEqual(result.facts.map((fact) => fact.candidate));
+
       changed = true;
       expect(await application.readBinding(session.bindings, port, signal)).toBeNull();
     } finally {

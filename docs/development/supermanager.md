@@ -38,11 +38,11 @@ are actively implementing source. Use the existing ten-minute checkpoint. Count 
 with source work; separate startup reservations, ready tasks, parked checks and landing from coding. Compare
 worktree changes and commits with landings; a process or task label alone is not evidence of code output.
 
-First ask each responsible manager which release outcomes can start now and whether its workers have proposed
-their next independent tasks. Have managers dispatch or recover those starts, confirm the evidence, and give idle
-slots another coherent outcome while a shared fault is repaired. Check concrete allowance and host admission after
-checking supply, ownership and start failures. Keep this intervention active until width recovers or the window
-ends; do not create filler or interrupt live writers.
+At each checkpoint inspect actual starts, first source and ready supply. Delegate discovery, prompt quality, assignment
+and continuous dispatch to managers. Identify the observed loss—unprepared work, a weak brief, admission or a shared
+bottleneck—and hold the responsible managers to its repair. Check concrete allowance and host admission after checking
+supply, ownership and start failures. Keep this intervention active until width recovers or the window ends; do not
+create filler or interrupt live writers.
 
 Consolidate resident managers whose work duplicates another owner's or whose role produces no independent decision
 or actionable work. Transfer their Goals and outstanding task ownership through Goal before stopping the redundant

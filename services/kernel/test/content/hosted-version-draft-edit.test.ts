@@ -3,6 +3,7 @@ import type { CommandTransaction } from '../../src/command/command.ts';
 import {
   createVersionedOutlineSequenceReadWriteSet,
   type VersionedOutlineSequenceNode,
+  type VersionedOutlineSequenceReadWriteSet,
 } from '../../src/content/versioned-outline-sequence.ts';
 import { commitHostedVersionDraftMoveInTransaction } from '../../src/content/hosted-version-draft-edit-command.ts';
 import { prepareHostedVersionDraftMovePlan } from '../../src/content/hosted-version-draft-edit.ts';
@@ -27,6 +28,20 @@ function buildSequence(values: readonly string[], weighted: ReadonlySet<string> 
     const left = leftId === null ? null : nodes.get(leftId)!;
     const right = rightId === null ? null : nodes.get(rightId)!;
     const chapterWeight = weighted.has(id) ? 1n : 0n;
+    const maximum = [
+      { subtreeHeight: 0, occurrenceId: id },
+      ...(left === null
+        ? []
+        : [{ subtreeHeight: left.maximumSubtreeHeight!, occurrenceId: left.maximumSubtreeOccurrenceId! }]),
+      ...(right === null
+        ? []
+        : [{ subtreeHeight: right.maximumSubtreeHeight!, occurrenceId: right.maximumSubtreeOccurrenceId! }]),
+    ].reduce((best, candidate) =>
+      candidate.subtreeHeight > best.subtreeHeight ||
+      (candidate.subtreeHeight === best.subtreeHeight && candidate.occurrenceId < best.occurrenceId)
+        ? candidate
+        : best,
+    );
     nodes.set(id, {
       id,
       value: id,
@@ -37,6 +52,9 @@ function buildSequence(values: readonly string[], weighted: ReadonlySet<string> 
       count: 1n + (left?.count ?? 0n) + (right?.count ?? 0n),
       chapterWeight,
       chapterCount: chapterWeight + (left?.chapterCount ?? 0n) + (right?.chapterCount ?? 0n),
+      subtreeHeight: 0,
+      maximumSubtreeHeight: maximum.subtreeHeight,
+      maximumSubtreeOccurrenceId: maximum.occurrenceId,
     });
     return id;
   }
@@ -48,11 +66,12 @@ function makeIndexes(snapshots: Readonly<{ siblings: Snapshot; preorder: Snapsho
     siblings: createVersionedOutlineSequenceReadWriteSet<string>(async (id) => snapshots.siblings.get(id) ?? null),
     preorder: createVersionedOutlineSequenceReadWriteSet<string>(async (id) => snapshots.preorder.get(id) ?? null),
     chapters: createVersionedOutlineSequenceReadWriteSet<string>(async (id) => snapshots.chapters.get(id) ?? null),
+    readLegacyMaximum: async () => null,
   } satisfies HostedVersionDraftMoveIndexes;
   return accesses;
 }
 
-function commit(snapshot: Snapshot, access: HostedVersionDraftMoveIndexes[keyof HostedVersionDraftMoveIndexes]) {
+function commit(snapshot: Snapshot, access: VersionedOutlineSequenceReadWriteSet<string>): Snapshot {
   return new Map([...snapshot, ...access.nodeWrites]);
 }
 
@@ -89,9 +108,16 @@ test('moves a large unchanged subtree by ranks, preserves the old draft, and rej
   const oldChapters = ['a-before', ...sourceChapterIds, 'a-after', 'b-before', 'b-after', 'outside-tail'];
   const siblingA = buildSequence(['a-before', 'source-part', 'a-after']);
   const siblingB = buildSequence(['b-before', 'b-after']);
+  const rootSiblings = buildSequence(['parent-a', 'parent-b', 'outside-tail'], new Set(['outside-tail']));
+  const sourceSiblings = buildSequence(descendantIds, new Set(sourceChapterIds));
   const preorder = buildSequence(oldPreorder, new Set(oldChapters));
   const chapters = buildSequence(oldChapters, new Set(oldChapters));
-  const siblingSnapshot = new Map([...siblingA.nodes, ...siblingB.nodes]);
+  const siblingSnapshot = new Map([
+    ...rootSiblings.nodes,
+    ...siblingA.nodes,
+    ...siblingB.nodes,
+    ...sourceSiblings.nodes,
+  ]);
   const original = {
     siblings: siblingSnapshot,
     preorder: preorder.nodes,
@@ -128,15 +154,35 @@ test('moves a large unchanged subtree by ranks, preserves the old draft, and rej
       chapterCount: 1n,
     },
     sourceAncestors: [
-      { snapshotId: revisionId, occurrenceId: 'parent-a', parentId: null, subtreeSize: 12_004n, chapterCount: 6_002n },
+      {
+        snapshotId: revisionId,
+        occurrenceId: 'parent-a',
+        parentId: null,
+        subtreeSize: 12_004n,
+        chapterCount: 6_002n,
+        subtreeHeight: 2,
+      },
     ],
     destinationAncestors: [
-      { snapshotId: revisionId, occurrenceId: 'parent-b', parentId: null, subtreeSize: 3n, chapterCount: 2n },
+      {
+        snapshotId: revisionId,
+        occurrenceId: 'parent-b',
+        parentId: null,
+        subtreeSize: 3n,
+        chapterCount: 2n,
+        subtreeHeight: 1,
+      },
     ],
     sourceSiblingRootId: siblingA.rootId,
     destinationSiblingRootId: siblingB.rootId,
     preorderRootId: preorder.rootId,
     chapterRootId: chapters.rootId,
+    siblingRootByParent: new Map([
+      [null, rootSiblings.rootId],
+      ['parent-a', siblingA.rootId],
+      ['parent-b', siblingB.rootId],
+      ['source-part', sourceSiblings.rootId],
+    ]),
   };
   const input: HostedVersionDraftMoveInput = {
     expectedRevisionId: revisionId,
@@ -268,6 +314,7 @@ test('promotes a large subtree to the root, reorders root siblings, and skips an
         parentId: null,
         subtreeSize: sourceSize + 1n,
         chapterCount: BigInt(descendants.length),
+        subtreeHeight: 2,
       },
     ],
     destinationAncestors: [],
@@ -275,6 +322,11 @@ test('promotes a large subtree to the root, reorders root siblings, and skips an
     destinationSiblingRootId: rootSiblings.rootId,
     preorderRootId: preorder.rootId,
     chapterRootId: chapters.rootId,
+    siblingRootByParent: new Map([
+      [null, rootSiblings.rootId],
+      ['source-parent', parentSiblings.rootId],
+      ['source-part', sourceSiblings.rootId],
+    ]),
   };
   const input: HostedVersionDraftMoveInput = {
     expectedRevisionId: revisionId,
@@ -402,11 +454,12 @@ test('binds staged move roots to one adapter commit, skips adjacent no-ops, and 
   };
   const siblingA = buildSequence(['source']);
   const siblingB = buildSequence(['anchor']);
+  const rootSiblings = buildSequence(['parent-a', 'parent-b']);
   const oldChapters = ['source', 'anchor'];
   const preorder = buildSequence(['parent-a', 'source', 'parent-b', 'anchor'], new Set(oldChapters));
   const chapters = buildSequence(oldChapters, new Set(oldChapters));
   const original = {
-    siblings: new Map([...siblingA.nodes, ...siblingB.nodes]),
+    siblings: new Map([...rootSiblings.nodes, ...siblingA.nodes, ...siblingB.nodes]),
     preorder: preorder.nodes,
     chapters: chapters.nodes,
   };
@@ -441,15 +494,34 @@ test('binds staged move roots to one adapter commit, skips adjacent no-ops, and 
       chapterCount: 1n,
     },
     sourceAncestors: [
-      { snapshotId: revisionId, occurrenceId: 'parent-a', parentId: null, subtreeSize: 2n, chapterCount: 1n },
+      {
+        snapshotId: revisionId,
+        occurrenceId: 'parent-a',
+        parentId: null,
+        subtreeSize: 2n,
+        chapterCount: 1n,
+        subtreeHeight: 1,
+      },
     ],
     destinationAncestors: [
-      { snapshotId: revisionId, occurrenceId: 'parent-b', parentId: null, subtreeSize: 2n, chapterCount: 1n },
+      {
+        snapshotId: revisionId,
+        occurrenceId: 'parent-b',
+        parentId: null,
+        subtreeSize: 2n,
+        chapterCount: 1n,
+        subtreeHeight: 1,
+      },
     ],
     sourceSiblingRootId: siblingA.rootId,
     destinationSiblingRootId: siblingB.rootId,
     preorderRootId: preorder.rootId,
     chapterRootId: chapters.rootId,
+    siblingRootByParent: new Map([
+      [null, rootSiblings.rootId],
+      ['parent-a', siblingA.rootId],
+      ['parent-b', siblingB.rootId],
+    ]),
   };
   const tx = {} as CommandTransaction;
   const write = {

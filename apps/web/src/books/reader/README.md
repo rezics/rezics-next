@@ -11,6 +11,18 @@ view. The reader uses Library's native hosted-reading checkpoint with explicit s
 positions; no automatic write or ordinary Progress conversion occurs. Hosts use the declared `books/reader/route.tsx`
 composition entry.
 
+The entry's `hostedBookNavigationForRouter` owns the bounded contents/chooser/focus visit and its subscriptions.
+File routes supply their existing Router and QueryClient. Search-only loader replacement retains that Router's
+visit; successful session replacement and `pagehide` retire its coordinates and pending focus. Moving between Book
+reader paths retires chapter/contents coordinates while preserving the independent chooser window. Leaving the Book
+reader route removes its session, page and route subscriptions and Router entry, so returning starts empty. Frozen
+release, occurrence, contents return and Back/Forward rereads keep their existing meaning.
+
+Existing [reader stories](../../stories/hosted-book-reader.stories.tsx) cover `MultipleContentsPages`,
+`NestedLevelReturn`, `FailedPreviousRetry` and `RetiredReading`; these states need no additional variants for entry
+composition changes. The production route and subscription retirement witnesses remain in
+[hosted-book-reader.test.tsx](../../../tests/hosted-book-reader.test.tsx).
+
 ## Production admission and links
 
 `routes/books.$id.read.tsx` follows the existing file-route generator and locale rewrite. It has no public cache,
@@ -18,9 +30,10 @@ preload cache or stale route payload: `staleTime: 0`, `gcTime: 0`, `shouldReload
 The default catalogue visit is the current public publication's root contents. Subject discovery uses the same
 route with `view=catalogues`; its path ID is then the Subject ID. It calls the generated
 `subjects({id}).hostedCatalogues.get` once with `includeTitle=1`, `limit=20` and the original optional opaque cursor
-on initial, continuation and Retry reads. Empty and sparse windows retain More when supplied, and Retry rereads
-the same URL. Each row opens its disclosed publication and retains `subject` in subsequent exact chapter and
-contents links. `readHostedBookVisit` prepares the native Web
+on initial, continuation and Retry reads. Empty and sparse windows retain More when supplied. Previous uses retained
+predecessor evidence, First page restarts the current Subject chooser, and Retry rereads the same URL. Each row opens
+its disclosed publication and retains `subject` and the independent chooser return descriptor in subsequent exact
+chapter and contents links. `readHostedBookVisit` prepares the native Web
 session, reads the current publication with the installed generated catalogue operation, resolves any frozen
 release and selected occurrence, and produces `NativeHostedBookAdmission` for this visit. An omitted or empty
 catalogue title uses the localized Book title; it does not refuse an otherwise readable chapter. Credentials never enter URLs or
@@ -60,14 +73,15 @@ import { HostedBookReaderLink } from '../reader/route';
 
 Canonical links use `/{locale}/books/{catalogueId}/read`. Their bounded search coordinates are:
 
-| Field                          | Meaning                                                                            |
-| ------------------------------ | ---------------------------------------------------------------------------------- |
-| `release`                      | Frozen native publication revision; omitted only to select the current publication |
-| `occurrence`                   | Stable native placement; exact target is resolved from that frozen publication     |
-| `view`                         | `chapter`, `contents`, or Subject `catalogues`; no occurrence defaults to contents |
-| `subject`                      | Subject associated with the discovery link; native Library validates every save    |
-| `parent`, `cursor`             | One bounded contents level and its opaque continuation                             |
-| `returnParent`, `returnCursor` | Originating bounded contents position retained by a chapter link                   |
+| Field                                | Meaning                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| `release`                            | Frozen native publication revision; omitted only to select the current publication |
+| `occurrence`                         | Stable native placement; exact target is resolved from that frozen publication     |
+| `view`                               | `chapter`, `contents`, or Subject `catalogues`; no occurrence defaults to contents |
+| `subject`                            | Subject associated with the discovery link; native Library validates every save    |
+| `parent`, `cursor`                   | One bounded contents level and its opaque continuation                             |
+| `returnParent`, `returnCursor`       | Originating bounded contents position retained by a chapter link                   |
+| `catalogueReturn`, `catalogueCursor` | Explicit Subject chooser return marker (`1`) and its exact optional cursor         |
 
 No ordinal, current Post head, semantic relationship or scalar progress creates an occurrence selection. Reused
 bodies have different occurrence links even when their exact Post/revision/digest is identical. A move changes
@@ -84,7 +98,7 @@ not download contents or descendants. No prefetch, refill, per-row hydration or 
 
 A publication identifies native catalogue, frozen source structure and separate publication release. A chapter
 selects occurrence plus exact Post/revision/SHA-256. Contents preserves native order and container/body/unavailable
-slots. Sparse or empty windows can continue. More replaces the window; failure retries the same parent/cursor.
+slots. Sparse or empty windows can continue. More and Previous replace the window; failure retries the same parent/cursor.
 Pages separately report current release/structure, bounded ancestors and previous/next. Known ends and unavailable
 navigation remain different states. Returning to contents retains the exact selection and focuses its row when
 present, otherwise the heading; a moved selection retains an exact chapter return and current-location control.
@@ -99,8 +113,8 @@ Decision: occurrence, contents/navigation and checkpoint metadata receivers acce
 positions through `Number.MAX_SAFE_INTEGER`, including 512. Each owner uses Valibot's `safeInteger` without a new
 cross-owner codec. Studio's 0–511 full-replacement input bound and the reader's page, occurrence-title, body, exact-selector,
 viewer/target, retirement and document-offset bounds stay unchanged. Focused decoder fixtures establish Web
-compatibility only; native acceptance runs in the dev verifier. Library's server metadata schema still caps positions
-at 511 and requires a separate Library-owned change.
+compatibility only; native acceptance runs in the dev verifier. Library's server metadata response uses the same
+safe-integer ceiling, independently of Studio's bounded replacement input.
 
 The route supplies a fresh `NativeHostedBookAdmissionSource` for every loader observation; synchronous replacement
 retires the former reader. Other hosts must likewise replace their snapshot and notify on publication, current
@@ -138,7 +152,8 @@ establish native publication acceptance. No new API, progress store, automatic s
 
 ## Controls and progress
 
-Explicit navigation focuses the heading; contents return focuses the selected occurrence where present. Choosing
+Keyboard navigation focuses the heading while its original focus intent remains. Pointer activation never schedules
+a focus transfer. Contents return focuses the selected occurrence where present. Choosing
 a shared search/header control during navigation or moving focus during a request cancels the transfer. Arrow
 navigation stays inside the reading region, mirrors the document direction, and respects text selection, editable
 and interactive controls, modifiers, held keys and input methods. Controls wrap with 44px targets and phone safe
@@ -181,22 +196,63 @@ document bytes. The external-response boundary rejects a mismatched occurrence, 
 than linking to a different saved chapter.
 
 Save and clear use native CAS revisions, idempotency keys and the installed POST BFF's session/CSRF checks. Each
-successful command is followed by one current body-free metadata read before showing the result. An uncertain delivery keeps
-its exact command and key for Retry. A conflict or changed selection requires a fresh visit; there is no optimistic
-checkpoint success. Reading retirement aborts private requests and fences completion and controls. Ordinary Library
+successful command is followed by one current body-free metadata read before showing the result.
+
+Decision: uncertain save/clear replay retains the original command, CAS, key, viewer, locale, CSRF header, sender and
+owning abort signal. Each effect incarnation and request has its own completion fence; even an equal-value replacement
+reading cannot inherit its intent. A separate observation never confirms an uncertain command. Acknowledged readback
+confirms the action only when its exact catalogue/release/occurrence/body revision/digest/position matches (or Clear
+reads back native none); a differing current value keeps changed-reading recovery. Replay, failed checkpoint read
+retry and explicit current-reading recovery are distinct actions. Original action context and supplied saved chapter
+context remain visible beside uncertainty. New writes stay unavailable until the original outcome is resolved, and
+conflict/changed recovery requires a fresh visit. These choices add no read, polling, persistence or private snapshot.
+Reading retirement aborts private requests and fences completion and controls. Ordinary Library
 Progress, page units and Continue remain independent, as owned by [Library](../../../../../services/kernel/src/library/README.md).
+
+Keyboard checkpoint actions focus their result only while the initiating control still owns focus; moving focus or
+choosing another control cancels the transfer. Pointer actions retain pointer focus. Read retry preserves the original
+observation operands and the existing once-only position restoration. Within a visit the controls keep their live
+section through loading/readback, preserving the restore frame's control inset; replacement discards pending result
+focus. An unavailable checkpoint observation is labelled separately from Library progress. Clearing affects only the native checkpoint;
+Library progress and membership remain unchanged.
 
 The independent `renderProgress(page, isCurrent)` extension remains available for an admitted Commerce region;
 rendering failure cannot remove the chapter. It does not supply or replace the Library checkpoint.
 
 ## Bounds and evidence
 
+Decision: the Subject catalogue chooser retains eight observed predecessor coordinates plus current/staged
+coordinates in the existing route owner, scoped to Subject, locale and viewer/session. Each cursor is at most
+4,096 characters. Only successful explicit More traversal creates a predecessor; sparse pages count as pages.
+Back/Forward can revisit retained coordinates; direct/evicted positions never invent Previous. First page clears
+the frontier after fresh admission. Failed reads retain their exact URL for Retry; restart omits only the chooser
+cursor. Selected publications carry an explicit `catalogueReturn=1` and optional `catalogueCursor`, independently
+of chapter/contents return operands, so ordinary and modified links can return to that same position through one
+fresh native discovery read. The marker also distinguishes an admitted first-page origin from a direct Book link.
+Chooser memory survives selecting a publication and returning within the Book route, but session/viewer, locale,
+Subject replacement, pagehide or leaving that route retires it and pending focus. No catalogue rows, bodies or
+private reading positions enter the descriptor or history. One discovery request per explicit page, Retry or return;
+no prefetch, refill, point reads or catalogue scan. Keyboard traversal focuses the admitted chooser heading; return
+focuses the selected publication when present, otherwise the heading. Pointer traversal does not move focus.
+
+Decision: retain at most eight observed predecessor contents coordinates plus current/staged coordinates in
+route-owned memory for one mounted publication/viewer/credential/locale visit. Coordinates contain only exact
+public parent/cursor operands, never rows, titles, bodies, credentials or private checkpoints. Only successful,
+current contents observations advance this window. Previous uses an observed predecessor in the same parent;
+level links restore that parent's most recent retained coordinate. An evicted or direct-entry predecessor stays
+unknown; First page explicitly restarts the level. Failed movements retain their exact target for Retry, including
+failed Previous. No refill, tree scan or predecessor inference is permitted. Chapter return rereads its original
+bounded address and focuses the admitted selected occurrence, or the heading if it is missing. Source retirement,
+publication/viewer/credential/locale replacement and leaving the route discard the window and late effects;
+ordinary same-publication route/chapter movement may retain it. Reload/direct entry starts without predecessors.
+Back/Forward keeps its exact public URL and performs the existing fresh admission/source observation.
+
 One reader retains at most 40 consumer rows (native maximum 20), one chapter, 24 ancestors, two neighbours and one
-contents return. Each catalogue host observation makes at most three native operations; Subject discovery makes one. Each source observation makes at
-most 32: chapter `7 + ancestors + changedRelease`, contents `5 + parentProbe + ancestors + selectedResolves`.
+contents return, in addition to this bounded coordinate window. Each catalogue host observation makes at most three
+native operations; Subject discovery makes one. Each source observation makes at most 32: chapter `7 + ancestors + changedRelease`, contents `5 + parentProbe + ancestors + selectedResolves`.
 Each operation retains Content's own bounds. Body bytes are at most 2 MiB per resolution; frozen/current resolution
 can read two bodies. Consumer cursors allow 8,192 characters; native/route cursors allow 4,096. There is no growing
-page cache, cursor chain, hydrated tree or new progress store.
+page/body cache, unbounded cursor chain, hydrated tree or new progress store.
 
 Checkpoint transport costs one body-free metadata request on initial observation and one after each successful
 save or clear. A later chapter open still performs its existing exact-body admission and canonical-byte verification.
@@ -204,7 +260,9 @@ save or clear. A later chapter open still performs its existing exact-body admis
 `illustrative-source.ts` supplies labelled native-format examples through the actual mapper, exclusively for tests
 and stories. It is never a production source. Story IDs remain `interfaces-hosted-book-reader` with named states
 `nested-contents`, `exact-chapter`, `sparse-continuation`, `failed-page-recovery`, `moved-occurrence`,
-`unavailable-navigation` and `retired-reading`; `saved-continue` and `independent-checkpoint-failure` cover checkpoint
+`unavailable-navigation` and `retired-reading`. `multiple-contents-pages`, `nested-level-return` and
+`failed-previous-retry` cover bounded contents traversal, independent parent restoration, frozen chapter return
+and exact failed-Previous recovery; `saved-continue` and `independent-checkpoint-failure` cover checkpoint
 presentation independently of the body. Review at 390px/1280px in light/dark and all eight locale globals.
 The reading column keeps the shared reading measure, wrapping controls, focus rings and safe area spacing.
 
@@ -215,6 +273,21 @@ unsaved progress edit under Review reading progress; Retry does not reset that e
 same presentation used by the native owner, with explicitly local illustrative state. Main review stories remain
 manual and stable; set the Storybook `readerJourney` parameter to `true` to run the retained interaction assertions.
 Only their destination selectors change from buttons to canonical links; their outcome assertions stay unchanged.
+
+`book-checkpoint-recovery.stories.tsx` mounts the actual checkpoint component inside the shared Book reader with
+installed native response shapes. Its named states are `saved`, `unknown-save`, `unknown-clear`, `failed-read` and
+`replaced-visit`; all use locale globals and wrapping 44px controls. These fixtures and interaction sources do not
+claim native save/Continue, keyboard, phone/desktop visual or retirement acceptance; those remain verifier-owned.
+
+`MultipleCataloguePages`, `SparseCatalogueContinuation`, `DirectCatalogueEntry`, `FailedCatalogueRetry` and
+`SelectedCatalogueReturn` mount the real chooser/reader route composition with illustrative native-format responses.
+Their local HTTP and Router seams retain only the explicit address, abort replaced reads and restore the HTTP seam
+on unmount. These named stories add no native acceptance claim. The chooser regression source pins one bounded list
+read per explicit traversal/retry/return, sparse Previous, first-page restart, modified links, exact frozen release
+and chooser operands, keyboard/pointer focus, browser Back/Forward, failed selected admission and expired direct entry.
+Coordinate cases pin the eight-predecessor bound, pending-render stability, scope replacement and 4,096-character URL
+limits. Execution, mounted native catalogue-to-reader return, phone/desktop keyboard, theme and locale acceptance
+remain verifier-owned; original complete Book acceptance remains open.
 
 `tests/hosted-book-reader.test.tsx` retains original bounds, exact operands, reuse, sparse retry, move, focus,
 keyboard/RTL, locale/viewer/session/source retirement and independent progress assertions. Extensions cover native
@@ -229,8 +302,14 @@ scoping, every exact coordinate, null/missing anchors, withheld targets, viewer 
 restoration and the unchanged public resume URL. Assertions use explicitly illustrative native-format responses;
 source assertions do not establish native admission or growth acceptance.
 
+`tests/hosted-book-checkpoint.test.tsx` adds original-envelope/sender replay, exact CAS/body/position preservation,
+separate read and changed-reading recovery, independent observed values, clear scope, focus and late read/write
+retirement cases, including equal-value replacement and Strict Mode setup. The retained code-only reader regression
+uses the action-specific save replay label; its original exact-anchor and native result assertions remain intact.
+
 Worker source review is formatting/diff inspection. Web typing and runtime acceptance are deferred in this
-source-only window. The dev verifier executes Web typing and the owning isolated runner: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`. Mounted acceptance remains
+source-only window. The dev verifier executes Web typing and the owning isolated runner: `bun run --cwd apps/web test tests/hosted-book-reader.test.tsx`.
+The checkpoint recovery source has its separate focused command: `bun run --cwd apps/web test tests/hosted-book-checkpoint.test.tsx`. Mounted acceptance remains
 deferred for explicit block save, reload and Library/Resume reopening in the exact
 chapter, stale revision/digest/publication/occurrence, missing anchor and old null positions, a changed viewer during
 the private read or restore frame, a withheld target, and scrolling while that read is pending. Verify that the

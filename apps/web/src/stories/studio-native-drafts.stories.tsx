@@ -309,6 +309,9 @@ export const CreationAndReview: Story = {
       await canvas.findByRole('textbox', { name: m.studio_account_body({}, { locale }) }),
       'A complete private opening body.',
     );
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: m.studio_account_create({}, { locale }) })).toBeEnabled(),
+    );
     await userEvent.click(canvas.getByRole('button', { name: m.studio_account_create({}, { locale }) }));
     await canvas.findByRole('textbox', { name: m.studio_workspace_article_document() });
     await userEvent.click(canvas.getByRole('button', { name: workbenchCopy[getLocale()].publication }));
@@ -364,6 +367,9 @@ export const UncertainIntent: Story = {
     await userEvent.type(
       await canvas.findByRole('textbox', { name: m.studio_account_body({}, { locale }) }),
       'Retry must send the same private create intent.',
+    );
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: m.studio_account_create({}, { locale }) })).toBeEnabled(),
     );
     await userEvent.click(canvas.getByRole('button', { name: m.studio_account_create({}, { locale }) }));
     await userEvent.click(await canvas.findByRole('button', { name: m.studio_workspace_retry() }));

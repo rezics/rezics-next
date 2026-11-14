@@ -63,6 +63,9 @@ work and an atomic public pointer change, without copying or revalidating every 
 whole-book publication consume exact selections in bounded resumable steps; the prior release remains visible until
 the complete new selection is atomically published. Before a first release completes, preparation stays private.
 
+Decision: The kernel route inventory lists `prepareRelease` and all six installed preparation-stage methods using
+internal `/$method` paths; activation routes remain with their existing owner.
+
 Decision: Hosted version write handles retain `Value` through an erased optional private unique-symbol member, so
 `hostedVersionSequence` infers node values without adding runtime state.
 

@@ -6,6 +6,7 @@ import { readerSessionSource } from '../reader/lifetime';
 import { m } from '../paraglide/messages.js';
 import type { KnowledgePrivateAddress } from './private-knowledge';
 import { KnowledgeNavigationReturn } from './navigation-return';
+import { KnowledgeNavigationFocus } from './navigation-focus';
 
 const returns = new WeakMap<QueryClient, KnowledgeNavigationReturn>();
 export function knowledgeNavigationReturn(client: QueryClient) {
@@ -63,8 +64,10 @@ export function KnowledgeNavigationReturnLink({
         preload={false}
         className={knowledgeNavigationLink}
         onClick={(event) => {
-          if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
-            returning.returnTo(binding, address);
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          const orientation = new KnowledgeNavigationFocus();
+          const keyboard = orientation.request(event.currentTarget, event.detail === 0);
+          returning.returnTo(binding, address, keyboard ? orientation : undefined);
         }}
       >
         {m.knowledge_navigation_return({}, { locale: locale as never })}

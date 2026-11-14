@@ -41,7 +41,10 @@ function exact(revisionId: string): KnowledgeHistoryRevision {
 function comparison(left = revisionA, right = revisionB): KnowledgeHistoryComparison {
   return { documentId, left: exact(left), right: exact(right) };
 }
-function page(next: string | null = null, revisions = [revisionB, revisionA]): KnowledgeHistoryRead {
+function page(
+  next: string | null = null,
+  revisions = [revisionB, revisionA],
+): Extract<KnowledgeHistoryRead, { state: 'ready' }> {
   return {
     state: 'ready',
     page: {
@@ -124,8 +127,69 @@ test('history reads one replacing page per action, preserves sparse continuation
     await view.findText('No saved revisions are available on this page.');
     expect(cursors).toEqual([null, 'opaque +/= cursor', 'opaque +/= cursor', null]);
     expect(compareCalls).toBe(0);
-    await view.click(view.button('Return to draft'));
+    await view.activate(view.button('Return to draft'));
     expect(view.activeElement()).toBe(view.button('Open revision history'));
+  } finally {
+    await mount.close();
+  }
+});
+
+test('Previous rereads exact cursors, retries a failed traversal and stops at the bounded window with explicit Restart', async () => {
+  const mount = await harness();
+  const cursors: Array<string | null> = [];
+  let failPrevious = false;
+  const ops = operations({
+    history: {
+      read: async (_address, cursor) => {
+        cursors.push(cursor);
+        if (failPrevious) {
+          failPrevious = false;
+          return { state: 'unavailable', status: 503 };
+        }
+        const index = cursor === null ? 0 : Number(cursor.slice(5));
+        const result = page(`page-${index + 1}`);
+        return {
+          ...result,
+          page: { ...result.page, revisions: [{ ...result.page.revisions[0]!, title: `Page ${index}` }] },
+        };
+      },
+      compare: async () => ({ state: 'unavailable' }),
+    },
+  });
+  try {
+    const view = await mount.mount(address, ops);
+    await view.findInput('Document title');
+    await view.click(view.button('Open revision history'));
+    await view.findText('Page 0');
+    expect(view.button('Previous revisions').disabled).toBe(true);
+    for (let index = 1; index <= 22; index++) {
+      await view.click(view.button('More revisions'));
+      await view.findText(`Page ${index}`);
+      view.expectMissingText(`Page ${index - 1}`);
+    }
+    failPrevious = true;
+    await view.click(view.button('Previous revisions'));
+    await view.findText('Revision history is unavailable.');
+    view.expectMissingText('Page 22');
+    await view.click(view.button('Retry this visit'));
+    await view.findText('Page 21');
+    expect(cursors.slice(-2)).toEqual(['page-21', 'page-21']);
+    await view.click(view.button('More revisions'));
+    await view.findText('Page 22');
+    for (let index = 21; index >= 4; index--) {
+      await view.click(view.button('Previous revisions'));
+      await view.findText(`Page ${index}`);
+      expect(cursors.at(-1)).toBe(`page-${index}`);
+    }
+    expect(view.button('Previous revisions').disabled).toBe(true);
+    view.expectText('Earlier pages are outside this history window.');
+    const reads = cursors.length;
+    await view.click(view.button('Previous revisions'));
+    expect(cursors).toHaveLength(reads);
+    await view.click(view.button('Restart history'));
+    await view.findText('Page 0');
+    expect(cursors.at(-1)).toBe(null);
+    expect(view.button('Previous revisions').disabled).toBe(true);
   } finally {
     await mount.close();
   }
@@ -136,6 +200,7 @@ test('exact comparison return retains the draft and publication selection; uncer
   const pairs: unknown[] = [];
   const saves: unknown[] = [];
   let readCalls = 0;
+  const cursors: Array<string | null> = [];
   let publicationCalls = 0;
   const ops = operations({
     read: async () => {
@@ -151,9 +216,13 @@ test('exact comparison return retains the draft and publication selection; uncer
       return { state: 'unavailable' };
     },
     history: {
-      read: async () => page(),
+      read: async (_address, cursor) => {
+        cursors.push(cursor);
+        return cursor === null ? page('exact +/= older', [revisionB]) : page(null, [revisionA]);
+      },
       compare: async (current, pair, binding) => {
         pairs.push({ current, pair, binding });
+        if (pairs.length === 1) return { state: 'unavailable', status: 503 };
         return { state: 'ready', comparison: comparison(pair.leftRevisionId, pair.rightRevisionId) };
       },
     },
@@ -168,19 +237,30 @@ test('exact comparison return retains the draft and publication selection; uncer
     await view.click(view.button('Open revision history'));
     await view.findText(`Saved ${revisionB}`);
     await view.click(view.radio('left', revisionB));
+    await view.click(view.button('More revisions'));
+    await view.findText(`Saved ${revisionA}`);
+    view.expectMissingText(`Saved ${revisionB}`);
     await view.click(view.radio('right', revisionA));
     await view.click(view.button('Compare selected revisions'));
+    await view.findText('Revision history is unavailable.');
+    await view.click(view.button('Retry this exact comparison'));
     await view.findText(`Exact saved ${revisionB}`);
-    expect(pairs).toEqual([
-      {
-        current: { notebookId, documentId },
-        pair: { leftRevisionId: revisionB, rightRevisionId: revisionA },
-        binding: { viewer, csrfToken },
-      },
-    ]);
-    await view.click(view.button('Back to revisions'));
+    const expectedPair = {
+      current: { notebookId, documentId },
+      pair: { leftRevisionId: revisionB, rightRevisionId: revisionA },
+      binding: { viewer, csrfToken },
+    };
+    expect(pairs).toEqual([expectedPair, expectedPair]);
+    await view.activate(view.button('Back to revisions'));
     expect(view.activeElement()).toBe(view.button('Compare selected revisions'));
-    await view.click(view.button('Return to draft'));
+    expect(view.radio('right', revisionA).checked).toBe(true);
+    expect(cursors).toEqual([null, 'exact +/= older']);
+    await view.click(view.button('Previous revisions'));
+    await view.findText(`Saved ${revisionB}`);
+    expect(view.radio('left', revisionB).checked).toBe(true);
+    expect(cursors).toEqual([null, 'exact +/= older', null]);
+    await view.activate(view.button('Return to draft'));
+    expect(view.activeElement()).toBe(view.button('Open revision history'));
     expect(title.value).toBe('Retained local words');
     expect(title.disabled).toBe(true);
     expect(view.button('Publish this exact version')).toBeDefined();
@@ -190,6 +270,63 @@ test('exact comparison return retains the draft and publication selection; uncer
     expect(readCalls).toBe(1);
     expect(publicationCalls).toBe(0);
     expect(JSON.stringify(mount.cachedValues())).not.toContain('Exact saved');
+    await view.click(view.button('Open revision history'));
+    await view.findText(`Saved ${revisionB}`);
+    expect(view.radio('left', revisionB).checked).toBe(false);
+    expect(view.button('Previous revisions').disabled).toBe(true);
+    expect(view.button('Compare selected revisions').disabled).toBe(true);
+  } finally {
+    await mount.close();
+  }
+});
+
+test('only current keyboard actions request focus; pointer, focus, key movement and departure cancel deferred focus', async () => {
+  const mount = await harness();
+  const reads: ReturnType<typeof deferred<KnowledgeHistoryRead>>[] = [];
+  const ops = operations({
+    history: {
+      read: () => {
+        const read = deferred<KnowledgeHistoryRead>();
+        reads.push(read);
+        return read.promise;
+      },
+      compare: async () => ({ state: 'unavailable' }),
+    },
+  });
+  try {
+    const view = await mount.mount(address, ops);
+    const title = await view.findInput('Document title');
+    await view.click(view.button('Open revision history'));
+    reads.at(-1)!.resolve(page());
+    await mount.flush();
+    expect(view.activeElement()).not.toBe(view.historyHeading());
+    await view.activate(view.button('Return to draft'));
+    expect(view.activeElement()).toBe(view.button('Open revision history'));
+    for (const movement of ['none', 'pointer', 'focus', 'key', 'departure']) {
+      const count = reads.length;
+      await view.activate(view.button('Open revision history'));
+      expect(reads).toHaveLength(count + 1);
+      const read = reads.at(-1)!;
+      if (movement === 'pointer') await view.point(title);
+      if (movement === 'focus') title.focus();
+      if (movement === 'key') await view.key('[ArrowDown]');
+      if (movement === 'departure') {
+        await view.activate(view.button('Return to draft'));
+        await view.click(view.button('Open revision history'));
+      }
+      const stayed = view.activeElement();
+      read.resolve(movement === 'departure' ? { state: 'denied', status: 403 } : page(null, [revisionC]));
+      await mount.flush();
+      if (movement === 'none') expect(view.activeElement()).toBe(view.historyHeading());
+      else expect(view.activeElement()).toBe(stayed);
+      if (movement === 'departure') {
+        view.expectMissingText(`Saved ${revisionC}`);
+        reads.at(-1)!.resolve(page());
+        await mount.flush();
+        await view.findText(`Saved ${revisionB}`);
+      }
+      await view.activate(view.button('Return to draft'));
+    }
   } finally {
     await mount.close();
   }
@@ -257,7 +394,7 @@ test('retirement discards late history and pair bodies, callbacks and focus work
   try {
     const view = await mount.mount(address, first);
     await view.findInput('Document title');
-    await view.click(view.button('Open revision history'));
+    await view.activate(view.button('Open revision history'));
     await mount.replace(
       address,
       operations(),
@@ -277,7 +414,7 @@ test('retirement discards late history and pair bodies, callbacks and focus work
     await view.findText(`Saved ${revisionB}`);
     await view.click(view.radio('left', revisionA));
     await view.click(view.radio('right', revisionB));
-    await view.click(view.button('Compare selected revisions'));
+    await view.activate(view.button('Compare selected revisions'));
     await mount.replace(address, operations());
     await view.findInput('Document title');
     const survivor = view.button('Open revision history');

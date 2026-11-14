@@ -8,13 +8,13 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { fromPlainText, hasDocumentContent } from '@rezics/document';
 import { RichTextEditor } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { DocumentBody } from '../document-body';
+import { PostReadingBody } from '../threads/post-reading-body';
 import type { BookOrganizerPort, StudioInput, StudioPort, StudioPresentation } from './contract';
-import { StudioController } from './controller';
+import { StudioController, type WorkingDocument } from './controller';
+import { NativeDraftComposer } from './native-draft-composer';
 import { workspaceEditorLabels, workspaceFailureMessage } from './workspace-language';
 import { BookOrganizer } from './book-organizer';
 import { ExactVersionDetails, StudioVersions } from './revisions';
@@ -61,7 +61,7 @@ export type StudioWorkspaceProps = {
 /** Production composition surface. No route, generated-operation binding or public authority is inferred here. */
 export function StudioWorkspace(props: StudioWorkspaceProps) {
   if (!props.port.isCurrent()) return <p role="status">{m.studio_workspace_ended({}, { locale: getLocale() })}</p>;
-  return <StudioVisit key={props.input.visitKey} {...props} />;
+  return <StudioVisit key={`${props.input.visitKey}:${getLocale()}`} {...props} />;
 }
 function StudioVisit(props: StudioWorkspaceProps) {
   const [controller] = useState(
@@ -101,6 +101,8 @@ export function StudioWorkbench({
   const [navigation, setNavigation] = useState(false);
   const [pendingOpen, setPendingOpen] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
+  const [nativeDraftRisk, setNativeDraftRisk] = useState(false);
+  const [nativeCreationPending, setNativeCreationPending] = useState(false);
   const editorHeading = useRef<HTMLHeadingElement>(null);
   const previousPost = useRef<string | null>(
     state.historical ? (state.selected?.source.revision.exact.postId ?? null) : null,
@@ -122,6 +124,7 @@ export function StudioWorkbench({
   const editorCurrent = () => postId !== null && controller.isEditorCurrent(postId, editorGeneration);
   const unresolved = controller.hasUnresolvedCommand();
   const atRisk = Boolean(
+    nativeDraftRisk ||
     selected?.dirty ||
     selected?.snapshotPending ||
     selected?.uploading ||
@@ -292,7 +295,15 @@ export function StudioWorkbench({
           </div>
         </section>
       ) : null}
-      <fieldset className="studio-layout min-w-0" disabled={startingBook}>
+      <fieldset
+        className="studio-layout min-w-0"
+        disabled={startingBook}
+        style={
+          input.nativeDrafts && !selected
+            ? { gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateAreas: "'sidebar' 'document'" }
+            : undefined
+        }
+      >
         <aside className="studio-sidebar" aria-label={m.studio_workspace_navigation({}, options)}>
           <details
             open={navigation}
@@ -381,8 +392,15 @@ export function StudioWorkbench({
                 ) : null}
                 {input.nativeDrafts ? (
                   <NativeDraftComposer
+                    key={`${input.visitKey}:${locale}`}
                     controller={controller}
-                    disabled={blocked || Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)}
+                    disabled={
+                      !input.canCreateDraft ||
+                      blocked ||
+                      Boolean(selected?.dirty || selected?.snapshotPending || selected?.uploading)
+                    }
+                    onDepartureRiskChange={setNativeDraftRisk}
+                    onCommandPendingChange={setNativeCreationPending}
                   />
                 ) : input.canCreateDraft ? (
                   <NewDraft
@@ -477,6 +495,7 @@ export function StudioWorkbench({
                   value={selected.title}
                   disabled={
                     !selected.source.permissions.edit ||
+                    nativeCreationPending ||
                     startingBook ||
                     state.operation === 'publish' ||
                     state.operation === 'withdraw' ||
@@ -499,6 +518,7 @@ export function StudioWorkbench({
                   toolbar="auto"
                   readOnly={!selected.source.permissions.edit || startingBook}
                   disabled={
+                    nativeCreationPending ||
                     startingBook ||
                     state.operation === 'publish' ||
                     state.operation === 'withdraw' ||
@@ -561,22 +581,14 @@ export function StudioWorkbench({
                 </WorkbenchRegion>
               </section>
               {tab === 'preview' ? (
-                <section
-                  className="studio-preview studio-stack"
-                  aria-label={m.studio_workspace_preview_region({}, options)}
-                >
-                  <h2>{documentTitle}</h2>
-                  <p className="studio-preview-notice">
-                    {selected.dirty
-                      ? m.studio_workspace_preview_unsaved({}, options)
-                      : m.studio_workspace_preview_saved({}, options)}
-                  </p>
-                  <DocumentBody
-                    {...presentation.reader?.(selected.source.revision.exact)}
-                    document={selected.body}
-                    visitKey={`${input.visitKey}:${postId}:preview:${selected.editorGeneration}`}
-                  />
-                </section>
+                <WorkingPreview
+                  controller={controller}
+                  selected={selected}
+                  presentation={presentation}
+                  workspaceVisit={input.visitKey}
+                  title={documentTitle}
+                  locale={locale}
+                />
               ) : null}
               <div hidden={tab !== 'versions'}>
                 <StudioVersions key={postId} controller={controller} state={state} presentation={presentation} />
@@ -630,6 +642,78 @@ export function StudioWorkbench({
     </section>
   );
 }
+
+/** The working snapshot is independent of saved-version readers and never owns an editor or a body copy. */
+function WorkingPreview({
+  controller,
+  selected,
+  presentation,
+  workspaceVisit,
+  title,
+  locale,
+}: {
+  controller: StudioController;
+  selected: WorkingDocument;
+  presentation: StudioPresentation;
+  workspaceVisit: string;
+  title: string;
+  locale: Locale;
+}) {
+  const { source, body, editorGeneration, snapshotPending, invalid } = selected;
+  const { postId, revisionId, sha256 } = source.revision.exact;
+  const options = { locale };
+  // Titles and upload status do not replace structured content. A save acknowledgement does replace its source.
+  const readerIdentity = useMemo(
+    () => ({}),
+    [controller, workspaceVisit, locale, source, body, editorGeneration, snapshotPending, invalid],
+  );
+  const visitKey = `studio-working:${workspaceVisit}:${locale}:${postId}:${editorGeneration}:${revisionId}:${sha256}`;
+  const isReaderCurrent = () => {
+    const live = controller.snapshot().selected;
+    return (
+      getLocale() === locale &&
+      controller.isEditorCurrent(postId, editorGeneration) &&
+      live?.source === source &&
+      live.body === body &&
+      !live.snapshotPending &&
+      !live.invalid
+    );
+  };
+  return (
+    <section className="studio-preview studio-stack" aria-label={m.studio_workspace_preview_region({}, options)}>
+      <h2>{title}</h2>
+      <p className="studio-preview-notice">
+        {selected.dirty
+          ? m.studio_workspace_preview_unsaved({}, options)
+          : m.studio_workspace_preview_saved({}, options)}
+      </p>
+      <div className="studio-preview-source" role="group" aria-label={m.studio_revision_current({}, options)}>
+        <p className="studio-help">
+          <time dateTime={source.revision.savedAt} title={source.revision.savedAt}>
+            {m.studio_workspace_saved_at({ savedAt: source.revision.savedAt }, options)}
+          </time>
+        </p>
+        <ExactVersionDetails exact={source.revision.exact} />
+      </div>
+      {invalid || snapshotPending ? (
+        <p role="status">
+          {invalid ? m.studio_workspace_snapshot_error({}, options) : m.studio_workspace_snapshot_pending({}, options)}
+        </p>
+      ) : (
+        <PostReadingBody
+          {...presentation.reader?.(source.revision.exact)}
+          document={body}
+          readerIdentity={readerIdentity}
+          isReaderCurrent={isReaderCurrent}
+          visitKey={visitKey}
+          wideVisitKey={visitKey}
+          locale={locale}
+        />
+      )}
+    </section>
+  );
+}
+
 function NewDraft({ controller, disabled }: { controller: StudioController; disabled: boolean }) {
   const [title, setTitle] = useState('');
   const options = { locale: getLocale() };
@@ -646,117 +730,6 @@ function NewDraft({ controller, disabled }: { controller: StudioController; disa
         {m.studio_workspace_create({}, options)}
       </Button>
       {disabled ? <p className="studio-help">{m.studio_workspace_create_wait({}, options)}</p> : null}
-    </form>
-  );
-}
-
-function NativeDraftComposer({ controller, disabled }: { controller: StudioController; disabled: boolean }) {
-  const [boardId, setBoardId] = useState('');
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [licence, setLicence] = useState('LicenseRef-rezics-terms');
-  const [subjects, setSubjects] = useState('');
-  const [media, setMedia] = useState('');
-  const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
-  const selectedId = state.selected?.source.revision.exact.postId ?? null;
-  const lastCreatedId = useRef<string | null>(null);
-  const id = useId();
-  const locale = getLocale();
-  useEffect(() => {
-    if (!selectedId || selectedId === lastCreatedId.current || state.result !== 'native-created') return;
-    lastCreatedId.current = selectedId;
-    setBoardId('');
-    setTitle('');
-    setBody('');
-    setSubjects('');
-    setMedia('');
-  }, [selectedId, state.result]);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const document = fromPlainText(body, 'blocks');
-    if (
-      !(await controller.createNativeDraft({
-        boardId,
-        title,
-        body: document,
-        licence,
-        subjectIds: subjects.split(/[\s,]+/).filter(Boolean),
-        mediaIds: media.split(/[\s,]+/).filter(Boolean),
-      }))
-    )
-      return;
-  }
-  const bodyReady = hasDocumentContent(fromPlainText(body, 'blocks'));
-  return (
-    <form
-      className="studio-native-create studio-stack"
-      onSubmit={(event) => void submit(event)}
-      aria-labelledby={`${id}-heading`}
-    >
-      <h2 id={`${id}-heading`}>{m.studio_account_create({}, { locale })}</h2>
-      <p className="studio-help">{m.studio_account_intro({}, { locale })}</p>
-      <label htmlFor={`${id}-board`}>{m.studio_account_board({}, { locale })}</label>
-      <Input
-        id={`${id}-board`}
-        value={boardId}
-        required
-        maxLength={128}
-        disabled={disabled}
-        onChange={(event) => setBoardId(event.target.value)}
-      />
-      <label htmlFor={`${id}-title`}>{m.studio_account_title({}, { locale })}</label>
-      <Input
-        id={`${id}-title`}
-        value={title}
-        required
-        maxLength={512}
-        disabled={disabled}
-        onChange={(event) => setTitle(event.target.value)}
-      />
-      <label htmlFor={`${id}-body`}>{m.studio_account_body({}, { locale })}</label>
-      <textarea
-        id={`${id}-body`}
-        value={body}
-        required
-        rows={5}
-        disabled={disabled}
-        onChange={(event) => setBody(event.target.value)}
-        className="studio-native-body"
-      />
-      <label htmlFor={`${id}-licence`}>{m.own_drafts_licence({}, { locale })}</label>
-      <Input
-        id={`${id}-licence`}
-        value={licence}
-        required
-        maxLength={128}
-        disabled={disabled}
-        onChange={(event) => setLicence(event.target.value)}
-      />
-      <label htmlFor={`${id}-subjects`}>{m.own_drafts_subjects({}, { locale })}</label>
-      <Input
-        id={`${id}-subjects`}
-        value={subjects}
-        disabled={disabled}
-        aria-describedby={`${id}-subject-help`}
-        onChange={(event) => setSubjects(event.target.value)}
-      />
-      <p id={`${id}-subject-help`} className="studio-help">
-        {m.studio_account_subject_help({}, { locale })}
-      </p>
-      <label htmlFor={`${id}-media`}>{m.own_drafts_media({}, { locale })}</label>
-      <Input
-        id={`${id}-media`}
-        value={media}
-        disabled={disabled}
-        aria-describedby={`${id}-media-help`}
-        onChange={(event) => setMedia(event.target.value)}
-      />
-      <p id={`${id}-media-help`} className="studio-help">
-        {m.studio_account_media_help({}, { locale })}
-      </p>
-      <Button type="submit" disabled={disabled || !boardId.trim() || !title.trim() || !licence.trim() || !bodyReady}>
-        {m.studio_account_create({}, { locale })}
-      </Button>
     </form>
   );
 }
@@ -821,6 +794,7 @@ export function HostedBookInventory({ visit, locale }: { visit: HostedInventoryV
                     >
                       {m.studio_draft_point_entry({}, { locale })}
                     </a>
+                    <p className="studio-help">{m.studio_draft_point_entry_help({}, { locale })}</p>
                     <span className="studio-help">
                       {book.postVisibility === 'draft'
                         ? m.studio_books_draft({}, { locale })

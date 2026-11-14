@@ -100,9 +100,9 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
   return (
     <nav
       aria-label={m.shell_navigation()}
-      className="fixed top-16 start-0 z-10 w-(--sidebar-width) group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
+      className="fixed top-(--shell-header-height) start-0 z-10 w-(--sidebar-width) group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
     >
-      <SidebarContent className="max-h-[calc(100svh-4rem)] overflow-y-auto!">
+      <SidebarContent className="max-h-[calc(100svh-var(--shell-header-height))] overflow-y-auto!">
         <SidebarGroup>
           <SidebarMenu>
             <NavigationEntries
@@ -154,7 +154,7 @@ function NavigationColumn({ pathname, session }: { pathname: string; session: Sh
   const { isMobile } = useSidebar();
   if (isMobile) return null;
   return (
-    <Sidebar collapsible="icon" className="static! top-auto! h-full! min-h-[calc(100svh-4rem)]!">
+    <Sidebar collapsible="icon" className="static! top-auto! h-full! min-h-[calc(100svh-var(--shell-header-height))]!">
       <Navigation pathname={pathname} session={session} />
     </Sidebar>
   );
@@ -361,14 +361,16 @@ export function AccountMenu({
           trigger ?? (
             <Button
               id="account-menu-button"
-              className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
+              className={cn(headerControlClass, 'min-h-11 h-auto max-w-48 px-3 py-2')}
               variant="ghost"
               size="lg"
               aria-label={m.account_menu()}
               aria-controls="account-menu"
             >
               <UserRound aria-hidden="true" />
-              <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
+              <span className="sr-only min-w-0 wrap-anywhere whitespace-normal 2xl:not-sr-only">
+                {m.account_menu()}
+              </span>
             </Button>
           )
         }
@@ -459,13 +461,13 @@ export function AccountMenu({
       trigger={
         trigger ?? (
           <Button
-            className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
+            className={cn(headerControlClass, 'min-h-11 h-auto max-w-48 px-3 py-2')}
             variant="ghost"
             size="lg"
             aria-label={m.account_menu()}
           >
             <LogIn aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
+            <span className="sr-only min-w-0 wrap-anywhere whitespace-normal 2xl:not-sr-only">{m.account_menu()}</span>
           </Button>
         )
       }
@@ -590,12 +592,12 @@ function ShellContent({
                 }
               />
               <ScriptFreeNavigation pathname={location.pathname} session={session} />
-              <div className="flex flex-1">
+              <div className="flex min-w-0 flex-1">
                 <NavigationColumn pathname={location.pathname} session={session} />
                 <SidebarInset
                   id="main-content"
                   tabIndex={-1}
-                  className="min-w-0 px-3 py-6 pb-[calc(var(--bottom-nav-height)+1.5rem)] outline-none md:p-6"
+                  className="min-w-0 scroll-mt-[calc(var(--shell-header-height)+1rem)] px-3 py-6 pb-[calc(var(--bottom-nav-height)+1.5rem)] outline-none md:p-6"
                 >
                   <div className="mx-auto w-full max-w-5xl">
                     {children}
@@ -604,7 +606,7 @@ function ShellContent({
                         <section
                           id="account-tools"
                           aria-labelledby="account-tools-heading"
-                          className="mt-8 scroll-mt-20 border-t border-border/60 pt-6"
+                          className="mt-8 scroll-mt-[calc(var(--shell-header-height)+1rem)] border-t border-border/60 pt-6"
                         >
                           <h2 id="account-tools-heading" className="mb-3 text-lg font-semibold">
                             {m.shell_account_tools()}

@@ -61,6 +61,15 @@ the reader boundary never reconstructs, retries or upgrades a command. Existing 
 `tests/thread-reader-boundary.test.tsx` adds cache replacement, synchronous abort, isolated host and navigation ABA
 coverage. Runtime acceptance runs after integration; workspace typing is the worker acceptance.
 
+## Reading route composition
+
+The existing public `thread-reading-context.ts` entry supplies `ConversationKind` and `ThreadReviewContext` to the file route.
+The owning components keep their admitted kind labels, current Subject target, exact source revision and citation
+inspection behavior. Route composition does not borrow private presentation leaves or create another global entry.
+The [review-context witness](../../tests/thread-review-context.test.tsx) exercises that entry with unchanged assertions.
+Existing [review-context stories](../stories/thread-review-context.stories.tsx) cover `AvailableCitation`,
+`WithheldTarget` and `UnavailableTarget`; entry changes need no additional states.
+
 ## Board pins
 
 The pin and unpin consumer contract, native-order presentation and pending Content binding are documented in
@@ -107,9 +116,8 @@ and a changed or lost session release protection and retire the old editor.
 
 Each editor owns its in-flight reads, uploads and submission continuations. Unmounting, changing its container or
 new-thread intent, or losing/replacing the signed-in subject retires that work irreversibly, including switching
-away and back to the same account. A same-account token refresh keeps the mounted editor, dirty draft, uncertain
-command and exact original idempotency key; a late reply does not publish, invalidate or rotate that key after
-credential replacement. Copied-image reads are aborted; late results cannot reserve an image, restore private writing, change a
+away and back to the same account. Credential or locale replacement retires the mounted editor and its private recovery; a late reply cannot publish,
+invalidate, rotate a key or invoke completion after retirement. Copied-image reads are aborted; late results cannot reserve an image, restore private writing, change a
 replacement editor or call its parent. A prepared editor with an unknown session does not gain upload authority.
 Choosing an ordinary reply parent keeps the current writing and reply-intent rules.
 
@@ -118,6 +126,18 @@ the exact reservation when known and never makes a second fresh reservation afte
 retires that image's recovery. Network uncertainty stays unknown. Submissions reject synchronous duplicates and
 retain the exact immutable command and key for current-editor retry. Leaving only retires local continuations; an
 already accepted native command is neither cancelled nor undone.
+
+Decision: Create, reply, save and publish recovery retain one immutable original request beside one editable working
+draft. Original Retry retrieves that request independently of draft preparation and uses its original sender,
+credential/context, action, target/parent, revision, title, document, media and key. A changed working draft is local
+writing, never another command while the original outcome is unknown. The recovery reader shows the submitted
+document and action separately from current writing; imports and media changes cannot replace the request. Known
+refusal releases the attempt for correction; stale edit review retains its exact-current flow. Acknowledgement clears
+only the submitted working version. Newer writing and its upload ownership stay mounted, with the acknowledged
+result retained until deliberate completion through the existing success/departure owner. No read proves an unknown
+request, and no polling, persistent request copy or history scan is added. Session, credential, locale and target
+retirement remove private late effects. Source assertions and stories describe this contract; native replay and mounted
+accessibility verification remain separate acceptance.
 
 The composer joins the editor's admitted image occurrences to `ComposerAttachmentEpisode` under
 `thread-upload-episode`. Each occurrence retains its exact File, native command, caller and target independently,
@@ -366,10 +386,23 @@ negative and unsafe counts remain unavailable, and prepared fixtures do not esta
 
 ## Post reading rhythm
 
+Decision: Board and mounted thread reading share compact supplied-author bylines, explicit discussion/review labels,
+readable titles and body-first post actions. The opening is identified independently of the supplied page position;
+replies keep native order and bounded indentation. Ancestry and exact citation identifiers use labelled inspection,
+while the reviewed Subject and cited value stay visible. Closing inspection retains mounted drafts and commands.
+Post details and watch guidance use the same secondary disclosure, while deliberate actions and recovery remain visible.
+Main routed review stories are manual and stable: `board.stories.tsx` and `thread-conversation.stories.tsx` use
+`PageStory` and the generated route tree for populated discussions, exact review citations, long writing, sparse
+continuation and independent attachment/watch/activity failure. `thread-conversation-walks.stories.tsx` separately
+pins branch/reply/Board return, an unchanged local draft, exact Retry and citation inspection. Regional previews
+remain existing regression sources and do not replace these routed entries.
+Source-only delivery does not establish compiler, test, runtime, native, browser or visual acceptance. The dev
+verifier owns deferred execution; keep unexecuted checks unverified and existing regression assertions authoritative.
+
 `PostReadingFrame` owns the byline-to-body hierarchy and the visible permalink/focus surface; its action and reply
-context slots consume the existing controls unchanged. The header uses the installed `FeedActionBar` detail port
-for share and reply; licence, history and provenance retain their positions after the body. Share and reply are not
-repeated in that footer. `ThreadPostReadingBody` passes the complete snapshot to the
+context slots consume the existing controls unchanged. The action row after the body uses the installed `FeedActionBar` detail port
+for reactions, share and the single post-specific reply action; licence, history and provenance follow in Post details.
+Share and reply are not repeated in that footer. `ThreadPostReadingBody` passes the complete snapshot to the
 existing `DocumentBody` and `NativeDocumentImage`, with a single exact-document media index. The current document's
 post, thread, revision, digest and declared media must all match the supplied disclosure. A replacement revision
 starts a fresh spoiler visit. Erased/withheld placeholders, keyed editing and current-reader retirement retain their
@@ -554,8 +587,9 @@ Inspecting a file never changes writing. **Replace unsent body** explicitly repl
 posting choices intact, resets a settled current-visit command key and returns keyboard focus to the editor.
 **Keep current writing**, Cancel and Escape retain the draft. A synchronous editor transaction, title/body change,
 normal recovery restore or upload-source replacement invalidates the pending preview/read. Confirmation compares the
-exact current draft revision again. A newer file selection or cancellation retires older callbacks. In-flight and
-uncertain commands and pending uploads suspend replacement; a file can never reset their immutable command or key.
+exact current draft revision again. A newer file selection or cancellation retires older callbacks. In-flight commands
+and pending uploads suspend replacement. During uncertainty a confirmed replacement changes only the working body,
+retaining the original request and key; a file never changes that request or establishes its outcome.
 
 Exports contain only the currently identified editable body, using installed canonical `serializeDocument` or
 `documentText`, with the same media/component/link repairs and notices. They never include command metadata, receipts,

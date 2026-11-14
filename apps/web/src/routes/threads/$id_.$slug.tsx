@@ -1,10 +1,10 @@
 import { RemovedPost } from '../../threads/post-removed';
-import { ReplyButton, ReplyContext, type ReplyParents } from '../../threads/reply-context';
+import { ReplyContext, type ReplyParents } from '../../threads/reply-context';
 import { draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/composer';
 import { erasePost, restorePost as restorePostAction, revisePost, type WriteFailure } from '../../threads/actions';
 import type { ThreadSubject } from '../../threads/subjects';
 import type { VoteCitation } from '../../threads/post-writes';
-import { publishedCitationForPost } from '../../threads/thread-reading-context';
+import { ConversationKind, ThreadReviewContext, publishedCitationForPost } from '../../threads/thread-reading-context';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import { exactRevisionHref, exactRevisionRoute } from '../../threads/exact-revision-href';
 import { PostHistory } from '../../threads/post-history';
@@ -185,16 +185,7 @@ export function ThreadReadingHeader({
   const restart = origin ? boardReturnRestart(origin) : undefined;
   return (
     <header className="min-w-0 min-h-8 scroll-mt-24 space-y-3 px-1 [overflow-wrap:anywhere]">
-      <BoardContext
-        realm={page.realm}
-        board={page.board}
-        boardReturn={currentOrigin ? origin : undefined}
-        reviewContext={page.reviewContext}
-        thread={page.thread}
-        posts={page.posts.posts}
-        cursor={page.composed?.query.cursor}
-        prominent
-      />
+      <BoardContext realm={page.realm} board={page.board} boardReturn={currentOrigin ? origin : undefined} prominent />
       {subjectReturn ? (
         <a
           data-slot="thread-subject-return"
@@ -221,13 +212,26 @@ export function ThreadReadingHeader({
           ) : null}
         </div>
       ) : null}
-      {title || watch ? (
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-          {title ? <PageHeading>{title}</PageHeading> : null}
-          {watch}
-        </div>
-      ) : null}
+      <div className="space-y-3">
+        <ConversationKind kind={page.thread.kind} />
+        <PageHeading className="max-w-[32ch] text-2xl leading-tight text-balance sm:text-3xl">
+          {title ?? m.threads_untitled()}
+        </PageHeading>
+        {watch ? (
+          <div data-slot="thread-watch-entry" className="flex min-w-0 flex-wrap items-center gap-2">
+            {watch}
+          </div>
+        ) : null}
+      </div>
       <ThreadSubjects subjects={page.subjects} />
+      <ThreadReviewContext
+        context={page.reviewContext}
+        thread={page.thread}
+        posts={page.posts.posts}
+        cursor={page.composed?.query.cursor}
+        boardReturn={boardReturn}
+        locale={getLocale()}
+      />
       {page.linkedPostUnavailable ? (
         <div role="status" className="space-y-2">
           <p>{m.thread_post_unavailable()}</p>
@@ -1105,6 +1109,67 @@ export function ThreadReadingPost({
           className="min-h-8 min-w-0 flex-1 basis-40"
         />
       }
+      details={
+        editing ? null : (
+          <footer className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="mr-auto min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+              {m.thread_history_licence()}: {post.licence}
+            </p>
+            <Collapsible className="contents">
+              <CollapsibleTrigger
+                aria-controls={`revision-details-${post.id}`}
+                render={<Button variant="ghost" size="sm" />}
+              >
+                {m.thread_provenance_heading()}
+              </CollapsibleTrigger>
+              <CollapsibleContent
+                id={`revision-details-${post.id}`}
+                keepMounted
+                className="order-last min-w-0 basis-full space-y-3 pt-3"
+              >
+                <RevisionProvenance
+                  revision={post}
+                  subjects={subjects}
+                  currentVote={ownsPost ? (currentVote ?? null) : null}
+                  review={review}
+                  showLicence={false}
+                  publishedCitation={publishedCitationForPost(composed?.reviewContext, post)}
+                  reviewTarget={
+                    composed?.reviewContext?.source.postId === post.id &&
+                    composed.reviewContext.source.revisionId === post.revisionId
+                      ? composed.reviewContext.target
+                      : undefined
+                  }
+                />
+                {post.revisionId ? (
+                  <a
+                    href={exactRevisionHref({ postId: post.id, revisionId: post.revisionId }, getLocale())}
+                    className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+                  >
+                    {m.exact_revision_heading()}
+                  </a>
+                ) : null}
+              </CollapsibleContent>
+            </Collapsible>
+            {post.revisionId ? (
+              <PostHistory
+                postId={post.id}
+                readAuthority={historyScope}
+                returnOrigin={{
+                  pathname: historyOrigin.pathname,
+                  search: historyOrigin.search,
+                }}
+                navigateToExactRevision={(identity, historyReturn) => {
+                  void router.navigate(exactRevisionRoute(identity, historyReturn));
+                }}
+                {...(viewerId ? { viewerId } : {})}
+                review={review}
+                className="contents"
+              />
+            ) : null}
+          </footer>
+        )
+      }
       actions={
         <FeedActionBar
           locale={getLocale()}
@@ -1136,7 +1201,7 @@ export function ThreadReadingPost({
                 }
               : undefined
           }
-          reply={{ onReply, disabled: replyPending || !personalReady }}
+          reply={{ onReply, disabled: replyPending || !personalReady, label: m.thread_reply_to_post() }}
           overflow={
             editing ? (
               <span />
@@ -1233,64 +1298,6 @@ export function ThreadReadingPost({
             readerIdentity={lifetime}
             isReaderCurrent={() => current()}
           />
-          <ReplyButton disabled={replyPending || !personalReady} onReply={onReply} />
-          <footer className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <p className="mr-auto min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-              {m.thread_history_licence()}: {post.licence}
-            </p>
-            <Collapsible className="contents">
-              <CollapsibleTrigger
-                aria-controls={`revision-details-${post.id}`}
-                render={<Button variant="ghost" size="sm" />}
-              >
-                {m.thread_provenance_heading()}
-              </CollapsibleTrigger>
-              <CollapsibleContent
-                id={`revision-details-${post.id}`}
-                keepMounted
-                className="order-last min-w-0 basis-full space-y-3 pt-3"
-              >
-                <RevisionProvenance
-                  revision={post}
-                  subjects={subjects}
-                  currentVote={ownsPost ? (currentVote ?? null) : null}
-                  review={review}
-                  showLicence={false}
-                  publishedCitation={publishedCitationForPost(composed?.reviewContext, post)}
-                  reviewTarget={
-                    composed?.reviewContext?.source.postId === post.id &&
-                    composed.reviewContext.source.revisionId === post.revisionId
-                      ? composed.reviewContext.target
-                      : undefined
-                  }
-                />
-                {post.revisionId ? (
-                  <a
-                    href={exactRevisionHref({ postId: post.id, revisionId: post.revisionId }, getLocale())}
-                    className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
-                  >
-                    {m.exact_revision_heading()}
-                  </a>
-                ) : null}
-              </CollapsibleContent>
-            </Collapsible>
-            {post.revisionId ? (
-              <PostHistory
-                postId={post.id}
-                readAuthority={historyScope}
-                returnOrigin={{
-                  pathname: historyOrigin.pathname,
-                  search: historyOrigin.search,
-                }}
-                navigateToExactRevision={(identity, historyReturn) => {
-                  void router.navigate(exactRevisionRoute(identity, historyReturn));
-                }}
-                {...(viewerId ? { viewerId } : {})}
-                review={review}
-                className="contents"
-              />
-            ) : null}
-          </footer>
         </>
       )}
     </PostReadingFrame>

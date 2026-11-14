@@ -91,6 +91,8 @@ test('My Logs uses shared item anatomy with stable immutable snapshot identity d
     await show([first, second]);
     expect(host.querySelector('h1')?.textContent).toBe(m.library_my_logs_heading());
     expect(host.querySelector('ol')?.getAttribute('aria-label')).toBe(m.library_logs_heading());
+    expect(host.querySelectorAll('[data-log-date-group]')).toHaveLength(2);
+    expect(host.textContent).toContain(m.library_journal_public_boundary());
     const originalRows = rows();
     expect(originalRows).toHaveLength(2);
     const headingIds: string[] = [];

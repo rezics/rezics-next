@@ -685,6 +685,8 @@ Collections and History link to their more specific contracts for exact addresse
   exact saved address and owners in [Continue](library-continue.md). Following and Pins retain their own bounded
   continuation and replacement rules.
 
+Decision: Library keeps its single-row shortcuts and one shared Menu at either viewport. The Menu lists every returned destination with its full wrapping supplied label, exact link and visible current check; unavailable targets are static readable rows showing their supplied ID. The opened surface repeats the existing notice with its existing precedence. Inline links and the selector have 44px minimum targets and visible focus. Native pin order, admission, locale addresses and Menu dismissal remain with their existing owners.
+
 ### Private Label assignment windows
 
 Decision: One eligible Label and locale visit keeps at most eight admitted predecessor cursor coordinates, the current coordinate and one staged target; movement commits only after that exact window is admitted, and a refused cursor can be retried at its exact address.

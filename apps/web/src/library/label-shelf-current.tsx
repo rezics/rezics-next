@@ -5,6 +5,8 @@ import { consolidationEnvelope } from './label-consolidation/envelope';
 import { consolidationTransport } from './label-consolidation/route';
 import { ConsolidationWorkspace } from './label-consolidation/workspace';
 import { m } from '../paraglide/messages.js';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { ArrowLeftIcon, LockKeyholeIcon } from 'lucide-react';
 import { usePrivateReportOrigin, usePrivateReportPayload } from './private-report-current-origin';
 import { LabelShelfPage, type LabelShelfWindowLinks } from './entries-page';
 import {
@@ -478,7 +480,8 @@ function LabelShelfRead({
       ? { first: action('first', null) }
       : {}),
     ...(shown.state === 'loaded' && shown.next ? { next: action('next', shown.next) } : {}),
-    ...(page.state === 'cursor-rejected' && source.cursor !== null && !query.isFetching
+    ...((page.state === 'cursor-rejected' || page.state === 'unavailable' || page.state === 'preparing') &&
+    !query.isFetching
       ? {
           retry: {
             href: currentHref,
@@ -523,6 +526,35 @@ function LabelShelfRead({
       canUndo={() => isCurrent() && origin.capture(...readGroups, 'library_label.unassign')()}
       csrfToken={() => origin.read().csrfToken}
     >
+      <nav
+        aria-label={m.library_labels_heading()}
+        className="mb-5 flex min-w-0 flex-wrap items-center justify-between gap-3"
+        data-label-detail-navigation
+      >
+        <a
+          href={`/${encodeURIComponent(locale)}/library/labels`}
+          className={buttonVariants({
+            variant: 'ghost',
+            className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal px-3 py-2',
+          })}
+          onClick={(event) => {
+            if (!isCurrent()) event.preventDefault();
+          }}
+        >
+          <ArrowLeftIcon aria-hidden="true" className="size-4 shrink-0" />
+          {m.library_labels_heading()}
+        </a>
+        <span className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LockKeyholeIcon aria-hidden="true" className="size-4 shrink-0" />
+          {m.library_labels_private()}
+        </span>
+      </nav>
+      {shown.state === 'loaded' ? (
+        <div className="mb-5 space-y-1 border-b pb-4" data-label-detail-count>
+          <p className="text-sm font-medium">{m.library_labels_member_page_count({ count: shown.entries.length })}</p>
+          <p className="text-sm text-muted-foreground">{m.library_labels_member_scope()}</p>
+        </div>
+      ) : null}
       {refreshState !== 'idle' ? (
         <p role="status">
           {refreshState === 'loading' ? m.library_consolidation_refreshing() : m.library_consolidation_refresh_failed()}

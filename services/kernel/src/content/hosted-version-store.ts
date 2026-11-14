@@ -1,16 +1,22 @@
 import type { AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import {
+  createVersionedOutlineSequenceReadAccess,
   createVersionedOutlineSequenceReadWriteSet,
   type VersionedOutlineSequenceNode,
+  type VersionedOutlineSequenceReadAccess,
   type VersionedOutlineSequenceReadWriteSet,
 } from './versioned-outline-sequence.ts';
 import commitVersion from './hosted-version-commit.sql';
 import createGeneration from './hosted-version-create-generation.sql';
 import readHead from './hosted-version-read-head.sql';
 import readNode from './hosted-version-read-node.sql';
+import readNodes from './hosted-version-read-nodes.sql';
+import readChildDepth from './hosted-version-read-child-depth.sql';
 import readOccurrence from './hosted-version-read-occurrence.sql';
+import readOccurrences from './hosted-version-read-occurrences.sql';
 import readSiblingRoot from './hosted-version-read-sibling-root.sql';
+import readSiblingRoots from './hosted-version-read-sibling-roots.sql';
 import readSnapshot from './hosted-version-read-snapshot.sql';
 import {
   HostedVersionHeadChangedError,
@@ -42,7 +48,11 @@ type NodeRow = {
   node_state: EncodedValue;
   is_deleted: boolean;
   sequence: string;
+  subtree_height: number | null;
+  maximum_subtree_height: number | null;
+  maximum_subtree_occurrence_id: string | null;
 };
+type ChildDepthRow = { occurrence_id: string; subtree_height: number };
 type OccurrenceRow = {
   occurrence_id: string;
   parent_occurrence_id: string | null;
@@ -50,6 +60,7 @@ type OccurrenceRow = {
   occurrence_state: EncodedValue;
   is_deleted: boolean;
   sequence: string;
+  subtree_height: number | null;
 };
 type SiblingRootRow = { parent_id: string | null; root_node_id: string | null; sequence: string };
 
@@ -65,6 +76,7 @@ type OccurrenceWrite = Readonly<{
   occurrenceId: string;
   parentOccurrenceId: string | null;
   subtreeSize: bigint;
+  subtreeHeight: number | null;
   value: unknown | null;
 }>;
 type SiblingRootWrite = Readonly<{
@@ -139,6 +151,17 @@ function decodeValue<Value>(value: EncodedValue): Value {
   return revive(value) as Value;
 }
 
+function subtreeHeightOf(value: unknown): number | null {
+  if (value === null || typeof value !== 'object') return null;
+  const height = (value as { subtreeHeight?: unknown }).subtreeHeight;
+  return typeof height === 'number' && Number.isSafeInteger(height) && height >= 0 ? height : null;
+}
+
+function withStoredSubtreeHeight<Value extends object>(value: Value, storedHeight: number | null): Value {
+  const subtreeHeight = storedHeight ?? subtreeHeightOf(value);
+  return subtreeHeight === null ? value : ({ ...value, subtreeHeight } as Value);
+}
+
 function overlayFor<Value extends object>(write: HostedVersionWrite<Value>): Overlay<Value> {
   const overlay = overlays.get(write);
   if (!overlay) throw new InvalidHostedVersionIdentityError();
@@ -206,11 +229,69 @@ async function readHostedVersionSequenceNode<Value extends object>(
     ])
   ).rows[0];
   if (!row || row.is_deleted) return null;
+  const state = decodeValue<PersistedSequenceNode<Value>>(row.node_state);
+  const storedValue = state.value;
   return {
     id: row.node_id,
     treeParentId: row.tree_parent_id,
-    ...decodeValue<PersistedSequenceNode<Value>>(row.node_state),
+    ...state,
+    subtreeHeight: row.subtree_height ?? state.subtreeHeight ?? subtreeHeightOf(storedValue),
+    maximumSubtreeHeight: row.maximum_subtree_height ?? state.maximumSubtreeHeight ?? null,
+    maximumSubtreeOccurrenceId: row.maximum_subtree_occurrence_id ?? state.maximumSubtreeOccurrenceId ?? null,
   };
+}
+
+/** Reads a deduplicated temporal frontier for one exact Book index and selected snapshot. */
+async function readHostedVersionSequenceNodes<Value extends object>(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  indexKind: HostedVersionIndexKind,
+  nodeIds: readonly string[],
+): Promise<ReadonlyMap<string, VersionedOutlineSequenceNode<Value> | null>> {
+  checkSnapshot(snapshot);
+  const selectedIds = [...new Set(nodeIds)];
+  for (const nodeId of selectedIds) checkOwnedId(snapshot.route, nodeId);
+  if (selectedIds.length === 0) return new Map();
+  const rows = (
+    await client.query<NodeRow>(readNodes.sql, [
+      snapshot.route,
+      snapshot.catalogueId,
+      snapshot.generationId,
+      indexKind,
+      selectedIds,
+      snapshot.sequence.toString(),
+    ])
+  ).rows;
+  const nodes = new Map<string, VersionedOutlineSequenceNode<Value> | null>();
+  for (const id of selectedIds) nodes.set(id, null);
+  for (const row of rows) {
+    if (row.is_deleted) continue;
+    const state = decodeValue<PersistedSequenceNode<Value>>(row.node_state);
+    const storedValue = state.value;
+    nodes.set(row.node_id, {
+      id: row.node_id,
+      treeParentId: row.tree_parent_id,
+      ...state,
+      subtreeHeight: row.subtree_height ?? state.subtreeHeight ?? subtreeHeightOf(storedValue),
+      maximumSubtreeHeight: row.maximum_subtree_height ?? state.maximumSubtreeHeight ?? null,
+      maximumSubtreeOccurrenceId: row.maximum_subtree_occurrence_id ?? state.maximumSubtreeOccurrenceId ?? null,
+    });
+  }
+  return nodes;
+}
+
+/** Creates an immutable page reader with one cache and a native batch seam for each selected index. */
+export function createHostedVersionSequenceReadAccess<Value extends object>(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  indexKind: HostedVersionIndexKind,
+): VersionedOutlineSequenceReadAccess<Value> {
+  checkSnapshot(snapshot);
+  const boundSnapshot = Object.freeze({ ...snapshot });
+  return createVersionedOutlineSequenceReadAccess<Value>(
+    (id) => readHostedVersionSequenceNode<Value>(client, boundSnapshot, indexKind, id),
+    (ids) => readHostedVersionSequenceNodes<Value>(client, boundSnapshot, indexKind, ids),
+  );
 }
 
 /** Product containment state is read independently from index-tree node state. */
@@ -235,9 +316,42 @@ export async function readHostedVersionOccurrence<Value extends object>(
     occurrenceId: row.occurrence_id,
     parentOccurrenceId: row.parent_occurrence_id,
     subtreeSize: BigInt(row.subtree_size),
-    value: decodeValue<Value>(row.occurrence_state),
+    value: withStoredSubtreeHeight(decodeValue<Value>(row.occurrence_state), row.subtree_height),
     sequence: BigInt(row.sequence),
   };
+}
+
+/** Reads the selected temporal occurrence rows for one bounded product page. */
+export async function readHostedVersionOccurrences<Value extends object>(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  occurrenceIds: readonly string[],
+): Promise<ReadonlyMap<string, HostedVersionOccurrenceValue<Value>>> {
+  checkSnapshot(snapshot);
+  const selectedIds = [...new Set(occurrenceIds)];
+  for (const occurrenceId of selectedIds) checkOwnedId(snapshot.route, occurrenceId);
+  if (selectedIds.length === 0) return new Map();
+  const rows = (
+    await client.query<OccurrenceRow>(readOccurrences.sql, [
+      snapshot.route,
+      snapshot.catalogueId,
+      snapshot.generationId,
+      selectedIds,
+      snapshot.sequence.toString(),
+    ])
+  ).rows;
+  const occurrences = new Map<string, HostedVersionOccurrenceValue<Value>>();
+  for (const row of rows) {
+    if (row.is_deleted) continue;
+    occurrences.set(row.occurrence_id, {
+      occurrenceId: row.occurrence_id,
+      parentOccurrenceId: row.parent_occurrence_id,
+      subtreeSize: BigInt(row.subtree_size),
+      value: withStoredSubtreeHeight(decodeValue<Value>(row.occurrence_state), row.subtree_height),
+      sequence: BigInt(row.sequence),
+    });
+  }
+  return occurrences;
 }
 
 /** Finds the last root row for one exact sibling parent at or before the snapshot. */
@@ -263,6 +377,58 @@ export async function readHostedVersionSiblingRoot(
     : null;
 }
 
+/** Reads the latest temporal root for each distinct parent in one bounded product page. */
+export async function readHostedVersionSiblingRoots(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  parentOccurrenceIds: readonly (string | null)[],
+): Promise<ReadonlyMap<string | null, HostedVersionSiblingRoot>> {
+  checkSnapshot(snapshot);
+  const selectedParents = [...new Set(parentOccurrenceIds)];
+  for (const parentOccurrenceId of selectedParents) checkOwnedId(snapshot.route, parentOccurrenceId);
+  if (selectedParents.length === 0) return new Map();
+  const rows = (
+    await client.query<SiblingRootRow>(readSiblingRoots.sql, [
+      snapshot.route,
+      snapshot.catalogueId,
+      snapshot.generationId,
+      selectedParents,
+      ROOT_KEY,
+      snapshot.sequence.toString(),
+    ])
+  ).rows;
+  const roots = new Map<string | null, HostedVersionSiblingRoot>();
+  for (const row of rows)
+    roots.set(row.parent_id, {
+      parentOccurrenceId: row.parent_id,
+      rootNodeId: row.root_node_id,
+      sequence: BigInt(row.sequence),
+    });
+  return roots;
+}
+
+/** Indexed fallback for a selected legacy sibling set whose AVL maximum is not retained yet. */
+export async function readHostedVersionMaximumChildSubtreeHeight(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  parentOccurrenceId: string | null,
+  excludedOccurrenceIds: readonly string[] = [],
+): Promise<Readonly<{ occurrenceId: string; subtreeHeight: number }> | null> {
+  checkSnapshot(snapshot);
+  checkOwnedId(snapshot.route, parentOccurrenceId);
+  const row = (
+    await client.query<ChildDepthRow>(readChildDepth.sql, [
+      snapshot.route,
+      snapshot.catalogueId,
+      snapshot.generationId,
+      parentOccurrenceId,
+      snapshot.sequence.toString(),
+      excludedOccurrenceIds,
+    ])
+  ).rows[0];
+  return row ? { occurrenceId: row.occurrence_id, subtreeHeight: row.subtree_height } : null;
+}
+
 /** Creates the producer's snapshot reader and final-per-ID node overlays for all three Book indexes. */
 export function createHostedVersionWrite<Value extends object>(
   client: AccessClient,
@@ -278,8 +444,9 @@ export function createHostedVersionWrite<Value extends object>(
   for (const indexKind of HOSTED_VERSION_INDEX_KINDS)
     sequences.set(
       indexKind,
-      createVersionedOutlineSequenceReadWriteSet<Value>((id) =>
-        readHostedVersionSequenceNode<Value>(client, boundSnapshot, indexKind, id),
+      createVersionedOutlineSequenceReadWriteSet<Value>(
+        (id) => readHostedVersionSequenceNode<Value>(client, boundSnapshot, indexKind, id),
+        (ids) => readHostedVersionSequenceNodes<Value>(client, boundSnapshot, indexKind, ids),
       ),
     );
   overlays.set(write, {
@@ -320,6 +487,7 @@ export function stageHostedVersionOccurrence<Value extends object>(
     occurrenceId,
     parentOccurrenceId: value?.parentOccurrenceId ?? null,
     subtreeSize: value?.subtreeSize ?? 0n,
+    subtreeHeight: value === null ? null : subtreeHeightOf(value.value),
     value: value === null ? null : value.value,
   });
 }
@@ -369,13 +537,23 @@ export async function commitHostedVersionWrite<Value extends object>(
   checkSnapshot(snapshot);
   const nodeRows = [...overlay.sequences].flatMap(([indexKind, sequence]) =>
     [...sequence.nodeWrites.values()].map((node) => {
-      const { id: nodeId, treeParentId, ...state } = node;
+      const {
+        id: nodeId,
+        treeParentId,
+        subtreeHeight,
+        maximumSubtreeHeight,
+        maximumSubtreeOccurrenceId,
+        ...state
+      } = node;
       return {
         index_kind: indexKind,
         node_id: nodeId,
         tree_parent_id: treeParentId,
         node_state: encodeValue(state),
         is_deleted: false,
+        subtree_height: subtreeHeight ?? subtreeHeightOf(node.value),
+        maximum_subtree_height: maximumSubtreeHeight ?? null,
+        maximum_subtree_occurrence_id: maximumSubtreeOccurrenceId ?? null,
       };
     }),
   );
@@ -383,6 +561,7 @@ export async function commitHostedVersionWrite<Value extends object>(
     occurrence_id: row.occurrenceId,
     parent_occurrence_id: row.parentOccurrenceId,
     subtree_size: row.subtreeSize.toString(),
+    subtree_height: row.subtreeHeight,
     occurrence_state: row.value === null ? null : encodeValue(row.value),
     is_deleted: row.value === null,
   }));

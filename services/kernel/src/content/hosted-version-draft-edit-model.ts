@@ -29,6 +29,7 @@ export type HostedVersionDraftMoveAncestor = Readonly<{
   parentId: string | null;
   subtreeSize: bigint;
   chapterCount: bigint;
+  subtreeHeight: number;
 }>;
 
 export type HostedVersionDraftMoveSelection = Readonly<{
@@ -46,12 +47,18 @@ export type HostedVersionDraftMoveSelection = Readonly<{
   destinationSiblingRootId: string | null;
   preorderRootId: string | null;
   chapterRootId: string | null;
+  /** Exact sibling roots for selected parents and ancestors in this snapshot. */
+  siblingRootByParent: ReadonlyMap<string | null, string | null>;
 }>;
 
 export type HostedVersionDraftMoveIndexes = Readonly<{
   siblings: VersionedOutlineSequenceReadWriteSet<string>;
   preorder: VersionedOutlineSequenceReadWriteSet<string>;
   chapters: VersionedOutlineSequenceReadWriteSet<string>;
+  readLegacyMaximum: (
+    parentId: string | null,
+    excludedOccurrenceIds: readonly string[],
+  ) => Promise<Readonly<{ occurrenceId: string; subtreeHeight: number }> | null>;
 }>;
 
 /** One native transaction view of the exact expected draft and all three
@@ -114,6 +121,7 @@ export type HostedVersionDraftMovePlan = Readonly<{
   chapterCount: bigint;
   chapterDestination: bigint;
   ancestorDeltas: readonly HostedVersionDraftMoveAncestorDelta[];
+  subtreeHeightUpdates: readonly Readonly<{ occurrenceId: string; subtreeHeight: number }>[];
   work: Readonly<{
     siblings: VersionedOutlineSequenceWork;
     preorder: VersionedOutlineSequenceWork;

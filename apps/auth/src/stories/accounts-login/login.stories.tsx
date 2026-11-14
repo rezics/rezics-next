@@ -28,7 +28,17 @@ export default {
   decorators: [authLocale],
 };
 
-type Mode = 'current' | 'switching' | 'pending' | 'changed' | 'unavailable' | 'uncertain';
+type Mode =
+  | 'current'
+  | 'switching'
+  | 'pending'
+  | 'changed'
+  | 'unavailable'
+  | 'uncertain'
+  | 'signed-out'
+  | 'retry'
+  | 'refused'
+  | 'long-copy';
 // Presentation fixtures for the real route, not native/browser acceptance evidence.
 function Page({ mode }: { mode: Mode }) {
   const [installed, setInstalled] = useState(false);
@@ -52,18 +62,28 @@ function Page({ mode }: { mode: Mode }) {
     globalThis.fetch = (async (input, init) => {
       if (input === '/signin/page') {
         reads++;
-        if (mode === 'unavailable') return Response.json({ error: 'unavailable' }, { status: 503 });
+        if (mode === 'unavailable' || (mode === 'retry' && reads === 1))
+          return Response.json({ error: 'unavailable' }, { status: 503 });
         return Response.json({
           methods: { password: true, passkey: false },
-          viewer: {
-            kind: 'signed-in',
-            account_id: reads > 1 && mode === 'changed' ? 'story-b' : 'story-a',
-            email: reads > 1 && mode === 'changed' ? 'second@example.test' : 'reader@example.test',
-          },
+          viewer:
+            mode === 'signed-out'
+              ? { kind: 'signed-out' }
+              : {
+                  kind: 'signed-in',
+                  account_id: reads > 1 && mode === 'changed' ? 'story-b' : 'story-a',
+                  email:
+                    mode === 'long-copy'
+                      ? 'international-reading-community.account-with-a-long-name@shared-library.example.test'
+                      : reads > 1 && mode === 'changed'
+                        ? 'second@example.test'
+                        : 'reader@example.test',
+                },
           continuation: { href: '/security', requires_sign_in: false },
         });
       }
       if (input === '/signin') {
+        if (mode === 'refused') return Response.json({ error: 'authentication_denied' }, { status: 401 });
         if (mode === 'pending') return new Promise<Response>(() => {});
         throw new TypeError('Story: acknowledgement unavailable');
       }
@@ -123,4 +143,37 @@ export const UncertainReview = {
     if (!canvasElement.textContent?.includes(m.auth_login_uncertain()))
       throw new Error('Review cannot attribute success');
   },
+};
+
+export const SignedOut = {
+  render: () => <Page mode="signed-out" />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await waitFor(() => canvasElement.querySelector('#login-password'));
+    if (button(canvasElement, m.auth_login_continue())) throw new Error('Signed-out advice has no current account');
+    const links = canvasElement.querySelector('nav');
+    if (!links?.querySelector('a[href="/recovery"]')) throw new Error('Recovery must remain visible');
+  },
+};
+export const UnavailableThenRetry = {
+  render: () => <Page mode="retry" />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    (await waitFor(() => button(canvasElement, m.auth_login_page_retry()))).click();
+    await waitFor(() => button(canvasElement, m.auth_login_continue()));
+    if (canvasElement.querySelector('#login-password')) throw new Error('Read Retry must not start authentication');
+  },
+};
+export const CredentialRefusal = {
+  render: () => <Page mode="refused" />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await submit(canvasElement);
+    await waitFor(() => canvasElement.querySelector('[role="alert"]'));
+    if (canvasElement.querySelector<HTMLInputElement>('#login-password')?.value)
+      throw new Error('Refusal must clear the password');
+    if (canvasElement.querySelector<HTMLInputElement>('#login-email')?.value !== 'another@example.test')
+      throw new Error('Refusal keeps the entered email for correction');
+  },
+};
+export const LongLocaleAccountChoice = {
+  globals: { locale: 'de' },
+  render: () => <Page mode="long-copy" />,
 };

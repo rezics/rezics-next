@@ -50,6 +50,11 @@ function charsCopy(id: string, bloodt: string, gender: string, spoilGender: stri
   ].join('\t');
 }
 
+const evidence = (content: unknown, rank: 'normal' | 'preferred' | 'deprecated' = 'normal') => ({
+  rank,
+  value: { content },
+});
+
 async function authoredTables(directory: string, extra: string[] = []): Promise<CrossMediaTables> {
   const dump = join(directory, 'vndb');
   await mkdir(join(dump, 'db'), { recursive: true });
@@ -105,7 +110,10 @@ function journalPort(commands: BatchCommand[]) {
       id: string;
       type: string;
       labels: Record<string, string>;
-      statements: Record<string, { value: { content: unknown }; references?: unknown }[]>;
+      statements: Record<
+        string,
+        { rank: 'normal' | 'preferred' | 'deprecated'; value: { content: unknown }; references?: unknown }[]
+      >;
     };
   };
   const subjects = new Map<string, Subject>();
@@ -128,6 +136,7 @@ function journalPort(commands: BatchCommand[]) {
             if (subject && value.type === 'value') {
               const rows = subject.subject.statements[command.statement.property.id] ?? [];
               rows.push({
+                rank: 'normal',
                 value: { content: value.content },
                 ...(command.statement.references ? { references: command.statement.references } : {}),
               });
@@ -224,8 +233,26 @@ test('default showcase without a profile file publishes selected blood types and
     const bindings = await readShowcaseVndbCharacterProfileVocabulary({ plan, port: captured, journal });
     expect(bindings.concepts.map((concept) => concept.code)).toEqual(['a']);
     expect(bindings.schemes[0]?.uri).toBe(vndbCharacterBloodTypeSchemeUri);
+    const references = parseVndbCharacterProfileReferences({
+      schemeId: bindings.schemes[0]!.id,
+      concepts: bindings.concepts.map(({ code, id }) => ({ code, id })),
+    });
+    const scheme = subjects.get(references.schemeId)!.subject;
+    const concept = subjects.get(references.concepts[0]!.id)!.subject;
+    for (const [subject, property, expected] of [
+      [scheme, 'schema:url', vndbCharacterBloodTypeSchemeUri],
+      [concept, 'schema:url', vndbCharacterBloodTypeConceptUri('a')],
+      [concept, 'skos:inScheme', references.schemeId],
+    ] as const) {
+      subject.statements[property] = [evidence(expected, 'deprecated')];
+      expect((await readVndbCharacterProfileBindings(captured, references)).concepts).toEqual([]);
+      subject.statements[property] = [evidence(expected, 'deprecated'), evidence(expected, 'preferred')];
+    }
+    const recovered = await readVndbCharacterProfileBindings(captured, references);
+    expect(recovered.schemes.map((entry) => entry.id)).toEqual(bindings.schemes.map((entry) => entry.id));
+    expect(recovered.concepts.map((entry) => entry.id)).toEqual(bindings.concepts.map((entry) => entry.id));
 
-    const second = await seedShowcaseVndbReleases(seedArgs(tables, plan, statePath, captured, bindings));
+    const second = await seedShowcaseVndbReleases(seedArgs(tables, plan, statePath, captured, recovered));
     expect(second.readings.find((row) => row.externalId === 'c1')?.subject.subject.id).toBe(heroineId);
     expect(second.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
     const blood = commands.find(
@@ -334,7 +361,7 @@ test('unknown, malformed, withheld gender, refused Concepts and interrupted send
     const bindings = await readShowcaseVndbCharacterProfileVocabulary({ plan, port: captured, journal });
     expect(bindings.concepts.map((concept) => concept.code)).toEqual(['a']);
     const concept = subjects.get(bindings.concepts[0]!.id)!;
-    concept.subject.statements['skos:inScheme'] = [{ value: { content: randomUUID() } }];
+    concept.subject.statements['skos:inScheme'] = [evidence(randomUUID())];
     const withheld = await readVndbCharacterProfileBindings(
       captured,
       parseVndbCharacterProfileReferences({

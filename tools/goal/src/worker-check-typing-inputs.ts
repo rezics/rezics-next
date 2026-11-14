@@ -4,13 +4,18 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { deflateSync } from 'node:zlib';
 import {
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
   lstatSync,
-  statSync,
   mkdirSync,
+  openSync,
   readFileSync,
   readlinkSync,
+  readSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -49,9 +54,19 @@ const REMOTE_PREPARATION_MARKERS = new Set([
   '.remote-check-supervisor',
   'preparation-install.json',
 ]);
-const KERNEL_MIGRATION_HEADER_LIMIT_BYTES = 512;
-const DBMATE_UP_MARKER = /^-- migrate:up(?:[ \t]+transaction:(?:true|false))?[ \t]*\r?$/m;
-const DBMATE_DOWN_MARKER = /^-- migrate:down(?:[ \t]+transaction:(?:true|false))?[ \t]*\r?$/m;
+const KERNEL_MIGRATION_PATH = /^services\/kernel\/db\/[a-z][a-z0-9_]*\/migrations\/\d{14}_[a-z0-9_]+\.sql$/;
+const LEGACY_DBMATE_SETUP_DIAGNOSTIC =
+  /^kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with ['"]-- migrate:up['"]$/;
+const LEGACY_DBMATE_SETUP_WRAPPED_DIAGNOSTIC =
+  /^kernel typecheck infrastructure failure: phase=database-setup: .+ up failed: Error: dbmate requires each migration to define an up block with ['"]-- migrate:up['"]$/;
+const LEGACY_DBMATE_SETUP_PREFIX = /^kernel typecheck infrastructure failure: phase=database-setup:/;
+const LEGACY_DBMATE_SETUP_DIAGNOSTIC_TEXT =
+  "kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'";
+const DBMATE_MARKER_READ_BYTES = 64 * 1024;
+// Horizontal whitespace runs collapse to one byte; any longer normalized line cannot match the marker grammar.
+const DBMATE_MARKER_MAX_NORMALIZED_LINE_BYTES = '-- migrate:down transaction:false'.length + 1;
+const DBMATE_UP_MARKER = /^-- migrate:up(?:[ \t]+transaction:(?:true|false))?[ \t]*\r?$/;
+const DBMATE_DOWN_MARKER = /^-- migrate:down(?:[ \t]+transaction:(?:true|false))?[ \t]*\r?$/;
 // These are outputs of the owning generation commands, before their compiler programs run.
 const producedDuringPreparation = (file: string): boolean =>
   /^apps\/(web|auth)\/src\/(?:paraglide\/|routeTree\.gen\.ts$)/.test(file);
@@ -60,46 +75,150 @@ const same = (left: unknown, right: unknown): boolean => JSON.stringify(left) ==
 
 export type KernelMigrationHeaderDiagnostic = { path: string; line: string };
 
-/** Revalidate the exact Kernel preflight diagnosis against the migration retained in this source tree. */
+/** The retained source must be an ordinary migration with a down block and no forward marker. */
+function retainedMigrationWithoutUpMarker(
+  root: string,
+  sourceRelativePath: string,
+  files: ReadonlySet<string>,
+): boolean {
+  if (!KERNEL_MIGRATION_PATH.test(sourceRelativePath) || !files.has(sourceRelativePath)) return false;
+  const sourcePath = join(root, sourceRelativePath);
+  const normalizedRoot = resolve(root);
+  const normalizedSource = resolve(sourcePath);
+  const withinKernel = relative(join(normalizedRoot, 'services/kernel'), normalizedSource).replaceAll('\\', '/');
+  if (!withinKernel || withinKernel === '..' || withinKernel.startsWith('../') || isAbsolute(withinKernel))
+    return false;
+  let info: ReturnType<typeof lstatSync>;
+  try {
+    info = lstatSync(normalizedSource);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+  if (!info.isFile() || info.isSymbolicLink()) return false;
+
+  const markers = readDbmateMigrationMarkers(normalizedSource);
+  return markers !== undefined && !markers.up && markers.down;
+}
+
+/** Scan whole marker lines with fixed memory, even when a migration or one of its lines is large. */
+function readDbmateMigrationMarkers(path: string): { up: boolean; down: boolean } | undefined {
+  let descriptor: number;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ELOOP') return;
+    throw error;
+  }
+
+  try {
+    if (!fstatSync(descriptor).isFile()) return;
+    const buffer = Buffer.allocUnsafe(DBMATE_MARKER_READ_BYTES);
+    let line = '';
+    let lineValid = true;
+    let lastWasHorizontalWhitespace = false;
+    let lineCarriageReturn = false;
+    let up = false;
+    let down = false;
+    const append = (character: string) => {
+      if (line.length < DBMATE_MARKER_MAX_NORMALIZED_LINE_BYTES) line += character;
+      else lineValid = false;
+    };
+    const finishLine = () => {
+      if (lineValid) {
+        const normalized = line.endsWith(' ') ? line.slice(0, -1) : line;
+        const candidate = `${normalized}${lineCarriageReturn ? '\r' : ''}`;
+        if (DBMATE_UP_MARKER.test(candidate)) up = true;
+        if (DBMATE_DOWN_MARKER.test(candidate)) down = true;
+      }
+      line = '';
+      lineValid = true;
+      lastWasHorizontalWhitespace = false;
+      lineCarriageReturn = false;
+    };
+
+    for (;;) {
+      const length = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (length === 0) break;
+      for (let index = 0; index < length; index++) {
+        const byte = buffer[index]!;
+        if (byte === 0x0a) {
+          finishLine();
+          continue;
+        }
+        if (!lineValid) continue;
+        if (byte === 0x0d) {
+          if (lineCarriageReturn) lineValid = false;
+          else lineCarriageReturn = true;
+          continue;
+        }
+        if (lineCarriageReturn) {
+          lineValid = false;
+          continue;
+        }
+        if (byte === 0x20 || byte === 0x09) {
+          if (!lastWasHorizontalWhitespace) append(' ');
+          lastWasHorizontalWhitespace = true;
+        } else {
+          lastWasHorizontalWhitespace = false;
+          append(String.fromCharCode(byte));
+        }
+      }
+    }
+    finishLine();
+    return { up, down };
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+/** Revalidate current preflight and retained legacy dbmate setup diagnostics against the source tree. */
 export function retainedKernelMigrationHeaderDefect(
   root: string,
   log: string,
 ): KernelMigrationHeaderDiagnostic | undefined {
   const lines = log.split(/\r?\n/);
+  let sourceFiles: Set<string> | undefined;
+  const files = () => (sourceFiles ??= new Set(gitFiles(root)));
   const starts = lines.flatMap((line, index) => (line === 'Migration version check failed:' ? [index] : []));
-  if (starts.length !== 1) return;
-  const start = starts[0]!;
-  const end = lines.indexOf('Name migrations with `date -u +%Y%m%d%H%M%S`.', start + 1);
-  if (end <= start + 1) return;
-  const issues = lines.slice(start + 1, end);
-  if (issues.length !== 1) return;
-  const match = issues[0]!.match(
-    /^- (db\/[a-z][a-z0-9_]*\/migrations\/\d{14}_[a-z0-9_]+\.sql): missing dbmate up marker; add `-- migrate:up` before the up SQL$/,
-  );
-  if (!match) return;
-
-  const relativePath = match[1]!;
-  const sourceRelativePath = `services/kernel/${relativePath}`;
-  if (!gitFiles(root).includes(sourceRelativePath)) return;
-  const sourcePath = join(root, 'services/kernel', relativePath);
-  const normalizedRoot = resolve(root);
-  const normalizedSource = resolve(sourcePath);
-  const withinKernel = relative(join(normalizedRoot, 'services/kernel'), normalizedSource).replaceAll('\\', '/');
-  if (!withinKernel || withinKernel === '..' || withinKernel.startsWith('../') || isAbsolute(withinKernel)) return;
-  let info: ReturnType<typeof lstatSync>;
-  try {
-    info = lstatSync(normalizedSource);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw error;
+  let preflight: KernelMigrationHeaderDiagnostic | undefined;
+  if (starts.length === 1) {
+    const start = starts[0]!;
+    const end = lines.indexOf('Name migrations with `date -u +%Y%m%d%H%M%S`.', start + 1);
+    if (end > start + 1) {
+      const issues = lines.slice(start + 1, end);
+      if (issues.length === 1) {
+        const match = issues[0]!.match(
+          /^- (db\/[a-z][a-z0-9_]*\/migrations\/\d{14}_[a-z0-9_]+\.sql): missing dbmate up marker; add `-- migrate:up` before the up SQL$/,
+        );
+        if (match) {
+          const sourceRelativePath = `services/kernel/${match[1]!}`;
+          if (retainedMigrationWithoutUpMarker(root, sourceRelativePath, files()))
+            preflight = { path: sourceRelativePath, line: issues[0]! };
+        }
+      }
+    }
   }
-  if (!info.isFile() || info.isSymbolicLink()) return;
 
-  const contents = readFileSync(normalizedSource);
-  if (contents.byteLength > KERNEL_MIGRATION_HEADER_LIMIT_BYTES) return;
-  const text = contents.toString('utf8');
-  if (DBMATE_UP_MARKER.test(text) || !DBMATE_DOWN_MARKER.test(text)) return;
-  return { path: sourceRelativePath, line: issues[0]! };
+  const legacyLines = new Set<string>();
+  let malformedLegacySetupDiagnostic = false;
+  for (const line of lines) {
+    if (LEGACY_DBMATE_SETUP_DIAGNOSTIC.test(line) || LEGACY_DBMATE_SETUP_WRAPPED_DIAGNOSTIC.test(line)) {
+      legacyLines.add(line);
+    } else if (LEGACY_DBMATE_SETUP_PREFIX.test(line)) {
+      malformedLegacySetupDiagnostic = true;
+    }
+  }
+  if (malformedLegacySetupDiagnostic || legacyLines.size > 1 || (preflight && legacyLines.size > 0)) return;
+  if (preflight) return preflight;
+  if (legacyLines.size !== 1) return;
+  const inventory = files();
+  const candidates = [...inventory]
+    .filter((file) => KERNEL_MIGRATION_PATH.test(file))
+    .filter((file) => retainedMigrationWithoutUpMarker(root, file, inventory));
+  if (candidates.length !== 1) return;
+  return { path: candidates[0]!, line: LEGACY_DBMATE_SETUP_DIAGNOSTIC_TEXT };
 }
 
 function gitFiles(root: string): string[] {

@@ -869,6 +869,87 @@ test('full base enrichment excludes late book creators but the first source impo
   }
 }, 30_000);
 
+test('selected Book drafts preserve exact role admission through the publication handoff', async () => {
+  const sourceCredits = [
+    { person_id: 8001, subject_id: 26, position: 2004, appear_eps: '' },
+    { person_id: 8001, subject_id: 27, position: 2001, appear_eps: '' },
+    { person_id: 6023, subject_id: 26, position: 2001, appear_eps: '' },
+    { person_id: 6023, subject_id: 27, position: 2004, appear_eps: '' },
+  ];
+  const expectedCredits = [
+    {
+      kind: 'staff',
+      work: '26',
+      workType: 1,
+      person: 'person:6023',
+      roleCode: 2001,
+      path: '/subject-persons/26/6023/position',
+      record: { subject_id: 26, person_id: 6023, position: 2001 },
+    },
+    {
+      kind: 'staff',
+      work: '26',
+      workType: 1,
+      person: 'person:8001',
+      roleCode: 2004,
+      path: '/subject-persons/26/8001/position',
+      record: { subject_id: 26, person_id: 8001, position: 2004 },
+    },
+  ];
+  const creditTuples = (drafts: Awaited<ReturnType<typeof planShowcaseBooks>>['credits']) =>
+    drafts
+      .map(({ kind, work, workType, person, roleCode, path, record }) => ({
+        kind,
+        work,
+        workType,
+        person,
+        roleCode,
+        path,
+        record,
+      }))
+      .sort((left, right) => `${left.work}:${left.person}`.localeCompare(`${right.work}:${right.person}`));
+
+  for (const credits of [sourceCredits, [...sourceCredits].reverse()]) {
+    const planned = await planShowcaseBooks({ tables: tables({ credits, people: [author, company] }) });
+    expect(creditTuples(planned.credits)).toEqual(expectedCredits);
+    expect(planned.selected).toMatchObject({
+      authors: ['person:6023'],
+      illustrators: [],
+      publishers: ['person:8001'],
+    });
+    expect(
+      planned.members
+        .filter((member) => member.role === 'author' || member.role === 'illustrator' || member.role === 'publisher')
+        .map(({ key, role, family }) => ({ key, role, family }))
+        .sort((left, right) => left.key.localeCompare(right.key)),
+    ).toEqual([
+      { key: 'person:6023', role: 'author', family: showcaseBookFamily.id },
+      { key: 'person:8001', role: 'publisher', family: showcaseBookFamily.id },
+    ]);
+    expect(planned.gaps).toContainEqual({
+      source: 'bangumi',
+      fields: ['person.id', 'person.name', 'person.type'],
+      record: company,
+      reason: 'author identity is not an individual person',
+      code: '2001',
+      endpoint: '8001',
+      property: 'schema:author',
+      requiredProfile: 'schema:Person',
+    });
+    expect(planned.gaps).toContainEqual({
+      source: 'bangumi',
+      fields: ['person.career', 'person.id', 'person.name', 'person.name_cn', 'person.type'],
+      record: author,
+      reason: 'publisher identity is not an Organization',
+      code: '2004',
+      endpoint: '6023',
+      property: 'schema:publisher',
+      requiredProfile: 'schema:Organization',
+    });
+    expect(creditTuples(showcaseBooksToCrossMediaPlan(planned).credits)).toEqual(expectedCredits);
+  }
+});
+
 test('pinned real light-novel families publish through the reviewed world and reopen with exact identities', async () => {
   const rows = pinned.rows as Record<string, Record<string, unknown>[]>;
   const directory = await mkdtemp(join(tmpdir(), 'showcase-pinned-books-'));

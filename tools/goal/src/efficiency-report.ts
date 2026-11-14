@@ -989,7 +989,20 @@ export function captureHourlyEfficiencyObservation(db: Database, options: Report
 }
 
 export async function renderHourlyEfficiencyReport(db: Database, options: ReportOptions): Promise<string> {
-  return captureHourlyEfficiencyObservation(db, options).snapshot.report;
+  const bucket = options.bucket ? parseUtcHour(options.bucket) : completedUtcHour(options.now);
+  const existing = readFrozenHourlyEfficiencyReport(db, bucket.start);
+  if (existing) return existing.report;
+
+  const asOf = options.now ?? Date.now();
+  const capturedAt = (asOf instanceof Date ? asOf : new Date(asOf)).toISOString();
+  const observation = observationData(
+    db,
+    bucket,
+    options.productLineMeasurement ?? unknownMeasurement(),
+    options.privateDuty,
+    capturedAt,
+  );
+  return buildHourlyEfficiencyReport(db, options, bucket, observation);
 }
 
 export { efficiencyReportMigrations, sendHourlyEfficiencyReport } from './efficiency-report-delivery.ts';

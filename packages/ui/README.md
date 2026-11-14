@@ -117,7 +117,11 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 
 `RichTextEditor` accepts an optional `lookupMention(handle, signal)` source. After a 200 ms typing pause, `@handle` offers one exact account match; stale lookups are aborted, keyboard or pointer selection inserts an inline `mention` with only its `accountId`, and Escape keeps the typed text. Without a source, `@` stays plain text. `DocumentBody` accepts a `mentions` map of account ids to current handles and a `locale` (English by default); it renders localized agent links, or a plain `@` for unresolved accounts. Handles are rendered as text, never HTML.
 
-`DocumentBody` derives visit identity from sorted-key structural JSON, so renderer-supported snapshots remain readable, equivalent property-key orderings keep disclosure, and changed document content resets it before paint. Reader option, locale, class name and callback updates keep the current visit's disclosure; only a changed document snapshot remounts spoilers.
+`DocumentBody` derives visit identity from sorted-key structural JSON, so renderer-supported snapshots remain readable,
+equivalent property-key orderings keep disclosure, and changed document content resets it before paint. A changed
+`visitKey` also retires disclosure, including equal document bytes from a new source or revision. Reader option,
+locale, class name and callback updates keep the current visit's disclosure. The
+[footnote integration contract](../document/FOOTNOTES.md) defines the public controls, labels and caller obligations.
 
 Decision: custom block mappings retain only authored common fields on their rendered output: `id` as `data-block-id`, plus `lang` and `dir`. A code or table callback that returns its supplied `defaultContent` keeps the existing semantic markup; a replacement output receives a block wrapper carrying those fields.
 

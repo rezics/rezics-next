@@ -124,6 +124,28 @@ function checkBlock(profile: DocumentProfile, block: unknown): CheckedBlock | nu
   return validTables ? { ids, node } : null;
 }
 
+/** Footnote labels link one top-level definition to any number of ordinary inline references. */
+function validFootnoteLinks(content: readonly DocumentNode[]): boolean {
+  const definitions = new Set<string>();
+  const references: string[] = [];
+  const visit = (node: DocumentNode, topLevel: boolean, insideDefinition: boolean): boolean => {
+    if (node.type === 'footnoteDefinition') {
+      const label = node.attrs?.label;
+      if (!topLevel || typeof label !== 'string' || definitions.has(label)) return false;
+      definitions.add(label);
+      insideDefinition = true;
+    }
+    if (node.type === 'footnoteReference') {
+      const label = node.attrs?.label;
+      if (insideDefinition || typeof label !== 'string') return false;
+      references.push(label);
+    }
+    return (node.content ?? []).every((child) => visit(child, false, insideDefinition));
+  };
+  if (!content.every((node) => visit(node, true, false))) return false;
+  return references.every((label) => definitions.has(label));
+}
+
 /** The checked blocks of a snapshot, or null when it is not a valid snapshot. */
 function checkBlocks(value: unknown): CheckedBlock[] | null {
   if (!plainContainer(value)) return null;
@@ -146,6 +168,7 @@ function checkBlocks(value: unknown): CheckedBlock[] | null {
     }
     checked.push(block);
   }
+  if (!validFootnoteLinks(content as DocumentNode[])) return null;
   const schema = schemaForProfile(profile);
   return schema.topNodeType.validContent(Fragment.fromArray(checked.map((block) => block.node))) ? checked : null;
 }
@@ -242,6 +265,7 @@ function inlineText(node: DocumentNode, mentionText?: (accountId: string) => str
     if (typeof accountId !== 'string') throw new TypeError('Invalid mention account ID');
     return mentionText ? mentionText(accountId) : '@';
   }
+  if (node.type === 'footnoteReference') return `[^${String(node.attrs?.label ?? '')}]`;
   if (node.type === 'extensionInline' || node.type === 'extensionBlock') return String(node.attrs?.fallback ?? '');
   if (node.type === 'image') return String(node.attrs?.alt ?? '');
   if (node.type === 'media') return String(node.attrs?.caption ?? '');
@@ -286,9 +310,16 @@ export function hasDocumentContent(snapshot: DocumentSnapshot): boolean {
   const visit = (node: DocumentNode): boolean =>
     node.type === 'text'
       ? Boolean(node.text?.trim())
-      : ['image', 'media', 'extensionBlock', 'extensionInline', 'horizontalRule', 'table', 'mention'].includes(
-          node.type,
-        ) || (node.content ?? []).some(visit);
+      : [
+          'image',
+          'media',
+          'extensionBlock',
+          'extensionInline',
+          'horizontalRule',
+          'table',
+          'mention',
+          'footnoteReference',
+        ].includes(node.type) || (node.content ?? []).some(visit);
   return visit(snapshot.doc);
 }
 

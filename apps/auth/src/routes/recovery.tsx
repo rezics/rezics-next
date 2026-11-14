@@ -11,7 +11,14 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
-import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
@@ -34,6 +41,74 @@ const emailId = 'recovery-email';
 const emailErrorId = 'recovery-email-error';
 const passwordId = 'recovery-password';
 const passwordErrorId = 'recovery-password-error';
+type RecoveryControlEvent = ReactMouseEvent<HTMLElement>;
+type AdviceControl = 'retry' | 'fresh' | 'fresh-link';
+
+// One mounted control owns one orientation. Observation never creates intent.
+function useRecoveryFocus() {
+  const intent = useRef<{ trigger: HTMLElement; destination: 'form' | 'return' } | null>(null);
+  const cancel = useCallback(() => {
+    intent.current = null;
+  }, []);
+  const claim = (event: RecoveryControlEvent, destination: 'form' | 'return') => {
+    cancel();
+    if (event.detail === 0 && document.activeElement === event.currentTarget)
+      intent.current = { trigger: event.currentTarget, destination };
+  };
+  const settle = (target: (destination: 'form' | 'return') => HTMLElement | null) => {
+    const owned = intent.current;
+    cancel();
+    if (!owned) return;
+    // A completed transition may have just removed its trigger. A connected
+    // trigger must still hold focus; detached controls never own another reader.
+    if (
+      document.activeElement !== owned.trigger &&
+      (owned.trigger.isConnected || document.activeElement !== document.body)
+    )
+      return;
+    target(owned.destination)?.focus();
+  };
+  useLayoutEffect(() => {
+    const moved = (event: FocusEvent) => {
+      if (intent.current && event.target !== intent.current.trigger) cancel();
+    };
+    const blurred = (event: FocusEvent) => {
+      if (event.target === intent.current?.trigger) cancel();
+    };
+    const acted = (event: MouseEvent | KeyboardEvent) => {
+      if (!intent.current) return;
+      const sameControl = event.target instanceof Node && intent.current.trigger.contains(event.target);
+      if (!sameControl || event.type === 'click' || ('key' in event && (event.key === 'Enter' || event.key === ' ')))
+        cancel();
+    };
+    document.addEventListener('focusin', moved, true);
+    document.addEventListener('focusout', blurred, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('mousedown', cancel, true);
+    document.addEventListener('touchstart', cancel, true);
+    document.addEventListener('click', acted, true);
+    document.addEventListener('keydown', acted, true);
+    document.addEventListener('visibilitychange', cancel);
+    window.addEventListener('focus', cancel);
+    window.addEventListener('blur', cancel);
+    window.addEventListener('pagehide', cancel);
+    return () => {
+      cancel();
+      document.removeEventListener('focusin', moved, true);
+      document.removeEventListener('focusout', blurred, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('mousedown', cancel, true);
+      document.removeEventListener('touchstart', cancel, true);
+      document.removeEventListener('click', acted, true);
+      document.removeEventListener('keydown', acted, true);
+      document.removeEventListener('visibilitychange', cancel);
+      window.removeEventListener('focus', cancel);
+      window.removeEventListener('blur', cancel);
+      window.removeEventListener('pagehide', cancel);
+    };
+  }, [cancel]);
+  return { claim, settle, cancel };
+}
 
 export const Route = createFileRoute('/recovery')({
   head: () => ({ meta: [{ title: `${m.auth_recovery_heading()} · REZICS` }] }),
@@ -77,7 +152,8 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   const [confirmResend, setConfirmResend] = useState(false);
   const form = useRef<HTMLFormElement>(null);
   const readStatus = useRef<HTMLDivElement>(null);
-  const focusAfterRead = useRef(false);
+  const focusIntent = useRecoveryFocus();
+  const [adviceControl, setAdviceControl] = useState<AdviceControl | null>(null);
   const retiring = useRef(false);
   const initialized = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
@@ -86,12 +162,21 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     () => !retiring.current && (unsent.current || unresolved.current || unresolvedRecoveryHistory(attempt.returned)),
     [attempt],
   );
-  const retryAdvice = () => {
-    focusAfterRead.current = true;
+  const retryAdvice = (event: RecoveryControlEvent) => {
+    if (advice.state.kind === 'loading') return;
+    focusIntent.claim(event, historical && !fresh ? 'return' : 'form');
+    setAdviceControl('retry');
     advice.retry();
+  };
+  const startFresh = (event: RecoveryControlEvent) => {
+    if (!page || !attempt.available) return;
+    focusIntent.claim(event, 'form');
+    setAdviceControl('fresh');
+    setFresh(true);
   };
   const clearSecrets = useCallback(() => {
     retiring.current = true;
+    focusIntent.cancel();
     for (const input of form.current?.querySelectorAll('input') ?? []) {
       input.value = '';
       input.defaultValue = '';
@@ -109,7 +194,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     setMessage('');
     setNotice('');
     setPending(false);
-  }, [attempt]);
+  }, [attempt, focusIntent.cancel]);
 
   useLayoutEffect(
     () => () => {
@@ -123,12 +208,16 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   );
 
   useLayoutEffect(() => {
-    if (!page) readStatus.current?.focus();
-    else if (focusAfterRead.current) {
-      focusAfterRead.current = false;
-      (emailInput.current ?? document.getElementById(passwordId) ?? readStatus.current)?.focus();
-    }
-  }, [page, fresh]);
+    if (advice.state.kind === 'loading' || !adviceControl) return;
+    setAdviceControl(null);
+    if (adviceControl === 'fresh-link') setMessage('');
+    focusIntent.settle((destination) => {
+      if (destination === 'return') return document.getElementById('recovery-return-heading');
+      if (!page) return readStatus.current;
+      if (hasFragment && !credentials) return alert.current;
+      return emailInput.current ?? document.getElementById(passwordId);
+    });
+  }, [advice.state, adviceControl, fresh]);
 
   useLayoutEffect(() => {
     const unload = (event: BeforeUnloadEvent) => {
@@ -193,12 +282,9 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     else if (message) alert.current?.focus();
   }, [emailError, passwordFieldError, message]);
 
-  useLayoutEffect(() => {
-    if (hasFragment && !credentials && message) alert.current?.focus();
-  }, [credentials, hasFragment, message, page]);
-
   async function submitStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    focusIntent.cancel();
     if (!attempt.available || !page?.actions.start || !page.methods.email) return;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
     if (invalidEmail) {
@@ -236,6 +322,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
 
   async function submitComplete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    focusIntent.cancel();
     if (!attempt.available || !page?.actions.complete || !page.methods.password) return;
     const passwordLength = password.length;
     if (
@@ -296,36 +383,61 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
 
   if (hasFragment === null) return <AuthPage heading={m.auth_recovery_heading()} />;
 
-  const readAdvice =
-    advice.state.kind === 'loading' ? (
-      <p role="status">{m.auth_recovery_advice_loading()}</p>
-    ) : advice.state.kind === 'unavailable' ? (
-      <>
-        <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
-        <Button type="button" onClick={retryAdvice}>
+  const reading = advice.state.kind === 'loading';
+  const readAdvice = (
+    <>
+      {reading ? <p role="status">{m.auth_recovery_advice_loading()}</p> : null}
+      {advice.state.kind === 'unavailable' ? <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert> : null}
+      {advice.state.kind === 'unavailable' || (reading && adviceControl === 'retry') ? (
+        <Button type="button" aria-disabled={reading} aria-busy={reading} onClick={retryAdvice}>
           {m.auth_login_retry()}
         </Button>
-      </>
-    ) : null;
+      ) : null}
+    </>
+  );
 
-  if (historical && !fresh) {
+  if (historical && (!fresh || (reading && adviceControl === 'fresh'))) {
     return (
       <AuthPage heading={m.auth_recovery_heading()}>
         <RecoveryReturnView
           summary={attempt.returned}
           status={advice.state.kind}
           retry={retryAdvice}
-          fresh={() => {
-            if (!page || !attempt.available) return;
-            focusAfterRead.current = true;
-            setFresh(true);
-          }}
+          retrying={reading && adviceControl === 'retry'}
+          freshPending={reading && adviceControl === 'fresh'}
+          fresh={startFresh}
         />
         <RecoveryDeparture
           shouldWarn={shouldWarn}
           leave={clearSecrets}
           focus={() => document.getElementById('recovery-return-heading')?.focus()}
         />
+      </AuthPage>
+    );
+  }
+
+  if ((page && hasFragment && !credentials) || (reading && adviceControl === 'fresh-link')) {
+    return (
+      <AuthPage heading={m.auth_recovery_heading()}>
+        <ErrorAlert tabIndex={-1} ref={alert}>
+          {message}
+        </ErrorAlert>
+        {readAdvice}
+        <a
+          href="/recovery"
+          aria-disabled={reading}
+          aria-busy={reading}
+          onClick={(event) => {
+            event.preventDefault();
+            if (reading) return;
+            focusIntent.claim(event, 'form');
+            setAdviceControl('fresh-link');
+            setHasFragment(false);
+            setFresh(true);
+          }}
+        >
+          {m.auth_recovery_new_link()}
+        </a>
       </AuthPage>
     );
   }
@@ -339,27 +451,6 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
         {hasRecoveryHistory(attempt.returned) ? <RecoveryHistory summary={attempt.returned} /> : null}
         <a href="/login">{m.auth_login_heading()}</a>
         <RecoveryDeparture shouldWarn={shouldWarn} leave={clearSecrets} focus={() => readStatus.current?.focus()} />
-      </AuthPage>
-    );
-  }
-
-  if (hasFragment && !credentials) {
-    return (
-      <AuthPage heading={m.auth_recovery_heading()}>
-        <ErrorAlert tabIndex={-1} ref={alert}>
-          {message}
-        </ErrorAlert>
-        <a
-          href="/recovery"
-          onClick={(event) => {
-            event.preventDefault();
-            setHasFragment(false);
-            setMessage('');
-            setFresh(true);
-          }}
-        >
-          {m.auth_recovery_new_link()}
-        </a>
       </AuthPage>
     );
   }
@@ -479,10 +570,10 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
           <Button
             type="button"
             disabled={pending || !page.actions.start || !page.methods.email}
-            onClick={() => {
+            onClick={(event) => {
               if (!attempt.available) return;
               setConfirmResend(true);
-              retryAdvice();
+              retryAdvice(event);
             }}
           >
             {m.auth_recovery_new_link()}

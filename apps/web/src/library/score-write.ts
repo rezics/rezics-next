@@ -1,6 +1,6 @@
 export type PersonalScoreWriteResult = 'successful' | 'rejected' | 'uncertain' | 'stale';
 
-export type PersonalScoreWriteCommand = { units: number | null; key: string };
+export type PersonalScoreWriteCommand = Readonly<{ units: number | null; key: string }>;
 
 /** Reuse the original command key while the same units stay unresolved. */
 export function personalScoreWriteCommand(
@@ -8,7 +8,7 @@ export function personalScoreWriteCommand(
   units: number | null,
 ): PersonalScoreWriteCommand {
   if (pending && pending.units === units) return pending;
-  return { units, key: crypto.randomUUID() };
+  return Object.freeze({ units, key: crypto.randomUUID() });
 }
 
 export function personalScoreWriteNotice(

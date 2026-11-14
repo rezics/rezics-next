@@ -11,6 +11,7 @@ import deleteSnapshots from './hosted-version-candidate-cleanup-snapshots.sql';
 
 export const HOSTED_VERSION_CANDIDATE_CLEANUP_STEP_LIMIT = 100;
 
+type TerminalStatus = 'expired' | 'cancelled';
 type Phase = 'nodes' | 'occurrences' | 'sibling_roots' | 'snapshots' | 'generation' | 'done';
 type AccountActor = Extract<Actor, { kind: 'account' }>;
 type CleanupCursor =
@@ -71,7 +72,7 @@ type GenerationRow = QueryResultRow & {
 type CleanupRow = QueryResultRow & {
   owner_epoch: string;
   generation_id: string;
-  terminal_status: 'expired';
+  terminal_status: TerminalStatus;
   phase: Phase;
   cursor: CleanupCursor | null;
   deleted_row_count: string;
@@ -85,7 +86,7 @@ export type HostedVersionCandidateCleanupProgress = Readonly<{
   locator: HostedPublicationStagingLocator;
   generationId: string;
   ownerEpoch: string;
-  terminalStatus: 'expired';
+  terminalStatus: TerminalStatus;
   phase: Phase;
   cursor: CleanupCursor | null;
   deletedRowCount: string;
@@ -216,7 +217,7 @@ async function lockStage(
   return stage;
 }
 
-async function requireExpiredStage(client: AccessClient, stage: StageRow): Promise<void> {
+async function requireReclaimableStage(client: AccessClient, stage: StageRow): Promise<TerminalStatus> {
   if (stage.status === 'sealed' && stage.is_expired) {
     await client.query(
       `UPDATE content.hosted_publication_staging
@@ -227,8 +228,16 @@ async function requireExpiredStage(client: AccessClient, stage: StageRow): Promi
     );
     stage.status = 'expired';
   }
-  if (stage.status !== 'expired' || stage.sealed_at === null || stage.seal_sealed_at === null)
-    throw new HostedVersionCandidateCleanupConflictError('Only an expired sealed source can retire a candidate');
+  // Cancellation retains its seal and terminal identity; its original expiry still controls reclamation.
+  if (
+    (stage.status !== 'expired' && !(stage.status === 'cancelled' && stage.is_expired)) ||
+    stage.sealed_at === null ||
+    stage.seal_sealed_at === null
+  )
+    throw new HostedVersionCandidateCleanupConflictError(
+      'Only an expired or due cancelled sealed source can retire a candidate',
+    );
+  return stage.status;
 }
 
 function assertExactCandidateBinding(stage: StageRow, candidate: CandidateRow): void {
@@ -254,7 +263,7 @@ function assertExactCandidateBinding(stage: StageRow, candidate: CandidateRow): 
     (candidate.coverage_complete && candidate.placement_count !== candidate.source_candidate_count)
   ) {
     throw new HostedVersionCandidateCleanupConflictError(
-      'The expired source does not bind the exact Book candidate seal',
+      'The terminal source does not bind the exact Book candidate seal',
     );
   }
 }
@@ -263,9 +272,9 @@ function assertClaimableCandidate(
   candidate: CandidateRow,
 ): asserts candidate is CandidateRow & { generation_id: string } {
   if (candidate.status !== 'building' && candidate.status !== 'sealed')
-    throw new HostedVersionCandidateCleanupConflictError('The expired source has no reclaimable candidate checkpoint');
+    throw new HostedVersionCandidateCleanupConflictError('The terminal source has no reclaimable candidate checkpoint');
   if (candidate.generation_id === null)
-    throw new HostedVersionCandidateCleanupConflictError('The expired source has no candidate generation');
+    throw new HostedVersionCandidateCleanupConflictError('The terminal source has no candidate generation');
   if (
     (candidate.status === 'sealed' && (candidate.sealed_at === null || !candidate.coverage_complete)) ||
     (candidate.status === 'building' && candidate.sealed_at !== null)
@@ -313,10 +322,11 @@ async function ensureCleanupClaim(
   client: AccessClient,
   stage: StageRow,
   locator: HostedPublicationStagingLocator,
+  terminalStatus: TerminalStatus,
 ): Promise<CleanupRow> {
   const existing = await readCleanup(client, stage.route, locator, true);
   if (existing) {
-    if (existing.owner_epoch !== stage.owner_epoch || existing.terminal_status !== 'expired')
+    if (existing.owner_epoch !== stage.owner_epoch || existing.terminal_status !== terminalStatus)
       throw new HostedVersionCandidateCleanupConflictError('The retained cleanup claim does not match its source');
     if (!existing.completed) {
       const checkpoint = (
@@ -394,8 +404,8 @@ async function ensureCleanupClaim(
   await client.query(
     `INSERT INTO content.hosted_version_candidate_cleanup
        (route,catalogue_id,stage_id,generation_id,owner_epoch,terminal_status)
-     VALUES ($1,$2,$3,$4,$5,'expired')`,
-    [stage.route, stage.catalogue_id, stage.stage_id, candidate.generation_id, stage.owner_epoch],
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [stage.route, stage.catalogue_id, stage.stage_id, candidate.generation_id, stage.owner_epoch, terminalStatus],
   );
   const retiredCheckpoint = await client.query(
     `UPDATE content.hosted_version_release_candidate
@@ -514,6 +524,14 @@ async function deleteGeneration(
   row: CleanupRow,
   mode: StageRow['mode'],
 ): Promise<number> {
+  // Earlier phases can exhaust within this step. The checkpoint guard reads the durable phase,
+  // so expose the reached frontier inside this same transaction before the fenced final deletion.
+  await client.query(
+    `UPDATE content.hosted_version_candidate_cleanup
+     SET phase='generation',cursor='null'::jsonb
+     WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND cleanup_active`,
+    [route, locator.catalogueId, locator.stageId],
+  );
   const candidate = await client.query(
     `UPDATE content.hosted_version_release_candidate
      SET status='reclaimed',updated_at=transaction_timestamp()
@@ -562,7 +580,7 @@ async function recordReceipt(
   );
 }
 
-/** Reclaim one expired Book candidate generation in one transaction and at most 100 deleted rows. */
+/** Reclaim one expired or due cancelled Book candidate generation in one transaction and at most 100 deleted rows. */
 export async function advanceHostedVersionCandidateCleanup(
   client: AccessClient,
   actorInput: Actor,
@@ -592,12 +610,12 @@ async function advanceCleanup(
   const stage = await lockStage(client, locator, route);
   if (owner.kind === 'account') assertActorBinding(stage, owner.actor);
   else if (owner.authority !== maintenanceAuthority) throw new Error('Invalid hosted candidate maintenance authority');
-  await requireExpiredStage(client, stage);
+  const terminalStatus = await requireReclaimableStage(client, stage);
 
   const prior = await readReceipt(client, route, locator, stepId);
   if (prior) return { replayed: true, deletedRows: prior.deleted_rows, progress: targetProgress(locator, prior) };
 
-  let row = await ensureCleanupClaim(client, stage, locator);
+  let row = await ensureCleanupClaim(client, stage, locator, terminalStatus);
   let phase = row.phase;
   let cursor = row.cursor;
   let deletedRows = 0;

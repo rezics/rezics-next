@@ -9,7 +9,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { useCollectionCurrentAdmission } from '../collection-current-admission';
@@ -146,22 +146,58 @@ function SavedQueryManagementLifetime({
       }),
   );
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
-  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const dialogOpener = useRef<HTMLElement | null>(null);
+  const readFocus = useRef<{ control: HTMLElement; moved: boolean } | null>(null);
   const close = useRef<HTMLButtonElement>(null);
   const previousPhase = useRef(state.phase);
 
-  useEffect(() => {
-    if (previousPhase.current === 'reading' && state.phase === 'ready') {
-      if (controller.can('collection.update')) document.getElementById('collection-edit-title')?.focus();
-      else close.current?.focus();
+  useLayoutEffect(() => {
+    function moved(event: FocusEvent) {
+      const origin = readFocus.current;
+      if (origin && event.target !== origin.control) origin.moved = true;
     }
-    if (previousPhase.current === 'ready' && state.phase === 'closed') trigger.current?.focus();
+    document.addEventListener('focusin', moved);
+    return () => document.removeEventListener('focusin', moved);
+  }, []);
+  useLayoutEffect(() => {
+    if (state.phase === 'ready') {
+      const origin = readFocus.current;
+      const active = document.activeElement;
+      if (
+        origin &&
+        !origin.moved &&
+        (active === origin.control || (!origin.control.isConnected && active === document.body))
+      ) {
+        if (controller.can('collection.update'))
+          panel.current?.querySelector<HTMLInputElement>('#collection-edit-title')?.focus();
+        else close.current?.focus();
+      }
+    }
+    if (state.phase !== 'reading') readFocus.current = null;
+    if (previousPhase.current === 'ready' && state.phase === 'closed' && opener.current?.isConnected) {
+      opener.current.focus();
+    }
     previousPhase.current = state.phase;
-  }, [controller, state.phase]);
+  }, [controller, state]);
   useLayoutEffect(() => () => controller.retire(), [controller]);
 
-  function retryRead() {
-    if (readCurrent) controller.retryRead();
+  function launchRead(event: MouseEvent<HTMLElement>, action: () => unknown, opening = false) {
+    const control = event.currentTarget;
+    if (opening) opener.current = control;
+    readFocus.current = document.activeElement === control ? { control, moved: false } : null;
+    void action();
+  }
+
+  function openDialog(event: MouseEvent<HTMLElement>, action: () => void) {
+    dialogOpener.current = event.currentTarget;
+    action();
+  }
+
+  function returnDialogFocus() {
+    const target = controller.getSnapshot().phase === 'closed' ? opener.current : dialogOpener.current;
+    return target?.isConnected ? target : false;
   }
 
   function submitMetadata(event: FormEvent<HTMLFormElement>) {
@@ -175,7 +211,7 @@ function SavedQueryManagementLifetime({
       return (
         <div className="space-y-2" role="alert">
           <p>{m.library_collection_conflict()}</p>
-          <Button type="button" variant="outline" onClick={controller.requestReconcile}>
+          <Button type="button" variant="outline" onClick={(event) => openDialog(event, controller.requestReconcile)}>
             {m.library_saved_query_management_read_current()}
           </Button>
         </div>
@@ -184,7 +220,7 @@ function SavedQueryManagementLifetime({
       return (
         <div className="space-y-2" role="alert">
           <p>{m.library_saved_query_management_refused()}</p>
-          <Button type="button" variant="outline" onClick={controller.requestReconcile}>
+          <Button type="button" variant="outline" onClick={(event) => openDialog(event, controller.requestReconcile)}>
             {m.library_saved_query_management_read_current()}
           </Button>
         </div>
@@ -195,14 +231,11 @@ function SavedQueryManagementLifetime({
     return (
       <div className="space-y-3 rounded-lg border border-border p-3" role="alert">
         <p>{m.library_saved_query_management_unknown()}</p>
-        <p className="break-words text-sm text-muted-foreground">
-          {m.library_rule_collection_revision({ revision: state.snapshot?.revision ?? 0 })}
-        </p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" disabled={!retryAllowed} onClick={controller.retryOriginal}>
             {m.library_saved_query_management_retry_original()}
           </Button>
-          <Button type="button" variant="outline" onClick={controller.requestReconcile}>
+          <Button type="button" variant="outline" onClick={(event) => openDialog(event, controller.requestReconcile)}>
             {m.library_saved_query_management_read_current()}
           </Button>
         </div>
@@ -212,16 +245,23 @@ function SavedQueryManagementLifetime({
 
   return (
     <section
-      className="mt-4 space-y-3 [&_button]:min-h-11 [&_input]:min-h-11 [&_textarea]:min-h-24"
+      ref={panel}
+      className="mt-4 min-w-0 space-y-3 [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_input]:min-h-11 [&_textarea]:min-h-24"
       aria-label={m.library_saved_query_manage()}
       data-saved-query-management
     >
       {accessState === 'ready' ? (
-        state.phase === 'closed' ? (
-          <Button ref={trigger} type="button" variant="outline" onClick={controller.open}>
-            {m.library_saved_query_manage()}
-          </Button>
-        ) : null
+        <Button
+          type="button"
+          variant="outline"
+          aria-expanded={state.phase !== 'closed'}
+          aria-disabled={state.phase !== 'closed'}
+          onClick={(event) => {
+            if (state.phase === 'closed') launchRead(event, controller.open, true);
+          }}
+        >
+          {m.library_saved_query_manage()}
+        </Button>
       ) : accessState === 'preparing' ? (
         <p role="status">{m.library_saved_query_management_preparing()}</p>
       ) : (
@@ -232,7 +272,12 @@ function SavedQueryManagementLifetime({
               : m.library_saved_query_management_denied()}
           </p>
           {readCurrent ? (
-            <Button type="button" variant="outline" disabled={state.phase === 'reading'} onClick={controller.open}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={state.phase === 'reading'}
+              onClick={(event) => launchRead(event, controller.open, true)}
+            >
               {m.library_collections_retry()}
             </Button>
           ) : null}
@@ -245,7 +290,7 @@ function SavedQueryManagementLifetime({
         <div className="space-y-2" role="alert">
           {state.confirmedNotice === 'saved' ? <p>{m.library_saved_query_management_saved()}</p> : null}
           <p>{m.library_saved_query_management_unavailable()}</p>
-          <Button type="button" variant="outline" onClick={retryRead}>
+          <Button type="button" variant="outline" onClick={(event) => launchRead(event, controller.retryRead)}>
             {m.library_collections_retry()}
           </Button>
         </div>
@@ -253,7 +298,7 @@ function SavedQueryManagementLifetime({
       {state.phase === 'denied' ? (
         <div className="space-y-2">
           <p role="status">{m.library_saved_query_management_denied()}</p>
-          <Button type="button" variant="outline" onClick={retryRead}>
+          <Button type="button" variant="outline" onClick={(event) => launchRead(event, controller.retryRead)}>
             {m.library_collections_retry()}
           </Button>
         </div>
@@ -263,24 +308,42 @@ function SavedQueryManagementLifetime({
         <div className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-6">
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">{m.library_saved_query_management_heading()}</h2>
+            <p className="break-words font-medium">{state.snapshot.title}</p>
             <p className="max-w-3xl text-sm text-muted-foreground">
               {m.library_saved_query_management_metadata_only()}
             </p>
           </div>
           {renderOutcome()}
           {state.intent ? (
-            <dl className="grid min-w-0 gap-2 rounded-lg border border-border p-3 text-sm">
-              <dt className="font-medium">{m.library_collection_title()}</dt>
-              <dd className="break-words">
-                {state.intent.operation === 'collection.update' ? state.title : state.snapshot.title}
-              </dd>
-              <dt className="font-medium">{m.library_saved_query_management_collection_id()}</dt>
-              <dd className="break-all font-mono">{state.snapshot.id}</dd>
-              <dt className="font-medium">
-                {m.library_rule_collection_revision({ revision: state.snapshot.revision ?? 0 })}
-              </dt>
-              <dd>{state.snapshot.revision ?? 0}</dd>
-            </dl>
+            <div className="min-w-0 space-y-3 rounded-lg border border-border p-3 text-sm">
+              <dl className="grid min-w-0 gap-2">
+                <dt className="font-medium">{m.library_collection_title()}</dt>
+                <dd className="break-words">
+                  {state.intent.operation === 'collection.update'
+                    ? state.intent.command.request.data.title
+                    : state.snapshot.title}
+                </dd>
+                {state.intent.operation === 'collection.update' && (
+                  <>
+                    <dt className="font-medium">{m.library_collection_description()}</dt>
+                    <dd className="whitespace-pre-wrap break-words">{state.intent.command.request.data.description}</dd>
+                  </>
+                )}
+              </dl>
+              <details className="min-w-0">
+                <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  {m.catalogue_technical_details()} · {m.library_saved_query_management_collection_id()}
+                </summary>
+                <dl className="grid min-w-0 gap-2 pt-2">
+                  <dt className="font-medium">{m.library_saved_query_management_collection_id()}</dt>
+                  <dd className="select-text break-all font-mono">{state.intent.command.request.data.collectionId}</dd>
+                  <dt className="font-medium">
+                    {m.library_rule_collection_revision({ revision: state.intent.command.request.data.revision })}
+                  </dt>
+                  <dd>{state.intent.command.request.data.revision}</dd>
+                </dl>
+              </details>
+            </div>
           ) : canUpdate ? (
             <CollectionMetadataEditor
               title={state.title}
@@ -304,7 +367,7 @@ function SavedQueryManagementLifetime({
                   type="button"
                   variant="outline"
                   disabled={state.busy}
-                  onClick={controller.requestClose}
+                  onClick={(event) => openDialog(event, controller.requestClose)}
                 >
                   {m.library_collection_cancel()}
                 </Button>
@@ -313,7 +376,7 @@ function SavedQueryManagementLifetime({
                     type="button"
                     variant="destructive"
                     disabled={state.busy || !isCurrent('collection.delete', state.snapshot)}
-                    onClick={controller.requestDelete}
+                    onClick={(event) => openDialog(event, controller.requestDelete)}
                   >
                     {m.library_collection_delete()}
                   </Button>
@@ -327,7 +390,7 @@ function SavedQueryManagementLifetime({
                 type="button"
                 variant="outline"
                 disabled={state.busy}
-                onClick={controller.requestClose}
+                onClick={(event) => openDialog(event, controller.requestClose)}
               >
                 {m.library_collection_cancel()}
               </Button>
@@ -336,7 +399,7 @@ function SavedQueryManagementLifetime({
                   type="button"
                   variant="destructive"
                   disabled={state.busy || !isCurrent('collection.delete', state.snapshot)}
-                  onClick={controller.requestDelete}
+                  onClick={(event) => openDialog(event, controller.requestDelete)}
                 >
                   {m.library_collection_delete()}
                 </Button>
@@ -356,7 +419,11 @@ function SavedQueryManagementLifetime({
           if (!open) controller.cancelDialog();
         }}
       >
-        <AlertDialogContent size="sm">
+        <AlertDialogContent
+          size="sm"
+          finalFocus={returnDialogFocus}
+          className="[&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal"
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_collection_delete_title()}</AlertDialogTitle>
             <AlertDialogDescription>{m.library_saved_query_management_delete_description()}</AlertDialogDescription>
@@ -399,7 +466,11 @@ function SavedQueryManagementLifetime({
           if (!open) controller.cancelDialog();
         }}
       >
-        <AlertDialogContent size="sm">
+        <AlertDialogContent
+          size="sm"
+          finalFocus={returnDialogFocus}
+          className="[&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal"
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_saved_query_management_leave_title()}</AlertDialogTitle>
             <AlertDialogDescription>{m.library_saved_query_management_leave_description()}</AlertDialogDescription>
@@ -425,7 +496,11 @@ function SavedQueryManagementLifetime({
           if (!open) controller.cancelDialog();
         }}
       >
-        <AlertDialogContent size="sm">
+        <AlertDialogContent
+          size="sm"
+          finalFocus={returnDialogFocus}
+          className="[&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal"
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_saved_query_management_reconcile_title()}</AlertDialogTitle>
             <AlertDialogDescription>{m.library_saved_query_management_reconcile_description()}</AlertDialogDescription>
@@ -434,7 +509,7 @@ function SavedQueryManagementLifetime({
             <AlertDialogCancel className="min-h-11" disabled={state.busy}>
               {m.library_collection_cancel()}
             </AlertDialogCancel>
-            <AlertDialogAction className="min-h-11" onClick={controller.confirmReconcile}>
+            <AlertDialogAction className="min-h-11" onClick={(event) => launchRead(event, controller.confirmReconcile)}>
               {m.library_saved_query_management_reconcile_confirm()}
             </AlertDialogAction>
           </AlertDialogFooter>

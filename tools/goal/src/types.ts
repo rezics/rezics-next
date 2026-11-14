@@ -523,6 +523,8 @@ export type TerminationIntent = {
 export type Attempt = AttemptRef & {
   /** Completed source waiting only for compiler evidence, never a source-writing retry. */
   typingEvidencePending?: { result: string; command?: string[] };
+  /** Completed source landed during source-only policy with compiler acceptance deferred to the verifier. */
+  typingEvidenceDeferred?: { result: string; command?: string[] };
   state: 'pending' | 'running' | 'waiting' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
   /** Detached check runs whose completion will resume this attempt's session. */
   checks?: string[];

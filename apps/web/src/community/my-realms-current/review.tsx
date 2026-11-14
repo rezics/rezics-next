@@ -1,9 +1,28 @@
+import { useEffect, useId, useRef } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { MyRealmsCurrentController } from './contract';
 
 /** Deliberate review of one frozen Account/Realm membership episode. */
-export function MyRealmsLeaveReview({ controller }: { controller: MyRealmsCurrentController }) {
+export function MyRealmsLeaveReview({
+  controller,
+  onDismiss,
+  id,
+}: {
+  controller: MyRealmsCurrentController;
+  id?: string | undefined;
+  onDismiss?: (() => void) | undefined;
+}) {
+  const headingId = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const selected = controller.review?.row;
+  useEffect(() => {
+    if (selected) heading.current?.focus();
+  }, [selected]);
+  const dismiss = (action: () => void) => {
+    action();
+    onDismiss?.();
+  };
   const review = controller.review;
   if (!review) return null;
 
@@ -35,15 +54,23 @@ export function MyRealmsLeaveReview({ controller }: { controller: MyRealmsCurren
 
   return (
     <section
-      aria-label={m.my_realms_leave_review()}
+      id={id}
+      aria-labelledby={headingId}
       aria-busy={review.phase === 'submitting' || review.standing === 'loading'}
-      className="mt-3 space-y-3 rounded-xl border border-border bg-muted/40 p-4"
+      className="min-w-0 space-y-4 rounded-xl border border-border bg-muted/40 p-4 [overflow-wrap:anywhere] sm:p-6 [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal"
       data-slot="my-realms-leave-review"
       data-phase={review.phase}
       data-workflow-id={review.workflowId}
     >
-      <h3 className="font-semibold">{m.my_realms_leave_review()}</h3>
-      <p>{m.my_realms_leave_confirm({ realm: review.row.name })}</p>
+      <h2
+        id={headingId}
+        ref={heading}
+        tabIndex={-1}
+        className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+      >
+        {m.my_realms_leave_review()}
+      </h2>
+      <p className="max-w-prose leading-relaxed">{m.my_realms_leave_confirm({ realm: review.row.name })}</p>
       <p role="status">{status}</p>
       {review.phase === 'pending' || review.phase === 'submitting' ? (
         <p className="text-sm text-muted-foreground">
@@ -52,10 +79,10 @@ export function MyRealmsLeaveReview({ controller }: { controller: MyRealmsCurren
       ) : null}
       {review.phase === 'review' ? (
         <div className="flex flex-wrap gap-2">
-          <Button type="button" disabled={!controller.ready} onClick={controller.confirm}>
+          <Button type="button" variant="destructive" disabled={!controller.ready} onClick={controller.confirm}>
             {m.my_realms_leave_confirm_button()}
           </Button>
-          <Button type="button" variant="outline" onClick={controller.cancel}>
+          <Button type="button" variant="outline" onClick={() => dismiss(controller.cancel)}>
             {m.action_cancel()}
           </Button>
         </div>
@@ -65,7 +92,7 @@ export function MyRealmsLeaveReview({ controller }: { controller: MyRealmsCurren
           <Button type="button" disabled={!controller.ready} onClick={controller.retry}>
             {m.realm_leave_retry_same()}
           </Button>
-          <Button type="button" variant="outline" onClick={controller.discard}>
+          <Button type="button" variant="outline" onClick={() => dismiss(controller.discard)}>
             {m.realm_membership_command_discard()}
           </Button>
         </div>
@@ -76,7 +103,7 @@ export function MyRealmsLeaveReview({ controller }: { controller: MyRealmsCurren
         </Button>
       ) : null}
       {review.phase === 'blocked' || review.phase === 'refused' ? (
-        <Button type="button" variant="outline" onClick={controller.discard}>
+        <Button type="button" variant="outline" onClick={() => dismiss(controller.discard)}>
           {m.realm_membership_command_discard()}
         </Button>
       ) : null}

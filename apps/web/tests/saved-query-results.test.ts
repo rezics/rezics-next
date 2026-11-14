@@ -402,6 +402,7 @@ test('restarted cursors and named stories keep recovery, empty, denied and unava
     'Denied',
     'Unavailable',
     'Recovery',
+    'MetadataAndDeleteReturn',
   ]);
   expect(story).toContain('PageStory visitor="Signed In"');
   expect(story).toContain('dynamic-saved-empty');

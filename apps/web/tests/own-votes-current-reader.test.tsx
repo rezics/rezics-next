@@ -90,10 +90,10 @@ const account = '11111111-1111-4111-8111-111111111111';
 const terminal = '22222222-2222-4222-8222-222222222222';
 const target = '33333333-3333-4333-8333-333333333333';
 const question = '44444444-4444-4444-8444-444444444444';
-const path = `/v1/subjects/${target}/ratings/${question}/vote`;
-function row(): OwnVoteEntry {
+function row(sourceTarget = target): OwnVoteEntry {
+  const path = `/v1/subjects/${sourceTarget}/ratings/${question}/vote`;
   return {
-    targetId: target,
+    targetId: sourceTarget,
     questionId: question,
     subject: subjectSummary({ id: terminal, label: { value: 'Kokoro', language: 'en' } }),
     subjectHref: `/v1/subjects/${terminal}`,
@@ -724,7 +724,7 @@ test('pending and uncertain commands lock staged movement; source and A/B/A repl
   routeReadPlan = (subject, cursor) =>
     nativeRead(subject, cursor, getLocale(), {
       viewer: { accountId: subject },
-      votes: [row()],
+      votes: [row(), row(terminal)],
       next: cursor === null ? 'cursor-next' : null,
     });
   const commandCalls: unknown[] = [];
@@ -749,6 +749,11 @@ test('pending and uncertain commands lock staged movement; source and A/B/A repl
   try {
     await editDraft(view);
     await view.click(findButton(m.library_my_ratings_save()));
+    const other = view.host.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')[1]!;
+    expect(other.disabled).toBe(true);
+    await view.click(other);
+    expect(commandCalls).toHaveLength(1);
+    expect(view.host.querySelector('[data-selected]')?.getAttribute('data-own-vote-target')).toBe(target);
     await view.click(findLink(m.library_my_ratings_continue()));
     expect(await waitForBodyText(view, m.library_my_ratings_departure_locked())).toBe(true);
     expect(document.body.textContent).not.toContain(m.library_my_ratings_leave());
@@ -810,6 +815,70 @@ test('pending and uncertain commands lock staged movement; source and A/B/A repl
       expect(reads.every((read) => read.cursor !== 'cursor-next')).toBe(true);
     } finally {
       await replaced.close();
+      routeLoaderReads = false;
+      routeReadPlan = null;
+    }
+  }
+});
+
+test('reader replacement retires a same-page selection prompt before an old discard can select or restore focus', async () => {
+  for (const replacement of ['account', 'locale', 'exposure', 'source', 'page', 'missing', 'advice']) {
+    reads.length = 0;
+    readWaiters.length = 0;
+    routeLoaderReads = true;
+    routeReadPlan = (subject, cursor) =>
+      nativeRead(subject, cursor, getLocale(), {
+        viewer: { accountId: subject },
+        votes: [row(), row(terminal)],
+        next: null,
+      });
+    const view = await mounted();
+    try {
+      const draft = await editDraft(view);
+      const count = reads.length;
+      await view.click(view.host.querySelectorAll('button[aria-pressed]')[1]!);
+      expect(await waitForBodyText(view, m.library_my_ratings_departure_title())).toBe(true);
+      expect(reads).toHaveLength(count);
+      const oldLeave = bodyButton(view, m.library_my_ratings_leave());
+      if (replacement === 'account') await view.exposeSequence([terminal, account]);
+      else if (replacement === 'locale')
+        await view.perform(async () => {
+          await setLocale('ja', { reload: false });
+          await view.router.invalidate();
+        });
+      else
+        await view.perform(() => {
+          if (replacement === 'exposure') {
+            const observation = viewerExposureLifetime(view.client).getSnapshot();
+            if (observation.state !== 'signed-in') throw new Error('Expected current observation');
+            view.client.setQueryData(viewerExposureQuery(observation.observation).queryKey, {
+              subject: account,
+              admitted: [],
+            });
+          } else {
+            const key = view.client
+              .getQueryCache()
+              .findAll({ queryKey: ['own-votes'] })
+              .at(-1)!.queryKey;
+            const page = pageFor(account);
+            const requested = row(terminal);
+            if (replacement !== 'missing')
+              page.votes.push(
+                replacement === 'advice'
+                  ? { ...requested, actions: { state: 'unavailable', reason: 'read_only' } }
+                  : requested,
+              );
+            const read = nativeRead(account, null, getLocale(), page);
+            view.client.setQueryData(key, replacement === 'source' ? { ...read, source: 'replacement-source' } : read);
+          }
+        });
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      await view.click(oldLeave);
+      expect(view.host.querySelector('[data-selected]')).toBeNull();
+      expect(document.activeElement).not.toBe(draft);
+    } finally {
+      await view.close();
+      await setLocale('en', { reload: false });
       routeLoaderReads = false;
       routeReadPlan = null;
     }

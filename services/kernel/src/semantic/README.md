@@ -752,6 +752,8 @@ The relation properties a subject can take, with their labels and admitted quali
 
 The value side of a relation is read through an indexed inverse read: the subjects whose statements with a given property point at a given subject, filtered by type and qualifier, ordered by a declared key (credit order, series position, date, name) and paged with an opaque continuation. Every inverse read returns an exact count or an "at least" count. Inverse reads never load the holding subjects' other facts.
 
+Decision: Labelled forward and property-filtered inverse windows retain the exact current disclosed assertion and authorized related summaries regardless of qualifiers; item citations keep their related labels on reference-only statements, and cross-property and `includeLabels=false` shapes remain compatible.
+
 `GET /v1/subjects/:id/links` retains the cross-property listing and response shape when `property` is absent. A property page accepts `filter` (one subject id across its declared qualifiers), `type` (a type CURIE, including its subtypes in the active release), `limit` (1–100, default 20), and an opaque `cursor`. Cursors bind the anchor, property, filter, type and the reader's ordered language ranges. Every returned link includes the holder's shared display summary; compatibility `type` and `label` fields copy its values. Summary labels follow the shared label rule below, including the original-language fallback, without reading unrelated facts.
 
 Every module embedding a chosen subject label uses `languageRanges` and `chooseLabel` from `language.ts`, including inverse and forward pages, previews and `readSubjectSummaries`. Reads returning all labels retain that shape. The label choice rule is:

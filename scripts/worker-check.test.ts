@@ -20,6 +20,7 @@ import {
   requestExecutionCancellation,
   type RemoteCheckSettlement,
   type RemotePhysicalRunReceipt,
+  type reconcileRemoteRun,
 } from './remote-check.ts';
 import {
   processTreeCpuTicks,
@@ -1143,6 +1144,116 @@ test('a lost wrapper waits on its exact remote reservation without starting a re
   expect(readWorkerCheckHistory(id, physicalRunId, root)?.status).toBe('running');
   expect(readFileSync(remoteRunCustodyPath(root, physicalRunId), 'utf8')).toContain('reservation-pending');
   expect(existsSync(join(root, 'rerun-marker'))).toBe(false);
+});
+
+test('a completed startup exit 75 receives exact remote cleanup without changing its failed result', async () => {
+  const fixture = workerFixture();
+  const original = await writeLostRemoteCheck(fixture.root, 'pending');
+  const originalRecord = readWorkerCheckRecord(original.id, fixture.root);
+  const resultFile = join(fixture.root, '.temp/goal/checks/results', `${original.id}.json`);
+  writeAtomicJson(resultFile, { ...originalRecord, status: 'finished', exitCode: 75 });
+  const finishedAt = new Date().toISOString();
+  const originalHistory = readWorkerCheckHistory(original.id, original.physicalRunId, fixture.root)!;
+  writeAtomicJson(physicalHistoryPath(fixture.root, original.id, original.physicalRunId), {
+    ...originalHistory,
+    status: 'finished',
+    exitCode: 75,
+    finishedAt,
+  });
+
+  const hostsFile = writeHosts(fixture);
+  const custodyFile = remoteRunCustodyPath(fixture.root, original.physicalRunId);
+  const custody = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+    binding: Record<string, unknown>;
+  };
+  writeAtomicJson(custodyFile, {
+    ...custody,
+    binding: { ...custody.binding, hostsFile, returns: [] },
+  });
+
+  const newer = await writeLostRemoteCheck(fixture.root, 'referenced-terminal');
+  expect(await waitWorkerCheck(newer.id, fixture.root, 100, { write: () => {} })).toBe(1);
+  const newerRecord = readWorkerCheckRecord(newer.id, fixture.root);
+  const newerHistory = readWorkerCheckHistory(newer.id, newer.physicalRunId, fixture.root);
+  expect(newerRecord).toMatchObject({ status: 'finished', exitCode: 1 });
+  expect(newerHistory?.terminalProof).toMatchObject({ local: true, remote: true, resultKnown: true });
+
+  const cleanup = {
+    schema: 1 as const,
+    host: 'check-a',
+    run: 'reservation-pending',
+    status: 'verified' as const,
+    supervisorStopped: true,
+    commandGroupTerminal: true,
+    containersRemoved: true,
+    runDirectoryRemoved: true,
+    failures: [],
+  };
+  const reconciliations: Array<Parameters<typeof reconcileRemoteRun>[0]> = [];
+  const remoteReconcile = async (request: Parameters<typeof reconcileRemoteRun>[0]) => {
+    reconciliations.push(request);
+    return {
+      schema: 1 as const,
+      host: cleanup.host,
+      run: cleanup.run,
+      native: null,
+      preparedInputs: null,
+      returns: { schema: 1 as const, status: 'empty' as const, entries: [], missing: [], failures: [] },
+      cleanup,
+      transportChildReaped: true,
+    } satisfies RemoteCheckSettlement;
+  };
+
+  const output: string[] = [];
+  expect(
+    await waitWorkerCheck(original.id, fixture.root, 100, {
+      write: (line) => output.push(line),
+      remoteReconcile,
+    }),
+  ).toBe(75);
+  expect(reconciliations).toHaveLength(1);
+  expect(reconciliations[0]).toMatchObject({
+    physical: { host: cleanup.host, run: cleanup.run },
+    allowedHosts: [cleanup.host],
+    returns: [],
+    cleanupOnly: true,
+  });
+  const result = readWorkerCheckRecord(original.id, fixture.root);
+  expect(result).toMatchObject({ status: 'finished', exitCode: 75 });
+  expect(result.physicalRun).toBeUndefined();
+  expect(result.physicalRunReference).toBeUndefined();
+  const received = JSON.parse(readFileSync(custodyFile, 'utf8')) as {
+    status: string;
+    attempts: Array<Record<string, unknown>>;
+  };
+  expect(received).toMatchObject({
+    status: 'terminal',
+    attempts: [{ status: 'terminal', physicalCleanup: cleanup }],
+  });
+  expect(received.attempts[0]?.nativeReference).toBeUndefined();
+  expect(received.attempts[0]?.settlementReference).toBeUndefined();
+  expect(readWorkerCheckHistory(original.id, original.physicalRunId, fixture.root)?.terminalProof).toMatchObject({
+    local: true,
+    remote: true,
+    resultKnown: false,
+  });
+  expect(readWorkerCheckCleanupReceipt(original.id, original.physicalRunId, fixture.root)).toMatchObject({
+    disposition: 'already-terminal',
+    localTerminal: true,
+    remoteTerminal: true,
+    resultTerminal: true,
+    physicalCleanup: cleanup,
+  });
+  expect(output.join('')).toContain('check: exit status 75');
+  expect(output.join('')).toContain('compiler result remains unavailable');
+  expect(output.join('')).not.toContain('check: exit status 0');
+  expect(existsSync(join(fixture.root, 'rerun-marker'))).toBe(false);
+  expect(readWorkerCheckRecord(newer.id, fixture.root)).toEqual(newerRecord);
+  expect(readWorkerCheckHistory(newer.id, newer.physicalRunId, fixture.root)).toEqual(newerHistory);
+
+  expect(await waitWorkerCheck(original.id, fixture.root, 0, { remoteReconcile, write: () => {} })).toBe(75);
+  expect(reconciliations).toHaveLength(1);
+  expect(readWorkerCheckRecord(original.id, fixture.root)).toEqual(result);
 });
 
 test('a retained terminal result survives host move and duplicate wake without another physical run', async () => {

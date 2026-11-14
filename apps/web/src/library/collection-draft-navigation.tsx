@@ -12,8 +12,16 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../paraglide/messages.js';
 
-/** Protects departure only; the editor continues to own every draft and command. */
-export function useCollectionDraftNavigation(options: { dirty: boolean; locked: boolean; isCurrent: () => boolean }) {
+type CollectionDraftNavigationOptions = {
+  dirty: boolean;
+  locked: boolean;
+  isCurrent: () => boolean;
+  /** A new Collection can discard its caller without undoing an already dispatched creation. */
+  creation?: { commandMayHaveApplied: boolean; discard: () => void };
+};
+
+/** Protects departure only; the caller continues to own every draft and command. */
+export function useCollectionDraftNavigation(options: CollectionDraftNavigationOptions) {
   const live = useRef(options);
   live.current = options;
   const [open, setOpen] = useState(false);
@@ -21,15 +29,30 @@ export function useCollectionDraftNavigation(options: { dirty: boolean; locked: 
   const returnFocus = useRef<HTMLElement | null>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
   const leaving = useRef(false);
+  const owner = useRef({ active: false });
   const protectedNow = () =>
     !leaving.current && live.current.isCurrent() && (live.current.dirty || live.current.locked);
 
-  function choose(leave: boolean) {
-    if (leave && live.current.isCurrent() && live.current.locked) return;
+  function settle(leave: boolean) {
     const resolve = pending.current;
     pending.current = null;
     setOpen(false);
     resolve?.(leave);
+  }
+  function choose(leave: boolean) {
+    if (!pending.current) return;
+    if (leave) {
+      if (!live.current.isCurrent()) {
+        settle(!live.current.creation);
+        return;
+      }
+      if (live.current.locked && !live.current.creation) return;
+      if (live.current.creation) {
+        leaving.current = true;
+        live.current.creation.discard();
+      }
+    }
+    settle(leave);
   }
   function confirm(): Promise<boolean> {
     if (!protectedNow()) return Promise.resolve(true);
@@ -43,16 +66,19 @@ export function useCollectionDraftNavigation(options: { dirty: boolean; locked: 
   const confirmRef = useRef(confirm);
   confirmRef.current = confirm;
   useLayoutEffect(() => {
-    // Retirement takes effect immediately; a save can also settle an open departure prompt.
-    if (pending.current && !protectedNow()) choose(true);
+    // A create acknowledgement owns its destination. Retirement must cancel its old departure request.
+    // Existing Collection saves still release the destination requested by their editor.
+    if (pending.current && !protectedNow()) settle(!live.current.creation);
   });
-  useLayoutEffect(
-    () => () => {
-      pending.current?.(true);
+  useLayoutEffect(() => {
+    const current = { active: true };
+    owner.current = current;
+    return () => {
+      current.active = false;
+      pending.current?.(!live.current.creation);
       pending.current = null;
-    },
-    [],
-  );
+    };
+  }, []);
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -89,8 +115,9 @@ export function useCollectionDraftNavigation(options: { dirty: boolean; locked: 
         return;
       event.preventDefault();
       event.stopPropagation();
+      const caller = owner.current;
       void confirmRef.current().then((leave) => {
-        if (!leave) return;
+        if (!leave || !caller.active) return;
         leaving.current = true;
         window.location.assign(destination.href);
       });
@@ -108,8 +135,9 @@ export function useCollectionDraftNavigation(options: { dirty: boolean; locked: 
       event.preventDefault();
       event.stopPropagation();
       const submitter = event.submitter;
+      const caller = owner.current;
       void confirmRef.current().then((leave) => {
-        if (!leave || !form.isConnected) return;
+        if (!leave || !caller.active || !form.isConnected) return;
         leaving.current = true;
         form.requestSubmit(submitter);
       });
@@ -145,17 +173,21 @@ export function useCollectionDraftNavigation(options: { dirty: boolean; locked: 
             <AlertDialogHeader>
               <AlertDialogTitle>{m.library_collection_draft_navigation_title()}</AlertDialogTitle>
               <AlertDialogDescription>
-                {options.locked
-                  ? m.library_collection_draft_navigation_pending()
-                  : m.library_collection_draft_navigation_description()}
+                {options.creation
+                  ? options.creation.commandMayHaveApplied
+                    ? m.library_collection_create_departure_unknown()
+                    : m.library_collection_create_departure_description()
+                  : options.locked
+                    ? m.library_collection_draft_navigation_pending()
+                    : m.library_collection_draft_navigation_description()}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel ref={stayButton} onClick={() => choose(false)}>
+              <AlertDialogCancel className="min-h-11" ref={stayButton} onClick={() => choose(false)}>
                 {m.library_collection_draft_navigation_stay()}
               </AlertDialogCancel>
-              {!options.locked ? (
-                <AlertDialogAction onClick={() => choose(true)}>
+              {!options.locked || options.creation ? (
+                <AlertDialogAction className="min-h-11" onClick={() => choose(true)}>
                   {m.library_collection_draft_navigation_leave()}
                 </AlertDialogAction>
               ) : null}

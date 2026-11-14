@@ -13,16 +13,17 @@ import {
 } from '@rezics/composition';
 import profileJson from '@rezics/composition/profiles/platform.json';
 import type { Release } from '@rezics/definitions';
-import { fromPlainText } from '@rezics/document';
+import { fromPlainText, type DocumentProfile } from '@rezics/document';
 import type { SubjectPageData } from '../../features/pages/subject';
 import type { FakeRoute } from '../fake-modules';
 import definitions from '../recorded/definitions-release.json';
-import { communityThread, communityThreadPage } from './subject-community';
+import { communityAuthor, communityBoard, communityThread, communityThreadPage } from './subject-community';
+import { authoredReadingPage } from './thread-reading-page';
 
 /** Invented public profiles, served through the real application routes and installed read plan. */
 export type PeopleReadingFamily = 'character' | 'person' | 'organization';
 export type PeopleReadingState = 'complete' | 'sparse' | 'relation-failure';
-export const peopleReadingId = (n: number) => `0193a000-0000-7000-8000-${String(n).padStart(12, '0')}`;
+export const peopleReadingId = (n: number) => `0193e000-0000-7000-8000-${String(n).padStart(12, '0')}`;
 export const peopleReadingIds = {
   character: peopleReadingId(1),
   person: peopleReadingId(2),
@@ -103,6 +104,21 @@ function portrait(family: PeopleReadingFamily): NonNullable<Summary['cover']> {
       license: 'CC0-1.0',
       obligations: [],
       via: { name: 'Illustrative profile artwork', url: origin },
+    },
+  };
+}
+
+/** Exact readbacks of one supplied document retain its paragraph identities as well as its content. */
+function peopleDocument(n: number, text: string, profile: DocumentProfile = 'text') {
+  const snapshot = fromPlainText(text, profile);
+  return {
+    ...snapshot,
+    doc: {
+      ...snapshot.doc,
+      content: snapshot.doc.content!.map((paragraph, index) => ({
+        ...paragraph,
+        attrs: { ...paragraph.attrs, id: peopleReadingId(1000000 + n * 100 + index) },
+      })),
     },
   };
 }
@@ -202,7 +218,7 @@ export function peopleReadingFixture(scenario: PeopleReadingState = state) {
       },
       rights: { license: 'CC0-1.0', obligations: [], attribution: 'Tide Archive synthetic profile' },
       availability: 'available',
-      body: fromPlainText(biographies[family]),
+      body: peopleDocument(80 + index, biographies[family]),
     };
     documents[bio.id] = biographyDocument;
     read.documents = { [bio.id]: biographyDocument };
@@ -385,6 +401,53 @@ function relationWindow(
   };
 }
 
+const threadKinds = ['review', 'discussion'] as const;
+type ThreadKind = (typeof threadKinds)[number];
+
+function peopleBoard(kind: ThreadKind) {
+  return {
+    ...communityBoard(kind),
+    id: peopleReadingId(kind === 'review' ? 8000 : 8001),
+    title: kind === 'review' ? 'Public Tide Archive reviews' : 'Public Tide Archive discussions',
+  };
+}
+
+/** The subject's fixed suffix keeps its thread stable across sparse/complete fixture populations. */
+function peopleThread(kind: ThreadKind, current: SubjectRead) {
+  const thread = communityThread(kind, false, { id: current.subject.id, label: current.subject.labels.en! });
+  const offset = Number(current.subject.id.slice(-12)) * 2 + (kind === 'review' ? 0 : 1);
+  const threadId = peopleReadingId(20000 + offset);
+  const boardId = peopleBoard(kind).id;
+  return {
+    ...thread,
+    id: threadId,
+    boardId,
+    title: 'How do the harbour stories connect?',
+    firstPost: {
+      ...thread.firstPost,
+      id: peopleReadingId(30000 + offset),
+      threadId,
+      boardId,
+      revisionId: peopleReadingId(40000 + offset),
+      body: peopleDocument(
+        20000 + offset,
+        'I am following the supplied work credits while reading the harbour stories.',
+        'blocks',
+      ),
+    },
+  };
+}
+
+function peopleThreadPage(kind: ThreadKind, current: SubjectRead, scenario: PeopleReadingState, place?: string) {
+  return communityThreadPage(
+    kind,
+    { id: current.subject.id, label: current.subject.labels.en! },
+    scenario === 'sparse' ? [] : [peopleThread(kind, current)],
+    null,
+    place,
+  );
+}
+
 export function peopleReadingPage(
   id: string,
   locale = 'en',
@@ -422,16 +485,9 @@ export function peopleReadingPage(
         },
       };
     } else if (read.kind === 'subjectThreads') {
-      const identity = { id, label: current.subject.labels.en! };
-      const thread = communityThread(read.threadKind, false, identity);
-      thread.title = 'How do the harbour stories connect?';
-      thread.firstPost!.body = fromPlainText(
-        'I am following the supplied work credits while reading the harbour stories.',
-        'blocks',
-      );
       reads[key] = {
         status: 200,
-        body: communityThreadPage(read.threadKind, identity, scenario === 'sparse' ? [] : [thread], null, read.place),
+        body: peopleThreadPage(read.threadKind, current, scenario, read.place),
       };
     } else if (read.kind === 'collections') {
       reads[key] = { status: 200, body: { collections: [], count: { value: 0, exact: true }, next: null } };
@@ -452,7 +508,6 @@ export function peopleReadingPage(
   };
 }
 
-const owns = (id: string | undefined): id is string => !!id && id.startsWith('0193a000-0000-7000-8000-');
 const localeOf = (request: Request) => request.headers.get('accept-language')?.split(',')[0]?.trim() ?? 'en';
 export const routes: FakeRoute[] = [
   {
@@ -464,7 +519,7 @@ export const routes: FakeRoute[] = [
         languages?: string[];
         continuation?: PageContinuation;
       };
-      if (!owns(input.target.subject)) return;
+      if (!input.target.subject || !peopleReadingFixture().subjects.has(input.target.subject)) return;
       return {
         status: 200,
         ...peopleReadingPage(
@@ -481,25 +536,25 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: /^\/v1\/subjects\/([^/]+)$/,
     story: ({ request, match }) => {
-      if (!owns(match?.[1])) return;
-      const current = peopleReadingFixture().subjects.get(match[1]);
-      return current
-        ? { status: 200, ...current, summary: summary(current, localeOf(request)) }
-        : { status: 404, code: 'not_found' };
+      const current = peopleReadingFixture().subjects.get(match![1]!);
+      if (!current) return;
+      return { status: 200, ...current, summary: summary(current, localeOf(request)) };
     },
   },
   ...(['links', 'relations'] as const).map((kind): FakeRoute => ({
     method: 'GET',
     path: new RegExp(`^/v1/subjects/([^/]+)/${kind}$`),
     story: ({ request, match }) => {
-      if (!owns(match?.[1])) return;
+      const id = match![1]!;
+      const fixture = peopleReadingFixture();
+      if (!fixture.subjects.has(id)) return;
       const query = new URL(request.url).searchParams;
       const property = query.get('property')!;
-      if (state === 'relation-failure' && property === failedRelation(match[1]))
+      if (state === 'relation-failure' && property === failedRelation(id))
         return { status: 503, code: 'dependency_unavailable' };
       const page = relationWindow(
-        peopleReadingFixture(),
-        match[1],
+        fixture,
+        id,
         property,
         kind === 'links',
         localeOf(request),
@@ -514,9 +569,125 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: /^\/v1\/documents\/([^/]+)$/,
     story: ({ match }) => {
-      if (!owns(match?.[1])) return;
-      const document = Object.values(peopleReadingFixture().documents).find((value) => value.id === match[1]);
-      return document ? { status: 200, document } : { status: 404, code: 'not_found' };
+      const document = Object.values(peopleReadingFixture().documents).find((value) => value.id === match![1]);
+      if (document) return { status: 200, document };
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/subjects\/([^/]+)\/threads$/,
+    story: ({ request, match }) => {
+      const current = peopleReadingFixture().subjects.get(match![1]!);
+      if (!current) return;
+      const query = new URL(request.url).searchParams;
+      const kind = query.get('kind');
+      if (kind !== 'review' && kind !== 'discussion') return;
+      return { status: 200, ...peopleThreadPage(kind, current, state, query.get('place') ?? undefined) };
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/boards\/([^/]+)(\/page|\/threads)?$/,
+    story: ({ request, match }) => {
+      const board = threadKinds.map(peopleBoard).find((row) => row.id === match![1]);
+      if (!board) return;
+      if (!match![2]) return { status: 200, board };
+      const kind = board.purpose === 'reviews' ? 'review' : 'discussion';
+      const threads =
+        state === 'sparse'
+          ? []
+          : [...peopleReadingFixture().subjects.values()].map((current) => peopleThread(kind, current));
+      const cursor = new URL(request.url).searchParams.get('cursor');
+      const offset = cursor ? Number(cursor.split(':').at(-1)) : 0;
+      const page = threads.slice(offset, offset + 20);
+      const next = offset + 20 < threads.length ? `people-board:${kind}:${offset + 20}` : null;
+      if (match![2] === '/threads') return { status: 200, threads: page, next, rankRefreshedAt: null };
+      const author = {
+        ...communityAuthor,
+        state: 'available',
+      };
+      return {
+        status: 200,
+        board,
+        pinRevision: '0',
+        pinnedThreads: [],
+        threads: page.map((thread) => ({
+          thread,
+          target: { kind: 'thread', id: thread.id, boardId: board.id },
+          authors: { thread: author, openingPost: author },
+          media: { state: 'none', images: [] },
+          interaction: {
+            target: { kind: 'thread', id: thread.id },
+            counts: { state: 'unavailable' },
+            viewer: { state: 'not-applicable' },
+          },
+          comments: { state: 'unavailable' },
+          actions: { reply: 'sign-in', react: 'sign-in', share: 'available' },
+        })),
+        next,
+        rankRefreshedAt: null,
+        reactionsAsOf: null,
+        viewer: { participation: 'sign-in' },
+        actions: { createThread: 'sign-in' },
+      };
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/threads\/([^/]+)(\/reading-page|\/posts)?$/,
+    story: ({ match }) => {
+      if (state === 'sparse') return;
+      const thread = [...peopleReadingFixture().subjects.values()]
+        .flatMap((current) => threadKinds.map((kind) => peopleThread(kind, current)))
+        .find((row) => row.id === match![1]);
+      if (!thread) return;
+      if (match![2] === '/posts') return { status: 200, posts: [thread.firstPost], next: null };
+      if (!match![2]) return { status: 200, thread };
+      return {
+        status: 200,
+        ...authoredReadingPage(
+          thread,
+          [],
+          [
+            {
+              id: communityAuthor.id,
+              displayName: communityAuthor.displayName,
+              handle: communityAuthor.handle,
+              avatar: null,
+            },
+          ],
+        ),
+      };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/v1/accounts',
+    story: ({ request }) => {
+      const agent = new URL(request.url).searchParams.get('agent');
+      if (agent && peopleReadingFixture().subjects.has(agent)) return { status: 200, accounts: [], next: null };
+    },
+  },
+  {
+    method: 'GET',
+    path: '/v1/progressSessions',
+    story: ({ request }) => {
+      const id = new URL(request.url).searchParams.get('subjectId');
+      if (!id || !peopleReadingFixture().subjects.has(id)) return;
+      return request.headers.has('authorization')
+        ? { status: 200, progressSessions: [], next: null }
+        : { status: 401, code: 'unauthorized' };
+    },
+  },
+  {
+    method: 'GET',
+    path: /^\/v1\/(?:libraryEntries\/([^/]+)|subjects\/([^/]+)\/ratings\/[^/]+\/vote)$/,
+    story: ({ request, match }) => {
+      const id = (match![1] ?? match![2])!;
+      if (!peopleReadingFixture().subjects.has(id)) return;
+      return request.headers.has('authorization')
+        ? { status: 404, code: 'not_found' }
+        : { status: 401, code: 'unauthorized' };
     },
   },
 ];

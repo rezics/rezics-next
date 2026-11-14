@@ -377,6 +377,20 @@ test('companion and correction links return only exact public selection state an
     await ui.flush();
     expect(calls.at(-1)).toMatchObject({ edge: edgeFirst, from: anchor, to: first, edgeProperty: property });
     expect(ui.host.textContent).toContain('Anchor edge');
+    await ui.show(
+      h(ui.RoutedVisit, {
+        key: 'withdrawn-return',
+        id: anchor,
+        locale: 'en',
+        initialRoute: Object.fromEntries(edgeReturn.searchParams) as GraphBrowserRouteState,
+        graphPath: edgeReturn.pathname,
+        transport: { read: async () => ({ ok: false, reason: 'stale' }) },
+      }),
+    );
+    await ui.flush();
+    expect(ui.host.textContent).toContain('This selection is no longer current');
+    expect(ui.host.querySelector('[data-graph-detail]')).toBeNull();
+    expect(ui.host.textContent).not.toContain('Anchor edge');
   } finally {
     await ui.close();
   }
@@ -493,6 +507,196 @@ replacementCase('source replacement rejects retired %s and tokens', async (lateR
     expect(ui.host.textContent).toContain('First selected');
     await ui.show(null);
     expect(signals.at(-1)?.aborted).toBe(true);
+  } finally {
+    await ui.close();
+  }
+});
+
+test('current relation labels, missing meanings and long node labels share manually selected views without another read', async () => {
+  const ui = await mounted();
+  const calls: ReadInput[] = [];
+  const initial = reading();
+  const longLabel = '旅の記憶と北の島々から届いた手紙 — Erinnerte Reisen und Briefe — رحلات وذكريات '.repeat(5);
+  initial.graph.nodes[1]!.label = longLabel;
+  initial.relations[0]!.label.text = 'Influence through correspondence / 書簡を通じた影響';
+  initial.graph.edges[1]!.property = 'urn:relation:current-name-unavailable';
+  initial.graph.nodes = initial.graph.nodes.filter((node) => node.id !== second);
+  try {
+    await ui.show(
+      h(ui.GraphBrowserPage, {
+        id: anchor,
+        locale: 'en',
+        initial,
+        transport: {
+          read: async (query) => {
+            calls.push(query);
+            return reading(query);
+          },
+        },
+      }),
+    );
+    const table = ui.host.querySelector('table')!;
+    expect(table.textContent).toContain(initial.relations[0]!.label.text);
+    expect(table.textContent).toContain('Relation name unavailable');
+    expect(table.textContent).not.toContain('urn:relation:current-name-unavailable');
+    expect(table.textContent).not.toContain(property);
+    expect(table.textContent).toContain(longLabel);
+    const inspect = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Selected meaning',
+    )!;
+    await ui.click(inspect);
+    expect(ui.window.document.activeElement?.tagName).toBe('H2');
+    expect(ui.window.location.hash).toBe('');
+    const diagramSwitch = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Graph diagram',
+    )!;
+    await ui.click(diagramSwitch);
+    expect(diagramSwitch.getAttribute('aria-pressed')).toBe('true');
+    expect(table.closest('[hidden]')).toBeTruthy();
+    const diagram = ui.host.querySelector<HTMLElement>('section[aria-label="Graph diagram"]')!;
+    expect(diagram.closest('[hidden]')).toBeNull();
+    expect(diagram.textContent).toContain(initial.relations[0]!.label.text);
+    expect(diagram.textContent).toContain(longLabel);
+    expect(diagram.querySelectorAll('[data-graph-selection]')).toHaveLength(
+      initial.graph.nodes.length + initial.graph.edges.length,
+    );
+    expect(diagram.querySelector('foreignObject')).toBeNull();
+    expect(calls).toHaveLength(0);
+    const anchorControl = diagram.querySelector<HTMLButtonElement>(`[data-graph-selection="node:${anchor}"]`)!;
+    await act(async () =>
+      anchorControl.dispatchEvent(new ui.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })),
+    );
+    await ui.flush();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.node).toBe(first);
+    expect(ui.window.document.activeElement?.getAttribute('data-graph-selection')).toBe(`node:${first}`);
+    expect(ui.window.document.activeElement?.closest('[hidden]')).toBeNull();
+  } finally {
+    await ui.close();
+  }
+});
+
+test('the adjacent inspector distinguishes exact statements and exposes supplied qualifiers, citations and independent links', async () => {
+  const ui = await mounted();
+  const route = {
+    property,
+    direction: 'out',
+    depth: 2,
+    edge: edgeFirst,
+    from: anchor,
+    to: first,
+    edgeProperty: property,
+  };
+  const path = `/en/subjects/${anchor}/anchor/graph`;
+  const withEvidence = (query: ReadInput) => {
+    const result = reading(query);
+    result.detail!.statement!.qualifiers = [
+      {
+        property: { id: 'schema:description', data_type: 'string' },
+        value: { type: 'value', content: 'A supplied statement-specific qualifier' },
+      },
+    ];
+    result.detail!.statement!.references = [
+      {
+        parts: [
+          {
+            property: { id: 'schema:url', data_type: 'url' },
+            value: { type: 'value', content: 'https://example.org/current-citation' },
+          },
+        ],
+      },
+    ];
+    result.detail!.labels['schema:description'] = { text: 'Influence context', lang: 'en' };
+    result.detail!.labels['schema:url'] = { text: 'Citation URL', lang: 'en' };
+    return result;
+  };
+  try {
+    await ui.show(
+      h(ui.RoutedVisit, {
+        id: anchor,
+        locale: 'en',
+        initialRoute: route,
+        graphPath: path,
+        initial: withEvidence(route),
+        transport: { read: async (query) => withEvidence(query) },
+      }),
+    );
+    const detail = ui.host.querySelector<HTMLElement>(`[data-graph-detail="edge:${edgeFirst}"]`)!;
+    const inspector = detail.closest('section[aria-labelledby]')!;
+    expect(inspector.previousElementSibling?.querySelector('table')).toBeTruthy();
+    expect(detail.textContent).toContain('Influenced by');
+    expect(detail.textContent).toContain('A supplied statement-specific qualifier');
+    expect(detail.textContent).toContain(edgeFirst);
+    expect(detail.querySelector('a[href="https://example.org/current-citation"]')).toBeTruthy();
+    const correction = [...inspector.querySelectorAll<HTMLAnchorElement>('a')].find((link) =>
+      link.textContent?.includes('Propose a correction'),
+    )!;
+    expect(correction.closest('button')).toBeNull();
+    const address = new URL(correction.href);
+    expect(address.searchParams.get('property')).toBe(property);
+    expect(address.searchParams.get('statement')).toBe(edgeFirst);
+    const returned = new URL(address.searchParams.get('returnTo')!, ui.window.location.origin);
+    expect(Object.fromEntries(returned.searchParams)).toEqual({
+      property,
+      direction: 'out',
+      depth: '2',
+      edge: edgeFirst,
+      from: anchor,
+      to: first,
+      edgeProperty: property,
+    });
+    await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="edge:${edgeBetween}"]`));
+    await ui.flush();
+    const next = ui.host.querySelector<HTMLElement>(`[data-graph-detail="edge:${edgeBetween}"]`)!;
+    expect(next.textContent).toContain(edgeBetween);
+    expect(next.textContent).not.toContain(edgeFirst);
+    expect(
+      ui.host.querySelector(`button[data-graph-selection="edge:${edgeBetween}"]`)?.getAttribute('aria-pressed'),
+    ).toBe('true');
+  } finally {
+    await ui.close();
+  }
+});
+
+test('a sparse native branch stays explicit and retries its exact cursor before replacing the current graph', async () => {
+  const ui = await mounted();
+  const initial = reading();
+  initial.graph.nodes = [initial.graph.nodes[0]!];
+  initial.graph.edges = [];
+  const calls: ReadInput[] = [];
+  const expanded = reading({}, { expanded: true });
+  expanded.graph.nodes = [expanded.graph.nodes[2]!];
+  expanded.graph.edges = [];
+  const transport: GraphBrowserTransport = {
+    read: async (query) => {
+      calls.push(query);
+      return calls.length === 1 ? { ok: false, reason: 'unavailable' } : expanded;
+    },
+  };
+  try {
+    await ui.show(h(ui.GraphBrowserPage, { id: anchor, locale: 'en', initial, transport }));
+    expect(ui.host.textContent).toContain('The branches below still have native pages to explore.');
+    const continuation = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Continue this branch'),
+    )!;
+    await ui.click(continuation);
+    await ui.flush();
+    expect(ui.host.querySelector('[role="alert"]')).toBeTruthy();
+    expect(continuation.disabled).toBe(true);
+    const retry = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Retry this exact read'),
+    )!;
+    await ui.click(retry);
+    await ui.flush();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual(calls[0]);
+    expect(calls[1]!.expansion).toEqual(initial.graph.truncated[0]);
+    expect(ui.host.textContent).toContain('Second neighbour');
+    expect(ui.host.querySelector('[data-graph-selection="node:' + anchor + '"]')).toBeNull();
+    expect(ui.host.textContent).not.toContain('native-cursor-private');
+    expect(
+      [...ui.host.querySelectorAll('button')].some((button) => button.textContent?.includes('Continue this branch')),
+    ).toBe(false);
   } finally {
     await ui.close();
   }

@@ -12,17 +12,21 @@ import {
   readHostedVersionOutlinePage,
 } from './hosted-version-read-pages.ts';
 import {
+  createHostedVersionSequenceReadAccess,
   createHostedVersionWrite,
   hostedVersionSequence,
   readHostedVersionOccurrence,
   readHostedVersionSiblingRoot,
+  readHostedVersionOccurrences,
+  readHostedVersionSiblingRoots,
   type HostedVersionWrite,
 } from './hosted-version-store.ts';
 import type { HostedVersionPointValue } from './hosted-version-draft-write.ts';
-import type { HostedVersionSnapshot } from './hosted-version-model.ts';
+import type { HostedVersionOccurrenceValue, HostedVersionSnapshot } from './hosted-version-model.ts';
 import {
   chapterRankVersionedOutlineSequenceNode,
   rankVersionedOutlineSequenceNode,
+  rankVersionedOutlineSequenceNodes,
   selectVersionedOutlineSequenceNode,
 } from './versioned-outline-sequence.ts';
 
@@ -85,6 +89,21 @@ function indexes(client: AccessClient, snapshot: HostedVersionSnapshot) {
   };
 }
 
+function pageIndexes(client: AccessClient, snapshot: HostedVersionSnapshot) {
+  return {
+    sibling: createHostedVersionSequenceReadAccess<HostedVersionPointValue>(client, snapshot, 'sibling'),
+    preorder: createHostedVersionSequenceReadAccess<HostedVersionPointValue>(client, snapshot, 'preorder'),
+    chapter: createHostedVersionSequenceReadAccess<HostedVersionPointValue>(client, snapshot, 'chapter'),
+  };
+}
+
+function siblingPageIndex(
+  access: ReturnType<typeof pageIndexes>['sibling'],
+  rootId: string | null,
+): HostedVersionReadIndex<HostedVersionPointValue> {
+  return { rootId, access };
+}
+
 async function continuationNode(
   index: HostedVersionReadIndex<HostedVersionPointValue>,
   after: number,
@@ -96,19 +115,51 @@ async function continuationNode(
 
 async function siblingPosition(
   write: HostedVersionWrite<HostedVersionPointValue>,
-  client: AccessClient,
-  snapshot: HostedVersionSnapshot,
-  parentId: string | null,
+  siblingRootId: string | null,
   occurrenceId: string,
 ): Promise<number> {
-  const siblingRoot = await readHostedVersionSiblingRoot(client, snapshot, parentId);
   const rank = await rankVersionedOutlineSequenceNode(
     hostedVersionSequence(write, 'sibling'),
-    siblingRoot?.rootNodeId ?? null,
+    siblingRootId,
     occurrenceId,
   );
   if (rank === null) throw new Error('Hosted version occurrence is missing from its sibling index');
   return wireRank(rank);
+}
+
+type HostedPlacementCandidate = Readonly<{ nodeId: string }>;
+type HydratedHostedCandidate<Candidate extends HostedPlacementCandidate> = Readonly<{
+  candidate: Candidate;
+  occurrence: HostedVersionOccurrenceValue<HostedVersionPointValue>;
+  siblingRootId: string | null;
+}>;
+
+async function hydrateCandidates<Candidate extends HostedPlacementCandidate>(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  candidates: readonly Candidate[],
+  missingMessage: string,
+): Promise<readonly HydratedHostedCandidate<Candidate>[]> {
+  const occurrences = await readHostedVersionOccurrences<HostedVersionPointValue>(
+    client,
+    snapshot,
+    candidates.map((candidate) => candidate.nodeId),
+  );
+  const selected = candidates.map((candidate) => {
+    const occurrence = occurrences.get(candidate.nodeId);
+    if (!occurrence) throw new Error(missingMessage);
+    return { candidate, occurrence };
+  });
+  const roots = await readHostedVersionSiblingRoots(
+    client,
+    snapshot,
+    selected.map(({ occurrence }) => occurrence.parentOccurrenceId),
+  );
+  return selected.map(({ candidate, occurrence }) => ({
+    candidate,
+    occurrence,
+    siblingRootId: roots.get(occurrence.parentOccurrenceId)?.rootNodeId ?? null,
+  }));
 }
 
 /** Resolve one live tree member at the mapped snapshot; removed subtrees are absent from the indexes. */
@@ -126,7 +177,8 @@ export async function readVersionedHostedPlacement(
     occurrenceId,
   );
   if (preorderRank === null) return null;
-  const position = await siblingPosition(access.write, client, snapshot, occurrence.parentOccurrenceId, occurrenceId);
+  const siblingRoot = await readHostedVersionSiblingRoot(client, snapshot, occurrence.parentOccurrenceId);
+  const position = await siblingPosition(access.write, siblingRoot?.rootNodeId ?? null, occurrenceId);
   return asPlacement(occurrenceId, occurrence.parentOccurrenceId, position, wireRank(preorderRank), occurrence.value);
 }
 
@@ -135,18 +187,15 @@ async function pageChildren(
   snapshot: HostedVersionSnapshot,
   query: HostedVersionedPageQuery,
 ): Promise<HostedVersionedPage> {
-  const access = indexes(client, snapshot);
+  const access = pageIndexes(client, snapshot);
   if (query.parentId !== null) {
     const parent = await readHostedVersionOccurrence<HostedVersionPointValue>(client, snapshot, query.parentId);
     if (!parent || parent.value.kind !== 'part') throw new ContentNotFoundError();
-    if (
-      (await rankVersionedOutlineSequenceNode(access.preorder().access, snapshot.preorderRootId, query.parentId)) ===
-      null
-    )
+    if ((await rankVersionedOutlineSequenceNode(access.preorder, snapshot.preorderRootId, query.parentId)) === null)
       throw new ContentNotFoundError();
   }
   const siblingRoot = await readHostedVersionSiblingRoot(client, snapshot, query.parentId);
-  const siblings = access.sibling(siblingRoot?.rootNodeId ?? null);
+  const siblings = siblingPageIndex(access.sibling, siblingRoot?.rootNodeId ?? null);
   const afterNodeId = query.cursorAfter === null ? undefined : await continuationNode(siblings, query.cursorAfter);
   const page = await readHostedVersionChildrenPage(siblings, {
     limit: query.limit,
@@ -168,29 +217,36 @@ async function pageOutline(
   snapshot: HostedVersionSnapshot,
   query: HostedVersionedPageQuery,
 ): Promise<HostedVersionedPage> {
-  const access = indexes(client, snapshot);
-  const preorder = access.preorder();
+  const access = pageIndexes(client, snapshot);
+  const preorder = siblingPageIndex(access.preorder, snapshot.preorderRootId);
   const afterNodeId = query.cursorAfter === null ? undefined : await continuationNode(preorder, query.cursorAfter);
   const page = await readHostedVersionOutlinePage(preorder, {
     limit: query.limit,
     ...(afterNodeId === undefined ? {} : { afterNodeId }),
   });
   const window = page.candidates.slice(0, query.limit);
-  const placements: OrderedHostedPlacement[] = [];
-  for (const candidate of window) {
-    const occurrence = await readHostedVersionOccurrence<HostedVersionPointValue>(client, snapshot, candidate.nodeId);
-    if (!occurrence) throw new Error('Hosted version outline member is missing occurrence state');
-    const position = await siblingPosition(
-      access.write,
-      client,
-      snapshot,
-      occurrence.parentOccurrenceId,
+  const hydrated = await hydrateCandidates(
+    client,
+    snapshot,
+    window,
+    'Hosted version outline member is missing occurrence state',
+  );
+  const positions = await rankVersionedOutlineSequenceNodes(
+    access.sibling,
+    hydrated.map(({ candidate, siblingRootId }) => ({ rootId: siblingRootId, nodeId: candidate.nodeId })),
+  );
+  const placements = hydrated.map(({ candidate, occurrence }, index) => {
+    const position = positions[index];
+    if (position === null || position === undefined)
+      throw new Error('Hosted version occurrence is missing from its sibling index');
+    return asPlacement(
       candidate.nodeId,
+      occurrence.parentOccurrenceId,
+      wireRank(position),
+      candidate.ordinal,
+      occurrence.value,
     );
-    placements.push(
-      asPlacement(candidate.nodeId, occurrence.parentOccurrenceId, position, candidate.ordinal, occurrence.value),
-    );
-  }
+  });
   return {
     placements,
     origin: -1,
@@ -205,19 +261,17 @@ async function pageChapters(
   query: HostedVersionedPageQuery,
 ): Promise<HostedVersionedPage> {
   if (query.occurrenceId === null) throw new InvalidHostedStructureError();
-  const access = indexes(client, snapshot);
-  const preorder = access.preorder();
-  const chapters = access.chapter();
-  if ((await rankVersionedOutlineSequenceNode(preorder.access, preorder.rootId, query.occurrenceId)) === null)
-    throw new ContentNotFoundError();
-  const originNode = await preorder.access.readNode(query.occurrenceId);
-  if (!originNode) throw new ContentNotFoundError();
+  const access = pageIndexes(client, snapshot);
+  const preorder = siblingPageIndex(access.preorder, snapshot.preorderRootId);
+  const chapters = siblingPageIndex(access.chapter, snapshot.chapterRootId);
   const originRank = await chapterRankVersionedOutlineSequenceNode(
     preorder.access,
     preorder.rootId,
     query.occurrenceId,
   );
   if (originRank === null) throw new ContentNotFoundError();
+  const originNode = await preorder.access.readNode(query.occurrenceId);
+  if (!originNode) throw new ContentNotFoundError();
   const originWeight = originNode.chapterWeight ?? 0n;
   const firstRank = query.mode === 'next' ? originRank + originWeight : originRank - 1n;
   const origin = query.mode === 'next' ? wireRank(firstRank) - 1 : wireRank(originRank);
@@ -229,27 +283,28 @@ async function pageChapters(
     ...(afterNodeId === undefined ? {} : { afterNodeId }),
   });
   const window = page.candidates.slice(0, query.limit);
-  const placements: OrderedHostedPlacement[] = [];
-  for (const candidate of window) {
-    const occurrence = await readHostedVersionOccurrence<HostedVersionPointValue>(client, snapshot, candidate.nodeId);
-    if (!occurrence) throw new Error('Hosted version chapter member is missing occurrence state');
-    const position = await siblingPosition(
-      access.write,
-      client,
-      snapshot,
-      occurrence.parentOccurrenceId,
+  const hydrated = await hydrateCandidates(
+    client,
+    snapshot,
+    window,
+    'Hosted version chapter member is missing occurrence state',
+  );
+  const positions = await rankVersionedOutlineSequenceNodes(
+    access.sibling,
+    hydrated.map(({ candidate, siblingRootId }) => ({ rootId: siblingRootId, nodeId: candidate.nodeId })),
+  );
+  const placements = hydrated.map(({ candidate, occurrence }, index) => {
+    const position = positions[index];
+    if (position === null || position === undefined)
+      throw new Error('Hosted version occurrence is missing from its sibling index');
+    return asPlacement(
       candidate.nodeId,
+      occurrence.parentOccurrenceId,
+      wireRank(position),
+      wireRank(candidate.rank),
+      occurrence.value,
     );
-    placements.push(
-      asPlacement(
-        candidate.nodeId,
-        occurrence.parentOccurrenceId,
-        position,
-        wireRank(candidate.rank),
-        occurrence.value,
-      ),
-    );
-  }
+  });
   return {
     placements,
     origin,

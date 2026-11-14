@@ -2,11 +2,13 @@ import type { QueryResultRow } from 'pg';
 import type { Actor, AccessClient } from '../request/access.ts';
 import {
   authoritativeTimeValue,
+  noEffect,
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
   type CommandAuthorization,
   type CommandOutcome,
+  type CommandResult,
   type CommandTransaction,
 } from '../command/command.ts';
 import { requestDigest } from '../command/request.ts';
@@ -26,7 +28,10 @@ import { snapshot, type ContentReadDependencies } from './reads.ts';
 import { hostedCatalogue } from './hosted-chapters-store.ts';
 import type { HostedChapterTarget, HostedCommandContext } from './hosted-chapters-model.ts';
 import { observeHostedPublicationActivationTarget } from './hosted-publication-point-eligibility.ts';
-import { readHostedPublicationStagingActivationTargets } from './hosted-publication-staging.ts';
+import {
+  lockHostedPublicationStagingForActivation,
+  readHostedPublicationStagingActivationTargets,
+} from './hosted-publication-staging.ts';
 import type { HostedPublicationTargetCursor } from './hosted-publication-staging-model.ts';
 import { commitHostedVersionRevision } from './hosted-version-revision.ts';
 import { readHostedVersionSnapshot } from './hosted-version-store.ts';
@@ -97,13 +102,16 @@ type CandidateRow = QueryResultRow & {
   initiator_account_id: string;
   owner_epoch: string;
   status: string;
+  stage_status: string;
+  stage_expires_at: string;
+  stage_expired: boolean;
 };
 
 type ActivationWork = (
   tx: CommandTransaction,
   time: AuthoritativeTime,
   transactionId: string,
-) => Promise<HostedPublicationActivationProgress>;
+) => Promise<CommandResult<HostedPublicationActivationProgress>>;
 
 function accountActor(actor: Actor): Extract<Actor, { kind: 'account' }> {
   if (actor.kind !== 'account' || !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 0)
@@ -148,6 +156,24 @@ function progress(row: ActivationRow): HostedPublicationActivationProgress {
     publicationId: row.publication_id,
     restartRequired: row.state === 'restart',
   };
+}
+
+function activationEffect(
+  value: HostedPublicationActivationProgress,
+  type: typeof ACTIVATION_EVENT | typeof ACTIVATION_PROGRESS_EVENT,
+): CommandResult<HostedPublicationActivationProgress> {
+  return {
+    value,
+    events: [{ type, subject: value.catalogueId, data: { catalogueId: value.catalogueId, stageId: value.stageId } }],
+  };
+}
+
+function activationProgressEffect(value: HostedPublicationActivationProgress) {
+  return activationEffect(value, ACTIVATION_PROGRESS_EVENT);
+}
+
+function publicationActivatedEffect(value: HostedPublicationActivationProgress) {
+  return activationEffect(value, ACTIVATION_EVENT);
 }
 
 function validateLocator(catalogueId: string, stageId: string): number {
@@ -209,18 +235,12 @@ async function activationCommand(
       authorization,
     },
     async (tx, { time, transactionId }) => {
-      const value = await work(tx, time, transactionId);
-      return {
-        value,
-        events: [
-          {
-            type:
-              operation === 'activate' && value.state === 'activated' ? ACTIVATION_EVENT : ACTIVATION_PROGRESS_EVENT,
-            subject: catalogueId,
-            data: { catalogueId, stageId },
-          },
-        ],
-      };
+      // runCommand has already authorized and settled exact receipt replay.
+      // Lock stage first, as build/reclaim do, before activation/candidate locks
+      // and before the authority-home locks and final catalogue CAS. SERIALIZABLE
+      // alone permits the stale stage read to precede a committed cancellation.
+      await lockHostedPublicationStagingForActivation(tx as AccessClient, { catalogueId, stageId });
+      return work(tx, time, transactionId);
     },
   );
 }
@@ -230,21 +250,37 @@ async function readCandidate(
   route: number,
   catalogueId: string,
   stageId: string,
+  time: AuthoritativeTime,
   lock = false,
 ): Promise<CandidateRow | null> {
   return (
     (
       await tx.query<CandidateRow>(
-        `SELECT route,catalogue_id,stage_id,generation_id,generation_sequence::text,
-         preorder_root_id,chapter_root_id,placement_count::text,chapter_count::text,
-         source_revision_id,expected_head_revision_id,expected_publication_id,
-         initiator_account_id,owner_epoch::text,status
-       FROM content.hosted_version_release_candidate
-       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3${lock ? ' FOR UPDATE' : ''}`,
-        [route, catalogueId, stageId],
+        `SELECT candidate.route,candidate.catalogue_id,candidate.stage_id,candidate.generation_id,
+         candidate.generation_sequence::text,candidate.preorder_root_id,candidate.chapter_root_id,
+         candidate.placement_count::text,candidate.chapter_count::text,candidate.source_revision_id,
+         candidate.expected_head_revision_id,candidate.expected_publication_id,
+         candidate.initiator_account_id,candidate.owner_epoch::text,candidate.status,
+         stage.status AS stage_status,
+         to_char(stage.expires_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS stage_expires_at,
+         (stage.expires_at<=$4::timestamptz) AS stage_expired
+       FROM content.hosted_version_release_candidate candidate
+       JOIN content.hosted_publication_staging stage
+         ON stage.route=candidate.route AND stage.catalogue_id=candidate.catalogue_id
+        AND stage.stage_id=candidate.stage_id
+       WHERE candidate.route=$1 AND candidate.catalogue_id=$2 AND candidate.stage_id=$3
+       ${lock ? 'FOR UPDATE OF candidate' : ''}`,
+        [route, catalogueId, stageId, authoritativeTimeValue(time)],
       )
     ).rows[0] ?? null
   );
+}
+
+/** The stage deadline is compared in PostgreSQL, preserving sub-millisecond
+ * precision. This admission belongs after native receipt replay, not in the
+ * authorization wrapper: successful receipts outlive preparation expiry. */
+function liveCandidate(candidate: CandidateRow): boolean {
+  return candidate.status === 'sealed' && candidate.stage_status === 'sealed' && !candidate.stage_expired;
 }
 
 async function readActivation(
@@ -363,16 +399,20 @@ export function startHostedPublicationActivation(
   context: HostedCommandContext,
 ): Promise<CommandOutcome<HostedPublicationActivationProgress>> {
   const route = validateLocator(catalogueId, stageId);
-  return activationCommand(deps, actor, catalogueId, stageId, 'start', { stageId }, context, async (tx) => {
+  return activationCommand(deps, actor, catalogueId, stageId, 'start', { stageId }, context, async (tx, time) => {
     const existing = await readActivation(tx, route, catalogueId, stageId, true);
-    if (existing) return progress(existing);
+    if (existing) {
+      const candidate = await readCandidate(tx, route, catalogueId, stageId, time);
+      if (!candidate || !liveCandidate(candidate)) throw activationNotFound();
+      return noEffect(progress(existing));
+    }
 
     const current = await hostedCatalogue(tx as AccessClient, catalogueId, true);
-    const candidate = await readCandidate(tx, route, catalogueId, stageId, true);
+    const candidate = await readCandidate(tx, route, catalogueId, stageId, time, true);
     if (
       !current ||
       !candidate ||
-      candidate.status !== 'sealed' ||
+      !liveCandidate(candidate) ||
       current.head_revision_id !== candidate.expected_head_revision_id ||
       current.publication_id !== candidate.expected_publication_id
     )
@@ -427,7 +467,7 @@ export function startHostedPublicationActivation(
     await insertVector(tx, route, catalogueId, stageId, passId, vector);
     const created = await readActivation(tx, route, catalogueId, stageId);
     if (!created) throw new HostedPublicationActivationConflictError('The activation pass was not retained');
-    return progress(created);
+    return activationProgressEffect(progress(created));
   });
 }
 
@@ -547,12 +587,12 @@ export function advanceHostedPublicationActivationAuthority(
 ): Promise<CommandOutcome<HostedPublicationActivationProgress>> {
   const actor = accountActor(actorInput);
   const route = validateLocator(catalogueId, stageId);
-  return activationCommand(deps, actor, catalogueId, stageId, 'advance', { stageId }, context, async (tx) => {
+  return activationCommand(deps, actor, catalogueId, stageId, 'advance', { stageId }, context, async (tx, time) => {
     let row = await readActivation(tx, route, catalogueId, stageId, true);
     if (!row) throw activationNotFound();
-    const candidate = await readCandidate(tx, route, catalogueId, stageId);
-    if (!candidate || !candidateMatches(row, candidate, actor)) throw activationNotFound();
-    if (row.state === 'activated' || row.state === 'ready') return progress(row);
+    const candidate = await readCandidate(tx, route, catalogueId, stageId, time);
+    if (!candidate || !liveCandidate(candidate) || !candidateMatches(row, candidate, actor)) throw activationNotFound();
+    if (row.state === 'activated' || row.state === 'ready') return noEffect(progress(row));
     if (row.state === 'restart') row = await resetPass(tx, row);
 
     const observations: Array<Readonly<{ homes: readonly number[] }>> = [];
@@ -679,7 +719,7 @@ export function advanceHostedPublicationActivationAuthority(
     );
     const updated = await readActivation(tx, route, catalogueId, stageId);
     if (!updated) throw new HostedPublicationActivationConflictError();
-    return progress(updated);
+    return activationProgressEffect(progress(updated));
   });
 }
 
@@ -706,9 +746,10 @@ export function activateHostedPublicationCandidate(
     async (tx, time, transactionId) => {
       const row = await readActivation(tx, route, catalogueId, stageId, true);
       if (!row) throw activationNotFound();
-      const candidate = await readCandidate(tx, route, catalogueId, stageId);
-      if (!candidate || !candidateMatches(row, candidate, actor)) throw activationNotFound();
-      if (row.state === 'activated') return progress(row);
+      const candidate = await readCandidate(tx, route, catalogueId, stageId, time);
+      if (!candidate || !liveCandidate(candidate) || !candidateMatches(row, candidate, actor))
+        throw activationNotFound();
+      if (row.state === 'activated') return noEffect(progress(row));
       if (row.state !== 'ready')
         throw new HostedPublicationActivationConflictError('Authority checks are not complete');
 
@@ -736,7 +777,7 @@ export function activateHostedPublicationCandidate(
         );
         const restart = await readActivation(tx, route, catalogueId, stageId);
         if (!restart) throw new HostedPublicationActivationConflictError();
-        return progress(restart);
+        return activationProgressEffect(progress(restart));
       }
 
       const current = await hostedCatalogue(tx as AccessClient, catalogueId, true);
@@ -771,7 +812,7 @@ export function activateHostedPublicationCandidate(
       );
       const completed = await readActivation(tx, route, catalogueId, stageId);
       if (!completed) throw new HostedPublicationActivationConflictError();
-      return progress(completed);
+      return publicationActivatedEffect(progress(completed));
     },
   );
 }

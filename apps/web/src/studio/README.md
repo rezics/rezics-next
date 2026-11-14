@@ -10,11 +10,62 @@ The generated `thread.create` operation receives draft visibility and one stable
 use the current exact-resume reader and the conditional revision writer for later edits. The editor retains one
 selection and one working document; it does not add a second body store.
 
+## Structured initial drafts
+
+Decision: native creation uses the installed shared rich editor and its admitted `DocumentSnapshot` from the first
+keystroke. Write and private preview retain one editor lifetime; pending or invalid snapshots cannot create or preview
+an older body. The supplied destination ID stays explicit, with no inferred board choices or permission. Licence,
+Subject IDs and media IDs keep native admission and live in labelled disclosures. Saving remains private and
+publication requires its separate review. Before the first selection, the creation canvas uses the available width;
+acknowledgement hands off to the existing document layout. Actions keep the workspace's wrapping, focus and minimum
+touch-target styles.
+
+The creation form contributes unsent edits to the workspace's existing departure protection. Cancel requires an
+explicit local discard choice. Sending and unknown recovery retain the controller's frozen command, credential and
+key; edits made afterwards remain local, and replay sends the original intent. An acknowledgement opens the exact
+created Post and clears the creation form only if it still represents that submitted version. Account/session,
+locale and workspace replacement retire the local editor and its callbacks. No creation transport, upload authority,
+lookup or parser is added.
+
+Sources read before design: `workspace.tsx`'s native composer and shared editor integration, `contract.ts`'s
+`NativeDraftCreate`, `controller.ts`'s creation/retry and visit lifetime, `account-port.ts`,
+[editing language](workspace-language.md), the shared editor/snapshot contract, Web's `document-body.tsx`, existing
+native-draft tests and stories, and the read-only main checkout's `.reference/INDEX.md`.
+Acceptance source covers structured first creation, preview, pending/invalid snapshots, failure and same-intent
+recovery, acknowledgement with newer edits, cancellation and visit replacement. Execution, native create/continue,
+keyboard and phone/desktop visual acceptance are deferred to the separate verifier. The existing language-completion
+case now authors through the shared editor, and existing creation story plays wait for its admitted snapshot.
+
 Before account publication, Studio freezes the acknowledged Post revision and digest, body, board, licence, subjects
 and media IDs in a local review. Editing retires that review. Publication uses the installed conditional revision
 command with the exact `If-Match`, captured session credential and original idempotency key. An uncertain outcome
 retries that same intent; a new observation is a separate action. Studio reports publication only after an exact
 current-post readback agrees with the acknowledged body and operands.
+
+Decision: article publication renders only the frozen `review.articleSnapshot` through the shared structured
+reader. Each review owns its disclosure, reference and wide-content inspector lifetime; replacement or retirement
+removes those views and suppresses late focus. Supplied destination/licence/operand labels may lead presentation,
+but exact IDs remain inspectable and an absent destination label stays unnamed. `StudioPublication.articlePresentation`
+is a synchronous, caller-supplied label projection of that exact review; it performs no reads. Media IDs never resolve attachments;
+there are no new reads or mention lookups. Notes use the admitted document's paragraphs/lists and shared spoiler
+disclosure; Studio adds no footnote schema. Consent belongs to one review object. Sending and uncertain same-intent
+retry use existing controller actions; acknowledged publication and a later current observation are distinct.
+The shared wide-inspector description says “document content” because the same renderer serves unpublished reviews.
+Book selection, expiry, native commands, authorization and departure protection retain their existing owners.
+
+Sources read before design: this guide's account publication and shared release sections, `publication.tsx`,
+`controller.ts`, `account-port.ts`, exported Studio contracts, `threads/post-reading-body.tsx`, Web/shared
+`document-body.tsx`, the declared public-entry map, existing Studio native/publication tests and stories, and the
+read-only main checkout's reference index. Cost is O(document nodes + supplied operands), with one current review
+and no attachment resolution or additional network requests.
+
+Source-only acceptance: `studio-article-publication.stories.tsx` illustrates structured body, missing presentation,
+unknown replay and replacement during wide inspection using the real panel and contract-shaped reviews. The focused
+mounted regression `apps/web/tests/studio-article-publication.test.tsx` pins frozen structured content, missing and
+supplied labels, equal-byte replacement, disclosure/inspector retirement, same-intent replay and separate later
+observations. Its execution and existing Studio account/publication/retry suites, keyboard/visual inspection and
+original native author-to-reader acceptance remain unverified until the separate verifier runs them. Story fixtures
+are illustrations, not native publication evidence.
 
 Hosted Books stay on `/studio?books=1`. Their selected-manifest review and hosted publish command remain independent
 and atomic. The manifest freezes exact chapter bodies and required table-of-contents ancestors; later draft edits and
@@ -66,25 +117,74 @@ Deferred acceptance: `bun run --cwd apps/web test tests/studio-workspace-languag
 dirty-switch and publication-lock assertions stay in the shared language regression. Manual stories are review
 fixtures; their supplied successful saves and unavailable publication do not establish native or promoted acceptance.
 
+## Working preview
+
+Decision: working Book/column preview composes the public `PostReadingBody` over `selected.body`; each body,
+saved-source or editor replacement starts a fresh reader visit, including equal-byte reloads and same-document save
+acknowledgements. Title edits preserve that visit. Returning to Write retires reader disclosures, references, wide
+inspection and late focus/clipboard effects while the mounted editor keeps undo, uploads and unsaved changes.
+Pending or invalid snapshots withhold the reader rather than presenting an older body as current. Dirty preview
+keeps its unsaved explanation; the separately labelled current saved draft shows only saved provenance, never a
+claim that working edits have that revision or digest. Save, publication and uncertain replay keep their controller.
+
+The supplied `presentation.reader` provides admitted images, mentions and labels; shared controls use all eight
+interface locales. Missing media stays unavailable and absent references stay absent. Account/source currentness,
+selection generation, body/source identity and locale fence callbacks before replacement renders. The shared reader
+owns one bounded projection and one inspector; Studio adds no reads, scans, body copies or second editor. Wide
+content uses the canvas width while the shared reader owns prose measure, overflow and inspector recovery.
+
+Sources read before design: `workspace.tsx`, `revisions.tsx`'s `RevisionBody`, public
+`threads/post-reading-body.tsx`, `contract.ts`'s `StudioPresentation`, `controller.ts`'s selected/currentness/save
+lifecycle, this README, existing workspace language tests and ordinary workbench story fixtures, and the read-only
+main checkout's `.reference/INDEX.md`.
+
+Source-only acceptance adds `tests/studio-working-preview.test.tsx` and extends the ordinary workbench stories with
+explicitly illustrative native-format structured bodies in `kernel/fake/studio-workbench.ts` (the only additional
+implementation path). Existing language assertions remain, with reader/provenance assertions added. The verifier
+separately runs that suite and `tests/studio-workspace-language.test.tsx`, plus mounted Book/column authoring,
+keyboard, phone, themes and all eight locales. Tests, typing, builds, browser and capture remain unverified in this
+source attempt.
+
 ## Saved-version language
 
 Decision: Book and column version comparison uses complete `studio_revision_*` messages in all eight launch locales,
-reusing shared history and cancellation messages. Replacement review names the supplied title and precise saved
-timestamp, with separate complete prompts for clean and dirty working text. Titles, exact IDs, digests and timestamps
-remain intact; the saved timestamp retains its semantic `time` element. Comparison shows the selected exact version
-beside the current saved draft, while unsaved working text stays in the editor. Copy remains a deliberate draft-only
-action under the existing permissions, pending/upload and unresolved-command guards; publication stays separate.
+reusing shared history and cancellation messages. Replacement review names the supplied title and localized saved
+time, with separate complete prompts for clean and dirty working text. Titles, exact IDs and digests remain intact;
+each saved time retains its exact native datetime and an inspectable unmodified timestamp. Comparison shows the
+selected exact version beside the current saved draft, while unsaved working text stays in the editor. Copy remains
+a deliberate draft-only action under the existing permissions, pending/upload and unresolved-command guards;
+publication stays separate.
+
+Decision: saved-version navigation keeps one native metadata page of at most 20 rows, eight predecessor
+cursors and one staged address. Previous, Next and explicit First commit their coordinate only after success;
+retry reuses the failed cursor, including a null first-page cursor. Sparse pages remain continuable, and generic
+unavailability never infers cursor expiry. No page/body cache, refill, prefetch or row read is added. Comparison uses
+independent shared structured/wide-content reader visits. Copy review binds the inspected exact version and working
+document; replacement refreshes the review and requires another deliberate acknowledgement. Copy retains history
+position through later saves of the same document; only explicit navigation changes the admitted page. The current
+saved reader retains its own disclosures while another exact version is inspected. Saved times use the interface
+locale with the exact native datetime and technical identity preserved.
+
+Sources read for bounded browsing before design: this Saved-version language section, `revisions.tsx`, controller
+versions/inspect/restore and their selection callers, `contract.ts`, `post-revision-headers.ts`,
+`threads/post-reading-body.tsx`, the existing saved-version/header tests and `publication-body.tsx`.
 
 Sources read before design: this owner document, `revisions.tsx`, `controller.ts`, `contract.ts`, the workspace caller,
 `tests/studio-post-revision-headers.test.tsx`, the existing Studio mounted fixtures, Web's
 [acceptance](../../../../docs/goals/web.md#acceptance), and Impeccable's Operate refinement and craft-floor guidance.
 The native one-page header continuation and explicitly selected body reader already support this workflow.
 
-Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-saved-version-language.test.tsx`.
-The focused mounted regression covers both profiles in every launch locale, sparse paging, translated comparison,
-exact disclosure, clean/dirty replacement review, unchanged identities and draft-only copy. Native authoring, keyboard,
-phone/desktop visual review, legacy parity and promoted-commit acceptance remain separate obligations. Source checks
-are catalogue key/argument parity, the changed-UI detector, changed-file formatting and the affected Web typecheck.
+Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test src/studio/version-navigation.test.ts
+ tests/studio-version-browsing.test.tsx tests/studio-saved-version-language.test.tsx
+ tests/studio-post-revision-headers.test.tsx`. Existing saved-version assertions remain, with only localized date
+presentation, catalogue size and explicit navigation labels updated. Focused additions cover bounded coordinates,
+failed Previous/First retry, sparse continuation, independent reader IDs/disclosures, tab and post-save position
+retention, stale copy review, locale/admission retirement and late keyboard focus. The illustrative `studio-version-browsing.stories.tsx` uses the
+installed controller/view, native-shaped metadata pages and separate exact body replies for both profiles. Its named
+states are comparison, empty-with-next, failed Previous retry and dirty draft copy review; locales and viewports are
+selected manually. Native authoring/comparison/copy, keyboard and phone/desktop visual review, original Book parity,
+Storybook, compiler and promoted-commit acceptance remain unverified. This source-only delivery inspects the actual
+diff and transitions; it submits no optional test, typecheck, build, browser or capture.
 
 ## Native author outline window
 
@@ -143,7 +243,9 @@ dirty-editor protection, Book/article publication and frozen public reading keep
 The route owns departure/locale/credential lifetime; source, account and session incarnation changes permanently
 retire the visit, picker, selection and window, abort requests and fence late commands, reads and focus. All actions
 use shared controls, wrapping 44px targets and distinct `studio_root_append_*` messages in all eight launch locales.
-Review and recovery move keyboard focus to the relevant heading; editing returns it to the title field.
+Review, recovery and explicit next-edit orientation request keyboard focus only while the initiating focus remains;
+later focus, pointer or Tab navigation cancels that request. Next-edit success returns to the saved-draft heading,
+and review editing returns to the title field. The shared draft-command continuation below also applies to append.
 
 Sources read before design: this owner, the [native bounded-root contract](../../../../services/kernel/src/content/hosted-chapters.md#bounded-root-append),
 [Web outcome and acceptance](../../../../docs/goals/web.md#acceptance), installed `hosted-chapters-routes.d.ts`,
@@ -163,54 +265,91 @@ promoted-commit acceptance remain separate verifier obligations.
 
 ## Stable draft outline anchors
 
-Decision: extend the bounded point visit with exact draft updates and a separate single-chapter publication review;
-public anchors are observed only in the expected public snapshot and draft-only ancestor titles require explicit inclusion.
-Switching between draft changes and publication retires the previous selection and refreshes owner pointers.
+Decision: insert and move use the bounded point visit with one replacing page and explicitly observed
+source/parent/before anchors; native owns cycle, depth and admission. Exact updates and single-chapter publication
+keep their separate reviews. Switching between draft changes and publication retires the previous selection and
+refreshes owner pointers; batch activation remains separate.
 
 The owned Book inventory offers `/studio?catalogueId=…&points=1` with its native viewer comparison before any
 complete-tree read. The separate point visit uses the existing picker and one replacing outline page of at most
 20 body-free occurrences per explicit request. Opaque continuations, sparse pages, large sibling addresses and
-same-cursor retry retain the bounded window contract. Only an available, displayed part can become a parent;
-root is always available. An observed sibling under that parent can become the before anchor, or the author chooses
-parent end. Selected anchors retain their supplied human titles, stable IDs and exact draft revision across page
-replacement. Removal reviews the chosen occurrence and explicitly removes its whole subtree from the draft without
-scanning descendants, inventing a count or erasing saved Posts and historical versions.
+same-cursor retry retain the bounded window contract. Only an available, displayed occurrence can become a move
+source. Only an available, displayed part can become a parent; root is an explicit destination. An observed sibling
+under that parent can become the before anchor, or the author chooses parent end. Selected anchors retain their
+supplied human titles, stable IDs and exact draft revision across page replacement. Reobserving the same parent
+preserves a retained before choice, which still requires its own current observation. Changing parent clears it.
+The view shows the supplied parent ID, kind and zero-based sibling position without rounding, clamping or inferring
+hidden ancestors or depth. It never scans descendants, enumerates destinations or refills a sparse page.
+
+Move review freezes the catalogue, expected head, source occurrence, parent/before IDs, original sender,
+idempotency key, CSRF and session/locale intent. A move preserves the occurrence identity and saved chapter versions;
+it moves a part's subtree without loading its descendants. Native decides cycles, depth, admission and adjacent
+no-op behavior. Removal separately reviews the chosen occurrence and explicitly removes its whole subtree from the
+draft without inventing a count or erasing saved Posts and historical versions. Switching operations retains only
+the active source and placement anchors, rather than accumulating selections from previous tasks.
 
 The chapter picker reads only the deliberate selection through `post-document-port.ts`. The page displays its
-saved body, timestamp, revision and SHA-256. Insert review freezes command kind, catalogue, expected head, fresh
-route-bound occurrence, parent/before IDs, title and exact chapter target; removal freezes the selected occurrence.
-Both retain the original idempotency key, CSRF and session/locale intent. Unknown results replay those exact bytes.
-A stale result preserves all choices but requires an explicit owner-head refresh, new observation/review of retained
-anchors and an explicit exact-version reread through the Post port; the latest chapter head is never substituted.
-Only then can review create a fresh intent/key. The private authenticated CSRF/no-store BFF validates incoming
-operands and calls the installed `$insertDraftPoint.post` or `$removeDraftPoint.post`; external receipts and pages
-are validated at the HTTP boundary. No Client declaration or generator changes are needed.
+saved body, timestamp, revision and SHA-256. Insert review freezes the fresh route-bound occurrence, title and exact
+chapter target as well as the destination anchors. Unknown results replay the original command, sender and credential
+with native current authorization. A stale result preserves the original identities, titles and observation revisions
+but marks each anchor unconfirmed, even when owner refresh returns the same head. Explicit owner-head refresh,
+current-page observations and fresh review precede any new intent/key. Insert/update chapters additionally require
+an explicit reread of their original exact saved version; the latest chapter head is never substituted.
+The private authenticated CSRF/no-store BFF validates the request union and calls the installed generated
+`$insertDraftPoint.post`, `$moveDraftPoint.post`, `$updateDraftPoint.post` or `$removeDraftPoint.post`. External
+receipts and pages retain HTTP validation; no Client declaration, complete-tree writer or native changes are needed.
 
-`hosted-draft-point-lifecycle.ts` owns the shared root-append/point replay, stale refresh, receipt and retirement
-lifecycle. An HTTP200 receipt acknowledges the write independently of observation. Its exact revision, including
-historical replay, selects a new bounded window; failed readback retries only that exact page. Account, session
-incarnation, source, credential, locale and departure retire private selection, abort pending requests and fence late
-results and focus. Shared wrapping 44px controls and eight-locale `studio_draft_point_*` messages retain the existing
-Studio appearance. Unmapped legacy drafts retain native recovery and the complete editor link; no browser migration
-or implicit whole-tree replacement is attempted. Move, point publication and batch activation remain separate work.
+`hosted-draft-point-lifecycle.ts` owns shared root-append/point replay, stale refresh, receipt and retirement.
+An HTTP200 receipt acknowledges the write independently of observation. Its exact revision, including historical
+replay, selects a new bounded window; failed readback retries only that exact page and never resubmits the command.
 
-Sources read before design: this owner's bounded-root section, native
-[authoring and release](../../../../services/kernel/src/content/hosted-chapters.md#authoring-and-release),
-[Web acceptance](../../../../docs/goals/web.md#acceptance), installed `hosted-chapters-routes.d.ts`, declared module
-entries, the route/workspace, hosted contracts/native/BFF, picker/window/root-append callers and regressions,
-`post-document-port.ts`, Impeccable's craft floor and the read-only main checkout `.reference/INDEX.md`.
-The base provides mounted insert/remove and ordered readback; the missing outcome was the author interface.
+Decision: after acknowledgement, both callers offer explicit Next edit. It discards the sealed command, title,
+selected saved version and all point anchors, closes the picker and retires the receipt window before one native
+owner-head read. Only a successful owner observation admits a new operation, using the existing picker, outline,
+preparation and exact head CAS. A failed or denied read stays locked with an explicit read retry; repeated activation
+while reading does no additional work. The last receipt remains historical acknowledgement, never a claim about
+the current draft, publication or public reading. Unknown original commands retain only their original replay path.
+Each explicit next-edit/retry costs one bounded owner read plus the existing new-head window and selected reads;
+one window and O(1) intent are retained, without scans, hidden refill or persisted private drafts.
 
-Deferred acceptance: the dev verifier runs `bun run --cwd apps/web test tests/studio-hosted-draft-points.test.tsx
- tests/studio-hosted-draft-picker.test.tsx tests/studio-hosted-root-append.test.tsx tests/studio-hosted-outline-window.test.ts`.
-The focused mounted cases cover nested anchor/exact-version review, part/end insertion, subtree removal, original
-intent replay, stale refresh and exact-version reread, opaque paging/retry, acknowledged-write/readback failure,
-private retirement and late results. Six illustrative `/studio` owned-author stories show anchor/version review,
-stale recovery and acknowledged-write/readback failure at phone390 and desktop1280. Existing picker/root/window
-assertions remain unchanged. Continue the existing native author-to-reader witness lane with its journal intact and
-separate private-publication/prepublished-reader verdicts. Native, browser/visual, legacy parity, broader suites and
-promoted-commit acceptance remain independent verifier work. Source checks are changed-file formatting, locale
-key/argument parity, one changed-UI detector pass and one affected Web typecheck.
+Continuation sources read before design: this draft-point contract and the bounded-root-append section;
+`hosted-draft-point-lifecycle.ts`, point and root-append visits/views/tests, both entry compositions,
+`hosted-draft-picker.ts`, `hosted-outline-window.ts`, `hosted-contract.ts`, `hosted-native.ts`,
+`hosted-actions.ts`, the existing point stories and locale copy; Content's versioned-outline and bounded-root
+contracts; and the read-only main checkout `.reference/INDEX.md`. The brief's append paths refer to the delivered
+`hosted-root-append.ts`, `hosted-root-append-view.tsx` and `studio-hosted-root-append.test.tsx`.
+
+Account, session incarnation, source, credential, locale and departure retire selections, abort pending requests and
+fence late results and focus. Shared wrapping 44px controls and eight-locale point and draft-command messages retain
+the existing Studio appearance. Review/recovery requests keyboard focus only while the initiating focus remains;
+subsequent focus, pointer or Tab movement cancels that request. Legacy body editing, native recovery,
+remove/update and publication keep their existing entry paths.
+
+Continuation acceptance source extends `studio-hosted-draft-points.test.tsx` and the delivered
+`studio-hosted-root-append.test.tsx`: fresh-head continuation, repeated activation, failed/denied read retry,
+cleared selections including removed anchors, a second key/occurrence and acknowledgement, original uncertain
+replay, retirement and cancelled orientation. Existing exact-replay and deep/bounded-outline assertions remain.
+Point stories add only fresh-next-edit and failed-next-read states at phone and desktop widths. Execution is
+deferred: the verifier runs both suites, mounted native repeated editing, original Book acceptance and
+keyboard/phone/theme/eight-locale review. This source-only continuation claims no compiler, test or native pass.
+
+Sources read before design: this owner's Stable draft outline anchors and Native author outline window sections;
+`hosted-draft-points.ts`, `hosted-draft-point-lifecycle.ts`, `hosted-draft-point-view.tsx`, `hosted-native.ts`,
+`hosted-contract.ts` and `hosted-actions.ts`; Content's
+[point-command contract](../../../../services/kernel/src/content/hosted-chapters.md#versioned-outline-adoption);
+the installed `hosted-chapters-routes.d.ts` move declaration; entry/workspace/window/picker callers and existing point
+and update acceptance; [Web acceptance](../../../../docs/goals/web.md#acceptance); and the read-only main checkout
+`.reference/INDEX.md`. The base supplies the native move and bounded readers but lacks the move request/caller/UI.
+
+Deferred acceptance: the verifier runs `bun run --cwd apps/web test tests/studio-hosted-draft-points.test.tsx
+ tests/studio-hosted-draft-picker.test.tsx tests/studio-hosted-root-append.test.tsx tests/studio-hosted-outline-window.test.ts
+ tests/studio-hosted-publication-point.test.tsx`. Point acceptance extends existing assertions with cross-page exact
+moves, supplied large positions/hidden-parent addresses, explicit root/end, unconfirmed same-head stale recovery,
+fresh review, original sender/key/credential replay, exact failed-readback retry and focus/session retirement.
+Existing insert/remove/update assertions and story IDs stay intact. Named illustrative move review, stale recovery
+and uncertain replay stories add three-page source/parent/before selection at phone390 and desktop1280, without
+claiming native proof. Native insert/move/replay, >512/deep Books, phone/desktop/keyboard/locale visual review,
+legacy parity, compilation and promoted-commit acceptance remain unverified, separate verifier obligations.
 
 ## Review and publish one exact chapter
 

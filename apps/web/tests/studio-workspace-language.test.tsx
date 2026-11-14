@@ -305,6 +305,12 @@ test.each(cases)(
       const preview = getByRole(v.host, 'region', { name: m.studio_workspace_preview_region() });
       expect(preview.textContent).toContain('Private <body> & 本文');
       expect(preview.textContent).toContain(m.studio_workspace_preview_saved());
+      expect(preview.querySelector('[data-slot="post-reading-body"]')).not.toBeNull();
+      expect(preview.querySelector('[data-slot="post-reading-controls"]')?.getAttribute('lang')).toBe(locale);
+      expect(queryByRole(preview, 'button', { name: m.post_references_title(), exact: true })).toBeNull();
+      expect(getByRole(preview, 'group', { name: m.studio_revision_current() }).textContent).toContain(
+        f.first.revision.exact.revisionId,
+      );
       await v.click(m.studio_workspace_write());
       expect(getByRole(v.host, 'textbox', { name: editor.getAttribute('aria-label')! })).toBe(editor);
       await v.change(v.title(), 'Captured <draft>');
@@ -471,10 +477,22 @@ test('native composer completion clears operands even when completion wording di
   const feedback = spyOn(language, 'workspaceFeedbackMessage').mockReturnValue('Different safe receipt text');
   const v = await mount(f, { ...f.input, initialSelection: undefined, nativeDrafts: true, canCreateDraft: true });
   try {
+    const navigation = v.host.querySelector<HTMLDetailsElement>('.studio-mobile-navigation')!;
+    await act(async () => {
+      navigation.open = true;
+    });
     const field = (name: string) => getByRole(v.host, 'textbox', { name, exact: true }) as HTMLInputElement;
     await v.change(field(m.studio_account_board()), 'board');
     await v.change(field(m.studio_account_title()), 'Created <原稿>');
-    await v.change(field(m.studio_account_body()), 'New private body');
+    await act(async () => {
+      const editor = getByRole(v.host, 'textbox', { name: m.studio_account_body() });
+      editor.focus();
+      const clipboardData = new dom.window.DataTransfer();
+      clipboardData.setData('text/html', '<h2>New private body</h2>');
+      editor.dispatchEvent(new dom.window.ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
+      (v.host.querySelector('.studio-native-create details summary') as HTMLElement).click();
+    });
+    await waitFor(() => expect(v.button(m.studio_account_create()).disabled).toBe(false));
     await v.change(field(m.own_drafts_subjects()), 'subject');
     await v.change(field(m.own_drafts_media()), 'media');
     await v.click(m.studio_account_create());
@@ -483,11 +501,11 @@ test('native composer completion clears operands even when completion wording di
     for (const name of [
       m.studio_account_board(),
       m.studio_account_title(),
-      m.studio_account_body(),
       m.own_drafts_subjects(),
       m.own_drafts_media(),
     ])
       expect(field(name).value).toBe('');
+    expect(getByRole(v.host, 'textbox', { name: m.studio_account_body() }).textContent).toBe('');
     expect(f.port.createNativeDraft).toHaveBeenCalledTimes(1);
   } finally {
     feedback.mockRestore();

@@ -82,6 +82,20 @@ const importedStatistics = [
     attribution: 'VNDB',
   },
 ] satisfies SourceStatisticsResponse;
+/** Synthetic scores on independent source scales, admitted through the installed response type. */
+export const independentSourceStatistics = [
+  ...importedStatistics,
+  {
+    source: 'bangumi',
+    sourceRecordId: '1851',
+    scale: { min: 1, max: 10 },
+    mean: 7.26,
+    count: 492,
+    asOf: '2026-10-23',
+    attribution: 'Bangumi contributors',
+  },
+] satisfies SourceStatisticsResponse;
+
 const emptyStatistics = subjectSourceStatisticsRecording as SourceStatisticsResponse;
 
 const emptyGlobal = {
@@ -93,6 +107,8 @@ const emptyGlobal = {
 const ownVote = { units: 17, revision: 1, at: '2026-10-28T00:00:00.000Z' } satisfies VoteResponse;
 
 export type RatingsFixtureName =
+  | 'subject-ratings-rich'
+  | 'subject-ratings-figure-unavailable'
   | 'subject-ratings-statistics-failed'
   | 'subject-ratings-sparse'
   | 'subject-ratings-empty'
@@ -109,6 +125,7 @@ export type RatingsFixture = {
   vote?: VoteResponse;
   preview: Ratings;
   statisticsStatus?: number;
+  figureStatus?: number;
   sparse?: boolean;
 };
 
@@ -117,7 +134,13 @@ function aggregate(figures: AggregateResponse['figures']): AggregateResponse {
 }
 
 const baseRatingsFixtures: Record<
-  Exclude<RatingsFixtureName, 'subject-ratings-statistics-failed' | 'subject-ratings-sparse'>,
+  Exclude<
+    RatingsFixtureName,
+    | 'subject-ratings-statistics-failed'
+    | 'subject-ratings-sparse'
+    | 'subject-ratings-rich'
+    | 'subject-ratings-figure-unavailable'
+  >,
   RatingsFixture
 > = {
   'subject-ratings-empty': {
@@ -245,8 +268,21 @@ const baseRatingsFixtures: Record<
   },
 };
 
+const richRatingsFixture: RatingsFixture = {
+  ...baseRatingsFixtures['subject-ratings-realms'],
+  statistics: independentSourceStatistics,
+  vote: { ...ownVote, units: 0 },
+  preview: {
+    ...baseRatingsFixtures['subject-ratings-realms'].preview,
+    statistics: independentSourceStatistics,
+    own: 0,
+  },
+};
+
 export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
   ...baseRatingsFixtures,
+  'subject-ratings-rich': richRatingsFixture,
+  'subject-ratings-figure-unavailable': { ...richRatingsFixture, figureStatus: 503 },
   'subject-ratings-statistics-failed': { ...baseRatingsFixtures['subject-ratings-realms'], statisticsStatus: 503 },
   'subject-ratings-sparse': { ...baseRatingsFixtures['subject-ratings-realms'], sparse: true },
 };
@@ -350,10 +386,16 @@ export const routes: FakeRoute[] = [
   {
     method: 'GET',
     path: /^\/v1\/subjects\/[^/]+\/figure$/,
-    story: ({ request }) => ({ status: 200, figure: selectedFixture(request).preview.figure }),
-    fixture: ({ request }) => ({ status: 200, figure: selectedFixture(request).preview.figure }),
+    story: ({ request }) => publicFigureResponse(selectedFixture(request)),
+    fixture: ({ request }) => publicFigureResponse(selectedFixture(request)),
   },
 ];
+
+function publicFigureResponse(fixture: RatingsFixture) {
+  return fixture.figureStatus
+    ? { status: fixture.figureStatus, code: 'overloaded' }
+    : { status: 200, figure: fixture.preview.figure };
+}
 
 // Declared native DTO fixtures for connected consumers; no membership, credential freshness or native proof is inferred.
 function populationPage(request: Request) {

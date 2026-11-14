@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import {
@@ -16,6 +16,7 @@ import {
   resolveTypingCompilerCommand,
   typingInputsReceiptPath,
   typingFailureInputsMatch,
+  retainedKernelMigrationHeaderDefect,
   type TypingInputReceipt,
 } from './worker-check-typing-inputs.ts';
 import {
@@ -667,6 +668,52 @@ test('a retained conservative receipt qualifies for the installed direct Kernel 
 
   write(root, 'docs/ledger.md', '# Changed imported compiler input\n');
   expect(qualifyTypingInputs(root, receipt)).toBe('source-changed');
+});
+
+test('retained dbmate setup diagnostics deduplicate wrapped echoes and scan complete migration files', () => {
+  const root = fixture();
+  const migration = 'services/kernel/db/commerce/migrations/20261113195649_post_benefit.sql';
+  const diagnostic =
+    "kernel typecheck infrastructure failure: phase=database-setup: dbmate requires each migration to define an up block with '-- migrate:up'";
+  const wrapped =
+    "kernel typecheck infrastructure failure: phase=database-setup: command='<redacted>' dsn='<redacted>' up failed: Error: dbmate requires each migration to define an up block with '-- migrate:up'";
+  const wrappedLog = `${wrapped}\n${wrapped}\n`;
+  const missingUpMigration = `-- migrate:down\n${'select 1;\n'.repeat(650)}select 1;`;
+  expect(Buffer.byteLength(missingUpMigration)).toBe(6525);
+  write(root, migration, missingUpMigration);
+
+  expect(retainedKernelMigrationHeaderDefect(root, `${diagnostic}\n`)).toEqual({ path: migration, line: diagnostic });
+  expect(retainedKernelMigrationHeaderDefect(root, wrappedLog)).toEqual({ path: migration, line: diagnostic });
+  expect(
+    retainedKernelMigrationHeaderDefect(root, wrapped.replace('phase=database-setup', 'phase=compiler')),
+  ).toBeUndefined();
+  const conflictingEcho = wrapped.replace("command='<redacted>'", "command='<different redaction>'");
+  expect(retainedKernelMigrationHeaderDefect(root, `${wrapped}\n${conflictingEcho}\n`)).toBeUndefined();
+  const conflictingDiagnostic = wrapped.replace('dbmate requires each migration', 'dbmate rejected another migration');
+  expect(retainedKernelMigrationHeaderDefect(root, `${wrapped}\n${conflictingDiagnostic}\n`)).toBeUndefined();
+
+  const preflightIssue =
+    '- db/commerce/migrations/20261113195649_post_benefit.sql: missing dbmate up marker; add `-- migrate:up` before the up SQL';
+  const preflightLog = `Migration version check failed:\n${preflightIssue}\nName migrations with \`date -u +%Y%m%d%H%M%S\`.\n`;
+  expect(retainedKernelMigrationHeaderDefect(root, preflightLog)).toEqual({ path: migration, line: preflightIssue });
+
+  const lateUpMarker = `${missingUpMigration}\n${'select 1;\n'.repeat(7000)}-- migrate:up${' \t'.repeat(300)}transaction:true\n`;
+  write(root, migration, lateUpMarker);
+  expect(retainedKernelMigrationHeaderDefect(root, preflightLog)).toBeUndefined();
+  expect(retainedKernelMigrationHeaderDefect(root, wrappedLog)).toBeUndefined();
+
+  write(root, migration, missingUpMigration);
+  const second = 'services/kernel/db/community/migrations/20261113195650_second.sql';
+  const secondPath = join(root, second);
+  mkdirSync(dirname(secondPath), { recursive: true });
+  symlinkSync(join(root, migration), secondPath);
+  expect(retainedKernelMigrationHeaderDefect(root, wrappedLog)).toEqual({ path: migration, line: diagnostic });
+  rmSync(secondPath);
+  write(root, second, missingUpMigration);
+  expect(retainedKernelMigrationHeaderDefect(root, wrappedLog)).toBeUndefined();
+
+  write(root, second, lateUpMarker);
+  expect(retainedKernelMigrationHeaderDefect(root, wrappedLog)).toEqual({ path: migration, line: diagnostic });
 });
 
 test('the exact Kernel schema emitter settles only its selected output with stable physical inputs', () => {

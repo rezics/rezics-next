@@ -90,11 +90,22 @@ export type BangumiGameEnvironmentDiagnostic = Readonly<{
 }>;
 
 function adoptedUrls(read: unknown): string[] {
-  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
-    .subject?.statements?.['schema:url'];
-  return (Array.isArray(statements) ? statements : []).flatMap((statement) =>
-    typeof statement.value?.content === 'string' ? [statement.value.content] : [],
-  );
+  const statements = (
+    read as {
+      subject?: {
+        statements?: Record<string, { rank?: string; value?: { type?: string; content?: unknown } }[]>;
+      };
+    }
+  ).subject?.statements?.['schema:url'];
+  return (Array.isArray(statements) ? statements : []).flatMap((statement) => {
+    if (
+      (statement.rank !== 'normal' && statement.rank !== 'preferred') ||
+      statement.value?.type !== 'value' ||
+      typeof statement.value.content !== 'string'
+    )
+      return [];
+    return [statement.value.content];
+  });
 }
 
 function hostnameOf(url: string): string | undefined {
@@ -118,10 +129,11 @@ export async function readBangumiGameEnvironmentBindings(
 ): Promise<{
   references: Record<string, string>;
   diagnostics: BangumiGameEnvironmentDiagnostic[];
-  concealed: boolean;
+  unavailableProperties: BangumiGameEnvironmentProperty[];
 }> {
   const references: Record<string, string> = {};
   const diagnostics: BangumiGameEnvironmentDiagnostic[] = [];
+  const unavailableProperties = new Set<BangumiGameEnvironmentProperty>();
   const current = (id: string) => {
     let pending = cache.get(id);
     if (!pending) {
@@ -135,7 +147,6 @@ export async function readBangumiGameEnvironmentBindings(
     }
     return pending;
   };
-  let concealed = false;
   const selected = bindings.slice(0, BINDING_CAP);
   for (const binding of selected) {
     const pointer = `/infobox/${binding.kind === 'platform' ? '平台' : '游戏引擎'}`;
@@ -153,13 +164,13 @@ export async function readBangumiGameEnvironmentBindings(
     }
     const page = await current(binding.conceptId);
     if (!page) {
-      concealed = true;
+      unavailableProperties.add(propertyOf(binding.kind));
       diagnostics.push({ sourceKey: binding.item, pointer, code: 'reviewed-binding-concealed' });
       continue;
     }
     const subject = (page as { subject?: { id?: string; type?: string } }).subject;
     if (!subject || subject.id !== binding.conceptId || subject.type !== 'skos:Concept') {
-      concealed = true;
+      unavailableProperties.add(propertyOf(binding.kind));
       diagnostics.push({ sourceKey: binding.item, pointer, code: 'reviewed-binding-concealed' });
       continue;
     }
@@ -183,7 +194,7 @@ export async function readBangumiGameEnvironmentBindings(
       diagnostics.push({ sourceKey: binding.item, pointer, code: 'source-claim-unavailable' });
     }
   }
-  return { references, diagnostics, concealed };
+  return { references, diagnostics, unavailableProperties: [...unavailableProperties] };
 }
 
 export function mergeIdentifierResolutions(parts: readonly ImportIdentifierResolution[]): ImportIdentifierResolution {
@@ -243,13 +254,12 @@ export function createShowcaseBangumiGameEnvironmentLookup(input: {
         if (matched) diagnostics.set(key, { ...matched, sourceKey: owner.external_id, pointer: item.pointer });
         else diagnostics.delete(key);
       }
-      if (
-        current.concealed &&
-        !Object.keys(current.references).length &&
-        needed.length > 0 &&
-        current.diagnostics.every((row) => row.code === 'reviewed-binding-concealed')
-      )
-        return { status: 'unavailable', preserveProperties: ['schema:gamePlatform', 'wdt:P408'] };
+      if (current.unavailableProperties.length)
+        return {
+          status: 'unavailable',
+          preserveProperties: current.unavailableProperties,
+          ...(Object.keys(current.references).length ? { resolvedReferences: current.references } : {}),
+        };
       return current.references;
     },
   };

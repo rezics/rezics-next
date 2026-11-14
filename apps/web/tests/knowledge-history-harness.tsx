@@ -163,8 +163,16 @@ export async function harness(editors = 1) {
         return found;
       },
       activeElement: () => document.activeElement,
+      historyHeading: () => scope.querySelector<HTMLElement>('#knowledge-revisions h2')!,
       button,
       click: (node: HTMLElement) => act(async () => user.click(node)),
+      activate: (node: HTMLElement) =>
+        act(async () => {
+          node.focus();
+          await user.keyboard('[Enter]');
+        }),
+      key: (keys: string) => act(async () => user.keyboard(keys)),
+      point: (node: HTMLElement) => act(async () => user.pointer({ target: node })),
       findInput: async (label: string) => {
         await findText(label);
         const found = [...scope.querySelectorAll<HTMLInputElement>('input')].find(

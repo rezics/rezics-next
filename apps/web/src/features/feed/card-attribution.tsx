@@ -7,7 +7,7 @@ import { threadLocation } from '../../threads/thread-href';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import type { FeedItem } from '../pages/home-feed-read';
-import { FeedCardSubjectContext, feedCardLinkClassName, type FeedCardKind } from './card-presentation';
+import { feedCardLinkClassName, type FeedCardKind } from './card-presentation';
 
 /** An explicit UTC zone keeps server and client rendering stable across midnight. */
 export function feedCardTime(value: string | null | undefined, locale: string): { value: string; text: string } | null {
@@ -94,21 +94,6 @@ function id(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 128;
 }
 
-function FeedCardReviewContext({ item, locale }: { item: FeedItem; locale: string }) {
-  const summary: unknown = item.summary;
-  if (
-    item.key.owner !== 'content' ||
-    item.destination.kind !== 'thread' ||
-    !record(summary) ||
-    summary.kind !== 'review' ||
-    !id(summary.id) ||
-    item.key.id !== summary.id ||
-    item.destination.id !== summary.id
-  )
-    return null;
-  return <PublicReviewDetails context={summary.reviewContext} locale={locale} />;
-}
-
 /** Shared admitted review context; labels never replace the native citation identity. */
 export function PublicReviewDetails({ context: supplied, locale }: { context: unknown; locale: string }) {
   const context = record(supplied) ? supplied : undefined;
@@ -188,30 +173,6 @@ export function PublicReviewDetails({ context: supplied, locale }: { context: un
         </p>
       ) : null}
     </section>
-  );
-}
-
-function FeedCardParentContext({ item, locale }: { item: FeedItem; locale: string }) {
-  const summary: unknown = item.summary;
-  const destination = item.destination;
-  if (
-    item.key.owner !== 'content' ||
-    item.key.kind !== 'post' ||
-    destination.kind !== 'post' ||
-    !record(summary) ||
-    !id(summary.threadId) ||
-    !id(summary.id) ||
-    item.key.id !== summary.id ||
-    destination.postId !== summary.id ||
-    destination.threadId !== summary.threadId
-  )
-    return null;
-  return (
-    <PublicReplyParent
-      context={summary.parentContext}
-      locale={locale}
-      thread={{ id: destination.threadId, title: destination.title }}
-    />
   );
 }
 
@@ -387,10 +348,7 @@ export function FeedCardAttribution({ item, kind, locale }: { item: FeedItem; ki
   return (
     <div className="flex min-w-0 w-full flex-col gap-1" data-feed-card-attribution>
       {content ? <FeedCardAuthor item={item} locale={locale} /> : null}
-      {content ? <FeedCardReviewContext item={item} locale={locale} /> : null}
-      {content ? <FeedCardParentContext item={item} locale={locale} /> : null}
       {kind === 'account' ? <FeedCardAccount item={item} locale={locale} /> : null}
-      <FeedCardSubjectContext item={item} locale={locale} />
       <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <FeedCardTime value={item.occurredAt} locale={locale} label={m.home_card_occurrence({}, options)} />
         {'createdAt' in summary ? (

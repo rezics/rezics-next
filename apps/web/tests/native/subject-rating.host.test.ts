@@ -122,20 +122,20 @@ test('the native browser rates a subject, publishes the Global figure at five vo
   await control.press('Home');
   for (let step = 0; step < 15; step++) await page.keyboard.press('ArrowRight');
   await page.locator('[data-slot="rating-control-value"]').waitFor({ state: 'visible' });
-  expect(await page.locator('[data-slot="rating-control-value"]').innerText()).toContain('7.5');
+  expect(await page.locator('[data-slot="rating-control-value"]').innerText()).toContain('15 / 20');
   await page.getByRole('button', { name: 'Save rating', exact: true }).click();
   await page.waitForFunction(
     () => document.querySelector('[data-slot="rating-control-reserved"]')?.getAttribute('aria-busy') === 'false',
   );
   await page.locator('[data-slot="own-rating"]').waitFor({ state: 'visible' });
-  expect(await page.locator('[data-slot="own-rating"]').innerText()).toContain('7.5');
+  expect(await page.locator('[data-slot="own-rating"]').innerText()).toContain('15 / 20');
 
   const ownVote = await stack.kernel(votePath, undefined, 'alice');
   expect(ownVote.status, await ownVote.clone().text()).toBe(200);
   expect(await ownVote.json()).toMatchObject({ units: 15 });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('[data-slot="own-rating"]').waitFor({ state: 'visible' });
-  expect(await page.locator('[data-slot="own-rating"]').innerText()).toContain('7.5');
+  expect(await page.locator('[data-slot="own-rating"]').innerText()).toContain('15 / 20');
 
   for (let voter = 1; voter <= 4; voter++) {
     const response = await stack.kernel(

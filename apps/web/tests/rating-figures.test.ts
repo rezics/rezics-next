@@ -117,7 +117,7 @@ test('question-driven save and clear include zero, enforce the live scale and pr
   expect(html).toContain(`aria-label="${question.label}"`);
   expect(html).toContain('max="40"');
   expect(html).toContain('step="4"');
-  expect(html).toContain('0 out of 10');
+  expect(html).toContain('0 / 40');
   expect(html).toContain('method="post"');
 
   const cache = new QueryClient();

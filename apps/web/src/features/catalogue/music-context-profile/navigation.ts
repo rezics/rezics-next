@@ -1,5 +1,9 @@
 import { candidateContext } from '../../pages/visit-host-port';
-import { subjectVisitReturn, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
+import {
+  subjectGraphVisitReturn,
+  subjectVisitReturn,
+  withSubjectVisitReturn,
+} from '../../pages/subject-visit-navigation';
 
 const streamId = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s\u0000-\u001f\u007f]{1,128}$/u;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -52,7 +56,7 @@ function entriesOf(url: URL): Record<string, unknown> | undefined {
   return search;
 }
 
-/** Admit one same-locale public origin. The caller supplies the current Subject and Context when known. */
+/** Graph returns keep their own anchor; ordinary returns match the current Subject and Context when known. */
 export function validatedMusicContextReturn(
   value: unknown,
   locale: string,
@@ -82,6 +86,11 @@ export function validatedMusicContextReturn(
       return;
   } catch {
     return;
+  }
+  const graph = subjectGraphVisitReturn(value, locale);
+  if (graph) {
+    // Graph coordinates restore navigation only; this companion's native admission stays Global without Realm.
+    return realm === undefined && (context === undefined || context === candidateContext) ? graph : undefined;
   }
   const accepted = subjectVisitReturn(value, locale);
   if (!accepted) return;

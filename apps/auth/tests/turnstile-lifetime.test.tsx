@@ -295,7 +295,13 @@ test("concurrent StrictMode owners share acquisition without removing another ow
     );
     expect(api.live.size).toBe(1);
     expect(scripts().filter((item) => item.src === src)).toHaveLength(1);
-    expect(api.widgets[0]!.options).toMatchObject({ sitekey: 'key', action: 'signup', language: 'ja', retry: 'never' });
+    expect(api.widgets[0]!.options).toMatchObject({
+      sitekey: 'key',
+      action: 'signup',
+      language: 'ja',
+      size: 'compact',
+      retry: 'never',
+    });
     await ui.close();
     expect(api.live.size).toBe(0);
     expect(scripts().filter((item) => item.src === src)).toHaveLength(0);
@@ -667,7 +673,9 @@ test('mounted default signup refuses invalid passwords before dispatch without c
       await page.fill('password', value);
       await page.submit();
       expect(requests).toBe(0);
-      expect(page.input('password').getAttribute('aria-describedby')).toBe('signup-password-error');
+      expect(page.input('password').getAttribute('aria-describedby')).toBe(
+        'signup-password-hint signup-password-error',
+      );
       expect(document.activeElement).toBe(page.input('password'));
       expect(api.resets).toHaveLength(0);
       expect(api.live.size).toBe(1);
@@ -846,13 +854,13 @@ test('default signup keeps handle privacy, unsupported rate limits, outages and 
       expect(bodies).toHaveLength(1);
       expect(page.ui.host.textContent).not.toContain('An account with this email already exists');
       if (code === 'handle_unavailable') {
-        expect(page.input('email').getAttribute('aria-describedby')).toBeNull();
+        expect(page.input('email').getAttribute('aria-describedby')).toBe('signup-email-hint');
         expect(document.activeElement).toBe(page.input('handle'));
         expect(page.ui.host.querySelector('#signup-handle-error')!.textContent).toContain('taken or reserved');
       } else {
         const alert = page.ui.host.querySelector('[role=alert]')!;
-        expect(alert.querySelector(`a[href="/login${page.query}"]`)).not.toBeNull();
-        expect(alert.querySelector(`a[href="/recovery${page.query}"]`)).not.toBeNull();
+        expect(page.ui.host.querySelector(`nav a[href="/login${page.query}"]`)).not.toBeNull();
+        expect(page.ui.host.querySelector(`nav a[href="/recovery${page.query}"]`)).not.toBeNull();
         expect(page.ui.host.querySelector('input')).toBeNull();
         if (status === 409) expect(alert.textContent).not.toContain('reader@example.test');
         else {

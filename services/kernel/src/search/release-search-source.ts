@@ -26,6 +26,7 @@ import {
   type ReleaseSearchNativeCandidate,
   type ReleaseSearchNativePage,
 } from './release-search-native-stream.ts';
+import { createReleaseSearchRelevanceState } from './release-search-relevance-state.ts';
 import { releaseWorkLink } from './release-search-grouping.ts';
 import type { SearchPlan } from './query.ts';
 import { searchSubjectHits } from './query.ts';
@@ -34,6 +35,7 @@ import { validateRequestSourceSnapshot, REQUEST_SOURCE_KEYS } from './request-so
 import { subjectPartition, type IndexedSubject, type SubjectSource } from './source.ts';
 import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
 import { admitProperties } from './hits.ts';
+import { filterReleaseSearchNameGroups, type ReleaseSearchCurrentText } from './release-search-text.ts';
 
 type SourceWithNames = SubjectSource & { canonicalNames?: SubjectCanonicalNames };
 type Runner = <T>(operation: () => Promise<T>) => Promise<T>;
@@ -117,6 +119,7 @@ export async function readReleaseSearchGroups(input: {
   prefix: string;
   client: Parameters<typeof searchSubjectHits>[0];
   relationProperties: readonly string[];
+  currentText?: ReleaseSearchCurrentText;
   observeBasis: () => Promise<ReleaseGroupingBasis>;
   deadline: number;
   observeRelationRelease: () => Promise<CurrentRelationRelease | null>;
@@ -139,11 +142,23 @@ export async function readReleaseSearchGroups(input: {
     observe: input.observeBasis,
   };
   const cut = await observeReleaseSearchCandidates(pools, context);
+  const relevanceProgress = {
+    principal: input.principal,
+    generation: input.generation,
+    now: input.now,
+    state: createReleaseSearchRelevanceState({
+      pool: input.pool,
+      run: input.runSource,
+      reserve: () => reserve(input.reserve, poolId, { searchReads: 1 }),
+      poolId,
+    }),
+  };
   const candidates = createReleaseSearchCandidateStreams({
     pools,
     release: input.release,
     cut,
     context,
+    relevanceProgress,
     relevance: async (_request, after, size): Promise<ReleaseSearchNativePage> => {
       const nativeAfter = sortAfter(after);
       reserve(input.reserve, poolId, { searchReads: 1, keys: size });
@@ -178,6 +193,7 @@ export async function readReleaseSearchGroups(input: {
     request: input.request,
     release: input.release,
     relationProperties: input.relationProperties,
+    ...(input.currentText ? { currentText: input.currentText } : {}),
     observeRelationRelease: input.observeRelationRelease,
     observeBasis: input.observeBasis,
     runSource: input.runSource,
@@ -207,6 +223,7 @@ export async function readReleaseSearchChildren(input: {
   prefix: string;
   client: Parameters<typeof searchSubjectHits>[0];
   relationProperties: readonly string[];
+  currentText?: ReleaseSearchCurrentText;
   observeBasis: () => Promise<ReleaseGroupingBasis>;
   deadline: number;
   observeRelationRelease: () => Promise<CurrentRelationRelease | null>;
@@ -268,6 +285,7 @@ export async function readReleaseSearchChildren(input: {
     request: input.request,
     release: input.release,
     relationProperties: input.relationProperties,
+    ...(input.currentText ? { currentText: input.currentText } : {}),
     observeRelationRelease: input.observeRelationRelease,
     observeBasis: input.observeBasis,
     runSource: input.runSource,
@@ -292,6 +310,7 @@ function createHydrationSource(input: {
   request: ReleaseGroupingRequest;
   release: FilterRelease;
   relationProperties: readonly string[];
+  currentText?: ReleaseSearchCurrentText;
   observeRelationRelease: () => Promise<CurrentRelationRelease | null>;
   observeBasis: () => Promise<ReleaseGroupingBasis>;
   runSource: Runner;
@@ -393,7 +412,13 @@ function createHydrationSource(input: {
       reserve(input.reserve, input.poolId, { sourceReads: 1, authorityObservations: 1 });
       return input.observeBasis();
     },
-    groups: input.candidates.groups,
+    async groups(request, after, size) {
+      const page = await input.candidates.groups(request, after, size);
+      if (request.sort !== 'name' || !input.currentText) return page;
+      return filterReleaseSearchNameGroups(page, subjects, workTypes, (subject) =>
+        input.runSource(() => input.currentText!(subject)),
+      );
+    },
     children: input.candidates.children,
     async works(_request, ids) {
       const current = await subjects(ids);
@@ -422,6 +447,7 @@ function createHydrationSource(input: {
           relationProperties: input.relationProperties,
           spoilerThreshold: request.spoilerThreshold,
           observeRelationRelease: input.observeRelationRelease,
+          ...(input.currentText ? { currentText: input.currentText } : {}),
         }),
       );
       if (checked.relationRejected) throw new ReleaseGroupingRestartRequired();

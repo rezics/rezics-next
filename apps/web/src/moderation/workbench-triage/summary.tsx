@@ -22,47 +22,51 @@ function SummaryValue({ field }: { field: WorkbenchTriageField }) {
   );
 }
 
-/** Compact scan summary. Owners keep their own link and history chrome around this. */
+/** The supplied reason and evidence lead; the exact native references live in Details. */
 export function WorkbenchTriageSummary({ item, locale = getLocale() }: { item: WorkbenchCase; locale?: string }) {
   const fields = workbenchTriageSummaryFields(item, locale);
   const type = fields.find((field) => field.key === 'type');
   const targetKind = fields.find((field) => field.key === 'target-kind');
   const outcome = fields.find((field) => field.key === 'outcome');
-  const rest = fields.filter((field) => field.key !== 'type' && field.key !== 'target-kind' && field.key !== 'outcome');
+  const reason = fields.find((field) => field.key === 'reason');
+  const created = fields.find((field) => field.key === 'created');
+  const evidence = fields.find((field) => field.key === 'evidence' || field.key === 'statement');
   return (
-    <div className="mt-2 min-w-0 space-y-1 text-sm">
-      <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-        {type ? <span className="font-medium">{type.value}</span> : null}
+    <div className="min-w-0 space-y-3 text-sm">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        {type ? <span>{type.value}</span> : null}
         {targetKind ? (
           <>
-            <span aria-hidden="true" className="text-muted-foreground">
-              ·
-            </span>
+            <span aria-hidden="true">·</span>
             <span>{targetKind.value}</span>
           </>
         ) : null}
         {outcome ? (
           <span
             data-triage-presence={outcome.presence}
-            className={
-              outcome.presence === 'present'
-                ? 'rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground'
-                : 'text-muted-foreground'
-            }
+            className="rounded-md bg-secondary px-2 py-1 font-medium text-secondary-foreground"
           >
             {outcome.value}
           </span>
         ) : null}
-      </p>
-      {rest.map((field) => (
-        <p
-          key={field.key}
-          className={`min-w-0 [overflow-wrap:anywhere] ${field.key === 'evidence' || field.key === 'statement' ? 'max-w-prose whitespace-pre-wrap line-clamp-2' : ''}`}
-        >
-          <span className="text-muted-foreground">{field.label}: </span>
-          <SummaryValue field={field} />
+        {created ? (
+          <span className="basis-full sm:ml-auto sm:basis-auto">
+            <SummaryValue field={created} />
+          </span>
+        ) : null}
+      </div>
+      {reason ? (
+        <p className="text-base font-semibold [overflow-wrap:anywhere]">
+          <span className="sr-only">{reason.label}: </span>
+          <SummaryValue field={reason} />
         </p>
-      ))}
+      ) : null}
+      {evidence ? (
+        <p className="max-w-prose whitespace-pre-wrap text-sm leading-6 line-clamp-3 [overflow-wrap:anywhere]">
+          <span className="sr-only">{evidence.label}: </span>
+          <SummaryValue field={evidence} />
+        </p>
+      ) : null}
     </div>
   );
 }

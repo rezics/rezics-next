@@ -58,30 +58,6 @@ export function ShelfSummaryNavigation({
   view: ShelfPresentationIntent;
 }) {
   const { page, retry } = summary;
-  if (page.state !== 'loaded') {
-    const message =
-      page.state === 'preparing'
-        ? m.library_summary_preparing()
-        : page.state === 'stale'
-          ? m.library_summary_stale()
-          : page.state === 'closed'
-            ? m.platform_closed_message()
-            : page.state === 'denied'
-              ? m.library_sort_denied()
-              : page.state === 'signed-out'
-                ? m.library_sign_in()
-                : m.library_summary_unavailable();
-    return (
-      <div className="flex flex-wrap items-center gap-3" role="status">
-        <p>{message}</p>
-        {['unavailable', 'preparing', 'stale'].includes(page.state) ? (
-          <button type="button" className={target} onClick={() => void retry()}>
-            {m.library_summary_retry()}
-          </button>
-        ) : null}
-      </div>
-    );
-  }
   const labels = {
     all: m.library_state_all(),
     in_progress: m.library_state_in_progress(),
@@ -93,39 +69,71 @@ export function ShelfSummaryNavigation({
   };
   const number = new Intl.NumberFormat(locale);
   const { cursor: _cursor, state: _state, ...selection } = view;
+  const message =
+    page.state === 'loaded'
+      ? null
+      : page.state === 'preparing'
+        ? m.library_summary_preparing()
+        : page.state === 'stale'
+          ? m.library_summary_stale()
+          : page.state === 'closed'
+            ? m.platform_closed_message()
+            : page.state === 'denied'
+              ? m.library_sort_denied()
+              : page.state === 'signed-out'
+                ? m.library_sign_in()
+                : m.library_summary_unavailable();
   return (
-    <nav aria-label={m.library_summary_heading()}>
-      <ul className="flex flex-wrap gap-2">
-        {(Object.keys(labels) as (keyof typeof labels)[]).map((bucket) => {
-          const counts = page.summary.tabs[bucket];
-          const link = (
-            <li key={bucket}>
-              <a
-                className={target}
-                href={
-                  bucket === 'collections'
-                    ? `/${locale}/library/collections`
-                    : shelfHref(locale, { ...selection, ...(bucket === 'all' ? {} : { state: bucket }) })
-                }
-                aria-current={bucket === (view.state ?? 'all') ? 'page' : undefined}
-              >
-                <span>{labels[bucket]}</span>
-                <span>
-                  {m.library_summary_count({ shown: number.format(counts.shown), total: number.format(counts.total) })}
-                </span>
-              </a>
-            </li>
-          );
-          return bucket === 'collections' ? (
-            <Exposure key={bucket} operation="collection.list">
-              {link}
-            </Exposure>
-          ) : (
-            link
-          );
-        })}
-      </ul>
-    </nav>
+    <div className="min-w-0 space-y-2" data-shelf-status-strip>
+      <nav aria-label={m.library_summary_heading()} className="min-w-0 overflow-x-auto border-b">
+        <ul className="flex w-max min-w-full gap-1">
+          {(Object.keys(labels) as (keyof typeof labels)[]).map((bucket) => {
+            const counts = page.state === 'loaded' ? page.summary.tabs[bucket] : null;
+            const current = bucket === (view.state ?? 'all');
+            const link = (
+              <li key={bucket}>
+                <a
+                  className={`inline-flex min-h-11 items-center gap-2 border-b-2 px-3 py-2 text-sm whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-[-2px] ${current ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}`}
+                  href={
+                    bucket === 'collections'
+                      ? `/${locale}/library/collections`
+                      : shelfHref(locale, { ...selection, ...(bucket === 'all' ? {} : { state: bucket }) })
+                  }
+                  aria-current={current ? 'page' : undefined}
+                >
+                  <span>{labels[bucket]}</span>
+                  {counts ? (
+                    <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs tabular-nums">
+                      {m.library_summary_count({
+                        shown: number.format(counts.shown),
+                        total: number.format(counts.total),
+                      })}
+                    </span>
+                  ) : null}
+                </a>
+              </li>
+            );
+            return bucket === 'collections' ? (
+              <Exposure key={bucket} operation="collection.list">
+                {link}
+              </Exposure>
+            ) : (
+              link
+            );
+          })}
+        </ul>
+      </nav>
+      {message ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" role="status">
+          <p>{message}</p>
+          {['unavailable', 'preparing', 'stale'].includes(page.state) ? (
+            <button type="button" className={target} onClick={() => void retry()}>
+              {m.library_summary_retry()}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

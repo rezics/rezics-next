@@ -6,7 +6,7 @@ Library navigation and the private export page link this journey separately from
 Decision: keep the original upload bytes for Restart after cancellation, and offer a completed export from this
 signed-in owner. All supported versions reach native validation as original bytes, preserving their manifests and unsupported coverage. An
 acknowledged Session opens the current progress reader. Journey tests pin that restart; the native Web owner walk
-restores one occurrence through the page. Named stories stay with Collection and Entry recovery.
+restores one occurrence through the page. Named progress stories use the real visit with contract-shaped presentation fixtures, separate from native proof.
 
 `native.ts` derives all request/result types from generated methods and quotes logical keys once. `server.ts`
 binds current HTTP viewer evidence and the existing sealed original command credential. `controller.ts` retains
@@ -19,3 +19,5 @@ One occurrence, review and confirmation creates one Session. Recovery reads the 
 recoverable replies hide facts until original checkpoint reconciliation. Cancellation and evidence removal preserve
 accepted Sessions. Unresolved commands remain in memory when the protected visit retires; navigation is blocked
 until they can be acknowledged. Full browser reload is not a persisted-command resume mechanism.
+
+Decision: lead review and outcomes with localized native effects and supplied unit meanings; keep exact IDs, operands and complete evidence in closed labelled details. Keep the three recovery visits independent, with unchanged confirmation, retry and page-read contracts. Presentation acceptance is added to the named route stories; execution and native, keyboard and visual verification are deferred to the verifier.

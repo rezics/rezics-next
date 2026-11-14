@@ -406,26 +406,46 @@ function selectedValues(rows: readonly StatementRow[] | undefined): string[] {
   });
 }
 
-function selectedFacts(
-  rows: readonly StatementRow[] | undefined,
-): readonly Readonly<{ content: string; qualifiers: readonly string[]; citations: readonly string[] }>[] {
+function creditCharacter(row: StatementRow): string | undefined {
+  for (const part of row.qualifiers ?? []) {
+    if (
+      (part.property?.id === 'wdt:P453' || part.property?.id === 'schema:character') &&
+      part.value?.type === 'value' &&
+      typeof part.value.content === 'string' &&
+      uuid.test(part.value.content)
+    )
+      return part.value.content;
+  }
+  return undefined;
+}
+
+function selectedFacts(rows: readonly StatementRow[] | undefined): readonly Readonly<{
+  content: string;
+  qualifiers: readonly string[];
+  citations: readonly string[];
+  characterExternalId?: string;
+}>[] {
   return (rows ?? [])
     .filter((row) => row.rank !== 'deprecated' && row.value?.type === 'value' && typeof row.value.content === 'string')
-    .map((row) => ({
-      content: row.value!.content as string,
-      qualifiers: (row.qualifiers ?? []).flatMap((part) =>
-        part.property?.id === 'wdt:P1932' && part.value?.type === 'value' && typeof part.value.content === 'string'
-          ? [part.value.content]
-          : [],
-      ),
-      citations: (row.references ?? []).flatMap((reference) =>
-        (reference.parts ?? []).flatMap((part) =>
-          part.property?.id === 'schema:url' && part.value?.type === 'value' && typeof part.value.content === 'string'
+    .map((row) => {
+      const characterExternalId = creditCharacter(row);
+      return {
+        content: row.value!.content as string,
+        qualifiers: (row.qualifiers ?? []).flatMap((part) =>
+          part.property?.id === 'wdt:P1932' && part.value?.type === 'value' && typeof part.value.content === 'string'
             ? [part.value.content]
             : [],
         ),
-      ),
-    }));
+        citations: (row.references ?? []).flatMap((reference) =>
+          (reference.parts ?? []).flatMap((part) =>
+            part.property?.id === 'schema:url' && part.value?.type === 'value' && typeof part.value.content === 'string'
+              ? [part.value.content]
+              : [],
+          ),
+        ),
+        ...(characterExternalId ? { characterExternalId } : {}),
+      };
+    });
 }
 
 /** Only exact Character source keys qualify; a name or appearance never creates a binding. */
@@ -609,19 +629,6 @@ export type CombinedPersonCredits = Readonly<{
   credits: readonly CombinedPersonCredit[];
 }>;
 
-function creditCharacter(row: StatementRow): string | undefined {
-  for (const part of row.qualifiers ?? []) {
-    if (
-      (part.property?.id === 'wdt:P453' || part.property?.id === 'schema:character') &&
-      part.value?.type === 'value' &&
-      typeof part.value.content === 'string' &&
-      uuid.test(part.value.content)
-    )
-      return part.value.content;
-  }
-  return undefined;
-}
-
 /**
  * After merge, both original works keep their credit statements. The value may still name the
  * durable Person; a one-hop redirect names the survivor. Combined credits are those two windows.
@@ -656,9 +663,6 @@ export function recordCombinedPersonCredits(input: {
         const boundPersonId = originals.has(target) ? target : input.canonicalPersonId;
         const personExternalId = originals.get(boundPersonId) ?? originals.get(input.canonicalPersonId);
         if (!personExternalId) continue;
-        const character = creditCharacter(
-          (rows ?? []).find((entry) => entry.value?.content === target) ?? { value: { content: target } },
-        );
         credits.push({
           workExternalId: work.externalId,
           workSubjectId: workId,
@@ -668,7 +672,7 @@ export function recordCombinedPersonCredits(input: {
           property,
           creditedAs: row.qualifiers,
           citations: row.citations,
-          ...(character ? { characterExternalId: character } : {}),
+          ...(row.characterExternalId ? { characterExternalId: row.characterExternalId } : {}),
         });
       }
     }

@@ -1,5 +1,15 @@
 # Following target reading
 
+Decision: identity leads the shared ContentItem rows and selected inspection; Open, Inspect, the existing removal
+control and page refresh remain independent controls. Native kind stays visible, and missing identity, Collection
+exposure withdrawal and return suspension explain why opening is unavailable without changing the follow. Inspection
+groups exact references, follow source and command meaning in a disclosure. The installed FULL target has no
+description field; only a deliberate current Space read supplies its summary. No row enrichment is added.
+The shared [ContentItem](../../../../../packages/ui/src/components/content-item.md) slots own the row layout.
+`following-target-reading.test.tsx` covers supplied identities, independent opening, current Space prose and the
+reference disclosure. `following-reading-return.test.tsx` covers kind-bound return suspension and retirement.
+Illustrative stories do not establish native admission or browser acceptance.
+
 Following renders one native FULL page in supplied order, at most twenty rows. Its summary identities and exact target
 index are prepared once per page in O(N); inspection selects by exact target ID in O(1). Local confirmed removal
 leaves a sparse page. Next uses the opaque cursor and replaces the page; a stale continuation retains the existing
@@ -15,8 +25,16 @@ owners. The panel returns to that existing row control rather than mounting anot
 FULL Space rows carry the Community producer's current destination and applicable-action projection. A Space
 destination uses its supplied address; a Realm destination uses its supplied Realm ID; an unavailable destination
 creates no link. Space UUID is neither address nor Realm UUID. The row opens a supplied destination without point
-reads. This community receiver supports only Space and Realm destinations; other native kinds, including Zone,
-produce no link.
+reads. Space inspection retains its separate selected currentness read.
+
+Decision: native Zone rows use the supplied FULL identity and only `destination.kind=zone` with its exact `zoneId`
+for the localized `/zones/{id}` reader; Zone inspection adds no point read or destination inference.
+The native Zone kind is visible in the row, inspection and exact-reference disclosure in all eight locales. Concealed
+or missing identity, missing destination and an unavailable supplied destination retain the follow without an Open
+link. A Zone is never presented as a Space or Realm, and community membership controls remain with Space/Realm.
+All-kind and Zone-only pages share the existing bounded index, sparse removal, opaque continuation, explicit retry
+and kind-bound return descriptor. A fresh native page retires selected identity and retained destination callbacks;
+browser return suspends opening until that page arrives. Account, locale and exposure retirement use the same owners.
 
 Explicit inspection may make one typed `client.spaces({spaceId}).get` under the same prepared viewer and current
 exposure. The response names its reader, target and locale. The selected request checks those against its parent
@@ -52,8 +70,9 @@ Content/community retains Space/Realm reads and membership; watch/Inbox manageme
 community navigation remain with their existing owners.
 
 The bounded journey is one `GET /v1/follows?view=FULL&limit=20`, optionally one deliberate selected
-`GET /v1/spaces/{spaceId}`, then ordinary navigation to the supplied address or the exact admitted Realm. Existing
-follow removal uses its existing writer, independently.
+`GET /v1/spaces/{spaceId}`, then ordinary navigation to the supplied Space address, Realm ID or Zone ID.
+Zone inspection uses only the FULL page. Follow removal uses its existing writer, independently. Navigation, retry
+and inspection controls keep a minimum height of 44px.
 Native work includes the page producer's [`fullView`](../../../../../services/kernel/src/library/views.ts)
 summary expansion and the Community reader's nested access/admission, not just the HTTP request count; those budgets
 remain with their native owners. Connected stories distinguish selected-read success, denial, retirement, unavailability
@@ -62,7 +81,7 @@ and no destination; inspection alone does not prove native admission or lifecycl
 Decision: retain the installed FULL producer, count relay/default-worker composition and mounted Following receiver;
 use a stable inspection marker for translated browser-return focus. Existing page, command and lifecycle assertions
 remain unchanged; `following-reading-return.test.tsx` adds the localized fresh-page return regression. Native, browser,
-growth and promoted-revision acceptance remain separate from worker workspace typing.
+growth and promoted-revision acceptance remain separate from illustrative source cases.
 
 ## Admission and command custody
 

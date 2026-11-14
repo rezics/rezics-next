@@ -1,4 +1,5 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { ImportChoice, ImportDetails, ImportTarget } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import type { AniListRow, AniListRowMeta, AniListScoreFormat } from './contract';
 import { AniListAction, AniListCheck } from './controls';
@@ -91,6 +92,7 @@ export function AniListRowReview({
   busy,
   onSave,
   onChoose,
+  children,
 }: {
   row: AniListRow;
   meta?: AniListRowMeta;
@@ -101,6 +103,7 @@ export function AniListRowReview({
   busy: boolean;
   onSave: (draft: RowDraft) => void;
   onChoose: (draft: RowDraft) => void;
+  children?: ReactNode;
 }) {
   const base = useId();
   const [draft, setDraft] = useState<RowDraft>(() => draftFromMeta(row, meta));
@@ -133,10 +136,74 @@ export function AniListRowReview({
             {m.library_anilist_group()}: {meta.groupLabel}
           </p>
         ) : null}
+        <p className="text-sm [overflow-wrap:anywhere]">
+          {row.source.identifiers.map((item) => `${item.source}: ${item.externalId}`).join(' · ')}
+        </p>
+        <ImportTarget target={draft.target} />
       </header>
-      <AniListEvidencePanel row={row} scoreFormat={scoreFormat} />
+      <ImportChoice title={m.library_import_state()}>
+        {row.proposal?.current || meta?.current ? (
+          <p>
+            {m.library_anilist_current({
+              state: (row.proposal?.current ?? meta?.current)!.state,
+              revision: (row.proposal?.current ?? meta?.current)!.revision,
+            })}
+          </p>
+        ) : (
+          <p>{m.library_anilist_absence()}</p>
+        )}
+        {(row.proposal?.proposedState ?? meta?.proposedState) ? (
+          <p>{m.library_anilist_proposed({ state: (row.proposal?.proposedState ?? meta?.proposedState)! })}</p>
+        ) : meta?.repeating ? (
+          <p>{m.library_anilist_repeating_status()}</p>
+        ) : (
+          <p>{m.library_anilist_unsupported_status()}</p>
+        )}
+        {replaceable ? <p>{m.library_anilist_conflict_entry()}</p> : null}
+        {!aniListHasAdmittedStatus(row) ? <p>{m.library_anilist_empty_fields()}</p> : null}
+        {meta?.target && row.review?.input.subjectId && meta.target !== row.review.input.subjectId ? (
+          <p>{m.library_anilist_changed_target()}</p>
+        ) : null}
+        {started ? <p>{m.library_anilist_started_locked()}</p> : null}
+        {canTarget && !started ? (
+          <AniListTargetSearch
+            disabled={busy}
+            value={draft.target}
+            onChange={(target) => update({ ...draft, target })}
+          />
+        ) : null}
+        <AniListCheck
+          id={`${base}-skip`}
+          checked={draft.skip}
+          disabled={busy || started}
+          label={m.library_anilist_skip_row()}
+          onToggle={(skip) => update({ ...draft, skip, replace: skip ? false : draft.replace, applyStatus: !skip })}
+        />
+        {!draft.skip && !started ? (
+          <AniListCheck
+            id={`${base}-status`}
+            checked={draft.applyStatus}
+            disabled={busy}
+            label={m.library_anilist_apply_status()}
+            onToggle={(applyStatus) => update({ ...draft, applyStatus })}
+          />
+        ) : null}
+        {replaceable && !draft.skip && !started ? (
+          <AniListCheck
+            id={`${base}-replace`}
+            checked={draft.replace}
+            disabled={busy || !reviewed}
+            label={
+              meta?.scoreReview?.currentVote === 'present'
+                ? m.library_anilist_replace_vote_and_state()
+                : m.library_anilist_replace()
+            }
+            onToggle={(replace) => update({ ...draft, replace })}
+          />
+        ) : null}
+      </ImportChoice>
       {meta?.scoreSource ? (
-        <section className="space-y-3 rounded-md border p-3" data-anilist-score-review>
+        <section className="space-y-3 border-t pt-4" data-anilist-score-review>
           <h4 className="font-medium">{m.library_anilist_score_review()}</h4>
           <p>
             {m.library_anilist_score_source({
@@ -260,61 +327,6 @@ export function AniListRowReview({
           ) : null}
         </section>
       ) : null}
-      {row.proposal?.current || meta?.current ? (
-        <p>
-          {m.library_anilist_current({
-            state: (row.proposal?.current ?? meta?.current)!.state,
-            revision: (row.proposal?.current ?? meta?.current)!.revision,
-          })}
-        </p>
-      ) : (
-        <p>{m.library_anilist_absence()}</p>
-      )}
-      {(row.proposal?.proposedState ?? meta?.proposedState) ? (
-        <p>{m.library_anilist_proposed({ state: (row.proposal?.proposedState ?? meta?.proposedState)! })}</p>
-      ) : meta?.repeating ? (
-        <p>{m.library_anilist_repeating_status()}</p>
-      ) : (
-        <p>{m.library_anilist_unsupported_status()}</p>
-      )}
-      {replaceable ? <p>{m.library_anilist_conflict_entry()}</p> : null}
-      {!aniListHasAdmittedStatus(row) ? <p>{m.library_anilist_empty_fields()}</p> : null}
-      {meta?.target && row.review?.input.subjectId && meta.target !== row.review.input.subjectId ? (
-        <p>{m.library_anilist_changed_target()}</p>
-      ) : null}
-      {started ? <p>{m.library_anilist_started_locked()}</p> : null}
-      {canTarget && !started ? (
-        <AniListTargetSearch disabled={busy} value={draft.target} onChange={(target) => update({ ...draft, target })} />
-      ) : null}
-      <AniListCheck
-        id={`${base}-skip`}
-        checked={draft.skip}
-        disabled={busy || started}
-        label={m.library_anilist_skip_row()}
-        onToggle={(skip) => update({ ...draft, skip, replace: skip ? false : draft.replace, applyStatus: !skip })}
-      />
-      {!draft.skip && !started ? (
-        <AniListCheck
-          id={`${base}-status`}
-          checked={draft.applyStatus}
-          disabled={busy}
-          label={m.library_anilist_apply_status()}
-          onToggle={(applyStatus) => update({ ...draft, applyStatus })}
-        />
-      ) : null}
-      {replaceable && !draft.skip && !started ? (
-        <AniListCheck
-          id={`${base}-replace`}
-          checked={draft.replace}
-          disabled={busy || !reviewed}
-          label={
-            meta?.scoreReview?.currentVote === 'present'
-              ? m.library_anilist_replace_vote_and_state()
-              : m.library_anilist_replace()
-          }
-          onToggle={(replace) => update({ ...draft, replace })}
-        />
-      ) : null}
       <AniListAction
         type="button"
         disabled={busy || started || (draft.scoreAction === 'vote' && draft.scoreUnits === null)}
@@ -322,6 +334,10 @@ export function AniListRowReview({
       >
         {m.library_anilist_save_review()}
       </AniListAction>
+      {children}
+      <ImportDetails>
+        <AniListEvidencePanel row={row} scoreFormat={scoreFormat} />
+      </ImportDetails>
     </article>
   );
 }

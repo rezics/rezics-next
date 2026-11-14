@@ -108,3 +108,34 @@ test('a completed recovery request can leave without another prompt', async () =
     await page.close();
   }
 });
+
+test('attempt replacement and unmount discard pending keyboard advice orientation', async () => {
+  for (const boundary of ['replace', 'unmount']) {
+    const page = await setup();
+    try {
+      let finish!: (response: Response) => void;
+      globalThis.fetch = (() =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        })) as typeof fetch;
+      await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+      await flush(() => finish(new Response('', { status: 503 })));
+      await flush(() => {
+        const retry = button(page.host, 'Try again')!;
+        retry.focus();
+        retry.click();
+      });
+      const stale = finish;
+      if (boundary === 'replace') await flush(() => page.router.history.replace('/recovery'));
+      else await page.close();
+      const reader = document.body.appendChild(document.createElement('button'));
+      reader.focus();
+      await flush(() => stale(new Response('', { status: 503 })));
+      expect(document.activeElement).toBe(reader);
+      expect(page.calls).toHaveLength(0);
+      reader.remove();
+    } finally {
+      await page.close();
+    }
+  }
+});

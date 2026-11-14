@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { SubjectRead } from '@rezics/client';
 import { MusicContextProfile } from '../features/pages/music-context-profile';
+import { catalogueEntries } from '../features/catalogue/catalogue-entry';
 import type { MusicContextRead } from '../features/catalogue/music-context-profile';
 import { getLocale } from '../paraglide/runtime.js';
 import { candidateContext } from '../subject/candidates';
@@ -98,7 +99,16 @@ function successful(
 function ReadingStory({
   state,
 }: {
-  state: 'populated' | 'empty' | 'failed' | 'removed' | 'selected' | 'realm' | 'unavailable-return';
+  state:
+    | 'populated'
+    | 'empty'
+    | 'failed'
+    | 'removed'
+    | 'selected'
+    | 'realm'
+    | 'unavailable-return'
+    | 'graph-node'
+    | 'graph-edge';
 }) {
   const locale = getLocale();
   const initial: MusicContextRead | undefined =
@@ -112,6 +122,20 @@ function ReadingStory({
           );
   const hasContext = state === 'selected' || state === 'unavailable-return';
   const hasRealm = state === 'realm';
+  const graph = catalogueEntries.graph({ id: venue, label: 'Harbor Hall', locale }).href;
+  const returnTo =
+    state === 'graph-node' || state === 'graph-edge'
+      ? `${graph}?${new URLSearchParams({
+          property: 'schema:location',
+          direction: 'out',
+          depth: '2',
+          ...(state === 'graph-node'
+            ? { node: anchor }
+            : { edge: event, from: venue, to: anchor, edgeProperty: 'schema:location' }),
+        })}`
+      : state === 'unavailable-return'
+        ? `/en/subjects/${anchor}/harbor-stage`
+        : undefined;
   return (
     <PatternStory path={`/subjects/${anchor}/harbor-stage/music-context`}>
       <AppShell>
@@ -120,7 +144,7 @@ function ReadingStory({
           locale={locale}
           {...(hasContext ? { context: selectedContext } : {})}
           {...(hasRealm ? { realm: selectedRealm } : {})}
-          {...(state === 'unavailable-return' ? { returnTo: `/en/subjects/${anchor}/harbor-stage` } : {})}
+          returnTo={returnTo}
           initial={initial}
           initialStream={state === 'removed' ? 'schema:removed' : 'schema:location'}
           transport={{
@@ -156,3 +180,6 @@ export const RemovedStream: Story = { args: { state: 'removed' } };
 export const SelectedContext: Story = { args: { state: 'selected' } };
 export const UnsupportedRealm: Story = { args: { state: 'realm' } };
 export const UnavailableReturn: Story = { args: { state: 'unavailable-return' } };
+
+export const GraphSelectedNode: Story = { args: { state: 'graph-node' } };
+export const GraphExactEdge: Story = { args: { state: 'graph-edge' } };

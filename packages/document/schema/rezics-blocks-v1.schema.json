@@ -391,6 +391,9 @@
                 "$ref": "#/$defs/blocks_horizontalRule"
               },
               {
+                "$ref": "#/$defs/blocks_footnoteDefinition"
+              },
+              {
                 "$ref": "#/$defs/blocks_table"
               },
               {
@@ -506,6 +509,9 @@
               },
               {
                 "$ref": "#/$defs/blocks_hardBreak"
+              },
+              {
+                "$ref": "#/$defs/blocks_footnoteReference"
               },
               {
                 "$ref": "#/$defs/blocks_mention"
@@ -625,6 +631,9 @@
               },
               {
                 "$ref": "#/$defs/blocks_hardBreak"
+              },
+              {
+                "$ref": "#/$defs/blocks_footnoteReference"
               },
               {
                 "$ref": "#/$defs/blocks_mention"
@@ -1347,6 +1356,121 @@
       },
       "additionalProperties": false
     },
+    "blocks_footnoteDefinition": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "footnoteDefinition"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id",
+            "label"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/blocks_paragraph"
+              },
+              {
+                "$ref": "#/$defs/blocks_heading"
+              },
+              {
+                "$ref": "#/$defs/blocks_blockquote"
+              },
+              {
+                "$ref": "#/$defs/blocks_bulletList"
+              },
+              {
+                "$ref": "#/$defs/blocks_orderedList"
+              },
+              {
+                "$ref": "#/$defs/blocks_taskList"
+              },
+              {
+                "$ref": "#/$defs/blocks_codeBlock"
+              },
+              {
+                "$ref": "#/$defs/blocks_horizontalRule"
+              },
+              {
+                "$ref": "#/$defs/blocks_table"
+              },
+              {
+                "$ref": "#/$defs/blocks_image"
+              },
+              {
+                "$ref": "#/$defs/blocks_media"
+              },
+              {
+                "$ref": "#/$defs/blocks_extensionBlock"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
     "blocks_hardBreak": {
       "type": "object",
       "required": [
@@ -1356,6 +1480,41 @@
         "type": {
           "type": "string",
           "const": "hardBreak"
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/blocks_Mark"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "blocks_footnoteReference": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "footnoteReference"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "label"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          },
+          "additionalProperties": false
         },
         "marks": {
           "type": "array",

@@ -1,3 +1,4 @@
+import { ImportDetails, ImportTarget } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import { ImportSourceChecks, ImportSourceEvidence } from '../rich-private-entry/source-confirm';
 import type { AniListRowMeta } from './contract';
@@ -28,6 +29,7 @@ export function AniListConfirmPage({
   const gated = busy || ready.length === 0 || !confirmPrivacy || !confirmTimestamps;
   return (
     <section className="space-y-4" data-anilist-stage="confirm">
+      <h2 className="text-xl font-semibold">{m.library_import_confirm()}</h2>
       <p>{m.library_anilist_confirm_help({ count: ready.length })}</p>
       <ul className="space-y-3">
         {ready.map((row) => {
@@ -50,7 +52,7 @@ export function AniListConfirmPage({
               {row.proposedState ? (
                 <p className="text-sm">{m.library_anilist_proposed({ state: row.proposedState })}</p>
               ) : null}
-              {row.target ? <p className="text-sm [overflow-wrap:anywhere]">{row.target}</p> : null}
+              <ImportTarget target={row.target} />
               {row.current ? (
                 <p className="text-sm">
                   {m.library_anilist_current({ state: row.current.state, revision: row.current.revision })}
@@ -58,7 +60,9 @@ export function AniListConfirmPage({
               ) : (
                 <p className="text-sm">{m.library_anilist_absence()}</p>
               )}
-              <ImportSourceEvidence preview={row.sourcePreview} />
+              <ImportDetails>
+                <ImportSourceEvidence preview={row.sourcePreview} />
+              </ImportDetails>
               {row.scoreSource ? (
                 <div className="space-y-2 rounded-md border p-3" data-anilist-confirm-score={row.ordinal}>
                   <p className="font-medium">
@@ -145,6 +149,8 @@ export function AniListConfirmPage({
           );
         })}
       </ul>
+      <p className="text-sm text-muted-foreground">{m.library_anilist_not_vote()}</p>
+      <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
       <ImportSourceChecks
         prefix="anilist"
         privacy={confirmPrivacy}

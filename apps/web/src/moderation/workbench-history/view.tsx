@@ -8,9 +8,9 @@ import { getLocale, localizeHref } from '../../paraglide/runtime.js';
 import { threadLocation } from '../../threads/thread-href';
 import { workbenchSearch, type WorkbenchSearch } from '../workbench-queue/scope';
 import type { HistoryRead } from './read';
+import { moderationControl } from '../presentation';
 
-const control =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words px-3 py-2 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const control = moderationControl;
 
 export function WorkbenchHistoryUnavailable({ onReturn, onRetry }: { onReturn: () => void; onRetry?: () => void }) {
   return (

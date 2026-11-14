@@ -16,6 +16,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEve
 import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
+import { AuthActions, AuthHelp, AuthTask, AuthTaskSection } from '../auth-task-view';
 import { failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
 import {
   passkeyAutofillSupported,
@@ -62,20 +63,22 @@ function LoginPage() {
   }, [journey, records.length]);
   return (
     <AuthPage heading={m.auth_login_heading()}>
-      <LoginReturnView
-        records={records}
-        onDismiss={() => {
-          dismiss();
-          current.current?.focus();
-        }}
-      />
-      <div ref={current} tabIndex={-1}>
-        {journey ? (
-          <LoginForm key={journey.key} query={journey.query} attempt={journey.attempt} restored={journey.restored} />
-        ) : (
-          <p role="status">{m.auth_inventory_loading()}</p>
-        )}
-      </div>
+      <AuthTask>
+        <LoginReturnView
+          records={records}
+          onDismiss={() => {
+            dismiss();
+            current.current?.focus();
+          }}
+        />
+        <div ref={current} tabIndex={-1}>
+          {journey ? (
+            <LoginForm key={journey.key} query={journey.query} attempt={journey.attempt} restored={journey.restored} />
+          ) : (
+            <p role="status">{m.auth_inventory_loading()}</p>
+          )}
+        </div>
+      </AuthTask>
     </AuthPage>
   );
 }
@@ -492,94 +495,100 @@ function LoginForm({ query, attempt, restored }: { query: string; attempt: Login
   return (
     <>
       <LoginDeparture unfinished={unfinished} leave={leave} focus={() => emailInput.current?.focus()} />
-      <LoginAccountChoiceView
-        choice={choice}
-        pending={pending}
-        passkeyPending={passkeyPending}
-        allowContinue={!stepUp}
-        onContinue={continueCurrentAccount}
-        onSwitch={switchAccount}
-        onReview={reviewSession}
-      />
-      {pageData && !pageData.methods.passkey ? <p role="status">{m.auth_login_passkey_method_unavailable()}</p> : null}
-      {pageData && pageData.methods.passkey && passkeySupport === 'none' ? (
-        <p role="status">{m.auth_login_passkey_browser_unsupported()}</p>
-      ) : null}
-      {showCredentials && pageData ? (
-        <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
-          <Field data-invalid={Boolean(emailError)}>
-            <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
-            <Input
-              ref={emailInput}
-              id={emailId}
-              name="email"
-              type="email"
-              autoComplete={passkeySupport === 'autofill' ? 'username webauthn' : 'username'}
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value);
-                setEmailError('');
-              }}
-              aria-invalid={emailError ? true : undefined}
-              aria-describedby={emailError ? emailErrorId : undefined}
-              readOnly={pending}
-              required
-            />
-            {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
-          </Field>
-          <Field data-invalid={Boolean(passwordError)}>
-            <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
-            <PasswordInput
-              name="password"
-              autoComplete="current-password"
-              required
-              readOnly={pending}
-              id={passwordId}
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-                setPasswordError('');
-              }}
-              aria-invalid={passwordError ? true : undefined}
-              aria-describedby={passwordError ? passwordErrorId : undefined}
-            />
-            {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
-          </Field>
-          {message ? (
-            <ErrorAlert tabIndex={-1} ref={alert}>
-              {message}
-            </ErrorAlert>
-          ) : null}
-          <Button type="submit" disabled={pending} aria-busy={pending && !passkeyPending}>
-            {m.auth_login_heading()}
-          </Button>
-          {!pageData.methods.passkey || passkeySupport === 'none' || passkeySupport === 'checking' ? null : (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              aria-busy={passkeyPending}
-              onClick={() => void submitPasskey()}
-            >
-              <KeyRound aria-hidden="true" />
-              {m.auth_login_passkey()}
-            </Button>
-          )}
-        </form>
-      ) : null}
-      {recoveryComplete ? (
-        <div className="auth-login-alert" role="status">
-          {m.auth_login_recovery_success()}
-        </div>
-      ) : null}
-      <nav className="auth-login-links" aria-label={m.auth_login_help()}>
-        <a href="/recovery" onClick={navigate}>
-          {m.auth_login_recovery()}
-        </a>
-        <a href={`/signup${query}`} onClick={navigate}>
-          {m.auth_login_signup()}
-        </a>
-      </nav>
+      <AuthTaskSection>
+        <LoginAccountChoiceView
+          choice={choice}
+          pending={pending}
+          passkeyPending={passkeyPending}
+          allowContinue={!stepUp}
+          onContinue={continueCurrentAccount}
+          onSwitch={switchAccount}
+          onReview={reviewSession}
+        />
+        {pageData && !pageData.methods.passkey ? (
+          <p role="status">{m.auth_login_passkey_method_unavailable()}</p>
+        ) : null}
+        {pageData && pageData.methods.passkey && passkeySupport === 'none' ? (
+          <p role="status">{m.auth_login_passkey_browser_unsupported()}</p>
+        ) : null}
+        {showCredentials && pageData ? (
+          <form className="grid min-w-0 gap-5" method="post" action="/signin" noValidate onSubmit={submit}>
+            <Field data-invalid={Boolean(emailError)}>
+              <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
+              <Input
+                ref={emailInput}
+                id={emailId}
+                name="email"
+                type="email"
+                autoComplete={passkeySupport === 'autofill' ? 'username webauthn' : 'username'}
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setEmailError('');
+                }}
+                aria-invalid={emailError ? true : undefined}
+                aria-describedby={emailError ? emailErrorId : undefined}
+                readOnly={pending}
+                required
+              />
+              {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
+            </Field>
+            <Field data-invalid={Boolean(passwordError)}>
+              <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
+              <PasswordInput
+                name="password"
+                autoComplete="current-password"
+                required
+                readOnly={pending}
+                id={passwordId}
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setPasswordError('');
+                }}
+                aria-invalid={passwordError ? true : undefined}
+                aria-describedby={passwordError ? passwordErrorId : undefined}
+              />
+              {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
+            </Field>
+            {message ? (
+              <ErrorAlert tabIndex={-1} ref={alert}>
+                {message}
+              </ErrorAlert>
+            ) : null}
+            <AuthActions>
+              <Button type="submit" disabled={pending} aria-busy={pending && !passkeyPending}>
+                {m.auth_login_heading()}
+              </Button>
+              {!pageData.methods.passkey || passkeySupport === 'none' || passkeySupport === 'checking' ? null : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending}
+                  aria-busy={passkeyPending}
+                  onClick={() => void submitPasskey()}
+                >
+                  <KeyRound aria-hidden="true" />
+                  {m.auth_login_passkey()}
+                </Button>
+              )}
+            </AuthActions>
+          </form>
+        ) : null}
+        {recoveryComplete ? (
+          <div className="auth-login-alert" role="status">
+            {m.auth_login_recovery_success()}
+          </div>
+        ) : null}
+        <AuthHelp aria-label={m.auth_login_help()}>
+          <a href="/recovery" onClick={navigate}>
+            {m.auth_login_recovery()}
+          </a>
+          <a href={`/signup${query}`} onClick={navigate}>
+            {m.auth_login_signup()}
+          </a>
+        </AuthHelp>
+      </AuthTaskSection>
     </>
   );
 }

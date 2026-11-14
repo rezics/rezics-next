@@ -8,14 +8,15 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { AuthButton as Button } from './button';
+import { AuthActions, AuthNotice, AuthTaskSection } from './auth-task-view';
 import type { ConsentOutcome } from './consent-request-return';
 import { m } from './paraglide/messages.js';
 
 /** Generic notices never accept former account, client or permission details. */
 export function ConsentRecoveryView({ outcome, dismiss }: { outcome: ConsentOutcome; dismiss: () => void }) {
   return (
-    <>
-      <p role="status">
+    <AuthTaskSection>
+      <AuthNotice role="status">
         {outcome === 'unknown'
           ? m.auth_consent_history_unknown()
           : outcome === 'unattributed'
@@ -25,12 +26,14 @@ export function ConsentRecoveryView({ outcome, dismiss }: { outcome: ConsentOutc
               : outcome === 'refused'
                 ? m.auth_consent_history_refused()
                 : m.auth_consent_declined()}
-      </p>
-      <p className="text-sm">{m.auth_consent_history_dismiss_explanation()}</p>
-      <Button type="button" variant="outline" onClick={dismiss}>
-        {m.auth_consent_history_dismiss()}
-      </Button>
-    </>
+      </AuthNotice>
+      <p className="text-sm leading-relaxed text-muted-foreground">{m.auth_consent_history_dismiss_explanation()}</p>
+      <AuthActions>
+        <Button type="button" variant="outline" onClick={dismiss}>
+          {m.auth_consent_history_dismiss()}
+        </Button>
+      </AuthActions>
+    </AuthTaskSection>
   );
 }
 

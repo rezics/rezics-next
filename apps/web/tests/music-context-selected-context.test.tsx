@@ -263,6 +263,39 @@ test('selected Context stays bound through the Subject entry, route, session, ac
       { subjectId: anchor },
     ),
   ).toBeUndefined();
+  const { graphPublicOriginHref, graphPublicSourceReturnHref } =
+    await import('../src/features/pages/graph-browser/public-visit');
+  for (const graphRealm of [undefined, realm]) {
+    const returnHref = graphPublicSourceReturnHref({
+      path: `/en/subjects/${target}/original`,
+      id: target,
+      locale: 'en',
+      context: contextA,
+      realm: graphRealm,
+    })!;
+    const graph = new URL(
+      graphPublicOriginHref(`/en/subjects/${target}/original/graph`, {
+        subject: target,
+        context: contextA,
+        locale: 'en',
+        realm: graphRealm,
+        returnHref,
+      }),
+      'https://site.test',
+    );
+    graph.searchParams.set('node', anchor);
+    const returnTo = `${graph.pathname}${graph.search}`;
+    // The graph's observation is navigation intent, never the companion's reading authority.
+    expect(musicContextRouteSearch({ returnTo }, 'en', { subjectId: anchor })?.returnTo).toBe(returnTo);
+    expect(
+      musicContextRouteSearch({ context: candidateContext, returnTo }, 'en', { subjectId: anchor })?.returnTo,
+    ).toBe(returnTo);
+    expect(musicContextRouteSearch({ context: contextA, returnTo }, 'en', { subjectId: anchor })).toBeUndefined();
+    expect(musicContextRouteSearch({ realm, returnTo }, 'en', { subjectId: anchor })).toBeUndefined();
+  }
+  expect(
+    musicContextRouteSearch({ returnTo: `/en/subjects/${target}/other` }, 'en', { subjectId: anchor }),
+  ).toBeUndefined();
   const nestedOrigin = `/en/subjects/${target}/harbor-hall/music-context?context=${contextA}&via=${encodeURIComponent(
     `/en/subjects/${anchor}/harbor-stage/music-context?context=${contextA}`,
   )}`;
@@ -367,6 +400,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await resolve(4, contextA, 'Current Context A');
     await until(() => relationCalls.length === 5 && host.textContent?.includes('Current Context A') === true);
     expect(host.textContent).toContain('Current Context A');
+    expect(host.textContent).not.toContain('Propose a correction');
     expect(host.textContent).not.toContain('Retired Context A');
     expect(host.textContent).not.toContain('Retired Context B');
     expect(host.querySelector('[data-context]')?.getAttribute('data-context')).toBe(contextA);

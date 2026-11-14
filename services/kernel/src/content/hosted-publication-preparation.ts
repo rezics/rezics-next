@@ -1,6 +1,7 @@
 import type { Actor, AccessClient } from '../request/access.ts';
 import {
   authoritativeTimeValue,
+  noEffect,
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
@@ -10,12 +11,7 @@ import {
 } from '../command/command.ts';
 import { requestDigest } from '../command/request.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import {
-  ContentNotFoundError,
-  RevisionPreconditionError,
-  hostedPostAuthorization,
-  type ContentCommandDependencies,
-} from './commands.ts';
+import { ContentNotFoundError, hostedPostAuthorization, type ContentCommandDependencies } from './commands.ts';
 import { snapshot } from './reads.ts';
 import { hostedCatalogue } from './hosted-chapters-store.ts';
 import type { HostedCommandContext, HostedDependencies } from './hosted-chapters-model.ts';
@@ -23,12 +19,17 @@ import {
   advanceHostedPublicationStaging,
   appendHostedPublicationSelectionBatch,
   beginHostedPublicationStaging,
-  cancelHostedPublicationStaging,
-  freezeHostedPublicationSelection,
+  cancelHostedPublicationStagingWithEvidence,
+  freezeHostedPublicationSelectionWithEvidence,
+  requireRoute,
+  readHostedPublicationAdvanceReplay,
   readHostedPublicationStagingProgress,
+  readHostedPublicationStagingProgressWithExpiry,
+  retainHostedPublicationAdvanceReceipt,
   sealHostedPublicationStaging,
 } from './hosted-publication-staging.ts';
 import type {
+  HostedPublicationAdvancePhase,
   HostedPublicationStagingBatchResult,
   HostedPublicationStagingCheckpoint,
   HostedPublicationStagingLocator,
@@ -36,6 +37,7 @@ import type {
 import {
   applyHostedVersionReleaseCandidatePage,
   beginHostedVersionReleaseCandidate,
+  readHostedVersionReleaseCandidateProgress,
   sealHostedVersionReleaseCandidate,
 } from './hosted-version-release-candidate.ts';
 import type { HostedVersionReleaseCandidateCheckpoint } from './hosted-version-release-candidate-model.ts';
@@ -62,10 +64,12 @@ export type HostedPublicationPreparationProgress = Readonly<{
   candidateReady: boolean;
 }>;
 
-type PreparationWork = (
-  tx: CommandTransaction,
-  time: AuthoritativeTime,
-) => Promise<HostedPublicationPreparationProgress>;
+type PreparationEffect = 'changed' | 'none';
+type PreparationWorkResult = Readonly<{
+  value: HostedPublicationPreparationProgress;
+  effect: PreparationEffect;
+}>;
+type PreparationWork = (tx: CommandTransaction, time: AuthoritativeTime) => Promise<PreparationWorkResult>;
 type StageBinding = Readonly<{ stageId: string; allowMissing: boolean }>;
 
 const PREPARATION_LIFETIME_MS = 24 * 60 * 60 * 1000;
@@ -100,7 +104,11 @@ function progress(
   };
 }
 
-/** Every mutation is an ordinary catalogue-home command. `runCommand` performs
+function preparationResult(value: HostedPublicationPreparationProgress, changed: boolean): PreparationWorkResult {
+  return { value, effect: changed ? 'changed' : 'none' };
+}
+
+/** Every preparation operation is an ordinary catalogue-home command. `runCommand` performs
  * current Post/container/revise authorization before it reads the retained
  * receipt, so exact retries keep their original response after later progress. */
 function preparationCommand(
@@ -165,14 +173,15 @@ function preparationCommand(
         authorization,
       },
       async (tx, { time }) => {
-        const value = await work(tx, time);
+        const result = await work(tx, time);
+        if (result.effect === 'none') return noEffect(result.value);
         return {
-          value,
+          value: result.value,
           events: [
             {
               type: PREPARATION_EVENT,
               subject: catalogueId,
-              data: { catalogueId, stageId: value.stageId },
+              data: { catalogueId, stageId: result.value.stageId },
             },
           ],
         };
@@ -208,24 +217,16 @@ export function startHostedPublicationPreparation(
     input,
     context,
     async (tx, time) => {
-      const current = await hostedCatalogue(tx as AccessClient, catalogueId, true);
-      if (!current) throw new ContentNotFoundError();
-      if (
-        current.head_revision_id !== input.expectedRevisionId ||
-        current.publication_id !== input.expectedPublicationId
-      )
-        throw new RevisionPreconditionError();
-
       const expiresAt = new Date(Date.parse(authoritativeTimeValue(time)) + PREPARATION_LIFETIME_MS);
       const begun = await beginHostedPublicationStaging(tx as AccessClient, actor, {
         catalogueId,
         stageId: input.stageId,
-        expectedHeadRevisionId: current.head_revision_id,
-        expectedPublicationId: current.publication_id,
+        expectedHeadRevisionId: input.expectedRevisionId,
+        expectedPublicationId: input.expectedPublicationId,
         mode: input.mode,
         expiresAt,
       });
-      return progress(catalogueId, begun.progress);
+      return preparationResult(progress(catalogueId, begun.progress), !begun.replayed);
     },
     { stageId: input.stageId, allowMissing: true },
   );
@@ -251,12 +252,15 @@ export function appendHostedPublicationPreparationBatch(
         ...locator(catalogueId, stageId),
         ...input,
       });
-      const stage = await readHostedPublicationStagingProgress(
+      const stageRead = await readHostedPublicationStagingProgressWithExpiry(
         tx as AccessClient,
         actor,
         locator(catalogueId, stageId),
       );
-      return progress(catalogueId, stage, null, batch);
+      return preparationResult(
+        progress(catalogueId, stageRead.progress, null, batch),
+        !batch.replayed || stageRead.expired,
+      );
     },
     { stageId, allowMissing: false },
   );
@@ -277,8 +281,12 @@ export function freezeHostedPublicationPreparationSelection(
     { stageId },
     context,
     async (tx) => {
-      const stage = await freezeHostedPublicationSelection(tx as AccessClient, actor, locator(catalogueId, stageId));
-      return progress(catalogueId, stage);
+      const result = await freezeHostedPublicationSelectionWithEvidence(
+        tx as AccessClient,
+        actor,
+        locator(catalogueId, stageId),
+      );
+      return preparationResult(progress(catalogueId, result.checkpoint), result.changed);
     },
     { stageId, allowMissing: false },
   );
@@ -289,10 +297,10 @@ async function candidateAfterSourceSeal(
   actor: Actor,
   stageId: string,
   catalogueId: string,
-): Promise<HostedVersionReleaseCandidateCheckpoint> {
+): Promise<Readonly<{ checkpoint: HostedVersionReleaseCandidateCheckpoint; changed: boolean }>> {
   const source = await sealHostedPublicationStaging(tx as AccessClient, actor, locator(catalogueId, stageId));
   const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
-  return candidate.checkpoint;
+  return { checkpoint: candidate.checkpoint, changed: !source.replayed || !candidate.replayed };
 }
 
 /** Advance exactly one retained staging or candidate page. The choice of source
@@ -313,10 +321,26 @@ export function advanceHostedPublicationPreparation(
     { stageId, stepId },
     context,
     async (tx) => {
+      // runCommand authorizes and checks committed receipts before entering this body. This
+      // fresh-work precondition covers candidate phases before any stage or candidate work.
+      requireRoute(stepId, routeOf(catalogueId)!);
       const stageLocator = locator(catalogueId, stageId);
-      const stage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
+      const replay = await readHostedPublicationAdvanceReplay(tx as AccessClient, actor, stageLocator, stepId);
+      if (replay?.kind === 'preparation')
+        return preparationResult(replay.response as HostedPublicationPreparationProgress, false);
+      if (replay?.kind === 'staging') return preparationResult(progress(catalogueId, replay.progress), false);
+
+      const stageRead = await readHostedPublicationStagingProgressWithExpiry(tx as AccessClient, actor, stageLocator);
+      const stage = stageRead.progress;
+      let phase: HostedPublicationAdvancePhase;
+      let processed = 0;
+      let fromFrontier = stage.sourceFrontier;
+      let toFrontier = stage.sourceFrontier;
+      let retainPreparationReceipt = true;
+      let result: PreparationWorkResult;
 
       if (stage.state === 'building' || stage.state === 'closing' || stage.state === 'collecting') {
+        let acknowledged: PreparationWorkResult | undefined;
         const advanced = await advanceHostedPublicationStaging(
           deps,
           tx as AccessClient,
@@ -324,30 +348,74 @@ export function advanceHostedPublicationPreparation(
           stageLocator,
           stepId,
           context.deadline,
+          (sourceResult) => {
+            acknowledged = preparationResult(
+              progress(catalogueId, sourceResult.progress),
+              stageRead.expired || !sourceResult.replayed,
+            );
+            return acknowledged.value;
+          },
         );
-        return progress(catalogueId, advanced.progress);
-      }
-
-      if (stage.state === 'ready') {
+        // A zero-row step can still persist phase or failure progress, so native replay evidence decides the event.
+        phase = advanced.phase;
+        processed = advanced.processed;
+        retainPreparationReceipt = false;
+        result =
+          acknowledged ??
+          preparationResult(progress(catalogueId, advanced.progress), stageRead.expired || !advanced.replayed);
+      } else if (stage.state === 'ready') {
         const source = await sealHostedPublicationStaging(tx as AccessClient, actor, stageLocator);
         const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
         const sealedStage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
-        return progress(catalogueId, sealedStage, candidateProgress(candidate.checkpoint));
-      }
-
-      if (stage.state === 'sealed') {
-        const checkpoint = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
-        if (checkpoint.coverageComplete) return progress(catalogueId, stage, candidateProgress(checkpoint));
-        const advanced = await applyHostedVersionReleaseCandidatePage(
-          tx,
-          actor,
-          checkpoint.sourceSeal,
-          checkpoint.afterSourceOrder,
+        phase = 'candidate_begin';
+        fromFrontier = '-1';
+        toFrontier = candidate.checkpoint.afterSourceOrder ?? '-1';
+        result = preparationResult(
+          progress(catalogueId, sealedStage, candidateProgress(candidate.checkpoint)),
+          stageRead.expired || !source.replayed || !candidate.replayed,
         );
-        return progress(catalogueId, stage, candidateProgress(advanced.checkpoint));
+      } else if (stage.state === 'sealed') {
+        const materialization = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
+        const checkpoint = materialization.checkpoint;
+        if (checkpoint.coverageComplete) {
+          phase = materialization.changed ? 'candidate_begin' : 'exhausted';
+          fromFrontier = checkpoint.afterSourceOrder ?? '-1';
+          toFrontier = checkpoint.afterSourceOrder ?? '-1';
+          result = preparationResult(
+            progress(catalogueId, stage, candidateProgress(checkpoint)),
+            stageRead.expired || materialization.changed,
+          );
+        } else {
+          const advanced = await applyHostedVersionReleaseCandidatePage(
+            tx,
+            actor,
+            checkpoint.sourceSeal,
+            checkpoint.afterSourceOrder,
+          );
+          phase = 'candidate_page';
+          processed = advanced.processed;
+          fromFrontier = checkpoint.afterSourceOrder ?? '-1';
+          toFrontier = advanced.checkpoint.afterSourceOrder ?? '-1';
+          result = preparationResult(
+            progress(catalogueId, stage, candidateProgress(advanced.checkpoint)),
+            stageRead.expired || materialization.changed || !advanced.replayed,
+          );
+        }
+      } else {
+        phase = 'terminal';
+        result = preparationResult(progress(catalogueId, stage), stageRead.expired);
       }
 
-      return progress(catalogueId, stage);
+      if (retainPreparationReceipt)
+        await retainHostedPublicationAdvanceReceipt(tx as AccessClient, actor, stageLocator, stepId, {
+          phase,
+          processed,
+          fromFrontier,
+          toFrontier,
+          progress: result.value.stage,
+          response: result.value,
+        });
+      return result;
     },
     { stageId, allowMissing: false },
   );
@@ -368,14 +436,16 @@ export function readHostedPublicationPreparationProgress(
     { stageId },
     context,
     async (tx) => {
-      const stage = await readHostedPublicationStagingProgress(
+      const stageRead = await readHostedPublicationStagingProgressWithExpiry(
         tx as AccessClient,
         actor,
         locator(catalogueId, stageId),
       );
-      if (stage.state !== 'sealed') return progress(catalogueId, stage);
-      const candidate = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
-      return progress(catalogueId, stage, candidateProgress(candidate));
+      const stage = stageRead.progress;
+      if (stage.state !== 'sealed') return preparationResult(progress(catalogueId, stage), stageRead.expired);
+      const candidate = await readHostedVersionReleaseCandidateProgress(tx, actor, locator(catalogueId, stageId));
+      const value = progress(catalogueId, stage, candidate === null ? null : candidateProgress(candidate));
+      return preparationResult(value, stageRead.expired);
     },
     { stageId, allowMissing: false },
   );
@@ -396,8 +466,12 @@ export function cancelHostedPublicationPreparation(
     { stageId },
     context,
     async (tx) => {
-      const stage = await cancelHostedPublicationStaging(tx as AccessClient, actor, locator(catalogueId, stageId));
-      return progress(catalogueId, stage);
+      const result = await cancelHostedPublicationStagingWithEvidence(
+        tx as AccessClient,
+        actor,
+        locator(catalogueId, stageId),
+      );
+      return preparationResult(progress(catalogueId, result.checkpoint), result.changed);
     },
     { stageId, allowMissing: false },
   );
@@ -424,8 +498,10 @@ export function sealHostedPublicationPreparation(
       const source = await sealHostedPublicationStaging(tx as AccessClient, actor, stageLocator);
       const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
       let checkpoint = candidate.checkpoint;
+      let changed = !source.replayed || !candidate.replayed;
       if (checkpoint.coverageComplete && !checkpoint.sealed) {
         const sealed = await sealHostedVersionReleaseCandidate(tx, actor, candidate.checkpoint.sourceSeal);
+        changed ||= !sealed.replayed;
         checkpoint = {
           ...checkpoint,
           placementCount: sealed.candidate.coverage.placementCount,
@@ -435,7 +511,7 @@ export function sealHostedPublicationPreparation(
         };
       }
       const stage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
-      return progress(catalogueId, stage, candidateProgress(checkpoint));
+      return preparationResult(progress(catalogueId, stage, candidateProgress(checkpoint)), changed);
     },
     { stageId, allowMissing: false },
   );

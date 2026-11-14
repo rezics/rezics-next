@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
-import { fromPlainText } from '@rezics/document';
+import { fromMarkdown, fromPlainText, withDocumentIds } from '@rezics/document';
+import { prepareWriting } from '../src/threads/local-writing-draft';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, localizeHref } from '../src/paraglide/runtime.js';
 import { subjectHref } from '../src/subject/subject-href';
@@ -181,6 +182,10 @@ test('browser writing stays separate until the person names it as the editor sou
   const unknownSubjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000006';
   const entry = row({ subjectIds: [unknownSubjectId] });
   const native = selected(entry, 'Server-saved body');
+  native.post.body = fromMarkdown(
+    '## Server-saved body\n\n> A retained quotation\n\n- A retained item\n\nBefore >!Server secret!< after.\n\n```ts\nconst server = 1;\n```\n\nSee [^Server-1].\n\n[^Server-1]: Server citation',
+    'blocks',
+  );
   const browser = {
     slot: 0,
     actor: accountId,
@@ -189,12 +194,13 @@ test('browser writing stays separate until the person names it as the editor sou
     updated: 1_798_000_000_000,
     bytes: 0,
     state: 'unsent' as const,
-    payload: {
-      title: 'Browser-only title',
-      body: fromPlainText('Independent browser body', 'blocks'),
-      text: 'Independent browser body',
-      attachmentRepair: false,
-    },
+    payload: prepareWriting(
+      'Browser-only title',
+      fromMarkdown(
+        '## Independent browser body\n\nBefore >!Browser secret!< after.\n\n- A browser item\n\nSee [^Browser-1].\n\n[^Browser-1]: Browser citation',
+        'blocks',
+      ),
+    ),
   };
   const reader: OwnDraftReader = {
     list: async () => {
@@ -248,6 +254,40 @@ test('browser writing stays separate until the person names it as the editor sou
     expect(fixture.host.textContent).toContain('Server-saved body');
     expect(fixture.host.textContent).toContain('Independent browser body');
     expect(fixture.host.textContent).toContain(m.own_drafts_choose_body({}, { locale }));
+    const previews = fixture.host.querySelectorAll<HTMLElement>('[data-slot="post-reading-body"]');
+    expect(previews).toHaveLength(2);
+    // The account UI locale cannot become an unknown body's language.
+    expect(previews[0]?.lang).toBe('en');
+    expect(previews[1]?.lang).toBe('');
+    expect(previews[0]?.querySelector('[data-slot="document-footnotes"]')?.getAttribute('aria-label')).toBe(
+      m.document_footnotes({}, { locale }),
+    );
+    expect(previews[0]?.querySelector('summary')?.textContent).toContain(m.document_footnote({}, { locale }));
+    expect(
+      [...previews[0]!.querySelectorAll('a[aria-label]')].map((link) => link.getAttribute('aria-label')),
+    ).toContain(`${m.document_go_to_footnote({}, { locale })} Server-1`);
+    const openFootnote = async (preview: Element) =>
+      act(async () => {
+        const details = preview.querySelector('details') as HTMLDetailsElement;
+        details.open = true;
+        details.dispatchEvent(new fixture.window.Event('toggle'));
+      });
+    await openFootnote(previews[0]!);
+    expect(previews[0]?.textContent).toContain('Server citation');
+    expect(previews[1]?.textContent).not.toContain('Server citation');
+    await openFootnote(previews[1]!);
+    expect(previews[1]?.textContent).toContain('Browser citation');
+    expect(previews[0]?.textContent).not.toContain('Browser citation');
+    expect(previews[0]?.querySelector('blockquote')?.textContent).toContain('A retained quotation');
+    expect(previews[0]?.querySelector('ul li')?.textContent).toContain('A retained item');
+    expect(previews[0]?.querySelector('pre code')?.textContent).toContain('const server = 1;');
+    const headings = [...fixture.host.querySelectorAll<HTMLHeadingElement>('[data-slot="post-reading-body"] h2')];
+    expect(headings.every((heading) => heading.id.length > 0)).toBe(true);
+    expect(new Set(headings.map((heading) => heading.id)).size).toBe(2);
+    const browserReveal = previews[1]?.querySelector<HTMLButtonElement>('.document-spoiler');
+    await act(async () => browserReveal!.click());
+    expect(previews[1]?.querySelector('.document-spoiler-revealed')?.textContent).toBe('Browser secret');
+    expect(previews[0]?.querySelector('.document-spoiler-revealed')).toBeNull();
     expect(writes).toHaveLength(0);
     expect(listReads).toBe(1);
     expect(selectedReads).toBe(1);
@@ -356,6 +396,99 @@ test('Return to drafts keeps edited server and browser writing on Stay and disca
       expect(fixture.window.document.activeElement?.textContent).toBe('Inspect draft privately');
     }
   } finally {
+    await fixture.close();
+  }
+});
+
+test('equal preview replacement retires disclosure, a wide inspector and late clipboard focus', async () => {
+  const { OwnDraftBodyPreview } = await import('../src/threads/own-drafts/body-preview');
+  const fixture = await mountOwnDrafts();
+  const prose = fromMarkdown(
+    '## Same supplied heading\n\nBefore >!Private conclusion!< after.\n\nSee [^Source-1].\n\n[^Source-1]: Private footnote\n\n```ts\nconst privateValue = 42;\n```',
+    'blocks',
+  );
+  const document = {
+    ...prose,
+    doc: withDocumentIds({
+      ...prose.doc,
+      content: [
+        ...prose.doc.content!,
+        { type: 'image', attrs: { src: 'unavailable-media', alt: 'Unavailable supplied image' } },
+      ],
+    }),
+  };
+  let finishCopy: (() => void) | undefined;
+  const originalClipboard = Object.getOwnPropertyDescriptor(fixture.window.navigator, 'clipboard');
+  Object.defineProperty(fixture.window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: () =>
+        new Promise<void>((resolve) => {
+          finishCopy = resolve;
+        }),
+    },
+  });
+  const render = (visitKey: string, source: 'server' | 'browser' = 'server', supplied = document) =>
+    fixture.renderComponent(
+      createElement(OwnDraftBodyPreview, {
+        document: supplied,
+        source,
+        visitKey,
+        documentLanguage: 'ja',
+        locale: 'en',
+        current: () => true,
+      }),
+    );
+  try {
+    await render('first');
+    expect(fixture.host.querySelector('img')).toBeNull();
+    expect(fixture.host.querySelector('[role="img"]')?.textContent).toContain('Unavailable supplied image');
+    await fixture.click(m.thread_reveal_spoiler());
+    expect(fixture.host.querySelector('.document-spoiler-revealed')?.textContent).toBe('Private conclusion');
+    const details = fixture.host.querySelector('details') as HTMLDetailsElement;
+    await act(async () => {
+      details.open = true;
+      details.dispatchEvent(new fixture.window.Event('toggle'));
+    });
+    expect(fixture.host.textContent).toContain('Private footnote');
+    const headingId = fixture.host.querySelector('h2')?.id;
+    await fixture.click(m.wide_document_code_inspect());
+    const dialog = fixture.window.document.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    const copy = [...dialog!.querySelectorAll('button')].find(
+      (button) => button.textContent === m.wide_document_code_copy(),
+    );
+    await act(async () => copy!.click());
+    expect(finishCopy).toBeDefined();
+    await render('replacement', 'server', structuredClone(document));
+    expect(fixture.window.document.querySelector('[role="dialog"]')).toBeNull();
+    expect(fixture.host.querySelector('.document-spoiler-revealed')).toBeNull();
+    expect(fixture.host.querySelector('details')?.hasAttribute('open')).toBe(false);
+    expect(fixture.host.textContent).not.toContain('Private footnote');
+    expect(fixture.host.querySelector('h2')?.id).not.toBe(headingId);
+    const focus = fixture.window.document.activeElement;
+    await act(async () => finishCopy!());
+    expect(fixture.window.document.activeElement).toBe(focus);
+    expect(fixture.host.textContent).not.toContain(m.wide_document_code_copied());
+    await fixture.renderComponent(
+      createElement(OwnDraftBodyPreview, {
+        document: null,
+        fallbackText: 'Text-only recovery',
+        source: 'browser',
+        visitKey: 'text',
+        documentLanguage: null,
+        locale: 'en',
+        current: () => true,
+      }),
+    );
+    expect(fixture.host.textContent).toContain(m.own_drafts_browser_text_fallback());
+    expect(fixture.host.textContent).toContain('Text-only recovery');
+    expect(fixture.host.querySelector('[data-slot="post-reading-body"]')).toBeNull();
+    await fixture.renderComponent(null);
+    expect(fixture.host.textContent).toBe('');
+  } finally {
+    if (originalClipboard) Object.defineProperty(fixture.window.navigator, 'clipboard', originalClipboard);
+    else Reflect.deleteProperty(fixture.window.navigator, 'clipboard');
     await fixture.close();
   }
 });

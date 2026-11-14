@@ -33,6 +33,7 @@ import {
   createHostedVersionGeneration,
   createHostedVersionWrite,
   hostedVersionSequence,
+  readHostedVersionMaximumChildSubtreeHeight,
   readHostedVersionOccurrence,
   readHostedVersionSiblingRoot,
   readHostedVersionSnapshot,
@@ -94,6 +95,7 @@ function insertValue(input: HostedDraftPointInsertInput): HostedVersionPointValu
 function asOccurrence(
   expectedRevisionId: string,
   row: HostedVersionOccurrenceValue<HostedVersionPointValue>,
+  subtreeHeight = row.value.subtreeHeight,
 ): HostedVersionDraftPointOccurrence {
   return {
     snapshotId: expectedRevisionId,
@@ -102,7 +104,7 @@ function asOccurrence(
     kind: row.value.kind,
     subtreeSize: row.subtreeSize,
     chapterCount: row.value.chapterCount,
-    subtreeHeight: row.value.subtreeHeight,
+    subtreeHeight,
   };
 }
 
@@ -121,10 +123,26 @@ function stringIndex(
       nodeReads.set(id, node);
       return node;
     },
+    async readNodes(ids) {
+      const selected = await inner.readNodes(ids);
+      const nodes = new Map<string, VersionedOutlineSequenceNode<string> | null>();
+      for (const [id, node] of selected) {
+        const mapped = asString(node);
+        nodeReads.set(id, mapped);
+        nodes.set(id, mapped);
+      }
+      return nodes;
+    },
     writeNode(node) {
       const previous = inner.nodeWrites.get(node.id) ?? inner.nodeReads.get(node.id);
-      const value = previous?.value ?? payloads.get(node.id);
-      if (!value) throw new Error('Hosted draft point sequence write is missing its occurrence value');
+      const previousValue = previous?.value ?? payloads.get(node.id);
+      if (!previousValue) throw new Error('Hosted draft point sequence write is missing its occurrence value');
+      const value =
+        node.subtreeHeight === undefined ||
+        node.subtreeHeight === null ||
+        node.subtreeHeight === previousValue.subtreeHeight
+          ? previousValue
+          : { ...previousValue, subtreeHeight: node.subtreeHeight };
       inner.writeNode({ ...node, value });
       nodeWrites.set(node.id, node);
     },
@@ -135,6 +153,8 @@ function stringIndex(
 }
 
 function indexesFor(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
   write: HostedVersionWrite<HostedVersionPointValue>,
   payloads: Map<string, HostedVersionPointValue>,
 ): HostedVersionDraftPointIndexes {
@@ -142,6 +162,8 @@ function indexesFor(
     siblings: stringIndex(hostedVersionSequence(write, 'sibling'), payloads),
     preorder: stringIndex(hostedVersionSequence(write, 'preorder'), payloads),
     chapters: stringIndex(hostedVersionSequence(write, 'chapter'), payloads),
+    readLegacyMaximum: async (parentId, excludedOccurrenceIds) =>
+      readHostedVersionMaximumChildSubtreeHeight(client, snapshot, parentId, excludedOccurrenceIds),
   };
 }
 
@@ -293,6 +315,7 @@ async function selectPoint(
       throw new InvalidHostedStructureError('Invalid hosted draft point anchor');
     }
     const siblingRoot = await readHostedVersionSiblingRoot(client, snapshot, input.parentId);
+    const siblingRootByParent = await siblingRootsFor(client, snapshot, parentPath);
     return {
       operation: 'insert',
       snapshotId: expectedRevisionId,
@@ -300,6 +323,7 @@ async function selectPoint(
       siblingRootId: siblingRoot?.rootNodeId ?? null,
       preorderRootId: snapshot.preorderRootId,
       chapterRootId: snapshot.chapterRootId,
+      siblingRootByParent,
       parentPath,
       before: before ? asOccurrence(expectedRevisionId, before) : null,
       occurrenceIdentityExists: await occurrenceIdentityExists(client, snapshot.catalogueId, input.occurrenceId),
@@ -308,6 +332,11 @@ async function selectPoint(
   const source = await readHostedVersionOccurrence<HostedVersionPointValue>(client, snapshot, input.occurrenceId);
   if (!source) throw new InvalidHostedStructureError('Invalid hosted draft point anchor');
   const siblingRoot = await readHostedVersionSiblingRoot(client, snapshot, source.parentOccurrenceId);
+  const rawSourceAncestors = await ancestorPath(client, snapshot, expectedRevisionId, source.parentOccurrenceId);
+  const siblingRootByParent = await siblingRootsFor(client, snapshot, [
+    asOccurrence(expectedRevisionId, source),
+    ...rawSourceAncestors,
+  ]);
   return {
     operation: 'remove',
     snapshotId: expectedRevisionId,
@@ -316,8 +345,27 @@ async function selectPoint(
     preorderRootId: snapshot.preorderRootId,
     chapterRootId: snapshot.chapterRootId,
     source: asOccurrence(expectedRevisionId, source),
-    sourceAncestors: await ancestorPath(client, snapshot, expectedRevisionId, source.parentOccurrenceId),
+    sourceAncestors: rawSourceAncestors,
+    siblingRootByParent,
   };
+}
+
+async function siblingRootsFor(
+  client: AccessClient,
+  snapshot: HostedVersionSnapshot,
+  occurrences: readonly HostedVersionDraftPointOccurrence[],
+): Promise<ReadonlyMap<string | null, string | null>> {
+  const parents = new Set<string | null>([null]);
+  for (const occurrence of occurrences) {
+    parents.add(occurrence.occurrenceId);
+    parents.add(occurrence.parentId);
+  }
+  const roots = new Map<string | null, string | null>();
+  for (const parentId of parents) {
+    const root = await readHostedVersionSiblingRoot(client, snapshot, parentId);
+    roots.set(parentId, root?.rootNodeId ?? null);
+  }
+  return roots;
 }
 
 async function stagePlan(
@@ -336,24 +384,19 @@ async function stagePlan(
   } else {
     stageHostedVersionOccurrence(write, input.occurrenceId, null);
   }
-  let childHeight = input.operation === 'insert' ? insertValue(input).subtreeHeight : 0;
+  const heightUpdates = new Map(plan.subtreeHeightUpdates.map((update) => [update.occurrenceId, update.subtreeHeight]));
   for (const delta of plan.ancestorDeltas) {
     const current = await readHostedVersionOccurrence<HostedVersionPointValue>(client, snapshot, delta.occurrenceId);
     if (!current) throw new InvalidHostedStructureError('Invalid hosted draft point anchor');
-    const subtreeHeight =
-      input.operation === 'insert'
-        ? Math.max(current.value.subtreeHeight, childHeight + 1)
-        : current.value.subtreeHeight;
     stageHostedVersionOccurrence(write, delta.occurrenceId, {
       parentOccurrenceId: current.parentOccurrenceId,
       subtreeSize: delta.subtreeSize,
       value: {
         ...current.value,
         chapterCount: delta.chapterCount,
-        subtreeHeight,
+        subtreeHeight: heightUpdates.get(delta.occurrenceId) ?? current.value.subtreeHeight,
       },
     });
-    childHeight = subtreeHeight;
   }
   stageHostedVersionSiblingRoot(write, plan.parentId, plan.siblingRootId);
   const placementDelta = input.operation === 'insert' ? 1n : -plan.preorderCount;
@@ -378,12 +421,9 @@ export async function commitHostedDraftPointWrite(
     const write = createHostedVersionWrite<HostedVersionPointValue>(client, snapshot);
     const payloads = new Map<string, HostedVersionPointValue>();
     if (input.operation === 'insert') payloads.set(input.occurrenceId, insertValue(input));
+    const indexes = indexesFor(client, snapshot, write, payloads);
     const selection = await selectPoint(client, snapshot, input);
-    const plan = await prepareHostedVersionDraftPointPlan(
-      input as HostedVersionDraftPointInput,
-      selection,
-      indexesFor(write, payloads),
-    );
+    const plan = await prepareHostedVersionDraftPointPlan(input as HostedVersionDraftPointInput, selection, indexes);
     if (input.operation === 'insert') await insertOccurrenceIdentity(client, catalogueId, input);
     await stagePlan(client, write, snapshot, input, plan);
     const next = await commitHostedVersionWrite(client, write);

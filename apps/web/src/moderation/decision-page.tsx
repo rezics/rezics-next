@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { ArrowLeft, Check, FileText, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Check, FileText } from 'lucide-react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -23,6 +23,7 @@ import {
 } from './decision-read-model';
 import { type DecisionPage, readDecisionPage } from './decision-read';
 import { threadLocation } from '../threads/thread-href';
+import { ModerationReference, moderationControl, moderationLink } from './presentation';
 
 function relativeTime(instant: string, now: number, locale: string) {
   const delta = Date.parse(instant) - now;
@@ -633,7 +634,7 @@ function DecisionVisit({
 
   return (
     <article
-      className="mx-auto w-full min-w-0 max-w-4xl space-y-7 py-1 sm:py-4"
+      className="mx-auto w-full min-w-0 max-w-5xl space-y-6 py-1 sm:py-4"
       aria-labelledby="decision-heading"
       aria-busy={busy}
       onKeyDownCapture={(event) => {
@@ -654,17 +655,11 @@ function DecisionVisit({
       }}
     >
       <header className="space-y-5">
-        <a
-          href={localizeHref('/inbox')}
-          className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:underline"
-        >
+        <a href={localizeHref('/inbox')} className={moderationLink}>
           <ArrowLeft className="size-4" aria-hidden="true" />
           {m.decision_back()}
         </a>
         <div className="flex items-start gap-3">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <ShieldCheck className="size-5" aria-hidden="true" />
-          </div>
           <div className="min-w-0 space-y-2">
             <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
               {m.decision_eyebrow()}
@@ -674,17 +669,37 @@ function DecisionVisit({
             </h1>
           </div>
         </div>
-        <ContentItemFrame as="div" className="p-5 sm:p-6" role="status">
-          <ContentItemHeading level={2} className="text-xs font-medium text-muted-foreground">
-            {m.decision_current_outcome()}
-          </ContentItemHeading>
-          <p className="mt-2 text-xl font-semibold tracking-tight">{outcome}</p>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            {appeal ? m.decision_outcome_independent() : m.decision_original_effect()}
-          </p>
-        </ContentItemFrame>
+        <div className="grid min-w-0 gap-5 border-l-2 border-primary pl-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div role="status">
+            <ContentItemHeading level={2} className="text-xs font-medium text-muted-foreground">
+              {m.decision_current_outcome()}
+            </ContentItemHeading>
+            <p className="mt-2 text-xl font-semibold tracking-tight">{outcome}</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              {appeal ? m.decision_outcome_independent() : m.decision_original_effect()}
+            </p>
+          </div>
+          <div className="min-w-0 space-y-3 text-sm">
+            {decision.appealDeadline ? (
+              <dl className="space-y-1 leading-6">
+                <dt className="font-medium">{m.decision_deadline_label()}</dt>
+                <dd className="text-muted-foreground">
+                  <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
+                </dd>
+              </dl>
+            ) : null}
+            <Button
+              className={moderationControl}
+              variant="outline"
+              disabled={refreshing}
+              onClick={() => void refresh()}
+            >
+              {refreshing ? m.decision_refreshing() : m.decision_refresh()}
+            </Button>
+          </div>
+        </div>
       </header>
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+      <ContentItemFrame as="div" className="grid min-w-0 gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <section className="min-w-0 space-y-4" aria-labelledby="decision-reasons">
           <ContentItemHeading
             id="decision-reasons"
@@ -694,7 +709,7 @@ function DecisionVisit({
             <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
             {m.decision_original_heading()}
           </ContentItemHeading>
-          <ContentItemFrame as="div" className="p-5 sm:p-6">
+          <div className="min-w-0">
             <p className="text-xs font-medium text-muted-foreground">{m.decision_original_action()}</p>
             <ContentItemHeading level={3} className="mt-5 text-sm font-semibold">
               {m.decision_reasons_heading()}
@@ -703,13 +718,13 @@ function DecisionVisit({
             <p className="mt-5 border-t border-border pt-4 text-xs leading-6 text-muted-foreground">
               {m.decision_decided_label()} <DecisionTime instant={decision.decidedAt} now={now} locale={locale} />
             </p>
-          </ContentItemFrame>
+          </div>
         </section>
         <section className="min-w-0 space-y-4" aria-labelledby="decision-applies">
           <ContentItemHeading id="decision-applies" level={2} className="text-base font-semibold">
             {m.decision_current_target()}
           </ContentItemHeading>
-          <ContentItemFrame as="div" className="p-5 sm:p-6">
+          <div className="min-w-0">
             <Badge variant="outline">{targetKind}</Badge>
             {context?.state === 'available' ? (
               <div className="mt-3 min-w-0 space-y-2 wrap-anywhere text-sm">
@@ -741,27 +756,14 @@ function DecisionVisit({
                   : m.decision_target_context_unavailable()}
               </p>
             )}
-            <p className="mt-3 text-xs leading-6 text-muted-foreground">{m.decision_target_independent()}</p>
-            <Button className="mt-4 min-h-11" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
-              {refreshing ? m.decision_refreshing() : m.decision_refresh()}
-            </Button>
-          </ContentItemFrame>
+          </div>
         </section>
-      </div>
-      <section className="min-w-0" aria-labelledby="decision-appeal">
-        <ContentItemFrame as="div" className="p-5 sm:p-6">
+      </ContentItemFrame>
+      <section className="min-w-0 space-y-4 border-t pt-5" aria-labelledby="decision-appeal">
+        <div className="min-w-0">
           <ContentItemHeading id="decision-appeal" level={2} className="text-lg font-semibold">
             {m.decision_appeal_heading()}
           </ContentItemHeading>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{m.decision_appeal_explanation()}</p>
-          {decision.appealDeadline ? (
-            <dl className="mt-5 border-y border-border py-4 text-sm leading-6 sm:flex sm:gap-6">
-              <dt className="font-medium">{m.decision_deadline_label()}</dt>
-              <dd className="mt-1 text-muted-foreground sm:mt-0">
-                <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
-              </dd>
-            </dl>
-          ) : null}
           {appeal ? (
             <div className="mt-5 space-y-3">
               <p
@@ -771,9 +773,6 @@ function DecisionVisit({
               >
                 <Check className="size-4 text-primary" aria-hidden="true" />
                 {appeal.outcome ? m.decision_review_heading() : m.decision_appeal_pending()}
-              </p>
-              <p className="text-sm leading-6 text-muted-foreground">
-                {appeal.outcome ? m.decision_review_explanation() : m.decision_pending_explanation()}
               </p>
               {appeal.outcome && appeal.statement ? (
                 <blockquote className="border-s-2 border-primary/30 ps-4 whitespace-pre-wrap wrap-anywhere text-sm leading-7">
@@ -822,9 +821,15 @@ function DecisionVisit({
               <p id="appeal-hint" className="text-xs leading-6 text-muted-foreground">
                 {m.decision_authority_hint()}
               </p>
+              <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                {m.moderation_case_details_decision_id()}:{' '}
+                <code dir="ltr" className="select-text break-all">
+                  {decision.id}
+                </code>
+              </p>
               <Button
                 type="submit"
-                className="min-h-11 w-full sm:w-auto"
+                className={`${moderationControl} w-full sm:w-auto`}
                 disabled={busy || locked || count < 1 || count > 2000}
               >
                 {busy ? m.decision_appeal_sending() : m.decision_appeal_submit()}
@@ -856,14 +861,14 @@ function DecisionVisit({
             </div>
           ) : null}
           {feedback ? (
-            <ContentItemFrame as="div" className="mt-5 space-y-3 p-4">
+            <div className="mt-5 space-y-3 border-l-2 border-border pl-4">
               <p role="alert" className="text-sm leading-6">
                 {feedbackText}
               </p>
               {feedback === 'uncertain' ? (
                 <Button
                   variant="outline"
-                  className="min-h-11"
+                  className={moderationControl}
                   disabled={busy}
                   onClick={(event) => {
                     const keyboardControl = keyboardClick.current === event.currentTarget ? event.currentTarget : null;
@@ -874,37 +879,28 @@ function DecisionVisit({
                   {m.decision_retry_same()}
                 </Button>
               ) : null}
-            </ContentItemFrame>
+            </div>
           ) : null}
           {composition.needsDecision ? (
             <Button
               type="button"
               variant="outline"
-              className="mt-4 min-h-11"
+              className={`${moderationControl} mt-4`}
               onClick={() => departure.requestDiscard()}
             >
               {m.decision_appeal_discard()}
             </Button>
           ) : null}
-        </ContentItemFrame>
+        </div>
       </section>
-      <details className="border-t border-border pt-3">
-        <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{m.reporter_status_reference()}</summary>
-        <ContentItemFrame as="div" className="space-y-4 p-4">
-          <dl className="space-y-4 text-sm">
-            <div className="space-y-1">
-              <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
-              <dd className="select-text break-all font-mono leading-6">{decision.id}</dd>
-            </div>
-            {appeal ? (
-              <div className="space-y-1">
-                <dt className="text-muted-foreground">{m.moderation_case_details_appeal_id()}</dt>
-                <dd className="select-text break-all font-mono leading-6">{appeal.id}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </ContentItemFrame>
-      </details>
+      <ModerationReference
+        fields={[
+          { label: m.moderation_case_details_decision_id(), value: decision.id },
+          ...(appeal ? [{ label: m.moderation_case_details_appeal_id(), value: appeal.id }] : []),
+        ]}
+      >
+        <p className="max-w-prose pb-3 text-xs leading-6 text-muted-foreground">{m.decision_target_independent()}</p>
+      </ModerationReference>
     </article>
   );
 }

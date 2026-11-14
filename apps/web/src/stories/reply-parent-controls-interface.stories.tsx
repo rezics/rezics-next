@@ -244,7 +244,7 @@ export const CompleteControls: Story = {
     release({ ok: false, reason: 'unavailable' });
     await composer.findByRole('alert');
     write.mockResolvedValueOnce({ ok: false, reason: 'forbidden' });
-    await userEvent.click(composer.getByRole('button', { name: m.thread_write_retry() }));
+    await userEvent.click(composer.getByRole('button', { name: m.thread_recovery_retry_original() }));
     await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
     await expect(write.mock.calls[1]![0]).toEqual(write.mock.calls[0]![0]);
     await waitFor(() => expect(cancel).toBeEnabled());

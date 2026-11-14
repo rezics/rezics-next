@@ -1,13 +1,27 @@
 import { useEffect, useId, useState } from 'react';
-import { documentText } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { ExactVersionDetails } from './revisions';
 import { bookTocRows } from './book-toc';
 import type { StudioController, StudioState } from './controller';
+import {
+  ArticlePublicationOutcome,
+  ArticlePublicationReview,
+  type ArticlePublicationPresentation,
+} from './publication-body';
+import type { PublicationReview } from './contract';
 
-export function StudioPublication({ controller, state }: { controller: StudioController; state: StudioState }) {
+export function StudioPublication({
+  controller,
+  state,
+  articlePresentation,
+}: {
+  controller: StudioController;
+  state: StudioState;
+  /** Supply only labels already admitted for the exact review; this callback performs no reads. */
+  articlePresentation?: (review: PublicationReview) => ArticlePublicationPresentation;
+}) {
   const review = state.review;
   const withdrawal = review?.withdrawal;
   const locale = getLocale();
@@ -79,7 +93,14 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
       {!controller.input.canPublish ? <p>{m.studio_release_unavailable({}, options)}</p> : null}
       {unsaved ? <p>{m.studio_release_save_first({}, options)}</p> : null}
       {book && !hasTarget ? <p>{m.studio_release_select_chapters({}, options)}</p> : null}
-      {review ? (
+      {review?.authority === 'local' && review.target.kind === 'article' && review.articleSnapshot ? (
+        <ArticlePublicationReview
+          controller={controller}
+          state={state}
+          review={review}
+          presentation={articlePresentation?.(review)}
+        />
+      ) : review ? (
         <div
           className="studio-release-review"
           aria-label={withdrawal ? m.studio_withdraw_heading({}, options) : m.studio_release_review_label({}, options)}
@@ -130,35 +151,6 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
           {review.notices.map((notice, index) => (
             <p key={index}>{notice}</p>
           ))}
-          {review.authority === 'local' && review.articleSnapshot ? (
-            <section
-              className="studio-native-review studio-stack"
-              aria-label={m.studio_release_article_details({}, options)}
-            >
-              <p>
-                <strong>{m.studio_account_review_destination({}, options)}:</strong> {review.articleSnapshot.boardId}
-              </p>
-              <p>
-                <strong>{m.studio_account_review_licence({}, options)}:</strong> {review.articleSnapshot.licence}
-              </p>
-              <p>
-                <strong>{m.own_drafts_subjects({}, options)}:</strong>{' '}
-                {review.articleSnapshot.subjectIds.length
-                  ? review.articleSnapshot.subjectIds.join(', ')
-                  : m.own_drafts_no_references({}, options)}
-              </p>
-              <p>
-                <strong>{m.own_drafts_media({}, options)}:</strong>{' '}
-                {review.articleSnapshot.mediaIds.length
-                  ? review.articleSnapshot.mediaIds.join(', ')
-                  : m.own_drafts_no_references({}, options)}
-              </p>
-              <div>
-                <h4>{m.studio_account_review_body({}, options)}</h4>
-                <pre className="studio-reviewed-body">{documentText(review.articleSnapshot.body)}</pre>
-              </div>
-            </section>
-          ) : null}
           {review.authority !== 'local' ? (
             <p className="studio-help">
               <time dateTime={review.expiresAt}>
@@ -204,6 +196,7 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
       ) : null}
       <Button
         type="button"
+        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]"
         variant={review ? 'outline' : 'default'}
         disabled={blocked || !hasTarget || Boolean(unsaved) || !controller.input.canPublish}
         onClick={() => void controller.reviewPublication()}
@@ -220,7 +213,9 @@ export function StudioPublication({ controller, state }: { controller: StudioCon
           {m.studio_withdraw_review({}, options)}
         </Button>
       ) : null}
-      {state.published ? (
+      {state.published?.readbackSelection ? (
+        <ArticlePublicationOutcome state={state} />
+      ) : state.published ? (
         <p role="status">
           {state.published.state === 'withdrawn'
             ? m.studio_withdraw_receipt({ revision: state.published.revision }, options)

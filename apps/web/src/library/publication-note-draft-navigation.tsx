@@ -20,7 +20,12 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../paraglide/messages.js';
 
-type DraftState = { active: boolean; dirty: boolean; locked: boolean };
+type DraftState = {
+  active: boolean;
+  dirty: boolean;
+  locked: boolean;
+  journal?: 'draft' | 'pending' | 'uncertain' | 'acknowledged' | undefined;
+};
 type DraftRegistration = {
   state: () => DraftState;
   discard: () => void;
@@ -33,12 +38,12 @@ type DraftOptions = {
   discard: () => void;
 };
 
-/** A Progress page has one navigation decision for its editor and publication note. */
+/** A Progress page has one navigation decision for its editor, private journal and publication note. */
 class ProgressDeparture {
   private drafts = new Set<DraftRegistration>();
   private listeners = new Set<() => void>();
   private revision = 0;
-  private decision: { resolve: (stay: boolean) => void } | null = null;
+  private decision: { resolve: (stay: boolean) => void; owners: DraftRegistration[] } | null = null;
   private focusTarget: HTMLElement | null = null;
   private suppressFocusReturn = false;
 
@@ -68,18 +73,23 @@ class ProgressDeparture {
 
   needsDecision = () => this.current().some(({ state }) => state.dirty || state.locked);
   isLocked = () => this.current().some(({ state }) => state.locked);
+  journalState = () => this.current().find(({ state }) => state.journal)?.state.journal;
+  hasOtherDrafts = () => this.current().some(({ state }) => !state.journal && (state.dirty || state.locked));
 
   register(draft: DraftRegistration) {
     this.drafts.add(draft);
     this.refresh();
     return () => {
       this.drafts.delete(draft);
-      this.refresh();
+      if (this.decision) this.settle(true, true);
+      else this.refresh();
     };
   }
 
   refresh = () => {
-    if (this.decision && !this.needsDecision()) this.settle(false);
+    // Retirement cancels the old navigation. It cannot approve movement for a replacement reader.
+    if (this.decision && (!this.needsDecision() || this.decision.owners.some((owner) => !owner.state().active)))
+      this.retire();
     else this.notify();
   };
 
@@ -89,12 +99,18 @@ class ProgressDeparture {
     this.focusTarget = focused;
     this.suppressFocusReturn = false;
     return new Promise<boolean>((resolve) => {
-      this.decision = { resolve };
+      this.decision = {
+        resolve,
+        owners: this.current()
+          .filter(({ state }) => state.dirty || state.locked)
+          .map(({ draft }) => draft),
+      };
       this.notify();
     });
   };
 
   stay = () => this.settle(true);
+  retire = () => this.settle(true, true);
 
   discard = () => {
     if (this.isLocked()) return;
@@ -102,11 +118,11 @@ class ProgressDeparture {
     this.settle(false);
   };
 
-  private settle(stay: boolean) {
+  private settle(stay: boolean, retired = false) {
     const decision = this.decision;
     if (!decision) return;
     this.decision = null;
-    this.suppressFocusReturn = !stay;
+    this.suppressFocusReturn = !stay || retired;
     this.notify();
     decision.resolve(stay);
   }
@@ -121,9 +137,23 @@ export function PublicationNoteDraftNavigation({
   children: ReactNode;
   messages?: 'publication-note' | 'progress';
 }) {
+  const existing = useContext(DepartureContext);
+  return existing ? children : <ProgressDepartureBoundary messages={messages}>{children}</ProgressDepartureBoundary>;
+}
+
+function ProgressDepartureBoundary({
+  children,
+  messages,
+}: {
+  children: ReactNode;
+  messages: 'publication-note' | 'progress';
+}) {
   const [navigation] = useState(() => new ProgressDeparture());
   useSyncExternalStore(navigation.subscribe, navigation.snapshot, navigation.snapshot);
   const stayButton = useRef<HTMLButtonElement>(null);
+  const journal = navigation.journalState();
+
+  useLayoutEffect(() => () => navigation.retire(), [navigation]);
 
   useBlocker({
     shouldBlockFn: ({ current, next }) => {
@@ -158,31 +188,47 @@ export function PublicationNoteDraftNavigation({
         >
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {messages === 'progress'
-                ? m.library_progress_draft_navigation_title()
-                : m.library_publication_note_draft_navigation_title()}
+              {journal
+                ? m.library_journal_draft_navigation_title()
+                : messages === 'progress'
+                  ? m.library_progress_draft_navigation_title()
+                  : m.library_publication_note_draft_navigation_title()}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {messages === 'progress'
-                ? navigation.isLocked()
-                  ? m.library_progress_draft_navigation_pending()
-                  : m.library_progress_draft_navigation_description()
-                : navigation.isLocked()
-                  ? m.library_publication_note_draft_navigation_pending()
-                  : m.library_publication_note_draft_navigation_description()}
+              {journal === 'pending'
+                ? m.library_journal_draft_navigation_pending()
+                : journal === 'uncertain'
+                  ? m.library_journal_draft_navigation_uncertain()
+                  : journal === 'acknowledged'
+                    ? m.library_journal_draft_navigation_acknowledged()
+                    : journal
+                      ? m.library_journal_draft_navigation_description()
+                      : null}
+              {journal && navigation.hasOtherDrafts() ? ' ' : null}
+              {!journal || navigation.hasOtherDrafts()
+                ? messages === 'progress'
+                  ? navigation.isLocked()
+                    ? m.library_progress_draft_navigation_pending()
+                    : m.library_progress_draft_navigation_description()
+                  : navigation.isLocked()
+                    ? m.library_publication_note_draft_navigation_pending()
+                    : m.library_publication_note_draft_navigation_description()
+                : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel ref={stayButton} onClick={navigation.stay}>
+            <AlertDialogCancel ref={stayButton} className="min-h-11 whitespace-normal" onClick={navigation.stay}>
               {messages === 'progress'
                 ? m.library_progress_draft_navigation_stay()
                 : m.library_publication_note_draft_navigation_stay()}
             </AlertDialogCancel>
             {!navigation.isLocked() ? (
-              <AlertDialogAction onClick={navigation.discard}>
-                {messages === 'progress'
-                  ? m.library_progress_draft_navigation_discard()
-                  : m.library_publication_note_draft_navigation_discard()}
+              <AlertDialogAction className="min-h-11 whitespace-normal" onClick={navigation.discard}>
+                {journal
+                  ? m.library_journal_draft_navigation_leave()
+                  : messages === 'progress'
+                    ? m.library_progress_draft_navigation_discard()
+                    : m.library_publication_note_draft_navigation_discard()}
               </AlertDialogAction>
             ) : null}
           </AlertDialogFooter>
@@ -200,7 +246,7 @@ export function usePublicationNoteDraftNavigation(options: DraftOptions) {
   const navigation = useContext(DepartureContext);
   const latest = useRef(options);
   latest.current = options;
-  const { active, dirty, locked } = options.state;
+  const { active, dirty, locked, journal } = options.state;
 
   useLayoutEffect(() => {
     if (!navigation) return;
@@ -215,7 +261,7 @@ export function usePublicationNoteDraftNavigation(options: DraftOptions) {
     };
   }, [navigation, options.identity]);
 
-  useLayoutEffect(() => navigation?.refresh(), [navigation, active, dirty, locked, options.identity]);
+  useLayoutEffect(() => navigation?.refresh(), [navigation, active, dirty, locked, journal, options.identity]);
 
   return {
     requestNavigation: () =>

@@ -59,11 +59,18 @@ function copyId(value: unknown, pattern: RegExp): string | undefined {
   return typeof value === 'string' && pattern.test(value) ? value : undefined;
 }
 
-function adoptedContent(read: unknown, property: string): string | undefined {
-  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
-    .subject?.statements?.[property];
-  const content = statements?.[0]?.value?.content;
-  return typeof content === 'string' ? content : undefined;
+function adoptedContents(read: unknown, property: string): string[] {
+  const statements = (
+    read as {
+      subject?: { statements?: Record<string, { rank?: string; value?: { content?: unknown } }[]> };
+    }
+  ).subject?.statements?.[property];
+  if (!Array.isArray(statements)) return [];
+  return statements.flatMap((statement) =>
+    (statement.rank === 'normal' || statement.rank === 'preferred') && typeof statement.value?.content === 'string'
+      ? [statement.value.content]
+      : [],
+  );
 }
 
 async function readSchemeConcepts(
@@ -85,7 +92,7 @@ async function readSchemeConcepts(
   }
   const scheme = schemeRead as { subject?: { id?: string; type?: string } };
   if (scheme.subject?.id !== known.schemeId || scheme.subject.type !== 'skos:ConceptScheme') return empty;
-  if (adoptedContent(schemeRead, 'schema:url') !== known.schemeUri) return empty;
+  if (!adoptedContents(schemeRead, 'schema:url').includes(known.schemeUri)) return empty;
   const concepts: SourceVocabularyBindings['concepts'][number][] = [];
   for (const item of known.concepts) {
     let conceptRead;
@@ -96,8 +103,8 @@ async function readSchemeConcepts(
     }
     const concept = conceptRead as { subject?: { id?: string; type?: string } };
     if (concept.subject?.id !== item.id || concept.subject.type !== 'skos:Concept') continue;
-    if (adoptedContent(conceptRead, 'schema:url') !== known.conceptUri(item.code)) continue;
-    if (adoptedContent(conceptRead, 'skos:inScheme') !== known.schemeId) continue;
+    if (!adoptedContents(conceptRead, 'schema:url').includes(known.conceptUri(item.code))) continue;
+    if (!adoptedContents(conceptRead, 'skos:inScheme').includes(known.schemeId)) continue;
     concepts.push({
       taxonomy: known.taxonomy,
       code: item.code,

@@ -865,6 +865,8 @@ deferred verification. Source completion does not claim mounted or deployed acce
 
 #### Fixture and recording workflow
 
+Decision: Both previews use static docs source and disable the Code panel by default; rich page stories expose concise snippets. Web retains Docs and component prop documentation.
+
 Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and
 `src/kernel/fixtures/`; add no new routes or entries to `fake.ts` or `fixtures.json`. Each route module exports a
 `routes` array typed as `FakeRoute[]` from `fake-modules.ts`: each route has a `method`, an exact pathname or regular

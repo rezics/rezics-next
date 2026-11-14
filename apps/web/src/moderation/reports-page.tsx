@@ -27,6 +27,7 @@ import { PageHeading } from '../shell/page-heading';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import { useRouter } from '@tanstack/react-router';
 import { reportReviewNavigationContext } from './reports-bulk-controls';
+import { ModerationScope } from './presentation';
 
 export { moderationTargetContent } from './target-content';
 export type ModerationTarget = ResolvedReportTarget;
@@ -376,7 +377,7 @@ function ReportsView({
       ref={continuationBoundary}
       tabIndex={-1}
       aria-label={m.moderation_reports_heading()}
-      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="mx-auto w-full min-w-0 max-w-6xl space-y-6 text-foreground [overflow-wrap:anywhere] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       onClick={(event) => {
         if (
           retired ||
@@ -411,6 +412,14 @@ function ReportsView({
           </a>
         ) : null}
         <PageHeading>{m.moderation_reports_heading()}</PageHeading>
+        {boardId ? (
+          <ModerationScope
+            kind="board"
+            id={boardId}
+            label={evidence.find((item) => item?.board?.id === boardId)?.board?.title}
+            admitted={state === 'ready' && !retired && isCurrent?.() !== false}
+          />
+        ) : null}
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
           {postId
             ? m.moderation_queue_post_scope()

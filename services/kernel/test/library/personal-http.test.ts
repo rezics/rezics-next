@@ -133,6 +133,19 @@ async function snapshot() {
     UNION ALL SELECT 'follow', to_jsonb(f) FROM library.follow f) AS rows ORDER BY kind, row::text`);
   return result.rows;
 }
+async function waitForFollowContribution() {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const waiting = await db.admin.query(
+      `SELECT 1 FROM pg_stat_activity
+       WHERE pid <> pg_backend_pid() AND datname=current_database()
+         AND wait_event_type='Lock' AND query ILIKE '%semantic.account_agent_subject%' LIMIT 1`,
+    );
+    if (waiting.rowCount) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('FULL Follow read did not reach the contribution lookup lock');
+}
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
@@ -581,6 +594,39 @@ test('FULL point keeps an inaccessible agent Follow target withheld while BASIC 
   });
   const full = await json(await request('GET', `/v1/follows/${targetId}?view=FULL`));
   expect(full.follow).toMatchObject({ targetId, state: 'following', target: null });
+});
+
+test('mounted FULL Follow reads recheck the owner after delayed contribution enrichment', async () => {
+  const targetId = await subject('Owner fence during enrichment');
+  await json(await request('PUT', `/v1/follows/${targetId}`));
+  const floor = await db.admin.query<{ minimum_authn_epoch: string }>(
+    'SELECT minimum_authn_epoch::text FROM access.account WHERE route=$1 AND account_id=$2',
+    [routeOf(accounts.owner), accounts.owner],
+  );
+  const blocker = await db.admin.connect();
+  let pending: Promise<Response> | undefined;
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query('LOCK TABLE semantic.account_agent_subject IN ACCESS EXCLUSIVE MODE');
+    pending = request('GET', `/v1/follows/${targetId}?view=FULL`);
+    await waitForFollowContribution();
+    await db.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2', [
+      routeOf(accounts.owner),
+      accounts.owner,
+    ]);
+  } finally {
+    await blocker.query('ROLLBACK');
+    blocker.release();
+  }
+  try {
+    await problem(await pending!, 404, 'not_found');
+  } finally {
+    await db.admin.query('UPDATE access.account SET minimum_authn_epoch=$3 WHERE route=$1 AND account_id=$2', [
+      routeOf(accounts.owner),
+      accounts.owner,
+      floor.rows[0]!.minimum_authn_epoch,
+    ]);
+  }
 });
 
 test('private reads conceal owner unknown and malformed ids and denied writes leave state unchanged', async () => {

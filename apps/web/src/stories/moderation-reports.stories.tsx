@@ -202,8 +202,8 @@ export const IllustrativeReferenceAndPreciseDates: Story = {
     await expect(details).toHaveAttribute('open');
     await expect(within(details).getByText(m.moderation_queue_details_report_id())).toBeVisible();
     await expect(within(details).getByText(report.id, { exact: true })).toBeVisible();
-    await expect(details.textContent).not.toContain(report.target.id);
-    await expect(details.textContent).not.toContain(report.revisionId!);
+    await expect(details.textContent).toContain(report.target.id);
+    await expect(details.textContent).toContain(report.revisionId!);
     const dates = [...article.querySelectorAll('time')];
     await expect(dates.map((time) => time.getAttribute('datetime'))).toEqual([report.createdAt, report.resolvedAt]);
     await expect(dates.map((time) => time.textContent)).toEqual([

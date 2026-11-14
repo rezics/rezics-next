@@ -7,7 +7,14 @@ export function ownVoteValue(entry: OwnVoteEntry, locale: string): string {
 
 export function ownVoteScale(entry: OwnVoteEntry, locale: string): string {
   const number = new Intl.NumberFormat(locale);
-  return `${number.format(entry.question.scale.min)}–${number.format(entry.question.scale.max)} · ${number.format(entry.question.scale.displayStep)}`;
+  return m.rating_native_scale(
+    {
+      min: number.format(entry.question.scale.min),
+      max: number.format(entry.question.scale.max),
+      step: number.format(entry.question.scale.displayStep),
+    },
+    { locale: locale as never },
+  );
 }
 
 export function ownVoteChangedAt(entry: OwnVoteEntry, locale: string): string | null {

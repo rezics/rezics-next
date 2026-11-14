@@ -36,6 +36,9 @@ Preparation start returns 202 and the remaining preparation commands return 200.
 limited to 1,024 IDs with no aggregate cap. Preparation responses are private and no-store, expose only retained
 progress and candidate counts, and never select the publication pointer.
 
+Decision: preparation route registration returns its chained Elysia type through chapter composition, so the
+generated Kernel client exposes all seven mounted commands and Studio calls them directly with inferred operands.
+
 Each placement supplies `occurrenceId`, nullable `parentId`, zero-based sibling `position`, `title` and `kind`.
 Parts have no target. Chapters supply a target containing `threadId`, `postId`, `revisionId` and lowercase SHA-256
 hex. The occurrence and parent IDs carry the catalogue's route; target identities carry the target Post's route.
@@ -71,15 +74,18 @@ offset order preserves native preorder and exact targets. Empty withdrawal verif
 but reads no descriptor or placement rows. The shared release validator still rejects duplicate and unknown IDs
 and missing ancestors, then assigns dense sibling positions and preorder; the direct publish selection cap remains 512.
 
-Selection preparation follows `hostedPostAuthorization.prepare`; only the catalogue locator runs before native
-Post authorship/container visibility/participation, authority-anchor and authoritative-time `post:revise` admission.
-It reads the expected immutable structure/selected rows with the original partition/deadline, then validates target
-attachments outside the write transaction. Keep complete preparation only for that invocation's attempt time; every
-retry re-admits and rereads, so failed preparation cannot lend a later transaction earlier selections. This admits
-reads, not mutation. Transactional authorization still consumes the single-use proof and rechecks the container
-before receipts, with existing finalization. For admitted authors selection/attachment errors precede receipts;
-head/publication CAS follows them. Empty withdrawal, exact replay, responses, events and the existing 512-placement
-compatibility limits stay unchanged; prepared selection batches use the 1,024-ID cap below.
+Decision: hosted structure create/revise/root append/direct publish, point insertion and chapter-target update first
+run `preflightCommandReceipt` with the original kind, key, digest, principal, partition and deadline under
+`hostedPostAuthorization`. Current Post authorship/container visibility/participation, authority-anchor and
+authoritative-time `post:revise` admission still precede receipt lookup. An authorized exact hit returns the stored
+response and command position without reading a mutable release selection or probing attached sources. A miss runs
+the full preparation: direct publish reads its expected immutable structure/selected rows, and each changed exact
+target is checked with native metadata and its retained original observation outside the write transaction. The
+ordinary command then repeats authorization and receipt lookup, consumes the single-use proof, rechecks/finalizes the
+container, and applies head/publication CAS atomically with immutable rows, receipt and event. Fresh selection and
+attachment failures still write nothing; stale CAS follows preparation. Digest conflicts and minimized results keep
+their native command behavior. Empty withdrawal, responses, events and the existing 512-placement compatibility
+limits stay unchanged; prepared selection batches use the 1,024-ID cap below.
 
 ## Versioned outline adoption
 
@@ -139,6 +145,13 @@ drafts stay on replacement until the ordered-generation builder activates them. 
 `commitHostedVersionRevision` records the new descriptor and CAS-advances the draft pointer. Compatibility readers
 remain for unmapped revisions. Mapped structure revisions fork GET children, outline, navigation and resolve onto the
 versioned indexes so advancing the catalogue head never serves an empty legacy page. Do not add a parallel SQL adapter.
+
+Decision: `subtreeHeight` counts containment edges below an occurrence: chapters and empty parts are zero, and a part
+is one plus its deepest child's height. Admission uses `ancestorCount + 1 + movedHeight <= 16`, including root
+placements. Each ordered sequence node retains the maximum measure in its AVL subtree, so a parent derives its
+deepest remaining child from one sibling-root summary after insert, move or removal. Recompute changed source and
+destination ancestor paths bottom-up, including shrinking maxima; old snapshots keep their original facts, and a
+missing legacy aggregate is derived from the selected snapshot's indexed child-height facts before admission.
 
 Decision: `updateDraftPoint` requires the new title and resulting exact target state (`null` for a part, the
 complete thread/Post/revision/digest tuple for a chapter); the occurrence kind and bound chapter Thread/Post cannot
@@ -380,6 +393,62 @@ source-pinned stage a 24-hour lifetime from native command time, and returns ret
 only the stage's immutable source revision, expected draft and expected publication IDs; preparation never selects
 the publication pointer.
 
+Decision: the native command gate serializes same-Pool work per partition, but separate service pools share only row
+locks. Preparation start locks an existing stage before the current catalogue row, matching fresh source-step lock
+order. A missing stage key still serializes first creation on the catalogue row; stale pointers and exact source, mode
+and native-deadline mismatches keep their existing precondition outcomes.
+
+Decision: preparation progress inspects the optional retained candidate by exact stage, source seal and owner epoch,
+returning null before materialization and its existing checkpoint afterwards. It never seals, allocates or advances
+a candidate. Later draft/publication movement does not reject this retained observation or relabel the stage;
+fresh start, advance and seal retain stale-intent admission. Current author/owner admission precedes exact receipt
+replay, which preserves the committed response. Existing expiry and terminal progress semantics remain in force.
+
+Decision: a fresh progress read is a no-effect command when its locked stage observation makes no change. If that
+observation persists the retained stage's expiry transition, the existing preparation-changed event records it once;
+an exact authorized receipt replay keeps the original reply without emitting another event.
+
+Decision: selection append emits preparation-changed when it adds a retained batch or its locked progress read persists
+expiry; an exact retained batch replay under a fresh authorized command receipt adds no input and emits no change event.
+
+Decision: fresh activation start, authority advancement and candidate selection require the exact candidate's stage
+to remain sealed and its `expires_at` to be strictly later than native command time. The indexed candidate/stage
+point read compares timestamps in PostgreSQL inside the owning command transaction, preserving timestamp precision
+and the existing locks and their order. Equality is expired, even while
+the collector has not visited the stage. Fresh keys cannot bypass expiry through existing activation progress;
+current author admission still precedes exact committed receipt replay, which returns before lifecycle admission
+and never moves the publication pointer again. The current public edition remains selected and readable under its
+ordinary disclosure rules; expired unpublished candidates remain private.
+
+Decision: native activation commands return explicit command effects. A new pass, authority-page advance or stale
+authority restart emits the existing activation-changed event; the first pointer commit emits publication-activated;
+retained start, ready/activated advance and activated retries use `noEffect` and emit no event.
+
+Decision: fresh whole-source building and selection building/closing advances replay their exact native step receipt
+before checking expiry, then lock the exact catalogue row after the stage row and compare both pinned draft and
+publication IDs before source traversal, candidate settlement or closure-frontier writes. A stale pointer returns the
+existing 412 conflict without changing retained progress. Current author admission remains before outer receipt
+replay, and exact acknowledged steps and retained progress remain available after pointer movement.
+
+Decision: every fresh activation body takes the existing stage row fence before activation/candidate locks,
+authority-home comparison and the final catalogue CAS, retaining it through final authorization, receipt and commit.
+Build and reclaim already fence the stage before candidate work. A cancellation committed first prevents selection;
+activation committed first keeps its exact receipt and selected edition after cancellation or expiry. Cancellation
+does not unpublish; withdrawal remains a separate command. Exact authorized receipt replay precedes this fence.
+
+Decision: mounted Cancel emits preparation-changed only when its locked transition persisted cancellation or expiry.
+A terminal-stage retry with a fresh outer key is a no-effect command; an authorized exact receipt replay keeps its original response.
+
+Decision: because the HTTP body accepts any syntactically valid `HostedId` for `stepId`, every fresh
+hosted-preparation advance requires that ID to share the catalogue's native route before progress is read or candidate
+materialization/page writes occur; otherwise the wrong-route ID can consume a page and cannot be corrected in place.
+The pure route precondition runs only on a receipt miss after current authorization; exact committed receipts replay
+unchanged. It reuses the staging conflict response and adds no storage query.
+
+Decision: one immutable receipt keyed by catalogue, stage and routed `stepId` preserves the exact preparation response
+across source pages, candidate creation/pages and exhausted acknowledgements; indexed legacy source receipts remain
+intact and are consulted before phase dispatch.
+
 Decision: materialize a sealed exact stage into one private candidate generation using the shared hosted version store and sequence builder; consume at most 20 source-ordered rows per replayable step, densify sparse selected ranks, rederive selected sibling positions, and require the pinned source fence at coverage seal.
 
 Decision: advertise and enforce a 1,024-ID selection batch cap, based on an isolated interleaved 40-sample benchmark;
@@ -408,7 +477,9 @@ Decision: cleanup enters only cancelled, expired or failed unsealed stages under
 it uses one 100-row budget across indexed candidate, input and target keysets while retaining terminal progress,
 existing staging receipts and all source/lifecycle records.
 
-Decision: expired sealed whole and explicit-selection Book candidates retire only after an exact-generation claim fences temporal writes and descriptor creation and finds no retained revision, current pointer, other checkpoint or active ordered receiving hold; selection claims also bind the frozen input version. Cleanup deletes generation-local temporal rows in 100-row indexed steps and retains the source stage, consent observations and page receipts.
+Decision: sealed whole and explicit-selection Book candidate reclamation follows the
+[terminal source claim contract](hosted-append-lifecycle.md#cancelled-sealed-book-candidate-reclamation),
+including cancelled sources reaching their normal expiry, exact-generation pins and retained receipts.
 
 Decision: the existing hourly Content collection sweep scans one global expiry-index keyset of at most 100 stage keys and advances at most one existing 100-row cleanup step per pass; pinned or unsupported states advance with the exact source, owner epoch, candidate and reason retained for recovery, while each cleanup owner resumes its own persisted frontier.
 
@@ -426,6 +497,21 @@ request; larger input uses retained batches, never one giant request or growing 
 is not substituted. A new selection batch locks and compares both current pointers before inserting; an existing
 exact batch receipt replays before that stale-pointer check. Empty explicit selection is deliberate atomic
 withdrawal, never incomplete preparation.
+
+Decision: a fresh selection Freeze locks its stage, then the current catalogue row, and compares both pinned draft
+and publication IDs before persisting the frozen input version or phase. A stale pointer leaves collection progress
+untouched; already frozen stages remain no-ops, and exact authorized command receipts replay before this check.
+
+Decision: mounted Freeze emits preparation-changed only when a locked stage first persists its input frozen version.
+A fresh-key retry of an already frozen stage returns its current progress without another event; exact authorized
+receipt replay preserves the original response.
+
+Decision: every mounted preparation command returns an explicit `changed` or `none` effect. Start uses native stage
+replay evidence; Advance combines locked expiry evidence with source-step, source-seal, candidate-begin and candidate-page
+replay evidence; Seal combines source-seal, candidate-begin and candidate-seal evidence. A newly persisted expiry
+emits once, while terminal observations and candidate advancement after complete coverage emit nothing. Advance uses
+replay evidence rather than processed-row counts or response state because a zero-row source step can persist a phase
+transition or failure. Exact outer receipt replay still returns its committed response without another event.
 
 Persist a small control row, indexed input/output, selected snapshot roots and a durable raw traversal frontier.
 Use existing Book page 20 plus lookahead for one processing step (1,024 is at most an ingestion batch). Each step
@@ -730,7 +816,8 @@ Every read retains native catalogue disclosure and repeats it before returning. 
 retains the exact native target Post, Board, Realm and ancestor checks. Erased, concealed, missing or changed
 targets return an unavailable slot containing only occurrence ID, parent, position, kind and availability. Titles,
 target references, digests, attribution and bytes are withheld. Dependency failures remain failures, not evidence
-that a target is absent. Parts disclose their titles under catalogue authority.
+that a target is absent. Parts disclose their titles under catalogue authority. Book page target preparation and
+finalization use the shared `database/bounded-read-window.ts` ordered concurrency utility.
 
 Library checkpoint pages resolve the saved publication revision and occurrence through the same current catalogue
 and target Access checks. Their metadata-only Content binding returns the available title and exact target reference
@@ -754,6 +841,9 @@ Exact body opening keeps `hosted_catalogue.resolve` and its canonical digest ver
 Children default to the root; an explicit parent must be a part in the selected revision. Navigation uses preorder
 and returns only chapters, excluding the origin. `direction=next` returns ascending order; `previous` returns
 descending order, nearest first. A part can serve as the navigation origin.
+
+Decision: an inclusive first-page rank visits its selected chapter once, then its directional subtree and eligible
+ancestors in order; continuation remains exclusive of its cursor anchor.
 
 The default and maximum page limit is 20. A page selects at most limit plus one indexed rows, discloses at most
 limit targets, and never refills denied slots. The last raw position determines `nextCursor`. Continuations bind
@@ -787,7 +877,7 @@ reads. Tokens bind the acting account/session, original selector and distinct
 outline mode, preserving the first page's revision, epoch and lifetime. The installed full-replacement outline
 retains its 512-placement and depth-16 limits; mixed-prefix outline exposure follows the prerequisites above.
 
-Decision: versioned Book pages use the selected sibling, preorder or chapter read set, prove every retained anchor in that root, and traverse one bounded in-order window; bigint ranks become numeric positions only at the existing wire projection, while route selection and disclosure remain with the hosted reader.
+Decision: versioned Book pages use the selected sibling, preorder or chapter read set, prove every retained anchor in that root, and traverse one bounded in-order window; bigint ranks become numeric positions only at the existing wire projection, while route selection and disclosure remain with the hosted reader. Outline and chapter pages hydrate only visible candidates with one temporal occurrence batch and one distinct-parent sibling-root batch, preserve exact point reads, and resolve chapter-origin membership and rank in one chapter-weighted traversal.
 
 ## Author history
 
@@ -841,6 +931,10 @@ Decision: drain at most 16 deterministic cleanup steps during the existing hourl
 using a pending-work index and one-hour retry time for pins or cleanup conflicts; each step still uses the existing
 100-row transaction limit and retirement authority.
 
+Decision: retention takes the existing staging-row lock with `NOWAIT` inside each per-row savepoint. SQLSTATE `55P03`
+leaves the due pending key and its availability unchanged while later keys in the bounded page can proceed; a later
+bounded pass revisits the pending key through the existing keyset cursor.
+
 The Library entry-retention worker provides the pacing reference: it runs every ten minutes, processes 100 durable
 single-key pages per segment, then enqueues a bounded maintenance continuation while its partition cursor remains.
 Content keeps its hourly `content.collection.hourly` schedule and does not add a scheduler or continuation queue. Each
@@ -882,6 +976,12 @@ author/licence; initial/final checks load zero chapter bodies. Denied slots adva
 or targets. Exact opening alone loads one body through ordinary Post disclosure, verifies its canonical digest/size,
 then closes the original observation: a fresh read cannot bless a changed source. Attachment validation owns write
 admission; metadata disclosure does not certify canonical bytes.
+
+Decision: Contents and navigation prepare independent target metadata in a local four-operation window per phase.
+Ordinary preparations remain grouped by full target key, privately consented fallback remains one per occurrence,
+and retained finalizations use a separate four-operation window. A page of 20 chapters therefore performs at most
+40 initial preparations and 20 finalizations, with no added probes or chapter-body reads; response and anchor order,
+raw continuation and final catalogue disclosure remain unchanged.
 
 Decision: attachment-denial coverage checks each thread, revision and digest mismatch for `not_found` and zero body
 loads. Cross-route native rejection has no read-chain probe; admitted attachment writes retain the metadata-only

@@ -10,6 +10,7 @@ const { fromPlainText } = await import('@rezics/document');
 const { editionDocumentDigest } = await import('../src/content-editions/edition-model');
 const { StudioController } = await import('../src/studio/controller');
 const { StudioVersions } = await import('../src/studio/revisions');
+const { fullDateTime } = await import('../src/threads/byline-time');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale, locales } = await import('../src/paraglide/runtime.js');
 const catalogues = await Promise.all(
@@ -95,7 +96,7 @@ test('saved-version catalogues have identical keys and named arguments in every 
   const keys = Object.keys(catalogues[0])
     .filter((key) => key.startsWith('studio_revision_'))
     .sort();
-  expect(keys.length).toBe(20);
+  expect(keys.length).toBe(26);
   const argumentsOf = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
   for (const catalogue of catalogues) {
     expect(
@@ -144,14 +145,14 @@ test.each(cases)(
       expect(host.textContent).toContain(m.thread_history_page_empty({}, options));
       expect(host.textContent).not.toContain(m.thread_history_empty({}, options));
       expect(f.port.revision).not.toHaveBeenCalled();
-      await click(m.thread_history_more({}, options));
+      await click(m.studio_revision_next({}, options));
       expect(f.port.versions).toHaveBeenLastCalledWith(
         { projectId: 'private-project', postId: 'private-post', cursor: 'opaque+/=' },
         expect.any(AbortSignal),
       );
-      expect(queryByRole(host, 'button', { name: m.thread_history_more({}, options) })).toBeNull();
+      expect(queryByRole(host, 'button', { name: m.studio_revision_next({}, options) })).toBeNull();
       expect(f.port.revision).not.toHaveBeenCalled();
-      const compare = m.studio_revision_compare({ savedAt: f.historical.savedAt }, options);
+      const compare = m.studio_revision_compare({ savedAt: fullDateTime(f.historical.savedAt, locale) }, options);
       await click(compare);
       expect(inspect).toHaveBeenCalledTimes(1);
       expect(inspect.mock.calls[0]![0]).toBe(f.header.exact);
@@ -169,7 +170,7 @@ test.each(cases)(
         expect(getByRole(region, 'heading', { name: version.title, exact: true }).textContent).toBe(version.title);
         expect(region.querySelector('time')?.getAttribute('datetime')).toBe(version.savedAt);
         expect(region.querySelector('time')?.textContent).toBe(
-          m.studio_revision_saved({ savedAt: version.savedAt }, options),
+          m.studio_revision_saved({ savedAt: fullDateTime(version.savedAt, locale) }, options),
         );
         const disclosure = region.querySelector('summary')!;
         expect(disclosure.textContent).toBe(m.studio_revision_exact({}, options));
@@ -185,7 +186,7 @@ test.each(cases)(
         );
         expect(reader).toHaveBeenCalledWith(version.exact);
       }
-      const args = { title: f.historical.title, savedAt: f.historical.savedAt };
+      const args = { title: f.historical.title, savedAt: fullDateTime(f.historical.savedAt, locale) };
       await click(m.studio_revision_use({}, options));
       expect(getByRole(host, 'group', { name: m.studio_revision_copy_review({}, options) }).textContent).toContain(
         m.studio_revision_replace_clean(args, options),
@@ -220,7 +221,7 @@ test.each(cases)(
       expect(f.port.saveDraft).not.toHaveBeenCalled();
       expect(f.port.reviewPublication).not.toHaveBeenCalled();
       expect(f.port.publish).not.toHaveBeenCalled();
-      await click(m.studio_revision_refresh({}, options));
+      await click(m.studio_revision_first({}, options));
       expect(f.port.versions).toHaveBeenLastCalledWith(
         { projectId: 'private-project', postId: 'private-post', cursor: null },
         expect.any(AbortSignal),

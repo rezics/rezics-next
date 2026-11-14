@@ -259,7 +259,9 @@ export const Unread: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     if (phone()) await expect(canvas.getByLabelText(m.shell_new_activity())).toBeVisible();
-    const navigation = canvas.getByRole('navigation', { name: phone() ? m.shell_phone_tabs() : m.shell_navigation() });
+    const navigation = phone()
+      ? canvas.getByRole('navigation', { name: m.shell_phone_tabs() })
+      : canvas.getByRole('banner');
     await expect(within(navigation).getByLabelText(m.inbox_unread_count({ count: '3' }))).toHaveTextContent('3');
   },
 };
@@ -269,19 +271,31 @@ export const UnreadUnavailable: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     await expect(canvas.queryByLabelText(m.shell_new_activity())).toBeNull();
-    const navigation = canvas.getByRole('navigation', { name: phone() ? m.shell_phone_tabs() : m.shell_navigation() });
+    const navigation = phone()
+      ? canvas.getByRole('navigation', { name: m.shell_phone_tabs() })
+      : canvas.getByRole('banner');
     await expect(within(navigation).getByRole('img', { name: m.inbox_unread_unavailable() })).toBeEmptyDOMElement();
   },
 };
+async function globalNavigation(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const canvas = within(context.canvasElement);
+  if (phone()) {
+    await userEvent.click(canvas.getByRole('button', { name: m.shell_open_navigation() }));
+    return within(await within(document.body).findByRole('dialog', { name: m.shell_navigation() }));
+  }
+  return within(canvas.getByRole('navigation', { name: m.shell_navigation() }));
+}
 export const PersonalNavigation: Story = {
   play: async (context) => {
-    await pageReady(context);
-    const navigation = within(within(context.canvasElement).getByRole('navigation', { name: m.shell_navigation() }));
+    const navigation = await globalNavigation(context);
     await expect(await navigation.findByRole('link', { name: m.nav_library() })).toHaveAttribute(
       'href',
       `/${getLocale()}/library`,
     );
-    await expect(navigation.getByRole('link', { name: m.nav_inbox() })).toHaveAttribute(
+    if (phone()) await userEvent.keyboard('{Escape}');
+    const header = within(within(context.canvasElement).getByRole('banner'));
+    await expect(header.getByRole('link', { name: m.settings_notifications_heading() })).toHaveAttribute(
       'href',
       `/${getLocale()}/inbox`,
     );
@@ -290,14 +304,15 @@ export const PersonalNavigation: Story = {
 export const PersonalUnavailable: Story = {
   parameters: { admitted: [] },
   play: async (context) => {
-    await pageReady(context);
-    const navigation = within(within(context.canvasElement).getByRole('navigation', { name: m.shell_navigation() }));
+    const navigation = await globalNavigation(context);
     const library = await navigation.findByRole('link', {
       name: `${m.nav_library()}: ${m.library_subject_unavailable()}`,
     });
     await expect(library).toHaveAttribute('aria-disabled', 'true');
     await expect(library).not.toHaveAttribute('href');
-    await expect(navigation.getByRole('link', { name: m.nav_inbox() })).toHaveAttribute(
+    if (phone()) await userEvent.keyboard('{Escape}');
+    const header = within(within(context.canvasElement).getByRole('banner'));
+    await expect(header.getByRole('link', { name: m.settings_notifications_heading() })).toHaveAttribute(
       'href',
       `/${getLocale()}/inbox`,
     );
@@ -487,15 +502,20 @@ export const CreationSheet: Story = {
   play: async (context) => {
     await pageReady(context);
     if (phone()) {
-      await userEvent.click(await within(context.canvasElement).findByRole('button', { name: m.shell_create() }));
+      await userEvent.click(creationTrigger(context.canvasElement));
       const sheet = within(await within(document.body).findByRole('dialog', { name: m.shell_create() }));
       const collection = await sheet.findByRole('link', { name: m.library_collection_new() }, { timeout: 5_000 });
       await expect(collection).toHaveAttribute('href', `/${getLocale()}/collections/new`);
     }
   },
 };
+function creationTrigger(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const surface = phone() ? canvas.getByRole('navigation', { name: m.shell_phone_tabs() }) : canvas.getByRole('banner');
+  return within(surface).getByRole('button', { name: m.shell_create() });
+}
 async function creationSheet({ canvasElement }: { canvasElement: HTMLElement }) {
-  await userEvent.click(within(canvasElement).getByRole('button', { name: m.shell_create() }));
+  await userEvent.click(creationTrigger(canvasElement));
   return within(await within(document.body).findByRole('dialog', { name: m.shell_create() }));
 }
 async function creationOrder(sheet: ReturnType<typeof within>, fragments: string[]) {
@@ -514,7 +534,7 @@ export const CreationOwnersLifecycle: Story = {
     const canvas = within(context.canvasElement);
     await creationOrder(await creationSheet(context), ['#first', '#shared', '#second']);
     await userEvent.keyboard('{Escape}');
-    await expect(canvas.getByRole('button', { name: m.shell_create() })).toHaveFocus();
+    await waitFor(() => expect(creationTrigger(context.canvasElement)).toHaveFocus());
     await userEvent.click(canvas.getByRole('button', { name: 'Update first owner' }));
     await creationOrder(await creationSheet(context), ['#first-updated', '#shared', '#second']);
     await userEvent.keyboard('{Escape}');
@@ -560,6 +580,10 @@ export const YouSettings: Story = {
       await userEvent.click(within(context.canvasElement).getByRole('button', { name: m.shell_you() }));
       await expect(await within(document.body).findByRole('region', { name: m.shell_appearance() })).toBeVisible();
       await expect(within(document.body).getByRole('button', { name: m.shell_theme() })).toBeVisible();
-    } else await expect(within(context.canvasElement).getByRole('button', { name: m.shell_theme() })).toBeVisible();
+    } else {
+      await userEvent.click(within(context.canvasElement).getByRole('button', { name: m.account_menu() }));
+      const menu = within(await within(document.body).findByRole('dialog', { name: m.account_menu() }));
+      await expect(menu.getByRole('button', { name: m.shell_theme() })).toBeVisible();
+    }
   },
 };

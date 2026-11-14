@@ -192,6 +192,8 @@ test('same-Realm headers have independent associations and supplied children acr
       }
       expect(heading.textContent).toBe(title);
       expect(heading.tagName).toBe(index === 0 ? 'H2' : 'H1');
+      const participation = header.querySelector('[data-slot="realm-home-participation"]');
+      if (participation) expect(heading.compareDocumentPosition(participation) & 4).toBe(4);
       expect(header.querySelectorAll('h1')).toHaveLength(1);
       expect(header.querySelector('h1')?.textContent).toBe(index === 0 ? page.space.title : title);
       expect(rulesHeading.textContent).toBe(m.board_community_rules());

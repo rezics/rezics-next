@@ -1,8 +1,8 @@
 # Library archive recovery
 
 `/library/recover-archive` is the Library destination for recovering selected Entries, private labels, assignments,
-annotations and occurrence journals from a completed local archive. Source observations and journal assessments
-remain retained unsupported evidence until the shared client publishes their review operands. The native owner is
+annotations, occurrence journals and source observations from a completed local archive. Journal assessments and
+source observations use only installed producer-published review operands. The native owner is
 [Library archive review and merge](../../../../docs/library-archive-merge.md);
 the artifact format is owned by [Library export](../../../../docs/library-export.md). This guide owns the mounted Web visit.
 
@@ -11,9 +11,8 @@ for every supported branch; preserve current fields by default and require delib
 for personal facts. Web consumes producer-published operands without generating another client, decoding files locally
 or adding a native endpoint. Content remains the shared publisher.
 
-Decision: while the installed review client omits assessment and observation operands, show their retained-evidence
-limitations beside journal choices and source-observation rows. Missing assessment never means zero or clear;
-privacy and source timestamps are never applied through another branch.
+Decision: keep assessment presence and source-observation fields independent. Missing assessment never means zero
+or clear; privacy and source timestamps use only the exact observation branch, never another branch.
 
 ## Upload and inventory
 
@@ -32,7 +31,7 @@ One upload identity and one preview page of at most 100 records are retained. In
 section counts, capture and treatment alongside validated overall manifest rows and compact bytes. It explains empty
 captures, retained unsupported evidence and manifest omissions. An empty page never substitutes for inventory. One
 upload, page size, selected-row limit and immutable review lifecycle cover every activated branch. V4 provider sections
-and rows without a producer-published review operand remain retained unsupported evidence. The installed client declares assessment and source-observation review. Observation rows use their exact provider
+and rows without a producer-published review operand remain retained unsupported evidence. Observation rows use their exact provider
 and record identity with native admit/correct operations; correction starts with preserve and requires the current
 observation revision. Unsupported rows have evidence only. Neither branch uses generic assignment controls.
 
@@ -114,7 +113,15 @@ current Session.
 Focused Web tests cover mounted file admission, three preview windows, independent reader histories, empty selected
 projections with native continuation, exact failed-read retry, original-intent retries, immutable review/apply, pending cancellation,
 acknowledged destination retention, current Entry and label-assignment reads, and original request bounds using the
-existing typed native fixture. The native Web owner walk uploads a completed export and rereads current Entry facts. Retained assessment and source-observation notices explain fields that cannot yet be
-selected, while retaining evidence unchanged. Existing controller fence and bounded-growth assertions remain. Browser,
+existing typed native fixture. The native Web owner walk uploads a completed export and rereads current Entry facts. Unsupported fields remain
+visible as retained evidence. Existing controller fence and bounded-growth assertions remain. Browser,
 installed-root, byte/caller observations, broader native acceptance and promotion remain integration
 responsibilities.
+
+Decision: lead each record, selection and result with a supplied title or an honest unavailable label and localized
+native status. Show personal values and independent preserve/set/clear effects before confirmation; keep exact
+IDs, ordinal/reviewRevision operands and complete supplied evidence in closed labelled details. Current readback
+summarizes only the addressed native response. The original retry custody, twenty-row selection, one-page readers
+and retirement boundaries remain unchanged. The named route stories include populated review, unsupported
+evidence, sparse continuation, unknown application recovery and acknowledged result. Their presentation assertions
+are source acceptance for the verifier; execution, native export-to-restore, keyboard and visual checks are deferred.

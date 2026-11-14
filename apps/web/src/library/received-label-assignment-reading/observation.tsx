@@ -88,7 +88,7 @@ export function ReceivedAssignmentObservation({
           <p className="whitespace-pre-wrap [overflow-wrap:anywhere]" dir="auto">
             {label.name}
           </p>
-          <p className="text-sm text-muted-foreground">{m.library_received_reading_membership_meaning()}</p>
+          <p className="text-sm text-muted-foreground">{m.library_labels_member_scope()}</p>
         </section>
         <section aria-labelledby={entryId} className="min-w-0 space-y-2 py-4">
           <h4 id={entryId} className="font-medium">
@@ -109,16 +109,19 @@ export function ReceivedAssignmentObservation({
           </h4>
           <ReceivedProgress progress={row.activeProgressSession ?? null} locale={locale} />
         </section>
-        <section aria-labelledby={contextId} className="min-w-0 space-y-2 py-4">
-          <h4 id={contextId} className="font-medium">
+        <details className="min-w-0 space-y-2 py-4" data-received-work-context>
+          <summary
+            id={contextId}
+            className="flex min-h-11 cursor-pointer items-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {m.library_received_reading_work_context()}
-          </h4>
+          </summary>
           {context?.facts.length ? (
             <ShelfWorkContextView entry={row} locale={locale} isCurrent={isCurrent} />
           ) : (
             <p className="text-sm text-muted-foreground">{m.library_received_reading_context_unavailable()}</p>
           )}
-        </section>
+        </details>
         <section aria-labelledby={destinationId} className="min-w-0 space-y-3 pt-4">
           <h4 id={destinationId} className="font-medium">
             {m.library_received_reading_destinations()}

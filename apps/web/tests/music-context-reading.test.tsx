@@ -4,7 +4,10 @@ import { act } from 'react';
 import type { MusicContextRead } from '../src/features/catalogue/music-context-profile';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { MusicContextAddress } from '../src/features/catalogue/music-context-profile/navigation';
-import { musicContextRouteSearch } from '../src/features/catalogue/music-context-profile/navigation';
+import {
+  musicContextAddressHref,
+  musicContextRouteSearch,
+} from '../src/features/catalogue/music-context-profile/navigation';
 import { MusicContextProfile } from '../src/features/pages/music-context-profile';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { candidateContext } from '../src/subject/candidates';
@@ -281,6 +284,77 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     const correctionReturn = new URL(correction.href).searchParams.get('returnTo');
     expect(correctionReturn).toBe(via);
     expect(subjectVisitReturn(correctionReturn, 'en')).toBe(via);
+    const returnLink = () =>
+      [...host.querySelectorAll('a')].find((link) => link.textContent === 'Return to the source subject')!;
+    expect(returnLink().getAttribute('href')).toBe(`/en/subjects/${anchor}/harbor-stage`); // Unsupported View keeps the general fallback.
+    const { graphBrowserReturnHref } = await import('../src/features/pages/graph-browser/view');
+    const { subjectGraphVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
+    const graphPath = `/en/subjects/${endpoint}/original-graph/graph`;
+    const query = { property: ['schema:location'], direction: 'out' as const, depth: 2 as const };
+    const graphVisit = { kind: 'global' as const, returnHref: graphPath.replace('/graph', '#subject-heading') };
+    const addresses = [
+      graphBrowserReturnHref(graphPath, query, { kind: 'node', id: anchor }, graphVisit)!,
+      graphBrowserReturnHref(
+        graphPath,
+        query,
+        { kind: 'edge', statement: endpoint, from: endpoint, to: anchor, property: 'schema:location' },
+        graphVisit,
+      )!,
+    ];
+    const graphTransport = { read: (input: Deferred['input']) => deferred(input).promise };
+    const showGraph = async (returnTo: string, key = 'graph') => {
+      const href = musicContextAddressHref(
+        `/en/subjects/${anchor}/harbor-stage/music-context`,
+        { returnTo },
+        'en',
+        anchor,
+      )!;
+      const url = new URL(href, 'https://site.test');
+      const received = musicContextRouteSearch(Object.fromEntries(url.searchParams), 'en', {
+        subjectId: anchor,
+        pathname: url.pathname,
+      });
+      expect(received?.returnTo).toBe(returnTo);
+      await act(async () =>
+        root.render(
+          <MusicContextProfile
+            key={key}
+            id={anchor}
+            locale="en"
+            returnTo={received!.returnTo}
+            transport={graphTransport}
+          />,
+        ),
+      );
+      expect(returnLink().getAttribute('href')).toBe(returnTo);
+      expect(subjectGraphVisitReturn(returnLink().getAttribute('href'), 'en')).toBe(returnTo);
+    };
+    const firstGraph = pending.length;
+    await showGraph(addresses[0]!);
+    await showGraph(addresses[1]!);
+    await settle(() =>
+      pending[firstGraph + 1]!.resolve(successful('schema:location', 'Current edge companion', 'edge-token')),
+    );
+    returnLink().focus();
+    const focused = document.activeElement;
+    await settle(() =>
+      pending[firstGraph]!.resolve(successful('schema:location', 'Retired node companion', 'node-token')),
+    );
+    expect(host.textContent).toContain('Current edge companion');
+    expect(host.textContent).not.toContain('Retired node companion');
+    expect(document.activeElement).toBe(focused);
+    expect(returnLink().getAttribute('href')).toBe(addresses[1]);
+    await showGraph(addresses[1]!, 'reload');
+    await settle(() =>
+      pending[firstGraph + 2]!.resolve(successful('schema:location', 'Reloaded companion', 'reload-token')),
+    );
+    expect(host.textContent).toContain('Reloaded companion');
+    expect(returnLink().getAttribute('href')).toBe(addresses[1]);
+    expect(pending.slice(firstGraph).map(({ input }) => input)).toEqual([
+      { context: candidateContext },
+      { context: candidateContext },
+      { context: candidateContext },
+    ]);
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous)

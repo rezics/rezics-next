@@ -31,6 +31,26 @@ lists also use shadcn items and badges. Password reveal buttons have localized s
 until hydration. Native form submissions keep their fields and actions; scripted actions retain their pending
 states with an accessible busy indicator. Error text uses ink blue, with red reserved for the brand mark.
 
+## Entry and recovery presentation
+
+Decision: login, signup, account choice and generic return/recovery views share `src/auth-task-view.tsx`:
+a task title, form or deliberate action, attached status/warnings and separate optional help. Actions stack on phones
+and wrap on desktop; help links retain a 44-pixel target. Native advice alone determines which actions exist. Generic
+history stays separate from current identity and cannot imply authentication, cancel a send or reconstruct a command.
+Signup requirements and errors both describe their fields; handle entry disables browser spelling/case correction.
+Read Retry and a fresh authentication remain separate actions. Existing localized copy supplies all eight locales.
+
+Presentation orientation uses this document's Sign-in, Sign-up, Consent and Step-up sections, the named route/view
+sources and their existing regression fixtures, plus the read-only reference index. When Impeccable reference files
+or its CLI are unavailable, use this document's shared shadcn components, spacing, wrapped content and focus rules;
+no CLI installation or capture is required to compose the source. Named synthetic stories demonstrate presentation,
+including long German copy, independently failed advice and retained unknown outcomes; they establish no native pass.
+
+This source window defers acceptance tests, browser checks and captures to the dev verifier. The final explicit
+workspace typecheck requirement takes precedence over the earlier typing deferral; the installed Auth command owns
+its generation prerequisites. Existing protocol, challenges, continuation and mounted-lifetime regression assertions
+remain unchanged.
+
 ## Mounted operation lifetime
 
 These are adopted browser requirements; documentation establishes no native, browser or shared-suite pass.
@@ -254,7 +274,7 @@ summary is never written to storage, a URL, history state or cookies; an ordinar
 Page departure immediately clears the inputs (including detached DOM nodes), retires command callbacks and aborts
 advice reads. Leaving cannot cancel a native effect. A retained document first reads current `/recovery/page` advice
 before enabling new work. Loading and read failure have visible states, fixed sign-in exits and an explicit read Retry.
-Focus moves to the generic return explanation or read result when private controls retire.
+The generic return explanation replaces retired private controls without taking reader focus.
 
 A start acknowledgement confirms neither account existence nor mail delivery. An unavailable start response keeps
 its outcome unknown. Requesting another link is deliberate new work: the person reviews fresh start advice and
@@ -267,6 +287,13 @@ Stay preserves active work; explicit Leave clears it and warns that a sent reque
 
 Deliberate fresh recovery opens an empty start form after current start advice, while generic earlier
 uncertainty remains visible and independent of the new request.
+
+Decision: only a focused keyboard activation of Retry or fresh recovery owns orientation to its matching form,
+return explanation or failed-read boundary. Keep the requesting control focusable during its pending advice read,
+without admitting another action. Focus movement, pointer use, another action, focus/visibility observation,
+attempt replacement, retirement and unmount cancel intent. Initial loading, pointer activation and unrelated
+advice results never take focus; equal results and delayed replies obey the same ownership. Invalid-fragment and
+submission feedback retain their existing local focus boundaries. Intent uses O(1) mounted state and adds zero I/O.
 
 Whole-call cost: summary capture and display make zero requests. Entry, retained return, focus/visibility refresh,
 explicit read Retry and deliberate transition from completion history to a fresh start each make at most one installed
@@ -295,6 +322,8 @@ acceptance test compares the browser pattern's source with the kernel's claim pa
 dependency on kernel or Auth modules. Reserved handles are checked by the server and get the same taken-or-reserved
 field message as taken handles.
 
+The widget uses the [documented compact size](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/widget-configurations/#widget-sizes)
+(150 × 140 pixels) so its fixed iframe fits the phone form column; size changes no verification operands or lifecycle.
 The page loads the Turnstile script once and renders the widget explicitly with the public `TURNSTILE_SITE_KEY`,
 `action: "signup"` and the page locale. In development, `TURNSTILE_SCRIPT_URL` replaces the script address. The
 submit button is enabled before a token arrives; submitting without one shows a localized message beside the widget

@@ -142,6 +142,7 @@ Workers do not merge, except that a product worker integrating into dev in its o
 cherry-picks a branch or commit its contract names explicitly.
 If initial dispatch preparation fails before a task is registered, Goal removes the worktree and branch it created when
 Git confirms ownership, preserves the original error, and names any artifact retained for recovery.
+Decision: under the shared dispatch lease, direct dispatch and claimed backlog registration reuse an indexed active task only when exact brief bytes, resolved manager, Goal, target and ordinary task class match. Admission and authorization run before lookup; proof and continuation identities do not coalesce, and terminal tasks do not suppress new outcomes.
 Decision: task-local Git/worktree preparation (branch heads, leftover and finished-work commits, shared frozen files, missing-worktree recreation, authorized proof captures, and making an owned tree writable so Git/cache leftovers can be removed) lives in `task-workspace.ts`. `WorkerTasks` remains the lifecycle coordinator and delegates that family under the caller's lease and existing store writes. Tests pin those behaviours at the public `WorkerTasks` entry with real Git fixtures rather than mirroring each helper.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
@@ -364,6 +365,17 @@ When a waiting session wakes on a finished failed check, Goal includes the exact
 and original log path. It reads only a UUID-owned log in that task's check directory and includes at most 4 KiB of its
 tail. Missing, unreadable, mismatched or truncated evidence is identified as unknown; other check logs and the worker's
 attempt log are not used as substitutes.
+
+When the maintainer authorizes a source-only window, the configured state directory's `verification-mode` file may
+contain `source-only`. Install the compatible controller and prompt templates before activating that value. Fresh,
+retry, wake and continuation prompts for ordinary product source then defer optional typing, tests, builds and captures;
+budget-driven minimal verification does not override it. Workers still write contract-required tests as source and
+repair defects established by existing results. Source completion never claims a compiler or test pass. Exact check
+results, running checks, cleanup and compiler grants remain owned and unchanged; a wake receives its original result,
+and a source change cannot reuse an earlier pass. Money paths (declared or already changed), explicit native/browser/root
+requirements, proof authorization and control-plane acceptance keep their existing verification protocols. Removing the
+value restores budget/minimal selection. This prompt policy does not discharge a retained compiler settlement gate;
+that gate must explicitly defer the obligation or retain the source pending evidence, without fabricating a pass.
 
 When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
 receives the current source-completion policy alongside its canonical contract. Workers finish their contract, then
@@ -1351,6 +1363,8 @@ as a child and continues serving commands while it runs. Without a configured no
 as a local command and the host sends nothing. Add `--send` to deliver a report manually; the default command only
 prints it.
 
+Decision: a plain preview formats current evidence without freezing a row; only a send may capture, sends reject buckets that have not ended, and frozen report bytes and attribution remain stable.
+
 The manager host evaluates absolute flow targets each hour and sends one `environment` event to the configured
 supermanager for each breached threshold: efficiency below 40%, any queue older than 60 minutes, landing p90 above
 30 minutes, or more than 1.5 attempts per integrated task. `flow` in local settings can override `efficiencyBelow`,
@@ -1798,9 +1812,11 @@ When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every 
 five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
 line of SSH stderr. A successful probe clears that outage, so a later pair of failures can report a new incident. The
 watchdog does not probe when no hosts file is present and does not include the configured identity path in its alert.
-Decision: check wakes use their original pool after live occupancy and allowance admission; check-host retries wait
-only when every performance-approved host is in outage, while started remote runs stay on their recorded host and
-identity and new runs use existing probes to select a responding approved host.
+Decision: check wakes use their original pool after live occupancy and allowance admission. A newly reported reset
+window starts a fresh burn series; repeated recovery preserves the original check result, session, pool and attempt,
+then resumes that session once. Check-host retries wait only when every performance-approved host is in outage, while
+started remote runs stay on their recorded host and identity and new runs use existing probes to select a responding
+approved host.
 
 ## Integration, promotion, culprit isolation and attempt fencing
 
@@ -1845,6 +1861,10 @@ published store is preserved and repaired through the requesting worktree's boun
 installs still reuse the immutable store. A failed install or identity validation prevents launch and retains its exact
 cause. Recovery uses the normal controller resume of the same current task/session after this preparation source is
 released; source validation alone does not repair or restart retained consumers or prove their compilers pass.
+
+The key lease covers only an absent-key build through its atomic publication. Validation of an already published immutable store and each consumer's private skeleton copy run after that lease is released. One `installShared` preparation keeps call-local Bun observations keyed by device and inode plus file size and timestamps: it hashes each reached executable once and runs its version/revision probes once, while rechecking every consumer's manifest, lock, installed package metadata and direct links. A later preparation starts a fresh cache; changed pins and lockfiles are still checked against the current source.
+
+Measured warm cohorts on this host used 1, 4 and 16 workspaces, 364, 886 and 2,998 manifest/lock bytes, and 1, 4 and 16 workspace link entries. Three independent consumers copied 4, 7 and 19 `node_modules` entries each; total preparation fell from 29.031/35.699/44.969 ms to 9.557/12.859/23.564 ms (9.677/11.900/14.990 ms to 3.186/4.286/7.855 ms per consumer). These dependency-free fixtures have no pinned Bun artifact. The installed pinned executable is 138,468,432 bytes: nested healthy validation previously read it four times and ran four version/revision probes per consumer (553,873,728 bytes); one preparation now reads it once and runs two probes, and a repeated same-preparation validation measured 5.98 ms with no additional hash or probe. Timings are observations, not thresholds.
 
 Disposable train worktrees capture their directory identity when created. Before Git removes one, the train restores
 owner access on its own directories, including immutable fixture stores left by checks. Cleanup rejects replaced roots
@@ -2279,7 +2299,9 @@ already holding the same brief is left in place. A different brief is published 
 untracked source is removed only after publication, while a newly tracked source remains unchanged after its copy is
 published. When every distinct name is occupied the source stays and a `continuation-retained` event is recorded. A
 brief moves only when it parses with the ordinary
-brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
+brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies.
+Plain-Markdown continuations inherit their omitted Goal, manager, kind and target from the current structured task brief;
+other inherited values retain the existing serialized-front-matter normalization rules.
 regular Markdown that cannot be admitted moves to `<state>/backlog/<goal>/failed/` under a task/attempt-prefixed name,
 with a `.reason` file and a manager `instruction` naming the continuation and reason; other entries are removed. The
 attempt still records `continuation-dropped`. Decision: keep rejected Markdown in the Goal's `failed/` directory, and
@@ -2491,6 +2513,10 @@ Worktree dependency setup failures store full diagnostics on the attempt's `laun
 inbox history retains a short task reference. Only the operations owner receives a waking notice; repeats are
 folded by shared cause without path or task ID in the wake. Offloaded starts do not emit a second background error
 for an attempt already settled and reported by the child.
+
+Landing failure alerts name the failed stage and link retained evidence when the diagnostic exceeds the summary
+budget. Codex wake-ups present an inbox pointer for any older over-budget summary and leave its original row
+intact. Assignment wake-ups reference Goal documents instead of embedding their bodies.
 
 A delivery identical to one made to the same recipient within the last hour is not stored again: the earlier row's
 `delivery_count` and `last_delivered_at` change, nobody is woken, and `inbox read` shows the count as `deliveries`.
@@ -2988,8 +3014,17 @@ Unchanged legacy stamps remain valid under their original full-tree comparison. 
 requested an artifact their compiler could not produce can reuse their successful original full-tree stamp only while
 the tree and retained prepared dependency inputs still match. Modern physical capture requires its matching artifact;
 a rejected artifact, changed legacy input or missing modern receipt never becomes a pass. True compiler failures retain
-their verdict and log. Unavailable evidence parks completed source with `typingEvidencePending`, preserving the attempt,
-commits and check IDs instead of creating a source-writing retry.
+their verdict and log. Outside an eligible source-only window, unavailable evidence parks completed source with
+`typingEvidencePending`, preserving the attempt, commits and check IDs instead of creating a source-writing retry.
+During an eligible source-only window, settlement records unavailable compiler evidence as `typingEvidenceDeferred` and
+lets ordinary source land for verifier acceptance after same-attempt physical custody is terminal. The original worker
+result, failed check records, compiler identities and unexecuted grants remain unchanged; repeated recovery does not
+launch a compiler or clear the obligation, including after source-only mode is removed.
+
+Decision: settlement and typing recovery use the launch prompt's live source-only eligibility rules, including changed
+paths. They defer only unavailable compiler evidence for ordinary dev source, require terminal custody, preserve exact
+failures and grants, and leave typing failures, money paths, explicit requirements, proof and control-plane acceptance
+on their existing paths. The dev verifier owns the deferred compiler acceptance.
 
 For the installed Kernel client-output pipeline, the receipt retains its remote host/run binding with the local physical
 check identity. Failure classification may accept replaced generated declarations only when the published output tree
@@ -2998,9 +3033,13 @@ pass qualification still requires its existing strict source and prepared-input 
 
 Decision: at the existing stopped-task expiry, the sweep reconciles compiler-only pending source under its current task lease, lands matching evidence, or records one per-attempt actionable event naming the authenticated `typing-recover` action; the stop remains visible to width reporting, no check is minted or compiler started, and explicit stop/cancel, real compiler failures and ordinary stale stops keep their current outcomes.
 
-Decision: an explicit retry after a completed stop keeps the existing stop proof. For an ordinary exited attempt, a queued source repair supersedes pending typing evidence only when the exact accepted replacement brief was recorded after exit, the captured branch head remains current, the exact retained command proves a terminal nonzero failure against unchanged source inputs, any replaced Kernel client declarations match the receipt-bound published tree, all same-attempt check custody is terminal, and no successor, later worker start, landing or live capacity ticket exists. Generated-output identity authorizes failure classification only; pass qualification stays strict. Otherwise the retry remains pending and does not enter compiler-only recovery. A same-generation `started` intent is reconciled only under that proof.
+Decision: an explicit retry after a completed stop keeps the existing stop proof. For an ordinary exited attempt, a queued source repair supersedes pending typing evidence only when the exact accepted replacement brief was recorded after exit, the captured branch head remains current, the exact retained command proves a terminal nonzero failure against unchanged source inputs, any replaced Kernel client declarations match the receipt-bound published tree, all same-attempt check custody is terminal, and no successor, later worker start, landing or live capacity ticket exists. A legacy attempt with no `attempt-progress` event may recover its source identity only through the exact retained source-repair receipt matching the current content tree and terminal same-attempt custody; a present malformed or stale progress event never uses this fallback. Generated-output identity authorizes failure classification only; pass qualification stays strict. Otherwise the retry remains pending and does not enter compiler-only recovery. A same-generation `started` intent is reconciled only under that proof.
 
-Decision: queued source-repair admission also accepts the exact Kernel migration preflight diagnostic for a missing forward `-- migrate:up` marker when the known compiler command, exit 75, retained source tree and same-attempt terminal check custody all match. This is setup evidence only; it creates no compiler verdict or replay authority, and the accepted amendment, retry transaction and money gate keep their existing rules.
+Decision: queued source-repair admission accepts the exact Kernel missing-forward-marker setup evidence from either the current migration preflight or a retained legacy dbmate `database-setup` diagnostic, when the installed Kernel command, exit 75 before compiler entry, current retained source tree and same-attempt terminal physical custody all match. The setup check may be absent from the old `attempt.checks` array and its command may differ from the pending combined compiler/test command; discover it only through an owned same-task/attempt result and bind its command, physical run, log, diagnostic and history to that result. At least one original listed check must still be terminal and bind the retained pending command, so an unrelated same-attempt check cannot stand in for the original obligation. An old stamp may lack `setupFailure` and retain `typingInputs` with `typecheckFailed: true`; accept the receipt only when its physical run and command match the owned setup result, it reports stable source and exit 75, and the exact saved diagnostic plus one current migration missing its up marker prove database setup failed before compilation. The failure flag alone never proves a compiler failure. This is setup evidence only: it creates no compiler verdict, replay authority or money-check pass, and preserves the original pending command, accepted amendment and retry transaction.
+
+Decision: the retained parser accepts the exact bare database-setup diagnostic or the command-wrapped dbmate form, collapses byte-identical echoes and rejects ambiguous setup lines; it scans every migration line in fixed memory and stores the normalized diagnostic while retaining the raw log digest.
+
+The exact legacy rejection began with missing `attempt-progress.endHead`; after recovering current source identity, the setup candidate still rejected the actual stamp because it required `typingInputs` to be absent and `typecheckFailed` not to be true. The retained source-caused exit-75 check has a stable captured input receipt, `includedTypecheck: true`, `typecheckFailed: true`, and dbmate's older `phase=database-setup` message, but no `setupFailure`. It is also absent from `attempt.checks` and uses the standalone installed Kernel typecheck rather than the pending combined typecheck and three money tests. Reconcile from the owned result, bound receipt, saved diagnostic and physical history without rewriting the retained result or log.
 
 Authenticated owning or operations managers reconcile that same attempt without starting a model:
 
@@ -3182,11 +3221,16 @@ than a second wake scheduler.
 the host persists until stopped and exits when its 60-second sweep finds its state directory missing. An untracked
 `<managerDirectory>/<goal>.json` can select a local `pool`, `objective`, `brief`, `effort`, `supermanager` and `limits`;
 otherwise scoped task briefs and a matching local manager pool supply the defaults. Termspaces owns the tmux windows.
-Each manager host starts a loopback WebSocket app-server for its Codex pool and records the process identity. The
-app-server leads its own process group, so its helpers and thread writers share that group. The host stops the group on
-shutdown; a replacement host reclaims every surviving recorded group and waits until it is empty before resuming
-persisted threads, so resume never meets a writer left by the previous host. A record written before this change names a
-shared group, so only its process is stopped. Recovery and actionable inbox wakes match a manager-owned Codex pane
+Each manager host starts a loopback WebSocket app-server for its Codex pool and records its process birth, pool
+identity, executable, environment fingerprint and endpoint in the private state directory. The app-server leads its own
+process group, so its helpers and thread writers share that group. A routine host restart hands off the live server and
+its endpoint; the replacement host adopts it only when the process, pool, account home, executable, environment and
+loopback endpoint all match, including proof that the recorded process owns the listener socket. If the recorded server
+is gone or a bounded reconnect fails, the host stops only that
+verified group and rejoins the stored thread on one new server for the same pool. An explicit provider daemon upgrade
+that replaces the recorded process may therefore require this clean rejoin. Other host shutdowns still stop recorded
+groups and wait until they are empty before removing the registry. A record written before this change names a shared
+group, so only its process is stopped. Recovery and actionable inbox wakes match a manager-owned Codex pane
 semantically only when its command proves the same manager role, `CODEX_HOME`, thread, executable and remaining
 arguments, and its current pane path matches the manager's working directory; only the `--remote` endpoint may differ.
 Tmux's supported quoting wrappers are parsed as literal argv without executing the recorded command. Endpoint repair
@@ -3207,6 +3251,15 @@ executable and configuration directory, interactive window and turn-accounting h
 The Stdio and WebSocket transports share one internal JSON-RPC implementation for request tracking, deadlines,
 notifications, response decoding, initialization and terminal rejection; framing, connection, readiness and owned
 child lifecycle remain with the transports ([control-plane simplification research](research/control-plane-simplification.md)).
+Decision: Goal host restarts hand off the same loopback app-server per pool and adopt only an exact live process and
+private endpoint; a dead or failed attachment gets one bounded same-pool rejoin. The installed Codex daemon is not used
+because its shared inherited environment and remote-management settings do not fit per-pool ownership.
+Decision: on a new provider start, its identity-only registry record remains provisional until readyz, the private
+WebSocket connection and JSON-RPC initialization succeed; the host then publishes the complete pool attachment before
+returning the client to manager thread recovery. Lifecycle checks count only recovery RPCs written after each host
+boundary and read that host's complete attachment after its fresh resume event.
+Decision: manager-host SIGTERM and SIGINT handlers remain attached through graceful shutdown and are removed in its
+final cleanup, so the socket drains before owned app-server process groups are stopped.
 Decision: ManagerSessions is the durable Goal coordinator; `manager-session-transport.ts` owns the provider connection
 cache, concrete Codex/Claude session requests, viewer argv and window prompt/respawn. Prompt rendering, launch-manifest
 accounting, inbox delivery, renewal and budget stay with ManagerSessions. Extraction tests pin saved-thread ordering,
@@ -3377,12 +3430,17 @@ this timing window alone never authorizes an interrupt. Same-thread, same-turn `
 notifications with protocol `ThreadItem.type` `userMessage`, or an authoritative `thread/items/list` read for that
 exact turn, promote the operator turn to counted work and the controller reparks after completion. The live
 pre-interrupt read paginates the complete result and recognizes only the 0.169 `ThreadItem` discriminants. A
-successful complete list without a `userMessage` permits an interrupt of only that exact turn. On host recovery,
-the same list promotes and rejoins persisted operator input; a complete negative result starts a fresh 250 ms
-ordering window and a second authoritative read before interrupting. Unavailable, busy or ambiguous reads never
-prove automation: the active turn stays untouched until its terminal event or an explicit stop, with no polling or
-automatic retry. A UserMessage not yet persisted in the final complete read cannot be distinguished; if it is
-emitted only after that read, the exact-turn interrupt may still race it.
+successful complete list without a `userMessage` permits an interrupt of only that exact turn when the manager already
+has a persisted idle handoff; absence of new input never creates idle state. On host recovery, the same list promotes
+and rejoins persisted operator input; a complete negative result starts a fresh 250 ms ordering window and a second
+authoritative read before interrupting. Unavailable, busy or ambiguous reads never prove automation: the active turn
+stays untouched until its terminal event or an explicit stop, with no polling or automatic retry. A UserMessage not
+yet persisted in the final complete read cannot be distinguished; if it is emitted only after that read, the exact-turn
+interrupt may still race it.
+
+Decision: Preserve `turn_trigger=goal` with `goal.internal_context.provenance=harness` as a native continuation, not
+operator input or mail. Keep its exact in-progress thread turn through host reload as work; a confirmed idle handoff
+with no active turn remains parked. Focus lifecycle verification on pending-work reload and explicit idle behavior.
 
 Decision: Send Goal mutation provenance explicitly. The initial user-requested Goal and an explicit manager stop use
 `origin: user`; controller parking, inbox reactivation, completion, limits and recovery use `origin: automatic`.

@@ -115,7 +115,7 @@ export const OpeningAndReply: Story = {
     await waitFor(() => expect(sends[0]).toBeEnabled());
     for (const send of sends) await ownControl(send);
     await userEvent.click(sends[1]!);
-    const retry = await view.findByRole('button', { name: m.thread_write_retry() });
+    const retry = await view.findByRole('button', { name: m.thread_recovery_retry_original() });
     await ownControl(retry);
   },
 };

@@ -8,6 +8,8 @@ import { bundledDigest } from '@rezics/definitions/bundled';
 import {
   observePersonIdentity,
   personIdentityForSource,
+  readCombinedPersonCredits,
+  recordCombinedPersonCredits,
   selectPersonReviewPair,
 } from '../src/showcase-person-identity.ts';
 import {
@@ -601,4 +603,144 @@ test('an identity observation for a followed endpoint cannot stand in for the re
       externalId: 's7',
     }),
   ).rejects.toThrow('Invalid import transport data');
+});
+
+test('combined Person credit readback keeps each current statement’s Character, name, citation, and binding', async () => {
+  const survivor = '00000000-0000-4000-8000-000000000008';
+  const vndb = '00000000-0000-4000-8000-000000000007';
+  const row = (
+    target: string,
+    rank: string,
+    name: string,
+    character: string,
+    citation: string,
+    characterProperty = 'wdt:P453',
+  ) => ({
+    rank,
+    value: { type: 'value', content: target },
+    qualifiers: [
+      { property: { id: characterProperty }, value: { type: 'value', content: character } },
+      { property: { id: 'wdt:P1932' }, value: { type: 'value', content: name } },
+    ],
+    references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: citation } }] }],
+  });
+  const retired = row(
+    survivor,
+    'deprecated',
+    'Retired name',
+    '00000000-0000-4000-8000-0000000000ff',
+    'https://bgm.test/retired',
+  );
+  const firstCurrent = row(survivor, 'normal', 'Voice A', '00000000-0000-4000-8000-00000000000a', 'https://bgm.test/a');
+  firstCurrent.qualifiers.unshift({
+    property: { id: 'wdt:P453' },
+    value: { type: 'value', content: 'character:unknown' },
+  });
+  const works = [
+    {
+      externalId: '1851',
+      read: read({
+        id: '00000000-0000-4000-8000-000000000185',
+        statements: {
+          'wdt:P725': [
+            retired,
+            firstCurrent,
+            row(
+              survivor,
+              'preferred',
+              'Voice B',
+              '00000000-0000-4000-8000-00000000000b',
+              'https://bgm.test/b',
+              'schema:character',
+            ),
+          ],
+        },
+      }),
+    },
+    {
+      externalId: 'v4',
+      read: Object.assign(
+        read({
+          id: '00000000-0000-4000-8000-000000000004',
+          statements: {
+            'schema:author': [
+              row(vndb, 'normal', 'Maeda Jun', '00000000-0000-4000-8000-00000000000c', 'https://vndb.test/v4'),
+            ],
+          },
+        }),
+        { related: { [vndb]: { redirect: survivor } } },
+      ),
+    },
+  ];
+  const originals = [
+    { boundPersonId: survivor, personExternalId: 'person:1916' },
+    { boundPersonId: vndb, personExternalId: 's224' },
+  ];
+  const recorded = recordCombinedPersonCredits({ canonicalPersonId: survivor, originals, works });
+  const project = (result: ReturnType<typeof recordCombinedPersonCredits>) =>
+    result.credits.map(
+      ({
+        workExternalId,
+        property,
+        personExternalId,
+        boundPersonId,
+        canonicalPersonId,
+        creditedAs,
+        citations,
+        characterExternalId,
+      }) => [
+        workExternalId,
+        property,
+        personExternalId,
+        boundPersonId,
+        canonicalPersonId,
+        creditedAs,
+        citations,
+        characterExternalId,
+      ],
+    );
+  expect(project(recorded)).toEqual([
+    [
+      '1851',
+      'wdt:P725',
+      'person:1916',
+      survivor,
+      survivor,
+      ['Voice A'],
+      ['https://bgm.test/a'],
+      '00000000-0000-4000-8000-00000000000a',
+    ],
+    [
+      '1851',
+      'wdt:P725',
+      'person:1916',
+      survivor,
+      survivor,
+      ['Voice B'],
+      ['https://bgm.test/b'],
+      '00000000-0000-4000-8000-00000000000b',
+    ],
+    [
+      'v4',
+      'schema:author',
+      's224',
+      vndb,
+      survivor,
+      ['Maeda Jun'],
+      ['https://vndb.test/v4'],
+      '00000000-0000-4000-8000-00000000000c',
+    ],
+  ]);
+  const publicReads: string[] = [];
+  const readback = await readCombinedPersonCredits({
+    canonicalPersonId: survivor,
+    originals,
+    works: works.map(({ externalId }) => ({ externalId, boundSubjectId: externalId })),
+    readPublic: async (id) => {
+      publicReads.push(id);
+      return works.find((work) => work.externalId === id)!.read;
+    },
+  });
+  expect(publicReads).toEqual(['1851', 'v4']);
+  expect(readback).toEqual(recorded);
 });

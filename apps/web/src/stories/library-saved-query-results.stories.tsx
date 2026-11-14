@@ -1,13 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { DynamicCollectionPage } from '../library/dynamic-collection-page';
 import type { DynamicCollectionPage as Page } from '../library/dynamic-collection';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { resetSavedQueryStory, savedQueryDirectoryCursor, savedQueryManagedId } from '../kernel/fake/collection-rules';
+import { setCollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { PageStory, PatternStory, pageReady } from './page';
 
 const meta = {
   title: 'Library/Saved query results',
   id: 'pages-library-saved-query-results',
+  beforeEach: () => {
+    resetSavedQueryStory();
+    setCollectionStoryMode('many');
+  },
   parameters: {
     layout: 'fullscreen',
     docs: {
@@ -129,4 +136,57 @@ export const Recovery: Story = {
       </main>
     </PatternStory>
   ),
+};
+
+export const MetadataAndDeleteReturn: Story = {
+  name: 'Metadata and delete return to the same directory page (illustrative)',
+  render: () => (
+    <PageStory
+      visitor="Signed In"
+      path={`/library/collections?${new URLSearchParams({ layout: 'rows', cursor: savedQueryDirectoryCursor })}`}
+    />
+  ),
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(within(context.canvasElement).getByRole('main'));
+    const directory = `/${getLocale()}/library/collections?${new URLSearchParams({ layout: 'rows', cursor: savedQueryDirectoryCursor })}`;
+    await waitFor(() =>
+      expect(context.canvasElement.querySelector(`[data-saved-query-row="${savedQueryManagedId}"]`)).not.toBeNull(),
+    );
+    const row = context.canvasElement.querySelector<HTMLElement>(`[data-saved-query-row="${savedQueryManagedId}"]`)!;
+    await expect(row).toBeVisible();
+    const open = within(row).getByRole('link', { name: m.library_collection_open() });
+    await expect(open).toHaveAttribute(
+      'href',
+      `/${getLocale()}/collections/${savedQueryManagedId}?${new URLSearchParams({ returnTo: directory })}`,
+    );
+    await userEvent.click(open);
+    await expect(await canvas.findByRole('heading', { level: 1, name: 'Weekend reading' })).toBeVisible();
+    // The fixture illustrates metadata commands only; membership remains honestly unavailable.
+    await expect(canvas.getByText(m.library_dynamic_unavailable())).toBeVisible();
+    const manage = await canvas.findByRole('button', { name: m.library_saved_query_manage() });
+    await userEvent.click(manage);
+    const title = await canvas.findByRole('textbox', { name: m.library_collection_title() });
+    await expect(title).toHaveFocus();
+    await userEvent.clear(title);
+    await userEvent.type(title, 'Quiet weekend reading');
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
+    await expect(await canvas.findByText(m.library_saved_query_management_saved())).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 1, name: 'Quiet weekend reading' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_cancel() }));
+    await expect(manage).toHaveFocus();
+    await userEvent.click(manage);
+    await expect(await canvas.findByRole('textbox', { name: m.library_collection_title() })).toHaveValue(
+      'Quiet weekend reading',
+    );
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_delete() }));
+    const dialog = within(context.canvasElement.ownerDocument.body).getByRole('alertdialog');
+    await expect(within(dialog).getByText(savedQueryManagedId)).toBeVisible();
+    await expect(within(dialog).getByText('Quiet weekend reading')).toBeVisible();
+    await expect(within(dialog).getByText(m.library_rule_collection_revision({ revision: 4 }))).toBeVisible();
+    await userEvent.click(within(dialog).getByRole('button', { name: m.library_collection_delete_confirm() }));
+    await expect(await canvas.findByRole('heading', { name: m.library_saved_queries_heading() })).toBeVisible();
+    await expect(canvas.getByText(m.library_saved_queries_empty_page())).toBeVisible();
+    await expect(context.canvasElement.querySelector(`[data-saved-query-row="${savedQueryManagedId}"]`)).toBeNull();
+  },
 };

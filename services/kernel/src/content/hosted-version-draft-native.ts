@@ -27,6 +27,7 @@ import {
   createHostedVersionWrite,
   hostedVersionSequence,
   readHostedVersionHead,
+  readHostedVersionMaximumChildSubtreeHeight,
   readHostedVersionOccurrence,
   readHostedVersionSiblingRoot,
   readHostedVersionSnapshot,
@@ -34,6 +35,10 @@ import {
   stageHostedVersionSiblingRoot,
   stageHostedVersionSnapshotRoots,
 } from './hosted-version-store.ts';
+import type {
+  VersionedOutlineSequenceNode,
+  VersionedOutlineSequenceReadWriteSet,
+} from './versioned-outline-sequence.ts';
 import { HostedVersionRevisionPointerChangedError, commitHostedVersionRevision } from './hosted-version-revision.ts';
 import type {
   HostedVersionDraftMoveDescriptor,
@@ -54,6 +59,7 @@ function invalidAnchor(): never {
 function occurrenceFact(
   revisionId: string,
   occurrence: HostedVersionDraftMoveSelectedOccurrence,
+  subtreeHeight = occurrence.value.subtreeHeight,
 ): HostedVersionDraftMoveOccurrence {
   return {
     snapshotId: revisionId,
@@ -61,7 +67,7 @@ function occurrenceFact(
     parentId: occurrence.parentOccurrenceId,
     kind: occurrence.value.kind,
     subtreeSize: occurrence.subtreeSize,
-    subtreeHeight: occurrence.value.subtreeHeight,
+    subtreeHeight,
     chapterCount: occurrence.value.chapterCount,
   };
 }
@@ -69,6 +75,7 @@ function occurrenceFact(
 function ancestorFact(
   revisionId: string,
   occurrence: HostedVersionDraftMoveSelectedOccurrence,
+  subtreeHeight = occurrence.value.subtreeHeight,
 ): HostedVersionDraftMoveAncestor {
   return {
     snapshotId: revisionId,
@@ -76,6 +83,56 @@ function ancestorFact(
     parentId: occurrence.parentOccurrenceId,
     subtreeSize: occurrence.subtreeSize,
     chapterCount: occurrence.value.chapterCount,
+    subtreeHeight,
+  };
+}
+
+function stringIndex(
+  inner: VersionedOutlineSequenceReadWriteSet<HostedVersionDraftMoveStoredValue>,
+  occurrences: ReadonlyMap<string, HostedVersionDraftMoveSelectedOccurrence>,
+): VersionedOutlineSequenceReadWriteSet<string> {
+  const asString = (
+    node: VersionedOutlineSequenceNode<HostedVersionDraftMoveStoredValue> | null,
+  ): VersionedOutlineSequenceNode<string> | null => (node === null ? null : { ...node, value: node.id });
+  const nodeReads = new Map<string, VersionedOutlineSequenceNode<string> | null>();
+  const nodeWrites = new Map<string, VersionedOutlineSequenceNode<string>>();
+  return {
+    async readNode(id) {
+      const node = asString(await inner.readNode(id));
+      nodeReads.set(id, node);
+      return node;
+    },
+    async readNodes(ids) {
+      const selected = await inner.readNodes(ids);
+      const nodes = new Map<string, VersionedOutlineSequenceNode<string> | null>();
+      for (const [id, node] of selected) {
+        const mapped = asString(node);
+        nodeReads.set(id, mapped);
+        nodes.set(id, mapped);
+      }
+      return nodes;
+    },
+    writeNode(node) {
+      const previous = inner.nodeWrites.get(node.id) ?? inner.nodeReads.get(node.id);
+      const storedValue: unknown = previous?.value;
+      const previousValue =
+        storedValue !== null && typeof storedValue === 'object'
+          ? storedValue
+          : (occurrences.get(node.id)?.value ?? storedValue);
+      if (!previousValue) throw new InvalidHostedVersionIdentityError();
+      const value =
+        node.subtreeHeight === undefined ||
+        (typeof previousValue === 'object' &&
+          previousValue !== null &&
+          node.subtreeHeight === (previousValue as HostedVersionDraftMoveStoredValue).subtreeHeight)
+          ? previousValue
+          : { ...(previousValue as HostedVersionDraftMoveStoredValue), subtreeHeight: node.subtreeHeight };
+      inner.writeNode({ ...node, value: value as HostedVersionDraftMoveStoredValue });
+      nodeWrites.set(node.id, node);
+    },
+    nodeReads,
+    nodeWrites,
+    work: () => inner.work(),
   };
 }
 
@@ -176,16 +233,16 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
       assertSnapshotIdentity(versionHead, descriptor);
 
       const storeWrite = createHostedVersionWrite<HostedVersionDraftMoveStoredValue>(tx, snapshot);
-      // The store producer shares its occurrence payload generic with sequence values;
-      // Book order indexes carry stable occurrence ID strings for the retained planner.
+      const occurrences = new Map<string, HostedVersionDraftMoveSelectedOccurrence>();
       const indexes: HostedVersionDraftMoveIndexes = {
-        siblings: hostedVersionSequence(storeWrite, 'sibling') as unknown as HostedVersionDraftMoveIndexes['siblings'],
-        preorder: hostedVersionSequence(storeWrite, 'preorder') as unknown as HostedVersionDraftMoveIndexes['preorder'],
-        chapters: hostedVersionSequence(storeWrite, 'chapter') as unknown as HostedVersionDraftMoveIndexes['chapters'],
+        siblings: stringIndex(hostedVersionSequence(storeWrite, 'sibling'), occurrences),
+        preorder: stringIndex(hostedVersionSequence(storeWrite, 'preorder'), occurrences),
+        chapters: stringIndex(hostedVersionSequence(storeWrite, 'chapter'), occurrences),
+        readLegacyMaximum: (parentId, excludedOccurrenceIds) =>
+          readHostedVersionMaximumChildSubtreeHeight(tx, snapshot, parentId, excludedOccurrenceIds),
       };
       await assertRootSummary(snapshot, indexes.preorder, indexes.chapters);
 
-      const occurrences = new Map<string, HostedVersionDraftMoveSelectedOccurrence>();
       const readOccurrence = async (occurrenceId: string): Promise<HostedVersionDraftMoveSelectedOccurrence> => {
         const existing = occurrences.get(occurrenceId);
         if (existing) return existing;
@@ -346,6 +403,28 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
       const sourceSiblingRootId = await rootForParent(source.parentOccurrenceId);
       const destinationSiblingRootId =
         source.parentOccurrenceId === input.parentId ? sourceSiblingRootId : await rootForParent(input.parentId);
+      const siblingParents = new Set<string | null>([
+        null,
+        source.occurrenceId,
+        source.parentOccurrenceId,
+        input.parentId,
+        ...(before === null ? [] : [before.occurrenceId, before.parentOccurrenceId]),
+      ]);
+      for (const ancestor of [...sourceAncestors, ...destinationAncestors]) {
+        siblingParents.add(ancestor.occurrenceId);
+        siblingParents.add(ancestor.parentId);
+      }
+      const siblingRootByParent = new Map<string | null, string | null>();
+      for (const parentId of siblingParents) {
+        siblingRootByParent.set(
+          parentId,
+          parentId === source.parentOccurrenceId
+            ? sourceSiblingRootId
+            : parentId === input.parentId
+              ? destinationSiblingRootId
+              : await rootForParent(parentId),
+        );
+      }
 
       const selection: HostedVersionDraftMoveSelection = {
         snapshotId: descriptor.revisionId,
@@ -362,6 +441,7 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
         destinationSiblingRootId,
         preorderRootId: snapshot.preorderRootId,
         chapterRootId: snapshot.chapterRootId,
+        siblingRootByParent,
       };
       const selected: HostedVersionDraftMoveNativeSnapshot = { selection, indexes };
       contexts.set(selected, {
@@ -397,10 +477,16 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
 
       const source = context.occurrences.get(write.input.occurrenceId);
       if (!source) throw new InvalidHostedVersionIdentityError();
+      const depthUpdates = new Map(
+        write.plan.subtreeHeightUpdates.map((update) => [update.occurrenceId, update.subtreeHeight]),
+      );
       stageHostedVersionOccurrence(storeWrite, source.occurrenceId, {
         parentOccurrenceId: write.plan.toParentId,
         subtreeSize: source.subtreeSize,
-        value: source.value,
+        value: {
+          ...source.value,
+          subtreeHeight: depthUpdates.get(source.occurrenceId) ?? source.value.subtreeHeight,
+        },
       });
 
       for (const delta of write.plan.ancestorDeltas) {
@@ -409,7 +495,26 @@ export function createHostedVersionDraftMoveNativeAdapter(): HostedVersionDraftM
         stageHostedVersionOccurrence(storeWrite, ancestor.occurrenceId, {
           parentOccurrenceId: ancestor.parentOccurrenceId,
           subtreeSize: delta.subtreeSize,
-          value: { ...ancestor.value, chapterCount: delta.chapterCount },
+          value: {
+            ...ancestor.value,
+            chapterCount: delta.chapterCount,
+            subtreeHeight: depthUpdates.get(ancestor.occurrenceId) ?? ancestor.value.subtreeHeight,
+          },
+        });
+      }
+      for (const update of write.plan.subtreeHeightUpdates) {
+        if (
+          update.occurrenceId === source.occurrenceId ||
+          write.plan.ancestorDeltas.some((delta) => delta.occurrenceId === update.occurrenceId)
+        ) {
+          continue;
+        }
+        const occurrence = context.occurrences.get(update.occurrenceId);
+        if (!occurrence) throw new InvalidHostedVersionIdentityError();
+        stageHostedVersionOccurrence(storeWrite, occurrence.occurrenceId, {
+          parentOccurrenceId: occurrence.parentOccurrenceId,
+          subtreeSize: occurrence.subtreeSize,
+          value: { ...occurrence.value, subtreeHeight: update.subtreeHeight },
         });
       }
 

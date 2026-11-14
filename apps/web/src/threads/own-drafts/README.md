@@ -48,6 +48,64 @@ and deferred until executed; generated declarations and Web fixtures do not esta
 When a resumed editor is open, Return to drafts uses the same departure decision as the editor. Staying keeps the
 chosen server or browser body and its retry state; deliberate departure returns focus to the inventory opener.
 
+Decision: Render the supplied structured server, browser and readback bodies through a private `PostReadingBody`
+caller with separate source/visit identities, heading anchors, disclosure and wide-inspector lifetimes. A browser
+text fallback is explicitly labelled and cannot resume without its structured body. Supplied block language remains
+intact; unknown browser/readback document language stays unknown rather than inheriting the interface locale.
+No reference, attachment or media lookup is added. Browser repair and unknown-submission notices stay beside its
+explicit choice; an unknown browser copy remains inspectable but cannot resume. Acknowledgement retains the
+submitted title, source, source revision and saved time separately from the later current read; browser submission
+also names the selected server revision used by the native command.
+
+## Footnote prerequisite
+
+[Document ownership](../../../../../packages/document/README.md) must define the public snapshot representation and
+shared reading disclosure port before consumer integration. That independent outcome includes profile validation and
+public schema artifacts, preservation through editor changes and Markdown import, accessible reading disclosure and
+retirement of its state when the supplied document or reading visit changes. Its focused acceptance belongs in:
+
+- [Document behaviour](../../../../../packages/document/tests/document.test.ts) and
+  [public contract](../../../../../packages/document/tests/contract.test.ts).
+- [Editor extensions](../../../../../packages/ui/tests/document-extensions.test.ts),
+  [reading output](../../../../../packages/ui/tests/document-body.test.ts) and
+  [disclosure lifetime](../../../../../packages/ui/tests/document-disclosure-lifetime.test.tsx).
+
+Decision: Bind the consumer dependency to the delivered snapshot format and public reading disclosure port implementation
+change in `packages/document` and `packages/ui`, confirmed through their public entries and a linked integration brief
+at the actual implementation revision. Prerequisite-only or unrelated integrated changes do not establish producer
+delivery. The integration brief must identify the public snapshot representation, runtime profiles and schema artifacts,
+editor and Markdown preservation, shared accessible disclosure controls and required messages, document and reading-visit
+retirement including equal bytes, and named story states before consumer fixtures and stories are written.
+The [producer integration contract](../../../../../packages/document/FOOTNOTES.md) identifies the delivered Document
+and UI implementation revisions, the public controls and messages, and the existing story states to extend.
+
+Decision: Own drafts retains those delivered producer APIs and sends each supplied snapshot unchanged through its
+existing private `PostReadingBody`; the Web wrapper localizes footnote controls, source-plus-visit keys retire
+disclosure state, and explicit server or browser choices preserve the selected footnotes through editing and submission
+while later current reads keep their own returned snapshot.
+
+Own drafts does not invent footnote payloads or controls. Consumer changes cover the page/body preview, existing resume,
+command and native suites, shared Web messages/wrapper, and producer-named stories together.
+
+The integration preserves separate server, browser and current-readback source and visit identities:
+
+| Source                   | Required acceptance                                                                                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Selected server revision | Inspect its supplied footnotes before choosing the server body; the explicit choice retains them in the editor and command submission.                                  |
+| Browser writing revision | Inspect its independent footnotes before choosing the browser body; the explicit choice retains them in the editor and submission against the selected server revision. |
+| Later current read       | Inspect only its returned footnotes under the readback identity; acknowledgement continues to describe the submitted source and revision independently.                 |
+
+A disclosure in one preview cannot reveal another preview; source, revision or visit replacement retires its state,
+including replacement by equal bytes. Supported structured nodes, authored language, spoiler disclosure, heading
+anchors and wide inspection retain their existing behaviour.
+
+Extend the existing [resume](../../../tests/own-drafts-resume.test.tsx) and
+[command](../../../tests/own-drafts-commands.test.tsx) suites for the adopted format: inspect supplied footnotes in each
+source, retain them through the explicit body choice and command submission, and keep acknowledged submitted bytes
+separate from the later current read. Keep the independent reader, command and native assertions whose behaviour does
+not change. New fixtures and stories use the producer's public snapshot format rather than a caller-defined payload.
+Execution, rich-document keyboard interaction and visual review belong to the separate verifier.
+
 ## Cost
 
 ### Own-draft inventory and inspection

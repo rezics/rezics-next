@@ -425,9 +425,13 @@ export const IllustrativeReferenceAndPreciseDates = {
     const references = within(details);
     await expect(references.getByText(m.moderation_queue_details_report_id())).toBeVisible();
     await expect(references.getByText(referenceExample.id, { exact: true })).toBeVisible();
-    await expect([...details.querySelectorAll('dd')].map((value) => value.textContent)).toEqual([referenceExample.id]);
-    await expect(details.textContent).not.toContain(postReport.target.id);
-    await expect(details.textContent).not.toContain(postReport.revisionId!);
+    await expect([...details.querySelectorAll('dd')].map((value) => value.textContent)).toEqual([
+      referenceExample.id,
+      referenceExample.target.id,
+      referenceExample.revisionId,
+    ]);
+    await expect(details.textContent).toContain(postReport.target.id);
+    await expect(details.textContent).toContain(postReport.revisionId!);
     await expect(summary.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth);
     await expect(args.onAction).not.toHaveBeenCalled();

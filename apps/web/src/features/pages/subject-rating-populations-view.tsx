@@ -528,11 +528,11 @@ function PopulationVisit({
 
   if (!lease || !current()) return null;
   return (
-    <div ref={region} data-slot="rating-populations" className="space-y-4 text-sm">
+    <div ref={region} data-slot="rating-populations" className="min-w-0 space-y-5 border-t pt-5 text-sm">
       <FieldSet aria-describedby={helpId} aria-busy={directory.isFetching}>
         <FieldLegend
           tabIndex={-1}
-          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {m.rating_population_choose({}, options)}
         </FieldLegend>
@@ -542,6 +542,7 @@ function PopulationVisit({
         <RatingSourceStatus
           outcome={directoryOutcome}
           source="directory"
+          showLabel={false}
           locale={locale}
           retry={pageState.stopped ? undefined : () => retry('directory')}
           owner={{ subject: subjectId, incarnation: lease.key, isCurrent: current }}
@@ -561,7 +562,9 @@ function PopulationVisit({
             <div className="grid gap-2 sm:grid-cols-2">
               {choices.map((item) => (
                 <Field key={item.id} orientation="horizontal" className="min-w-0">
-                  <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 break-words">
+                  <label
+                    className={`flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 wrap-anywhere ${selected.includes(item.id) ? 'border-primary/50 bg-primary/5' : 'hover:bg-muted/50'}`}
+                  >
                     <input
                       type="checkbox"
                       aria-describedby={helpId}
@@ -626,13 +629,18 @@ function PopulationVisit({
         <div
           data-slot="rating-selected"
           data-retry-after={selectedRetryAfter}
-          className="space-y-3"
+          className="min-w-0 space-y-3 border-t pt-5"
+          role="region"
+          aria-labelledby={`${helpId}-selected`}
           aria-busy={comparison.isFetching}
         >
-          <h3 className="font-medium">{m.subject_ratings_comparisons({}, options)}</h3>
+          <h3 id={`${helpId}-selected`} className="text-base font-semibold">
+            {m.rating_population_source_selected({}, options)}
+          </h3>
           <RatingSourceStatus
             outcome={selectedOutcome}
             source="selected"
+            showLabel={false}
             locale={locale}
             retry={() => retry('selected')}
             owner={{
@@ -651,7 +659,7 @@ function PopulationVisit({
                 <ContentItemFrame
                   as="div"
                   data-slot="content-item-frame"
-                  className="min-w-0 space-y-2 wrap-anywhere py-3 sm:py-4"
+                  className="min-w-0 space-y-3 rounded-lg border p-4 wrap-anywhere"
                 >
                   <ContentItemHeading
                     level={4}
@@ -714,40 +722,44 @@ function PopulationFigure({
 }) {
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
   if (item.figure.kind !== 'ready')
-    return <RatingSourceStatus outcome={item.figure} source="comparison" locale={locale} />;
+    return <RatingSourceStatus outcome={item.figure} source="comparison" locale={locale} showLabel={false} />;
   const figure = item.figure.value;
   const number = (value: number) => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
   const threshold = ['episode', 'character'].includes(question.grain) ? 10 : 5;
   const mean = figure.mean;
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       {figure.freshness?.updating ? (
         <>
           <p>{m.subject_ratings_realm_count({ count: number(figure.count), population: item.name }, options)}</p>
-          <p role="status">{m.rating_public_updating({}, options)}</p>
+          <p role="status" className="text-muted-foreground">
+            {m.rating_public_updating({}, options)}
+          </p>
         </>
       ) : figure.count === 0 ? (
-        <p>{m.subject_ratings_empty({}, options)}</p>
+        <p className="text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
       ) : (
         <>
-          <p>{m.subject_ratings_realm_count({ count: number(figure.count), population: item.name }, options)}</p>
           {figure.remaining !== undefined || figure.count < threshold ? (
-            <p>
+            <p className="text-muted-foreground">
               {m.subject_ratings_remaining({ count: number(figure.remaining ?? threshold - figure.count) }, options)}
             </p>
           ) : mean !== undefined &&
             Number.isFinite(mean) &&
             mean >= question.scale.min &&
             mean <= question.scale.max ? (
-            <p className="font-medium tabular-nums">
+            <p className="text-2xl font-semibold tabular-nums">
               {m.rating_public_mean(
                 { mean: number(displayRating(mean, question.scale)), maximum: number(PUBLIC_RATING_SCALE.max) },
                 options,
               )}
             </p>
           ) : (
-            <p>{m.subject_ratings_figure_unavailable({}, options)}</p>
+            <p className="text-muted-foreground">{m.subject_ratings_figure_unavailable({}, options)}</p>
           )}
+          <p className="text-xs text-muted-foreground">
+            {m.subject_ratings_realm_count({ count: number(figure.count), population: item.name }, options)}
+          </p>
         </>
       )}
       {figure.freshness?.asOf && (

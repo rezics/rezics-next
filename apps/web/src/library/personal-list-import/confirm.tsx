@@ -1,3 +1,4 @@
+import { ImportDetails } from './presentation';
 import { m } from '../../paraglide/messages.js';
 import type { VndbJourneySnapshot } from './controller';
 import { VndbAction } from './controls';
@@ -20,6 +21,12 @@ export function VndbConfirmPage({
   onBack: () => void;
   onConfirm: () => void;
 }) {
+  const effectsByOrdinal = new Map<number, typeof snap.unattemptedEffects>();
+  for (const effect of snap.unattemptedEffects) {
+    const effects = effectsByOrdinal.get(effect.ordinal) ?? [];
+    effects.push(effect);
+    effectsByOrdinal.set(effect.ordinal, effects);
+  }
   return (
     <section className="min-w-0 space-y-4" data-vndb-stage="confirm" tabIndex={-1}>
       <h2 className="text-xl font-semibold">{m.library_vndb_confirm_title()}</h2>
@@ -36,56 +43,57 @@ export function VndbConfirmPage({
                 <p className="break-words text-sm">{m.library_vndb_identifier({ value: row.identifier.value })}</p>
               ) : null}
               <ul className="mt-2 space-y-2">
-                {snap.unattemptedEffects
-                  .filter((effect) => effect.ordinal === row.ordinal)
-                  .map((effect) => (
-                    <li
-                      key={`${effect.kind}:${effect.reviewId}`}
-                      className="break-words rounded-sm bg-muted/40 p-2 text-sm"
-                    >
-                      <p className="font-medium">
-                        {effect.kind === 'entry-state' && row.decision?.action === 'progress'
-                          ? m.library_vndb_progress_title()
-                          : effect.kind === 'score'
-                            ? m.library_vndb_score_effect()
-                            : row.decision
-                              ? selectionLabel(row.decision.status, row.decision.state, row.decision.replace)
-                              : m.library_vndb_action_state()}
+                {(effectsByOrdinal.get(row.ordinal) ?? []).map((effect) => (
+                  <li
+                    key={`${effect.kind}:${effect.reviewId}`}
+                    className="break-words rounded-sm bg-muted/40 p-2 text-sm"
+                  >
+                    <p className="font-medium">
+                      {effect.kind === 'entry-state' && row.decision?.action === 'progress'
+                        ? m.library_vndb_progress_title()
+                        : effect.kind === 'score'
+                          ? m.library_vndb_score_effect()
+                          : row.decision
+                            ? selectionLabel(row.decision.status, row.decision.state, row.decision.replace)
+                            : m.library_vndb_action_state()}
+                    </p>
+                    {effect.kind === 'score' && score?.reviewId === effect.reviewId ? (
+                      <p>
+                        {score.action === 'vote'
+                          ? m.library_vndb_score_selected_vote({ units: score.units ?? 0 })
+                          : m.library_vndb_score_selected_clear()}
                       </p>
-                      {effect.kind === 'score' && score?.reviewId === effect.reviewId ? (
-                        <p>
-                          {score.action === 'vote'
-                            ? m.library_vndb_score_selected_vote({ units: score.units ?? 0 })
-                            : m.library_vndb_score_selected_clear()}
-                        </p>
-                      ) : null}
-                      {effect.kind === 'entry-state' && row.decision?.progress ? (
-                        <ul>
-                          {row.decision.progress.measures.map((measure) => (
-                            <li key={measure.field}>
-                              {measure.field}: {measure.sourceAmount ?? '—'} {measure.unit} · {measure.action} ·{' '}
-                              {measure.status}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
+                    ) : null}
+                    {effect.kind === 'entry-state' && row.decision?.progress ? (
+                      <ul>
+                        {row.decision.progress.measures.map((measure) => (
+                          <li key={measure.field}>
+                            {measure.field}: {measure.sourceAmount ?? '—'} {measure.unit} · {measure.action} ·{' '}
+                            {measure.status}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <ImportDetails>
                       <p>{m.library_vndb_score_receipt({ id: effect.reviewId })}</p>
-                      {effect.targetId ? <p>{m.library_vndb_target_id({ id: effect.targetId })}</p> : null}
-                      {effect.kind === 'entry-state' && row.decision?.baseline ? (
-                        <p>
-                          {m.library_bangumi_current({
-                            state: row.decision.baseline.state,
-                            revision: row.decision.baseline.revision,
-                          })}
-                        </p>
-                      ) : null}
-                    </li>
-                  ))}
+                    </ImportDetails>
+                    {effect.targetId ? <p>{m.library_vndb_target_id({ id: effect.targetId })}</p> : null}
+                    {effect.kind === 'entry-state' && row.decision?.baseline ? (
+                      <p>
+                        {m.library_bangumi_current({
+                          state: row.decision.baseline.state,
+                          revision: row.decision.baseline.revision,
+                        })}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
               </ul>
             </li>
           );
         })}
       </ul>
+      <p className="text-sm text-muted-foreground">{m.library_vndb_no_rollback()}</p>
       <div className="flex flex-wrap gap-3">
         <VndbAction type="button" variant="outline" disabled={busy} onClick={onBack}>
           {m.library_bangumi_return_review()}

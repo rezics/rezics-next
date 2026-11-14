@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   createVersionedOutlineSequenceReadWriteSet,
   type VersionedOutlineSequenceNode,
+  type VersionedOutlineSequenceReadWriteSet,
 } from '../../src/content/versioned-outline-sequence.ts';
 import { prepareHostedVersionDraftPointPlan } from '../../src/content/hosted-version-draft-points.ts';
 import {
@@ -24,6 +25,20 @@ function buildSequence(values: readonly string[], weighted: ReadonlySet<string> 
     const left = leftId === null ? null : nodes.get(leftId)!;
     const right = rightId === null ? null : nodes.get(rightId)!;
     const chapterWeight = weighted.has(id) ? 1n : 0n;
+    const maximum = [
+      { subtreeHeight: 0, occurrenceId: id },
+      ...(left === null
+        ? []
+        : [{ subtreeHeight: left.maximumSubtreeHeight!, occurrenceId: left.maximumSubtreeOccurrenceId! }]),
+      ...(right === null
+        ? []
+        : [{ subtreeHeight: right.maximumSubtreeHeight!, occurrenceId: right.maximumSubtreeOccurrenceId! }]),
+    ].reduce((best, candidate) =>
+      candidate.subtreeHeight > best.subtreeHeight ||
+      (candidate.subtreeHeight === best.subtreeHeight && candidate.occurrenceId < best.occurrenceId)
+        ? candidate
+        : best,
+    );
     nodes.set(id, {
       id,
       value: id,
@@ -34,6 +49,9 @@ function buildSequence(values: readonly string[], weighted: ReadonlySet<string> 
       count: 1n + (left?.count ?? 0n) + (right?.count ?? 0n),
       chapterWeight,
       chapterCount: chapterWeight + (left?.chapterCount ?? 0n) + (right?.chapterCount ?? 0n),
+      subtreeHeight: 0,
+      maximumSubtreeHeight: maximum.subtreeHeight,
+      maximumSubtreeOccurrenceId: maximum.occurrenceId,
     });
     return id;
   }
@@ -45,10 +63,11 @@ function indexes(snapshots: Readonly<{ siblings: Snapshot; preorder: Snapshot; c
     siblings: createVersionedOutlineSequenceReadWriteSet<string>(async (id) => snapshots.siblings.get(id) ?? null),
     preorder: createVersionedOutlineSequenceReadWriteSet<string>(async (id) => snapshots.preorder.get(id) ?? null),
     chapters: createVersionedOutlineSequenceReadWriteSet<string>(async (id) => snapshots.chapters.get(id) ?? null),
+    readLegacyMaximum: async () => null,
   } satisfies HostedVersionDraftPointIndexes;
 }
 
-function commit(snapshot: Snapshot, access: HostedVersionDraftPointIndexes[keyof HostedVersionDraftPointIndexes]) {
+function commit(snapshot: Snapshot, access: VersionedOutlineSequenceReadWriteSet<string>): Snapshot {
   return new Map([...snapshot, ...access.nodeWrites]);
 }
 
@@ -116,6 +135,12 @@ test('inserts anchored parts and chapters and cuts a large unchanged subtree by 
   const preorder = buildSequence(preorderValues, new Set(chapterValues));
   const chapters = buildSequence(chapterValues, new Set(chapterValues));
   const selected = { siblings: siblingsSnapshot, preorder: preorder.nodes, chapters: chapters.nodes };
+  const siblingRootByParent = new Map<string | null, string | null>([
+    [null, rootSiblings.rootId],
+    ['large-part', largeSiblings.rootId],
+    ['container-part', containerSiblingSequence.rootId],
+    ['nested-part', nestedSiblingSequence.rootId],
+  ]);
   const beforeRoots = {
     siblings: materialize(siblingsSnapshot, rootSiblings.rootId),
     nestedSiblings: materialize(siblingsSnapshot, nestedSiblingSequence.rootId),
@@ -153,6 +178,7 @@ test('inserts anchored parts and chapters and cuts a large unchanged subtree by 
       operation: 'insert',
       snapshotId: revisionId,
       headRevisionId: revisionId,
+      siblingRootByParent,
       siblingRootId: nestedSiblingSequence.rootId,
       preorderRootId: preorder.rootId,
       chapterRootId: chapters.rootId,
@@ -200,6 +226,7 @@ test('inserts anchored parts and chapters and cuts a large unchanged subtree by 
       operation: 'insert',
       snapshotId: revisionId,
       headRevisionId: revisionId,
+      siblingRootByParent,
       siblingRootId: nestedSiblingSequence.rootId,
       preorderRootId: preorder.rootId,
       chapterRootId: chapters.rootId,
@@ -240,6 +267,7 @@ test('inserts anchored parts and chapters and cuts a large unchanged subtree by 
       operation: 'insert',
       snapshotId: revisionId,
       headRevisionId: revisionId,
+      siblingRootByParent,
       siblingRootId: rootSiblings.rootId,
       preorderRootId: preorder.rootId,
       chapterRootId: chapters.rootId,
@@ -260,6 +288,7 @@ test('inserts anchored parts and chapters and cuts a large unchanged subtree by 
       operation: 'remove',
       snapshotId: revisionId,
       headRevisionId: revisionId,
+      siblingRootByParent,
       siblingRootId: rootSiblings.rootId,
       preorderRootId: preorder.rootId,
       chapterRootId: chapters.rootId,
@@ -322,6 +351,7 @@ test('inserts anchored parts and chapters and cuts a large unchanged subtree by 
         operation: 'remove',
         snapshotId: revisionId,
         headRevisionId: revisionId,
+        siblingRootByParent,
         siblingRootId: rootSiblings.rootId,
         preorderRootId: preorder.rootId,
         chapterRootId: chapters.rootId,
@@ -346,6 +376,7 @@ test('inserts anchored parts and chapters and cuts a large unchanged subtree by 
     operation: 'insert',
     snapshotId: revisionId,
     headRevisionId: revisionId,
+    siblingRootByParent,
     siblingRootId: nestedSiblingSequence.rootId,
     preorderRootId: preorder.rootId,
     chapterRootId: chapters.rootId,

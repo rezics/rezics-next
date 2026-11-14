@@ -96,7 +96,7 @@ function configuredBindings(value: unknown): SourceVocabularyBindings {
 type CurrentSubject = {
   id: string;
   type: string;
-  statements: Record<string, readonly { value?: { type?: string; content?: unknown } }[]>;
+  statements: Record<string, readonly { rank?: unknown; value?: { type?: string; content?: unknown } }[]>;
 };
 
 function currentSubject(read: ReviewedSubjectRead, id: string): CurrentSubject | null {
@@ -110,7 +110,12 @@ function hasCurrentValue(subject: CurrentSubject, property: string, content: str
   const values = subject.statements[property];
   return (
     Array.isArray(values) &&
-    values.some((statement) => statement.value?.type === 'value' && statement.value.content === content)
+    values.some(
+      (statement) =>
+        (statement.rank === 'normal' || statement.rank === 'preferred') &&
+        statement.value?.type === 'value' &&
+        statement.value.content === content,
+    )
   );
 }
 

@@ -3,10 +3,18 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
+import { createServer as createNetServer } from 'node:net';
 import { dirname, join, relative } from 'node:path';
 import type { Attempt } from './types.ts';
 import { createInterface } from 'node:readline';
-import type { AppServer, Notification } from './app-server.ts';
+import {
+  appServerEnvironmentFingerprint,
+  attachPool,
+  ForeignAppServerEndpointError,
+  type AppServer,
+  type AppServerAttachment,
+  type Notification,
+} from './app-server.ts';
 import { openDb } from './db.ts';
 import { dispatchDailyStepAudit, ensureFlow } from './flow.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -18,6 +26,7 @@ import { authorizeProof } from './verification.ts';
 import { git } from './tasks.ts';
 import { hostRequest } from './integration-cli.ts';
 import { createTerminalProcessSweep } from './attempt-resources.ts';
+import { HOST_UNIT, reportServices } from './service.ts';
 import { physicalHistoryPath } from '../../../scripts/check-custody.ts';
 import {
   grantWorkerTypingRecovery,
@@ -27,6 +36,11 @@ import {
 
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const short = (path: string) => relative(process.cwd(), path);
+const tmuxBinary = [process.env.TMUX, '/usr/bin/tmux', '/bin/tmux', 'tmux'].find((candidate) => {
+  if (!candidate) return false;
+  const result = spawnSync(candidate, ['-V'], { encoding: 'utf8' });
+  return result.status === 0;
+});
 
 function fixture(extra: NodeJS.ProcessEnv = {}) {
   const temporary = temporaryDirectory();
@@ -49,10 +63,14 @@ function fixture(extra: NodeJS.ProcessEnv = {}) {
   return { ...temporary, env, command };
 }
 
-type Hosted = { child: ChildProcess; exited: Promise<void>; ready: Promise<void>; pid: number };
+type Hosted = { child: ChildProcess; exited: Promise<void>; ready: Promise<void>; pid: number; diagnostics?(): string };
 function startHost(env: NodeJS.ProcessEnv): Hosted {
   const child = spawn(process.execPath, [runtime, '_manager-host'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  let diagnostics = '';
+  child.stderr?.on('data', (chunk) => {
+    diagnostics = `${diagnostics}${String(chunk)}`.slice(-4096);
+  });
+  const exited = new Promise<void>((resolve) => child.once('close', () => resolve()));
   const ready = new Promise<void>((resolve, reject) => {
     const lines = createInterface({ input: child.stdout! });
     lines.once('line', (line) => {
@@ -62,7 +80,24 @@ function startHost(env: NodeJS.ProcessEnv): Hosted {
     });
     child.once('exit', (code) => reject(new Error(`host exited before ready (${code})`)));
   });
-  return { child, exited, ready, pid: child.pid! };
+  return { child, exited, ready, pid: child.pid!, diagnostics: () => diagnostics };
+}
+
+function hostShutdownEvidence(stateDirectory: string, host: Hosted, identity: ProcessIdentity): string {
+  let registry = 'unreadable';
+  try {
+    registry = readFileSync(join(stateDirectory, 'manager-app-servers.json'), 'utf8');
+  } catch (error) {
+    registry = (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'removed' : String(error);
+  }
+  let handoff = 'absent';
+  try {
+    handoff = readFileSync(join(stateDirectory, 'manager-app-servers-handoff.json'), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') handoff = String(error);
+  }
+  const termination = `${host.child.exitCode ?? 'running'}/${host.child.signalCode ?? 'no signal'}`;
+  return `app-server ${identity.pid} remains alive; registry=${registry}; handoff=${handoff}; host=${termination}; ${host.diagnostics?.() ?? ''}`;
 }
 
 function children(pid: number): ProcessIdentity[] {
@@ -89,6 +124,125 @@ function hostIdentity(stateDirectory: string): ProcessIdentity | undefined {
   }
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function installFakeWebSocketCodex(stateDirectory: string): string {
+  const executable = join(stateDirectory, 'fake-codex');
+  const script = join(import.meta.dir, 'fixtures/fake-websocket-codex.ts');
+  writeFileSync(executable, `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(script)} "$@"\n`);
+  chmodSync(executable, 0o755);
+  return executable;
+}
+
+function startIsolatedTmux(socket: string, session: string, cwd: string): void {
+  if (!tmuxBinary) throw new Error('tmux fixture is unavailable');
+  const result = spawnSync(
+    tmuxBinary,
+    ['-u', '-S', socket, 'new-session', '-d', '-s', session, '-c', cwd, 'sleep', '300'],
+    {
+      encoding: 'utf8',
+    },
+  );
+  if (result.status !== 0)
+    throw new Error(
+      result.error?.message ||
+        result.stderr ||
+        `tmux exited ${result.status}${result.signal ? ` (${result.signal})` : ''}`,
+    );
+}
+
+function tmux(socket: string, ...argv: string[]): string {
+  if (!tmuxBinary) throw new Error('tmux fixture is unavailable');
+  const result = spawnSync(tmuxBinary, ['-u', '-S', socket, ...argv], { encoding: 'utf8' });
+  if (result.status !== 0)
+    throw new Error(result.error?.message || result.stderr || `tmux ${argv.join(' ')} exited ${result.status}`);
+  return result.stdout.trim();
+}
+
+function jsonLines(path: string): any[] {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+async function waitForJsonLine(
+  path: string,
+  predicate: (entry: any) => boolean,
+  label: string,
+  afterLine = 0,
+): Promise<any> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const found = jsonLines(path).slice(afterLine).find(predicate);
+    if (found) return found;
+    await Bun.sleep(20);
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
+function appServerRegistryEntry(stateDirectory: string): {
+  identity: ProcessIdentity;
+  attachment: AppServerAttachment;
+} {
+  const records = JSON.parse(readFileSync(join(stateDirectory, 'manager-app-servers.json'), 'utf8')) as {
+    identity: ProcessIdentity;
+    attachment?: AppServerAttachment;
+  }[];
+  const entry = records.find((record) => record.attachment?.poolId === 'fake');
+  if (!entry?.attachment) throw new Error('Manager host did not record a complete pool app-server attachment');
+  expect(entry.attachment.identity).toEqual(entry.identity);
+  expect(entry.attachment).toMatchObject({
+    version: 1,
+    poolId: 'fake',
+    codexHome: expect.any(String),
+    executable: expect.any(String),
+    endpoint: expect.stringMatching(/^ws:\/\/127\.0\.0\.1:\d+$/),
+    environmentFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+    selectedExecutablePath: expect.any(String),
+    selectedExecutableDevice: expect.any(Number),
+    selectedExecutableInode: expect.any(Number),
+    processExecutablePath: expect.any(String),
+    processExecutableDevice: expect.any(Number),
+    processExecutableInode: expect.any(Number),
+  });
+  return { identity: entry.identity, attachment: entry.attachment };
+}
+
+function storedManagerState(stateDirectory: string, id = 'accounts'): Record<string, any> {
+  const db = openDb(join(stateDirectory, 'state.sqlite'));
+  try {
+    const row = db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null;
+    if (!row) throw new Error(`Missing stored manager state: ${id}`);
+    return JSON.parse(row.state);
+  } finally {
+    db.close();
+  }
+}
+
+function managerWindow(socket: string, session: string): string {
+  return (
+    tmux(socket, 'list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}')
+      .split('\n')
+      .find((line) => line.endsWith('\taccounts'))
+      ?.split('\t')[0] ?? ''
+  );
+}
+
+async function unusedLoopbackPort(): Promise<number> {
+  const server = createNetServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const port = (server.address() as { port: number }).port;
+  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  return port;
+}
+
 function signal(identity: ProcessIdentity | undefined, value: NodeJS.Signals): void {
   if (identity && sameProcess(identity)) {
     try {
@@ -106,7 +260,9 @@ async function cleanHosted(
   const appServers = join(stateDirectory, 'manager-app-servers.json');
   let recorded: ProcessIdentity[] = [];
   try {
-    recorded = JSON.parse(readFileSync(appServers, 'utf8')) as ProcessIdentity[];
+    recorded = (
+      JSON.parse(readFileSync(appServers, 'utf8')) as (ProcessIdentity | { identity: ProcessIdentity })[]
+    ).map((record) => ('identity' in record ? record.identity : record));
   } catch {}
   const childrenBeforeExit = [
     ...knownChildren,
@@ -136,10 +292,14 @@ test('the app-server a host owns exits with the host', async () => {
     await host.ready;
     const started = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
     expect(started.code).toBe(0);
-    server = children(host.pid)[0];
+    const registry = JSON.parse(readFileSync(join(f.path, 'manager-app-servers.json'), 'utf8')) as {
+      identity: ProcessIdentity;
+    }[];
+    server = registry[0]?.identity;
     expect(server).toBeDefined();
     host.child.kill('SIGTERM');
     await host.exited;
+    if (server && sameProcess(server)) throw new Error(hostShutdownEvidence(f.path, host, server));
     expect(server && sameProcess(server)).toBe(false);
   } finally {
     await cleanHosted(f.path, host, server ? [server] : []);
@@ -189,6 +349,289 @@ test('a host that finds a recorded app-server of a dead host stops it before res
     f.close();
   }
 }, 15_000);
+
+test.skipIf(!tmuxBinary)(
+  'a routine Goal host restart keeps the pool server endpoint and its tmux viewer',
+  async () => {
+    const f = fixture();
+    const tmuxDirectory = join(process.cwd(), '.temp');
+    mkdirSync(tmuxDirectory, { recursive: true });
+    const tmuxSocket = join(tmuxDirectory, `goal-tmux-${randomUUID()}.sock`);
+    const session = 'goal-host-lifecycle';
+    const rpcPath = join(f.path, 'rpc.jsonl');
+    const viewerPath = join(f.path, 'viewers.jsonl');
+    const serverStartPath = join(f.path, 'servers.jsonl');
+    let first: Hosted | undefined;
+    let second: Hosted | undefined;
+    try {
+      const executable = installFakeWebSocketCodex(f.path);
+      Object.assign(f.env, {
+        FAKE_APP_SERVER_WEBSOCKET: '1',
+        FAKE_CODEX_EXECUTABLE: executable,
+        FAKE_RPC_LOG: rpcPath,
+        FAKE_SERVER_START_LOG: serverStartPath,
+        FAKE_THREAD_STATE: join(f.path, 'threads.json'),
+        FAKE_VIEWER_LOG: viewerPath,
+        FAKE_TMUX_SOCKET: tmuxSocket,
+        FAKE_TMUX_SESSION: session,
+      });
+      startIsolatedTmux(tmuxSocket, session, f.path);
+      first = startHost(f.env);
+      await first.ready;
+      const started = await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000');
+      expect(started.code).toBe(0);
+      const originalViewer = await waitForJsonLine(
+        viewerPath,
+        (entry) => entry.phase === 'attached',
+        'the initial tmux viewer to attach to its app-server',
+      );
+      const originalThread = jsonLines(rpcPath).find((message) => message.method === 'thread/start');
+      expect(originalThread).toBeDefined();
+      const originalState = storedManagerState(f.path);
+      const originalThreadId = originalState.threadId as string;
+      expect(originalThreadId).toBeTruthy();
+      const originalWindow = managerWindow(tmuxSocket, session);
+      expect(originalWindow).not.toBe('');
+      const originalPanes = tmux(tmuxSocket, 'list-panes', '-t', originalWindow, '-F', '#{pane_id}');
+      const original = appServerRegistryEntry(f.path);
+      const originalViewerIdentity = processIdentity(originalViewer.pid);
+      expect(originalViewerIdentity).toBeDefined();
+      expect(originalViewer.codexHome).toBe(join(f.path, 'codex'));
+      expect(originalViewer.argv).toEqual(['resume', originalThreadId, '--remote', original.attachment.endpoint]);
+      expect(readFileSync(`/proc/${original.identity.pid}/environ`, 'utf8')).toContain(
+        `CODEX_HOME=${join(f.path, 'codex')}\0`,
+      );
+
+      const mockSystemctl = async (argv: string[]) => {
+        if (argv[0] === 'systemctl' && argv[2] === 'restart' && argv.includes(HOST_UNIT)) {
+          first!.child.kill('SIGTERM');
+          await first!.exited;
+          return { code: 0, output: '' };
+        }
+        if (argv[0] === 'systemctl' && argv.includes('show'))
+          return { code: 0, output: 'LoadState=loaded\nActiveState=active\nSubState=running\nResult=success' };
+        return { code: 0, output: '' };
+      };
+      expect(await reportServices('restart', mockSystemctl, () => {}, undefined, f.path)).toBe(0);
+      expect(sameProcess(original.identity)).toBe(true);
+
+      second = startHost(f.env);
+      await second.ready;
+      const resumed = await waitForJsonLine(
+        rpcPath,
+        (message) =>
+          message.method === 'thread/resume' &&
+          message.params.threadId === originalThreadId &&
+          message.params.model === 'gpt-6.1-sol',
+        'the original manager thread to resume',
+      );
+      expect(resumed.params.threadId).toBe(originalThreadId);
+      const adopted = appServerRegistryEntry(f.path);
+      expect(sameIdentityForTest(adopted.identity, original.identity)).toBe(true);
+      expect(sameProcess(adopted.identity)).toBe(true);
+      expect(adopted.attachment.endpoint).toBe(original.attachment.endpoint);
+      expect(adopted.attachment.codexHome).toBe(original.attachment.codexHome);
+      expect(adopted.attachment.executable).toBe(original.attachment.executable);
+      expect(adopted.attachment.environmentFingerprint).toBe(original.attachment.environmentFingerprint);
+      const resumedState = storedManagerState(f.path);
+      for (const key of [
+        'threadId',
+        'status',
+        'objective',
+        'budget',
+        'goalState',
+        'promptManifest',
+        'pool',
+        'engine',
+        'effort',
+        'goals',
+        'supermanager',
+        'limits',
+        'history',
+      ])
+        expect(resumedState[key]).toEqual(originalState[key]);
+      expect(jsonLines(serverStartPath)).toHaveLength(1);
+      expect(jsonLines(rpcPath).filter((message) => message.method === 'thread/start')).toHaveLength(1);
+      expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(1);
+      expect(sameProcess(originalViewerIdentity!)).toBe(true);
+      expect(jsonLines(viewerPath).filter((entry) => entry.phase === 'started')).toHaveLength(1);
+      expect(jsonLines(viewerPath).filter((entry) => entry.phase === 'attached')).toHaveLength(1);
+      expect(managerWindow(tmuxSocket, session)).toBe(originalWindow);
+      expect(tmux(tmuxSocket, 'list-panes', '-t', originalWindow, '-F', '#{pane_id}')).toBe(originalPanes);
+      expect(existsSync(join(f.path, 'manager-app-servers-handoff.json'))).toBe(false);
+    } finally {
+      await cleanHosted(f.path, second);
+      await cleanHosted(f.path, first);
+      if (existsSync(tmuxSocket) && tmuxBinary)
+        spawnSync(tmuxBinary, ['-u', '-S', tmuxSocket, 'kill-server'], { stdio: 'ignore' });
+      rmSync(tmuxSocket, { force: true });
+      f.close();
+    }
+  },
+  30_000,
+);
+
+test('a foreign or credential-bearing viewer endpoint is refused before connecting', async () => {
+  const pool = { id: 'pool', codexHome: '/private/codex-home' };
+  const listener = createNetServer();
+  await new Promise<void>((resolve, reject) => {
+    listener.once('error', reject);
+    listener.listen(0, '127.0.0.1', resolve);
+  });
+  const foreignServer = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  try {
+    let foreignIdentity: ProcessIdentity | null = null;
+    const identityDeadline = Date.now() + 5000;
+    while (!foreignIdentity && Date.now() < identityDeadline) {
+      foreignIdentity = processIdentity(foreignServer.pid!);
+      if (!foreignIdentity) await Bun.sleep(10);
+    }
+    expect(foreignIdentity).toBeDefined();
+    const attachment: AppServerAttachment = {
+      version: 1,
+      identity: foreignIdentity!,
+      poolId: pool.id,
+      codexHome: pool.codexHome,
+      executable: 'codex',
+      endpoint: 'ws://198.51.100.7:43123',
+      environmentFingerprint: appServerEnvironmentFingerprint(pool),
+      selectedExecutablePath: '/usr/bin/codex',
+      selectedExecutableDevice: 1,
+      selectedExecutableInode: 1,
+      processExecutablePath: '/usr/bin/codex',
+      processExecutableDevice: 1,
+      processExecutableInode: 1,
+    };
+    const endpoint = `ws://127.0.0.1:${(listener.address() as { port: number }).port}`;
+    await expect(attachPool(pool, { ...attachment, endpoint })).rejects.toBeInstanceOf(ForeignAppServerEndpointError);
+    await expect(attachPool(pool, { ...attachment, endpoint: 'ws://198.51.100.7:43123' })).rejects.toThrow(
+      'Refusing non-private app-server endpoint',
+    );
+    await expect(attachPool(pool, { ...attachment, endpoint: 'ws://viewer:secret@127.0.0.1:43123' })).rejects.toThrow(
+      'Refusing non-private app-server endpoint',
+    );
+  } finally {
+    foreignServer.kill('SIGTERM');
+    await new Promise<void>((resolve) => foreignServer.once('exit', () => resolve()));
+    await new Promise<void>((resolve, reject) => listener.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('an explicit provider restart and one failed loopback reconnect each rejoin the same stored thread once', async () => {
+  const f = fixture();
+  let first: Hosted | undefined;
+  let second: Hosted | undefined;
+  let third: Hosted | undefined;
+  const rpcPath = join(f.path, 'rpc.jsonl');
+  const serverStartPath = join(f.path, 'servers.jsonl');
+  try {
+    const executable = installFakeWebSocketCodex(f.path);
+    Object.assign(f.env, {
+      FAKE_APP_SERVER_WEBSOCKET: '1',
+      FAKE_CODEX_EXECUTABLE: executable,
+      FAKE_RPC_LOG: rpcPath,
+      FAKE_SERVER_START_LOG: serverStartPath,
+      FAKE_THREAD_STATE: join(f.path, 'threads.json'),
+    });
+    first = startHost(f.env);
+    await first.ready;
+    expect((await f.command('manager', 'start', 'accounts', '--engine', 'codex', '--budget', '1000')).code).toBe(0);
+    const originalThread = jsonLines(rpcPath).find((message) => message.method === 'thread/start');
+    expect(originalThread).toBeDefined();
+    const originalThreadId = storedManagerState(f.path).threadId as string;
+    expect(originalThreadId).toBeTruthy();
+    const initial = appServerRegistryEntry(f.path);
+
+    signal(initial.identity, 'SIGTERM');
+    const providerDeadline = Date.now() + 5000;
+    while (sameProcess(initial.identity) && Date.now() < providerDeadline) await Bun.sleep(20);
+    expect(sameProcess(initial.identity)).toBe(false);
+    first.child.kill('SIGTERM');
+    await first.exited;
+
+    const replacementRpcOffset = jsonLines(rpcPath).length;
+    second = startHost(f.env);
+    await second.ready;
+    await waitForJsonLine(
+      rpcPath,
+      (message) =>
+        message.method === 'thread/resume' &&
+        message.params.threadId === originalThreadId &&
+        message.params.model === 'gpt-6.1-sol',
+      'thread recovery after provider replacement',
+      replacementRpcOffset,
+    );
+    await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/goal/get' && message.params.threadId === originalThreadId,
+      'the replacement host to read the resumed thread state',
+      replacementRpcOffset,
+    );
+    const replacement = appServerRegistryEntry(f.path);
+    expect(replacement.identity.pid).not.toBe(initial.identity.pid);
+    expect(jsonLines(serverStartPath)).toHaveLength(2);
+
+    const unavailablePort = await unusedLoopbackPort();
+    const registryPath = join(f.path, 'manager-app-servers.json');
+    const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as {
+      identity: ProcessIdentity;
+      attachment?: AppServerAttachment;
+    }[];
+    const record = registry.find((entry) => entry.attachment?.poolId === 'fake');
+    if (!record?.attachment) throw new Error('Missing provider replacement attachment');
+    record.attachment.endpoint = `ws://127.0.0.1:${unavailablePort}`;
+    writeFileSync(registryPath, JSON.stringify(registry), { mode: 0o600 });
+    second.child.kill('SIGKILL');
+    await second.exited;
+
+    const reconnectRpcOffset = jsonLines(rpcPath).length;
+    third = startHost(f.env);
+    await third.ready;
+    await waitForJsonLine(
+      rpcPath,
+      (message) =>
+        message.method === 'thread/resume' &&
+        message.params.threadId === originalThreadId &&
+        message.params.model === 'gpt-6.1-sol',
+      'bounded clean rejoin after a failed private endpoint',
+      reconnectRpcOffset,
+    );
+    await waitForJsonLine(
+      rpcPath,
+      (message) => message.method === 'thread/goal/get' && message.params.threadId === originalThreadId,
+      'the reconnecting host to read the resumed thread state',
+      reconnectRpcOffset,
+    );
+    const recovered = appServerRegistryEntry(f.path);
+    expect(recovered.identity.pid).not.toBe(replacement.identity.pid);
+    expect(jsonLines(serverStartPath)).toHaveLength(3);
+    expect(
+      jsonLines(rpcPath).filter(
+        (message) =>
+          message.method === 'thread/resume' &&
+          message.params.threadId === originalThreadId &&
+          message.params.model === 'gpt-6.1-sol',
+      ),
+    ).toHaveLength(2);
+    expect(jsonLines(rpcPath).filter((message) => message.method === 'thread/start')).toHaveLength(1);
+    expect(jsonLines(rpcPath).filter((message) => message.method === 'turn/start')).toHaveLength(1);
+    third.child.kill('SIGTERM');
+    await third.exited;
+    expect(third.child.exitCode).toBe(0);
+    expect(third.child.signalCode).toBeNull();
+    if (sameProcess(recovered.identity)) throw new Error(hostShutdownEvidence(f.path, third, recovered.identity));
+    expect(sameProcess(recovered.identity)).toBe(false);
+  } finally {
+    await cleanHosted(f.path, third);
+    await cleanHosted(f.path, second);
+    await cleanHosted(f.path, first);
+    f.close();
+  }
+}, 45_000);
+
+function sameIdentityForTest(left: ProcessIdentity, right: ProcessIdentity): boolean {
+  return left.pid === right.pid && left.start === right.start && left.boot === right.boot && left.group === right.group;
+}
 
 test('a replacement host adopts a worker launched after slice tuning fails and can stop that same attempt', async () => {
   const h = harness(`#!/usr/bin/env bun
@@ -494,7 +937,9 @@ test('recovery restores all five stale viewers without losing drafts or starting
     ).length;
     await recovered.recover();
     expect(
-      requests.filter((request) => request.method === 'thread/resume' && request.params.threadId === webThread.threadId),
+      requests.filter(
+        (request) => request.method === 'thread/resume' && request.params.threadId === webThread.threadId,
+      ),
     ).toHaveLength(webResumeCount);
     expect(recovered.get('web')).toMatchObject({
       threadId: webThread.threadId,
@@ -1169,6 +1614,7 @@ test('a host that loaded one tools/goal revision retires once main publishes ano
     expect(code).toBe(0);
     expect(output).toContain('tools/goal is published as');
     expect(existsSync(join(f.path, 'manager.sock'))).toBe(false);
+    expect(existsSync(join(f.path, 'manager-app-servers-handoff.json'))).toBe(true);
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     await cleanHosted(f.path);

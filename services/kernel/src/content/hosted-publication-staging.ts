@@ -100,11 +100,31 @@ type TargetIdentityRow = QueryResultRow & {
   target_revision_id: string;
   sha256: string;
 };
-type StepReceiptRow = QueryResultRow & {
-  phase: 'whole' | 'selection' | 'closure';
+type PreparationAdvanceReceiptRow = QueryResultRow & {
+  phase: HostedPublicationAdvancePhase;
   processed: number;
   result_checkpoint: HostedPublicationStagingCheckpoint;
+  result_preparation: unknown | null;
 };
+export type HostedPublicationAdvanceReplay =
+  | Readonly<{ kind: 'preparation'; response: unknown }>
+  | Readonly<{ kind: 'staging'; progress: HostedPublicationStagingCheckpoint }>;
+export type HostedPublicationAdvancePhase =
+  | 'whole'
+  | 'selection'
+  | 'closure'
+  | 'candidate_begin'
+  | 'candidate_page'
+  | 'exhausted'
+  | 'terminal';
+export type HostedPublicationAdvanceReceipt = Readonly<{
+  phase: Exclude<HostedPublicationAdvancePhase, 'whole' | 'selection' | 'closure'>;
+  processed: number;
+  fromFrontier: string;
+  toFrontier: string;
+  progress: HostedPublicationStagingCheckpoint;
+  response: unknown;
+}>;
 type PinnedSourceRow = QueryResultRow & {
   head_revision_id: string;
   publication_id: string | null;
@@ -165,7 +185,7 @@ function accountActor(actor: Actor): AccountActor {
     throw new HostedPublicationStagingNotFoundError();
   return actor;
 }
-function requireRoute(id: string, expected?: number): number {
+export function requireRoute(id: string, expected?: number): number {
   const route = routeOf(id);
   if (route === null || (expected !== undefined && route !== expected))
     throw stagingConflict('Hosted publication staging identifiers must share their native route');
@@ -230,14 +250,112 @@ async function lockStage(client: AccessClient, locator: HostedPublicationStaging
   if (!row) throw new HostedPublicationStagingNotFoundError();
   return row;
 }
-async function refreshExpiry(client: AccessClient, row: StageRow): Promise<StageRow> {
-  if (!row.is_expired || row.status === 'cancelled' || row.status === 'expired' || row.status === 'failed') return row;
+
+/** Lock the stage and find an acknowledged step before expiry or phase dispatch.
+ * The indexed native receipt owns every new reply; old rows without a public
+ * response still replay their immutable source checkpoint. */
+export async function readHostedPublicationAdvanceReplay(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+  stepId: string,
+): Promise<HostedPublicationAdvanceReplay | null> {
+  const route = validateLocator(locator);
+  requireRoute(stepId, route);
+  const stage = await lockStage(client, locator);
+  assertActorBinding(stage, actorInput);
+  const prior = (
+    await client.query<PreparationAdvanceReceiptRow>(
+      `SELECT phase,processed,result_checkpoint,result_preparation
+       FROM content.hosted_publication_staging_step
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND step_id=$4`,
+      [route, locator.catalogueId, locator.stageId, stepId],
+    )
+  ).rows[0];
+  if (!prior) return null;
+  return prior.result_preparation !== null
+    ? { kind: 'preparation', response: prior.result_preparation }
+    : { kind: 'staging', progress: prior.result_checkpoint };
+}
+
+/** Retain one bounded immutable non-source response in the native step index. */
+export async function retainHostedPublicationAdvanceReceipt(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+  stepId: string,
+  receipt: HostedPublicationAdvanceReceipt,
+): Promise<void> {
+  const route = validateLocator(locator);
+  requireRoute(stepId, route);
+  const stage = await lockStage(client, locator);
+  assertActorBinding(stage, actorInput);
   await client.query(
+    `INSERT INTO content.hosted_publication_staging_step
+       (route,catalogue_id,stage_id,step_id,phase,from_frontier,to_frontier,processed,result_state,
+        result_checkpoint,result_preparation)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb)`,
+    [
+      route,
+      locator.catalogueId,
+      locator.stageId,
+      stepId,
+      receipt.phase,
+      receipt.fromFrontier,
+      receipt.toFrontier,
+      receipt.processed,
+      receipt.progress.state === 'failed' ? 'failed' : receipt.progress.state === 'ready' ? 'ready' : 'more',
+      JSON.stringify(receipt.progress),
+      JSON.stringify(receipt.response),
+    ],
+  );
+}
+
+async function requireCurrentPinnedSource(client: AccessClient, stage: StageRow): Promise<void> {
+  const current = (
+    await client.query<QueryResultRow & { head_revision_id: string; publication_id: string | null }>(
+      `SELECT head_revision_id,publication_id
+       FROM content.hosted_catalogue
+       WHERE route=$1 AND catalogue_id=$2
+       FOR SHARE`,
+      [stage.route, stage.catalogue_id],
+    )
+  ).rows[0];
+  if (
+    !current ||
+    current.head_revision_id !== stage.expected_head_revision_id ||
+    !sameOptional(current.publication_id, stage.expected_publication_id)
+  )
+    throw stagingConflict('Pinned draft or publication changed before source traversal');
+}
+
+/** Join activation to the existing cancellation/build/reclaim fence. Acquire it
+ * before activation or candidate locks and retain it through the command's final
+ * authorization, receipt and COMMIT. Lifecycle admission stays with activation:
+ * its exact deadline comparison uses native command time, not wall-clock expiry. */
+export async function lockHostedPublicationStagingForActivation(
+  client: AccessClient,
+  locator: HostedPublicationStagingLocator,
+): Promise<void> {
+  await lockStage(client, locator);
+}
+
+async function refreshExpiryWithEvidence(
+  client: AccessClient,
+  row: StageRow,
+): Promise<Readonly<{ stage: StageRow; expired: boolean }>> {
+  if (!row.is_expired || row.status === 'cancelled' || row.status === 'expired' || row.status === 'failed')
+    return { stage: row, expired: false };
+  const updated = await client.query(
     `UPDATE content.hosted_publication_staging SET status='expired'
      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND expires_at<=clock_timestamp()`,
     [row.route, row.catalogue_id, row.stage_id],
   );
-  return { ...row, status: 'expired' };
+  if (!updated.rowCount) return { stage: row, expired: false };
+  return { stage: { ...row, status: 'expired' }, expired: true };
+}
+async function refreshExpiry(client: AccessClient, row: StageRow): Promise<StageRow> {
+  return (await refreshExpiryWithEvidence(client, row)).stage;
 }
 async function requireLiveStage(client: AccessClient, row: StageRow): Promise<StageRow> {
   const refreshed = await refreshExpiry(client, row);
@@ -290,7 +408,9 @@ function orderedSourceRow(placement: OrderedHostedPlacement): SourceRow {
 }
 
 /** Pin one current structure and its exact ordered, prefix or legacy source descriptor.
- * Call only after current native catalogue author/container admission. */
+ * Existing stage rows are locked before the current catalogue row so preparation
+ * start follows the same stage-to-catalogue order as fresh source steps. The
+ * catalogue lock still serializes concurrent first creation for a missing stage. */
 export async function beginHostedPublicationStaging(
   client: AccessClient,
   actorInput: Actor,
@@ -306,6 +426,23 @@ export async function beginHostedPublicationStaging(
   const existing = (
     await client.query<StageRow>(`${STAGE_SELECT} FOR UPDATE`, [route, input.catalogueId, input.stageId])
   ).rows[0];
+
+  const current = (
+    await client.query<QueryResultRow & { head_revision_id: string; publication_id: string | null }>(
+      `SELECT head_revision_id,publication_id
+       FROM content.hosted_catalogue
+       WHERE route=$1 AND catalogue_id=$2
+       FOR UPDATE`,
+      [route, input.catalogueId],
+    )
+  ).rows[0];
+  if (
+    !current ||
+    current.head_revision_id !== input.expectedHeadRevisionId ||
+    !sameOptional(current.publication_id, input.expectedPublicationId)
+  )
+    throw stagingConflict('The expected draft or publication is stale');
+
   if (existing) {
     assertActorBinding(existing, actor);
     if (
@@ -507,13 +644,24 @@ export async function freezeHostedPublicationSelection(
   actorInput: Actor,
   locator: HostedPublicationStagingLocator,
 ): Promise<HostedPublicationStagingCheckpoint> {
+  return (await freezeHostedPublicationSelectionWithEvidence(client, actorInput, locator)).checkpoint;
+}
+
+/** Mounted commands use the locked transition evidence to decide whether to
+ * announce a change; native callers keep the checkpoint-only contract. */
+export async function freezeHostedPublicationSelectionWithEvidence(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+): Promise<Readonly<{ checkpoint: HostedPublicationStagingCheckpoint; changed: boolean }>> {
   const actor = accountActor(actorInput);
   const row = await lockStage(client, locator);
   assertActorBinding(row, actor);
   const live = await requireLiveStage(client, row);
   if (live.mode !== 'selection') throw stagingConflict('Whole-source staging has no imported selection');
-  if (live.input_frozen_version !== null) return checkpoint(live);
+  if (live.input_frozen_version !== null) return { checkpoint: checkpoint(live), changed: false };
   if (live.status !== 'collecting') throw stagingConflict('Selection input cannot be frozen in its current state');
+  await requireCurrentPinnedSource(client, live);
   const nextState = BigInt(live.input_count) === 0n ? 'closing' : 'building';
   const updated = await client.query(
     `UPDATE content.hosted_publication_staging
@@ -522,7 +670,7 @@ export async function freezeHostedPublicationSelection(
     [live.route, live.catalogue_id, live.stage_id, nextState],
   );
   if (updated.rowCount !== 1) throw stagingConflict();
-  return checkpoint(await stageSnapshot(client, live.route, locator));
+  return { checkpoint: checkpoint(await stageSnapshot(client, live.route, locator)), changed: true };
 }
 
 /** Advance one page of at most twenty source or closure rows. A step key makes
@@ -536,6 +684,7 @@ export async function advanceHostedPublicationStaging(
   locator: HostedPublicationStagingLocator,
   stepId: string,
   deadline: number,
+  preparationResponse?: (result: HostedPublicationStagingStepResult) => unknown,
 ): Promise<HostedPublicationStagingStepResult> {
   const actor = accountActor(actorInput);
   const route = validateLocator(locator);
@@ -543,30 +692,41 @@ export async function advanceHostedPublicationStaging(
   const row = await lockStage(client, locator);
   assertActorBinding(row, actor);
   const prior = (
-    await client.query<StepReceiptRow>(
-      `SELECT phase,processed,result_checkpoint
+    await client.query<PreparationAdvanceReceiptRow>(
+      `SELECT phase,processed,result_checkpoint,result_preparation
        FROM content.hosted_publication_staging_step
        WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 AND step_id=$4`,
       [route, locator.catalogueId, locator.stageId, stepId],
     )
   ).rows[0];
-  if (prior)
+  if (prior) {
+    if (prior.phase !== 'whole' && prior.phase !== 'selection' && prior.phase !== 'closure')
+      throw stagingConflict('Advance step belongs to another preparation phase');
     return {
       replayed: true,
       phase: prior.phase,
       processed: prior.processed,
       progress: prior.result_checkpoint,
     };
+  }
   const live = await requireLiveStage(client, row);
   let result: HostedPublicationStagingStepResult;
-  if (live.mode === 'whole') result = await advanceWhole(deps, client, actor, live, deadline);
-  else if (live.status === 'building') result = await advanceSelection(deps, client, actor, live, deadline);
+  if (
+    (live.mode === 'whole' && live.status === 'building') ||
+    (live.mode === 'selection' && (live.status === 'building' || live.status === 'closing'))
+  )
+    await requireCurrentPinnedSource(client, live);
+  if (live.mode === 'whole') {
+    result = await advanceWhole(deps, client, actor, live, deadline);
+  } else if (live.status === 'building') result = await advanceSelection(deps, client, actor, live, deadline);
   else if (live.status === 'closing') result = await advanceClosure(client, live);
   else throw stagingConflict('Staging is not ready for another step');
+  const response = preparationResponse ? JSON.stringify(preparationResponse(result)) : null;
   await client.query(
     `INSERT INTO content.hosted_publication_staging_step
-       (route,catalogue_id,stage_id,step_id,phase,from_frontier,to_frontier,processed,result_state,result_checkpoint)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)`,
+       (route,catalogue_id,stage_id,step_id,phase,from_frontier,to_frontier,processed,result_state,
+        result_checkpoint,result_preparation)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb)`,
     [
       route,
       locator.catalogueId,
@@ -586,6 +746,7 @@ export async function advanceHostedPublicationStaging(
       result.processed,
       result.progress.state === 'failed' ? 'failed' : result.progress.state === 'ready' ? 'ready' : 'more',
       JSON.stringify(result.progress),
+      response,
     ],
   );
   return result;
@@ -1441,25 +1602,38 @@ async function requireSealedStage(client: AccessClient, stageInput: StageRow): P
   if (!seal.rows.length) throw stagingConflict('Staged candidates are missing their exact seal');
 }
 
-/** Cancellation fences all later reads and writes. It does not delete a retained
- * source or candidate row and is idempotent for an already cancelled stage. */
-export async function cancelHostedPublicationStaging(
+/** Cancellation shares activation's stage fence: a committed cancellation keeps
+ * a fresh activation private. An activation committed first retains its public
+ * selection and receipt; withdrawing it uses the separate unpublish operation.
+ * Retained source/candidate rows survive, and repeated cancellation is idempotent. */
+export async function cancelHostedPublicationStagingWithEvidence(
   client: AccessClient,
   actorInput: Actor,
   locator: HostedPublicationStagingLocator,
-): Promise<HostedPublicationStagingCheckpoint> {
+): Promise<Readonly<{ checkpoint: HostedPublicationStagingCheckpoint; changed: boolean }>> {
   const actor = accountActor(actorInput);
   const stage = await lockStage(client, locator);
   assertActorBinding(stage, actor);
-  const refreshed = await refreshExpiry(client, stage);
-  if (refreshed.status === 'expired' || refreshed.status === 'cancelled' || refreshed.status === 'failed')
-    return checkpoint(refreshed);
+  const refreshed = await refreshExpiryWithEvidence(client, stage);
+  const live = refreshed.stage;
+  if (live.status === 'expired' || live.status === 'cancelled' || live.status === 'failed')
+    return { checkpoint: checkpoint(live), changed: refreshed.expired };
   await client.query(
     `UPDATE content.hosted_publication_staging SET status='cancelled'
      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
     [stage.route, stage.catalogue_id, stage.stage_id],
   );
-  return checkpoint(await stageSnapshot(client, stage.route, locator));
+  return { checkpoint: checkpoint(await stageSnapshot(client, stage.route, locator)), changed: true };
+}
+
+/** Native callers keep the checkpoint-only contract; mounted commands use the
+ * locked transition evidence to decide whether to announce a change. */
+export async function cancelHostedPublicationStaging(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+): Promise<HostedPublicationStagingCheckpoint> {
+  return (await cancelHostedPublicationStagingWithEvidence(client, actorInput, locator)).checkpoint;
 }
 
 /** A read-only progress snapshot remains author/epoch bound and expires through
@@ -1469,10 +1643,20 @@ export async function readHostedPublicationStagingProgress(
   actorInput: Actor,
   locator: HostedPublicationStagingLocator,
 ): Promise<HostedPublicationStagingCheckpoint> {
+  return (await readHostedPublicationStagingProgressWithExpiry(client, actorInput, locator)).progress;
+}
+
+/** Reports whether this locked observation itself persisted the terminal expiry transition. */
+export async function readHostedPublicationStagingProgressWithExpiry(
+  client: AccessClient,
+  actorInput: Actor,
+  locator: HostedPublicationStagingLocator,
+): Promise<Readonly<{ progress: HostedPublicationStagingCheckpoint; expired: boolean }>> {
   const actor = accountActor(actorInput);
   const stage = await lockStage(client, locator);
   assertActorBinding(stage, actor);
-  return checkpoint(await refreshExpiry(client, stage));
+  const refreshed = await refreshExpiryWithEvidence(client, stage);
+  return { progress: checkpoint(refreshed.stage), expired: refreshed.expired };
 }
 
 async function advanceClosure(client: AccessClient, stage: StageRow): Promise<HostedPublicationStagingStepResult> {

@@ -31,40 +31,45 @@ export function ReceivedProgress({ progress, locale }: { progress: ProgressLabel
       <p className="font-medium break-words" aria-describedby={descriptionId}>
         {view?.text ?? m.library_received_reading_value_unavailable()}
       </p>
-      <p id={descriptionId} className="text-sm text-muted-foreground">
-        {m.library_received_reading_session_observation()}
-      </p>
-      <dl className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-3 gap-y-2 text-sm">
-        <dt className="break-words text-muted-foreground">{m.library_progress_mode()}</dt>
-        <dd className="min-w-0 break-words">{mode}</dd>
-        <dt className="break-words text-muted-foreground">{m.library_progress_unit()}</dt>
-        <dd className="min-w-0 break-words" lang={progress.unitLabelLanguage}>
-          {progress.unitLabel || m.library_progress_unit_unspecified()}
-        </dd>
-        <dt className="break-words text-muted-foreground">
-          {progress.mode === 'cursor_position'
-            ? m.library_received_reading_position()
-            : progress.mode === 'completed_units'
-              ? m.library_received_reading_completed_units()
-              : m.library_received_reading_amount()}
-        </dt>
-        <dd className="min-w-0 [overflow-wrap:anywhere]">
-          {amount === null ? m.library_received_reading_value_unavailable() : <bdi>{amount}</bdi>}
-        </dd>
-        <dt className="break-words text-muted-foreground">{m.library_received_reading_total()}</dt>
-        <dd className="min-w-0 [overflow-wrap:anywhere]">
-          {progress.total === null ? m.library_received_reading_total_unknown() : <bdi>{progress.total}</bdi>}
-        </dd>
-        {progress.mode === 'cursor_position' ? (
-          <>
-            <dt className="break-words text-muted-foreground">{m.library_progress_locator()}</dt>
-            <dd className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-              {progress.locator || m.library_received_reading_value_unavailable()}
-            </dd>
-          </>
-        ) : null}
-      </dl>
-      <p className="text-sm text-muted-foreground">{meaning}</p>
+      <details className="min-w-0 rounded-lg bg-muted/30 p-3">
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {m.library_labels_reading_details()}
+        </summary>
+        <p id={descriptionId} className="pb-3 text-sm text-muted-foreground">
+          {m.library_received_reading_session_observation()}
+        </p>
+        <dl className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-3 gap-y-2 text-sm">
+          <dt className="break-words text-muted-foreground">{m.library_progress_mode()}</dt>
+          <dd className="min-w-0 break-words">{mode}</dd>
+          <dt className="break-words text-muted-foreground">{m.library_progress_unit()}</dt>
+          <dd className="min-w-0 break-words" lang={progress.unitLabelLanguage}>
+            {progress.unitLabel || m.library_progress_unit_unspecified()}
+          </dd>
+          <dt className="break-words text-muted-foreground">
+            {progress.mode === 'cursor_position'
+              ? m.library_received_reading_position()
+              : progress.mode === 'completed_units'
+                ? m.library_received_reading_completed_units()
+                : m.library_received_reading_amount()}
+          </dt>
+          <dd className="min-w-0 [overflow-wrap:anywhere]">
+            {amount === null ? m.library_received_reading_value_unavailable() : <bdi>{amount}</bdi>}
+          </dd>
+          <dt className="break-words text-muted-foreground">{m.library_received_reading_total()}</dt>
+          <dd className="min-w-0 [overflow-wrap:anywhere]">
+            {progress.total === null ? m.library_received_reading_total_unknown() : <bdi>{progress.total}</bdi>}
+          </dd>
+          {progress.mode === 'cursor_position' ? (
+            <>
+              <dt className="break-words text-muted-foreground">{m.library_progress_locator()}</dt>
+              <dd className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                {progress.locator || m.library_received_reading_value_unavailable()}
+              </dd>
+            </>
+          ) : null}
+        </dl>
+        <p className="pt-3 text-sm text-muted-foreground">{meaning}</p>
+      </details>
     </div>
   );
 }

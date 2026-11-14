@@ -461,11 +461,19 @@ test('real composer imports only on confirmation, keeps rich editing and exact u
     expect(output.value).not.toContain(session.csrfToken);
     expect(output.value).not.toContain('idempotencyKey');
     await click(m.thread_write_send());
-    await settle(() => commands.length === 1 && Boolean(button(m.thread_write_retry())));
-    expect(button(m.thread_portable_choose()).disabled).toBe(true);
-    await click(m.thread_write_retry());
+    await settle(() => commands.length === 1 && Boolean(button(m.thread_recovery_retry_original())));
+    expect(button(m.thread_portable_choose()).disabled).toBe(false);
+    await choose(file('**New local import after uncertainty**', 'newer.md'));
+    await click(m.thread_portable_replace());
+    await settle(
+      () => host.querySelector('.ProseMirror')?.textContent?.includes('New local import after uncertainty') === true,
+    );
+    expect(commands).toHaveLength(1);
+    await click(m.thread_recovery_retry_original());
     expect(commands).toHaveLength(2);
     expect(commands[1]).toBe(commands[0]);
+    expect(JSON.stringify(commands[1])).toContain('Imported rich text');
+    expect(JSON.stringify(commands[1])).not.toContain('New local import after uncertainty');
     const privateExport = host.querySelector('[data-private-writing]')!;
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });

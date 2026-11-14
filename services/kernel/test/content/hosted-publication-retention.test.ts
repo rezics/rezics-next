@@ -4,6 +4,7 @@ import type { HostedDependencies, HostedPlacement } from '../../src/content/host
 import {
   advanceHostedPublicationStaging,
   beginHostedPublicationStaging,
+  cancelHostedPublicationStaging,
   sealHostedPublicationStaging,
 } from '../../src/content/hosted-publication-staging.ts';
 import {
@@ -70,16 +71,25 @@ async function createSource() {
     threadId: f.threadId,
     placements,
   });
-  const published = await f.native.command(
-    `/v1/hostedCatalogues/${f.catalogueId}:publish`,
-    {
-      expectedRevisionId: created.revisionId,
-      expectedPublicationId: null,
-      occurrenceIds: [occurrenceIds.at(-1)!],
-    },
-    200,
-  );
-  return { target, occurrenceIds, sourceRevisionId: created.revisionId, publicationId: published.revisionId };
+  const publicationBody = {
+    expectedRevisionId: created.revisionId,
+    expectedPublicationId: null,
+    occurrenceIds: [occurrenceIds.at(-1)!],
+  };
+  const publicationKey = crypto.randomUUID();
+  const publication = await f.native.call('POST', `/v1/hostedCatalogues/${f.catalogueId}:publish`, publicationBody, {
+    key: publicationKey,
+  });
+  expect(publication.status).toBe(200);
+  return {
+    target,
+    occurrenceIds,
+    sourceRevisionId: created.revisionId,
+    publicationId: publication.value.revisionId,
+    publication,
+    publicationBody,
+    publicationKey,
+  };
 }
 
 async function createCandidate(source: Awaited<ReturnType<typeof createSource>>, expiresAt: Date) {
@@ -280,7 +290,7 @@ async function runSweep(sweepId: string, cutoff: Date, first?: HostedPublication
   return results;
 }
 
-test('bounded hourly retention resumes pages, skips completed history and defers a pinned candidate', async () => {
+test('bounded hourly retention skips a locked stage, resumes pages and defers a pinned candidate', async () => {
   const route = routeOf(f.catalogueId);
   if (route === null) throw new Error('Hosted fixture catalogue has no route');
   const source = await createSource();
@@ -297,22 +307,40 @@ test('bounded hourly retention resumes pages, skips completed history and defers
   const firstSweepId = crypto.randomUUID();
   const firstPassId = `${firstSweepId}:retention:0`;
 
-  const first = await advanceHostedPublicationRetention(f.native.pool, firstPassId, cutoff);
-  expect(first).toMatchObject({
-    replayed: false,
-    adoptionScanned: HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT,
-    adopted: 0,
-    advanced: true,
-    locator: abandoned,
-    cleanup: {
-      kind: 'staging',
-      result: {
-        replayed: false,
-        deletedRows: 100,
-        progress: { phase: 'candidate', completed: false },
-      },
-    },
-  });
+  const locker = await f.native.pool.connect();
+  let first: HostedPublicationRetentionResult;
+  try {
+    await locker.query('BEGIN');
+    await locker.query(
+      `SELECT stage_id FROM content.hosted_publication_staging
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3 FOR UPDATE`,
+      [route, f.catalogueId, abandoned.stageId],
+    );
+    first = await advanceHostedPublicationRetention(f.native.pool, firstPassId, cutoff);
+    expect(first).toMatchObject({
+      replayed: false,
+      adoptionScanned: HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT,
+      adopted: 0,
+      advanced: true,
+      locator: eligible.locator,
+      cleanup: { kind: 'candidate', result: { replayed: false, deletedRows: 100, progress: { completed: false } } },
+    });
+    const busyPending = await f.native.pool.query<{ available_at: Date }>(
+      `SELECT available_at FROM content.hosted_publication_retention_pending
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, f.catalogueId, abandoned.stageId],
+    );
+    expect(busyPending.rows[0]!.available_at.getTime()).toBeLessThan(cutoff.getTime());
+    const busyIssue = await f.native.pool.query(
+      `SELECT 1 FROM content.hosted_publication_retention_issue
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, f.catalogueId, abandoned.stageId],
+    );
+    expect(busyIssue.rowCount).toBe(0);
+  } finally {
+    await locker.query('ROLLBACK').catch(() => undefined);
+    locker.release();
+  }
   expect(first.examinedKeys).toBe(first.scanned + first.adoptionScanned);
   expect(first.scanned).toBeLessThanOrEqual(HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT);
 
@@ -437,4 +465,144 @@ test('bounded hourly retention resumes pages, skips completed history and defers
     empty.every((result) => result.scanned === 0 && result.adoptionScanned === 0 && result.examinedKeys === 0),
   ).toBe(true);
   expect(empty.at(-1)?.hasMoreWork).toBe(false);
+});
+
+test('retention reclaims due cancelled candidates, preserves pins and keeps public reads and receipts', async () => {
+  const sharedFixture = f;
+  f = await hostedChaptersFixture();
+  try {
+    const route = routeOf(f.catalogueId)!;
+    const source = await createSource();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60_000);
+    const eligible = await createCandidate(source, expiresAt);
+    const pinned = await createCandidate(source, expiresAt);
+    const young = await createCandidate(source, expiresAt);
+    await pinCandidate(pinned.generationId, pinned.generationSequence, source.sourceRevisionId);
+    for (const candidate of [eligible, pinned, young]) {
+      const cancelled = await transaction((client) =>
+        cancelHostedPublicationStaging(client, f.native.author.actor, candidate.locator),
+      );
+      expect(cancelled.state).toBe('cancelled');
+    }
+    const publicPath = `/v1/hostedCatalogues/${f.catalogueId}/occurrences/${source.occurrenceIds.at(-1)!}?kind=publication`;
+    const publicBefore = await f.native.call('GET', publicPath, undefined, { anonymous: true });
+    expect(publicBefore.status).toBe(200);
+    const audit = () =>
+      f.native.pool.query(
+        `SELECT to_jsonb(seal) AS seal,
+         (SELECT jsonb_agg(to_jsonb(target)) FROM content.hosted_publication_staging_target target
+          WHERE target.route=seal.route AND target.catalogue_id=seal.catalogue_id
+            AND target.stage_id=seal.stage_id) AS observations,
+         (SELECT count(*)::text FROM content.hosted_publication_staging_step step
+          WHERE step.route=seal.route AND step.catalogue_id=seal.catalogue_id
+            AND step.stage_id=seal.stage_id) AS staging_receipts,
+         (SELECT count(*)::text FROM content.hosted_version_release_candidate_page page
+          WHERE page.route=seal.route AND page.catalogue_id=seal.catalogue_id
+            AND page.stage_id=seal.stage_id) AS build_receipts
+       FROM content.hosted_publication_staging_seal seal
+       WHERE seal.route=$1 AND seal.catalogue_id=$2 AND seal.stage_id=$3`,
+        [route, f.catalogueId, eligible.locator.stageId],
+      );
+    const auditBefore = (await audit()).rows;
+    expect(auditBefore[0].observations).toHaveLength(1);
+
+    const premature = await runSweep(crypto.randomUUID(), new Date());
+    expect(premature.every((result) => result.scanned === 0 && !result.advanced)).toBe(true);
+    // Age just the two due fixtures and their existing pending entries; the young cancellation stays private.
+    const cutoff = new Date();
+    const due = new Date(cutoff.getTime() - 1);
+    await transaction(async (client) => {
+      const stageIds = [eligible.locator.stageId, pinned.locator.stageId];
+      await client.query(
+        `UPDATE content.hosted_publication_staging SET expires_at=$4
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])`,
+        [route, f.catalogueId, stageIds, due],
+      );
+      await client.query(
+        `UPDATE content.hosted_publication_retention_pending SET available_at=$4
+         WHERE route=$1 AND catalogue_id=$2 AND stage_id=ANY($3::uuid[])`,
+        [route, f.catalogueId, stageIds, due],
+      );
+    });
+    const passId = `${crypto.randomUUID()}:retention:0`;
+    const first = await advanceHostedPublicationRetention(f.native.pool, passId, cutoff);
+    expect(first.cleanup).toMatchObject({
+      kind: 'candidate',
+      result: { deletedRows: 100, progress: { terminalStatus: 'cancelled', completed: false } },
+    });
+    expect(await advanceHostedPublicationRetention(f.native.pool, passId, cutoff)).toEqual({
+      ...first,
+      replayed: true,
+    });
+    const results = [first];
+    for (let sweep = 0; sweep < 8 && !results.some((result) => result.cleanup?.result.progress.completed); sweep++) {
+      results.push(...(await runSweep(crypto.randomUUID(), cutoff)));
+    }
+    expect(results.some((result) => result.cleanup?.result.progress.completed)).toBe(true);
+    for (const result of results) {
+      expect(result.scanned).toBeLessThanOrEqual(HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT);
+      expect(result.adoptionScanned).toBeLessThanOrEqual(HOSTED_PUBLICATION_RETENTION_SCAN_LIMIT);
+      expect(result.cleanup?.result.deletedRows ?? 0).toBeLessThanOrEqual(100);
+      if (result.cleanup) {
+        expect(result.locator).toEqual(eligible.locator);
+        expect(result.cleanup.result.progress.terminalStatus).toBe('cancelled');
+      }
+    }
+    const states = await f.native.pool.query(
+      `SELECT stage.stage_id,stage.status,cleanup.terminal_status,
+         candidate.status AS candidate_status,candidate.generation_id,
+         generation.retirement_claimed,
+         pending.available_at IS NOT NULL AS pending,
+         cleanup.completed_at IS NOT NULL AS completed
+       FROM content.hosted_publication_staging stage
+       JOIN content.hosted_version_release_candidate candidate USING (route,catalogue_id,stage_id)
+       LEFT JOIN content.hosted_version_candidate_cleanup cleanup USING (route,catalogue_id,stage_id)
+       LEFT JOIN content.hosted_tree_generation generation
+         ON generation.route=stage.route AND generation.catalogue_id=stage.catalogue_id
+        AND generation.generation_id=candidate.generation_id
+       LEFT JOIN content.hosted_publication_retention_pending pending
+         ON pending.route=stage.route AND pending.catalogue_id=stage.catalogue_id AND pending.stage_id=stage.stage_id
+       WHERE stage.route=$1 AND stage.catalogue_id=$2 AND stage.stage_id=ANY($3::uuid[])`,
+      [route, f.catalogueId, [eligible.locator.stageId, pinned.locator.stageId, young.locator.stageId]],
+    );
+    expect(states.rows).toContainEqual({
+      stage_id: eligible.locator.stageId,
+      status: 'cancelled',
+      terminal_status: 'cancelled',
+      candidate_status: 'reclaimed',
+      generation_id: null,
+      retirement_claimed: null,
+      pending: false,
+      completed: true,
+    });
+    for (const retained of [pinned, young])
+      expect(states.rows).toContainEqual({
+        stage_id: retained.locator.stageId,
+        status: 'cancelled',
+        terminal_status: null,
+        candidate_status: 'sealed',
+        generation_id: retained.generationId,
+        retirement_claimed: false,
+        pending: true,
+        completed: false,
+      });
+    const issue = await f.native.pool.query(
+      `SELECT state FROM content.hosted_publication_retention_issue
+       WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, f.catalogueId, pinned.locator.stageId],
+    );
+    expect(issue.rows[0].state).toContain('retained by retained revision');
+    expect((await audit()).rows).toEqual(auditBefore);
+    const publicAfter = await f.native.call('GET', publicPath, undefined, { anonymous: true });
+    expect(publicAfter.status).toBe(200);
+    expect(publicAfter.value.document.sha256).toBe(publicBefore.value.document.sha256);
+    expect(
+      await f.native.call('POST', `/v1/hostedCatalogues/${f.catalogueId}:publish`, source.publicationBody, {
+        key: source.publicationKey,
+      }),
+    ).toEqual(source.publication);
+  } finally {
+    await f.close();
+    f = sharedFixture;
+  }
 });

@@ -525,7 +525,7 @@ function CurrentBasis({
     <section className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3" data-conflict-basis>
       <h3 className="font-semibold">{m.collection_save_current_basis()}</h3>
       <p>{m.collection_save_draft_preserved()}</p>
-      <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3">
         <section className="min-w-0 space-y-2 rounded-lg border border-border p-3" data-remaining-draft>
           <h4 className="font-semibold">{m.collection_save_remaining_draft()}</h4>
           {metadataChanges.length ? (
@@ -548,7 +548,12 @@ function CurrentBasis({
               {basisState === 'reading' ? m.collection_save_basis_reading() : m.collection_save_basis_unavailable()}
             </p>
             {basisState !== 'reading' && onReadCurrent ? (
-              <Button type="button" variant="outline" onClick={onReadCurrent}>
+              <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+                type="button"
+                variant="outline"
+                onClick={onReadCurrent}
+              >
                 {m.collection_save_read_current()}
               </Button>
             ) : null}
@@ -576,17 +581,32 @@ function CurrentBasis({
       ) : null}
       <div className="flex flex-wrap gap-2">
         {rebaseIssue && onDiscardUnavailable ? (
-          <Button type="button" variant="outline" onClick={onDiscardUnavailable}>
+          <Button
+            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            type="button"
+            variant="outline"
+            onClick={onDiscardUnavailable}
+          >
             {m.collection_save_discard_unavailable_change()}
           </Button>
         ) : null}
         {currentBasis && onDiscard ? (
-          <Button type="button" variant="outline" onClick={onDiscard}>
+          <Button
+            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            type="button"
+            variant="outline"
+            onClick={onDiscard}
+          >
             {m.collection_save_discard_draft()}
           </Button>
         ) : null}
         {currentBasis && onReviewCurrent ? (
-          <Button type="button" disabled={!canReviewCurrent || Boolean(rebaseIssue)} onClick={onReviewCurrent}>
+          <Button
+            className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+            type="button"
+            disabled={!canReviewCurrent || Boolean(rebaseIssue)}
+            onClick={onReviewCurrent}
+          >
             {m.collection_save_review_current()}
           </Button>
         ) : null}
@@ -625,12 +645,12 @@ export function CollectionSaveReview({
   const actionLabel = unknown ? m.collection_save_retry_original() : m.collection_save_outcomes_heading();
   return (
     <section
-      className="min-w-0 space-y-3 rounded-2xl border border-border bg-card p-4 [overflow-wrap:anywhere] sm:p-6"
+      className="min-w-0 space-y-4 rounded-2xl border border-border bg-card p-4 [overflow-wrap:anywhere] sm:p-5"
       data-collection-edit-review
       data-plan-collection={plan.collectionId}
     >
       <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-        <summary className="min-h-11 cursor-pointer rounded-lg font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+        <summary className="min-h-11 cursor-pointer rounded-lg py-2 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
           {m.collection_review_heading()}
         </summary>
         <div className="mt-3 space-y-4">
@@ -665,7 +685,11 @@ export function CollectionSaveReview({
           {unknown && onRetry ? (
             <div className="space-y-2 rounded-lg border border-amber-500/40 p-3">
               <p>{m.collection_save_unknown_help()}</p>
-              <Button type="button" onClick={onRetry}>
+              <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal py-3 text-start"
+                type="button"
+                onClick={onRetry}
+              >
                 {actionLabel}
               </Button>
             </div>

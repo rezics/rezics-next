@@ -1,5 +1,5 @@
 import { defaultPolicy } from './policy.ts';
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { homedir, userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -184,9 +184,18 @@ export async function reportServices(
   run = serviceCommand,
   print: (value: string) => void = console.log,
   policy = defaultPolicy.service,
+  stateDirectory?: string,
 ): Promise<number> {
   let failed = false;
   if (action === 'restart') {
+    const handoffPath = stateDirectory ? join(stateDirectory, 'manager-app-servers-handoff.json') : undefined;
+    if (handoffPath) {
+      mkdirSync(stateDirectory!, { recursive: true });
+      writeFileSync(handoffPath, JSON.stringify({ version: 1, requestedAt: Date.now(), requesterPid: process.pid }), {
+        mode: 0o600,
+      });
+      chmodSync(handoffPath, 0o600);
+    }
     const restarted = await run(['systemctl', '--user', 'restart', ...RESIDENT_CODE_UNITS]);
     failed = restarted.code !== 0;
     if (restarted.output.trim()) print(restarted.output.trim());

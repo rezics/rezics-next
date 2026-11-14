@@ -1,9 +1,11 @@
 import { locales } from '../../../paraglide/runtime.js';
-import { workTagOriginatingReturn } from '../subject-visit-navigation';
+import { subjectGraphVisitReturn, workTagOriginatingReturn } from '../subject-visit-navigation';
 
-/** Work tags retain an admitted visit address; ordinary classification origins keep the existing allowlist. */
+/** Graph and work-tag returns retain their admitted address; ordinary origins keep the existing allowlist. */
 export function originatingConceptReturn(value: unknown, locale?: string): string | undefined {
   if (typeof value !== 'string' || new TextEncoder().encode(value).byteLength > 2048) return;
+  const graph = subjectGraphVisitReturn(value, locale);
+  if (graph) return graph;
   const work = workTagOriginatingReturn(value, locale);
   if (work) return work;
   const ordinary = originatingReturn(value);

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { setFakeAdmitted } from '../kernel/fake';
 import { setLibraryLabelStorySizes } from '../kernel/fake/library-label-assignments';
 import { m } from '../paraglide/messages.js';
@@ -29,13 +29,15 @@ function LabelShelfStory({
   count,
   labelId = firstLabelId,
   search = '',
+  scenario = 'default',
 }: {
   count: number;
   labelId?: string;
   search?: string;
+  scenario?: 'default' | 'reading' | 'sparse';
 }) {
   setFakeAdmitted(['personal_library', 'reading_progress', 'library_label.assignment_list', 'library_label.unassign']);
-  setLibraryLabelStorySizes({ subject: 3, shelf: count });
+  setLibraryLabelStorySizes({ subject: 3, shelf: count, scenario });
   return <PageStory visitor="Signed In" path={`/library?label=${labelId}${search}`} />;
 }
 
@@ -138,5 +140,53 @@ export const Hidden: Story = {
     await pageReady(context);
     await within(context.canvasElement).findByRole('heading', { name: m.not_found_heading() });
     await expect(context.canvasElement.querySelector('[data-slot="cover-card"]')).toBeNull();
+  },
+};
+
+export const SparseContinued: Story = {
+  name: 'Sparse page continues in native order',
+  render: () => <LabelShelfStory count={40} scenario="sparse" />,
+  play: async (context) => {
+    await shelfReady(context, 1, 'Reading list');
+    const view = within(context.canvasElement);
+    await expect(view.getByText(m.library_labels_member_page_count({ count: 1 }))).toBeVisible();
+    await expect(view.getByText('The Left Hand of Darkness')).toBeVisible();
+    await userEvent.click(view.getByRole('link', { name: m.library_more() }));
+    await waitFor(() =>
+      expect(context.canvasElement.querySelectorAll('[data-slot="cover-card"], [data-slot="tombstone"]')).toHaveLength(
+        2,
+      ),
+    );
+    await expect(view.getByText(m.library_labels_member_page_count({ count: 2 }))).toBeVisible();
+    await expect(view.getByRole('link', { name: m.library_label_previous_page() })).toBeVisible();
+    await expect(view.queryByRole('link', { name: m.library_more() })).toBeNull();
+  },
+};
+
+export const ReadMeaningfulMembers: Story = {
+  name: 'Member reading keeps status and progress independent',
+  render: () => <LabelShelfStory count={3} scenario="reading" />,
+  play: async (context) => {
+    await shelfReady(context, 3, 'Reading list');
+    const view = within(context.canvasElement);
+    await userEvent.click(
+      view.getByRole('button', {
+        name: m.library_received_reading_open_named({ position: 1, title: 'The Left Hand of Darkness' }),
+      }),
+    );
+    const reading = context.canvasElement.querySelector<HTMLElement>('[data-received-assignment-reader]')!;
+    await expect(reading).toBeVisible();
+    await expect(within(reading).getByRole('heading', { name: 'The Left Hand of Darkness' })).toBeVisible();
+    const details = reading.querySelector<HTMLDetailsElement>('[data-received-progress] details')!;
+    await expect(details.open).toBe(false);
+    await userEvent.click(within(details).getByText(m.library_labels_reading_details()));
+    await expect(details.open).toBe(true);
+    const link = within(reading).getByRole('link', { name: m.library_received_reading_open_work() });
+    const href = link.getAttribute('href')!;
+    await expect(href).not.toContain('label=');
+    await expect(href).not.toContain('cursor=');
+    await expect(href).not.toContain('assignmentId');
+    await userEvent.click(within(reading).getByRole('button', { name: m.library_received_reading_close() }));
+    await waitFor(() => expect(context.canvasElement.querySelector('[data-received-assignment-reader]')).toBeNull());
   },
 };

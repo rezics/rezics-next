@@ -1,5 +1,6 @@
 import { checkDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../content-editions/edition-model';
+import { getLocale, type Locale } from '../paraglide/runtime.js';
 import { workspaceFailureMessage, workspaceFeedbackMessage, workspaceOperationMessage } from './workspace-language';
 import { bookChapterOccurrences, bookPublicationTarget, bookTocIndex, bookTocRows } from './book-toc';
 import {
@@ -26,6 +27,14 @@ import {
   type NativeDraftCreate,
 } from './contract';
 
+import {
+  admitVersionAddress,
+  initialVersionNavigation,
+  versionAddress,
+  type VersionMovement,
+  type VersionNavigation,
+} from './version-navigation';
+
 export type VersionSummary = StudioRevisionHeader;
 export type WorkingDocument = Readonly<{
   source: StudioSelection;
@@ -37,6 +46,8 @@ export type WorkingDocument = Readonly<{
   uploading: boolean;
   editorGeneration: number;
 }>;
+/** Scalar consent binding; never retain a second working or historical body for review. */
+export type VersionCopyReview = Readonly<{ version: ExactDocument; workingSequence: number }>;
 export type StudioState = Readonly<{
   documents: StudioPage<StudioDocument>;
   publications: StudioPage<PublicationRecord>;
@@ -45,7 +56,11 @@ export type StudioState = Readonly<{
   selectedOccurrences: ReadonlySet<string>;
   selected: WorkingDocument | null;
   versions: StudioPage<VersionSummary> | null;
+  versionNavigation: VersionNavigation;
+  versionLocale: Locale;
+  versionCopyReview: VersionCopyReview | null;
   historical: StudioRevision | null;
+  inspectedVersion: ExactDocument | null;
   review: PublicationReview | null;
   published: PublicationRecord | null;
   /** Presentation only; use operation for behavior. */
@@ -207,6 +222,7 @@ export class StudioController {
   private request: AbortController | null = null;
   private connected = false;
   private editorSequence = 0;
+  private workingSequence = 0;
   private saveAttempt: DraftSave | null = null;
   private createAttempt: { projectId: string; title: string; idempotencyKey: string } | null = null;
   private nativeCreateAttempt: (NativeDraftCreate & { projectId: string; idempotencyKey: string }) | null = null;
@@ -227,7 +243,11 @@ export class StudioController {
       selectedOccurrences: new Set(),
       selected: input.initialSelection ? working(input.initialSelection) : null,
       versions: null,
+      versionNavigation: initialVersionNavigation(),
+      versionLocale: getLocale(),
+      versionCopyReview: null,
       historical: null,
+      inspectedVersion: null,
       review: null,
       published: null,
       busy: null,
@@ -249,7 +269,16 @@ export class StudioController {
       this.connected = false;
       this.request?.abort();
       this.request = null;
-      this.patch({ busy: null, operation: null, review: null, historical: null });
+      this.patch({
+        busy: null,
+        operation: null,
+        review: null,
+        historical: null,
+        inspectedVersion: null,
+        versionCopyReview: null,
+        versions: null,
+        versionNavigation: initialVersionNavigation(),
+      });
     };
   };
   current = (): boolean => this.connected && this.port.isCurrent();
@@ -258,6 +287,7 @@ export class StudioController {
     this.state.selected?.source.revision.exact.postId === postId &&
     this.state.selected.editorGeneration === generation;
   private patch(patch: Partial<StudioState>) {
+    if ('selected' in patch && patch.selected !== this.state.selected) this.workingSequence++;
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
   }
@@ -345,7 +375,15 @@ export class StudioController {
     )
       return false;
     // Never leave an old readable body beneath a new selection or a refused read.
-    this.patch({ selected: null, historical: null, versions: null, review: null });
+    this.patch({
+      selected: null,
+      versionCopyReview: null,
+      historical: null,
+      inspectedVersion: null,
+      versions: null,
+      versionNavigation: initialVersionNavigation(),
+      review: null,
+    });
     return this.run<StudioSelection>(
       'open',
       async (signal) => {
@@ -404,7 +442,10 @@ export class StudioController {
           selected: working(selection, ++this.editorSequence),
           documents: this.updateSummary(selection),
           versions: null,
+          versionNavigation: initialVersionNavigation(),
           historical: null,
+          inspectedVersion: null,
+          versionCopyReview: null,
           review: null,
         });
       },
@@ -478,7 +519,6 @@ export class StudioController {
             ...(!newer ? { title: selection.revision.title, body: selection.revision.body } : {}),
           },
           documents: this.updateSummary(selection),
-          versions: null,
           review: null,
         });
       },
@@ -558,36 +598,64 @@ export class StudioController {
           selected: working(selection, ++this.editorSequence),
           documents: this.updateSummary(selection),
           versions: null,
+          versionNavigation: initialVersionNavigation(),
           historical: null,
+          inspectedVersion: null,
+          versionCopyReview: null,
           review: null,
         });
       },
       true,
     );
   };
-  loadVersions = async (more = false) => {
+  /** Locale/admission owners replace their binding; this only retires local version browsing. */
+  retainVersionLocale = (locale: Locale) => {
+    if (locale === this.state.versionLocale) return;
+    this.retireVersions(locale);
+  };
+  retireVersions = (locale = this.state.versionLocale) => {
+    if (this.state.operation === 'versions' || this.state.operation === 'revision') {
+      this.request?.abort();
+      this.request = null;
+      this.patch({ busy: null, operation: null });
+    }
+    this.patch({
+      versions: null,
+      versionNavigation: initialVersionNavigation(),
+      versionLocale: locale,
+      historical: null,
+      inspectedVersion: null,
+      versionCopyReview: null,
+    });
+  };
+  /** Compatibility entry for existing callers; First and Next both replace the single page. */
+  loadVersions = (more = false): Promise<boolean> => this.navigateVersions(more ? 'next' : 'first');
+  navigateVersions = async (movement: VersionMovement | 'retry'): Promise<boolean> => {
+    this.retainVersionLocale(getLocale());
     const postId = this.state.selected?.source.revision.exact.postId;
-    if (!postId || this.hasUnresolvedCommand()) return;
-    const cursor = more ? this.state.versions?.nextCursor : null;
-    if (more && !cursor) return;
-    await this.run<StudioPage<VersionSummary>>(
+    if (!postId || !this.canMutate()) return false;
+    const navigation = this.state.versionNavigation;
+    const address = versionAddress(navigation, movement, this.state.versions?.nextCursor ?? null);
+    if (!address) return false;
+    this.patch({ versionNavigation: { ...navigation, staged: address } });
+    return this.run<StudioPage<VersionSummary>>(
       'versions',
-      async (signal) => {
-        const result = await this.port.versions(
-          { projectId: this.input.projectId, postId, cursor: cursor ?? null },
-          signal,
-        );
-        if (result.ok && result.value.items.some((row) => row.exact.postId !== postId))
-          return { ok: false, error: failure('invalid') };
-        return result;
-      },
-      (versions) => this.patch({ versions, historical: null }),
+      (signal) => this.port.versions({ projectId: this.input.projectId, postId, cursor: address.cursor }, signal),
+      (versions) =>
+        this.patch({
+          versions,
+          versionNavigation: admitVersionAddress(navigation, address),
+          historical: null,
+          inspectedVersion: null,
+          versionCopyReview: null,
+        }),
     );
   };
-  inspectVersion = async (document: ExactDocument) => {
-    if (this.hasUnresolvedCommand() || document.postId !== this.state.selected?.source.revision.exact.postId) return;
-    this.patch({ historical: null });
-    await this.run<StudioRevision>(
+  inspectVersion = async (document: ExactDocument): Promise<boolean> => {
+    this.retainVersionLocale(getLocale());
+    if (!this.canMutate() || document.postId !== this.state.selected?.source.revision.exact.postId) return false;
+    this.patch({ historical: null, inspectedVersion: document });
+    return this.run<StudioRevision>(
       'revision',
       async (signal) => {
         const result = await this.port.revision({ projectId: this.input.projectId, document }, signal);
@@ -598,17 +666,40 @@ export class StudioController {
       (historical) => this.patch({ historical }),
     );
   };
-  restoreVersion = () => {
+  isVersionCopyReviewCurrent = (review = this.state.versionCopyReview): boolean =>
+    Boolean(
+      review &&
+      this.state.versionLocale === getLocale() &&
+      review === this.state.versionCopyReview &&
+      this.state.historical &&
+      sameExact(review.version, this.state.historical.exact) &&
+      review.workingSequence === this.workingSequence,
+    );
+  reviewVersionCopy = (): boolean => {
+    const { selected, historical } = this.state;
     if (
       !this.canMutate() ||
-      !this.state.historical ||
-      !this.state.selected ||
-      this.state.selected.snapshotPending ||
-      this.state.selected.uploading
+      !historical ||
+      !selected?.source.permissions.edit ||
+      selected.snapshotPending ||
+      selected.uploading
     )
-      return;
-    const historical = this.state.historical;
-    if (historical.exact.postId !== this.state.selected.source.revision.exact.postId) return;
+      return false;
+    this.patch({ versionCopyReview: { version: historical.exact, workingSequence: this.workingSequence } });
+    return true;
+  };
+  cancelVersionCopy = () => this.patch({ versionCopyReview: null });
+  restoreVersion = (review = this.state.versionCopyReview): boolean => {
+    const { historical, selected } = this.state;
+    if (
+      !this.canMutate() ||
+      !this.isVersionCopyReviewCurrent(review) ||
+      !historical ||
+      !selected?.source.permissions.edit ||
+      selected.snapshotPending ||
+      selected.uploading
+    )
+      return false;
     this.edit({
       title: historical.title,
       body: historical.body,
@@ -617,7 +708,8 @@ export class StudioController {
       snapshotPending: false,
       editorGeneration: ++this.editorSequence,
     });
-    this.complete('restored');
+    this.complete('restored', { versionCopyReview: null });
+    return true;
   };
   toggleOccurrence = (occurrenceId: string, checked: boolean) => {
     const placement = this.state.structure?.placements.find((row) => row.occurrenceId === occurrenceId);

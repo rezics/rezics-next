@@ -2,63 +2,62 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { ReportedYearSummary } from './private-diary/native';
+import type { NativeYearlyGoal } from './yearly-goal-native';
 
 const control =
   'inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border px-4 py-2 text-sm underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-type GoalAction = { allowed: boolean; reason?: string };
-export type YearlyGoalSnapshot = {
-  year: number;
-  viewer: {
-    state: 'owner';
-    actions: { editTarget: GoalAction; clearTarget: GoalAction; navigateYear: GoalAction };
-  };
-  target:
-    | { state: 'none'; revision: string | null }
-    | { state: 'set'; target: number; revision: string }
-    | { state: 'unavailable'; reason: 'not_installed' };
-  progress:
-    | { state: 'available'; summary: ReportedYearSummary }
-    | { state: 'unavailable'; reason: 'summary_unavailable' };
-};
+export type YearlyGoalSnapshot = NativeYearlyGoal;
 
 export type YearlyGoalReadResult =
   | { state: 'ready'; value: YearlyGoalSnapshot }
   | { state: 'denied' | 'retired' | 'unavailable' };
 
 /** The UI hands this exact command to its server adapter; the key is sent as the native header. */
-export type YearlyGoalCommand = {
+export type YearlyGoalCommand = Readonly<{
   year: number;
   metric: 'completed_consumption_occurrences';
   target: number | null;
   expectedRevision: string | null;
   idempotencyKey: string;
+}>;
+
+export type YearlyGoalWriteResult = {
+  state:
+    | 'applied'
+    | 'stale'
+    | 'uncertain'
+    | 'denied'
+    | 'retired'
+    | 'unavailable'
+    | 'key-conflict'
+    | 'erased'
+    | 'invalid';
 };
 
-export type YearlyGoalWriteResult =
-  | { state: 'applied' }
-  | { state: 'stale' }
-  | { state: 'uncertain' }
-  | { state: 'denied' }
-  | { state: 'unavailable' };
-
-/** A narrow seam for the mounted Kernel reader and command; the owning route supplies the published client binding. */
+/** Rejected transport promises are normalized at this boundary; a current read cannot confirm an uncertain write. */
 export type YearlyGoalPageApi = {
+  current?: () => boolean;
   read(year: number): Promise<YearlyGoalReadResult>;
   write(command: YearlyGoalCommand): Promise<YearlyGoalWriteResult>;
 };
 
-type Loaded = { state: 'loading' } | Exclude<YearlyGoalReadResult, { state: 'ready' }> | YearlyGoalReadResult;
+type Loaded = { state: 'loading' } | YearlyGoalReadResult;
 type Operation =
   | null
   | 'sending'
   | 'refreshing'
-  | 'saved'
   | 'review'
-  | 'stale'
-  | 'uncertain'
-  | 'denied'
-  | 'unavailable';
+  | Exclude<YearlyGoalWriteResult['state'], 'applied' | 'retired'>;
+type PendingIntent = { command: YearlyGoalCommand; sender: YearlyGoalPageApi['write'] };
+
+async function readCurrent(api: YearlyGoalPageApi, year: number): Promise<YearlyGoalReadResult> {
+  try {
+    return await api.read(year);
+  } catch {
+    return { state: 'unavailable' };
+  }
+}
 
 function monthName(month: number): string {
   return new Intl.DateTimeFormat(getLocale(), { month: 'long', timeZone: 'UTC' }).format(
@@ -86,110 +85,125 @@ function YearlyGoalScreen({
   const [mode, setMode] = useState<'view' | 'edit' | 'clear'>('view');
   const [draft, setDraft] = useState('');
   const [invalidTarget, setInvalidTarget] = useState(false);
-  const [pending, setPending] = useState<YearlyGoalCommand>();
+  const [pending, setPending] = useState<PendingIntent>();
   const [operation, setOperation] = useState<Operation>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
   const generation = useRef(0);
+  const inFlight = useRef(false);
+  const unresolved = useRef<PendingIntent | undefined>(undefined);
+  const live = () => api !== undefined && (api.current?.() ?? true);
 
   useEffect(() => {
     const current = ++generation.current;
-    setMode('view');
-    setDraft('');
-    setInvalidTarget(false);
-    setPending(undefined);
-    setOperation(null);
-    if (year === undefined || sessionState !== 'signed-in' || !viewerSubject || !api) {
+    if (year === undefined || sessionState !== 'signed-in' || !viewerSubject || !api || !live()) {
       setLoaded({ state: 'unavailable' });
     } else {
-      setLoaded({ state: 'loading' });
-      void api.read(year).then((result) => {
-        if (generation.current === current) setLoaded(result);
+      inFlight.current = true;
+      void readCurrent(api, year).then((result) => {
+        if (generation.current !== current || !live()) return;
+        inFlight.current = false;
+        setLoaded(result);
       });
     }
     return () => {
       if (generation.current === current) generation.current += 1;
+      unresolved.current = undefined;
     };
   }, [api, sessionState, viewerSubject, year]);
 
   const snapshot = loaded.state === 'ready' ? loaded.value : undefined;
+  const busy = operation === 'sending' || operation === 'refreshing';
 
   async function refreshCurrent(purpose: 'conflict' | 'manual' | 'readback') {
-    if (!api || year === undefined) return;
+    if (!api || year === undefined || !live() || inFlight.current || unresolved.current) return;
+    inFlight.current = true;
     const current = generation.current;
     setOperation('refreshing');
     setLoaded({ state: 'loading' });
-    const result = await api.read(year);
-    if (generation.current !== current) return;
+    const result = await readCurrent(api, year);
+    if (generation.current !== current || !live()) return;
+    inFlight.current = false;
     setLoaded(result);
     setOperation(
       result.state === 'ready'
         ? purpose === 'conflict' || mode !== 'view'
           ? 'review'
-          : purpose === 'readback'
-            ? 'saved'
-            : null
+          : null
         : purpose === 'conflict'
           ? 'stale'
-          : purpose === 'readback'
-            ? 'unavailable'
-            : null,
+          : 'unavailable',
     );
   }
 
-  async function send(command: YearlyGoalCommand) {
-    if (!api) return;
+  async function send(intent: PendingIntent) {
+    if (!api || !live() || inFlight.current) return;
+    inFlight.current = true;
     const current = generation.current;
     setOperation('sending');
-    const result = await api.write(command);
-    if (generation.current !== current) return;
+    let result: YearlyGoalWriteResult;
+    try {
+      result = await intent.sender(intent.command);
+    } catch {
+      result = { state: 'uncertain' };
+    }
+    if (generation.current !== current || !live()) return;
     if (result.state === 'applied') {
+      unresolved.current = undefined;
       setPending(undefined);
       setMode('view');
+      setAcknowledged(true);
       setLoaded({ state: 'loading' });
-      setOperation('saved');
+      setOperation('refreshing');
       if (year === undefined) return;
-      const readback = await api.read(year);
-      if (generation.current !== current) return;
+      const readback = await readCurrent(api, year);
+      if (generation.current !== current || !live()) return;
+      inFlight.current = false;
       setLoaded(readback);
+      setOperation(readback.state === 'ready' ? null : 'unavailable');
       return;
     }
-    if (result.state === 'stale') {
-      setPending(undefined);
-      setLoaded({ state: 'unavailable' });
-      setOperation('stale');
-      return;
-    }
+    inFlight.current = false;
+    setLoaded({ state: result.state === 'denied' ? 'denied' : result.state === 'retired' ? 'retired' : 'unavailable' });
     if (result.state === 'uncertain') {
-      setPending(command);
-      setLoaded({ state: 'unavailable' });
+      unresolved.current = intent;
+      setPending(intent);
       setOperation('uncertain');
       return;
     }
+    unresolved.current = undefined;
     setPending(undefined);
-    setLoaded(result.state === 'denied' ? { state: 'denied' } : { state: 'unavailable' });
-    setOperation(result.state);
+    setOperation(result.state === 'retired' ? null : result.state);
   }
 
   function commandFor(target: number | null) {
     if (
+      !api ||
+      !live() ||
+      inFlight.current ||
+      unresolved.current ||
       !snapshot ||
       year === undefined ||
       snapshot.target.state === 'unavailable' ||
-      !snapshot.viewer.actions.editTarget.allowed
+      (target !== null && !snapshot.viewer.actions.editTarget.allowed)
     )
       return;
     if (target === null && (snapshot.target.state !== 'set' || !snapshot.viewer.actions.clearTarget.allowed)) return;
-    const expectedRevision = snapshot.target.revision;
-    void send({
+    const command: YearlyGoalCommand = Object.freeze({
       year,
       metric: 'completed_consumption_occurrences',
       target,
-      expectedRevision,
+      expectedRevision: snapshot.target.revision,
       idempotencyKey: crypto.randomUUID(),
     });
+    const intent = { command, sender: api.write.bind(api) };
+    unresolved.current = intent;
+    setAcknowledged(false);
+    void send(intent);
   }
 
   function submitTarget(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!live() || inFlight.current || unresolved.current) return;
     if (!/^[0-9]+$/.test(draft)) {
       setInvalidTarget(true);
       return;
@@ -204,15 +218,19 @@ function YearlyGoalScreen({
   }
 
   function beginEdit() {
-    if (!snapshot) return;
+    if (!snapshot || !live() || inFlight.current || unresolved.current) return;
     setDraft(snapshot.target.state === 'set' ? String(snapshot.target.target) : '');
     setOperation(null);
     setInvalidTarget(false);
     setMode('edit');
   }
 
+  function cancel() {
+    if (live() && !inFlight.current && !unresolved.current) setMode('view');
+  }
+
   const retryExact = () => {
-    if (pending) void send(pending);
+    if (pending && unresolved.current === pending) void send(pending);
   };
 
   return (
@@ -302,7 +320,12 @@ function YearlyGoalScreen({
               <>
                 <p role="status">{m.library_yearly_goal_unavailable()}</p>
                 {api && operation === null ? (
-                  <button type="button" className={control} onClick={() => void refreshCurrent('manual')}>
+                  <button
+                    type="button"
+                    className={control}
+                    disabled={busy}
+                    onClick={() => void refreshCurrent('manual')}
+                  >
                     {m.library_selection_retry()}
                   </button>
                 ) : null}
@@ -329,8 +352,9 @@ function YearlyGoalScreen({
                     </p>
                   </div>
                 )}
-                {snapshot.viewer.actions.editTarget.allowed && snapshot.target.state !== 'unavailable' ? (
-                  mode === 'edit' ? (
+                {(snapshot.viewer.actions.editTarget.allowed || snapshot.viewer.actions.clearTarget.allowed) &&
+                snapshot.target.state !== 'unavailable' ? (
+                  mode === 'edit' && snapshot.viewer.actions.editTarget.allowed ? (
                     <form className="grid max-w-sm gap-3" onSubmit={submitTarget}>
                       <label htmlFor="yearly-goal-target-value">{m.library_yearly_goal_target()}</label>
                       <input
@@ -354,14 +378,10 @@ function YearlyGoalScreen({
                       {operation === 'stale' ? <p role="alert">{m.library_yearly_goal_stale()}</p> : null}
                       {operation === 'review' ? <p role="status">{m.library_yearly_goal_review()}</p> : null}
                       <div className="flex flex-wrap gap-3">
-                        <button
-                          type="submit"
-                          className={control}
-                          disabled={operation === 'sending' || operation === 'refreshing'}
-                        >
+                        <button type="submit" className={control} disabled={busy}>
                           {m.library_yearly_goal_save()}
                         </button>
-                        <button type="button" className={control} onClick={() => setMode('view')}>
+                        <button type="button" className={control} disabled={busy} onClick={cancel}>
                           {m.library_yearly_goal_cancel()}
                         </button>
                       </div>
@@ -369,29 +389,33 @@ function YearlyGoalScreen({
                   ) : mode === 'clear' ? (
                     <div className="flex flex-wrap items-center gap-3">
                       {snapshot.target.state === 'set' && snapshot.viewer.actions.clearTarget.allowed ? (
-                        <button
-                          type="button"
-                          className={control}
-                          disabled={operation === 'sending' || operation === 'refreshing'}
-                          onClick={() => commandFor(null)}
-                        >
+                        <button type="button" className={control} disabled={busy} onClick={() => commandFor(null)}>
                           {m.library_yearly_goal_clear()}
                         </button>
                       ) : (
                         <p role="status">{m.library_yearly_goal_target_none()}</p>
                       )}
-                      <button type="button" className={control} onClick={() => setMode('view')}>
+                      <button type="button" className={control} disabled={busy} onClick={cancel}>
                         {m.library_yearly_goal_cancel()}
                       </button>
                       {operation === 'review' ? <p role="status">{m.library_yearly_goal_review()}</p> : null}
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-3">
-                      <button type="button" className={control} onClick={beginEdit}>
-                        {m.library_yearly_goal_edit()}
-                      </button>
+                      {snapshot.viewer.actions.editTarget.allowed ? (
+                        <button type="button" className={control} disabled={busy} onClick={beginEdit}>
+                          {m.library_yearly_goal_edit()}
+                        </button>
+                      ) : null}
                       {snapshot.target.state === 'set' && snapshot.viewer.actions.clearTarget.allowed ? (
-                        <button type="button" className={control} onClick={() => setMode('clear')}>
+                        <button
+                          type="button"
+                          className={control}
+                          disabled={busy}
+                          onClick={() => {
+                            if (live() && !inFlight.current && !unresolved.current) setMode('clear');
+                          }}
+                        >
                           {m.library_yearly_goal_clear()}
                         </button>
                       ) : null}
@@ -403,7 +427,10 @@ function YearlyGoalScreen({
             {operation === 'sending' || operation === 'refreshing' ? (
               <p role="status">{m.library_yearly_goal_loading()}</p>
             ) : null}
-            {operation === 'saved' ? <p role="status">{m.library_yearly_goal_saved()}</p> : null}
+            {acknowledged ? <p role="status">{m.library_yearly_goal_saved()}</p> : null}
+            {operation === 'key-conflict' ? <p role="alert">{m.library_yearly_goal_key_conflict()}</p> : null}
+            {operation === 'erased' ? <p role="status">{m.library_yearly_goal_receipt_erased()}</p> : null}
+            {operation === 'invalid' ? <p role="alert">{m.library_yearly_goal_invalid_target()}</p> : null}
             {operation === 'stale' ? (
               <div className="space-y-3" role="alert">
                 <p>{m.library_yearly_goal_stale()}</p>
@@ -426,7 +453,7 @@ function YearlyGoalScreen({
               </div>
             ) : null}
             {operation === 'denied' ? <p role="alert">{m.ctxw_denied()}</p> : null}
-            {operation === 'unavailable' || (operation === 'saved' && loaded.state !== 'ready') ? (
+            {['unavailable', 'key-conflict', 'erased', 'invalid'].includes(operation ?? '') ? (
               <button type="button" className={control} onClick={() => void refreshCurrent('readback')}>
                 {m.library_selection_retry()}
               </button>
@@ -446,8 +473,8 @@ function YearlyGoalScreen({
               <p role="status">{m.library_yearly_goal_unavailable()}</p>
             )}
             <p className="text-sm text-muted-foreground">{m.library_yearly_goal_coverage()}</p>
-            {snapshot ? (
-              <button type="button" className={control} onClick={() => void refreshCurrent('manual')}>
+            {snapshot && !pending ? (
+              <button type="button" className={control} disabled={busy} onClick={() => void refreshCurrent('manual')}>
                 {m.library_yearly_goal_refresh()}
               </button>
             ) : null}
@@ -464,7 +491,7 @@ function SummaryView({ year, summary }: { year: number; summary: ReportedYearSum
       {month === undefined ? null : (
         <a
           href={`/${getLocale()}/library/history?year=${year}&month=${month}`}
-          className="inline-flex min-h-11 items-center text-start font-medium underline"
+          className="inline-flex min-h-11 min-w-11 items-center text-start font-medium underline"
         >
           {month === 'unallocated' ? m.library_diary_year_unallocated() : monthName(month)}
         </a>
@@ -472,15 +499,15 @@ function SummaryView({ year, summary }: { year: number; summary: ReportedYearSum
       <dl className="mt-2 grid gap-3 sm:grid-cols-3">
         <div>
           <dt className="text-sm">{m.library_diary_completed()}</dt>
-          <dd className="text-xl font-semibold">{counts.completedOccurrences}</dd>
+          <dd className="break-all text-xl font-semibold tabular-nums">{counts.completedOccurrences}</dd>
         </div>
         <div>
           <dt className="text-sm">{m.library_diary_distinct_subjects()}</dt>
-          <dd className="text-xl font-semibold">{counts.distinctCompletedSubjects}</dd>
+          <dd className="break-all text-xl font-semibold tabular-nums">{counts.distinctCompletedSubjects}</dd>
         </div>
         <div>
           <dt className="text-sm">{m.library_diary_repeats()}</dt>
-          <dd className="text-xl font-semibold">{counts.repeatOccurrences}</dd>
+          <dd className="break-all text-xl font-semibold tabular-nums">{counts.repeatOccurrences}</dd>
         </div>
       </dl>
       <p className="mt-3 text-sm">
@@ -498,15 +525,15 @@ function SummaryView({ year, summary }: { year: number; summary: ReportedYearSum
       <dl className="grid gap-3 sm:grid-cols-3">
         <div>
           <dt className="text-sm">{m.library_diary_completed()}</dt>
-          <dd className="text-2xl font-semibold">{summary.completedOccurrences}</dd>
+          <dd className="break-all text-2xl font-semibold tabular-nums">{summary.completedOccurrences}</dd>
         </div>
         <div>
           <dt className="text-sm">{m.library_diary_distinct_subjects()}</dt>
-          <dd className="text-xl font-semibold">{summary.distinctCompletedSubjects}</dd>
+          <dd className="break-all text-xl font-semibold tabular-nums">{summary.distinctCompletedSubjects}</dd>
         </div>
         <div>
           <dt className="text-sm">{m.library_diary_repeats()}</dt>
-          <dd className="text-xl font-semibold">{summary.repeatOccurrences}</dd>
+          <dd className="break-all text-xl font-semibold tabular-nums">{summary.repeatOccurrences}</dd>
         </div>
       </dl>
       <p className="text-sm">
@@ -549,6 +576,8 @@ export function YearlyGoalPage({
   viewerSubject?: string | null;
   api?: YearlyGoalPageApi | undefined;
 }) {
-  const key = `${year ?? 'invalid'}:${viewerSubject ?? 'no-viewer'}:${sessionState}`;
+  const source = useRef({ api, version: 0 });
+  if (source.current.api !== api) source.current = { api, version: source.current.version + 1 };
+  const key = `${getLocale()}:${year ?? 'invalid'}:${viewerSubject ?? 'no-viewer'}:${sessionState}:${source.current.version}`;
   return <YearlyGoalScreen key={key} year={year} sessionState={sessionState} viewerSubject={viewerSubject} api={api} />;
 }

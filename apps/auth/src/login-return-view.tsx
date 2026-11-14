@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import { AuthButton as Button } from './button';
+import { AuthActions, AuthNotice, AuthTaskSection } from './auth-task-view';
 import { m } from './paraglide/messages.js';
 import type { LoginPhase, LoginReturnHistory } from './login-return';
 
@@ -20,12 +21,12 @@ export function LoginReturnView({ records, onDismiss }: { records: LoginReturnHi
     cancelled: m.auth_login_prompt_cancelled,
   };
   return (
-    <section className="auth-login-form" aria-label={m.auth_login_return_heading()}>
-      <div ref={status} tabIndex={-1} role="status">
+    <AuthTaskSection aria-label={m.auth_login_return_heading()}>
+      <AuthNotice ref={status} tabIndex={-1} role="status">
         <h2>{m.auth_login_return_heading()}</h2>
         {records.map((record, index) => (
-          <div key={index}>
-            <p>
+          <div key={index} className="grid gap-1 border-s-2 border-border ps-3">
+            <p className="font-medium">
               {record.method === 'autofill'
                 ? m.auth_login_autofill()
                 : record.method === 'passkey'
@@ -36,11 +37,13 @@ export function LoginReturnView({ records, onDismiss }: { records: LoginReturnHi
           </div>
         ))}
         <p>{m.auth_login_return_separate()}</p>
-      </div>
-      <Button type="button" variant="outline" onClick={onDismiss}>
-        {m.auth_login_return_dismiss()}
-      </Button>
-      <p>{m.auth_login_return_dismiss_help()}</p>
-    </section>
+      </AuthNotice>
+      <AuthActions>
+        <Button type="button" variant="outline" onClick={onDismiss}>
+          {m.auth_login_return_dismiss()}
+        </Button>
+      </AuthActions>
+      <p className="text-sm text-muted-foreground">{m.auth_login_return_dismiss_help()}</p>
+    </AuthTaskSection>
   );
 }

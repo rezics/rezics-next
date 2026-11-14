@@ -36,6 +36,13 @@ async function write(...args: Parameters<typeof f.native.call>) {
   return result;
 }
 
+async function replay(...args: Parameters<typeof f.native.call>) {
+  const start = observer.records.length;
+  const result = await f.native.call(...args);
+  expect(readChainProbes(observer.records.slice(start))).toEqual([]);
+  return result;
+}
+
 // A deliberately nested native operation owns its own SQL reads. Keep those
 // records intact while checking every outer attachment probe on either side.
 async function writeWithNestedRevision(
@@ -117,7 +124,7 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
   const createKey = crypto.randomUUID();
   const created = await write('POST', '/v1/hostedCatalogues', createBody, { key: createKey });
   expect(created.status, JSON.stringify(created.value)).toBe(201);
-  const createReplay = await write('POST', '/v1/hostedCatalogues', createBody, { key: createKey });
+  const createReplay = await replay('POST', '/v1/hostedCatalogues', createBody, { key: createKey });
   expect(createReplay.value).toEqual(created.value);
 
   const privatePage = await f.native.call('GET', `${path}/children?kind=structure`);
@@ -147,7 +154,7 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
   const publishKey = crypto.randomUUID();
   const published = await write('POST', `${path}:publish`, publishBody, { key: publishKey });
   expect(published.status, JSON.stringify(published.value)).toBe(200);
-  const publishReplay = await write('POST', `${path}:publish`, publishBody, { key: publishKey });
+  const publishReplay = await replay('POST', `${path}:publish`, publishBody, { key: publishKey });
   expect(publishReplay.value).toEqual(published.value);
 
   expect((await f.native.call('GET', `/v1/posts/${draft.postId}`, undefined, { anonymous: true })).status).toBe(404);
@@ -269,7 +276,7 @@ test('publishes an ordered frozen catalogue while preserving Post disclosure and
   };
   const later = await write('POST', `${path}:revise`, laterBody, { key: crypto.randomUUID() });
   expect(later.status).toBe(200);
-  const moveReplay = await write('POST', `${path}:revise`, moveBody, { key: moveKey });
+  const moveReplay = await replay('POST', `${path}:revise`, moveBody, { key: moveKey });
   expect(moveReplay.value).toEqual(moved.value);
   const stale = await write('POST', `${path}:revise`, moveBody, { key: crypto.randomUUID() });
   expect(stale.status).toBe(412);

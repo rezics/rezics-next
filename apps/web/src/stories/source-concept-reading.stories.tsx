@@ -35,7 +35,9 @@ type State =
   | 'denied'
   | 'returning'
   | 'membership'
-  | 'membership-unavailable';
+  | 'membership-unavailable'
+  | 'graph-node'
+  | 'graph-edge';
 
 /** Finite native response fixtures demonstrate caller states; they do not assert producer success. */
 function fixture(state: State, locale: string) {
@@ -225,7 +227,18 @@ function fixture(state: State, locale: string) {
 function Example({ state }: { state: State }) {
   const locale = getLocale();
   const transport = useMemo(() => fixture(state, locale), [state, locale]);
-  const origin = catalogueEntries.graph({ id: plainSubject, label: 'Classification', locale }).href;
+  const graph = catalogueEntries.graph({ id: plainSubject, label: 'Classification', locale }).href;
+  const origin =
+    state === 'graph-node' || state === 'graph-edge'
+      ? `${graph}?${new URLSearchParams({
+          property: 'skos:broader',
+          direction: 'in',
+          depth: '2',
+          ...(state === 'graph-node'
+            ? { node: id }
+            : { edge: disclosed, from: plainSubject, to: id, edgeProperty: 'skos:broader' }),
+        })}`
+      : graph;
   const hierarchyAddress: ConceptHierarchyAddress | undefined =
     state === 'returning'
       ? {
@@ -280,6 +293,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const CurrentHierarchy: Story = {};
+export const GraphSelectedNode: Story = { args: { state: 'graph-node' } };
+export const GraphExactEdge: Story = { args: { state: 'graph-edge' } };
 
 export const CurrentMembership: Story = { args: { state: 'membership' } };
 

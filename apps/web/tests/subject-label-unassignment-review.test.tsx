@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { m } from '../src/paraglide/messages.js';
 import {
   captureSubjectLabelReview,
+  SubjectLabelUnassignmentReview,
   subjectLabelReviewIsCurrent,
 } from '../src/library/subject-label-unassignment-review/review';
 import type { SlotLifetime } from '../src/library/subject-library-current-origin';
@@ -100,4 +104,23 @@ test('retired reads and missing unassign admission close review without closing 
       lifetime: source,
     }),
   ).toBe(false);
+});
+
+test('removal review shows the same exact relationship and separates label removal from Library facts', () => {
+  const review = captureSubjectLabelReview(subject, 'en', assignment, 'current-read', lifetime('A'));
+  const html = renderToStaticMarkup(
+    createElement(SubjectLabelUnassignmentReview, {
+      review,
+      canConfirm: false,
+      onConfirm: () => {},
+      onCancel: () => {},
+    }),
+  );
+  expect(html).toContain('data-label-relationship');
+  expect(html).toContain(review.subjectLabel);
+  expect(html).toContain(review.labelName);
+  expect(html).toContain(m.library_labels_member_scope());
+  expect(html).toMatch(/<button[^>]*data-subject-label-review-confirm[^>]*disabled/);
+  expect(html).not.toContain('href=');
+  expect(html).not.toContain(review.assignmentId);
 });

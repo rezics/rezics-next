@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { parseFilter } from '@rezics/filter';
-import { savedRuleReadyId } from '../kernel/fake/collection-rules';
+import { resetSavedQueryStory, savedRuleConflictId, savedRuleReadyId } from '../kernel/fake/collection-rules';
 import { storyViewerId } from '../kernel/fake/identities';
 import { writeSavedQueryHandoff } from '../library/save-query';
 import { m } from '../paraglide/messages.js';
@@ -10,12 +10,13 @@ import { PageStory, pagePaths, pageReady } from './page';
 const meta = {
   title: 'Library/Saved query',
   id: 'pages-library-saved-query',
+  beforeEach: resetSavedQueryStory,
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component:
-          'Review, Unsupported and ConflictOrUnknown use the actual routed Library and Collection rule editors in AppShell. Saved uses the local create response only as an illustration; Commerce owns native execution and member results. Review phone390 and desktop1280 with both themes and all launch locales.',
+          'Routed new draft, saved rule, unavailable same-request retry and conflict with a retained draft in AppShell. Saved uses the local create response only as an illustration; Commerce owns native execution and member results. Review phone390 and desktop1280 with both themes and all eight locales through globals.',
       },
     },
   },
@@ -46,6 +47,7 @@ export const Review: Story = {
 };
 
 export const Saved: Story = {
+  name: 'Create confirmation (illustrative)',
   render: () => <SeededRulePage />,
   play: async ({ canvasElement }) => {
     await pageReady({ canvasElement });
@@ -75,6 +77,7 @@ export const Unsupported: Story = {
 };
 
 export const ConflictOrUnknown: Story = {
+  name: 'Unavailable, retry the same save',
   render: () => <PageStory visitor="Signed In" path={`/collections/${savedRuleReadyId}/rule`} />,
   play: async ({ canvasElement }) => {
     await pageReady({ canvasElement });
@@ -84,7 +87,48 @@ export const ConflictOrUnknown: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await expect(await canvas.findByText(m.library_rule_uncertain())).toBeVisible();
     await expect(canvas.getByDisplayValue('schema:Book')).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
+    await expect(canvas.getByText(m.library_rule_review_submitted())).toBeVisible();
+    const retry = canvas.getByRole('button', { name: m.library_rule_retry_save_original() });
+    retry.focus();
+    await expect(retry).toHaveFocus();
+    await userEvent.click(retry);
     await expect(canvas.getByText(m.library_rule_uncertain())).toBeVisible();
+  },
+};
+
+export const ExistingRule: Story = {
+  name: 'Saved title, accepted rule and editable conditions',
+  render: () => <PageStory visitor="Signed In" path={`/collections/${savedRuleReadyId}/rule`} />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(within(context.canvasElement).getByRole('main'));
+    await expect(await canvas.findByRole('heading', { name: 'Private saved definition' })).toBeVisible();
+    await expect(canvas.getByText(m.library_rule_review_saved())).toBeVisible();
+    await expect(canvas.getByText(m.library_rule_edit_release_help())).toBeVisible();
+    await expect(canvas.getByDisplayValue('schema:Book')).toBeEnabled();
+    await expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull();
+    await expect(canvas.getByRole('link', { name: m.library_rule_members() })).toBeVisible();
+  },
+};
+
+export const ConflictWithRetainedDraft: Story = {
+  name: 'Conflict, retain draft and review the current saved rule',
+  render: () => <PageStory visitor="Signed In" path={`/collections/${savedRuleConflictId}/rule`} />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(within(context.canvasElement).getByRole('main'));
+    const type = await canvas.findByDisplayValue('schema:Book');
+    await userEvent.clear(type);
+    await userEvent.type(type, 'schema:Movie');
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
+    await expect(await canvas.findByText(m.library_rule_conflict())).toBeVisible();
+    await expect(canvas.getByDisplayValue('schema:Movie')).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: m.library_collection_save() })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_rule_review_current_read() }));
+    await expect(await canvas.findByText(m.library_rule_reloaded())).toBeVisible();
+    await expect(canvas.getByDisplayValue('schema:Movie')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_rule_review_current_button() }));
+    await expect(canvas.getByText(m.library_rule_review_current())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.library_collection_save() })).toBeEnabled();
   },
 };

@@ -5,6 +5,12 @@ import {
   selectVersionedOutlineSequenceNode,
   spliceVersionedOutlineSequence,
 } from './versioned-outline-sequence.ts';
+import {
+  createHostedVersionDepthChanges,
+  recomputeHostedVersionAncestorHeights,
+  recordHostedVersionDepthChange,
+  type HostedVersionDepthIndexes,
+} from './hosted-version-depth-aggregate.ts';
 import { HOSTED_DEPTH_LIMIT } from './hosted-chapters-limits.ts';
 import {
   HostedVersionDraftPointError,
@@ -131,12 +137,13 @@ function ancestorDeltas(
 }
 
 function ancestorFacts(ancestors: readonly HostedVersionDraftPointOccurrence[]): HostedVersionDraftPointAncestor[] {
-  return ancestors.map(({ snapshotId, occurrenceId, parentId, subtreeSize, chapterCount }) => ({
+  return ancestors.map(({ snapshotId, occurrenceId, parentId, subtreeSize, chapterCount, subtreeHeight }) => ({
     snapshotId,
     occurrenceId,
     parentId,
     subtreeSize,
     chapterCount,
+    subtreeHeight,
   }));
 }
 
@@ -185,6 +192,8 @@ async function prepareInsert(
     siblingStart,
     input.occurrenceId,
     input.occurrenceId,
+    undefined,
+    0,
   );
   const preorderRootId = await insertVersionedOutlineSequenceNode(
     indexes.preorder,
@@ -193,6 +202,7 @@ async function prepareInsert(
     input.occurrenceId,
     input.occurrenceId,
     entryKind === 'chapter' ? 1n : 0n,
+    0,
   );
   let chapterRootId = selection.chapterRootId;
   if (entryKind === 'chapter') {
@@ -203,9 +213,25 @@ async function prepareInsert(
       input.occurrenceId,
       input.occurrenceId,
       1n,
+      0,
     );
   }
   const chapterCount = entryKind === 'chapter' ? 1n : 0n;
+  const depthIndexes: HostedVersionDepthIndexes = {
+    siblings: indexes.siblings,
+    preorder: indexes.preorder,
+    siblingRootByParent: selection.siblingRootByParent,
+    preorderRootId,
+    readLegacyMaximum: indexes.readLegacyMaximum,
+  };
+  const depthChanges = createHostedVersionDepthChanges();
+  recordHostedVersionDepthChange(depthChanges, input.parentId, input.occurrenceId, 0);
+  const subtreeHeightUpdates = await recomputeHostedVersionAncestorHeights(
+    depthIndexes,
+    selection.parentPath,
+    new Map([[input.parentId, siblingRootId]]),
+    depthChanges,
+  );
 
   return {
     result: 'inserted',
@@ -223,6 +249,7 @@ async function prepareInsert(
     chapterCount,
     chapterRootId,
     ancestorDeltas: ancestorDeltas(ancestorFacts(selection.parentPath), 1n, chapterCount),
+    subtreeHeightUpdates,
     work: {
       siblings: indexes.siblings.work(),
       preorder: indexes.preorder.work(),
@@ -245,7 +272,6 @@ async function prepareRemove(
     source.chapterCount < 0n ||
     source.chapterCount > source.subtreeSize ||
     source.subtreeHeight < 0 ||
-    selection.sourceAncestors.length + source.subtreeHeight + 1 > HOSTED_DEPTH_LIMIT ||
     (source.kind === 'chapter' &&
       (source.subtreeSize !== 1n || source.subtreeHeight !== 0 || source.chapterCount !== 1n))
   ) {
@@ -311,6 +337,22 @@ async function prepareRemove(
     chapterRootId = chapters.rootId;
   }
 
+  const depthIndexes: HostedVersionDepthIndexes = {
+    siblings: indexes.siblings,
+    preorder: indexes.preorder,
+    siblingRootByParent: selection.siblingRootByParent,
+    preorderRootId: preorder.rootId,
+    readLegacyMaximum: indexes.readLegacyMaximum,
+  };
+  const depthChanges = createHostedVersionDepthChanges();
+  recordHostedVersionDepthChange(depthChanges, source.parentId, source.occurrenceId, null);
+  const subtreeHeightUpdates = await recomputeHostedVersionAncestorHeights(
+    depthIndexes,
+    selection.sourceAncestors,
+    new Map([[source.parentId, siblings.rootId]]),
+    depthChanges,
+  );
+
   return {
     result: 'removed',
     operation: 'remove',
@@ -327,6 +369,7 @@ async function prepareRemove(
     chapterCount: source.chapterCount,
     chapterRootId,
     ancestorDeltas: ancestorDeltas(selection.sourceAncestors, -source.subtreeSize, -source.chapterCount),
+    subtreeHeightUpdates,
     work: {
       siblings: indexes.siblings.work(),
       preorder: indexes.preorder.work(),

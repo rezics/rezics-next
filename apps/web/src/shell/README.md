@@ -47,8 +47,8 @@ existing header tests retain this receiving contract.
 
 ## Phone navigation clearance
 
-`PhoneNavigationClearance` scopes one `--bottom-nav-height` value around the shell and observes only its own phone
-navigation. It uses a 5rem SSR fallback plus the safe-area inset; the measured navigation box includes that inset,
+`PhoneNavigationClearance` scopes one `--bottom-nav-height` value around the shell and observes its own phone
+navigation and header. It uses a 5rem SSR fallback plus the safe-area inset; the measured navigation box includes that inset,
 so fixed selection surfaces use the measured value directly. Resize and phone/desktop transitions update the value
 only when it changes. Unmount disconnects the observer, removes media listeners and clears the inline value. Desktop
 and standalone displays use zero clearance, and standalone hides phone navigation.
@@ -77,3 +77,22 @@ changes preserve the initiating control's focus; a new path focuses the page mai
 Selected source comparison: experiment `7c041ee376` supplied the phone session/return behavior and path-change focus
 behavior. Current Book navigation, Menu dismissal, account controls and unread ownership remain the implementation
 authority. Preparing, signed-out and unavailable phone Create stories supplement the installed application tests.
+
+## Responsive header and shared recovery
+
+Decision: below 1024px, identity and account actions occupy the first header row and search owns the full second
+row. Desktop uses flexible side columns with a bounded action group; translated labels may wrap without consuming
+the search entrance. Unavailable-account text is visible at every width beside the safe sign-in recovery anchor.
+Create in the header and phone tabs uses `ShellCreationMenu`, the existing contribution contract and the same
+Menu focus/dismissal owner. Standalone phone displays retain header account and appearance entrances when tabs are hidden.
+
+The shell measures both header and phone navigation. `--shell-header-height` positions the desktop rail, bounds its
+scrolling area and offsets heading/recovery anchors; the bottom measurement still includes the safe area exactly
+once. Before hydration the header reserves 7.5rem below 1024px and 4rem above it. Loading uses `PageHeading` like
+ready pages. Route recovery stays in the page's content column with shared Empty slots and wrapping actions,
+without imposing a card around route content. The shell does not change private reads, session/exposure admission,
+account internals or navigation destinations. All control copy uses the existing eight-locale messages.
+
+Decision: this source batch adds focused plays to the actual shell stories and runs only the Web workspace typing
+command under the brief's final minimal-verification instruction. Runtime, keyboard, visual, native and broader
+regression execution is deferred to the dev verifier. Existing regression sources remain unchanged.

@@ -180,3 +180,17 @@ the current page admission, matching route, eligible focus intent and connected 
 The original admission, exact Query commit, equal replacements, ABA observation, locale/source/credential retirement
 and uncertain command occurrences retain their existing owners and guards. The capability binding changes none of
 the lifetime proof limits above.
+
+## Public page composition
+
+Decision: put the current Realm identity and description before participation; retain the carrying Space as separate
+context. Public catalogue, Board discussion prefixes and publications share a heading hierarchy and local section
+movement that does not replace the admitted route or its shelf cursors. Management has a separate entry and focus
+boundary; closing it keeps existing controllers mounted under hidden/inert. Selected forms, lifecycle commands and
+all currentness checks retain their native owners.
+
+The source design reads this document, `my-realms-lifetime.md`, the current `realm-home-header.tsx`, `space-page.tsx`,
+`realm-community/boards.tsx`, current-entry types and route stories. Impeccable's `skill/reference/layout.md` and
+`craft-floor.md` informed spacing, grouping and phone reflow; its unavailable local launcher uses the documented
+existing-context fallback. Current source supersedes historical hero captures. This source window defers acceptance,
+browser rendering and captures to the dev verifier; the worker submits only the required Web workspace typecheck.

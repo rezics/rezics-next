@@ -56,6 +56,14 @@ const selected = {
   id: 'appeal',
   decisionId: 'decision',
   appellantId: 'private-account',
+  appellantIdentity: {
+    state: 'available' as const,
+    kind: 'actor' as const,
+    displayName: 'River Chen',
+    handle: 'river',
+    automated: false,
+  },
+  targetContext: { state: 'concealed' as const },
   statement: 'Reconsider.',
   createdAt: '2026-01-01T00:00:00Z',
   canResolve: true,
@@ -162,6 +170,9 @@ test('same-input inspection retries recover keyboard focus and show a resolved s
   await act(async () => finish(page('ready', true)));
   expect(calls).toEqual([search, search]);
   expect(host.textContent).toContain('Reviewed.');
+  expect(host.textContent).toContain('River Chen');
+  expect(host.textContent).toContain('@river');
+  expect(host.textContent).toContain(m.moderation_appeal_context_concealed());
   expect(host.textContent).toContain(m.moderation_appeal_upheld());
   expect(host.textContent).not.toContain('private-account');
   expect(document.activeElement).toBe(host.querySelector('article'));

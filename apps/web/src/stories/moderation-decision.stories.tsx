@@ -86,6 +86,8 @@ export const IllustrativeLongReferences: Story = {
     await expect(view.queryByRole('link', { name: /affected by this decision/i })).toBeNull();
     await expect(view.getByText(longDecisionReason)).toBeVisible();
     await expect(view.getByText(m.decision_appeal_pending())).toBeVisible();
+    const header = canvasElement.querySelector('article[aria-labelledby="decision-heading"] > header')!;
+    await expect(header.querySelector('time[datetime="2027-04-02T09:30:00.000Z"]')).toBeVisible();
     const reference = view.getByText(m.reporter_status_reference(), { exact: true });
     await userEvent.click(reference);
     await expect(view.getByText(longReferencePage.decision.id, { exact: true })).toBeVisible();

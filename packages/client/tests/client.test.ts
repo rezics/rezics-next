@@ -232,6 +232,38 @@ test("a create sends its idempotency key and JSON body, as the kernel's route ty
   expect(typeof typed).toBe('function');
 });
 
+test('hosted publication preparation exposes all mounted commands with typed operands', () => {
+  const typed = async (client: KernelClient) => {
+    const book = client.hostedCatalogues({ id: ID });
+    const stage = book.publicationPreparations({ stageId: ID });
+    const options = { headers: { 'idempotency-key': '"prepare-1"' } };
+
+    await book.$prepareRelease.post(
+      {
+        stageId: ID,
+        expectedRevisionId: ID,
+        expectedPublicationId: null,
+        mode: 'whole',
+      },
+      options,
+    );
+    await stage.$appendSelectionBatch.post({ batchId: ID, occurrenceIds: [ID] }, options);
+    await stage.$freezeSelection.post({}, options);
+    await stage.$advance.post({ stepId: ID }, options);
+    await stage.$progress.post({}, options);
+    await stage.$cancel.post({}, options);
+    await stage.$seal.post({}, options);
+
+    // @ts-expect-error start requires the expected source and publication heads
+    await book.$prepareRelease.post({ stageId: ID, mode: 'whole' }, options);
+    // @ts-expect-error selection batches require an array of occurrence IDs
+    await stage.$appendSelectionBatch.post({ batchId: ID, occurrenceIds: [1] }, options);
+    // @ts-expect-error advance requires a step ID
+    await stage.$advance.post({}, options);
+  };
+  expect(typeof typed).toBe('function');
+});
+
 test('the derived subjects group keeps native counts and routes contributed by other modules', async () => {
   const { sent, fetch } = kernel([
     () => json(200, { content: null }, { [SESSION_HEADER]: 'count-read' }),

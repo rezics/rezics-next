@@ -2,6 +2,7 @@ import type { Actor } from '../request/access.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
+  preflightCommandReceipt,
   runCommand,
   type CommandAuthorization,
 } from '../command/command.ts';
@@ -71,18 +72,24 @@ export async function updateHostedDraftPoint(
       return evidence;
     },
   };
+  const commandOptions = {
+    ...principalCommandIdentity(actor),
+    partition: partitionOf(route),
+    deadline: context.deadline,
+    clock: deps.clock,
+    receipt,
+  };
+  const replay = await preflightCommandReceipt<HostedCommandValue>(deps.pool, {
+    ...commandOptions,
+    authorization: base,
+  });
+  if (replay) return replay;
+
   const revisionId = newId(route);
 
   return runCommand<HostedCommandValue>(
     deps.pool,
-    {
-      ...principalCommandIdentity(actor),
-      partition: partitionOf(route),
-      deadline: context.deadline,
-      clock: deps.clock,
-      receipt,
-      authorization,
-    },
+    { ...commandOptions, authorization },
     async (tx, { transactionId, time }) => {
       await commitHostedVersionDraftUpdate(tx, catalogueId, {
         revisionId,

@@ -179,3 +179,40 @@ export const BoardsUnavailable: Story = {
   },
   render: () => <PageStory visitor="Signed Out" path="/spaces/atlas-boards-unavailable" />,
 };
+
+/** Current composed Home, through the actual Space loader and installed client declaration. */
+export const CurrentRealmHome: Story = {
+  name: 'Current Realm Space · populated public shelves',
+  render: () => <PageStory visitor="Signed Out" path="/spaces/readers-realm" />,
+  play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
+    const main = within(canvasElement).getByRole('main');
+    const view = within(main);
+    await expect(await view.findByRole('heading', { level: 1, name: 'The Evening Reading Room' })).toBeVisible();
+    await expect(view.getByRole('heading', { level: 2, name: 'Readers Across Languages' })).toBeVisible();
+    await expect(view.getByRole('link', { name: 'Which translation stayed with you?' })).toBeVisible();
+    await expect(view.getByRole('heading', { name: m.realm_published_heading() })).toBeVisible();
+    const sections = within(view.getByRole('navigation', { name: m.community_page_navigation() }));
+    const address = location.href;
+    await userEvent.click(sections.getByRole('button', { name: m.realm_boards_heading() }));
+    await expect(view.getByRole('heading', { name: m.realm_boards_heading() })).toHaveFocus();
+    await expect(location.href).toBe(address);
+    await expect(view.queryByRole('button', { name: m.community_manage() })).toBeNull();
+    await expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth + 1);
+  },
+};
+
+/** A Global Space without a Realm keeps its own identity and never borrows Realm shelves. */
+export const GlobalSpace: Story = {
+  name: 'Global Space · no Realm carrier',
+  render: () => <PageStory visitor="Signed Out" path="/spaces/readers-global" />,
+  play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
+    const view = within(within(canvasElement).getByRole('main'));
+    await expect(await view.findByRole('heading', { level: 1, name: 'The Open Reading Space' })).toBeVisible();
+    await expect(view.getByText(/This Space has no Realm catalogue/)).toBeVisible();
+    await expect(view.queryByRole('heading', { name: m.realm_boards_heading() })).toBeNull();
+    await expect(view.queryByRole('heading', { name: m.realm_published_heading() })).toBeNull();
+    await expect(view.queryByRole('navigation', { name: m.community_page_navigation() })).toBeNull();
+  },
+};

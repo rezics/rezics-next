@@ -354,7 +354,9 @@ export function createHostedBookNative(
             ? await resource.$insertDraftPoint.post(input.body, commandOptions(signal, idempotencyKey))
             : input.kind === 'update'
               ? await resource.$updateDraftPoint.post(input.body, commandOptions(signal, idempotencyKey))
-              : await resource.$removeDraftPoint.post(input.body, commandOptions(signal, idempotencyKey));
+              : input.kind === 'move'
+                ? await resource.$moveDraftPoint.post(input.body, commandOptions(signal, idempotencyKey))
+                : await resource.$removeDraftPoint.post(input.body, commandOptions(signal, idempotencyKey));
         if (response.error || response.status !== 200) return failure(response.status, true);
         const receipt = v.safeParse(hostedCommand, response.data);
         if (!receipt.success || receipt.output.catalogueId !== catalogueId) return uncertain();

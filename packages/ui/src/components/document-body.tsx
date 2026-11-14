@@ -1,6 +1,16 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
 import { type DocumentNode, type DocumentSnapshot } from '@rezics/document';
-import { createContext, createElement, useContext, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import {
+  createContext,
+  createElement,
+  useContext,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
 import { documentExtensions } from './document-extensions.ts';
@@ -46,6 +56,9 @@ function semanticSnapshotJson(value: unknown): string {
 
 export const documentBodyLabels = {
   revealSpoiler: 'Reveal spoiler',
+  goToFootnote: 'Go to footnote',
+  footnote: 'Footnote',
+  footnotes: 'Footnotes',
   taskStatus: 'Task status',
   embeddedComponent: 'Embedded component',
   imageUnavailable: 'Image unavailable',
@@ -53,6 +66,9 @@ export const documentBodyLabels = {
 
 export type DocumentBodyLabels = {
   readonly revealSpoiler: string;
+  readonly goToFootnote?: string;
+  readonly footnote?: string;
+  readonly footnotes?: string;
   readonly taskStatus?: string;
   readonly embeddedComponent?: string;
   readonly imageUnavailable?: string;
@@ -62,13 +78,40 @@ export type DocumentMentions = Readonly<Record<string, { handle: string }>>;
 
 type DocumentRenderValue = {
   labels: DocumentBodyLabels;
-  visitId: number;
   revealed: ReadonlySet<number>;
+  footnoteTargets: ReadonlyMap<string, string>;
   reveal: (index: number) => void;
   spoilerIndex: (node: object) => number;
 };
 
 const DocumentRenderContext = createContext<DocumentRenderValue | null>(null);
+
+/** Index definitions and visible references once; footnote bodies are rendered only on disclosure. */
+function indexDocumentFootnotes(document: DocumentSnapshot) {
+  const definitions = new Map<string, { document: DocumentSnapshot; definition: DocumentNode }>();
+  const references = new Set<string>();
+  const visit = (node: DocumentNode) => {
+    if (node.type === 'footnoteReference') {
+      references.add(String(node.attrs?.label));
+      return;
+    }
+    for (const child of node.content ?? []) visit(child);
+  };
+  for (const node of document.doc.content ?? []) {
+    if (node.type === 'footnoteDefinition') {
+      const label = String(node.attrs?.label);
+      definitions.set(label, {
+        definition: node,
+        document: {
+          version: document.version,
+          profile: document.profile,
+          doc: { type: 'doc', content: node.content ?? [] },
+        },
+      });
+    } else visit(node);
+  }
+  return new Map([...definitions].filter(([label]) => references.has(label)));
+}
 
 /** Stable mark component; visit-scoped revealed indices restore after a parent re-render remounts. */
 function SpoilerMark({ children, node }: { children?: ReactNode; node: object }) {
@@ -83,6 +126,19 @@ function SpoilerMark({ children, node }: { children?: ReactNode; node: object })
     >
       {children}
     </DocumentSpoiler>
+  );
+}
+
+/** Local references navigate to one shared disclosure per supplied definition. */
+function FootnoteReference({ node }: { node: { attrs?: Record<string, unknown> } }) {
+  const render = useContext(DocumentRenderContext);
+  const label = String(node.attrs?.label ?? '');
+  const target = render?.footnoteTargets.get(label);
+  if (!render || !target) return <>[{label}]</>;
+  return (
+    <a href={`#${target}`} aria-label={`${render.labels.goToFootnote ?? 'Go to footnote'} ${label}`}>
+      <sup>{label}</sup>
+    </a>
   );
 }
 
@@ -147,17 +203,25 @@ export function DocumentBody({
   const anchored = !!headingAttributes;
   const cachedSemantic = useMemo(() => (anchored ? semanticSnapshotJson(document) : null), [document, anchored]);
   const semanticSnapshot = cachedSemantic ?? semanticSnapshotJson(document);
+  const footnotes = useMemo(() => indexDocumentFootnotes(document), [document]);
+  const readerId = useId();
+  const footnoteTargets = useMemo(
+    () =>
+      new Map([...footnotes.keys()].map((label, index) => [label, `document-footnote-${readerId}-${index}`] as const)),
+    [footnotes, readerId],
+  );
   const [visit, setVisit] = useState(() => ({ semanticSnapshot, visitKey, id: 0 }));
-  const concealment = useRef({ id: 0, revealed: new Set<number>() });
+  const [, setFootnoteRevision] = useState(false);
+  const concealment = useRef({ id: 0, revealed: new Set<number>(), revealedFootnotes: new Set<string>() });
   if (visit.semanticSnapshot !== semanticSnapshot || visit.visitKey !== visitKey) {
     // Restart this render before its children commit so replacement text cannot paint revealed.
     const id = visit.id + 1;
-    concealment.current = { id, revealed: new Set() };
+    concealment.current = { id, revealed: new Set(), revealedFootnotes: new Set() };
     setVisit({ semanticSnapshot, visitKey, id });
     return null;
   }
   if (concealment.current.id !== visit.id) {
-    concealment.current = { id: visit.id, revealed: new Set() };
+    concealment.current = { id: visit.id, revealed: new Set(), revealedFootnotes: new Set() };
   }
 
   const visitId = visit.id;
@@ -166,13 +230,21 @@ export function DocumentBody({
     concealment.current.revealed.add(index);
     onDisclosureChange?.(new Set(concealment.current.revealed));
   };
+  const toggleFootnote = (label: string, expanded: boolean) => {
+    if (concealment.current.id !== visitId) return;
+    const currentlyExpanded = concealment.current.revealedFootnotes.has(label);
+    if (currentlyExpanded === expanded) return;
+    if (expanded) concealment.current.revealedFootnotes.add(label);
+    else concealment.current.revealedFootnotes.delete(label);
+    setFootnoteRevision((revision) => !revision);
+  };
   let spoilerIndex = 0;
   const spoilerPositions = new WeakMap<object, number>();
   const resolved = { ...documentBodyLabels, ...labels };
   const renderValue: DocumentRenderValue = {
     labels: resolved,
-    visitId,
     revealed: concealment.current.revealed,
+    footnoteTargets,
     reveal,
     spoilerIndex: (node) => {
       const known = spoilerPositions.get(node);
@@ -188,9 +260,14 @@ export function DocumentBody({
   const tableOccurrences = new WeakMap<object, number>();
   let codeBlockOccurrence = 0;
   let tableOccurrence = 0;
-  const content = renderToReactElement({
+  const visibleBlocks = (document.doc.content ?? []).filter((node) => node.type !== 'footnoteDefinition');
+  const hasVisibleBlocks = visibleBlocks.length > 0;
+  const renderedContent = renderToReactElement({
     extensions: documentExtensions,
-    content: document.doc,
+    content: {
+      type: 'doc',
+      content: hasVisibleBlocks ? visibleBlocks : [{ type: 'paragraph' }],
+    },
     options: {
       nodeMapping: {
         // Without the optional port, the installed extension retains its exact default markup.
@@ -226,6 +303,7 @@ export function DocumentBody({
             <>@</>
           );
         },
+        footnoteReference: ({ node }: any) => <FootnoteReference node={node} />,
         horizontalRule: ({ node }: any) => <hr {...authoredBlockAttributes(node)} />,
         image: ({ node }: any) => {
           const id = typeof node.attrs?.src === 'string' ? node.attrs.src : '';
@@ -315,6 +393,7 @@ export function DocumentBody({
       },
       markMapping: {
         link: ({ mark, children, node }: any) => {
+          if (node.type.name === 'footnoteReference') return <>{children}</>;
           const occurrence = linkOccurrence++;
           if (node.type.name === 'mention') return <>{children}</>;
           const href = safeDocumentUrl(mark.attrs?.href);
@@ -335,10 +414,48 @@ export function DocumentBody({
       },
     },
   });
+  const content = hasVisibleBlocks ? renderedContent : null;
   return (
     <DocumentRenderContext.Provider value={renderValue}>
       <Prose className={className} data-slot="document-body">
         {content}
+        {footnotes.size ? (
+          <section
+            className="mt-4 border-t pt-3"
+            data-slot="document-footnotes"
+            aria-label={resolved.footnotes ?? 'Footnotes'}
+          >
+            <ol className="list-decimal space-y-2 pl-5">
+              {[...footnotes].map(([label, footnote]) => {
+                const target = footnoteTargets.get(label)!;
+                const expanded = concealment.current.revealedFootnotes.has(label);
+                return (
+                  <li key={label}>
+                    <details open={expanded} onToggle={(event) => toggleFootnote(label, event.currentTarget.open)}>
+                      <summary id={target} className="cursor-pointer">
+                        {resolved.footnote ?? 'Footnote'} {label}
+                      </summary>
+                      {expanded ? (
+                        <div className="mt-2" {...authoredBlockAttributes(footnote.definition)}>
+                          <DocumentBody
+                            document={footnote.document}
+                            labels={labels}
+                            mentions={mentions}
+                            locale={locale}
+                            visitKey={JSON.stringify([visitId, visitKey, 'footnote', label])}
+                            renderImage={renderImage}
+                            renderCodeBlock={renderCodeBlock}
+                            renderTable={renderTable}
+                          />
+                        </div>
+                      ) : null}
+                    </details>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        ) : null}
       </Prose>
     </DocumentRenderContext.Provider>
   );

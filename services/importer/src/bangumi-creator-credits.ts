@@ -125,6 +125,23 @@ function nativeType(read: { subject?: { type?: string } } | null | undefined): s
   return typeof type === 'string' && type.length > 0 ? type : undefined;
 }
 
+type CurrentIdentitySubject = {
+  statements?: Record<string, readonly { rank?: unknown; value?: { type?: unknown; content?: unknown } }[]>;
+};
+
+function hasCurrentIdentity(subject: CurrentIdentitySubject | undefined, property: string, content: string): boolean {
+  const statements = subject?.statements?.[property];
+  return (
+    Array.isArray(statements) &&
+    statements.some(
+      (statement) =>
+        (statement.rank === 'normal' || statement.rank === 'preferred') &&
+        statement.value?.type === 'value' &&
+        statement.value.content === content,
+    )
+  );
+}
+
 export function buildBangumiCreatorCreditRows(input: {
   drafts: readonly BangumiCreatorCreditDraft[];
   identities: Readonly<Record<string, NativeIdentity | undefined>>;
@@ -286,11 +303,7 @@ export async function deliverBangumiCreatorCredits(input: {
       const hasIdentity =
         organizationTupleIdentity ||
         bookSeriesTupleIdentity ||
-        (identityProperty !== undefined &&
-          (subject?.statements?.[identityProperty]?.some(
-            (statement) => statement.value?.type === 'value' && statement.value.content === sourceId,
-          ) ??
-            false));
+        (identityProperty !== undefined && hasCurrentIdentity(subject, identityProperty, sourceId));
       if (!type || subject?.id !== claim.subject || type !== expectedType || !hasIdentity) continue;
       const identity = { id: claim.subject, type, releaseDigest: bundledDigest };
       resolved[key] = identity;

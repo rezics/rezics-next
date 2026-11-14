@@ -432,10 +432,58 @@ export function publicStatements(read: ReviewedSubjectRead, property: string): r
   return subject?.statements?.[property] ?? [];
 }
 
+function isCurrentPublicValueStatement(value: unknown, property: string): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as {
+    rank?: unknown;
+    property?: { id?: unknown };
+    value?: { type?: unknown; content?: unknown };
+  };
+  return (
+    (row.rank === 'normal' || row.rank === 'preferred') && row.property?.id === property && row.value?.type === 'value'
+  );
+}
+
+export function publicValueStatementCurrent(value: unknown, property: string): boolean {
+  return isCurrentPublicValueStatement(value, property);
+}
+
+/** Current dependency evidence is an exact native value row at normal or preferred rank. */
+export function publicValueStatementMatches(value: unknown, property: string, expected: unknown): boolean {
+  if (!publicValueStatementCurrent(value, property)) return false;
+  return (value as { value: { content?: unknown } }).value.content === expected;
+}
+
 export function publicHasValue(read: ReviewedSubjectRead, property: string, expected: unknown): boolean {
-  return publicStatements(read, property).some((entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
-    const value = (entry as { value?: { content?: unknown } }).value;
-    return showcaseDigest(value?.content) === showcaseDigest(expected);
+  return publicStatements(read, property).some((entry) => publicValueStatementMatches(entry, property, expected));
+}
+
+function statementCites(value: unknown, uri: string): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const references = (value as { references?: unknown }).references;
+  if (!Array.isArray(references)) return false;
+  return references.some((reference) => {
+    if (!reference || typeof reference !== 'object' || Array.isArray(reference)) return false;
+    const parts = (reference as { parts?: unknown }).parts;
+    return (
+      Array.isArray(parts) &&
+      parts.some((part) => {
+        if (!part || typeof part !== 'object' || Array.isArray(part)) return false;
+        const row = part as { property?: { id?: unknown }; value?: { type?: unknown; content?: unknown } };
+        return row.property?.id === 'schema:url' && row.value?.type === 'value' && row.value.content === uri;
+      })
+    );
   });
+}
+
+/** A citation is current only when it belongs to a current native value statement. */
+export function publicHasCitation(read: ReviewedSubjectRead, uri: string): boolean {
+  const subject = read.subject as { statements?: Record<string, unknown[]> } | undefined;
+  return Object.entries(subject?.statements ?? {}).some(
+    ([property, rows]) => Array.isArray(rows) && rows.some((row) => publicValueStatementCites(row, property, uri)),
+  );
+}
+
+export function publicValueStatementCites(value: unknown, property: string, uri: string): boolean {
+  return publicValueStatementCurrent(value, property) && statementCites(value, uri);
 }

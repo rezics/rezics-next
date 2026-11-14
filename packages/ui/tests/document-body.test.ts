@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import { DocumentBody } from '../src/components/document-body.tsx';
+import { DocumentBody } from '@rezics/ui/document-body';
 
 const root = join(import.meta.dir, '..');
 const stories = 'src/components/document-body.stories.tsx';
@@ -56,6 +56,33 @@ const snapshot = (content: DocumentSnapshot['doc']['content']): DocumentSnapshot
   version: 'rezics-document-v1',
   profile: 'blocks',
   doc: { type: 'doc', content },
+});
+
+test('DocumentBody links references to an accessible, initially closed footnote disclosure', () => {
+  const document = snapshot([
+    {
+      type: 'paragraph',
+      attrs: { id: 'body' },
+      content: [
+        { type: 'text', text: 'Read this ' },
+        { type: 'footnoteReference', attrs: { label: 'source' } },
+      ],
+    },
+    {
+      type: 'footnoteDefinition',
+      attrs: { id: 'definition', label: 'source' },
+      content: [{ type: 'paragraph', attrs: { id: 'note' }, content: [{ type: 'text', text: 'Supplied source' }] }],
+    },
+  ]);
+  const html = renderToStaticMarkup(createElement(DocumentBody, { document }));
+
+  expect(html).toContain('aria-label="Go to footnote source"');
+  expect(html).toContain('href="#document-footnote-');
+  expect(html).toContain('data-slot="document-footnotes" aria-label="Footnotes"');
+  expect(html).toContain('<summary id="document-footnote-');
+  expect(html).toContain('class="cursor-pointer">Footnote source</summary>');
+  expect(html).not.toContain('Supplied source');
+  expect(html).not.toContain('data-footnote-definition');
 });
 
 test('DocumentBody preserves common attributes through default output and defaultContent callbacks', () => {

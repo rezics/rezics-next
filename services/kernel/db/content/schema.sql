@@ -50,12 +50,13 @@ BEGIN
          JOIN content.hosted_version_release_candidate candidate
            USING (route,catalogue_id,stage_id)
          WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
-           AND cleanup.generation_id=OLD.generation_id AND cleanup.terminal_status='expired'
+           AND cleanup.generation_id=OLD.generation_id AND cleanup.terminal_status IN ('expired','cancelled')
            AND cleanup.phase='nodes' AND NOT cleanup.cleanup_active AND cleanup.completed_at IS NULL
            AND cleanup.owner_epoch=stage.owner_epoch AND cleanup.owner_epoch=candidate.owner_epoch
            AND stage.initiator_account_id=candidate.initiator_account_id
            AND stage.mode=candidate.mode AND stage.mode IN ('whole','selection')
-           AND stage.status='expired' AND stage.sealed_at IS NOT NULL
+           AND stage.status=cleanup.terminal_status AND stage.sealed_at IS NOT NULL
+           AND (stage.status='expired' OR stage.expires_at<=clock_timestamp())
            AND stage.source_revision_id=stage.expected_head_revision_id
            AND stage.source_revision_id=candidate.source_revision_id
            AND stage.expected_head_revision_id=candidate.expected_head_revision_id
@@ -338,11 +339,12 @@ BEGIN
           USING (route,catalogue_id,stage_id)
         WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
           AND cleanup.stage_id=OLD.stage_id AND cleanup.generation_id=OLD.generation_id
-          AND cleanup.owner_epoch=OLD.owner_epoch AND cleanup.terminal_status='expired'
+          AND cleanup.owner_epoch=OLD.owner_epoch AND cleanup.terminal_status IN ('expired','cancelled')
           AND cleanup.phase='nodes' AND NOT cleanup.cleanup_active AND cleanup.completed_at IS NULL
           AND stage.initiator_account_id=OLD.initiator_account_id
           AND stage.owner_epoch=OLD.owner_epoch AND stage.mode=OLD.mode
-          AND stage.status='expired' AND stage.sealed_at IS NOT NULL
+          AND stage.status=cleanup.terminal_status AND stage.sealed_at IS NOT NULL
+          AND (stage.status='expired' OR stage.expires_at<=clock_timestamp())
           AND stage.source_revision_id=stage.expected_head_revision_id
           AND stage.source_revision_id=OLD.source_revision_id
           AND stage.expected_head_revision_id=OLD.expected_head_revision_id
@@ -353,7 +355,7 @@ BEGIN
           AND stage.sealed_at=seal.sealed_at AND OLD.source_sealed_at=seal.sealed_at
           AND (stage.mode='whole' OR stage.input_frozen_version=stage.input_version)
       ) THEN
-        RAISE EXCEPTION 'Hosted release candidate retirement requires its expired source claim' USING ERRCODE='23514';
+        RAISE EXCEPTION 'Hosted release candidate retirement requires its terminal source claim' USING ERRCODE='23514';
       END IF;
       RETURN NEW;
     END IF;
@@ -367,7 +369,7 @@ BEGIN
         FROM content.hosted_version_candidate_cleanup cleanup
         WHERE cleanup.route=OLD.route AND cleanup.catalogue_id=OLD.catalogue_id
           AND cleanup.stage_id=OLD.stage_id AND cleanup.owner_epoch=OLD.owner_epoch
-          AND cleanup.terminal_status='expired' AND cleanup.phase='generation'
+          AND cleanup.terminal_status IN ('expired','cancelled') AND cleanup.phase='generation'
           AND cleanup.cleanup_active AND cleanup.completed_at IS NULL
           AND authority=format('%s:%s:%s:%s',cleanup.route,cleanup.catalogue_id,
                                cleanup.stage_id,cleanup.generation_id);
@@ -1190,6 +1192,24 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
+$$;
+
+
+--
+-- Name: hosted_occurrence_subtree_height(jsonb); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.hosted_occurrence_subtree_height(encoded jsonb) RETURNS smallint
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$
+  SELECT (
+    SELECT (field.value->1->>'value')::smallint
+    FROM jsonb_array_elements(
+      CASE WHEN encoded->>'kind'='object' THEN encoded->'value' ELSE '[]'::jsonb END
+    ) AS field(value)
+    WHERE field.value->>0 = 'subtreeHeight'
+    LIMIT 1
+  )
 $$;
 
 
@@ -2183,6 +2203,8 @@ CREATE TABLE content.hosted_occurrence_state_version (
     subtree_size bigint NOT NULL,
     occurrence_state jsonb,
     is_deleted boolean NOT NULL,
+    subtree_height smallint,
+    CONSTRAINT hosted_occurrence_state_depth_bounds CHECK (((subtree_height IS NULL) OR ((subtree_height >= 0) AND (subtree_height <= 16)))),
     CONSTRAINT hosted_occurrence_state_version_check CHECK (((is_deleted AND (occurrence_state IS NULL) AND (parent_occurrence_id IS NULL) AND (subtree_size = 0)) OR ((NOT is_deleted) AND (occurrence_state IS NOT NULL) AND (subtree_size > 0)))),
     CONSTRAINT hosted_occurrence_state_version_check1 CHECK ((route = ((get_byte(uuid_send(occurrence_id), 10) * 256) + get_byte(uuid_send(occurrence_id), 11)))),
     CONSTRAINT hosted_occurrence_state_version_check2 CHECK (((parent_occurrence_id IS NULL) OR (route = ((get_byte(uuid_send(parent_occurrence_id), 10) * 256) + get_byte(uuid_send(parent_occurrence_id), 11))))),
@@ -2205,6 +2227,12 @@ CREATE TABLE content.hosted_order_node_version (
     tree_parent_id uuid,
     node_state jsonb,
     is_deleted boolean NOT NULL,
+    subtree_height smallint,
+    maximum_subtree_height smallint,
+    maximum_subtree_occurrence_id uuid,
+    CONSTRAINT hosted_order_node_depth_bounds CHECK (((subtree_height IS NULL) OR ((subtree_height >= 0) AND (subtree_height <= 16)))),
+    CONSTRAINT hosted_order_node_max_depth_bounds CHECK (((maximum_subtree_height IS NULL) OR ((maximum_subtree_height >= 0) AND (maximum_subtree_height <= 16)))),
+    CONSTRAINT hosted_order_node_max_depth_pair CHECK ((((maximum_subtree_height IS NULL) AND (maximum_subtree_occurrence_id IS NULL)) OR ((maximum_subtree_height IS NOT NULL) AND (maximum_subtree_occurrence_id IS NOT NULL)))),
     CONSTRAINT hosted_order_node_version_check CHECK (((is_deleted AND (node_state IS NULL)) OR ((NOT is_deleted) AND (node_state IS NOT NULL)))),
     CONSTRAINT hosted_order_node_version_check1 CHECK ((route = ((get_byte(uuid_send(node_id), 10) * 256) + get_byte(uuid_send(node_id), 11)))),
     CONSTRAINT hosted_order_node_version_check2 CHECK (((tree_parent_id IS NULL) OR (route = ((get_byte(uuid_send(tree_parent_id), 10) * 256) + get_byte(uuid_send(tree_parent_id), 11))))),
@@ -2677,9 +2705,11 @@ CREATE TABLE content.hosted_publication_staging_step (
     processed integer NOT NULL,
     result_state text NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    result_preparation jsonb,
     CONSTRAINT hosted_publication_staging_step_check CHECK ((route = ((get_byte(uuid_send(step_id), 10) * 256) + get_byte(uuid_send(step_id), 11)))),
     CONSTRAINT hosted_publication_staging_step_created_at_check CHECK (isfinite(created_at)),
-    CONSTRAINT hosted_publication_staging_step_phase_check CHECK ((phase = ANY (ARRAY['whole'::text, 'selection'::text, 'closure'::text]))),
+    CONSTRAINT hosted_publication_staging_step_phase_check CHECK ((phase = ANY (ARRAY['whole'::text, 'selection'::text, 'closure'::text, 'candidate_begin'::text, 'candidate_page'::text, 'exhausted'::text, 'terminal'::text]))),
+    CONSTRAINT hosted_publication_staging_step_preparation_check CHECK (((result_preparation IS NULL) OR ((jsonb_typeof(result_preparation) = 'object'::text) AND (octet_length((result_preparation)::text) <= 8192) AND ((result_preparation ->> 'catalogueId'::text) = (catalogue_id)::text) AND ((result_preparation ->> 'stageId'::text) = (stage_id)::text)))),
     CONSTRAINT hosted_publication_staging_step_processed_check CHECK (((processed >= 0) AND (processed <= 20))),
     CONSTRAINT hosted_publication_staging_step_result_state_check CHECK ((result_state = ANY (ARRAY['more'::text, 'ready'::text, 'failed'::text])))
 );
@@ -2990,7 +3020,7 @@ CREATE TABLE content.hosted_version_candidate_cleanup (
     CONSTRAINT hosted_version_candidate_cleanup_deleted_row_count_check CHECK ((deleted_row_count >= 0)),
     CONSTRAINT hosted_version_candidate_cleanup_owner_epoch_check CHECK ((owner_epoch >= 0)),
     CONSTRAINT hosted_version_candidate_cleanup_phase_check CHECK ((phase = ANY (ARRAY['nodes'::text, 'occurrences'::text, 'sibling_roots'::text, 'snapshots'::text, 'generation'::text, 'done'::text]))),
-    CONSTRAINT hosted_version_candidate_cleanup_terminal_status_check CHECK ((terminal_status = 'expired'::text))
+    CONSTRAINT hosted_version_candidate_cleanup_terminal_status_check CHECK ((terminal_status = ANY (ARRAY['expired'::text, 'cancelled'::text])))
 );
 
 
@@ -6741,6 +6771,13 @@ CREATE INDEX hosted_migration_input_owner_idx ON content.hosted_migration_input 
 --
 
 CREATE INDEX hosted_migration_input_reference_source_idx ON content.hosted_migration_input_reference USING btree (route, catalogue_id, source_revision_id, input_id);
+
+
+--
+-- Name: hosted_occurrence_child_depth_asof; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX hosted_occurrence_child_depth_asof ON content.hosted_occurrence_state_version USING btree (route, catalogue_id, generation_id, parent_occurrence_id, COALESCE(subtree_height, content.hosted_occurrence_subtree_height(occurrence_state)) DESC, occurrence_id, sequence DESC) WHERE ((NOT is_deleted) AND (COALESCE(subtree_height, content.hosted_occurrence_subtree_height(occurrence_state)) IS NOT NULL));
 
 
 --

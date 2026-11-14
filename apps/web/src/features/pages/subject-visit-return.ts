@@ -17,9 +17,9 @@ import {
   gameClassificationReturnLimit,
 } from '../catalogue/game-current-visit-descriptor';
 import type { WorkFranchiseReturn } from './semantic-render-port';
+import { parseGraphPublicVisit, subjectDestination, subjectReturnPathAllowed } from './graph-browser/public-address';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const subjectDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+(?:/([^/?#]+))?$`);
 const musicContextDestination = new RegExp(
   `^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+/music-context$`,
 );
@@ -757,17 +757,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
   const catalogueReturn = realmCatalogueReturnHref(value, locale);
   if (catalogueReturn) return catalogueReturn;
   if (!value.startsWith('/') || value.startsWith('//')) return;
-  const rawPath = value.split(/[?#]/u, 1)[0] ?? '';
-  if (/%(?:2f|5c)/iu.test(rawPath)) return;
+  if (!subjectReturnPathAllowed(value)) return;
   try {
-    const decodedPath = decodeURIComponent(rawPath);
-    if (
-      decodedPath.includes('\\') ||
-      /[\u0000-\u001f\u007f]/u.test(decodedPath) ||
-      decodedPath.split('/').some((segment) => segment === '.' || segment === '..') ||
-      /%(?:25|2e|2f|5c|0[0-9a-f]|1[0-9a-f]|7f)/iu.test(decodedPath)
-    )
-      return;
     const url = new URL(value, 'https://rezics.invalid');
     const characterSearch = characterPersonSearchReturn(url, locale);
     if (url.origin === 'https://rezics.invalid' && characterSearch) return characterSearch;
@@ -788,6 +779,16 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const collection = collectionReturn(url, locale);
     if (collection) return collection;
     const quotation = subjectDestination.exec(url.pathname);
+    if (quotation?.[2] === 'graph') {
+      if (
+        url.origin !== 'https://rezics.invalid' ||
+        (locale !== undefined && quotation[1] !== locale) ||
+        parseGraphPublicVisit(url.search, url.hash, url.pathname.split('/')[3]!, quotation[1]!, url.pathname)?.kind ===
+          'invalid'
+      )
+        return;
+      return `${url.pathname}${url.search}`;
+    }
     if (quotation?.[2] === 'quotations') {
       const keys = [...url.searchParams.keys()];
       const quote = url.searchParams.get('quote');
@@ -1047,6 +1048,14 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
   return subjectVisitReturnAt(value, locale, false);
 }
 
+/** The graph sender's returnTo operand is admitted only as its closed bounded public address. */
+export function subjectGraphVisitReturn(value: unknown, locale?: string): string | undefined {
+  const accepted = subjectVisitReturn(value, locale);
+  if (!accepted) return;
+  const url = new URL(accepted, 'https://rezics.invalid');
+  return subjectDestination.exec(url.pathname)?.[2] === 'graph' ? accepted : undefined;
+}
+
 /** A thread-entry return may target only a real mounted community region on an admitted Subject route. */
 export function subjectCommunityVisitReturn(value: unknown, locale?: string): string | undefined {
   const reading = realmReadingReturn(value, locale);
@@ -1061,7 +1070,13 @@ export function subjectRouteSearchLimit(search: string, cursor?: string): number
   const parameters = new URLSearchParams(search);
   const via = parameters.get('via');
   const recipeReturn = parameters.getAll('recipeReturn');
-  const acceptedVia = via && via.length <= returnAddressCap ? subjectVisitReturn(via) : undefined;
+  const acceptedVia = parameters.has('via')
+    ? via && via.length <= returnAddressCap
+      ? subjectVisitReturn(via)
+      : undefined
+    : parameters.getAll('returnTo').length === 1
+      ? subjectGraphVisitReturn(parameters.get('returnTo'))
+      : undefined;
   try {
     const currentCursor = cursor && cursor.length <= 8192 ? encodeURIComponent(cursor).length : 0;
     const recipeReturnBudget = recipeReturn.length === 1 && recipeReturn[0]!.length <= 8192 ? 8192 : 0;

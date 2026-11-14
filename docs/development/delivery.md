@@ -70,12 +70,19 @@ than assumed. Check:
 - declared risk areas cover the paths;
 - the target is recorded in parsed metadata;
 - dependencies are real code dependencies;
-- overlap is not encoded as a dependency; use `after:` only when code needs another task's API, schema or component;
+- Use `after` with `afterSource` only for an indispensable unlanded implementation, and link its existing Goal
+  contract;
 - a requirement that refuses, rejects, stops or fails work carries its price line ([agent conduct](agent-conduct.md#briefs)).
 
+Prepare the next briefs while workers write. A held outcome's brief names the outcome, first writable boundary, what is
+missing, its owner and the observable release condition, and identifies which part actually needs that condition.
+When an installed or adopted contract supports independent work, dispatch that coherent slice now and defer only the
+dependent binding, activation or check. Shared files, review and test scheduling are not source dependencies. Make
+and record reversible assumptions when justified; preserve authorization, money, data integrity and present
+acceptance obligations. Do not represent a temporary adapter or mock as installed behavior.
+
 Declared paths never hold a task. Overlapping tasks run side by side; the controller's rebase process resolves
-conflicts with agent assistance. Shared READMEs, fake data, messages, `package.json` and routes are not dependencies
-merely because multiple tasks edit them. See [integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing).
+conflicts with agent assistance. See [integration mechanics](../../tools/goal/README.md#integration-promotion-culprit-isolation-and-attempt-fencing).
 
 Prefer the oldest ready dependency. Do not restart a live attempt for an unchanged contract. Check actual task state
 immediately before changing it.
@@ -148,18 +155,21 @@ state, owner links, blockers and next actions. Resume only when authorized.
 
 # Delivery ownership
 
-The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns delivery to resident managers
-and implementation to workers. The manager owns a continuously workable queue: prioritize outcomes, assign each
-ready worker a clear next result and write boundary, change assignments or width as work and capacity change,
-and replace stalled or spent work promptly. Managers own [starts through first source](../../tools/goal/prompts/manager.md):
-dispatch through Goal, verify the current worker and its first source checkpoint, and resolve or replace a failed
-start. The controller executes admission, retries and landings; it does not replace the manager's scheduling judgment.
+Each manager independently finds runnable release work from actual source gaps, owner contracts and worker proposals.
+Size complete writable outcomes and refill eligible capacity before workers exit or park. Keep a ready queue, verify
+actual process starts and first-source checkpoints, and continue dispatch without waiting for a fixed batch or a list
+from the supermanager. Follow [Brief preflight](#brief-preflight) for verification dependencies.
 
-Workers can find defects, define a repair within the accepted scope, and ask for or propose their next assignment.
-They may continue evidenced work inside their assigned boundary and coordinate before taking another boundary.
-Managers review worker proposals for priority, ownership and overlap; a proposal does not have to originate with a
-manager. When an assignment parks, keep its commits and exact next action and offer independent work to the
-available worker or slot. Review a small sample of delivered work for recurring defects rather than auditing every task.
+Workers repair within scope and continuously surface evidenced, valuable independent outcomes while working, without
+waiting to finish. Each proposal gives the user-visible outcome, source witness, first editable files and exact
+dependency, if any. Managers merge related proposals, avoid duplicate ownership, coordinate write boundaries, start
+eligible work and park only genuine dependencies; they own priority, assignment, start recovery and integration
+follow-through. Proposal production is a duty, not an artificial quota, second audit or substitute for coding. When
+first source stalls, inspect the rendered prompt and identify the first writable file or function, observed behavior,
+owner boundaries and next independent step. Remove unnecessary context, conflicting instructions and stale check
+demands; preserve useful active work and avoid repeating the prompt.
+The [Goal delivery journey](../../tools/goal/README.md#roles-and-delegation) assigns implementation to workers; the
+controller executes admission, retries and landings.
 
 Managers and workers communicate directly with the owner who can act. Managers settle reversible cross-Goal
 decisions peer to peer: the producer owns its interface and the outcome owner decides shared choices after one

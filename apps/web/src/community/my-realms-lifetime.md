@@ -87,3 +87,16 @@ is introduced. Current-entry and selected-command admission remain owned by the 
 
 Keyboard Next, Previous and First transfer focus to the newly admitted heading only while that movement still owns
 the request and the reader has not focused or pointed elsewhere. Retirement clears the pending focus effect.
+
+Decision: current-entry rows lead with the supplied identity, description and independently admitted Open/Manage
+choices. Optional media states remain visible as secondary information; a missing image never changes action advice.
+Leave is a separate row action that selects one page-level review above the inventory. Selection focuses that review;
+explicit Cancel or Discard returns focus to its connected trigger. The original controller continues to own the
+selected Account, episode, command, retry and readback. Browsing and sparse continuation retain the supplied order,
+current window and finite inventory history; no extra membership, media or permission reads are introduced.
+
+The current route sources include a synthetic admitted member with independent Open/Manage advice, a member whose
+entry is withheld, a sparse inventory with an opaque continuation, and deliberate leave selection/cancel. The selected
+review has one page-level region above the inventory, associates its trigger, receives keyboard focus and returns it
+on explicit cancellation when that original trigger is still connected. These states leave the existing immutable
+selected episode and command controller unchanged. Source acceptance is authored and deferred to the dev verifier.

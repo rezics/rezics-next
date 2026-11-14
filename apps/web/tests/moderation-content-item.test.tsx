@@ -316,7 +316,18 @@ test('Reports and Appeals compose complete, independently labelled case frames a
     expect(review).toBeDefined();
     await act(async () => (review as HTMLButtonElement).click());
     expect(first.querySelector('textarea')?.getAttribute('maxlength')).toBe('1024');
-    expect(first.querySelector('form')).not.toBeNull();
+    const reviewForm = first.querySelector('form')!;
+    expect(reviewForm).not.toBeNull();
+    expect(reviewForm.textContent).toContain(reportRows[0]!.target.id);
+    expect(reviewForm.textContent).toContain(reportRows[0]!.id);
+    expect(reviewForm.textContent).toContain(m.moderation_action_review_hint());
+    const targetOperand = [...reviewForm.querySelectorAll('code')].find(
+      (item) => item.textContent === reportRows[0]!.target.id,
+    )!;
+    expect(
+      targetOperand.compareDocumentPosition(reviewForm.querySelector('button[type="submit"]')!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
 
     const withheld = cards[1]!;
     expect(withheld.textContent).toContain(reportRows[1]!.target.id);
@@ -369,7 +380,9 @@ test('Reports and Appeals compose complete, independently labelled case frames a
     expect(pending.querySelector('a[href="https://example.test/source"]')).not.toBeNull();
     expect(pending.querySelector('time')?.getAttribute('datetime')).toBe(appeals[0]!.createdAt);
     expect(pending.querySelector('form')).not.toBeNull();
-    expect(pending.querySelector('form')?.closest('section')).toBeNull();
+    expect(pending.querySelector('form')?.closest('section')?.querySelector('h3')?.textContent).toBe(
+      m.moderation_queue_review(),
+    );
     expect(pending.querySelector('a button, button a, a a')).toBeNull();
     expect(resolvedAppeal.textContent).toContain(longResolution);
     expect(resolvedAppeal.textContent).toContain(m.moderation_appeal_upheld());

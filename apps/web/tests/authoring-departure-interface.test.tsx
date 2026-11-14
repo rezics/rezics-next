@@ -348,7 +348,7 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     const pending = await mount('opening', true);
     await click(button(host, m.thread_write_send()));
     await settle(() => pending.commands.length === 1);
-    const command = structuredClone(pending.commands[0]);
+    const originalWritingCommand = structuredClone(pending.commands[0]);
     const pendingDialog = await openDialog(pending.origin, m.thread_authoring_leave_pending());
     await stayAndRestore(pendingDialog.stay, pending.origin);
     expect(host.querySelector<HTMLInputElement>('#thread-title')?.value).toBe(localTitle);
@@ -356,10 +356,10 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     await settle(() => host.textContent?.includes(m.thread_write_unavailable()) === true);
     const unknown = await openDialog(pending.origin, m.thread_authoring_leave_pending());
     await stayAndRestore(unknown.stay, pending.origin);
-    expect(pending.commands).toEqual([command]);
-    await click(button(host, m.thread_write_retry()));
+    expect(pending.commands).toEqual([originalWritingCommand]);
+    await click(button(host, m.thread_recovery_retry_original()));
     await settle(() => pending.commands.length === 2);
-    expect(pending.commands).toEqual([command, command]);
+    expect(pending.commands).toEqual([originalWritingCommand, originalWritingCommand]);
     const confirmed = await openDialog(pending.origin, m.thread_authoring_leave_pending());
     expect(pending.counts()).toEqual({ arrivals: 0, successes: 0 });
     await click(confirmed.leave);
@@ -446,59 +446,62 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     expect(signingOut.counts()).toEqual({ arrivals: 0, successes: 0 });
     expect(requests).toEqual([]);
 
-    const story = await import('../src/stories/patterns/edition-publication/edition-publication-fixtures');
-    const fixture = await story.publicationFixture('draft');
-    const events: string[] = [];
-    const retire = fixture.controller.retire;
-    fixture.controller.retire = () => {
-      events.push('retire');
-      retire();
-    };
-    const command = fixture.api.command;
-    let resolvePublish!: (result: Awaited<ReturnType<typeof fixture.api.command>>) => void;
-    const pendingPublish = new Promise<Awaited<ReturnType<typeof fixture.api.command>>>((resolve) => {
-      resolvePublish = resolve;
-    });
-    fixture.api.command = (intent) => {
-      if (intent.kind === 'publish') return pendingPublish;
-      return command(intent);
-    };
-    const page = await mount('edition', false, { controller: fixture.controller, events });
-    const controller = fixture.controller;
-    const draft = controller.snapshot().edition!;
-    const openPublicationLeave = (origin: HTMLElement) =>
-      openDialog(origin, m.edition_publication_leave_pending(), false, m.edition_publication_leave_title());
-    expect(blocked()).toBe(false); // A persisted draft alone is browsing state.
-    await click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-    await click(button(host, m.edition_publication_publish()));
-    await settle(() => !!controller.snapshot().intent);
-    const intent = structuredClone(controller.snapshot().intent);
-    const stay = await openPublicationLeave(page.origin);
-    await stayAndRestore(stay.stay, page.origin);
-    expect(controller.snapshot()).toMatchObject({
-      identity: story.identity,
-      targetSubjectId: story.subjectId,
-      edition: { editionRevision: draft.editionRevision },
-      intent,
-    });
-    expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
-    const leave = await openPublicationLeave(page.origin);
-    await click(leave.leave);
-    await settle(() => page.router.state.location.pathname === '/inbox');
-    expect(events.indexOf('retire')).toBeGreaterThanOrEqual(0);
-    expect(events.indexOf('read')).toBeGreaterThan(events.indexOf('retire'));
-    const retired = controller.snapshot();
-    await act(async () => {
-      resolvePublish({
-        kind: 'confirmed',
-        edition: { ...draft, state: 'published', editionRevision: '2' },
+    // Publication has its own scenario scope beside the conversation writing scenarios.
+    {
+      const story = await import('../src/stories/patterns/edition-publication/edition-publication-fixtures');
+      const fixture = await story.publicationFixture('draft');
+      const events: string[] = [];
+      const retire = fixture.controller.retire;
+      fixture.controller.retire = () => {
+        events.push('retire');
+        retire();
+      };
+      const sendPublicationCommand = fixture.api.command;
+      let resolvePublish!: (result: Awaited<ReturnType<typeof fixture.api.command>>) => void;
+      const pendingPublish = new Promise<Awaited<ReturnType<typeof fixture.api.command>>>((resolve) => {
+        resolvePublish = resolve;
       });
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    });
-    expect(controller.snapshot()).toEqual(retired);
-    expect(page.router.state.location.pathname).toBe('/inbox');
-    expect(host.textContent).toContain('Inbox destination');
-    expect(host.textContent).not.toContain(m.edition_publication_published_heading());
+      fixture.api.command = (intent) => {
+        if (intent.kind === 'publish') return pendingPublish;
+        return sendPublicationCommand(intent);
+      };
+      const page = await mount('edition', false, { controller: fixture.controller, events });
+      const controller = fixture.controller;
+      const draft = controller.snapshot().edition!;
+      const openPublicationLeave = (origin: HTMLElement) =>
+        openDialog(origin, m.edition_publication_leave_pending(), false, m.edition_publication_leave_title());
+      expect(blocked()).toBe(false); // A persisted draft alone is browsing state.
+      await click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+      await click(button(host, m.edition_publication_publish()));
+      await settle(() => !!controller.snapshot().intent);
+      const intent = structuredClone(controller.snapshot().intent);
+      const stay = await openPublicationLeave(page.origin);
+      await stayAndRestore(stay.stay, page.origin);
+      expect(controller.snapshot()).toMatchObject({
+        identity: story.identity,
+        targetSubjectId: story.subjectId,
+        edition: { editionRevision: draft.editionRevision },
+        intent,
+      });
+      expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
+      const leave = await openPublicationLeave(page.origin);
+      await click(leave.leave);
+      await settle(() => page.router.state.location.pathname === '/inbox');
+      expect(events.indexOf('retire')).toBeGreaterThanOrEqual(0);
+      expect(events.indexOf('read')).toBeGreaterThan(events.indexOf('retire'));
+      const retired = controller.snapshot();
+      await act(async () => {
+        resolvePublish({
+          kind: 'confirmed',
+          edition: { ...draft, state: 'published', editionRevision: '2' },
+        });
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      });
+      expect(controller.snapshot()).toEqual(retired);
+      expect(page.router.state.location.pathname).toBe('/inbox');
+      expect(host.textContent).toContain('Inbox destination');
+      expect(host.textContent).not.toContain(m.edition_publication_published_heading());
+    }
   } finally {
     await act(async () => root.unmount());
     client.clear();

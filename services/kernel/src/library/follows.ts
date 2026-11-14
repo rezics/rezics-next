@@ -23,6 +23,7 @@ import type { Follow, FollowPageCursor, FollowTargetType } from './follow-model.
 import { applyFollow, pageFollows, readFollow as readStoredFollow } from './follow-store.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import { consumeFollowWork, followAccountWork, withFollowWork } from './follow-operation-bounds.ts';
+import { admitPrivateFollowRead, type FollowReadAdmission } from './follow-read-admission.ts';
 
 const FOLLOW_EVENT = 'com.rezics.library.follow.updated.v1';
 
@@ -398,25 +399,37 @@ export function createFollowCommands(config: FollowDeps) {
     return changed ? followEvent(input.accountId, input.subjectId) : null;
   }
 
-  async function readFollow(actor: Actor, targetId: string, deadline = workStepDeadline()): Promise<Follow | null> {
+  async function readFollow(
+    actor: Actor,
+    targetId: string,
+    deadline = workStepDeadline(),
+    admission?: FollowReadAdmission,
+  ): Promise<Follow | null> {
     const account = requireAccount(actor);
-    return load(account.accountId, targetId, deadline);
+    const selectedAt = admission ?? (await admitPrivateFollowRead(pool, account, deadline));
+    const follow = await load(account.accountId, targetId, deadline);
+    await admitPrivateFollowRead(pool, account, deadline, selectedAt);
+    return follow;
   }
 
   async function listFollows(
     actor: Actor,
     page: { cursor: FollowPageCursor | null; limit: number; targetType?: FollowTargetType },
     deadline = workStepDeadline(),
+    admission?: FollowReadAdmission,
   ): Promise<Follow[]> {
     const account = requireAccount(actor);
-    const route = routeOf(account.accountId)!;
-    return withConnection(pool, (client) =>
+    const selectedAt = admission ?? (await admitPrivateFollowRead(pool, account, deadline));
+    const route = selectedAt.route;
+    const rows = await withConnection(pool, (client) =>
       pageFollows(deadlineClient(client, deadline), route, account.accountId, {
         after: page.cursor,
         limit: page.limit,
         ...(page.targetType === undefined ? {} : { targetType: page.targetType }),
       }),
     );
+    await admitPrivateFollowRead(pool, account, deadline, selectedAt);
+    return rows;
   }
 
   return { follow, unfollow, followForMembership, followFromLibrary, readFollow, listFollows };

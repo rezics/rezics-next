@@ -33,11 +33,12 @@ import {
 import { captureCandidateSession } from '../../subject/candidate-lifetime';
 import {
   factsGlobalVisitHref,
-  factsPublicIntentFits,
+  factsCorrectionIntentFits,
   factsPublicVisitUnsupported,
   parseFactsPublicVisit,
 } from '../../features/catalogue/facts-public-visit';
-import { FactsPublicVisitNotice } from '../../features/catalogue/subject-facts-entry';
+import { FactsPublicReturnLink, FactsPublicVisitNotice } from '../../features/catalogue/subject-facts-entry';
+import { subjectGraphVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { subjectHref } from '../../subject/subject-href';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -46,7 +47,12 @@ function retireFactsPublicVisit(search: string): string {
   const query = search.split('#', 1)[0] ?? '';
   if (!query.startsWith('?')) return search;
   const params = new URLSearchParams(query);
-  if (!params.has('origin') && !params.has('publicReturn')) return search;
+  if (
+    !params.has('origin') &&
+    !params.has('publicReturn') &&
+    (!params.has('returnTo') || ['queue', 'changes', 'sources'].includes(params.get('returnTo')!))
+  )
+    return search;
   // Retire the old observation and all correction interpretation on the redirected identity.
   // The invalid marker keeps the user on an explicit recovery screen instead of opening a bare editor.
   return '?origin=!';
@@ -62,7 +68,7 @@ const canonicalEditor = createServerFn({ method: 'GET', strict: false })
       value.slug.length > 128 ||
       typeof value.locale !== 'string' ||
       typeof value.search !== 'string' ||
-      !factsPublicIntentFits(value.search)
+      !factsCorrectionIntentFits(value.search, value.locale)
     )
       throw notFound();
     return value;
@@ -123,16 +129,24 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
       returnTo:
         input.returnTo === 'queue' || input.returnTo === 'changes' || input.returnTo === 'sources'
           ? input.returnTo
-          : undefined,
+          : input.returnTo === undefined
+            ? undefined
+            : (subjectGraphVisitReturn(input.returnTo, getLocale()) ?? '!'),
       ...(hasExact && !validExact ? { reviewInvalid: true } : {}),
     };
   },
-  loaderDeps: ({ search }) => ({ origin: search.origin, publicReturn: search.publicReturn }),
+  loaderDeps: ({ search }) => ({
+    origin: search.origin,
+    publicReturn: search.publicReturn,
+    returnTo: search.returnTo,
+    property: search.property,
+    statement: search.statement,
+  }),
   loader: async ({ params, location }) => {
     const locale = getLocale();
     const search = keepSearch('', location.searchStr, location.hash);
     const path = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(params.id)}/${encodeURIComponent(params.slug)}/edit`;
-    const searchFits = factsPublicIntentFits(search);
+    const searchFits = factsCorrectionIntentFits(`${path}${search}`, locale);
     const canonical = await canonicalEditor({ data: { ...params, locale, search: searchFits ? search : '?origin=!' } });
     return {
       ...canonical,
@@ -152,8 +166,8 @@ function CorrectionRoute(): ReactElement {
   const visitIdentity =
     visit.kind === 'origin'
       ? JSON.stringify(['origin', visit.origin])
-      : visit.kind === 'fresh'
-        ? JSON.stringify(['fresh', visit.returnHref])
+      : visit.kind === 'fresh' || visit.kind === 'graph'
+        ? JSON.stringify([visit.kind, visit.returnHref])
         : visit.kind;
   const unsupportedVisit = factsPublicVisitUnsupported(visit);
   const generalSubjectHref = `${subjectHref({ id, label: slug }, locale).href}#connections`;
@@ -204,14 +218,12 @@ function CorrectionRoute(): ReactElement {
   const returnUnavailable =
     (returnTo === 'queue' && !providerReturn) || (returnTo === 'changes' && !changesReturn && !correctionReturn);
   const publicVisitReturn =
-    visit.kind === 'origin' ? (
+    visit.kind === 'origin' || visit.kind === 'graph' ? (
       <p className="px-6 pt-4">
-        <a
-          className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          href={visit.origin.returnHref}
-        >
-          {m.facts_public_return({}, { locale: locale as never })}
-        </a>
+        <FactsPublicReturnLink
+          href={visit.kind === 'origin' ? visit.origin.returnHref : visit.returnHref}
+          locale={locale}
+        />
       </p>
     ) : visit.kind === 'fresh' ? (
       <div className="px-6 pt-4">

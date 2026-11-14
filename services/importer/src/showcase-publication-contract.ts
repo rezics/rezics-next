@@ -9,7 +9,7 @@ export type ShowcaseAdoptBody = {
   property: string;
   mode: 'replace';
   expected_head: number | null;
-  selection: { candidate: string; rank: 'normal' | 'preferred' }[];
+  selection: { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
 };
 
 export type ShowcasePublicationResult = Readonly<{

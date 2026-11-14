@@ -32,6 +32,7 @@ import {
   type PrivateAppealPage,
 } from './appeals-read-model';
 import { moderationTargetContent, type ModerationTarget } from './target-content';
+import { ModerationActionRegion, ModerationReference, moderationControl, moderationLink } from './presentation';
 
 const date = (value: string) =>
   new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -362,14 +363,18 @@ function AppealsView({
       ref={queueBoundary}
       tabIndex={-1}
       aria-labelledby={headingId}
-      className="max-w-4xl space-y-8 text-foreground"
+      className="mx-auto w-full min-w-0 max-w-5xl space-y-6 text-foreground [overflow-wrap:anywhere]"
     >
       <header className="space-y-3">
         <p className="text-sm text-muted-foreground">{m.moderation_appeals_tab()}</p>
         <PageHeading id={headingId}>{m.moderation_appeals_heading()}</PageHeading>
+        {state === 'ready' && isCurrent?.() !== false ? (
+          <Badge variant="secondary">{m.moderation_admission_current()}</Badge>
+        ) : null}
       </header>
-      <nav aria-label={m.moderation_tabs_label()} className="flex gap-4 border-b pb-2">
+      <nav aria-label={m.moderation_tabs_label()} className="flex flex-wrap items-center gap-4 border-b pb-2">
         <a
+          className={moderationLink}
           href={reportsHref}
           onClick={(event) => {
             if (
@@ -388,7 +393,10 @@ function AppealsView({
         >
           {m.moderation_reports_tab()}
         </a>
-        <span aria-current="page" className="font-semibold">
+        <span
+          aria-current="page"
+          className="inline-flex min-h-11 items-center border-b-2 border-primary px-3 py-2 text-sm font-semibold"
+        >
           {m.moderation_appeals_tab()}
         </span>
       </nav>
@@ -403,7 +411,7 @@ function AppealsView({
       </p>
       {state === 'ready' && onRefresh ? (
         <div className="space-y-2">
-          <Button variant="outline" disabled={refreshBlocked} onClick={onRefresh}>
+          <Button className={moderationControl} variant="outline" disabled={refreshBlocked} onClick={onRefresh}>
             {m.moderation_queue_refresh()}
           </Button>
           {refreshBlocked ? (
@@ -431,12 +439,12 @@ function AppealsView({
                   : m.moderation_appeals_read_closed()}
           </ContentItemHeading>
           {state === 'unavailable' && onRetry ? (
-            <Button ref={recoveryControl} variant="outline" onClick={onRetry}>
+            <Button ref={recoveryControl} className={moderationControl} variant="outline" onClick={onRetry}>
               {m.moderation_appeals_read_retry()}
             </Button>
           ) : null}
           {state === 'stale' && onRestart ? (
-            <Button variant="outline" onClick={onRestart}>
+            <Button className={moderationControl} variant="outline" onClick={onRestart}>
               {m.moderation_appeals_read_restart()}
             </Button>
           ) : null}
@@ -470,7 +478,7 @@ function AppealsView({
         </ContentItemFrame>
       )}
       {state === 'ready' && next ? (
-        <Button variant="outline" onClick={() => onNext?.(next)}>
+        <Button className={moderationControl} variant="outline" onClick={() => onNext?.(next)}>
           {m.threads_next_page()}
         </Button>
       ) : null}
@@ -521,26 +529,28 @@ function AppealCard({
             {m.moderation_queue_submitted()} <time dateTime={appeal.createdAt}>{date(appeal.createdAt)}</time>
           </p>
         </header>
-        <section aria-labelledby={`${id}-decision`} className="space-y-2">
-          <ContentItemHeading id={`${id}-decision`} level={3} className="text-sm font-semibold">
-            {m.moderation_appeal_decision_label()}
-          </ContentItemHeading>
-          <p className="whitespace-pre-wrap break-words">{appeal.decision.statement}</p>
-        </section>
-        <section aria-labelledby={`${id}-target`} className="space-y-2">
-          <ContentItemHeading id={`${id}-target`} level={3} className="text-sm font-semibold">
-            {m.moderation_current_target_label()}
-          </ContentItemHeading>
-          <Badge variant="outline">{targetKind}</Badge>
-          <blockquote className="min-w-0 border-l-2 pl-3 wrap-anywhere">{moderationTargetContent(target)}</blockquote>
-        </section>
         <section aria-labelledby={`${id}-statement`} className="space-y-2">
           <ContentItemHeading id={`${id}-statement`} level={3} className="text-sm font-semibold">
             {m.moderation_appeal_reason_label()}
           </ContentItemHeading>
           <p className="whitespace-pre-wrap break-words">{appeal.statement}</p>
         </section>
-        <div className="space-y-3 border-t pt-4">
+        <div className="grid min-w-0 gap-6 border-t pt-5 lg:grid-cols-2">
+          <section aria-labelledby={`${id}-decision`} className="space-y-2">
+            <ContentItemHeading id={`${id}-decision`} level={3} className="text-sm font-semibold">
+              {m.moderation_appeal_decision_label()}
+            </ContentItemHeading>
+            <p className="whitespace-pre-wrap break-words">{appeal.decision.statement}</p>
+          </section>
+          <section aria-labelledby={`${id}-target`} className="space-y-2">
+            <ContentItemHeading id={`${id}-target`} level={3} className="text-sm font-semibold">
+              {m.moderation_current_target_label()}
+            </ContentItemHeading>
+            <Badge variant="outline">{targetKind}</Badge>
+            <blockquote className="min-w-0 border-l-2 pl-3 wrap-anywhere">{moderationTargetContent(target)}</blockquote>
+          </section>
+        </div>
+        <ModerationActionRegion title={m.moderation_queue_review()}>
           {appeal.decision.appeal ? (
             <p className="text-sm text-muted-foreground">
               {m.moderation_queue_resolved_at()}{' '}
@@ -556,32 +566,18 @@ function AppealCard({
               : {})}
             {...(isCurrent ? { isCurrent } : {})}
           />
-          <details className="border-t border-border pt-3">
-            <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">
-              {m.reporter_status_reference()}
-            </summary>
-            <ContentItemFrame as="div" className="space-y-4 p-4">
-              <dl className="space-y-4 text-sm">
-                <div className="space-y-1">
-                  <dt className="text-muted-foreground">{m.moderation_case_details_appeal_id()}</dt>
-                  <dd className="select-text break-all font-mono leading-6">{appeal.id}</dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
-                  <dd className="select-text break-all font-mono leading-6">{appeal.decisionId}</dd>
-                </div>
-                {identity &&
-                identity.kind !== 'board' &&
-                currentTargetIsAvailable(target, { kind: identity.kind, id: identity.id }) ? (
-                  <div className="space-y-1">
-                    <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
-                    <dd className="select-text break-all font-mono leading-6">{identity.id}</dd>
-                  </div>
-                ) : null}
-              </dl>
-            </ContentItemFrame>
-          </details>
-        </div>
+        </ModerationActionRegion>
+        <ModerationReference
+          fields={[
+            { label: m.moderation_case_details_appeal_id(), value: appeal.id },
+            { label: m.moderation_case_details_decision_id(), value: appeal.decisionId },
+            ...(identity &&
+            identity.kind !== 'board' &&
+            currentTargetIsAvailable(target, { kind: identity.kind, id: identity.id })
+              ? [{ label: m.moderation_case_details_target_id(), value: identity.id }]
+              : []),
+          ]}
+        />
       </ContentItemFrame>
     </li>
   );

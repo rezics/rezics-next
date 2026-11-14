@@ -3,6 +3,8 @@ import type {
   SubjectLinksResponse,
   SubjectRead,
   SubjectReadQuery,
+  WorkReleaseCard,
+  WorkReleaseCardField,
   WorkReleaseCards,
 } from '@rezics/client';
 import { pickText } from '@rezics/composition';
@@ -178,6 +180,10 @@ export async function readGameReader(
   }
 }
 
+function responseObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /** Admit the same native inverse page whether it arrived in composition or through explicit continuation. */
 export function gameReaderEditionPage(
   common: GameReaderReady,
@@ -188,21 +194,22 @@ export function gameReaderEditionPage(
   // The links owner currently reports both stale and invalid cursors as invalid_request.
   // Neither means that the native stream is exhausted or that retrying the token will help.
   if (status === 400 && address.cursor) return { ok: false, reason: 'restart' };
-  if (status !== 200 || !body) return failure(status);
+  if (status !== 200 || !responseObject(body)) return failure(status);
   const page = body as SubjectLinksResponse;
-  if (!Array.isArray(page.links) || typeof page.freshness?.caught_up !== 'boolean')
+  if (!Array.isArray(page.links) || !responseObject(page.freshness) || typeof page.freshness.caught_up !== 'boolean')
     return { ok: false, reason: 'unavailable' };
   const { workReleaseCards, ...membershipPage } = page;
   if (
     page.links.length > gameReaderLimit ||
     encodedBytes(membershipPage) > gameReaderLimit * 128 * 1024 + 64 * 1024 ||
-    (workReleaseCards !== undefined && encodedBytes(workReleaseCards) > 2 * 1024 * 1024) ||
     (page.next !== null &&
       (typeof page.next !== 'string' || !page.next.length || page.next.length > 4096 || page.next === address.cursor))
   )
     return { ok: false, reason: 'unavailable' };
   const seen = new Set<string>();
   for (const row of page.links) {
+    if (!responseObject(row) || typeof row.subject !== 'string' || typeof row.statement !== 'string')
+      return { ok: false, reason: 'unavailable' };
     const key = `${row.subject}:${row.statement}`;
     if (
       encodedBytes(row) > 128 * 1024 ||
@@ -210,9 +217,12 @@ export function gameReaderEditionPage(
       !gameUuid.test(row.subject) ||
       !gameUuid.test(row.statement) ||
       row.property !== editionProperty ||
-      (row.summary && row.summary.id !== row.subject) ||
-      (row.assertion &&
-        (row.assertion.id !== row.statement ||
+      (row.summary != null && (!responseObject(row.summary) || row.summary.id !== row.subject)) ||
+      (row.assertion !== undefined &&
+        (!responseObject(row.assertion) ||
+          row.assertion.id !== row.statement ||
+          !responseObject(row.assertion.property) ||
+          !responseObject(row.assertion.value) ||
           row.assertion.property.id !== editionProperty ||
           row.assertion.value.type !== 'value' ||
           row.assertion.value.content !== address.id))
@@ -223,8 +233,188 @@ export function gameReaderEditionPage(
   return {
     ...common,
     editions: page.links,
-    workReleaseCards: workReleaseCards ?? { state: 'unavailable' },
+    workReleaseCards: admitComparison(workReleaseCards, page.links, address.id),
     next: page.next,
     caughtUp: page.freshness.caught_up,
   };
+}
+
+// Bind the installed HTTP union here, rather than making the renderer repair external facts.
+// These are the native copy-work-reader-port limits; the client exports their types, not runtime constants.
+const comparisonProperties = {
+  'schema:gamePlatform': true,
+  'schema:inLanguage': true,
+  'schema:datePublished': true,
+  'schema:creativeWorkStatus': true,
+  'wdt:P5804': true,
+  'rezics:releaseStatus': true,
+  'schema:contentRating': true,
+  'schema:publisher': true,
+  'schema:producer': true,
+  'wdt:P178': true,
+  'wdt:P162': true,
+  'wdt:P2899': true,
+} satisfies Record<keyof WorkReleaseCard['fields'], true>;
+const comparisonDataTypes = {
+  document: true,
+  'external-id': true,
+  media: true,
+  monolingualtext: true,
+  quantity: true,
+  string: true,
+  time: true,
+  url: true,
+  'wikibase-item': true,
+} satisfies Record<GameStatement['property']['data_type'], true>;
+const comparisonEmptyStates = {
+  unsupported: true,
+  withheld: true,
+  missing: true,
+  unavailable: true,
+} satisfies Record<Exclude<WorkReleaseCardField['state'], 'available'>, true>;
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function comparisonSummary(value: unknown, id: string): value is WorkReleaseCard['summary'] {
+  if (
+    !record(value) ||
+    value.id !== id ||
+    typeof value.type !== 'string' ||
+    !stringArray(value.types) ||
+    typeof value.creativeWork !== 'boolean' ||
+    (value.label !== null &&
+      (!record(value.label) || typeof value.label.language !== 'string' || typeof value.label.value !== 'string'))
+  )
+    return false;
+  const cover = value.cover;
+  if (cover === null) return true;
+  return (
+    record(cover) &&
+    typeof cover.media === 'string' &&
+    Number.isInteger(cover.width) &&
+    Number.isInteger(cover.height) &&
+    record(cover.placeholder) &&
+    typeof cover.placeholder.thumbhash === 'string' &&
+    typeof cover.placeholder.color === 'string' &&
+    Array.isArray(cover.variants) &&
+    cover.variants.every(
+      (variant) =>
+        record(variant) && (variant.format === 'avif' || variant.format === 'webp') && Number.isInteger(variant.width),
+    ) &&
+    (cover.focalPoint === null ||
+      (record(cover.focalPoint) && Number.isFinite(cover.focalPoint.x) && Number.isFinite(cover.focalPoint.y))) &&
+    record(cover.credit) &&
+    typeof cover.credit.rightsHolder === 'string' &&
+    record(cover.credit.via) &&
+    typeof cover.credit.via.name === 'string' &&
+    typeof cover.credit.via.url === 'string' &&
+    typeof cover.credit.license === 'string' &&
+    stringArray(cover.credit.obligations)
+  );
+}
+
+function comparisonRelated(value: unknown): value is WorkReleaseCard['related'] {
+  return record(value) && Object.entries(value).every(([id, summary]) => comparisonSummary(summary, id));
+}
+
+function comparisonSnak(value: unknown): value is GameStatement['qualifiers'][number] {
+  if (
+    !record(value) ||
+    !record(value.property) ||
+    typeof value.property.id !== 'string' ||
+    typeof value.property.data_type !== 'string' ||
+    !Object.hasOwn(comparisonDataTypes, value.property.data_type) ||
+    !record(value.value)
+  )
+    return false;
+  // Native content is unknown. Keep dates, quantities, documents and source text as supplied.
+  return (
+    (value.value.type === 'value' && Object.hasOwn(value.value, 'content')) ||
+    value.value.type === 'somevalue' ||
+    value.value.type === 'novalue'
+  );
+}
+
+function comparisonStatement(value: unknown, fieldFact = true): value is GameStatement {
+  return (
+    record(value) &&
+    (!fieldFact || encodedBytes(value) <= 64 * 1024) &&
+    typeof value.id === 'string' &&
+    gameUuid.test(value.id) &&
+    (value.rank === 'normal' || value.rank === 'preferred' || value.rank === 'deprecated') &&
+    comparisonSnak(value) &&
+    Array.isArray(value.qualifiers) &&
+    (!fieldFact || value.qualifiers.length <= 64) &&
+    value.qualifiers.every(comparisonSnak) &&
+    Array.isArray(value.references) &&
+    (!fieldFact || value.references.length <= 32) &&
+    value.references.every(
+      (reference) =>
+        record(reference) &&
+        typeof reference.hash === 'string' &&
+        Array.isArray(reference.parts) &&
+        (!fieldFact || reference.parts.length <= 64) &&
+        reference.parts.every(comparisonSnak),
+    ) &&
+    record(value.rezics) &&
+    typeof value.rezics.release === 'string' &&
+    typeof value.rezics.revision === 'number' &&
+    Number.isFinite(value.rezics.revision)
+  );
+}
+
+function comparisonField(value: unknown, property: string): value is WorkReleaseCardField {
+  if (!record(value) || typeof value.state !== 'string') return false;
+  if (value.state !== 'available') return Object.hasOwn(comparisonEmptyStates, value.state);
+  return (
+    Array.isArray(value.statements) &&
+    value.statements.length <= 32 &&
+    value.statements.every((statement) => comparisonStatement(statement) && statement.property.id === property) &&
+    comparisonRelated(value.related)
+  );
+}
+
+/** A malformed optional HTTP comparison cannot retire an independently admitted membership window. */
+function admitComparison(value: unknown, rows: Links['links'], work: string): WorkReleaseCards {
+  const unavailable: WorkReleaseCards = { state: 'unavailable' };
+  if (!record(value) || encodedBytes(value) > 2 * 1024 * 1024) return unavailable;
+  if (value.state === 'unavailable') return value as WorkReleaseCards;
+  if (value.state !== 'available' || !Array.isArray(value.cards) || value.cards.length > gameReaderLimit)
+    return unavailable;
+  const membership = new Map(rows.map((row, index) => [`${row.subject}:${row.statement}`, { row, index }]));
+  let previous = -1;
+  for (const card of value.cards) {
+    if (
+      !record(card) ||
+      typeof card.subject !== 'string' ||
+      typeof card.type !== 'string' ||
+      !comparisonStatement(card.membership, false)
+    )
+      return unavailable;
+    const admitted = membership.get(`${card.subject}:${card.membership.id}`);
+    const fields = card.fields;
+    if (
+      !admitted?.row.assertion ||
+      !admitted.row.summary ||
+      admitted.index <= previous ||
+      card.type !== admitted.row.summary.type ||
+      !comparisonSummary(card.summary, card.subject) ||
+      card.summary.type !== card.type ||
+      card.membership.property.id !== editionProperty ||
+      card.membership.value.type !== 'value' ||
+      card.membership.value.content !== work ||
+      !comparisonRelated(card.related) ||
+      !record(fields) ||
+      !Object.keys(comparisonProperties).every((property) => comparisonField(fields[property], property))
+    )
+      return unavailable;
+    previous = admitted.index;
+  }
+  return value as WorkReleaseCards;
 }

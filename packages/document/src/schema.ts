@@ -24,6 +24,7 @@ const language = Type.Optional(
 const choice = (values: string[]) => Type.Union(values.map((value) => Type.Literal(value)));
 const direction = Type.Optional(Type.Union([choice(['ltr', 'rtl', 'auto']), Type.Null()]));
 const common = { id, lang: language, dir: direction };
+const footnoteLabel = Type.String({ minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$' });
 const align = Type.Optional(Type.Union([choice(['left', 'right', 'center', 'justify']), Type.Null()]));
 const commonAttrs = { id: { default: null }, lang: { default: null }, dir: { default: null } };
 
@@ -96,6 +97,8 @@ export const nodeAttributes: Record<string, Record<string, TSchema>> = {
     payload: Type.Unknown(),
     fallback: Type.String(),
   },
+  footnoteDefinition: { ...common, label: footnoteLabel },
+  footnoteReference: { label: footnoteLabel },
 };
 
 export const markAttributes: Record<string, Record<string, TSchema>> = {
@@ -133,7 +136,9 @@ export const textNodeNames = [
   'taskItem',
   'codeBlock',
   'horizontalRule',
+  'footnoteDefinition',
   'hardBreak',
+  'footnoteReference',
   'mention',
   'ruby',
   'text',
@@ -185,7 +190,7 @@ function block(spec: NodeSpec): NodeSpec {
 
 function createSchema(profile: DocumentProfile): Schema {
   const nodes: Record<string, NodeSpec> = {
-    doc: { content: 'block+' },
+    doc: { content: '(block | footnoteDefinition)+' },
     paragraph: block({ ...basicNodes.paragraph, attrs: { textAlign: { default: null } } }),
     heading: block({
       ...basicNodes.heading,
@@ -220,7 +225,35 @@ function createSchema(profile: DocumentProfile): Schema {
     }),
     codeBlock: block({ ...basicNodes.code_block, attrs: { language: { default: null } } }),
     horizontalRule: block(basicNodes.horizontal_rule),
+    footnoteDefinition: {
+      group: 'footnoteDefinition',
+      content: 'block+',
+      attrs: { ...commonAttrs, label: {} },
+      parseDOM: [
+        {
+          tag: 'aside[data-footnote-definition]',
+          getAttrs: (dom) => {
+            const element = dom as HTMLElement;
+            return { ...commonAttrs(element), label: element.getAttribute('data-footnote-definition') ?? '' };
+          },
+        },
+      ],
+      toDOM: (node) => ['aside', { ...domAttrs(node.attrs), 'data-footnote-definition': node.attrs.label }, 0],
+    },
     hardBreak: basicNodes.hard_break,
+    footnoteReference: {
+      inline: true,
+      group: 'inline',
+      atom: true,
+      attrs: { label: {} },
+      parseDOM: [
+        {
+          tag: 'sup[data-footnote-reference]',
+          getAttrs: (dom) => ({ label: (dom as HTMLElement).getAttribute('data-footnote-reference') ?? '' }),
+        },
+      ],
+      toDOM: (node) => ['sup', { 'data-footnote-reference': node.attrs.label }, node.attrs.label],
+    },
     mention: {
       inline: true,
       group: 'inline',
@@ -393,12 +426,20 @@ interface WireRules {
 
 function wireRules(profile: DocumentProfile): WireRules {
   const names = profile === 'text' ? textNodeNames : blocksNodeNames;
-  const inlineNames = ['text', 'hardBreak', 'mention', 'ruby', ...(profile === 'blocks' ? ['extensionInline'] : [])];
+  const inlineNames = [
+    'text',
+    'hardBreak',
+    'footnoteReference',
+    'mention',
+    'ruby',
+    ...(profile === 'blocks' ? ['extensionInline'] : []),
+  ];
   const blockNames = names.filter(
     (name) =>
       ![
         'text',
         'hardBreak',
+        'footnoteReference',
         'mention',
         'ruby',
         'extensionInline',
@@ -409,23 +450,25 @@ function wireRules(profile: DocumentProfile): WireRules {
         'tableHeader',
       ].includes(name),
   );
+  const nestedBlockNames = blockNames.filter((name) => name !== 'footnoteDefinition');
   const rule = (allowed: readonly string[], minItems = 0) => ({ allowed, minItems });
   const content = {
     doc: rule(blockNames, 1),
     paragraph: rule(inlineNames),
     heading: rule(inlineNames),
-    blockquote: rule(blockNames, 1),
+    blockquote: rule(nestedBlockNames, 1),
     bulletList: rule(['listItem'], 1),
     orderedList: rule(['listItem'], 1),
-    listItem: rule(blockNames, 1),
+    listItem: rule(nestedBlockNames, 1),
     taskList: rule(['taskItem'], 1),
-    taskItem: rule(blockNames, 1),
+    taskItem: rule(nestedBlockNames, 1),
     codeBlock: rule(['text']),
     ruby: rule(['text']),
+    footnoteDefinition: rule(nestedBlockNames, 1),
     table: rule(['tableRow'], 1),
     tableRow: rule(['tableCell', 'tableHeader'], 1),
-    tableCell: rule(blockNames, 1),
-    tableHeader: rule(blockNames, 1),
+    tableCell: rule(nestedBlockNames, 1),
+    tableHeader: rule(nestedBlockNames, 1),
   };
   const mark = Type.Union(
     Object.entries(markAttributes).map(([name, attrs]) =>

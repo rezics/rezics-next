@@ -322,13 +322,20 @@ test('current graph results gate publication on exact reopen, changed source and
   }
 }, 30_000);
 
-function readWith(subject: string, type: string, statements: Record<string, string>): ReviewedSubjectRead {
+function readWith(
+  subject: string,
+  type: string,
+  statements: Record<string, string | readonly { rank: string; value: { type: string; content: string } }[]>,
+): ReviewedSubjectRead {
   return {
     subject: {
       id: subject,
       type,
       statements: Object.fromEntries(
-        Object.entries(statements).map(([property, content]) => [property, [{ value: { type: 'value', content } }]]),
+        Object.entries(statements).map(([property, content]) => [
+          property,
+          typeof content === 'string' ? [{ rank: 'normal', value: { type: 'value', content } }] : content,
+        ]),
       ),
     },
   } as unknown as ReviewedSubjectRead;
@@ -344,6 +351,29 @@ test('work-relation endpoints certify VNDB work and Bangumi identities separatel
       'wd:Q689445',
     ),
   ).toBe('current');
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(2002), 'wd:Q689445', {
+        'wdt:P3180': [
+          { rank: 'deprecated', value: { type: 'value', content: 'v2002' } },
+          { rank: 'preferred', value: { type: 'value', content: 'v2002' } },
+        ],
+      }),
+      'v2002',
+      id(2002),
+      'wd:Q689445',
+    ),
+  ).toBe('current');
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(2002), 'wd:Q689445', {
+        'wdt:P3180': [{ rank: 'deprecated', value: { type: 'value', content: 'v2002' } }],
+      }),
+      'v2002',
+      id(2002),
+      'wd:Q689445',
+    ),
+  ).toBe('identity_mismatch');
   expect(
     currentWorkRelationEndpoint(
       readWith(id(2002), 'wd:Q689445', { 'wdt:P3180': 'v3' }),
@@ -398,55 +428,117 @@ test('work-relation endpoints certify VNDB work and Bangumi identities separatel
       'schema:VideoGame',
     ),
   ).toBe('unknown');
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(3154), 'schema:BookSeries', { 'wdt:P5732': '3154' }),
+      '3154',
+      id(3154),
+      'schema:BookSeries',
+    ),
+  ).toBe('current');
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(999), 'schema:BookSeries', { 'wdt:P5732': '3154' }),
+      '3154',
+      id(3154),
+      'schema:BookSeries',
+    ),
+  ).toBe('identity_mismatch');
+  expect(
+    currentWorkRelationEndpoint(
+      readWith(id(700), 'schema:Organization', {}),
+      'person:700',
+      id(700),
+      'schema:Organization',
+    ),
+  ).toBe('current');
 });
 
-test('a VNDB side edge is proposed only while both work endpoints still name their own identities', async () => {
+test('current graph identities recover after reopen while current siblings keep delivering', async () => {
   const temporary = join(process.cwd(), '.temp');
   await mkdir(temporary, { recursive: true });
-  const directory = await mkdtemp(join(temporary, 'showcase-franchise-vndb-'));
-  const uuids: Record<string, string> = { v2002: id(2002), v17102: id(17102) };
+  const directory = await mkdtemp(join(temporary, 'showcase-franchise-identities-'));
+  const path = join(directory, 'graph.sqlite');
+  let db = new Database(path);
   try {
     const plan = await planCrossMediaSeed(tables(), { selection: showcaseFranchiseSelection(roots) });
-    const sides = plan.edges.filter((edge) => edge.vndbRelation);
-    expect(sides).toHaveLength(1);
-    const deliver = (path: string, endpoints: Record<string, string>) => {
-      const db = new Database(path);
-      const graph = new CrossMediaGraph(db);
-      graph.remember(sides);
-      const reads = new Map(
-        Object.entries(uuids).map(([externalId, uuid]) => [
-          uuid,
-          readWith(uuid, 'wd:Q689445', { 'wdt:P3180': endpoints[externalId] ?? externalId }),
-        ]),
-      );
-      return graph
-        .deliver({
-          claim: ({ external_id }) => ({ state: 'bound', subject: uuids[external_id]! }),
-          nativeType: () => 'wd:Q689445',
-          currentRelationEndpoint: async (externalId, nativeSubjectId, expectedType) =>
-            currentWorkRelationEndpoint(reads.get(nativeSubjectId) ?? null, externalId, nativeSubjectId, expectedType),
-          fence: async () => ({ fenced: false, securityRevision: null }),
-          batch: async ({ commands }) => ({
+    const drafts = plan.edges.filter((edge) => edge.relation || edge.vndbRelation);
+    const side = drafts.find((edge) => edge.vndbRelation)!;
+    const sideKey = graphEdgeCommandKey(side);
+    const nativeId = (key: string) => id(Number(key.replace(/^v/u, '')));
+    const nativeType = (key: string) =>
+      key.startsWith('v')
+        ? 'wd:Q689445'
+        : key === '3154'
+          ? 'schema:VideoGame'
+          : ['84148', '247445'].includes(key)
+            ? 'schema:Book'
+            : 'schema:TVSeries';
+    let restored = false;
+    let graph = new CrossMediaGraph(db);
+    graph.remember(drafts);
+    const sends: BatchCommand[] = [];
+    const currentRows = (key: string) =>
+      key === 'v17102' && !restored
+        ? [{ rank: 'deprecated', value: { type: 'value', content: key } }]
+        : key === 'v17102'
+          ? [
+              { rank: 'deprecated', value: { type: 'value', content: 'v17103' } },
+              { rank: 'preferred', value: { type: 'value', content: key } },
+            ]
+          : [{ rank: 'normal', value: { type: 'value', content: key } }];
+    const deliver = () =>
+      graph.deliver({
+        claim: ({ external_id }) => ({ state: 'bound', subject: nativeId(external_id) }),
+        nativeType,
+        currentRelationEndpoint: async (externalId, boundId, expectedType) =>
+          currentWorkRelationEndpoint(
+            readWith(boundId, expectedType!, {
+              [externalId.startsWith('v') ? 'wdt:P3180' : 'wdt:P5732']: currentRows(externalId),
+            }),
+            externalId,
+            boundId,
+            expectedType,
+          ),
+        fence: async () => ({ fenced: false, securityRevision: null }),
+        batch: async ({ commands }) => {
+          const commandBase = sends.length;
+          sends.push(...structuredClone(commands));
+          return {
             results: commands.map((command, index) => ({
               key: command.key,
               status: 201 as const,
-              value: { candidate: id(700000 + index), revision: 1 },
+              value: { candidate: id(800000 + commandBase + index), revision: 1 },
             })),
-          }),
-        })
-        .finally(() => db.close());
-    };
-    const current = await deliver(join(directory, 'current.sqlite'), {});
-    expect(current.unresolved).toEqual([]);
-    expect(current.proposed).toEqual([
-      expect.objectContaining({ holder: 'v2002', target: 'v17102', property: 'wdt:P144', subject: uuids.v2002 }),
-    ]);
-    const stale = await deliver(join(directory, 'stale.sqlite'), { v17102: 'v17103' });
-    expect(stale.proposed).toEqual([]);
-    expect(stale.unresolved).toEqual([
+          };
+        },
+      });
+
+    const first = await deliver();
+    expect(first.proposed.some((edge) => edge.vndbRelation)).toBe(false);
+    expect(first.unresolved).toContainEqual(
       expect.objectContaining({ reason: 'current_relation_endpoint_identity_mismatch:v17102' }),
-    ]);
+    );
+    expect(first.proposed.some((edge) => edge.source === 'bangumi')).toBe(true);
+
+    db.close();
+    db = new Database(path);
+    graph = new CrossMediaGraph(db);
+    graph.remember(drafts);
+    restored = true;
+    const reopened = await deliver();
+    expect(reopened.proposed.some((edge) => edge.vndbRelation && edge.holder === side.holder)).toBe(true);
+    expect(sends.find((command) => command.key === sideKey)?.key).toBe(sideKey);
+    const afterRecovery = sends.length;
+
+    db.close();
+    db = new Database(path);
+    graph = new CrossMediaGraph(db);
+    graph.remember(drafts);
+    await deliver();
+    expect(sends).toHaveLength(afterRecovery);
   } finally {
+    db.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

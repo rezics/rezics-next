@@ -1,3 +1,4 @@
+import { ImportDetails, ImportEmpty, ImportReturn, ImportTarget } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import type { SourceAdmissionOutcome } from '../rich-private-entry/admission';
 import { ImportSourceEvidence, ImportSourceOutcome } from '../rich-private-entry/source-confirm';
@@ -52,6 +53,7 @@ function Outcome({
   return (
     <li className="rounded-md border p-3" data-mal-outcome={outcome.status} data-mal-row={outcome.row}>
       <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.row) ?? `#${outcome.row + 1}`}</p>
+      <ImportTarget target={targetId} />
       <p>{m.library_mal_row_outcome({ status: malOutcomeLabel(outcome.status) })}</p>
       <p className="text-sm">
         {m.library_mal_state_effect({
@@ -123,11 +125,13 @@ function Outcome({
         ) : null}
       </section>
       {row ? (
-        <section className="space-y-1 rounded-md border p-3">
-          <p className="font-medium">{m.library_mal_source_evidence_label()}</p>
+        <ImportDetails title={m.library_mal_source_evidence_label()}>
           <p className="text-sm">{m.library_mal_source_score({ value: malOriginalScoreLabel(row.score) })}</p>
           <ImportSourceEvidence preview={row.sourcePreview ?? malSourcePreview(row)} />
-        </section>
+        </ImportDetails>
+      ) : null}
+      {row && outcome.labels?.length && targetId ? (
+        <MalCurrentAssignments subjectId={targetId} disabled={busy} />
       ) : null}
       <ImportSourceOutcome outcome={admission} />
     </li>
@@ -166,6 +170,8 @@ export function MalResultPage({
   const rowByIndex = new Map(rows.map((row) => [row.index, row]));
   return (
     <section className="space-y-4" data-mal-stage="results">
+      <h2 className="text-xl font-semibold">{m.library_import_results()}</h2>
+      {result.outcomes.length === 0 && result.remaining.length === 0 ? <ImportEmpty results /> : null}
       {result.stopped ? <p role="status">{m.library_mal_stopped()}</p> : <p role="status">{m.library_mal_partial()}</p>}
       <ul className="space-y-3">
         {result.outcomes.map((outcome) => {
@@ -202,21 +208,6 @@ export function MalResultPage({
           </li>
         ))}
       </ul>
-      {rows
-        .filter(
-          (row) =>
-            row.outcome?.labels?.length ||
-            result.outcomes.some((outcome) => outcome.row === row.index && outcome.labels?.length),
-        )
-        .map((row) => {
-          const subjectId = row.review?.target ?? row.target;
-          return subjectId ? (
-            <MalCurrentAssignments
-              key={`${row.index}:${subjectId}:${JSON.stringify(result.outcomes)}`}
-              subjectId={subjectId}
-            />
-          ) : null;
-        })}
       <div className="flex flex-wrap gap-3">
         <MalAction type="button" variant="outline" disabled={busy} onClick={onReview}>
           {m.library_mal_return_review()}
@@ -231,6 +222,7 @@ export function MalResultPage({
             {m.library_mal_retry_source_evidence()}
           </MalAction>
         ) : null}
+        <ImportReturn />
       </div>
     </section>
   );

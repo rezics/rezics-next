@@ -8,6 +8,7 @@ import { addonProfileFixture, addonProfileId, addonWorkId } from '../src/kernel/
 import { subjectFactsFixture } from '../src/kernel/fake/subject-facts';
 import {
   factsGlobalVisitHref,
+  factsCorrectionIntentFits,
   factsPublicCorrectionHref,
   factsPublicIntentFits,
   factsPublicVisitUnsupported,
@@ -17,6 +18,7 @@ import {
 import { SubjectFactsEntry } from '../src/features/catalogue/subject-facts-entry';
 import { subjectHref } from '../src/subject/subject-href';
 import { candidateContext } from '../src/subject/candidates';
+import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -30,6 +32,53 @@ const observed: FactsPublicOrigin = {
   context: candidateContext,
   returnHref: publicHref,
 };
+const graphReturn = `${publicHref}/graph?${new URLSearchParams({
+  property: 'schema:abstract',
+  direction: 'in',
+  depth: '2',
+  edge: addonWorkId,
+  from: addonProfileId,
+  to: addonWorkId,
+  edgeProperty: 'schema:abstract',
+})}`;
+
+test('Facts and Subject returns admit the exact closed graph address without editor or session authority', () => {
+  const search = `?${new URLSearchParams({ returnTo: graphReturn, property: 'schema:abstract', statement: addonWorkId })}`;
+  expect(parseFactsPublicVisit(search, addonProfileId, 'en', base)).toEqual({ kind: 'graph', returnHref: graphReturn });
+  expect(subjectVisitReturn(graphReturn, 'en')).toBe(graphReturn);
+  const neighbourOrigin = factsPublicCorrectionHref(base, addonWorkId, 'en', {
+    ...observed,
+    subject: addonWorkId,
+    returnHref: graphReturn,
+  });
+  expect(
+    parseFactsPublicVisit(new URL(neighbourOrigin, 'https://site.test').search, addonWorkId, 'en', base).kind,
+  ).toBe('origin');
+  for (const suffix of [
+    '&session=private',
+    '&cursor=private',
+    '&node=' + addonProfileId,
+    '&edge=' + addonWorkId,
+    '&via=x',
+    '#connections',
+  ]) {
+    const invalid = graphReturn + suffix;
+    expect(subjectVisitReturn(invalid, 'en')).toBeUndefined();
+    expect(
+      parseFactsPublicVisit(`?${new URLSearchParams({ returnTo: invalid })}`, addonProfileId, 'en', base).kind,
+    ).toBe('invalid');
+  }
+  expect(subjectVisitReturn(graphReturn.replace('/en/', '/ja/'), 'en')).toBeUndefined();
+  expect(parseFactsPublicVisit(search + '&origin=!', addonProfileId, 'en', base).kind).toBe('invalid');
+  const longGraph = new URL(graphReturn, 'https://site.test');
+  longGraph.pathname = `/en/subjects/${addonProfileId}/${'a'.repeat(1600)}/graph`;
+  const longSearch = `?${new URLSearchParams({ returnTo: longGraph.pathname + longGraph.search, property: 'schema:abstract', statement: addonWorkId })}`;
+  expect(factsPublicIntentFits(base + longSearch)).toBe(false);
+  expect(factsCorrectionIntentFits(base + longSearch, 'en')).toBe(true);
+  expect(parseFactsPublicVisit(longSearch, addonProfileId, 'en', base).kind).toBe('graph');
+  longGraph.pathname = `/en/subjects/${addonProfileId}/${'界'.repeat(700)}/graph`;
+  expect(subjectVisitReturn(longGraph.pathname + longGraph.search, 'en')).toBeUndefined();
+});
 
 test('Facts public visits keep the address closed and leave exact-review search under its existing owner', () => {
   const href = factsPublicCorrectionHref(base, addonProfileId, 'en', observed);
@@ -253,12 +302,18 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     expect(changesReview).toMatchObject({ returnTo: 'changes' });
     expect(changesReview.reviewInvalid).toBeFalsy();
     expect(visitValidator({ property: 'schema:abstract', returnTo: 'sources' })).toMatchObject({ returnTo: 'sources' });
+    expect(
+      visitValidator({ property: 'schema:abstract', statement: addonWorkId, returnTo: graphReturn }),
+    ).toMatchObject({ property: 'schema:abstract', statement: addonWorkId, returnTo: graphReturn });
     const visitLoaderDeps = Route.options.loaderDeps as (input: { search: Record<string, unknown> }) => unknown;
     expect(
       visitLoaderDeps({ search: { origin: 'observed', publicReturn: '/en/subjects/example#connections' } }),
     ).toEqual({
       origin: 'observed',
       publicReturn: '/en/subjects/example#connections',
+      returnTo: undefined,
+      property: undefined,
+      statement: undefined,
     });
 
     await load('harbor-northern-lights', originHref);
@@ -323,6 +378,13 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     expect(new URL(returnLink!.href).searchParams.toString()).toBe('');
     returnLink!.focus();
     expect(window.document.activeElement).toBe(returnLink);
+    await navigate(`${base}?${new URLSearchParams({ returnTo: graphReturn })}`);
+    await waitFor(() => expect(host.querySelector(`a[href="${graphReturn}"]`)).not.toBeNull());
+    expect(host.querySelector(`a[href="${graphReturn}"]`)!.textContent).toBe(m.recording_reader_return());
+    const beforeInvalidGraph = correctionReads.length;
+    await navigate(`${base}?${new URLSearchParams({ returnTo: graphReturn + '&session=private' })}`);
+    await waitFor(() => expect(host.textContent).toContain(m.facts_public_invalid()));
+    expect(correctionReads).toHaveLength(beforeInvalidGraph);
   } finally {
     await act(async () => root.unmount());
     client.clear();

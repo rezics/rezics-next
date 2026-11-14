@@ -29,6 +29,11 @@ import {
   characterTraitSchemeUri,
 } from '../src/vndb-character-traits.ts';
 
+const evidence = (content: unknown, rank: 'normal' | 'preferred' | 'deprecated' = 'normal') => ({
+  rank,
+  value: { content },
+});
+
 async function selectedTables(directory: string, extraParents: string[] = []) {
   const vndb = join(directory, 'vndb');
   await mkdir(join(vndb, 'db'), { recursive: true });
@@ -130,7 +135,10 @@ function journaledPort(journal: ShowcaseJournal, commands: BatchCommand[]) {
         if (command.op === 'propose') {
           const subject = subjects.get(command.subject)?.subject;
           if (subject) {
-            const statement = structuredClone(command.statement) as { value: { type: string; content: unknown } };
+            const statement = {
+              ...structuredClone(command.statement),
+              rank: 'normal',
+            } as { rank: string; value: { type: string; content: unknown } };
             const property = command.statement.property.id;
             subject.statements[property] =
               property === 'skos:broader' ? [...(subject.statements[property] ?? []), statement] : [statement];
@@ -332,7 +340,6 @@ test('lying, release-scoped, retracted and parent-contradictory rows withhold on
     const current = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port, journal });
     const hair = current.concepts.find((concept) => concept.code === 'i73')!;
     const parent = current.concepts.find((concept) => concept.code === 'i10')!;
-    const role = current.concepts.find((concept) => concept.code === 'main')!;
     await importVndbCharacterTraits({
       tables,
       path: join(directory, 'state.sqlite'),
@@ -354,26 +361,36 @@ test('lying, release-scoped, retracted and parent-contradictory rows withhold on
     ).toBe(true);
 
     const hairSubject = port.subjects.get(hair.id)!.subject;
-    hairSubject.statements['schema:url'] = [
-      { value: { content: 'https://rezics.com/schemes/vndb/character-traits/other' } },
-    ];
+    hairSubject.statements['schema:url'] = [evidence(characterTraitConceptUri('i73'), 'deprecated')];
     const withheldUri = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port, journal });
     expect(withheldUri.concepts.map((concept) => concept.code).sort()).toEqual(['i10', 'i7', 'main']);
-    hairSubject.statements['schema:url'] = [{ value: { content: characterTraitConceptUri('i73') } }];
-    hairSubject.statements['skos:inScheme'] = [{ value: { content: role.schemeId } }];
+    const traitSchemeId = current.schemes.find((scheme) => scheme.taxonomy === 'vndb.character-trait')!.id;
+    hairSubject.statements['schema:url'] = [
+      evidence('https://rezics.com/schemes/vndb/character-traits/other', 'deprecated'),
+      evidence(characterTraitConceptUri('i73'), 'preferred'),
+    ];
+    hairSubject.statements['skos:inScheme'] = [evidence(traitSchemeId)];
+    expect(
+      (await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port, journal })).concepts.map(
+        (concept) => concept.code,
+      ),
+    ).toContain('i73');
+    hairSubject.statements['skos:inScheme'] = [evidence(traitSchemeId, 'deprecated')];
     const withheldScheme = await composeVndbCharacterVocabularyBindings(
       port,
       profileFromCharacterVocabularyBindings(current),
       (await planShowcaseCharacterVocabulary(tables, selected)).requirements,
     );
     expect(withheldScheme.concepts.some((concept) => concept.code === 'i73')).toBe(false);
-    hairSubject.statements['skos:inScheme'] = [
-      { value: { content: current.schemes.find((scheme) => scheme.taxonomy === 'vndb.character-trait')!.id } },
-    ];
-    hairSubject.statements['skos:broader'] = [{ value: { content: role.id } }];
+    hairSubject.statements['skos:inScheme'] = [evidence(traitSchemeId, 'deprecated'), evidence(traitSchemeId)];
+    hairSubject.statements['skos:broader'] = [evidence(parent.id, 'deprecated')];
     const withheldParent = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port, journal });
     expect(withheldParent.concepts.map((concept) => concept.code).sort()).toEqual(['i10', 'i7', 'main']);
-    hairSubject.statements['skos:broader'] = [{ value: { content: parent.id } }];
+    hairSubject.statements['skos:broader'] = [evidence(parent.id, 'deprecated'), evidence(parent.id, 'preferred')];
+    const restored = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port, journal });
+    expect(restored.concepts.map((concept) => [concept.code, concept.id]).sort()).toEqual(
+      current.concepts.map((concept) => [concept.code, concept.id]).sort(),
+    );
 
     const afterCount = commands.length;
     await importVndbCharacterTraits({
@@ -400,6 +417,15 @@ test('lying, release-scoped, retracted and parent-contradictory rows withhold on
         commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:character'),
       ),
     ).not.toContain('/chars_vns/c2/v1/r9');
+    const restoredImport = await importVndbCharacterTraits({
+      tables,
+      path: join(directory, 'state.sqlite'),
+      port,
+      bindings: restored,
+      selectedWorkIds: ['v1', 'v2', 'v3'],
+    });
+    expect(port.identities.get('c1')).toBe(createdCharacters.find(([key]) => key === 'c1')?.[1]);
+    expect(restoredImport.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
 
     const overflowParents = Array.from({ length: 14 }, (_, index) => `i${2000 + index}`);
     const overflowTables = await selectedTables(join(directory, 'overflow'), overflowParents);

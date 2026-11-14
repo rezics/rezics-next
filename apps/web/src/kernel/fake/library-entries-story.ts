@@ -1,3 +1,4 @@
+import { memberShelfFixture, type MemberShelfState } from './library-member-fixture';
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 
@@ -11,7 +12,14 @@ export function setLibraryTypesStoryState(next: typeof typesState): void {
 
 export function setLibraryEntriesStoryMode(next: LibraryStoryMode): void {
   mode = next;
+  memberShelfFixture.select(null);
   typesState = 'loaded';
+}
+
+export function setLibraryMemberStoryState(next: MemberShelfState): void {
+  mode = 'recorded';
+  typesState = 'loaded';
+  memberShelfFixture.select(next);
 }
 
 function response(recordings: Record<string, KernelRecording>, request: Request): KernelRecording | undefined {
@@ -61,6 +69,7 @@ function response(recordings: Record<string, KernelRecording>, request: Request)
 }
 
 export const routes: FakeRoute[] = [
+  ...memberShelfFixture.routes,
   {
     method: 'GET',
     path: '/v1/libraryShelfTypes',

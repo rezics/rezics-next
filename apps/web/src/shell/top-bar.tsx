@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { Bell, LogIn, Plus } from 'lucide-react';
-import { Menu } from '@rezics/ui/menu';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Skeleton } from '@rezics/ui/shadcn/skeleton';
 import { cn } from '@rezics/ui/utils';
@@ -8,9 +7,10 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { UnreadBadge, UnreadBadgeView, type UnreadCount } from '../inbox';
 import { LanguageControl, ThemeControl } from './appearance-controls';
-import { PhoneCreationLinks, shellSignInHref, useShellCreationActions } from './phone-navigation';
+import { ShellCreationMenu, shellSignInHref, useShellCreationActions } from './phone-navigation';
 import { navigationPathMatches, type NavigationSession } from './navigation';
 
+/** Search has its own compact row; labels and recovery can grow without taking its width. */
 export function TopBar({
   navigation,
   logo,
@@ -18,14 +18,27 @@ export function TopBar({
   actions,
 }: Record<'navigation' | 'logo' | 'search' | 'actions', ReactNode>) {
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur-md has-[[data-expanded=true]]:z-50">
-      <div className="flex min-h-16 items-center gap-2 px-3 lg:grid lg:grid-cols-[minmax(21rem,1fr)_minmax(0,40rem)_minmax(21rem,1fr)]">
-        <div className="flex shrink-0 items-center gap-1">
+    <header
+      data-shell-header
+      className="sticky top-0 z-40 border-b border-border/60 bg-background/95 backdrop-blur-md has-[[data-expanded=true]]:z-50"
+    >
+      <div className="mx-auto grid w-full max-w-[112rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-3 py-2 lg:min-h-16 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,auto)] lg:gap-x-4">
+        <div className="flex min-w-0 items-center gap-1">
           {navigation}
           {logo}
         </div>
-        <div className="min-w-0 flex-1">{search}</div>
-        <div className="ms-auto flex w-max shrink-0 items-center gap-1">{actions}</div>
+        <div
+          data-shell-header-search
+          className="col-span-2 row-start-2 min-h-11 min-w-0 w-full lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:min-h-0 lg:mx-auto lg:max-w-160"
+        >
+          {search}
+        </div>
+        <div
+          data-shell-header-actions
+          className="col-start-2 row-start-1 flex min-w-0 flex-wrap items-center justify-end gap-1 lg:col-start-3 lg:max-w-104"
+        >
+          {actions}
+        </div>
       </div>
     </header>
   );
@@ -46,13 +59,11 @@ export function NotificationsLink({ pathname, badge }: { pathname: string; badge
   );
 }
 
+/** A failed session stays visible at every width, alongside its real recovery anchor. */
 export function UnavailableAccountAction({ signIn }: { signIn: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-1">
-      <span
-        role="status"
-        className="sr-only md:not-sr-only md:max-w-36 md:break-words md:text-xs md:text-muted-foreground"
-      >
+    <div data-account-unavailable className="flex min-w-0 flex-1 items-center justify-end gap-2">
+      <span role="status" className="min-w-0 max-w-44 text-xs leading-snug wrap-anywhere text-muted-foreground">
         {m.shell_account_unavailable()}
       </span>
       <a
@@ -60,11 +71,12 @@ export function UnavailableAccountAction({ signIn }: { signIn: string }) {
         aria-label={m.account_sign_in()}
         title={m.account_sign_in()}
         className={cn(
-          buttonVariants({ variant: 'ghost', size: 'icon-lg' }),
-          'size-11 min-h-11 min-w-11 shrink-0 rounded-full p-0 text-primary',
+          buttonVariants({ variant: 'outline', size: 'lg' }),
+          'min-h-11 min-w-11 shrink-0 rounded-full px-3 text-primary',
         )}
       >
-        <LogIn aria-hidden="true" className="size-4" />
+        <LogIn aria-hidden="true" className="size-4 shrink-0" />
+        <span className="hidden sm:inline">{m.account_sign_in()}</span>
       </a>
     </div>
   );
@@ -89,16 +101,21 @@ export function ShellTopActions({
   const signIn = shellSignInHref(pathname, returnTo);
   return (
     <>
-      <Menu
-        title={m.shell_create()}
-        closeOnNavigation
+      <ShellCreationMenu
+        actions={actions}
+        pathname={pathname}
+        session={session}
+        returnTo={returnTo}
         trigger={
-          <Button size="lg" className="min-w-11 rounded-full px-3" aria-label={m.shell_create()}>
+          <Button
+            size="lg"
+            className="min-h-11 h-auto min-w-11 shrink-0 rounded-full px-3 py-2"
+            aria-label={m.shell_create()}
+          >
             <Plus aria-hidden="true" />
-            <span className="hidden lg:inline">{m.shell_create()}</span>
+            <span className="hidden max-w-32 wrap-anywhere whitespace-normal xl:inline">{m.shell_create()}</span>
           </Button>
         }
-        content={<PhoneCreationLinks actions={actions} pathname={pathname} session={session} returnTo={returnTo} />}
       />
       {session === 'signed-in' ? (
         <>
@@ -108,23 +125,28 @@ export function ShellTopActions({
               badge={unread ? <UnreadBadgeView data={unread} /> : <UnreadBadge />}
             />
           )}
-          <div className="hidden md:block" data-session-slot>
+          <div
+            className="hidden md:block [@media(display-mode:standalone)]:block [[data-standalone]_&]:block"
+            data-session-slot
+          >
             {account}
           </div>
         </>
       ) : session === 'signed-out' ? (
         <>
-          <div className="hidden items-center gap-1 md:flex">
+          <div className="hidden min-w-0 flex-wrap items-center justify-end gap-1 md:flex [@media(display-mode:standalone)]:flex [[data-standalone]_&]:flex">
             <LanguageControl />
             <ThemeControl />
           </div>
           <a
             href={signIn}
-            className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'rounded-full px-3 text-primary')}
+            className={cn(
+              buttonVariants({ variant: 'outline', size: 'lg' }),
+              'min-h-11 h-auto min-w-11 max-w-48 rounded-full px-3 py-2 text-primary',
+            )}
           >
             <LogIn aria-hidden="true" className="size-4" />
-            <span className="hidden sm:inline">{m.account_sign_in()}</span>
-            <span className="sr-only sm:hidden">{m.account_sign_in()}</span>
+            <span className="min-w-0 wrap-anywhere whitespace-normal">{m.account_sign_in()}</span>
           </a>
         </>
       ) : session === 'unknown' ? (

@@ -1,5 +1,6 @@
 import { candidateContext } from '../pages/visit-host-port';
-import { subjectVisitReturn } from '../pages/subject-visit-navigation';
+import { subjectGraphVisitReturn, subjectVisitReturn } from '../pages/subject-visit-navigation';
+import { parseGraphPublicVisit } from '../pages/graph-browser/public-visit';
 
 /** A public observation, never a selected correction assertion or mutation operand. */
 export type FactsPublicOrigin = {
@@ -13,6 +14,7 @@ export type FactsPublicVisit =
   | { kind: 'legacy' }
   | { kind: 'origin'; origin: FactsPublicOrigin }
   | { kind: 'fresh'; returnHref: string }
+  | { kind: 'graph'; returnHref: string }
   | { kind: 'invalid' };
 
 export const factsPublicIntentLimit = 2048;
@@ -25,13 +27,37 @@ export function factsPublicIntentFits(value: string): boolean {
   return value.length <= factsPublicIntentLimit && encoder.encode(value).byteLength <= factsPublicIntentLimit;
 }
 
-function publicReturn(value: unknown, subject: string, locale: string): { href: string; realm?: string } | undefined {
+/** A separate graph return pays its own address budget, alongside the editor's fixed search fields. */
+export function factsCorrectionIntentFits(value: string, locale: string): boolean {
+  if (factsPublicIntentFits(value)) return true;
+  const queryStart = value.indexOf('?');
+  if (queryStart < 0) return false;
+  const params = new URLSearchParams(value.slice(queryStart));
+  if (params.getAll('returnTo').length !== 1 || !subjectGraphVisitReturn(params.get('returnTo'), locale)) return false;
+  params.delete('returnTo');
+  return factsPublicIntentFits(`${value.slice(0, queryStart)}?${params}`);
+}
+
+function publicReturn(
+  value: unknown,
+  subject: string,
+  locale: string,
+): { href: string; realm?: string; context?: string } | undefined {
   if (typeof value !== 'string' || !factsPublicIntentFits(value) || !value.startsWith('/') || value.startsWith('//'))
     return;
   const href = subjectVisitReturn(value, locale);
   if (!href || !factsPublicIntentFits(href)) return;
   const url = new URL(href, localOrigin);
   const path = url.pathname.split('/');
+  if (path[5] === 'graph') {
+    const visit = parseGraphPublicVisit(url.search, url.hash, path[3]!, locale, url.pathname);
+    if (visit?.kind === 'invalid') return;
+    return {
+      href,
+      context: visit?.kind === 'origin' ? visit.origin.context : candidateContext,
+      ...(visit?.kind === 'origin' && visit.origin.realm ? { realm: visit.origin.realm } : {}),
+    };
+  }
   const keys = [...url.searchParams.keys()];
   const realms = url.searchParams.getAll('realm');
   if (
@@ -65,7 +91,8 @@ function normalizeOrigin(value: unknown, subject: string, locale: string): Facts
     return;
   const realm = origin.realm as string | undefined;
   const returned = publicReturn(origin.returnHref, subject, locale);
-  if (!returned || returned.realm !== realm) return;
+  if (!returned || returned.realm !== realm || (returned.context !== undefined && returned.context !== origin.context))
+    return;
   return {
     subject,
     context: origin.context,
@@ -131,7 +158,24 @@ export function parseFactsPublicVisit(
   const hasFreshReturn = params.has('publicReturn');
   const malformedVisitKey = /(?:^|[?&])(?:origin|publicReturn)%(?![0-9a-f]{2})/i.test(search);
   if (malformedVisitKey) return { kind: 'invalid' };
-  if (!hasOrigin && !hasFreshReturn) return { kind: 'legacy' };
+  if (!hasOrigin && !hasFreshReturn) {
+    const returnTo = params.get('returnTo');
+    if (returnTo === null || ['queue', 'changes', 'sources'].includes(returnTo)) return { kind: 'legacy' };
+    const returned = subjectGraphVisitReturn(returnTo, locale);
+    const property = params.get('property');
+    const statement = params.get('statement');
+    if (
+      !returned ||
+      !factsCorrectionIntentFits(`${canonicalPath}${search}`, locale) ||
+      /%(?![0-9a-f]{2})|#/i.test(search) ||
+      new Set(keys).size !== keys.length ||
+      keys.some((key) => !['returnTo', 'property', 'statement'].includes(key)) ||
+      ((property !== null || statement !== null) &&
+        (!property || property.length > 256 || !statement || !uuid.test(statement)))
+    )
+      return { kind: 'invalid' };
+    return { kind: 'graph', returnHref: returned };
+  }
   if (
     !factsPublicIntentFits(`${canonicalPath}${search}`) ||
     /%(?![0-9a-f]{2})/i.test(search) ||

@@ -109,7 +109,16 @@ export function parseVndbCharacterProfileReferences(value: unknown): VndbCharact
 function hasAdoptedContent(read: unknown, property: string, expected: string): boolean {
   if (!object(read) || !object(read.subject) || !object(read.subject.statements)) return false;
   const rows = read.subject.statements[property];
-  return Array.isArray(rows) && rows.some((row) => object(row) && object(row.value) && row.value.content === expected);
+  return (
+    Array.isArray(rows) &&
+    rows.some(
+      (row) =>
+        object(row) &&
+        (row.rank === 'normal' || row.rank === 'preferred') &&
+        object(row.value) &&
+        row.value.content === expected,
+    )
+  );
 }
 
 /** Verify exact current public type, URI and scheme associations before a code can be proposed. */

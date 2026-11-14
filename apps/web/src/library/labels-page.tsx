@@ -18,7 +18,7 @@ import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { ContentItemTitleLink } from '@rezics/ui/content-item';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@rezics/ui/shadcn/dialog';
-import { EllipsisIcon } from 'lucide-react';
+import { ArrowUpRightIcon, EllipsisIcon, LockKeyholeIcon, TagIcon } from 'lucide-react';
 import { undoToast as UndoToast } from '@rezics/ui/undo-toast';
 import { toast } from '@rezics/ui/shadcn/toast';
 import type { manageLabel } from './labels-actions';
@@ -566,6 +566,7 @@ export function LabelsPageView({
     const failed = fallback ? failedAction(page) : null;
     const label =
       failed?.operation === operation && failed.label.id === selected.label.id ? failed.label : selected.label;
+    const currentLabel = page.labels.find((item) => item.id === label.id);
     const invalid = fieldError(operation, label.id);
     const errorId = `${operation}-error-${label.id}`;
     const helpId = `rename-help-${label.id}`;
@@ -579,6 +580,22 @@ export function LabelsPageView({
         aria-busy={busy}
       >
         {hidden(operation, operation === 'rename' ? label.renameKey : label.deleteKey, label.id, label.revision)}
+        {invalid && !currentLabel ? (
+          <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+            {m.library_labels_recovery_off_page()}
+          </p>
+        ) : null}
+        {operation === 'rename' &&
+        currentLabel &&
+        (invalid || currentLabel.name !== selected.label.name) &&
+        currentLabel.name !== selected.name ? (
+          <p className="min-w-0 rounded-lg bg-muted p-3 text-sm [overflow-wrap:anywhere]" data-label-current-name>
+            {m.library_labels_current_name({ name: currentLabel.name })}
+          </p>
+        ) : null}
+        {operation === 'delete' ? (
+          <p className="text-sm text-muted-foreground">{m.library_labels_delete_effect()}</p>
+        ) : null}
         {operation === 'rename' ? (
           <Field>
             <FieldLabel htmlFor={`label-${label.id}`}>{m.library_label_name()}</FieldLabel>
@@ -766,7 +783,7 @@ export function LabelsPageView({
   return (
     <article ref={pageRef} tabIndex={-1} className="min-w-0 max-w-3xl space-y-8 text-foreground" aria-busy={busy}>
       {navigation.boundary}
-      <header className="space-y-2">
+      <header className="space-y-3 border-b pb-6">
         <PageHeading
           ref={headingRef}
           tabIndex={-1}
@@ -774,8 +791,11 @@ export function LabelsPageView({
         >
           {m.library_labels_heading()}
         </PageHeading>
-        <p className="text-muted-foreground">{m.library_labels_private()}</p>
-        <p className="text-sm text-muted-foreground">{m.library_consolidation_labels_hint()}</p>
+        <p className="max-w-xl text-muted-foreground">{m.library_labels_directory_description()}</p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LockKeyholeIcon aria-hidden="true" className="size-4 shrink-0" />
+          {m.library_labels_private()}
+        </p>
       </header>
       {feedback &&
       !feedback.ok &&
@@ -818,8 +838,14 @@ export function LabelsPageView({
           action={mutationPath}
           onSubmit={onSubmit}
           noValidate
-          className="space-y-2"
+          className="space-y-3 rounded-xl border bg-muted/20 p-4 sm:p-5"
+          aria-label={m.library_label_create()}
+          data-label-create
         >
+          <div className="space-y-1">
+            <h2 className="font-semibold">{m.library_label_create()}</h2>
+            <p className="text-sm text-muted-foreground">{m.library_labels_create_hint()}</p>
+          </div>
           {hidden('create', page.createKey)}
           <Field>
             <FieldLabel htmlFor="new-label">{m.library_label_name()}</FieldLabel>
@@ -845,9 +871,14 @@ export function LabelsPageView({
                 {m.library_label_create()}
               </Button>
             </div>
-            <p id="create-name-help" className="text-sm text-muted-foreground">
-              {m.library_label_name_input_help()}
-            </p>
+            <details className="text-sm text-muted-foreground">
+              <summary className={`${actionClass} w-fit cursor-pointer text-start`}>
+                {m.library_labels_name_guidance()}
+              </summary>
+              <p id="create-name-help" className="pt-2">
+                {m.library_label_name_input_help()}
+              </p>
+            </details>
             {fieldError('create') ? error('create-error', fieldIssue('create')) : null}
           </Field>
         </form>
@@ -858,8 +889,14 @@ export function LabelsPageView({
           {actionForm(failedAction(page)!, true)}
         </LabelExposure>
       ) : null}
+      <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-2 border-b pb-3">
+        <h2 className="text-sm font-medium text-muted-foreground" data-label-directory-count>
+          {m.library_labels_directory_count({ count: page.labels.length })}
+        </h2>
+        {page.next ? <span className="text-sm text-muted-foreground">{m.library_label_more()}</span> : null}
+      </div>
       {page.labels.length ? (
-        <ul className="space-y-1">
+        <ul className="divide-y" aria-label={m.library_labels_heading()}>
           {page.labels.map((label) => {
             const entries: MenuEntry[] = [];
             if (
@@ -887,9 +924,21 @@ export function LabelsPageView({
                 },
               });
             return (
-              <ListRow key={label.id} className="min-w-0 px-2 py-3 sm:py-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <LabelShelfLink label={label} locale={locale} />
+              <ListRow key={label.id} className="min-w-0 px-2 py-4 sm:px-3 sm:py-5">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <span
+                    className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+                    aria-hidden="true"
+                  >
+                    <TagIcon className="size-4" />
+                  </span>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <LabelShelfLink label={label} locale={locale} />
+                    <span className="flex items-center gap-1 text-sm text-muted-foreground" aria-hidden="true">
+                      {m.library_labels_view_members()}
+                      <ArrowUpRightIcon className="size-3.5 shrink-0" />
+                    </span>
+                  </div>
                   {hydrated && entries.length ? (
                     <ListRowControl className="shrink-0">
                       <Menu

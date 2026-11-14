@@ -62,42 +62,32 @@ function proposedValue(command: BatchCommand) {
     : undefined;
 }
 
+function environmentValues(commands: readonly BatchCommand[]) {
+  return environmentCommands(commands).map((command) =>
+    command.op === 'propose' ? [command.statement.property.id, proposedValue(command)] : [],
+  );
+}
+
+function reviewedConcept(id: string, url: string) {
+  return {
+    subject: {
+      id,
+      type: 'skos:Concept',
+      statements: { 'schema:url': [{ rank: 'normal', value: { type: 'value', content: url } }] },
+    },
+  };
+}
+
 test('selected authored Game proposes reviewed platform and engine Concepts and withholds only concealed or wrong-source items', async () => {
   const stateDir = await mkdtemp(join(tmpdir(), 'bangumi-game-environment-state-'));
   const pc = randomUUID();
   const playstation = randomUUID();
   const unity = randomUUID();
+  const nintendo = randomUUID();
   const known = new Map<string, object>([
-    [
-      pc,
-      {
-        subject: {
-          id: pc,
-          type: 'skos:Concept',
-          statements: { 'schema:url': [{ value: { content: 'https://bgm.tv/info/platform/PC' } }] },
-        },
-      },
-    ],
-    [
-      playstation,
-      {
-        subject: {
-          id: playstation,
-          type: 'skos:Concept',
-          statements: { 'schema:url': [{ value: { content: 'https://bgm.tv/info/platform/PS4' } }] },
-        },
-      },
-    ],
-    [
-      unity,
-      {
-        subject: {
-          id: unity,
-          type: 'skos:Concept',
-          statements: { 'schema:url': [{ value: { content: 'https://bgm.tv/info/engine/Unity' } }] },
-        },
-      },
-    ],
+    [pc, reviewedConcept(pc, 'https://bgm.tv/info/platform/PC')],
+    [playstation, reviewedConcept(playstation, 'https://bgm.tv/info/platform/PS4')],
+    [unity, reviewedConcept(unity, 'https://bgm.tv/info/engine/Unity')],
   ]);
   const sent: BatchCommand[] = [];
   const identities = new Map<string, string>();
@@ -139,6 +129,12 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
       item: 'PlayStation 4',
       conceptId: playstation,
       sourceUri: 'https://bgm.tv/info/platform/PS4',
+    },
+    {
+      kind: 'platform' as const,
+      item: 'Nintendo Switch',
+      conceptId: nintendo,
+      sourceUri: 'https://bgm.tv/info/platform/Nintendo_Switch',
     },
     { kind: 'engine' as const, item: 'Unity', conceptId: unity, sourceUri: 'https://bgm.tv/info/engine/Unity' },
   ];
@@ -189,13 +185,7 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
       code: 'missing_current_game_genre_binding',
     });
 
-    known.set(pc, {
-      subject: {
-        id: pc,
-        type: 'skos:Concept',
-        statements: { 'schema:url': [{ value: { content: 'https://vndb.org/releases/platforms/win' } }] },
-      },
-    });
+    known.set(pc, reviewedConcept(pc, 'https://vndb.org/releases/platforms/win'));
     known.delete(playstation);
     const before = sent.length;
     const withheld = await seedCrossMedia(selected, join(stateDir, 'state.sqlite'), port, undefined, {
@@ -208,8 +198,7 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
     const later = sent.slice(before);
     expect(environmentCommands(later)).toEqual([]);
     const retracted = later.filter((command) => command.op === 'retract' && command.source.field_group === 'facts');
-    expect(retracted).toHaveLength(2);
-    expect(JSON.stringify(retracted)).toMatch(/平台|%E5%B9%B3%E5%8F%B0/);
+    expect(retracted).toHaveLength(0);
     expect(JSON.stringify(retracted)).not.toMatch(/游戏引擎|%E6%B8%B8%E6%88%8F%E5%BC%95%E6%93%8E/);
     const lookup = createShowcaseBangumiGameEnvironmentLookup({
       sourceAlias: 'bangumi',
@@ -228,11 +217,47 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
       identifierLookup: lookup,
     });
     try {
-      const dump = `${JSON.stringify(target())}\n`;
-      async function* bytes() {
-        yield new TextEncoder().encode(dump);
+      async function runOrdinary(record: ReturnType<typeof target>) {
+        const dump = `${JSON.stringify(record)}\n`;
+        async function* bytes() {
+          yield new TextEncoder().encode(dump);
+        }
+        return importer.runDump(createSourceRegistration('bangumi'), bytes());
       }
-      expect((await importer.runDump(createSourceRegistration('bangumi'), bytes())).status).toBe('committed');
+      known.set(pc, reviewedConcept(pc, 'https://bgm.tv/info/platform/PC'));
+      known.set(playstation, reviewedConcept(playstation, 'https://bgm.tv/info/platform/PS4'));
+      known.set(nintendo, reviewedConcept(nintendo, 'https://bgm.tv/info/platform/Nintendo_Switch'));
+      const baselineAt = sent.length;
+      expect((await runOrdinary(target())).status).toBe('committed');
+      expect(environmentValues(sent.slice(baselineAt))).toEqual([
+        ['schema:gamePlatform', pc],
+        ['schema:gamePlatform', playstation],
+        ['wdt:P408', unity],
+      ]);
+
+      known.delete(unity);
+      const refreshAt = sent.length;
+      const changed = {
+        ...target(),
+        infobox: authoredInfobox.replace('[PC]\n[PlayStation 4]', '[Nintendo Switch]'),
+      };
+      expect((await runOrdinary(changed)).status).toBe('committed');
+      const refreshed = sent.slice(refreshAt);
+      expect(environmentValues(refreshed)).toEqual([['schema:gamePlatform', nintendo]]);
+      const ordinaryRetractions = refreshed.filter(
+        (command) =>
+          command.op === 'retract' &&
+          command.source.external_id === String(targetId) &&
+          /平台|%E5%B9%B3%E5%8F%B0/u.test(JSON.stringify(command)),
+      );
+      expect(ordinaryRetractions).toHaveLength(2);
+      expect(JSON.stringify(ordinaryRetractions)).not.toMatch(/游戏引擎|%E6%B8%B8%E6%88%8F%E5%BC%95%E6%93%8E/);
+      expect(
+        refreshed.some(
+          (command) =>
+            command.op === 'retract' && /游戏引擎|%E6%B8%B8%E6%88%8F%E5%BC%95%E6%93%8E/u.test(JSON.stringify(command)),
+        ),
+      ).toBe(false);
     } finally {
       await importer.close();
     }

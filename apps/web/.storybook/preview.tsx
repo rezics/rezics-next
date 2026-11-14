@@ -33,6 +33,10 @@ const preview: Preview = {
   parameters: {
     a11y: { test: 'error' },
     backgrounds: { disable: true },
+    docs: {
+      codePanel: false,
+      source: { type: 'code' },
+    },
     viewport: {
       options: {
         phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },

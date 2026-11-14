@@ -7,6 +7,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { AppealResolution } from '../appeal-resolution';
 import { appealTarget, type Appeal, type AppealAppellantIdentity, type AppealTargetContext } from '../appeals-read';
 import { workbenchAppealFromPage } from './read-model';
+import { ModerationActionRegion, ModerationActionTarget, ModerationReference, moderationLink } from '../presentation';
 
 const date = (value: string) =>
   new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -73,72 +74,91 @@ export function WorkbenchAppealDetail({
   const originalTarget = appealTarget(appeal);
   const resolution = appeal.resolution !== undefined ? appeal.resolution : (appeal.decision.appeal ?? null);
   return (
-    <article className="space-y-5">
+    <article className="min-w-0 space-y-5 [overflow-wrap:anywhere]">
       <a
-        className="inline-flex min-h-11 items-center underline underline-offset-4"
+        className={moderationLink}
         href={queueHref}
         onClick={(event) => onReturn?.(appeal.id, event.currentTarget, event)}
       >
         {m.moderation_workbench_history_return()}
       </a>
-      <h2 className="text-xl font-semibold">{m.moderation_appeals_tab()}</h2>
-      <ContentItemFrame as="article" className="space-y-5 p-4 sm:p-6">
-        <p className="text-sm text-muted-foreground">
-          {m.moderation_queue_submitted()} <time dateTime={appeal.createdAt}>{date(appeal.createdAt)}</time>
-        </p>
-        <section className="space-y-2">
-          <ContentItemHeading level={3} className="text-sm font-semibold">
-            {m.moderation_appeal_appellant_label()}
-          </ContentItemHeading>
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-2">
+          <h2 className="text-2xl font-semibold">{m.moderation_appeals_tab()}</h2>
           <AppellantIdentity identity={appeal.appellantIdentity} />
-        </section>
-        <section className="space-y-2">
-          <ContentItemHeading level={3} className="text-sm font-semibold">
-            {m.moderation_appeal_decision_label()}
-          </ContentItemHeading>
-          <p className="whitespace-pre-wrap break-words">{appeal.decision.statement}</p>
-          <div className="space-y-1 text-sm">
-            <p>{m.moderation_appeal_original_target_label()}</p>
-            {originalTarget ? (
-              <p className="wrap-anywhere">
-                {targetKindLabel(originalTarget.kind)} <code className="break-all">{originalTarget.id}</code>
-              </p>
-            ) : (
-              <p>{m.moderation_target_unavailable()}</p>
-            )}
-          </div>
-        </section>
-        <section className="space-y-2">
-          <ContentItemHeading level={3} className="text-sm font-semibold">
-            {m.moderation_current_target_label()}
-          </ContentItemHeading>
-          <CurrentDestination context={appeal.targetContext} />
-        </section>
-        <section className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            {m.moderation_queue_submitted()} <time dateTime={appeal.createdAt}>{date(appeal.createdAt)}</time>
+          </p>
+        </div>
+        <Badge variant="secondary">
+          {resolution ? m.moderation_filter_resolved() : m.moderation_appeal_resolution_pending()}
+        </Badge>
+      </header>
+      <div className="grid min-w-0 gap-6 border-t pt-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <section className="min-w-0 space-y-3">
           <ContentItemHeading level={3} className="text-sm font-semibold">
             {m.moderation_appeal_reason_label()}
           </ContentItemHeading>
-          <p className="whitespace-pre-wrap break-words">{appeal.statement}</p>
+          <p className="max-w-prose whitespace-pre-wrap text-base leading-7 [overflow-wrap:anywhere]">
+            {appeal.statement}
+          </p>
         </section>
-        <div className="space-y-3 border-t pt-4">
-          {resolution ? (
-            <p className="text-sm text-muted-foreground">
-              {m.moderation_queue_resolved_at()}{' '}
-              <time dateTime={resolution.resolvedAt}>{date(resolution.resolvedAt)}</time>
+        <div className="min-w-0 space-y-6">
+          <section className="min-w-0 space-y-3">
+            <ContentItemHeading level={3} className="text-sm font-semibold">
+              {m.moderation_appeal_decision_label()}
+            </ContentItemHeading>
+            <p className="whitespace-pre-wrap text-sm leading-7 [overflow-wrap:anywhere]">
+              {appeal.decision.statement}
             </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">{m.moderation_appeal_resolution_pending()}</p>
-          )}
-          <AppealResolution
-            appealId={appeal.id}
-            {...(nativeSession ? { nativeSession } : {})}
-            mayResolve={appeal.canResolve === true}
-            resolution={resolution}
-            {...(isCurrent ? { isCurrent } : {})}
-            {...(onUnresolvedChange ? { onUnresolvedChange } : {})}
-          />
+          </section>
+          <section className="min-w-0 space-y-3 border-t pt-4">
+            <ContentItemHeading level={3} className="text-sm font-semibold">
+              {m.moderation_current_target_label()}
+            </ContentItemHeading>
+            <CurrentDestination context={appeal.targetContext} />
+          </section>
         </div>
-      </ContentItemFrame>
+      </div>
+      <ModerationActionRegion title={m.moderation_queue_review()}>
+        {originalTarget ? (
+          <ModerationActionTarget
+            kind={targetKindLabel(originalTarget.kind)}
+            id={originalTarget.id}
+            reference={{ label: m.moderation_case_details_appeal_id(), value: appeal.id }}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">{m.moderation_target_unavailable()}</p>
+        )}
+        {resolution ? (
+          <p className="text-xs text-muted-foreground">
+            {m.moderation_queue_resolved_at()}{' '}
+            <time dateTime={resolution.resolvedAt}>{date(resolution.resolvedAt)}</time>
+          </p>
+        ) : null}
+        <AppealResolution
+          appealId={appeal.id}
+          {...(nativeSession ? { nativeSession } : {})}
+          mayResolve={appeal.canResolve === true}
+          resolution={resolution}
+          {...(isCurrent ? { isCurrent } : {})}
+          {...(onUnresolvedChange ? { onUnresolvedChange } : {})}
+        />
+      </ModerationActionRegion>
+      <ModerationReference
+        fields={[
+          { label: m.moderation_case_details_appeal_id(), value: appeal.id },
+          { label: m.moderation_case_details_decision_id(), value: appeal.decisionId },
+          ...(originalTarget
+            ? [
+                {
+                  label: m.moderation_appeal_original_target_label(),
+                  value: `${targetKindLabel(originalTarget.kind)} ${originalTarget.id}`,
+                },
+              ]
+            : []),
+        ]}
+      />
     </article>
   );
 }

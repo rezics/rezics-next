@@ -12,15 +12,23 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
 
+type SelectionMovement = { kind: 'selection'; returnFocus: HTMLElement | null };
 export type OwnVotesDepartureControl = {
-  confirm: () => Promise<boolean>;
+  confirm: (movement?: SelectionMovement) => Promise<boolean>;
   allowNavigation: () => void;
   clearNavigation: () => void;
 };
 export type OwnVotesDepartureRef = { current: OwnVotesDepartureControl | null };
 
-/** One editor owns one draft and command; a pending or uncertain command cannot leave without review. */
+type Decision = {
+  owner: object;
+  returnFocus: HTMLElement | null;
+  resolve: (leave: boolean) => void;
+};
+
+/** One editor owns one draft and command; selection and navigation share one decision. */
 export function OwnVotesDeparture({
+  owner,
   dirty,
   locked,
   isCurrent,
@@ -28,6 +36,7 @@ export function OwnVotesDeparture({
   onStay,
   confirmMovement,
 }: {
+  owner: object;
   dirty: boolean;
   locked: boolean;
   isCurrent: () => boolean;
@@ -35,51 +44,62 @@ export function OwnVotesDeparture({
   onStay?: () => void;
   confirmMovement?: OwnVotesDepartureRef | undefined;
 }) {
-  const live = useRef<{
-    dirty: boolean;
-    locked: boolean;
-    isCurrent: () => boolean;
-    onLeave: (() => void) | undefined;
-    onStay: (() => void) | undefined;
-  }>({
-    dirty,
-    locked,
-    isCurrent,
-    onLeave,
-    onStay,
-  });
-  live.current = { dirty, locked, isCurrent, onLeave, onStay };
-  const [open, setOpen] = useState(false);
-  const waiting = useRef<((leave: boolean) => void) | null>(null);
+  const live = useRef({ owner, dirty, locked, isCurrent, onLeave, onStay });
+  const previousOwner = live.current.owner;
+  live.current = { owner, dirty, locked, isCurrent, onLeave, onStay };
+  const [decision, setDecision] = useState<Decision | null>(null);
+  const waiting = useRef<Decision | null>(null);
   const stay = useRef<HTMLButtonElement>(null);
-  const returnFocus = useRef<HTMLElement | null>(null);
+  const connected = useRef(true);
   const approvedMovement = useRef(false);
   const protectedNow = () => live.current.isCurrent() && (live.current.dirty || live.current.locked);
 
-  function choose(leave: boolean) {
-    if (leave && live.current.locked) return;
-    const resolve = waiting.current;
+  // Retire during render: a replacement must never inherit a prompt, approval or focus restoration.
+  if (previousOwner !== owner) approvedMovement.current = false;
+  if (waiting.current && (waiting.current.owner !== owner || !protectedNow())) {
+    waiting.current.resolve(false);
     waiting.current = null;
-    setOpen(false);
-    if (resolve && !leave) live.current.onStay?.();
-    resolve?.(leave);
+    setDecision(null);
+  }
+  const visibleDecision = decision?.owner === owner && decision === waiting.current && isCurrent() ? decision : null;
+
+  function choose(leave: boolean) {
+    const pending = waiting.current;
+    if (!pending || pending.owner !== owner || (leave && live.current.locked)) return;
+    waiting.current = null;
+    setDecision(null);
+    const current = live.current.owner === pending.owner && live.current.isCurrent();
+    if (current && !leave) live.current.onStay?.();
+    pending.resolve(current && leave);
   }
 
-  function confirm(): Promise<boolean> {
+  function confirm(movement?: SelectionMovement): Promise<boolean> {
+    if (waiting.current || !live.current.isCurrent()) return Promise.resolve(false);
     if (!protectedNow()) return Promise.resolve(true);
-    if (waiting.current) return Promise.resolve(false);
-    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setOpen(true);
+    const returnFocus = movement
+      ? movement.returnFocus
+      : document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     return new Promise((resolve) => {
-      waiting.current = resolve;
+      const pending = { owner, returnFocus, resolve };
+      waiting.current = pending;
+      setDecision(pending);
     });
   }
 
-  const decide = () => {
+  const decide = (movement?: SelectionMovement) => {
     const originalAuthority = live.current.isCurrent;
-    return confirm().then((leave) => {
-      const admittedLeave = leave && originalAuthority() && live.current.isCurrent();
-      if (admittedLeave) live.current.onLeave?.();
+    return confirm(movement).then((leave) => {
+      const admittedLeave =
+        leave &&
+        connected.current &&
+        live.current.owner === owner &&
+        originalAuthority() &&
+        live.current.isCurrent() &&
+        !live.current.locked;
+      // Same-page selection discards the editor only after its exact target is admitted by the workspace.
+      if (admittedLeave && !movement) live.current.onLeave?.();
       return admittedLeave;
     });
   };
@@ -106,23 +126,28 @@ export function OwnVotesDeparture({
   });
 
   useEffect(() => {
-    if (waiting.current && !protectedNow()) choose(true);
-  });
-
-  useEffect(
-    () => () => {
-      waiting.current?.(true);
+    connected.current = true;
+    return () => {
+      connected.current = false;
+      waiting.current?.resolve(false);
       waiting.current = null;
-    },
-    [],
-  );
+      approvedMovement.current = false;
+    };
+  }, []);
 
   return (
-    <AlertDialog open={open && isCurrent()} onOpenChange={(next) => !next && choose(false)}>
-      {open && isCurrent() ? (
+    <AlertDialog open={!!visibleDecision} onOpenChange={(next) => !next && choose(false)}>
+      {visibleDecision ? (
         <AlertDialogContent
           initialFocus={stay}
-          finalFocus={() => (isCurrent() && returnFocus.current?.isConnected ? returnFocus.current : false)}
+          finalFocus={() =>
+            connected.current &&
+            live.current.owner === visibleDecision.owner &&
+            live.current.isCurrent() &&
+            visibleDecision.returnFocus?.isConnected
+              ? visibleDecision.returnFocus
+              : false
+          }
         >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_my_ratings_departure_title()}</AlertDialogTitle>
@@ -131,11 +156,20 @@ export function OwnVotesDeparture({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel ref={stay} onClick={() => choose(false)}>
+            <AlertDialogCancel
+              ref={stay}
+              className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              onClick={() => choose(false)}
+            >
               {m.library_my_ratings_stay()}
             </AlertDialogCancel>
             {!locked ? (
-              <AlertDialogAction onClick={() => choose(true)}>{m.library_my_ratings_leave()}</AlertDialogAction>
+              <AlertDialogAction
+                className="h-auto min-h-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                onClick={() => choose(true)}
+              >
+                {m.library_my_ratings_leave()}
+              </AlertDialogAction>
             ) : null}
           </AlertDialogFooter>
         </AlertDialogContent>

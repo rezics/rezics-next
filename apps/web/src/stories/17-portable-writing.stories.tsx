@@ -243,8 +243,8 @@ export const UnknownKeepsExactCustody: Story = {
     await userEvent.click(await view.findByRole('button', { name: m.thread_portable_files() }));
     await userEvent.click(view.getByRole('button', { name: m.thread_write_send() }));
     await view.findByText('Prepared unknown outcome: only the original exact retry remains.');
-    await expect(view.getByRole('button', { name: m.thread_portable_choose() })).toBeDisabled();
-    await expect(view.getByRole('button', { name: m.thread_write_retry() })).toBeEnabled();
+    await expect(view.getByRole('button', { name: m.thread_portable_choose() })).toBeEnabled();
+    await expect(view.getByRole('button', { name: m.thread_recovery_retry_original() })).toBeEnabled();
     await userEvent.click(view.getByRole('button', { name: m.thread_portable_export_text() }));
     await expect(view.getByRole('textbox', { name: m.thread_portable_copy_hint() })).toHaveValue(
       'Original unsent writing.',

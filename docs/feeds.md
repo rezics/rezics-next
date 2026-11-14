@@ -360,6 +360,9 @@ alone do not close that acceptance gap. Home cards and the shared FeedActionBar 
 
 Decision: review context exposes current permitted work and question meaning with the exact recorded vote units and
 vote revision; absent and concealed context stay distinct, while dependency failure rewinds the owning source for retry.
+Home renders supplied native review context on following posts as well as review threads, independently of summary
+kind, alongside immediate-parent context. Only review rows without native context use the discovery Subject metadata
+fallback; native absent or withheld fields never fall back to that metadata.
 
 An authenticated request also gets `summary.viewerReaction`, including explicit `null` after a successful slot read.
 Anonymous requests omit this private field. It is read in one batch for the current actor and is never cached across
@@ -581,6 +584,15 @@ The existing consumers are `apps/web/src/features/feed/home-feed-item.tsx` and
 `HomeFeedActions` / `FeedActionBar` in `apps/web/src/features/feed/action-bar.tsx`, mounted by
 `apps/web/src/features/pages/home-feed.tsx`. The current native review context is the sole authority for its
 reviewed work and citation; absent, concealed or unavailable context never falls back to discovery metadata.
+
+Decision: Home composes the typed native review renderer once in metadata and the immediate-parent renderer once
+in preview; attribution owns author, account, times and image credit. Shared `PublicReviewDetails` and
+`PublicReplyParent` keep their other callers. Space carrier context comes only from the public-owner preview.
+Native absent citation copy describes an uncited post, independently of private rating storage; concealed citations
+keep their own status. Available citations retain supplied units, question/vote revisions and the recorded scale,
+even when the reviewed Subject is absent or concealed. Parent spoiler reveal and hide use the current origin;
+replacement resets disclosure and retires earlier callbacks.
+
 An available parent carries both the current exact post destination and an exact revision destination. Removed and
 withheld parents disclose only their respective admitted fields.
 

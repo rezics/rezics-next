@@ -9,7 +9,11 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { KnowledgeNavigationEntry, type KnowledgeNavigationOperations } from '../knowledge/navigation-page';
-import type { KnowledgeNavigationAddress, KnowledgeNavigationResult } from '../knowledge/navigation-read';
+import {
+  admitKnowledgeNavigationPage,
+  type KnowledgeNavigationAddress,
+  type KnowledgeNavigationResult,
+} from '../knowledge/navigation-read';
 import { knowledgeViewports } from './knowledge-document-fixtures';
 import { locales, type Locale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -18,22 +22,22 @@ const notebookId = '0192f3a0-6c1e-7b2a-9d4e-000000000010';
 const placementId = '0192f3a0-6c1e-7b2a-9d4e-000000000020';
 const documentId = '0192f3a0-6c1e-7b2a-9d4e-000000000021';
 const structureRevisionId = '0192f3a0-6c1e-7b2a-9d4e-000000000030';
-type Scenario = 'owned' | 'outline' | 'sparse' | 'changed' | 'unavailable';
+type Scenario = 'owned' | 'outline' | 'sparse' | 'changed' | 'unavailable' | 'keyboard-retry';
 
 /** Constructed signed-in examples, not native response recordings or admission evidence. */
 function NavigationExample({ scenario, locale = 'en' }: { scenario: Scenario; locale?: Locale }) {
   const router = useMemo(() => {
     const address: KnowledgeNavigationAddress =
       scenario === 'owned' ? { kind: 'owned' } : { kind: 'outline', notebookId, parentPlacementId: null };
+    let continuationAttempts = 0;
     const operations: KnowledgeNavigationOperations = {
       read: async (request): Promise<KnowledgeNavigationResult> => {
         if (scenario === 'changed') return { state: 'changed' };
         if (scenario === 'unavailable') return { state: 'unavailable' };
         if (request.kind === 'owned')
-          return {
-            state: 'ready',
-            page: {
-              kind: 'owned',
+          return admitKnowledgeNavigationPage(
+            200,
+            {
               next: null,
               notebooks: [
                 {
@@ -52,11 +56,13 @@ function NavigationExample({ scenario, locale = 'en' }: { scenario: Scenario; lo
                 },
               ],
             },
-          };
-        return {
-          state: 'ready',
-          page: {
-            kind: 'outline',
+            request,
+          );
+        if (scenario === 'keyboard-retry' && request.cursor && continuationAttempts++ === 0)
+          return admitKnowledgeNavigationPage(503, undefined, request);
+        return admitKnowledgeNavigationPage(
+          200,
+          {
             notebookId,
             parentPlacementId: request.parentPlacementId,
             structureRevisionId,
@@ -69,7 +75,9 @@ function NavigationExample({ scenario, locale = 'en' }: { scenario: Scenario; lo
                       documentId,
                       parentPlacementId: null,
                       position: '3',
-                      title: 'Inspiration: how a character changes through the story',
+                      title: request.cursor
+                        ? 'Retry admitted the same native page'
+                        : 'Inspiration: how a character changes through the story',
                     },
                     {
                       placementId: structureRevisionId,
@@ -80,9 +88,13 @@ function NavigationExample({ scenario, locale = 'en' }: { scenario: Scenario; lo
                         'Scene notes with a long supplied title that wraps on a narrow phone while both actions remain usable',
                     },
                   ],
-            next: scenario === 'sparse' && !request.cursor ? 'illustrative-opaque-frontier' : null,
+            next:
+              !request.cursor && (scenario === 'sparse' || scenario === 'keyboard-retry')
+                ? 'illustrative-opaque-frontier'
+                : null,
           },
-        };
+          request,
+        );
       },
     };
     const root = createRootRoute({
@@ -187,5 +199,46 @@ export const Unavailable: Story = {
     const options = { locale: args.locale as never };
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.knowledge_navigation_unavailable({}, options));
     await expect(canvas.getByRole('button', { name: m.knowledge_navigation_retry({}, options) })).toBeEnabled();
+  },
+};
+
+export const KeyboardCompletion: Story = {
+  args: { scenario: 'outline' },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const options = { locale: args.locale as never };
+    const children = (
+      await canvas.findAllByRole('button', {
+        name: (name) => name.startsWith(m.knowledge_navigation_children({}, options)),
+      })
+    )[0]!;
+    children.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(await canvas.findByRole('status')).toHaveTextContent(
+      m.knowledge_navigation_empty_outline({}, options),
+    );
+    await expect(canvas.getByRole('region', { name: m.knowledge_navigation_reading({}, options) })).toHaveFocus();
+  },
+};
+
+export const KeyboardRetry: Story = {
+  args: { scenario: 'keyboard-retry' },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const options = { locale: args.locale as never };
+    const more = await canvas.findByRole('button', { name: m.knowledge_navigation_more({}, options) });
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.knowledge_navigation_unavailable({}, options));
+    const boundary = canvas.getByRole('region', { name: m.knowledge_navigation_reading({}, options) });
+    await expect(boundary).toHaveFocus();
+    canvas.getByRole('button', { name: m.knowledge_navigation_retry({}, options) }).focus();
+    await userEvent.keyboard(' ');
+    await expect(
+      await canvas.findByRole('link', {
+        name: (name) => name.endsWith('Retry admitted the same native page'),
+      }),
+    ).toBeVisible();
+    await expect(boundary).toHaveFocus();
   },
 };

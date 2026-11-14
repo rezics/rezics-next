@@ -106,6 +106,14 @@ test('pending, resolved and appeal summaries keep native type, reason, outcome a
   expect(host.textContent).toContain(statement);
   expect(host.textContent).toContain(evidence);
   expect(host.textContent).not.toContain(m.report_illegal());
+  expect(host.textContent).toContain(m.moderation_admission_current());
+  const firstRow = host.querySelector('li')!;
+  const caseLink = firstRow.querySelector('a')!;
+  expect(caseLink.textContent).toBe(m.moderation_case_open());
+  expect(caseLink.getAttribute('aria-label')).toContain(reportId);
+  expect(firstRow.textContent).not.toContain(reportId);
+  const evidenceNode = [...firstRow.querySelectorAll('p')].find((item) => item.textContent?.includes(evidence))!;
+  expect(evidenceNode.compareDocumentPosition(caseLink) & window.Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   const hrefs = [...host.querySelectorAll('a')].map((link) => link.getAttribute('href') ?? '');
   expect(hrefs.some((href) => href.includes('/moderation/cases/'))).toBe(true);
   expect(hrefs.join(' ')).not.toContain(evidence);
@@ -164,6 +172,7 @@ test('empty and denied pages drop prior cases; invalid time and absent evidence 
   });
   expect(host.textContent).toContain(m.moderation_workbench_denied());
   expect(host.textContent).not.toContain(evidence);
+  expect(host.textContent).not.toContain(m.moderation_admission_current());
   expect(workbenchTriageTime('not-a-time', 'en')).toBeNull();
   expect(
     workbenchTriageDetailFields({ ...pending, createdAt: 'not-a-time', evidence: null }, 'en').map((field) => [
@@ -176,4 +185,15 @@ test('empty and denied pages drop prior cases; invalid time and absent evidence 
       (field) => field.key === 'evidence' && field.presence === 'absent',
     ),
   ).toBe(true);
+});
+
+test('valid report times remain readable in all eight interface locales with their original instant', () => {
+  for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
+    const time = workbenchTriageTime(pending.createdAt, locale);
+    expect(time?.iso).toBe(pending.createdAt);
+    expect(time?.readable).toContain('UTC');
+    expect(workbenchTriageDetailFields(pending, locale).find((field) => field.key === 'created')?.presence).toBe(
+      'present',
+    );
+  }
 });

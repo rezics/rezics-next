@@ -240,9 +240,13 @@ test('a continuation missing front matter inherits it from the brief it continue
   expect(completeContinuation(complete, parent, ownership)).toBe(complete);
 });
 
-test('a plain Markdown continuation takes the front matter of the brief it continues', () => {
+test('a plain Markdown continuation uses current parent routing after manager reassignment', () => {
   const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
-  const parent = { id: 'parent-task', brief: parseBrief(markdown, ownership) };
+  const staleMarkdown = markdown.replace('goal: fixture\n', 'goal: fixture\nmanager: supermanager\n');
+  const parent = {
+    id: 'parent-task',
+    brief: { ...parseBrief(staleMarkdown, ownership), manager: 'performance', afterSource: ['source-task'] },
+  };
   const completed = completeContinuation('# Finish the notice\n\nShow the rest.\n', parent, ownership);
   expect(parseBrief(completed, ownership)).toMatchObject({
     goal: parent.brief.goal,
@@ -250,9 +254,17 @@ test('a plain Markdown continuation takes the front matter of the brief it conti
     kind: parent.brief.kind,
     paths: parent.brief.paths,
     criticalPath: false,
-    after: ['parent-task'],
+    after: ['source-task', 'parent-task'],
+    afterSource: ['source-task'],
   });
   expect(completed.endsWith('\n---\n# Finish the notice\n\nShow the rest.\n')).toBe(true);
+  const explicit = completeContinuation(
+    '---\ngoal: fixture\nmanager: supermanager\nkind: implementation\npaths: [result.txt]\n---\n# Keep explicit ownership\n',
+    parent,
+    ownership,
+  );
+  expect(parseBrief(explicit, ownership).manager).toBe('supermanager');
+  expect(completeContinuation(completed, parent, ownership)).toBe(completed);
 });
 
 const toolBlockedWorker = `#!/usr/bin/env bun

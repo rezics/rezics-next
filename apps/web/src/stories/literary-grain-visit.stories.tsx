@@ -190,6 +190,12 @@ export const RemovedVolumeOnReturn: Story = {
     view: 'contents',
     windows: [{ ...removed.windows[0]!, rows: [] }],
   },
+  parameters: {
+    docs: {
+      codePanel: true,
+      source: { code: '<Addressed args={args} />' },
+    },
+  },
   render: (args) => (
     <Addressed args={args} search={`?realm=${realm}&context=${realmContext}&focus=members%3Aremoved-statement`} />
   ),

@@ -1,3 +1,4 @@
+import { ImportDetails, ImportEmpty } from './presentation';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
@@ -73,6 +74,7 @@ export function VndbResultPage({
       {snap.stopped === 'deadline' ? <p>{m.library_vndb_stopped_deadline()}</p> : null}
       <p className="text-sm text-muted-foreground">{m.library_vndb_no_rollback()}</p>
       {!snap.reviewCurrent ? <p role="status">{m.library_vndb_review_withdrawn()}</p> : null}
+      {snap.outcomes.length === 0 && snap.unattemptedEffects.length === 0 ? <ImportEmpty results /> : null}
       <ul className="space-y-3">
         {snap.outcomes.map((outcome) => (
           <li
@@ -86,7 +88,9 @@ export function VndbResultPage({
               {outcomeKind(outcome) === 'score' ? m.library_vndb_score_effect() : m.library_vndb_entry_state_effect()}
             </p>
             <p>{resultLabel(outcome.status)}</p>
-            <p className="break-words text-sm">{m.library_vndb_effect_review_id({ id: outcomeId(outcome) })}</p>
+            <ImportDetails>
+              <p>{m.library_vndb_effect_review_id({ id: outcomeId(outcome) })}</p>
+            </ImportDetails>
             {renderTarget(
               settled.get(`${outcome.ordinal}:${outcomeKind(outcome)}:${outcomeId(outcome)}`)?.targetId ?? null,
             )}
@@ -116,7 +120,9 @@ export function VndbResultPage({
                 {effect.kind === 'score' ? m.library_vndb_score_effect() : m.library_vndb_entry_state_effect()}
               </p>
               <p>{progress}</p>
-              <p className="break-words text-sm">{m.library_vndb_effect_review_id({ id: effect.reviewId })}</p>
+              <ImportDetails>
+                <p>{m.library_vndb_effect_review_id({ id: effect.reviewId })}</p>
+              </ImportDetails>
               {renderTarget(effect.targetId)}
             </li>
           );

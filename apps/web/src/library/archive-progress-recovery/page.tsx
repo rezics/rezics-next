@@ -17,10 +17,17 @@ import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 import { ProgressRecoveryJourney, type Snapshot } from './controller';
 import { browserProgressRecoveryPort } from './port';
 import type { ReviewInput } from './native';
-import { RecoveryReview, RecoveryResult, Evidence } from './review';
+import {
+  RecoveryReview,
+  RecoveryResult,
+  Evidence,
+  EvidenceDetails,
+  progressModeLabel,
+  progressStateLabel,
+} from './review';
+import { actionClass } from '../private-export/controls';
 
-export const action =
-  'min-h-11 min-w-11 max-w-full rounded-md border px-3 py-2 whitespace-normal [overflow-wrap:anywhere] disabled:opacity-50';
+export const action = `${actionClass} rounded-md border disabled:opacity-50`;
 type Journey = ProgressRecoveryJourney<ProgressChoices>;
 type View = Snapshot<ProgressChoices>;
 const uuid = '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}';
@@ -61,7 +68,7 @@ export function ArchiveProgressRecoveryPage() {
   return <RecoveryJourney key={scope.address + scope.csrfToken} journey={journey} snap={snap} owner={scope.subject} />;
 }
 
-function RecoveryJourney({ journey, snap, owner }: { journey: Journey; snap: View; owner: string | null }) {
+export function RecoveryJourney({ journey, snap, owner }: { journey: Journey; snap: View; owner: string | null }) {
   if (owner) bindArchiveCustodyOwner(owner);
   const completed = owner ? completedArchiveFor(owner) : null;
   const [consent, setConsent] = useState('');
@@ -88,8 +95,8 @@ function RecoveryJourney({ journey, snap, owner }: { journey: Journey; snap: Vie
       <ArchiveRecoveryDestinations current="progress" />
       <p role="status" aria-live="polite">
         {notices[snap.notice]()}
-        {snap.refusal ? ` (${snap.refusal})` : ''}
       </p>
+      {snap.refusal ? <EvidenceDetails value={{ status: snap.refusal }} /> : null}
       {snap.pending || snap.notice === 'uncertain' || snap.notice === 'recoverable' ? (
         <button className={action} disabled={snap.busy} onClick={() => void journey.retry()}>
           {m.library_archive_progress_retry()}
@@ -129,20 +136,22 @@ function RecoveryJourney({ journey, snap, owner }: { journey: Journey; snap: Vie
       ) : (
         <>
           <p>{m.library_archive_progress_expiry({ at: snap.upload.expiresAt })}</p>
-          <details>
-            <summary className={action}>{m.library_archive_recovery_coverage_title()}</summary>
-            <Evidence
-              value={snap.holdings ? { manifest: snap.holdings.manifest, coverage: snap.holdings.coverage } : null}
-            />
+          <section className="space-y-3 rounded-lg border p-4" aria-label={m.library_archive_recovery_coverage_title()}>
+            <h2 className="text-xl font-semibold">{m.library_archive_recovery_coverage_title()}</h2>
             <p>{m.library_archive_progress_holdings()}</p>
-            <Evidence value={snap.holdings} />
-            <Pager
-              next={snap.holdings?.next}
-              disabled={locked}
-              onFirst={() => void journey.page('holdings')}
-              onNext={(after) => void journey.page('holdings', after)}
-            />
-          </details>
+            {snap.holdings ? (
+              <>
+                <p>{m.library_archive_recovery_manifest_rows({ rows: snap.holdings.manifest.rows })}</p>
+                <EvidenceDetails value={snap.holdings} />
+                <Pager
+                  next={snap.holdings.next}
+                  disabled={locked}
+                  onFirst={() => void journey.page('holdings')}
+                  onNext={(after) => void journey.page('holdings', after)}
+                />
+              </>
+            ) : null}
+          </section>
           {!snap.occurrences ? (
             <button className={action} disabled={locked} onClick={() => void journey.inspect()}>
               {m.library_archive_progress_inspect()}
@@ -155,14 +164,20 @@ function RecoveryJourney({ journey, snap, owner }: { journey: Journey; snap: Vie
               ) : (
                 <ul className="space-y-3">
                   {snap.occurrences.occurrences.map(({ ordinal, evidence }) => (
-                    <li className="rounded-md border p-3" key={evidence.session_id}>
+                    <li className="rounded-md border p-3" key={ordinal}>
                       <p>
-                        {evidence.subject_id} · {evidence.state} ·{' '}
-                        {evidence.amount ?? m.library_progress_measure_absent()} {evidence.unit}
+                        {m.library_archive_present_item({ number: ordinal + 1 })} · {progressStateLabel(evidence.state)}
+                      </p>
+                      <p>
+                        {progressModeLabel(evidence.mode)} · {evidence.amount ?? m.library_progress_measure_absent()}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {m.library_archive_present_title_unavailable()} · {m.library_progress_unit_unspecified()}
                       </p>
                       <p className="text-sm">
-                        {ordinal + 1} · {evidence.session_id}
+                        {m.library_archive_progress_unit_help({ count: evidence.completed_unit_count })}
                       </p>
+                      <EvidenceDetails value={{ ordinal, evidence }} />
                       <button
                         className={action}
                         disabled={locked || snap.cancelled}
@@ -315,7 +330,7 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
       completed: false,
       membership: admission ?? 'unavailable',
       ordinal: null,
-      label: evidence.unit_id,
+      label: m.library_archive_present_title_unavailable(),
       source: 'inspect',
     };
   });
@@ -329,7 +344,7 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
     { value: null, label: m.library_archive_progress_choose() },
     ...pairs.map((item) => ({
       value: `${item.mode}:${item.id}`,
-      label: `${item.mode} · ${item.label || item.id}`,
+      label: `${progressModeLabel(item.mode)} · ${item.label || m.library_progress_unit_unspecified()}`,
     })),
   ];
   return (
@@ -344,7 +359,7 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
         measures={measures.map((item, index) => ({
           ...item,
           primary: index === 0,
-          label: item.unit,
+          label: m.library_progress_unit_unspecified(),
           kind: measureValueKind(item.amount),
           meaning: 'unknown',
           recording: 'historical',
@@ -380,7 +395,7 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
       </form>
       {snap.mappedSubject ? (
         <>
-          <p>{snap.mappedSubject}</p>
+          <EvidenceDetails value={{ subjectId: snap.mappedSubject }} />
           {!pairs.length ? (
             <p>{m.library_archive_progress_unsupported()}</p>
           ) : (
@@ -421,7 +436,7 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
         </>
       ) : null}
       {choice?.mode === 'scalar_amount'
-        ? (source.additional_measures ?? []).map((measure) => {
+        ? (source.additional_measures ?? []).map((measure, index) => {
             const additionalMeasureOptions = [
               { value: null, label: m.library_archive_progress_omit() },
               ...pairs
@@ -433,7 +448,7 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
                       ([sourceUnit, unit]) => sourceUnit !== measure.unit && unit === item.id,
                     ),
                 )
-                .map((item) => ({ value: item.id, label: item.label || item.id })),
+                .map((item) => ({ value: item.id, label: item.label || m.library_progress_unit_unspecified() })),
             ];
             return (
               <Field key={measure.unit} className="block space-y-2">
@@ -443,7 +458,8 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
                 >
                   {
                     <>
-                      {measure.unit} · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
+                      {m.library_archive_present_item({ number: index + 1 })} · {m.library_progress_unit_unspecified()}{' '}
+                      · {measure.amount ?? m.library_progress_measure_absent()} /{' '}
                       {measure.total ?? m.library_progress_measure_absent()}
                     </>
                   }
@@ -478,10 +494,10 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
             );
           })
         : null}
-      <details open={choice?.mode === 'completed_units'}>
-        <summary className={action}>{m.library_archive_progress_units()}</summary>
+      <section className="space-y-3">
+        <h3 className="font-semibold">{m.library_archive_progress_units()}</h3>
         <p>{m.library_archive_progress_unit_help({ count: source.completed_unit_count })}</p>
-        <Evidence value={snap.units} />
+        <EvidenceDetails value={snap.units} />
         {choice?.mode === 'completed_units' && body ? (
           <>
             <button
@@ -519,7 +535,7 @@ function Mapping({ journey, snap }: { journey: Journey; snap: View }) {
           onFirst={() => void journey.page('units')}
           onNext={(after) => void journey.page('units', after)}
         />
-      </details>
+      </section>
       <button className={action} disabled={locked || !body} onClick={() => body && void journey.review(body)}>
         {m.library_archive_progress_review()}
       </button>

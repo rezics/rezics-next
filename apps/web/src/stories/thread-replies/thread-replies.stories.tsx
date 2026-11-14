@@ -106,7 +106,7 @@ export const Retry: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.thread_write_send() }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.thread_write_unavailable());
     await expect(editor).toHaveTextContent('Keep my reply draft.');
-    await userEvent.click(canvas.getByRole('button', { name: m.thread_write_retry() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.thread_recovery_retry_original() }));
     await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
     await expect(write.mock.calls[1]![0]).toEqual(write.mock.calls[0]![0]);
     await waitFor(() => expect(editor).not.toHaveTextContent('Keep my reply draft.'));

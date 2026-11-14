@@ -66,11 +66,22 @@ function copyCells(row: Row): Record<string, string | null> {
   return cells;
 }
 
-function adoptedContent(read: unknown, property: string): string | undefined {
-  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
-    .subject?.statements?.[property];
-  const content = statements?.[0]?.value?.content;
-  return typeof content === 'string' ? content : undefined;
+function hasAdoptedValue(read: unknown, property: string, expected: string): boolean {
+  const statements = (
+    read as {
+      subject?: {
+        statements?: Record<string, { rank?: unknown; value?: { type?: unknown; content?: unknown } }[]>;
+      };
+    }
+  ).subject?.statements?.[property];
+  return (
+    statements?.some(
+      (statement) =>
+        (statement?.rank === 'normal' || statement?.rank === 'preferred') &&
+        statement.value?.type === 'value' &&
+        statement.value.content === expected,
+    ) ?? false
+  );
 }
 
 export function vndbPublicTagConceptCode(category: VndbPublicTagCategory, uri: string): string | undefined {
@@ -103,7 +114,7 @@ export async function readVndbPublicTagBindings(
     }
     const scheme = schemeRead as { subject?: { id?: string; type?: string } };
     if (scheme.subject?.id !== item.id || scheme.subject.type !== 'skos:ConceptScheme') continue;
-    if (adoptedContent(schemeRead, 'schema:url') !== vndbPublicTagScheme(item.category)) continue;
+    if (!hasAdoptedValue(schemeRead, 'schema:url', vndbPublicTagScheme(item.category))) continue;
     schemeIds.set(item.category, item.id);
     schemes.push({
       taxonomy: vndbPublicTagTaxonomy(item.category),
@@ -127,8 +138,8 @@ export async function readVndbPublicTagBindings(
     }
     const concept = conceptRead as { subject?: { id?: string; type?: string } };
     if (concept.subject?.id !== item.id || concept.subject.type !== 'skos:Concept') continue;
-    if (adoptedContent(conceptRead, 'schema:url') !== vndbPublicTagConceptUri(item.category, item.code)) continue;
-    if (adoptedContent(conceptRead, 'skos:inScheme') !== schemeId) continue;
+    if (!hasAdoptedValue(conceptRead, 'schema:url', vndbPublicTagConceptUri(item.category, item.code))) continue;
+    if (!hasAdoptedValue(conceptRead, 'skos:inScheme', schemeId)) continue;
     concepts.push({
       taxonomy: vndbPublicTagTaxonomy(item.category),
       code: item.code,

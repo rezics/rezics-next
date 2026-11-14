@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { converter_revision as entityRevision, mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
 import type { NativeIdentity, SourceRecord, SourceVocabularyBindings, SourceVocabularyRow } from '@rezics/conversion';
 import { runBangumiCharacterFidelity } from '../src/bangumi-character-fidelity.ts';
 import { ImportTransportError, type ReviewedSubjectRead } from '../src/import-client.ts';
@@ -232,7 +232,9 @@ test('Character fidelity bounds the identity read burst before importing and pre
         subject: {
           id,
           type: 'wd:Q95074',
-          statements: { 'wdt:P6296': [{ value: { type: 'value', content: String(Number(id.slice(-12)) - 99) } }] },
+          statements: {
+            'wdt:P6296': [{ rank: 'normal', value: { type: 'value', content: String(Number(id.slice(-12)) - 99) } }],
+          },
         },
       } as unknown as ReviewedSubjectRead;
     },
@@ -261,4 +263,102 @@ test('Character fidelity bounds the identity read burst before importing and pre
   await expect(run()).rejects.toBe(failure);
   expect(requested).toEqual([...subjects.values()].slice(0, 4));
   expect(imported).toEqual([]);
+});
+
+test('Bangumi appearances require current endpoint and role evidence and recover on unchanged input', async () => {
+  type NativeStatement = { rank: string; value: { type: 'value'; content: unknown } };
+  const exact = (content: unknown, rank = 'normal'): NativeStatement => ({ rank, value: { type: 'value', content } });
+  const records: SourceRecord[] = [
+    { source: 'bangumi', key: '990010', revision: null, payload: { id: 990010, type: 2, name: 'Work' } },
+    { source: 'bangumi', key: 'character:990011', revision: null, payload: { id: 990011, type: 1, name: 'One' } },
+    { source: 'bangumi', key: 'character:990012', revision: null, payload: { id: 990012, type: 1, name: 'Two' } },
+  ];
+  const nativeIds = new Map(records.map((record, index) => [record.key, uuid(20 + index)]));
+  const native = new Map<string, { id: string; type: string; statements: Record<string, NativeStatement[]> }>();
+  const add = (id: string, type: string, statements: Record<string, NativeStatement[]>) =>
+    native.set(id, { id, type, statements });
+  const workId = nativeIds.get('990010')!;
+  const firstCharacter = nativeIds.get('character:990011')!;
+  const secondCharacter = nativeIds.get('character:990012')!;
+  add(workId, 'schema:TVSeries', { 'wdt:P5732': [exact('990010')] });
+  add(firstCharacter, 'wd:Q95074', { 'wdt:P6296': [exact('990011', 'deprecated')] });
+  add(secondCharacter, 'wd:Q95074', { 'wdt:P6296': [exact('990012')] });
+  add(uuid(2), 'skos:ConceptScheme', { 'schema:url': [exact(bindings.schemes[1]!.uri)] });
+  add(uuid(4), 'skos:Concept', {
+    'schema:url': [exact(mapSourceEnumeration('bangumi', 'subject-characters.type', '1')?.concept?.id ?? '')],
+    'skos:inScheme': [exact(uuid(2))],
+  });
+  const roleBindings: SourceVocabularyBindings = {
+    releaseDigest: bundledDigest,
+    schemes: [bindings.schemes[1]!],
+    concepts: [bindings.concepts[1]!],
+  };
+  const alter = (id: string, property: string, rank: string) => {
+    native.get(id)!.statements[property]![0]!.rank = rank;
+  };
+  const restore = (id: string, property: string, content: unknown, rank = 'preferred') =>
+    native.get(id)!.statements[property]!.push(exact(content, rank));
+  const proposals: string[] = [];
+  const importer = {
+    session: {
+      bindings: {
+        claim: ({ external_id }: { external_id: string }) => ({ state: 'bound', subject: nativeIds.get(external_id)! }),
+      },
+    },
+    async runRecords(source: unknown, input: AsyncIterable<SourceRecord>) {
+      const registration = source as {
+        convert(
+          record: { external_id: string; record_revision: null; record: unknown },
+          context: { source: string; subjectId: string },
+        ): {
+          proposals: {
+            op: string;
+            statement: { property: { id: string }; value: { content: unknown } };
+          }[];
+        };
+      };
+      for await (const record of input) {
+        if (record.key !== '990010') continue;
+        const converted = registration.convert(
+          { external_id: record.key, record_revision: null, record: record.payload },
+          { source: crossMediaAliases.bangumi, subjectId: workId },
+        );
+        for (const command of converted.proposals)
+          if (command.op === 'propose' && command.statement.property.id === 'schema:character')
+            proposals.push(command.statement.value.content as string);
+      }
+      return { status: 'committed' };
+    },
+  } as unknown as Importer;
+  const port = {
+    async readReviewedSubject(id: string) {
+      return { subject: native.get(id) } as unknown as ReviewedSubjectRead;
+    },
+  };
+  const refresh = async () => {
+    proposals.length = 0;
+    await runBangumiCharacterFidelity({
+      importer,
+      port,
+      sourceAlias: crossMediaAliases.bangumi,
+      records,
+      appearances: [
+        { subjectId: '990010', characterId: 990011, sourceIndex: 0, roleCode: 1 },
+        { subjectId: '990010', characterId: 990012, sourceIndex: 1, roleCode: 1 },
+      ],
+      bindings: roleBindings,
+    });
+    return proposals.sort();
+  };
+
+  expect(await refresh()).toEqual([secondCharacter]);
+  restore(firstCharacter, 'wdt:P6296', '990011');
+  alter(uuid(2), 'schema:url', 'deprecated');
+  alter(uuid(4), 'schema:url', 'deprecated');
+  alter(uuid(4), 'skos:inScheme', 'deprecated');
+  expect(await refresh()).toEqual([]);
+  restore(uuid(2), 'schema:url', bindings.schemes[1]!.uri);
+  restore(uuid(4), 'schema:url', mapSourceEnumeration('bangumi', 'subject-characters.type', '1')?.concept?.id ?? '');
+  restore(uuid(4), 'skos:inScheme', uuid(2));
+  expect(await refresh()).toEqual([firstCharacter, secondCharacter].sort());
 });

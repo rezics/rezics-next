@@ -1295,6 +1295,7 @@
       "publicEntries": [
         "apps/web/src/library/adapters/community-follow.tsx",
         "apps/web/src/library/application.tsx",
+        "apps/web/src/library/collection-draft-navigation.tsx",
         "apps/web/src/library/hosted-checkpoint-books.tsx",
         "apps/web/src/library/private-lifetime.tsx",
         "apps/web/src/library/follow-control.tsx",
@@ -1318,6 +1319,10 @@
         "apps/web/src/library/subject-slot-return-context.ts",
         "apps/web/src/library/title.tsx",
         "apps/web/src/library/archive-progress-recovery/page.tsx",
+        "apps/web/src/library/yearly-goal-address.ts",
+        "apps/web/src/library/yearly-goal-page.tsx",
+        "apps/web/src/library/yearly-goal-native.ts",
+        "apps/web/src/library/yearly-goal-current.tsx",
         "apps/web/src/library/copies-query.ts"
       ],
       "allowedDependencies": [

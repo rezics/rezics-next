@@ -253,9 +253,19 @@ export function OwnVotesWorkspace({
   const [retired, setRetired] = useState(false);
   const attempt = useRef(0);
   const selection = useRef<{ entry: OwnVoteEntry; active: boolean } | null>(null);
+  const workspace = useRef<HTMLElement>(null);
+  const selectionDeparture = useRef<OwnVotesDepartureControl | null>(null);
+  const departure = confirmMovement ?? selectionDeparture;
+  const movementOwner = useMemo(() => ({}), [state, page, returnIndex, cursor, locale]);
+  const movement = useRef<{
+    owner: object;
+    pending: { entry: OwnVoteEntry; observation: typeof selection.current } | null;
+  }>({ owner: movementOwner, pending: null });
+  if (movement.current.owner !== movementOwner) movement.current = { owner: movementOwner, pending: null };
   useEffect(
     () => () => {
       if (selection.current) selection.current.active = false;
+      movement.current.pending = null;
       attempt.current += 1;
     },
     [],
@@ -271,6 +281,10 @@ export function OwnVotesWorkspace({
   }, [page, returnIndex]);
   const indexedPageValid = !page || index.size === page.votes.length;
   const activeEntry = selectedPair ? (index.get(selectedPair) ?? null) : null;
+  useEffect(() => {
+    if (selectedPair && selection.current?.active)
+      workspace.current?.querySelector<HTMLButtonElement>('[data-selected="true"] button')?.focus();
+  }, [selectedPair]);
   const visibleState = retired ? 'preparing' : state;
   const visiblePage = retired ? null : page;
   // A new action observation requires a new explicit selection. Local readback retains the actions object.
@@ -311,6 +325,7 @@ export function OwnVotesWorkspace({
   function retire() {
     if (!isCurrent()) return;
     if (selection.current) selection.current.active = false;
+    movement.current.pending = null;
     attempt.current += 1;
     intentRef.current = null;
     setRetired(true);
@@ -323,18 +338,39 @@ export function OwnVotesWorkspace({
     setBusy(false);
   }
 
-  function select(entry: OwnVoteEntry) {
-    if (!isCurrent() || locked) return;
+  async function select(entry: OwnVoteEntry) {
+    const pair = votePairKey(entry);
+    if (!presentationCurrent() || locked || pair === selectedPair || movement.current.pending) return;
+    const pending = { entry, observation: selection.current };
+    movement.current.pending = pending;
+    const allowed = await departure.current!.confirm({
+      kind: 'selection',
+      returnFocus:
+        workspace.current?.querySelector<HTMLElement>(
+          '[data-slot="own-vote-editor"] input, [data-slot="own-vote-editor"] button',
+        ) ?? null,
+    });
+    if (movement.current.pending !== pending) return;
+    movement.current.pending = null;
+    if (
+      !allowed ||
+      !presentationCurrent() ||
+      movement.current.owner !== movementOwner ||
+      selection.current !== pending.observation ||
+      pending.observation?.active === false ||
+      index.get(pair) !== pending.entry
+    )
+      return;
     if (selection.current) selection.current.active = false;
-    selection.current = { entry, active: true };
+    selection.current = { entry: pending.entry, active: true };
     attempt.current += 1;
     intentRef.current = null;
     setIntent(null);
     setFeedback(null);
     setEditing(false);
     setDraft('');
-    setSelectedPair(votePairKey(entry));
-    onDeparturePair?.(entry);
+    setSelectedPair(pair);
+    onDeparturePair?.(pending.entry);
   }
 
   function replaceFromReadback(readback: OwnVoteReadback, active: OwnVoteIntent) {
@@ -500,7 +536,7 @@ export function OwnVotesWorkspace({
   };
 
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+    <main ref={workspace} className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-10">
       <PageHeading ref={headingRef} tabIndex={-1}>
         {m.library_my_ratings_heading()}
       </PageHeading>
@@ -539,7 +575,6 @@ export function OwnVotesWorkspace({
                   : m.library_my_ratings_return_refreshed()}
             </p>
           ) : null}
-          <p className="text-sm text-muted-foreground">{m.library_my_ratings_page_order()}</p>
           {visiblePage.votes.length === 0 ? (
             feedback?.kind === 'cleared' || feedback?.kind === 'review-cleared' ? null : (
               <p role="status">{visiblePage.next ? m.library_my_ratings_sparse() : m.library_my_ratings_empty()}</p>
@@ -552,40 +587,45 @@ export function OwnVotesWorkspace({
               disabled={locked}
               onSelect={select}
               onVisit={(entry) => onDeparturePair?.(entry)}
+              selectedEditor={
+                activeEntry && selectedCurrent() ? (
+                  <OwnVoteEditor
+                    key={votePairKey(activeEntry)}
+                    entry={activeEntry}
+                    locale={locale}
+                    editing={editing}
+                    draft={draft}
+                    locked={locked}
+                    busy={busy}
+                    feedback={feedback}
+                    canRetry={
+                      awaitingCommand &&
+                      !!intent &&
+                      isAdmittedVoteAction(activeEntry, activeEntry.actions, intent.method)
+                    }
+                    onEdit={() => {
+                      setDraft(String(activeEntry.own.units));
+                      setEditing(true);
+                      setFeedback(null);
+                    }}
+                    onDraft={setDraft}
+                    onSave={() => startIntent('PUT', Number(draft))}
+                    onCancel={() => {
+                      setEditing(false);
+                      setDraft('');
+                      setFeedback(null);
+                    }}
+                    onClear={() => startIntent('DELETE')}
+                    onRetry={() => {
+                      const active = intentRef.current;
+                      if (active && awaitingCommand) void send(active);
+                    }}
+                    onReview={() => void reviewOriginal()}
+                  />
+                ) : null
+              }
             />
           )}
-          {activeEntry && selectedCurrent() ? (
-            <OwnVoteEditor
-              entry={activeEntry}
-              locale={locale}
-              editing={editing}
-              draft={draft}
-              locked={locked}
-              busy={busy}
-              feedback={feedback}
-              canRetry={
-                awaitingCommand && !!intent && isAdmittedVoteAction(activeEntry, activeEntry.actions, intent.method)
-              }
-              onEdit={() => {
-                setDraft(String(activeEntry.own.units));
-                setEditing(true);
-                setFeedback(null);
-              }}
-              onDraft={setDraft}
-              onSave={() => startIntent('PUT', Number(draft))}
-              onCancel={() => {
-                setEditing(false);
-                setDraft('');
-                setFeedback(null);
-              }}
-              onClear={() => startIntent('DELETE')}
-              onRetry={() => {
-                const active = intentRef.current;
-                if (active && awaitingCommand) void send(active);
-              }}
-              onReview={() => void reviewOriginal()}
-            />
-          ) : null}
           {feedback?.kind === 'cleared' || feedback?.kind === 'review-cleared' ? (
             <p role="status">{m.library_my_ratings_cleared()}</p>
           ) : null}
@@ -594,7 +634,7 @@ export function OwnVotesWorkspace({
               {m.library_my_ratings_retry_page()}
             </Button>
           ) : null}
-          <nav className="flex flex-wrap gap-3" aria-label={m.library_my_ratings_heading()}>
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2" aria-label={m.library_my_ratings_heading()}>
             {cursor !== null ? (
               <Link
                 className="inline-flex min-h-11 items-center underline"
@@ -629,14 +669,16 @@ export function OwnVotesWorkspace({
               </Link>
             ) : null}
           </nav>
+          <p className="text-xs text-muted-foreground">{m.library_my_ratings_page_order()}</p>
         </>
       ) : null}
       <OwnVotesDeparture
+        owner={movementOwner}
         dirty={dirty}
         locked={locked}
         isCurrent={presentationCurrent}
         onLeave={retire}
-        confirmMovement={confirmMovement}
+        confirmMovement={departure}
       />
     </main>
   );

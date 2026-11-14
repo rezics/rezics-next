@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
-import { fromPlainText } from '@rezics/document';
+import { fromMarkdown, fromPlainText } from '@rezics/document';
+import { act } from 'react';
+import { prepareWriting } from '../src/threads/local-writing-draft';
 import { admittedOwnDraftAction, type OwnDraftReader, type OwnDraftWriteInput } from '../src/threads/own-drafts/model';
 import type { RevisedPost } from '../src/threads/actions';
-import { accountId, identity, mountOwnDrafts, row, selected } from './own-drafts-fixture';
+import { accountId, footnoteDocument, identity, mountOwnDrafts, row, selected } from './own-drafts-fixture';
 
 test('native command advice belongs to the selected author, resource and revision', () => {
   const entry = row();
@@ -87,12 +89,26 @@ test('erase review retries the same uncertain intent and readback does not claim
   }
 });
 
-test('publish sends the selected revision and separates acknowledgement from published readback', async () => {
+test('server and browser footnotes survive explicit source submission and later current readback', async () => {
   const mediaId = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
   const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000012';
   const entry = row({ mediaIds: [mediaId], subjectIds: [subjectId], language: 'ja', licence: 'CC-BY-4.0' });
-  const body = fromPlainText('Published current body', 'blocks');
+  const body = fromMarkdown(
+    '## Published current body\n\n> Current quotation\n\n- Current list item\n\nBefore >!Current secret!< after.\n\n```ts\nconst current = true;\n```\n\nSee [^Current-1].\n\n[^Current-1]: Current citation',
+    'blocks',
+  );
   const inspected = selected(entry);
+  inspected.post.body = footnoteDocument('Server-1', 'Server supplied citation');
+  const browserWriting = {
+    slot: 0,
+    actor: accountId,
+    scope: { kind: 'thread' as const, boardId: entry.board.id, subjects: [] },
+    revision: 'browser-local-revision',
+    updated: 1_798_000_000_000,
+    bytes: 0,
+    state: 'unsent' as const,
+    payload: prepareWriting('Browser-only title', footnoteDocument('Browser-1', 'Browser supplied citation')),
+  };
   const editorBody = {
     ...inspected.post.body,
     doc: {
@@ -116,6 +132,7 @@ test('publish sends the selected revision and separates acknowledgement from pub
       identity,
       active: true,
       reader,
+      localWritingReader: { load: async () => browserWriting },
       commands: {
         async write(input) {
           writes.push(input);
@@ -141,6 +158,8 @@ test('publish sends the selected revision and separates acknowledgement from pub
       },
     });
     await fixture.click('Inspect draft privately');
+    expect(fixture.host.textContent).toContain('Footnote Server-1');
+    expect(fixture.host.textContent).toContain('Footnote Browser-1');
     await fixture.click('Use server-saved body in editor');
     expect(fixture.host.textContent).toContain(entry.id);
     expect(fixture.host.textContent).toContain(entry.threadId);
@@ -155,12 +174,27 @@ test('publish sends the selected revision and separates acknowledgement from pub
       threadId: entry.threadId,
       revisionId: entry.revisionId,
     });
+    expect(JSON.stringify(writes[0]?.body)).toContain('"type":"footnoteReference"');
+    expect(JSON.stringify(writes[0]?.body)).toContain('"type":"footnoteDefinition"');
+    expect(JSON.stringify(writes[0]?.body)).toContain('"label":"Server-1"');
     expect(fixture.host.textContent).toContain('The save request was acknowledged');
     await fixture.click('Read current post');
     expect(fixture.host.textContent).toContain('retained draft at revision saved-revision');
+    expect(fixture.host.querySelector('article h2')?.textContent).toBe('Published current body');
+    expect(fixture.host.querySelector('article blockquote')?.textContent).toBe('Current quotation');
+    expect(fixture.host.querySelector('article ul li')?.textContent).toBe('Current list item');
+    expect(fixture.host.querySelector('article pre code')?.textContent).toContain('const current = true;');
+    expect(fixture.host.querySelector('article [data-slot="document-footnotes"] summary')?.textContent).toContain(
+      'Footnote Current-1',
+    );
+    const savedHeading = fixture.host.querySelector('article h2')?.id;
+    expect(savedHeading).toBeTruthy();
+    await fixture.click('Reveal spoiler');
+    expect(fixture.host.querySelector('article .document-spoiler-revealed')?.textContent).toBe('Current secret');
     await fixture.click('Restart inventory');
     await fixture.click('Inspect draft privately');
-    await fixture.click('Use server-saved body in editor');
+    expect(fixture.host.textContent).toContain('Footnote Browser-1');
+    await fixture.click('Use browser-saved body in editor');
     await fixture.click('Publish');
     expect(writes).toHaveLength(2);
     expect(writes[1]).toMatchObject({
@@ -168,8 +202,11 @@ test('publish sends the selected revision and separates acknowledgement from pub
       postId: entry.id,
       threadId: entry.threadId,
       revisionId: entry.revisionId,
-      mediaIds: [mediaId],
+      mediaIds: [],
     });
+    expect(JSON.stringify(writes[1]?.body)).toContain('"type":"footnoteReference"');
+    expect(JSON.stringify(writes[1]?.body)).toContain('"type":"footnoteDefinition"');
+    expect(JSON.stringify(writes[1]?.body)).toContain('"label":"Browser-1"');
     expect(writes[1]?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
     expect(fixture.host.textContent).toContain('Retry publish');
     const { m } = await import('../src/paraglide/messages.js');
@@ -187,6 +224,22 @@ test('publish sends the selected revision and separates acknowledgement from pub
     await fixture.click('Read current post');
     expect(fixture.host.textContent).toContain('published post at revision published-revision');
     expect(fixture.host.textContent).toContain('Published current body');
+    const currentDetails = fixture.host.querySelector(
+      'article [data-slot="document-footnotes"] details',
+    ) as HTMLDetailsElement;
+    await act(async () => {
+      currentDetails.open = true;
+      currentDetails.dispatchEvent(new fixture.window.Event('toggle'));
+    });
+    const currentFootnotes = fixture.host.querySelector('article [data-slot="document-footnotes"]');
+    expect(currentFootnotes?.textContent).toContain('Current citation');
+    expect(currentFootnotes?.textContent).not.toContain('Server supplied citation');
+    expect(currentFootnotes?.textContent).not.toContain('Browser supplied citation');
+    expect(fixture.host.querySelector('article h2')?.id).not.toBe(savedHeading);
+    expect(fixture.host.querySelector('article .document-spoiler-revealed')).toBeNull();
+    expect(fixture.host.querySelector('article [data-slot="post-reading-body"]')?.getAttribute('lang')).toBe('');
+    expect(fixture.host.textContent).toContain(entry.title!);
+    expect(fixture.host.querySelector('time')?.dateTime).toBe(entry.savedAt);
   } finally {
     await fixture.close();
   }

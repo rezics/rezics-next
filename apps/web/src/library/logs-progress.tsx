@@ -128,11 +128,14 @@ function PublishLog({
   }
 
   return (
-    <section aria-labelledby="publish-log-heading" className="space-y-3">
-      <h2 id="publish-log-heading" className="text-xl font-semibold">
-        {m.library_logs_publish_heading()}
-      </h2>
-      <p>{m.library_logs_description()}</p>
+    <details className="min-w-0 space-y-3 rounded-xl border bg-card p-4 sm:p-5">
+      <summary className="min-h-11 cursor-pointer content-center rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <h2 id="publish-log-heading" className="inline text-lg font-semibold">
+          {m.library_logs_publish_heading()}
+        </h2>
+      </summary>
+      <p className="max-w-prose text-sm text-muted-foreground">{m.library_journal_public_boundary()}</p>
+      <p className="max-w-prose text-sm text-muted-foreground">{m.library_logs_description()}</p>
       {lifetime.publishedId ? (
         <p role="status">
           <Link
@@ -154,6 +157,8 @@ function PublishLog({
               <Textarea
                 aria-label={m.library_logs_publish_note()}
                 maxLength={1000}
+                dir="auto"
+                className="min-h-40 text-base leading-relaxed"
                 readOnly={Boolean(lifetime.intent)}
                 value={lifetime.note}
                 onChange={(event) => {
@@ -181,7 +186,7 @@ function PublishLog({
           </form>
         </Exposure>
       )}
-    </section>
+    </details>
   );
 }
 
@@ -192,7 +197,8 @@ function PublishedLogNote({ note }: { note: string }) {
     <div className="min-w-0 space-y-1">
       <p
         id={noteId}
-        className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${expanded ? 'relative z-10' : 'line-clamp-3'}`}
+        dir="auto"
+        className={`max-w-prose leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] ${expanded ? 'relative z-10' : 'line-clamp-3'}`}
       >
         {note}
       </p>

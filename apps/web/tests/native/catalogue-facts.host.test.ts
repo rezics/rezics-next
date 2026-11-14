@@ -8,6 +8,8 @@ import {
   type CatalogueFactsStatement,
 } from './catalogue-facts-fixture.ts';
 import type { NativeKernelRequest } from './stack.ts';
+import { graphPublicOriginHref } from '../../src/features/pages/graph-browser/public-visit.ts';
+import { subjectHref } from '../../src/subject/subject-href.ts';
 
 setDefaultTimeout(900_000);
 
@@ -256,4 +258,105 @@ test('a multi-field Edit facts submit uses the production BFF, keeps public valu
   }
 
   expect(browserAuthorization).toEqual([]);
+});
+
+test('graph Subject and exact correction destinations return through fresh native admission and browser history', async () => {
+  const target = await fixture.current();
+  const property = 'rezics:stylisticallyComparableTo';
+  const label = `Graph return ${crypto.randomUUID()}`;
+  const created = await json<{ subject: { id: string; statements: Record<string, CatalogueFactsStatement[]> } }>(
+    await fixture.stack.kernel(
+      '/v1/subjects',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+        body: JSON.stringify({
+          type: 'schema:Book',
+          labels: { en: label },
+          statements: {
+            [property]: [{ property: { id: property }, value: { type: 'value', content: target.id }, references: [] }],
+          },
+        }),
+      },
+      'editor',
+    ),
+    201,
+    'Create graph source',
+  );
+  const source = subjectHref({ id: created.subject.id, label }, 'en').href;
+  const graph = new URL(
+    graphPublicOriginHref(`${source}/graph`, {
+      subject: created.subject.id,
+      context: GLOBAL_CONTEXT,
+      locale: 'en',
+      returnHref: `${source}#subject-heading`,
+    }),
+    fixture.stack.web,
+  );
+  graph.searchParams.set('property', property);
+  graph.searchParams.set('direction', 'out');
+  graph.searchParams.set('depth', '2');
+  const page = await fixture.alice.context.newPage();
+  page.setDefaultTimeout(60_000);
+  const graphReads = () =>
+    fixture.stack
+      .kernelRequests()
+      .filter(
+        (request) =>
+          !request.fixtureRequest &&
+          request.method === 'GET' &&
+          new URL(request.url, fixture.stack.kernelOrigin).pathname === `/v1/subjects/${created.subject.id}/graph`,
+      ).length;
+  try {
+    await page.goto(graph.href);
+    await page.locator(`button[data-graph-selection="node:${target.id}"]:visible`).first().click();
+    const inspector = page.getByRole('navigation', { name: 'Selected meaning', exact: true });
+    const subjectLink = inspector.getByRole('link', { name: 'Open this subject', exact: true });
+    await subjectLink.waitFor();
+    const nodeReturn = new URL((await subjectLink.getAttribute('href'))!, fixture.stack.web).searchParams.get(
+      'returnTo',
+    )!;
+    expect(new URL(nodeReturn, fixture.stack.web).searchParams.get('node')).toBe(target.id);
+    await subjectLink.click();
+    const subjectReturn = page.locator(`a[href="${nodeReturn}"]`).first();
+    await ui(subjectReturn).toBeVisible();
+    await fixture.stack.flushKernelRequests();
+    const beforeNodeReturn = graphReads();
+    await subjectReturn.click();
+    await page.locator(`[data-graph-detail="node:${target.id}"]`).waitFor();
+    await fixture.stack.flushKernelRequests();
+    expect(graphReads()).toBeGreaterThan(beforeNodeReturn);
+    const statement = created.subject.statements[property]![0]!.id;
+    await page.locator(`button[data-graph-selection="edge:${statement}"]:visible`).first().click();
+    const correction = inspector.getByRole('link', { name: 'Propose a correction', exact: true });
+    await correction.waitFor();
+    const address = new URL((await correction.getAttribute('href'))!, fixture.stack.web);
+    expect(address.searchParams.get('property')).toBe(property);
+    expect(address.searchParams.get('statement')).toBe(statement);
+    const edgeReturn = address.searchParams.get('returnTo')!;
+    expect(Object.fromEntries(new URL(edgeReturn, fixture.stack.web).searchParams)).toMatchObject({
+      property,
+      direction: 'out',
+      depth: '2',
+      edge: statement,
+      from: created.subject.id,
+      to: target.id,
+      edgeProperty: property,
+    });
+    await correction.click();
+    const correctionReturn = page.getByRole('link', { name: 'Return to the source page', exact: true });
+    await ui(correctionReturn).toHaveAttribute('href', edgeReturn);
+    await page.goBack();
+    await page.locator(`[data-graph-detail="edge:${statement}"]`).waitFor();
+    await page.goForward();
+    await ui(correctionReturn).toHaveAttribute('href', edgeReturn);
+    await fixture.stack.flushKernelRequests();
+    const beforeEdgeReturn = graphReads();
+    await correctionReturn.click();
+    await page.locator(`[data-graph-detail="edge:${statement}"]`).waitFor();
+    await fixture.stack.flushKernelRequests();
+    expect(graphReads()).toBeGreaterThan(beforeEdgeReturn);
+  } finally {
+    await page.close();
+  }
 });

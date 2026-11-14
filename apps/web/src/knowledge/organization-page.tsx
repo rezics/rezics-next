@@ -1,10 +1,11 @@
 import { KnowledgeDetails } from './workspace';
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { KnowledgeNavigationFrontier } from './navigation-model';
-import type { KnowledgeNavigationReturn } from './navigation-return';
+import type { KnowledgeNavigationReturn, KnowledgeNavigationRestoration } from './navigation-return';
+import { useKnowledgeNavigationOrientation } from './navigation-focus';
 import { knowledgeNavigationControl as control, knowledgeNavigationLink as link } from './navigation-return-link';
 import { KnowledgeOrganizationReading } from './organization-model';
 import type { OrganizationOperations } from './organization-read';
@@ -21,6 +22,9 @@ export function KnowledgeOrganizationOwner({
   binding,
   operations,
   returning,
+  restored,
+  embedded,
+  selectedDocumentId,
   current,
   subscribeRetirement,
 }: {
@@ -30,6 +34,9 @@ export function KnowledgeOrganizationOwner({
   binding: string;
   operations: OrganizationOperations;
   returning?: KnowledgeNavigationReturn | undefined;
+  restored?: KnowledgeNavigationRestoration | undefined;
+  embedded?: boolean | undefined;
+  selectedDocumentId?: string | undefined;
 } & Operations) {
   const [reading, setReading] = useState<KnowledgeOrganizationReading>();
   useLayoutEffect(() => {
@@ -46,7 +53,15 @@ export function KnowledgeOrganizationOwner({
     };
   }, [operations, frontier, expired, current, subscribeRetirement]);
   return reading ? (
-    <KnowledgeOrganizationPage reading={reading} locale={locale} binding={binding} returning={returning} />
+    <KnowledgeOrganizationPage
+      reading={reading}
+      locale={locale}
+      binding={binding}
+      returning={returning}
+      restored={restored}
+      embedded={embedded}
+      selectedDocumentId={selectedDocumentId}
+    />
   ) : (
     <p role="status">{m.knowledge_navigation_preparing({}, { locale: locale as never })}</p>
   );
@@ -54,6 +69,9 @@ export function KnowledgeOrganizationOwner({
 
 /** Shares the existing exact editor link and return slot; placement movement never changes document identity. */
 export function KnowledgeOrganizationPage({
+  embedded,
+  selectedDocumentId,
+  restored,
   reading,
   locale,
   binding,
@@ -63,25 +81,21 @@ export function KnowledgeOrganizationPage({
   locale: string;
   binding: string;
   returning?: KnowledgeNavigationReturn | undefined;
+  restored?: KnowledgeNavigationRestoration | undefined;
+  embedded?: boolean | undefined;
+  selectedDocumentId?: string | undefined;
 }) {
   const snapshot = useSyncExternalStore(reading.subscribe, reading.getSnapshot, reading.getSnapshot);
   const options = { locale: locale as never };
   const copy = organizationCopy(locale);
   const root = m.knowledge_navigation_root({}, options);
   const actions = reading.actions(snapshot, root);
-  const focus = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    if (
-      snapshot.state === 'preparing' ||
-      snapshot.state === 'retired' ||
-      snapshot.command === 'preparing' ||
-      snapshot.command === 'sending'
-    )
-      return;
-    const active = document.activeElement;
-    if (active === document.body || (active && focus.current?.contains(active)))
-      focus.current?.focus({ preventScroll: true });
-  }, [snapshot]);
+  const documentId = selectedDocumentId ?? restored?.documentId;
+  const { boundary, selected, activate } = useKnowledgeNavigationOrientation(snapshot, reading.getSnapshot, {
+    restored,
+    embedded,
+    selectedDocumentId: documentId,
+  });
   const { page, frontier, command } = snapshot;
   const historical = frontier.request.kind === 'historical';
   const history = frontier.request.kind === 'history';
@@ -95,7 +109,7 @@ export function KnowledgeOrganizationPage({
   };
   return (
     <section
-      ref={focus}
+      ref={boundary}
       tabIndex={-1}
       aria-busy={busy}
       aria-label={m.knowledge_navigation_reading({}, options)}
@@ -109,7 +123,12 @@ export function KnowledgeOrganizationPage({
           {m.knowledge_navigation_heading({}, options)}
         </Link>
         {!history && (
-          <Button variant="ghost" className={control} disabled={busy || locked} onClick={actions.root}>
+          <Button
+            variant="ghost"
+            className={control}
+            disabled={busy || locked}
+            onClick={(event) => activate(event, actions.root)}
+          >
             {root}
           </Button>
         )}
@@ -121,13 +140,18 @@ export function KnowledgeOrganizationPage({
               className={control}
               disabled={busy || locked || snapshot.state !== 'ready'}
               aria-current={index === frontier.breadcrumbs.length - 1 ? 'location' : undefined}
-              onClick={() => actions.ancestor(index)}
+              onClick={(event) => activate(event, () => actions.ancestor(index))}
             >
               {crumb.title}
             </Button>
           ))}
         {!historical && !history && (
-          <Button variant="outline" className={control} disabled={busy || locked} onClick={actions.history}>
+          <Button
+            variant="outline"
+            className={control}
+            disabled={busy || locked}
+            onClick={(event) => activate(event, actions.history)}
+          >
             {copy.history}
           </Button>
         )}
@@ -141,10 +165,20 @@ export function KnowledgeOrganizationPage({
             </p>
           )}
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className={control} disabled={busy} onClick={() => actions.current(true)}>
+            <Button
+              variant="outline"
+              className={control}
+              disabled={busy}
+              onClick={(event) => activate(event, () => actions.current(true))}
+            >
               {copy.current}
             </Button>
-            <Button variant="outline" className={control} disabled={busy} onClick={() => actions.current()}>
+            <Button
+              variant="outline"
+              className={control}
+              disabled={busy}
+              onClick={(event) => activate(event, () => actions.current())}
+            >
               {copy.parent}
             </Button>
           </div>
@@ -206,7 +240,7 @@ export function KnowledgeOrganizationPage({
                 ? copy.rejected
                 : m.knowledge_navigation_unavailable({}, options)}
           </p>
-          <Button className={control} onClick={actions.restart}>
+          <Button className={control} onClick={(event) => activate(event, actions.restart)}>
             {copy.reselect}
           </Button>
         </div>
@@ -222,10 +256,14 @@ export function KnowledgeOrganizationPage({
           <p className="max-w-prose text-sm text-muted-foreground">{copy.readback_note}</p>
           {command === 'acknowledged' && (
             <div className="flex flex-wrap gap-2">
-              <Button className={control} onClick={() => actions.current()}>
+              <Button className={control} onClick={(event) => activate(event, () => actions.current())}>
                 {copy.parent}
               </Button>
-              <Button variant="outline" className={control} onClick={() => actions.current(true)}>
+              <Button
+                variant="outline"
+                className={control}
+                onClick={(event) => activate(event, () => actions.current(true))}
+              >
                 {copy.current}
               </Button>
             </div>
@@ -246,12 +284,12 @@ export function KnowledgeOrganizationPage({
                   : m.knowledge_navigation_unavailable({}, options)}
           </p>
           {snapshot.state === 'unavailable' && (
-            <Button className={control} onClick={actions.retry}>
+            <Button className={control} onClick={(event) => activate(event, actions.retry)}>
               {m.knowledge_navigation_retry({}, options)}
             </Button>
           )}
           {snapshot.state === 'changed' && (
-            <Button className={control} onClick={actions.restart}>
+            <Button className={control} onClick={(event) => activate(event, actions.restart)}>
               {m.knowledge_navigation_restart({}, options)}
             </Button>
           )}
@@ -316,7 +354,7 @@ export function KnowledgeOrganizationPage({
                     <Button
                       variant="outline"
                       className={control}
-                      onClick={() => actions.historical(row.structureRevisionId)}
+                      onClick={(event) => activate(event, () => actions.historical(row.structureRevisionId))}
                     >
                       {copy.historical}: {row.revisionNumber}
                     </Button>
@@ -336,6 +374,8 @@ export function KnowledgeOrganizationPage({
                       params={{ notebookId: page.notebookId, documentId: row.documentId }}
                       preload={false}
                       className={link}
+                      ref={row.documentId === documentId ? selected : undefined}
+                      aria-current={row.documentId === documentId ? 'page' : undefined}
                       onClick={(event) => {
                         if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
                           remember(row.documentId);
@@ -350,7 +390,7 @@ export function KnowledgeOrganizationPage({
                       variant="outline"
                       className={control}
                       disabled={frontier.breadcrumbs.length >= 32}
-                      onClick={() => actions.children(row)}
+                      onClick={(event) => activate(event, () => actions.children(row))}
                     >
                       {m.knowledge_navigation_children({}, options)}
                       <span className="sr-only">: {row.title}</span>
@@ -383,7 +423,7 @@ export function KnowledgeOrganizationPage({
             </Button>
           )}
           {page.next && (
-            <Button variant="outline" className={control} onClick={actions.more}>
+            <Button variant="outline" className={control} onClick={(event) => activate(event, actions.more)}>
               {m.knowledge_navigation_more({}, options)}
             </Button>
           )}

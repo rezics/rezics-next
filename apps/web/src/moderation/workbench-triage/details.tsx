@@ -5,9 +5,9 @@ import { getLocale } from '../../paraglide/runtime.js';
 import type { WorkbenchCase } from '../workbench-queue/read';
 import { workbenchTriageDetailFields, type WorkbenchTriageField } from './labels';
 import { WorkbenchTriageSummary } from './summary';
+import { moderationControl } from '../presentation';
 
-const control =
-  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words px-3 py-2 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const control = moderationControl;
 
 function DetailValue({ field }: { field: WorkbenchTriageField }) {
   if (field.kind === 'time' && field.iso && field.presence === 'present') {
@@ -117,12 +117,12 @@ export function WorkbenchTriageDetails({
   }
 
   return (
-    <div className="mt-2 min-w-0">
+    <div className="min-w-0">
       <Button
         ref={openerRef}
         type="button"
-        variant="outline"
-        className={`${control} justify-start`}
+        variant="ghost"
+        className={`${control} justify-start text-muted-foreground`}
         aria-expanded={visible}
         aria-controls={panelId}
         onClick={() => {
@@ -138,7 +138,7 @@ export function WorkbenchTriageDetails({
           id={panelId}
           tabIndex={-1}
           aria-labelledby={headingId}
-          className="mt-3 min-w-0 rounded-lg border p-3 sm:p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="mt-3 min-w-0 border-l-2 pl-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <h3 id={headingId} className="text-sm font-semibold">
             {m.moderation_workbench_triage_details()}
