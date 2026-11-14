@@ -495,6 +495,13 @@ Decision: mounted Freeze emits preparation-changed only when a locked stage firs
 A fresh-key retry of an already frozen stage returns its current progress without another event; exact authorized
 receipt replay preserves the original response.
 
+Decision: every mounted preparation command returns an explicit `changed` or `none` effect. Start uses native stage
+replay evidence; Advance combines locked expiry evidence with source-step, source-seal, candidate-begin and candidate-page
+replay evidence; Seal combines source-seal, candidate-begin and candidate-seal evidence. A newly persisted expiry
+emits once, while terminal observations and candidate advancement after complete coverage emit nothing. Advance uses
+replay evidence rather than processed-row counts or response state because a zero-row source step can persist a phase
+transition or failure. Exact outer receipt replay still returns its committed response without another event.
+
 Persist a small control row, indexed input/output, selected snapshot roots and a durable raw traversal frontier.
 Use existing Book page 20 plus lookahead for one processing step (1,024 is at most an ingestion batch). Each step
 bounds metadata checks, memory and writes, including O(H log N) path changes per admitted row; it commits output,

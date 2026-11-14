@@ -61,9 +61,11 @@ export type HostedPublicationPreparationProgress = Readonly<{
   candidateReady: boolean;
 }>;
 
-type PreparationWorkResult =
-  | HostedPublicationPreparationProgress
-  | Readonly<{ value: HostedPublicationPreparationProgress; changed: boolean }>;
+type PreparationEffect = 'changed' | 'none';
+type PreparationWorkResult = Readonly<{
+  value: HostedPublicationPreparationProgress;
+  effect: PreparationEffect;
+}>;
 type PreparationWork = (tx: CommandTransaction, time: AuthoritativeTime) => Promise<PreparationWorkResult>;
 type StageBinding = Readonly<{ stageId: string; allowMissing: boolean }>;
 
@@ -97,6 +99,10 @@ function progress(
     candidate,
     candidateReady: candidate?.sealed === true,
   };
+}
+
+function preparationResult(value: HostedPublicationPreparationProgress, changed: boolean): PreparationWorkResult {
+  return { value, effect: changed ? 'changed' : 'none' };
 }
 
 /** Every preparation operation is an ordinary catalogue-home command. `runCommand` performs
@@ -165,15 +171,14 @@ function preparationCommand(
       },
       async (tx, { time }) => {
         const result = await work(tx, time);
-        if ('changed' in result && !result.changed) return noEffect(result.value);
-        const value = 'changed' in result ? result.value : result;
+        if (result.effect === 'none') return noEffect(result.value);
         return {
-          value,
+          value: result.value,
           events: [
             {
               type: PREPARATION_EVENT,
               subject: catalogueId,
-              data: { catalogueId, stageId: value.stageId },
+              data: { catalogueId, stageId: result.value.stageId },
             },
           ],
         };
@@ -218,7 +223,7 @@ export function startHostedPublicationPreparation(
         mode: input.mode,
         expiresAt,
       });
-      return progress(catalogueId, begun.progress);
+      return preparationResult(progress(catalogueId, begun.progress), !begun.replayed);
     },
     { stageId: input.stageId, allowMissing: true },
   );
@@ -249,10 +254,10 @@ export function appendHostedPublicationPreparationBatch(
         actor,
         locator(catalogueId, stageId),
       );
-      return {
-        value: progress(catalogueId, stageRead.progress, null, batch),
-        changed: !batch.replayed || stageRead.expired,
-      };
+      return preparationResult(
+        progress(catalogueId, stageRead.progress, null, batch),
+        !batch.replayed || stageRead.expired,
+      );
     },
     { stageId, allowMissing: false },
   );
@@ -278,7 +283,7 @@ export function freezeHostedPublicationPreparationSelection(
         actor,
         locator(catalogueId, stageId),
       );
-      return { value: progress(catalogueId, result.checkpoint), changed: result.changed };
+      return preparationResult(progress(catalogueId, result.checkpoint), result.changed);
     },
     { stageId, allowMissing: false },
   );
@@ -289,10 +294,10 @@ async function candidateAfterSourceSeal(
   actor: Actor,
   stageId: string,
   catalogueId: string,
-): Promise<HostedVersionReleaseCandidateCheckpoint> {
+): Promise<Readonly<{ checkpoint: HostedVersionReleaseCandidateCheckpoint; changed: boolean }>> {
   const source = await sealHostedPublicationStaging(tx as AccessClient, actor, locator(catalogueId, stageId));
   const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
-  return candidate.checkpoint;
+  return { checkpoint: candidate.checkpoint, changed: !source.replayed || !candidate.replayed };
 }
 
 /** Advance exactly one retained staging or candidate page. The choice of source
@@ -317,7 +322,12 @@ export function advanceHostedPublicationPreparation(
       // fresh-work precondition covers candidate phases before any stage or candidate work.
       requireRoute(stepId, routeOf(catalogueId)!);
       const stageLocator = locator(catalogueId, stageId);
-      const stage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
+      const stageRead = await readHostedPublicationStagingProgressWithExpiry(
+        tx as AccessClient,
+        actor,
+        stageLocator,
+      );
+      const stage = stageRead.progress;
 
       if (stage.state === 'building' || stage.state === 'closing' || stage.state === 'collecting') {
         const advanced = await advanceHostedPublicationStaging(
@@ -328,29 +338,41 @@ export function advanceHostedPublicationPreparation(
           stepId,
           context.deadline,
         );
-        return progress(catalogueId, advanced.progress);
+        // A zero-row step can still persist phase or failure progress, so native replay evidence decides the event.
+        return preparationResult(progress(catalogueId, advanced.progress), stageRead.expired || !advanced.replayed);
       }
 
       if (stage.state === 'ready') {
         const source = await sealHostedPublicationStaging(tx as AccessClient, actor, stageLocator);
         const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
         const sealedStage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
-        return progress(catalogueId, sealedStage, candidateProgress(candidate.checkpoint));
+        return preparationResult(
+          progress(catalogueId, sealedStage, candidateProgress(candidate.checkpoint)),
+          stageRead.expired || !source.replayed || !candidate.replayed,
+        );
       }
 
       if (stage.state === 'sealed') {
-        const checkpoint = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
-        if (checkpoint.coverageComplete) return progress(catalogueId, stage, candidateProgress(checkpoint));
+        const materialization = await candidateAfterSourceSeal(tx, actor, stageId, catalogueId);
+        const checkpoint = materialization.checkpoint;
+        if (checkpoint.coverageComplete)
+          return preparationResult(
+            progress(catalogueId, stage, candidateProgress(checkpoint)),
+            stageRead.expired || materialization.changed,
+          );
         const advanced = await applyHostedVersionReleaseCandidatePage(
           tx,
           actor,
           checkpoint.sourceSeal,
           checkpoint.afterSourceOrder,
         );
-        return progress(catalogueId, stage, candidateProgress(advanced.checkpoint));
+        return preparationResult(
+          progress(catalogueId, stage, candidateProgress(advanced.checkpoint)),
+          stageRead.expired || materialization.changed || !advanced.replayed,
+        );
       }
 
-      return progress(catalogueId, stage);
+      return preparationResult(progress(catalogueId, stage), stageRead.expired);
     },
     { stageId, allowMissing: false },
   );
@@ -377,10 +399,10 @@ export function readHostedPublicationPreparationProgress(
         locator(catalogueId, stageId),
       );
       const stage = stageRead.progress;
-      if (stage.state !== 'sealed') return { value: progress(catalogueId, stage), changed: stageRead.expired };
+      if (stage.state !== 'sealed') return preparationResult(progress(catalogueId, stage), stageRead.expired);
       const candidate = await readHostedVersionReleaseCandidateProgress(tx, actor, locator(catalogueId, stageId));
       const value = progress(catalogueId, stage, candidate === null ? null : candidateProgress(candidate));
-      return { value, changed: stageRead.expired };
+      return preparationResult(value, stageRead.expired);
     },
     { stageId, allowMissing: false },
   );
@@ -406,7 +428,7 @@ export function cancelHostedPublicationPreparation(
         actor,
         locator(catalogueId, stageId),
       );
-      return { value: progress(catalogueId, result.checkpoint), changed: result.changed };
+      return preparationResult(progress(catalogueId, result.checkpoint), result.changed);
     },
     { stageId, allowMissing: false },
   );
@@ -433,8 +455,10 @@ export function sealHostedPublicationPreparation(
       const source = await sealHostedPublicationStaging(tx as AccessClient, actor, stageLocator);
       const candidate = await beginHostedVersionReleaseCandidate(tx, actor, source.seal);
       let checkpoint = candidate.checkpoint;
+      let changed = !source.replayed || !candidate.replayed;
       if (checkpoint.coverageComplete && !checkpoint.sealed) {
         const sealed = await sealHostedVersionReleaseCandidate(tx, actor, candidate.checkpoint.sourceSeal);
+        changed ||= !sealed.replayed;
         checkpoint = {
           ...checkpoint,
           placementCount: sealed.candidate.coverage.placementCount,
@@ -444,7 +468,7 @@ export function sealHostedPublicationPreparation(
         };
       }
       const stage = await readHostedPublicationStagingProgress(tx as AccessClient, actor, stageLocator);
-      return progress(catalogueId, stage, candidateProgress(checkpoint));
+      return preparationResult(progress(catalogueId, stage, candidateProgress(checkpoint)), changed);
     },
     { stageId, allowMissing: false },
   );
