@@ -1,4 +1,12 @@
-import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type MouseEvent,
+} from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
@@ -19,6 +27,7 @@ import {
   notificationOriginalAllowed,
   notificationsNeedNavigationDecision,
   unavailableNotificationIntent,
+  type NotificationEditorState,
   type NotificationEditorIO,
 } from './notification-recovery';
 import { preferencePageAllows, usePreferenceRetry, type PreferencePage } from './preferences';
@@ -28,6 +37,76 @@ import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { useSettingsCurrent, useSettingsReadCurrent, useSettingsDisposal } from './settings-session-owner';
 
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
+
+type NotificationFocusAction = 'restore' | 'apply' | 'keep-current' | 'retry' | 'reload';
+type NotificationFocusRequest = {
+  action: NotificationFocusAction;
+  source: HTMLElement;
+  focusedAtActivation: boolean;
+  complete: boolean;
+};
+
+function canReceiveFocus(element: Element | null): element is HTMLElement {
+  if (
+    !(element instanceof HTMLElement) ||
+    !element.isConnected ||
+    element.hidden ||
+    element.matches(':disabled, [aria-disabled="true"]') ||
+    element.closest('[hidden], [inert]')
+  )
+    return false;
+  const style = window.getComputedStyle(element);
+  return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+}
+
+function focusDestination(
+  root: HTMLElement,
+  action: NotificationFocusAction,
+  state: NotificationEditorState,
+): HTMLElement | null {
+  const find = (selector: string) =>
+    [...root.querySelectorAll(selector)].find((element) => canReceiveFocus(element)) ?? null;
+  const switchControl = find('[role="switch"]');
+  const restore = find('[data-notification-focus="restore"]');
+  const apply = find('[data-notification-focus="apply"]');
+  const keepCurrent = find('[data-notification-focus="keep-current"]');
+  const retry = find('[data-notification-focus="retry"]');
+  const reload = find('[data-notification-focus="reload"]');
+  const statusCandidate = find('[data-notification-focus="status"]');
+  const status = statusCandidate?.textContent?.trim() ? statusCandidate : null;
+  const review = state.phase === 'review';
+  const pending = state.pending !== null;
+  const readFailed = state.readOrigin !== null && (state.phase === 'failed' || state.phase === 'uncertain');
+  const needsCurrentRead = readFailed || state.phase === 'conflict' || state.phase === 'failed';
+
+  if (action === 'keep-current') {
+    return needsCurrentRead ? reload ?? switchControl ?? status : switchControl ?? reload ?? restore ?? status;
+  }
+  if (action === 'restore') {
+    if (pending) return retry ?? reload ?? status ?? switchControl;
+    if (needsCurrentRead) return reload ?? status ?? switchControl;
+    if (review) return apply ?? keepCurrent ?? reload ?? switchControl ?? status;
+    return status ?? reload ?? switchControl ?? restore ?? keepCurrent;
+  }
+  if (action === 'apply') {
+    if (pending) return retry ?? reload ?? status ?? switchControl;
+    if (needsCurrentRead) return reload ?? status ?? switchControl;
+    if (review) return apply ?? keepCurrent ?? reload ?? switchControl ?? status;
+    return status ?? switchControl ?? reload ?? restore;
+  }
+  if (action === 'retry') {
+    if (pending) return retry ?? reload ?? status ?? switchControl;
+    if (needsCurrentRead) return reload ?? status ?? switchControl;
+    if (review) return apply ?? keepCurrent ?? reload ?? switchControl ?? status;
+    return status ?? switchControl ?? reload ?? restore;
+  }
+  if (pending) return retry ?? reload ?? status ?? switchControl;
+  if (needsCurrentRead) return reload ?? status ?? switchControl;
+  if (review) return apply ?? keepCurrent ?? reload ?? switchControl ?? status;
+  return switchControl ?? status ?? reload ?? restore;
+}
+
+type NotificationFocusActivation = FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement>;
 
 export function notificationName(kind: string): string {
   if (kind === 'reply') return m.settings_notification_reply();
@@ -57,6 +136,9 @@ export function NotificationsCard({
 }) {
   const ids = useId();
   const nativeInputs = useRef(new Map<string, HTMLInputElement>());
+  const focusRoot = useRef<HTMLDivElement>(null);
+  const focusRequest = useRef<NotificationFocusRequest | null>(null);
+  const [focusRevision, setFocusRevision] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const sharedVersion = useRef(version);
   sharedVersion.current = Math.max(sharedVersion.current, version);
@@ -90,6 +172,73 @@ export function NotificationsCard({
     () => isCurrent() && notificationsNeedNavigationDecision(editor.snapshot()),
     editor,
   );
+  const runFocusAction = (
+    action: NotificationFocusAction,
+    event: NotificationFocusActivation,
+    dispatch: () => void | Promise<void>,
+  ) => {
+    const current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const submitter = (event.nativeEvent as Event & { submitter?: unknown }).submitter;
+    const source =
+      submitter instanceof HTMLElement
+        ? submitter
+        : current && event.currentTarget.contains(current)
+          ? current
+          : event.currentTarget;
+    const request: NotificationFocusRequest = {
+      action,
+      source,
+      focusedAtActivation: current === source,
+      complete: false,
+    };
+    const before = editor.snapshot();
+    focusRequest.current = request;
+    let operation: void | Promise<void>;
+    try {
+      operation = dispatch();
+    } catch (error) {
+      if (focusRequest.current === request) focusRequest.current = null;
+      throw error;
+    }
+    if (editor.snapshot() === before) {
+      if (focusRequest.current === request) focusRequest.current = null;
+      return;
+    }
+    const complete = () => {
+      if (focusRequest.current !== request) return;
+      request.complete = true;
+      setFocusRevision((revision) => revision + 1);
+    };
+    if (operation && typeof operation.then === 'function') void operation.then(complete, complete);
+    else complete();
+  };
+  useLayoutEffect(() => {
+    const cancelAfterManualChoice = (event: Event) => {
+      if (!focusRequest.current) return;
+      if (event.type === 'focusin' && event.target === document.body) return;
+      focusRequest.current = null;
+    };
+    document.addEventListener('focusin', cancelAfterManualChoice, true);
+    document.addEventListener('pointerdown', cancelAfterManualChoice, true);
+    document.addEventListener('keydown', cancelAfterManualChoice, true);
+    return () => {
+      document.removeEventListener('focusin', cancelAfterManualChoice, true);
+      document.removeEventListener('pointerdown', cancelAfterManualChoice, true);
+      document.removeEventListener('keydown', cancelAfterManualChoice, true);
+      focusRequest.current = null;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    const request = focusRequest.current;
+    if (!request?.complete) return;
+    focusRequest.current = null;
+    if (!request.focusedAtActivation || !isCurrent()) return;
+    const root = focusRoot.current;
+    if (!root) return;
+    if (document.activeElement === request.source && canReceiveFocus(request.source)) return;
+    const destination = focusDestination(root, request.action, state);
+    if (destination && destination !== document.activeElement) destination.focus({ preventScroll: true });
+  }, [focusRevision, isCurrent, state]);
   const commandWaiting = usePreferenceRetry(state.commandFailure, state.commandRetryAt);
   const readWaiting = usePreferenceRetry(state.readFailure, state.readRetryAt);
   const waiting = commandWaiting || readWaiting;
@@ -149,7 +298,12 @@ export function NotificationsCard({
         </ContentSectionDescription>
       </ContentSectionHeader>
       <ContentSectionBody className="min-w-0 space-y-4">
-        <div role="group" aria-label={m.settings_notifications_heading()} className="space-y-4">
+        <div
+          ref={focusRoot}
+          role="group"
+          aria-label={m.settings_notifications_heading()}
+          className="space-y-4"
+        >
           <WatchNotificationGuide />
           <FieldGroup>
             <div className="flex flex-col gap-3">
@@ -246,7 +400,7 @@ export function NotificationsCard({
                 onSubmit={(event) => {
                   if (!hydrated) return;
                   event.preventDefault();
-                  void editor.restore(version);
+                  runFocusAction('restore', event, () => editor.restore(version));
                 }}
               >
                 <input form={`${ids}-restore-form`} type="hidden" name="csrf_token" value={csrfToken ?? ''} />
@@ -259,6 +413,7 @@ export function NotificationsCard({
                   variant="outline"
                   disabled={restoreDisabled}
                   aria-describedby={waitDescription}
+                  data-notification-focus="restore"
                 >
                   {m.settings_notifications_restore()}
                 </Button>
@@ -293,7 +448,13 @@ export function NotificationsCard({
               ))}
             </div>
           ) : null}
-          <div role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
+          <div
+            role="status"
+            aria-live="polite"
+            tabIndex={-1}
+            data-notification-focus="status"
+            className="min-h-5 text-sm text-muted-foreground"
+          >
             {state.phase === 'saving'
               ? m.settings_saving()
               : state.phase === 'reloading'
@@ -333,7 +494,8 @@ export function NotificationsCard({
                   variant="outline"
                   disabled={readWaiting || busy || !hydrated}
                   aria-describedby={waitDescription}
-                  onClick={() => void editor.reload()}
+                  data-notification-focus="reload"
+                  onClick={(event) => runFocusAction('reload', event, () => editor.reload())}
                 >
                   {m.settings_reload()}
                 </Button>
@@ -358,7 +520,8 @@ export function NotificationsCard({
                   variant="outline"
                   disabled={commandWaiting || disabled || !canRetryOriginal}
                   aria-describedby={waitDescription}
-                  onClick={() => void editor.retry()}
+                  data-notification-focus="retry"
+                  onClick={(event) => runFocusAction('retry', event, () => editor.retry())}
                 >
                   {m.settings_notifications_retry_original()}
                 </Button>
@@ -369,7 +532,8 @@ export function NotificationsCard({
                     variant="outline"
                     disabled={readWaiting || busy || !hydrated}
                     aria-describedby={waitDescription}
-                    onClick={() => void editor.reload()}
+                    data-notification-focus="reload"
+                    onClick={(event) => runFocusAction('reload', event, () => editor.reload())}
                   >
                     {m.settings_reload()}
                   </Button>
@@ -412,7 +576,8 @@ export function NotificationsCard({
                   variant="outline"
                   disabled={readWaiting || busy || !hydrated}
                   aria-describedby={waitDescription}
-                  onClick={() => void editor.reload()}
+                  data-notification-focus="reload"
+                  onClick={(event) => runFocusAction('reload', event, () => editor.reload())}
                 >
                   {m.settings_reload()}
                 </Button>
@@ -451,7 +616,8 @@ export function NotificationsCard({
                     type="button"
                     disabled={commandWaiting || disabled || !canRetryOriginal}
                     aria-describedby={waitDescription}
-                    onClick={() => void editor.retry()}
+                    data-notification-focus="retry"
+                    onClick={(event) => runFocusAction('retry', event, () => editor.retry())}
                   >
                     {m.settings_notifications_retry_original()}
                   </Button>
@@ -462,7 +628,8 @@ export function NotificationsCard({
                       variant="outline"
                       disabled={readWaiting || disabled || !hydrated}
                       aria-describedby={waitDescription}
-                      onClick={() => void editor.reload()}
+                      data-notification-focus="reload"
+                      onClick={(event) => runFocusAction('reload', event, () => editor.reload())}
                     >
                       {m.settings_reload()}
                     </Button>
@@ -493,7 +660,8 @@ export function NotificationsCard({
                       type="button"
                       disabled={commandWaiting || disabled || !canSubmitReview}
                       aria-describedby={waitDescription}
-                      onClick={() => void editor.submit(version)}
+                      data-notification-focus="apply"
+                      onClick={(event) => runFocusAction('apply', event, () => editor.submit(version))}
                     >
                       {state.intent === null
                         ? m.settings_notifications_restore()
@@ -505,7 +673,8 @@ export function NotificationsCard({
                       className={preferenceActionClassName}
                       type="button"
                       variant="outline"
-                      onClick={() => editor.useCurrent()}
+                      data-notification-focus="keep-current"
+                      onClick={(event) => runFocusAction('keep-current', event, () => editor.useCurrent())}
                     >
                       {m.settings_notifications_use_current()}
                     </Button>
@@ -521,7 +690,8 @@ export function NotificationsCard({
               variant="ghost"
               disabled={readWaiting || !hydrated || busy}
               aria-describedby={waitDescription}
-              onClick={() => void editor.reload()}
+              data-notification-focus="reload"
+              onClick={(event) => runFocusAction('reload', event, () => editor.reload())}
             >
               {m.settings_reload()}
             </Button>
