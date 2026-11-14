@@ -267,13 +267,15 @@ export async function listAuthorThreads(
   context: ReadContext,
   input: AuthorThreadPageInput = {},
 ): Promise<AuthorPage<AuthorThreadEntry>> {
-  const kind = input.kind ?? 'discussion';
+  const pageContext: ReadContext = { actor: context.actor, deadline: context.deadline };
+  const pageInput: AuthorThreadPageInput = { cursor: input.cursor, limit: input.limit, kind: input.kind };
+  const kind = pageInput.kind ?? 'discussion';
   if (kind !== 'discussion' && kind !== 'review') throw new TypeError('Invalid author thread kind');
   return (await listAuthorItems(
     dependencies,
     accountId,
-    context,
-    input,
+    pageContext,
+    pageInput,
     'threads',
     kind,
   )) as AuthorPage<AuthorThreadEntry>;
@@ -285,5 +287,14 @@ export async function listAuthorPosts(
   context: ReadContext,
   input: AuthorPageInput = {},
 ): Promise<AuthorPage<AuthorPostEntry>> {
-  return (await listAuthorItems(dependencies, accountId, context, input, 'posts', null)) as AuthorPage<AuthorPostEntry>;
+  const pageContext: ReadContext = { actor: context.actor, deadline: context.deadline };
+  const pageInput: AuthorPageInput = { cursor: input.cursor, limit: input.limit };
+  return (await listAuthorItems(
+    dependencies,
+    accountId,
+    pageContext,
+    pageInput,
+    'posts',
+    null,
+  )) as AuthorPage<AuthorPostEntry>;
 }
