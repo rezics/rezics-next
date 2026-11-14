@@ -25,14 +25,14 @@ function store(
   tasks: Partial<Task>[],
   attempts: Partial<Attempt>[],
   intents: Partial<RetryIntent>[] = [],
-  recordedEvents: { taskId: string; attempt: number; kind: string }[] = [],
+  recordedEvents: { taskId: string; attempt: number; kind: string; body?: string }[] = [],
 ) {
   return {
     tasks: () => tasks.map((task) => ({ brief: { goal: 'accounts' }, ...task }) as Task),
     attempt: (ref: { taskId: string; attempt: number }) =>
       attempts.find((attempt) => attempt.taskId === ref.taskId && attempt.attempt === ref.attempt) as Attempt,
     retryIntents: () => intents as RetryIntent[],
-    events: () => recordedEvents.map((event) => event as never),
+    events: () => recordedEvents.map((event) => ({ ...event, body: event.body ?? '' }) as never),
     attemptsEndedBetween: (start: string, end: string) =>
       attempts.filter(
         (attempt) =>
@@ -166,6 +166,54 @@ test('a stopped typing-evidence retry reports once only after the deadline and l
     expect(watch(fixture, root, branches, root, deliver, now + 60_000, undefined, undefined, policy, scheduling)).toBe(
       0,
     );
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]).toMatchObject({ managerId: 'control-plane-manager' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the watchdog names the compiler reconciliation hold and both owners for an accepted source amendment', () => {
+  const root = temporaryDirectory('goal-watchdog-source-amendment-');
+  const taskId = 'source-amendment-retry';
+  const task = {
+    id: taskId,
+    state: 'ready' as const,
+    currentAttempt: 1,
+    brief: { ...brief(), goal: 'web', manager: 'web-manager', after: [] },
+  } as Partial<Task>;
+  const attempt = {
+    taskId,
+    attempt: 1,
+    state: 'exited' as const,
+    endedAt: minutesAgo(30),
+  };
+  const intent = { taskId, attempt: 1, status: 'pending' as const, queuedAt: minutesAgo(11), options: {} };
+  const event = {
+    taskId,
+    attempt: 1,
+    kind: 'typing-retry-unreconciled',
+    body: JSON.stringify({ action: 'source-amendment-compiler-hold' }),
+  };
+  const fixture = store([task], [attempt], [intent], [event]);
+  const policy = readControlPolicy({});
+  const scheduling = { schedulingOwner: 'control-plane-manager', runnableSupply: () => true };
+  const branches = { stabilize: 'missing-stabilize', integration: 'missing-dev' };
+  try {
+    const found = violations(fixture, now, undefined, root, policy, scheduling);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ key: 'no-worker:source-amendment-retry:1', managerId: 'control-plane-manager' });
+    expect(found[0]?.summary).toContain('held on attempt 1 for compiler reconciliation');
+    expect(found[0]?.summary).toContain('unavailable compiler evidence');
+    expect(found[0]?.summary).toContain('terminal proof for same-attempt check custody');
+    expect(found[0]?.summary).toContain('Task owner web-manager');
+    expect(found[0]?.summary).toContain('control-plane owner control-plane-manager');
+    expect(found[0]?.summary).not.toContain('eligible time');
+
+    const delivered: { summary: string; managerId: string | undefined }[] = [];
+    const deliver = (summary: string, managerId?: string) => delivered.push({ summary, managerId });
+    expect(watch(fixture, root, branches, root, deliver, now, undefined, undefined, policy, scheduling)).toBe(1);
+    expect(watch(fixture, root, branches, root, deliver, now + 60_000, undefined, undefined, policy, scheduling)).toBe(0);
     expect(delivered).toHaveLength(1);
     expect(delivered[0]).toMatchObject({ managerId: 'control-plane-manager' });
   } finally {

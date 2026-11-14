@@ -510,12 +510,22 @@ export function violations(
     if (!attempt.endedAt) continue;
     if (attempt.driver && sameProcess(attempt.driver)) continue;
     const retry = pending.get(`${task.id}:${attempt.attempt}`);
+    const retryEvents = store.events?.(task.id, attempt.attempt) ?? [];
     const typingRetryUnreconciled =
       task.state === 'ready' &&
       attempt.state === 'stopped' &&
       retry !== undefined &&
-      (store.events?.(task.id, attempt.attempt).some((event) => event.kind === 'typing-retry-unreconciled') ?? false);
-    if (attempt.state !== 'exited' && !typingRetryUnreconciled) continue;
+      retryEvents.some((event) => event.kind === 'typing-retry-unreconciled');
+    const sourceAmendmentCompilerHold =
+      task.state === 'ready' &&
+      attempt.state === 'exited' &&
+      retry !== undefined &&
+      retryEvents.some(
+        (event) =>
+          event.kind === 'typing-retry-unreconciled' && event.body.includes('source-amendment-compiler-hold'),
+      );
+    const compilerReconciliationHold = typingRetryUnreconciled || sourceAmendmentCompilerHold;
+    if (attempt.state !== 'exited' && !compilerReconciliationHold) continue;
     const eligibleAt = Math.max(
       ...[attempt.endedAt, retry?.queuedAt, retry?.options?.notBefore]
         .map((time) => Date.parse(time ?? ''))
@@ -529,20 +539,28 @@ export function violations(
     if (task.state === 'ready' && intent && waiting.has(task.id)) continue;
     // A retry held for dependencies, a backoff or a host outage is waiting by design, not missing its starter.
     if (retry && retryWait(retry, task, dependencyState, now, stateDirectory, policy)) continue;
-    if (typingRetryUnreconciled && (!retry || !scheduling.runnableSupply || !scheduling.runnableSupply(task, retry)))
+    if (
+      compilerReconciliationHold &&
+      (!retry || !scheduling.runnableSupply || !scheduling.runnableSupply(task, retry))
+    )
       continue;
     const minutes = Math.round(idle / 60_000);
     found.push({
       key: `no-worker:${task.id}:${attempt.attempt}`,
-      summary: typingRetryUnreconciled
-        ? `Task ${task.id} (${task.brief.goal}) is ready on attempt ${attempt.attempt} with unreconciled stopped compiler evidence; its pending retry has had no starter for ${minutes} min since ${new Date(eligibleAt).toISOString()}, and a compatible provider pool is available. Task owner ${task.brief.manager}: run bun tools/goal/src/cli.ts typing-recover ${task.id} --expected-attempt ${attempt.attempt}.`.slice(
+      summary: sourceAmendmentCompilerHold
+        ? `Task ${task.id} (${task.brief.goal}) is held on attempt ${attempt.attempt} for compiler reconciliation: its accepted source amendment is waiting for unavailable compiler evidence and terminal proof for same-attempt check custody. Task owner ${task.brief.manager}; control-plane owner ${scheduling.schedulingOwner ?? 'not registered'}: let retained custody settle before the existing retry starts; do not submit another retry or compiler.`.slice(
             0,
             policy.worker.summaryCharacters,
           )
+        : typingRetryUnreconciled
+          ? `Task ${task.id} (${task.brief.goal}) is ready on attempt ${attempt.attempt} with unreconciled stopped compiler evidence; its pending retry has had no starter for ${minutes} min since ${new Date(eligibleAt).toISOString()}, and a compatible provider pool is available. Task owner ${task.brief.manager}: run bun tools/goal/src/cli.ts typing-recover ${task.id} --expected-attempt ${attempt.attempt}.`.slice(
+              0,
+              policy.worker.summaryCharacters,
+            )
         : intent
           ? `Task ${task.id} (${task.brief.goal}) has had a pending retry for ${minutes} min of eligible time that no process started.`
           : `Task ${task.id} (${task.brief.goal}) is ${task.state} but its attempt ${attempt.attempt} ended ${minutes} min ago and nothing will start another.`,
-      ...(typingRetryUnreconciled && scheduling.schedulingOwner ? { managerId: scheduling.schedulingOwner } : {}),
+      ...(compilerReconciliationHold && scheduling.schedulingOwner ? { managerId: scheduling.schedulingOwner } : {}),
     });
   }
   return found;

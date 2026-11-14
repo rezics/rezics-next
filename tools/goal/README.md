@@ -1812,6 +1812,16 @@ fallback. Other watchdog alerts keep their existing routing.
 
 Decision: The watchdog reports a same-generation stopped typing-evidence retry only after its eligible no-worker deadline and positive live pool supply; it routes that alert and flow alarms to the active control-plane manager, falling back to the supermanager, and directs the authenticated task owner to run the existing `typing-recover` command.
 
+During a source-only verification window, an exited successful source attempt with a current accepted changed brief
+also keeps its existing retry pending when compiler evidence is unavailable and exact same-attempt check custody is
+unresolved. The accepted amendment remains the only retry intent; this hold does not run a compiler, settle the old
+source attempt or discard its proposal. After the ordinary no-worker deadline and existing dependency, backoff,
+host-outage, capacity and live-supply checks, the watchdog names unavailable compiler evidence, unresolved terminal
+check custody, the task owner and active control-plane owner. The existing per-generation alert state prevents a
+second wake.
+
+Decision: A current accepted ordinary source-only amendment may start its existing retry after exact same-attempt terminal proof when compiler evidence remains unavailable; compiler acceptance stays owed, and unresolved custody holds use the existing watchdog route to name the task and active control-plane owners.
+
 A running attempt that exceeds its routed time limit (two hours by default) sends its owning manager one event. The
 event includes elapsed time, commits in the task worktree, time recorded waiting for check slots and the last ten shell
 commands in the run log. Check wait time is reported separately; it does not reduce this elapsed time. If those recent
