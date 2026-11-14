@@ -29,6 +29,8 @@ type ReadAttempt =
   | { kind: 'choices'; visit: BoundedPageVisit }
   | { kind: 'placements'; visit: BoundedPageVisit; target: CollectionDestination };
 
+type FocusIntent = { episode: number; opener: HTMLElement };
+
 type ReadIssue = 'denied' | 'expired' | 'changed' | 'unavailable';
 
 function issueMessage(issue: ReadIssue) {
@@ -83,14 +85,30 @@ export function CollectionMoveChooser({
   const callbacks = useRef({ current, onChange });
   const destinationHeading = useRef<HTMLHeadingElement>(null);
   const placementHeading = useRef<HTMLHeadingElement>(null);
-  const focusAfterEpisode = useRef<number | null>(null);
+  const focusIntent = useRef<FocusIntent | null>(null);
   callbacks.current = { current, onChange };
   const retained = (episode: number) => live.current && episode === version.current && callbacks.current.current();
 
   useEffect(() => {
+    function expireFocusIntent(event: FocusEvent) {
+      const intent = focusIntent.current;
+      if (
+        !intent ||
+        event.target === intent.opener ||
+        event.target === document.body ||
+        event.target === document.documentElement
+      )
+        return;
+      focusIntent.current = null;
+    }
+    document.addEventListener('focusin', expireFocusIntent);
+    return () => document.removeEventListener('focusin', expireFocusIntent);
+  }, []);
+
+  useEffect(() => {
     live.current = true;
     if (focusHeadingOnMount) destinationHeading.current?.focus();
-    void readChoices(firstPageVisit(), false);
+    void readChoices(firstPageVisit(), null);
     return () => {
       live.current = false;
       version.current++;
@@ -98,17 +116,18 @@ export function CollectionMoveChooser({
   }, []);
 
   useEffect(() => {
-    const episode = focusAfterEpisode.current;
-    if (episode === null || loading || !retained(episode)) return;
-    focusAfterEpisode.current = null;
-    if (destination && placement) placementHeading.current?.focus();
-    else destinationHeading.current?.focus();
+    const intent = focusIntent.current;
+    if (!intent || loading || !retained(intent.episode)) return;
+    focusIntent.current = null;
+    const placementTarget = destination && placement ? placementHeading.current : null;
+    const heading = placementTarget?.isConnected ? placementTarget : destinationHeading.current;
+    if (heading?.isConnected) heading.focus();
   }, [choices, placements, destination, choiceIssue, placementIssue, loading]);
 
-  async function readChoices(visit: BoundedPageVisit, focus: boolean) {
+  async function readChoices(visit: BoundedPageVisit, opener: HTMLElement | null) {
     if (!callbacks.current.current()) return;
     const episode = ++version.current;
-    if (focus) focusAfterEpisode.current = episode;
+    focusIntent.current = opener ? { episode, opener } : null;
     setLoading(true);
     setChoiceIssue(null);
     readAttempt.current = { kind: 'choices', visit };
@@ -132,12 +151,12 @@ export function CollectionMoveChooser({
   async function readPlacementPage(
     visit: BoundedPageVisit,
     target: CollectionDestination,
-    focus: boolean,
+    opener: HTMLElement,
     preserveSelection: boolean,
   ) {
     if (!callbacks.current.current()) return;
     const episode = ++version.current;
-    if (focus) focusAfterEpisode.current = episode;
+    focusIntent.current = { episode, opener };
     setLoading(true);
     setPlacementIssue(null);
     readAttempt.current = { kind: 'placements', visit, target };
@@ -176,10 +195,10 @@ export function CollectionMoveChooser({
     }
   }
 
-  async function chooseDestination(id: string) {
+  async function chooseDestination(id: string, opener: HTMLElement) {
     if (!callbacks.current.current()) return;
     const episode = ++version.current;
-    focusAfterEpisode.current = episode;
+    focusIntent.current = { episode, opener };
     selectionAdmitted.current = false;
     setSelectionReady(false);
     setLoading(true);
@@ -256,10 +275,10 @@ export function CollectionMoveChooser({
     callbacks.current.onChange({ destination, after: anchor.id, anchor });
   }
 
-  function clearDestination() {
+  function clearDestination(opener: HTMLElement) {
     if (!callbacks.current.current()) return;
     const episode = ++version.current;
-    focusAfterEpisode.current = episode;
+    focusIntent.current = { episode, opener };
     selectionAdmitted.current = false;
     setSelectionReady(false);
     setDestination(null);
@@ -270,16 +289,15 @@ export function CollectionMoveChooser({
     setPlacementVisit(firstPageVisit());
     setPlacementIssue(null);
     callbacks.current.onChange(null);
-    destinationHeading.current?.focus();
   }
 
-  function restartChoices() {
-    void readChoices(firstPageVisit(), true);
+  function restartChoices(opener: HTMLElement) {
+    void readChoices(firstPageVisit(), opener);
   }
 
-  function restartPlacements() {
+  function restartPlacements(opener: HTMLElement) {
     if (!destination) {
-      if (destinationId) void chooseDestination(destinationId);
+      if (destinationId) void chooseDestination(destinationId, opener);
       return;
     }
     const preserveSelection = placementIssue === null && selectionAdmitted.current;
@@ -287,26 +305,26 @@ export function CollectionMoveChooser({
       selectionAdmitted.current = false;
       setSelectionReady(false);
     }
-    void readPlacementPage(firstPageVisit(), destination, true, preserveSelection);
+    void readPlacementPage(firstPageVisit(), destination, opener, preserveSelection);
   }
 
-  function retryChoicePage() {
+  function retryChoicePage(opener: HTMLElement) {
     const attempt = readAttempt.current;
-    if (attempt?.kind === 'choices') void readChoices(attempt.visit, true);
+    if (attempt?.kind === 'choices') void readChoices(attempt.visit, opener);
   }
 
-  function retryPlacementPage() {
+  function retryPlacementPage(opener: HTMLElement) {
     const attempt = readAttempt.current;
     if (attempt?.kind === 'placements') {
       selectionAdmitted.current = false;
       setSelectionReady(false);
-      void readPlacementPage(attempt.visit, attempt.target, true, false);
+      void readPlacementPage(attempt.visit, attempt.target, opener, false);
     }
   }
 
-  function chooseBrowseDestination(id: string) {
+  function chooseBrowseDestination(id: string, opener: HTMLElement) {
     if (disabled || loading || choiceIssue) return;
-    void chooseDestination(id);
+    void chooseDestination(id, opener);
   }
 
   const visibleChoices = choices.collections.filter((choice) => choice.id !== sourceId);
@@ -334,7 +352,7 @@ export function CollectionMoveChooser({
                   data-move-destination={choice.id}
                   disabled={disabled || loading || !!choiceIssue}
                   aria-pressed={destinationId === choice.id}
-                  onClick={() => chooseBrowseDestination(choice.id)}
+                  onClick={(event) => chooseBrowseDestination(choice.id, event.currentTarget)}
                 >
                   {choice.title}
                 </Button>
@@ -362,7 +380,11 @@ export function CollectionMoveChooser({
               variant="outline"
               className={controlClass}
               disabled={disabled || loading}
-              onClick={choiceIssue === 'expired' ? restartChoices : retryChoicePage}
+              onClick={(event) =>
+                choiceIssue === 'expired'
+                  ? restartChoices(event.currentTarget)
+                  : retryChoicePage(event.currentTarget)
+              }
             >
               {choiceIssue === 'expired' ? m.library_collection_move_restart() : m.library_collection_move_retry()}
             </Button>
@@ -376,9 +398,9 @@ export function CollectionMoveChooser({
               variant="outline"
               className={controlClass}
               disabled={disabled || loading}
-              onClick={() => {
-                if (destinationId) void chooseDestination(destinationId);
-                else restartChoices();
+              onClick={(event) => {
+                if (destinationId) void chooseDestination(destinationId, event.currentTarget);
+                else restartChoices(event.currentTarget);
               }}
             >
               {destinationId ? m.library_collection_move_reread_destination() : m.library_collection_move_retry()}
@@ -392,9 +414,9 @@ export function CollectionMoveChooser({
               variant="outline"
               className={controlClass}
               disabled={disabled || loading || !previousPageVisit(choiceVisit)}
-              onClick={() => {
+              onClick={(event) => {
                 const previous = previousPageVisit(choiceVisit);
-                if (previous) void readChoices(previous, true);
+                if (previous) void readChoices(previous, event.currentTarget);
               }}
             >
               {m.library_collection_move_previous()}
@@ -406,7 +428,7 @@ export function CollectionMoveChooser({
               variant="outline"
               className={controlClass}
               disabled={disabled || loading}
-              onClick={restartChoices}
+              onClick={(event) => restartChoices(event.currentTarget)}
             >
               {m.library_collection_move_restart()}
             </Button>
@@ -417,7 +439,7 @@ export function CollectionMoveChooser({
               variant="outline"
               className={controlClass}
               disabled={disabled || loading}
-              onClick={() => void readChoices(nextPageVisit(choiceVisit, choices.next), true)}
+              onClick={(event) => void readChoices(nextPageVisit(choiceVisit, choices.next), event.currentTarget)}
             >
               {m.library_collection_move_more_destinations()}
             </Button>
@@ -492,7 +514,11 @@ export function CollectionMoveChooser({
                 variant="outline"
                 className={controlClass}
                 disabled={disabled || loading}
-                onClick={placementIssue === 'expired' ? restartPlacements : retryPlacementPage}
+                onClick={(event) =>
+                  placementIssue === 'expired'
+                    ? restartPlacements(event.currentTarget)
+                    : retryPlacementPage(event.currentTarget)
+                }
               >
                 {placementIssue === 'changed' || placementIssue === 'denied'
                   ? m.library_collection_move_reread_destination()
@@ -509,9 +535,10 @@ export function CollectionMoveChooser({
                 variant="outline"
                 className={controlClass}
                 disabled={disabled || loading}
-                onClick={() => {
+                onClick={(event) => {
                   const previous = previousPageVisit(placementVisit);
-                  if (previous) void readPlacementPage(previous, destination, true, selectionAdmitted.current);
+                  if (previous)
+                    void readPlacementPage(previous, destination, event.currentTarget, selectionAdmitted.current);
                 }}
               >
                 {m.library_collection_move_previous()}
@@ -523,7 +550,7 @@ export function CollectionMoveChooser({
                 variant="outline"
                 className={controlClass}
                 disabled={disabled || loading}
-                onClick={restartPlacements}
+                onClick={(event) => restartPlacements(event.currentTarget)}
               >
                 {m.library_collection_move_restart()}
               </Button>
@@ -534,11 +561,11 @@ export function CollectionMoveChooser({
                 variant="outline"
                 className={controlClass}
                 disabled={disabled || loading}
-                onClick={() =>
+                onClick={(event) =>
                   void readPlacementPage(
                     nextPageVisit(placementVisit, placements.next),
                     destination,
-                    true,
+                    event.currentTarget,
                     selectionAdmitted.current,
                   )
                 }
@@ -555,7 +582,7 @@ export function CollectionMoveChooser({
           variant="outline"
           className={controlClass}
           disabled={disabled || loading}
-          onClick={clearDestination}
+          onClick={(event) => clearDestination(event.currentTarget)}
         >
           {m.library_collection_move_change_destination()}
         </Button>
