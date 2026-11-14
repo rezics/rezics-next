@@ -1,4 +1,4 @@
-import { ImportDetails, ImportEmpty } from './presentation';
+import { ImportDetails, ImportEmpty, ImportReturn } from './presentation';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
@@ -8,6 +8,7 @@ import type { VndbJourneySnapshot } from './controller';
 import { VndbAction } from './controls';
 import type { VndbOutcome } from './contract';
 import { VndbPendingReview } from './pending';
+import { VndbStage } from './vndb-workspace';
 
 function outcomeId(outcome: VndbOutcome): string {
   return typeof outcome.scoreReviewId === 'string' ? outcome.scoreReviewId : outcome.reviewId!;
@@ -61,7 +62,32 @@ export function VndbResultPage({
     );
   };
   return (
-    <section className="min-w-0 space-y-4" data-vndb-stage="results" tabIndex={-1}>
+    <VndbStage
+      stage="results"
+      actions={
+        <div className="min-w-0 space-y-3">
+          {snap.stopped === 'deadline' ? (
+            <VndbAction type="button" disabled={busy} onClick={onResume}>
+              {m.library_vndb_resume()}
+            </VndbAction>
+          ) : null}
+          <VndbAction
+            type="button"
+            variant="outline"
+            disabled={busy || !snap.reviewCurrent || !!snap.retryCommand}
+            onClick={onReview}
+          >
+            {m.library_bangumi_return_review()}
+          </VndbAction>
+          {snap.uploadId ? (
+            <VndbAction type="button" variant="outline" disabled={busy || !!snap.retryCommand} onClick={onDiscard}>
+              {m.library_bangumi_discard()}
+            </VndbAction>
+          ) : null}
+          <ImportReturn />
+        </div>
+      }
+    >
       <h2 className="text-xl font-semibold">{m.library_vndb_results_title()}</h2>
       <p role="status">
         {m.library_vndb_effect_progress({
@@ -79,7 +105,7 @@ export function VndbResultPage({
         {snap.outcomes.map((outcome) => (
           <li
             key={`${outcome.ordinal}:${outcomeId(outcome)}`}
-            className="rounded-md border p-3"
+            className="min-w-0 rounded-md border p-3"
             data-vndb-result={outcome.status}
             data-vndb-row={outcome.ordinal}
           >
@@ -128,26 +154,6 @@ export function VndbResultPage({
           );
         })}
       </ul>
-      <div className="flex flex-wrap gap-3">
-        {snap.stopped === 'deadline' ? (
-          <VndbAction type="button" disabled={busy} onClick={onResume}>
-            {m.library_vndb_resume()}
-          </VndbAction>
-        ) : null}
-        <VndbAction
-          type="button"
-          variant="outline"
-          disabled={busy || !snap.reviewCurrent || !!snap.retryCommand}
-          onClick={onReview}
-        >
-          {m.library_bangumi_return_review()}
-        </VndbAction>
-        {snap.uploadId ? (
-          <VndbAction type="button" variant="outline" disabled={busy || !!snap.retryCommand} onClick={onDiscard}>
-            {m.library_bangumi_discard()}
-          </VndbAction>
-        ) : null}
-      </div>
-    </section>
+    </VndbStage>
   );
 }

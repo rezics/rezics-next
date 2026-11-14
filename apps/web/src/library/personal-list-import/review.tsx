@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { ImportEmpty } from './presentation';
 import { m } from '../../paraglide/messages.js';
 import type { VndbJourneySnapshot } from './controller';
@@ -5,6 +6,7 @@ import { VndbAction } from './controls';
 import { VndbRowReview } from './row';
 import type { VndbReviewInput } from './contract';
 import { VndbPendingReview } from './pending';
+import { VndbStage } from './vndb-workspace';
 
 export function VndbReviewPage({
   snap,
@@ -27,36 +29,72 @@ export function VndbReviewPage({
   onSource: () => void;
   onHideSource: () => void;
 }) {
+  const sourcePanelId = useId();
   const current = snap.page?.rows ?? [];
   const scoreNotices = new Map(snap.scoreNotices.map((item) => [item.ordinal, item]));
   const reviewed = snap.rows.reduce((count, row) => count + Number(!!row.decision) + Number(!!row.scoreDecision), 0);
   return (
-    <section className="min-w-0 space-y-6" data-vndb-stage="review" tabIndex={-1}>
-      <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
-      <p role="status">
-        {m.library_vndb_page_progress({ shown: current.length, loaded: snap.rows.length, total: snap.total, reviewed })}
-      </p>
+    <VndbStage
+      stage="review"
+      actions={
+        <div className="min-w-0 space-y-3">
+          {snap.offset > 0 ? (
+            <VndbAction type="button" variant="outline" disabled={busy} onClick={onPrevious}>
+              {m.library_vndb_previous_page()}
+            </VndbAction>
+          ) : null}
+          <VndbAction type="button" variant="outline" disabled={busy} onClick={onRefresh}>
+            {m.library_vndb_refresh_page()}
+          </VndbAction>
+          {snap.page?.next !== null && snap.page ? (
+            <VndbAction type="button" variant="outline" disabled={busy} onClick={onNext}>
+              {m.library_vndb_next_page()}
+            </VndbAction>
+          ) : null}
+          <VndbAction
+            type="button"
+            disabled={busy || snap.cancelled || snap.selectedEffects === 0}
+            onClick={onConfirm}
+          >
+            {m.library_vndb_confirm_selection({ count: snap.selectedEffects })}
+          </VndbAction>
+        </div>
+      }
+    >
+      <header className="min-w-0 space-y-2">
+        <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
+        <p role="status" tabIndex={-1} data-vndb-window-status>
+          {m.library_vndb_page_progress({
+            shown: current.length,
+            loaded: snap.rows.length,
+            total: snap.total,
+            reviewed,
+          })}
+        </p>
+      </header>
       <VndbPendingReview snap={snap} />
       {snap.page?.state === 'cancelled' ? <p role="status">{m.library_vndb_stopped_cancelled()}</p> : null}
-      <div className="flex flex-wrap gap-3">
-        <VndbAction type="button" variant="outline" disabled={busy || snap.sourceVisible} onClick={onSource}>
-          {m.library_vndb_source_button()}
+      <div className="flex min-w-0 flex-wrap gap-3">
+        <VndbAction
+          type="button"
+          variant="outline"
+          disabled={busy}
+          aria-expanded={snap.sourceVisible}
+          {...(snap.sourceVisible && snap.sourceXML !== null ? { 'aria-controls': sourcePanelId } : {})}
+          onClick={snap.sourceVisible ? onHideSource : onSource}
+        >
+          {snap.sourceVisible ? m.library_vndb_source_hide() : m.library_vndb_source_button()}
         </VndbAction>
-        {snap.sourceVisible ? (
-          <VndbAction type="button" variant="outline" disabled={busy} onClick={onHideSource}>
-            {m.library_vndb_source_hide()}
-          </VndbAction>
-        ) : null}
       </div>
       {snap.sourceVisible && snap.sourceXML !== null ? (
-        <details open className="rounded-md border p-3" data-vndb-source-xml>
+        <details id={sourcePanelId} open className="min-w-0 rounded-md border p-3" data-vndb-source-xml>
           <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_vndb_source_summary()}</summary>
           <p className="text-sm text-muted-foreground">{m.library_vndb_source_private()}</p>
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-sm">{snap.sourceXML}</pre>
         </details>
       ) : null}
       {current.length === 0 ? <ImportEmpty /> : null}
-      <ul className="space-y-6">
+      <ul className="min-w-0 space-y-6">
         {current.map((row) => {
           const scoreNotice = scoreNotices.get(row.ordinal);
           return (
@@ -71,24 +109,6 @@ export function VndbReviewPage({
           );
         })}
       </ul>
-      <div className="flex flex-wrap gap-3">
-        {snap.offset > 0 ? (
-          <VndbAction type="button" variant="outline" disabled={busy} onClick={onPrevious}>
-            {m.library_vndb_previous_page()}
-          </VndbAction>
-        ) : null}
-        <VndbAction type="button" variant="outline" disabled={busy} onClick={onRefresh}>
-          {m.library_vndb_refresh_page()}
-        </VndbAction>
-        {snap.page?.next !== null && snap.page ? (
-          <VndbAction type="button" variant="outline" disabled={busy} onClick={onNext}>
-            {m.library_vndb_next_page()}
-          </VndbAction>
-        ) : null}
-        <VndbAction type="button" disabled={busy || snap.cancelled || snap.selectedEffects === 0} onClick={onConfirm}>
-          {m.library_vndb_confirm_selection({ count: snap.selectedEffects })}
-        </VndbAction>
-      </div>
-    </section>
+    </VndbStage>
   );
 }

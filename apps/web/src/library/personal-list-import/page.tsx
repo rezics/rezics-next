@@ -18,6 +18,7 @@ import { useVndbVisit, type VndbVisit } from './visit';
 import type { VndbNotice } from './controller';
 import { CurrentImportLibrary } from '../showcase-import-return/current';
 import { vndbReviewHref, type VndbReviewAddress } from './address';
+import { VndbWorkspace } from './vndb-workspace';
 
 function noticeText(notice: VndbNotice): string | null {
   if (!notice) return null;
@@ -115,6 +116,11 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
   const port = useVndbImportPort(visit);
   const journey = useRef<VndbJourney | null>(null);
   const main = useRef<HTMLElement>(null);
+  const [focusRequest, setFocusRequest] = useState<{
+    kind: 'stage' | 'window';
+    stage: VndbJourneySnapshot['stage'];
+    trigger: HTMLElement | null;
+  } | null>(null);
   if (!journey.current) journey.current = createVndbJourney({ port, visit });
   const [snap, setSnap] = useState<VndbJourneySnapshot>(() => journey.current!.snapshot());
   useEffect(() => () => journey.current?.retire(), [visit]);
@@ -129,25 +135,139 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
     }
   }, [address?.uploadId, address?.offset]);
   useEffect(() => {
-    main.current?.querySelector<HTMLElement>(`[data-vndb-stage="${snap.stage}"]`)?.focus({ preventScroll: true });
-  }, [snap.stage, snap.page?.rows[0]?.ordinal]);
+    if (!focusRequest) return;
+    const active = document.activeElement;
+    if (active !== focusRequest.trigger && active !== document.body) {
+      setFocusRequest(null);
+      return;
+    }
+    const target =
+      focusRequest.kind === 'window'
+        ? (main.current?.querySelector<HTMLElement>('[data-vndb-window-status]') ??
+          main.current?.querySelector<HTMLElement>(`[data-vndb-stage="${focusRequest.stage}"]`))
+        : focusRequest.stage === 'cleanup'
+          ? main.current?.querySelector<HTMLElement>('[data-import-cleanup]')
+          : main.current?.querySelector<HTMLElement>(`[data-vndb-stage="${focusRequest.stage}"]`);
+    target?.focus({ preventScroll: true });
+    setFocusRequest(null);
+  }, [focusRequest]);
 
-  async function act(run: (current: VndbJourney) => Promise<VndbJourneySnapshot> | VndbJourneySnapshot) {
+  async function act(
+    run: (current: VndbJourney) => Promise<VndbJourneySnapshot> | VndbJourneySnapshot,
+    focus?: 'stage' | 'window',
+  ) {
     if (!journey.current) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const result = run(journey.current);
     setSnap(journey.current.snapshot());
     const next = await result;
     setSnap(next);
     if (next.page && next.reviewCurrent && !next.busy)
       onAddressChange?.({ uploadId: next.page.uploadId, offset: next.offset });
+    if (focus) setFocusRequest({ kind: focus, stage: next.stage, trigger });
   }
 
   const locked = snap.busy || !!snap.retryCommand || snap.cleanupPending;
   const showSourceRetry = snap.notice?.kind === 'unknown' && snap.notice.command.kind === 'source';
+  const notice = noticeText(snap.notice);
+  const hasRecovery =
+    !!notice ||
+    (!!snap.retryCommand && !snap.cleanupPending) ||
+    showSourceRetry ||
+    !!snap.cleanupReceipts.length ||
+    snap.cleanupPending;
   return (
-    <main ref={main} className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6">
-      <PageHeading>{m.library_vndb_title()}</PageHeading>
-      <ImportJourney stage={snap.stage} />
+    <VndbWorkspace
+      mainRef={main}
+      stage={snap.stage}
+      heading={<PageHeading>{m.library_vndb_title()}</PageHeading>}
+      journey={<ImportJourney stage={snap.stage} />}
+      {...(hasRecovery
+        ? {
+            recovery: (
+              <>
+                {notice ? (
+                  <p role="status" aria-live="polite">
+                    {notice}
+                  </p>
+                ) : null}
+                {snap.retryCommand && !snap.cleanupPending ? (
+                  <VndbAction
+                    type="button"
+                    disabled={snap.busy}
+                    onClick={() => void act((current) => current.retryUnknown(), 'stage')}
+                  >
+                    {m.library_bangumi_retry_command()}
+                  </VndbAction>
+                ) : null}
+                {showSourceRetry ? <p className="text-sm">{m.library_vndb_source_retry_help()}</p> : null}
+                <ImportCleanupReceipts count={snap.cleanupReceipts.length} />
+                {snap.cleanupPending ? (
+                  <ImportCleanupRecovery
+                    busy={snap.busy}
+                    replacementPending={snap.replacementPending}
+                    onRetry={() => void act((current) => current.retryUnknown(), 'stage')}
+                    onDiscardReplacement={() => void act((current) => current.discard(), 'stage')}
+                  />
+                ) : null}
+              </>
+            ),
+          }
+        : {})}
+      footer={
+        <>
+          {snap.sourceVisible && snap.sourceXML !== null ? (
+            <VndbAction type="button" variant="outline" onClick={() => download(snap.sourceXML!)}>
+              {m.library_vndb_download_source()}
+            </VndbAction>
+          ) : null}
+          {snap.uploadId && !snap.cleanupPending && snap.stage !== 'removed' ? (
+            <div className="flex min-w-0 flex-wrap gap-3">
+              {snap.stage === 'review' || snap.stage === 'results' ? (
+                <VndbAction
+                  type="button"
+                  variant="outline"
+                  disabled={locked}
+                  onClick={() => void act((current) => current.replaceSource(), 'stage')}
+                >
+                  {m.library_vndb_replace_source()}
+                </VndbAction>
+              ) : null}
+              {snap.stage !== 'results' || !snap.cancelled ? (
+                <VndbAction
+                  type="button"
+                  variant="outline"
+                  disabled={locked && snap.stage !== 'applying'}
+                  onClick={() => void act((current) => current.cancelAdmission(), 'stage')}
+                >
+                  {snap.busy ? m.library_bangumi_cancelling() : m.library_bangumi_cancel()}
+                </VndbAction>
+              ) : null}
+              {snap.stage !== 'results' ? (
+                <VndbAction
+                  type="button"
+                  variant="outline"
+                  disabled={locked}
+                  onClick={() => void act((current) => current.discard(), 'stage')}
+                >
+                  {m.library_bangumi_discard()}
+                </VndbAction>
+              ) : null}
+            </div>
+          ) : null}
+          {snap.stage !== 'results' ? <ImportReturn /> : null}
+          <VndbDeparture
+            active={!!snap.uploadId && snap.stage !== 'removed' && (snap.stage !== 'results' || locked)}
+            locked={locked}
+            onLeave={async () => {
+              if (snap.retryCommand || snap.busy) return false;
+              journey.current?.retire();
+              return true;
+            }}
+          />
+        </>
+      }
+    >
       {snap.page && snap.reviewCurrent ? (
         <ImportDetails title={m.library_import_retained()}>
           <p className="text-sm">
@@ -164,33 +284,13 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
         </ImportDetails>
       ) : null}
       {libraryReturn && snap.stage === 'upload' ? <CurrentImportLibrary visit={visit} returned /> : null}
-      {noticeText(snap.notice) ? (
-        <p role="status" aria-live="polite">
-          {noticeText(snap.notice)}
-        </p>
-      ) : null}
-      {snap.retryCommand && !snap.cleanupPending ? (
-        <VndbAction type="button" disabled={snap.busy} onClick={() => void act((current) => current.retryUnknown())}>
-          {m.library_bangumi_retry_command()}
-        </VndbAction>
-      ) : null}
-      {showSourceRetry ? <p className="text-sm">{m.library_vndb_source_retry_help()}</p> : null}
-      <ImportCleanupReceipts count={snap.cleanupReceipts.length} />
-      {snap.cleanupPending ? (
-        <ImportCleanupRecovery
-          busy={snap.busy}
-          replacementPending={snap.replacementPending}
-          onRetry={() => void act((current) => current.retryUnknown())}
-          onDiscardReplacement={() => void act((current) => current.discard())}
-        />
-      ) : null}
       {snap.stage === 'upload' || snap.stage === 'cleanup' ? (
         <VndbUploadForm
           busy={snap.cleanupPending ? false : snap.busy}
           onEdit={() => void act((current) => current.editReplacement())}
           disabled={!snap.cleanupPending && locked}
-          onUpload={(xml) => void act((current) => current.preview(xml))}
-          onReadFailure={() => void act((current) => current.fileReadFailed())}
+          onUpload={(xml) => void act((current) => current.preview(xml), 'stage')}
+          onReadFailure={() => void act((current) => current.fileReadFailed(), 'stage')}
         />
       ) : null}
       {snap.stage === 'review' ? (
@@ -211,10 +311,10 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
             snap={snap}
             busy={snap.busy || locked}
             onReview={(body) => void act((current) => current.review(body))}
-            onNext={() => void act((current) => current.loadPage(snap.page?.next ?? 0))}
-            onPrevious={() => void act((current) => current.loadPage(Math.max(0, snap.offset - 8)))}
-            onRefresh={() => void act((current) => current.loadPage(snap.offset))}
-            onConfirm={() => void act((current) => current.openConfirm())}
+            onNext={() => void act((current) => current.loadPage(snap.page?.next ?? 0), 'window')}
+            onPrevious={() => void act((current) => current.loadPage(Math.max(0, snap.offset - 8)), 'window')}
+            onRefresh={() => void act((current) => current.loadPage(snap.offset), 'window')}
+            onConfirm={() => void act((current) => current.openConfirm(), 'stage')}
             onSource={() => void act((current) => current.source())}
             onHideSource={() => void act((current) => current.hideSource())}
           />
@@ -224,8 +324,8 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
         <VndbConfirmPage
           snap={snap}
           busy={snap.busy || locked}
-          onBack={() => void act((current) => current.backToReview())}
-          onConfirm={() => void act((current) => current.confirm())}
+          onBack={() => void act((current) => current.backToReview(), 'stage')}
+          onConfirm={() => void act((current) => current.confirm(), 'stage')}
         />
       ) : null}
       {snap.stage === 'applying' ? (
@@ -240,9 +340,9 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
           <VndbResultPage
             snap={snap}
             busy={locked}
-            onResume={() => void act((current) => current.resume())}
-            onReview={() => void act((current) => current.backToReview())}
-            onDiscard={() => void act((current) => current.discard())}
+            onResume={() => void act((current) => current.resume(), 'stage')}
+            onReview={() => void act((current) => current.backToReview(), 'window')}
+            onDiscard={() => void act((current) => current.discard(), 'stage')}
           />
           <CurrentImportLibrary
             key={`${snap.uploadId}:${snap.outcomes.map((row) => `${typeof row.scoreReviewId === 'string' ? 'score' : 'entry-state'}:${typeof row.scoreReviewId === 'string' ? row.scoreReviewId : row.reviewId}:${row.status}`).join(',')}`}
@@ -252,55 +352,6 @@ function VndbImportSession({ visit, libraryReturn, address, onAddressChange }: V
         </>
       ) : null}
       {snap.stage === 'removed' ? <VndbRemoved outcomes={snap.outcomes} effects={snap.settledEffects} /> : null}
-      {snap.sourceVisible && snap.sourceXML !== null ? (
-        <VndbAction type="button" variant="outline" onClick={() => download(snap.sourceXML!)}>
-          {m.library_vndb_download_source()}
-        </VndbAction>
-      ) : null}
-      {snap.uploadId && !snap.cleanupPending && snap.stage !== 'removed' ? (
-        <div className="flex flex-wrap gap-3">
-          {snap.stage === 'review' || snap.stage === 'results' ? (
-            <VndbAction
-              type="button"
-              variant="outline"
-              disabled={locked}
-              onClick={() => void act((current) => current.replaceSource())}
-            >
-              {m.library_vndb_replace_source()}
-            </VndbAction>
-          ) : null}
-          {snap.stage !== 'results' || !snap.cancelled ? (
-            <VndbAction
-              type="button"
-              variant="outline"
-              disabled={locked && snap.stage !== 'applying'}
-              onClick={() => void act((current) => current.cancelAdmission())}
-            >
-              {snap.busy ? m.library_bangumi_cancelling() : m.library_bangumi_cancel()}
-            </VndbAction>
-          ) : null}
-          {snap.stage !== 'results' ? (
-            <VndbAction
-              type="button"
-              variant="outline"
-              disabled={locked}
-              onClick={() => void act((current) => current.discard())}
-            >
-              {m.library_bangumi_discard()}
-            </VndbAction>
-          ) : null}
-        </div>
-      ) : null}
-      <ImportReturn />
-      <VndbDeparture
-        active={!!snap.uploadId && snap.stage !== 'removed' && (snap.stage !== 'results' || locked)}
-        locked={locked}
-        onLeave={async () => {
-          if (snap.retryCommand || snap.busy) return false;
-          journey.current?.retire();
-          return true;
-        }}
-      />
-    </main>
+    </VndbWorkspace>
   );
 }
