@@ -246,7 +246,7 @@ export const SelectionPaint: Story = {
     await waitFor(() =>
       expect((textbox as HTMLElement & { editor: Editor }).editor.state.selection).toBeInstanceOf(CellSelection),
     );
-    expect(window.getSelection()?.toString()).toBe('Authored red');
+    await waitFor(() => expect(window.getSelection()?.toString()).toBe('Authored red'));
     expect(getComputedStyle(authored, '::selection').backgroundColor).toBe('rgba(0, 0, 0, 0)');
     expect(getComputedStyle(authored, '::selection').color).not.toBe(normalColor);
     expect(getComputedStyle(authored).color).toBe(authoredColor);
