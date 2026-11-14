@@ -785,7 +785,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
                 },
                 subjectIds,
               ),
-              presentProgressDiscovery(pool, result.sessions),
+              presentProgressDiscovery(pool, result.sessions, job.deadline),
             ]);
             await subjects.verify();
             await sessionCommands().verifyOwnerDiscoveryCurrent(actor, result.generation, result.partitionEpoch);
