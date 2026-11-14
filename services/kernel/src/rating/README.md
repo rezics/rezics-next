@@ -869,8 +869,10 @@ reads, review-context selection and citation disclosure.
   scale; `mean` is the producer's published display mean on 0–10 and `score` its Bayesian score. Both numbers are
   null unless `state` is `ready`, and score is also null without a published active prior epoch. No figure row
   returns zero count, `insufficient_data` and null numbers. Below threshold a pending apply reports `updating`;
-  an already ready figure retains its published numbers and `ready` state. The response uses the published revision
-  as its ETag (zero before publication) and `Cache-Control: no-cache`, matching other public subject reads.
+  an already ready figure retains its published numbers and `ready` state. Its ETag is the SHA-256 digest of the
+  deterministically serialized complete `{ figure }` response, including its computed state, so pending-state changes
+  before publication change the validator while identical representations retain it. The route uses
+  `Cache-Control: no-cache`, matching other public subject reads.
   The route never reads votes, shard totals or Realm populations. `subject.get` continues to follow the subject's
   head revision and carries no figure; search can reuse `PublicFigure` unchanged.
 

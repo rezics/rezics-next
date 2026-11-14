@@ -639,9 +639,10 @@ export function ratingRoutes(
         if (!(await readableSubject(config(), actor, params.id, job.deadline))) throw new ProblemError('not_found');
         const result = await readSubjectPublicFigure(dependencies.pool, params.id, job.deadline);
         if (!result) throw new ProblemError('not_found');
-        set.headers.etag = `"${result.revision}"`;
+        const representation = { figure: result.figure };
+        set.headers.etag = `"${createHash('sha256').update(JSON.stringify(representation)).digest('hex')}"`;
         set.headers['cache-control'] = 'no-cache';
-        return { figure: result.figure };
+        return representation;
       });
     })
     .get(declarations.route4.path, declarations.route4.options, async ({ actor, params, query, admission, job }) => {
