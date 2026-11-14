@@ -87,18 +87,18 @@ No ordinal, current Post head, semantic relationship or scalar progress creates 
 bodies have different occurrence links even when their exact Post/revision/digest is identical. A move changes
 current ancestors while an old frozen link retains its original body. Modified activation opens an ordinary native
 link. Normal activation uses the application Router; Back/Forward restores URL coordinates, prepares admission again
-and rereads through the native source. Reader state never stores a previous body or rows in history.
+and rereads through the native source. Reader state never stores a previous body or outline rows in browser history.
 
 ## Source and retirement
 
 `source.ts` defines the typed consumer projection. Each mounted explicit open, More, Retry or return makes one
 `source.read({ address, locale, limit: 40, ancestorLimit: 24 }, signal)` observation. The route first makes one bounded
 host observation: current publication, optionally frozen publication, optionally the selected occurrence. It does
-not download contents or descendants. No prefetch, refill, per-row hydration or tree index is retained.
+not download contents or descendants. No prefetch, refill, per-row hydration or unrevealed tree index is retained.
 
 A publication identifies native catalogue, frozen source structure and separate publication release. A chapter
 selects occurrence plus exact Post/revision/SHA-256. Contents preserves native order and container/body/unavailable
-slots. Sparse or empty windows can continue. More and Previous replace the window; failure retries the same parent/cursor.
+slots. Sparse or empty windows can continue. Expand reveals one immediate branch page in place; More appends one page to that branch. Failure retries its exact original parent/cursor/selection without hiding retained rows or another branch.
 Pages separately report current release/structure, bounded ancestors and previous/next. Known ends and unavailable
 navigation remain different states. Returning to contents retains the exact selection and focuses its row when
 present, otherwise the heading; a moved selection retains an exact chapter return and current-location control.
@@ -137,8 +137,12 @@ current parent absent from the frozen release may be unavailable; no alternative
 
 ## Presentation
 
-Decision: use one restrained reading column, linked work/part breadcrumbs and bounded contents rows whose titles
-open their chapter or nested level. Containers with a body retain separate Read and Contents destinations. Current
+Decision: use one restrained reading column, linked work/part breadcrumbs and an expandable Book outline in the main
+Shell navigation through `ShellContextNavigation({ label, children })`. Shell owns placement, responsive disclosure
+and fallback outside its provider; Book supplies its actual outline consumer, never a second sidebar. Chapter titles
+open their exact body in the center. Container disclosure buttons expand in place with truthful `aria-expanded` and
+`aria-controls`; Enter/Space and direction-aware horizontal arrows operate them. Containers with a body retain
+separate Read and expansion controls. Current
 selection remains visible and focusable; sparse windows keep their exact More/Retry operands. The chapter uses
 Content's existing multilingual prose measure, outline, wide blocks and anchor renderer. Compact chapter navigation
 can be pinned or unpinned without changing the body, focus or saved position. Unpinned navigation shows full neighbour
@@ -235,24 +239,34 @@ private reading positions enter the descriptor or history. One discovery request
 no prefetch, refill, point reads or catalogue scan. Keyboard traversal focuses the admitted chooser heading; return
 focuses the selected publication when present, otherwise the heading. Pointer traversal does not move focus.
 
-Decision: retain at most eight observed predecessor contents coordinates plus current/staged coordinates in
-route-owned memory for one mounted publication/viewer/credential/locale visit. Coordinates contain only exact
-public parent/cursor operands, never rows, titles, bodies, credentials or private checkpoints. Only successful,
-current contents observations advance this window. Previous uses an observed predecessor in the same parent;
-level links restore that parent's most recent retained coordinate. An evicted or direct-entry predecessor stays
-unknown; First page explicitly restarts the level. Failed movements retain their exact target for Retry, including
-failed Previous. No refill, tree scan or predecessor inference is permitted. Chapter return rereads its original
-bounded address and focuses the admitted selected occurrence, or the heading if it is missing. Source retirement,
-publication/viewer/credential/locale replacement and leaving the route discard the window and late effects;
-ordinary same-publication route/chapter movement may retain it. Reload/direct entry starts without predecessors.
-Back/Forward keeps its exact public URL and performs the existing fresh admission/source observation.
+Decision: keep occurrence-keyed branch expansion and explicitly revealed pages independently of the center
+chapter. Opening a sibling preserves every other branch; collapse hides descendants without discarding their rows,
+continuation or failure, and reopening a loaded branch makes no request. More appends in supplied order, suppressing
+occurrences already revealed in that branch; empty and duplicate-only pages retain the supplied continuation without
+refill. Each explicit expansion/More/Retry makes exactly one existing bounded source read. There is no subtree
+prefetch, hidden refill, scan or per-node fetch. Each branch keeps its latest native continuation and exact failed
+request, so Retry cannot substitute a new cursor, selection or locale. A branch failure keeps its revealed rows,
+unrelated branches and the current chapter/checkpoint useful. Branch requests never replace center state or its
+checkpoint intent. Keyboard More/Retry focuses newly appended content or recovery in the requesting branch only
+while the requester still owns focus; pointer actions never transfer focus.
 
-One reader retains at most 40 consumer rows (native maximum 20), one chapter, 24 ancestors, two neighbours and one
-contents return, in addition to this bounded coordinate window. Each catalogue host observation makes at most three
-native operations; Subject discovery makes one. Each source observation makes at most 32: chapter `7 + ancestors + changedRelease`, contents `5 + parentProbe + ancestors + selectedResolves`.
-Each operation retains Content's own bounds. Body bytes are at most 2 MiB per resolution; frozen/current resolution
-can read two bodies. Consumer cursors allow 8,192 characters; native/route cursors allow 4,096. There is no growing
-page/body cache, unbounded cursor chain, hydrated tree or new progress store.
+The route-owned contents visit retains revealed rows, branch expansion, first-reveal occurrence origins and cursor
+operands, using O(revealed rows + explicitly opened branches) memory. It keeps one center chapter, not a body cache.
+Each chapter's canonical link and originating contents position use the page which actually revealed that occurrence;
+reused body bytes never merge distinct placements. Selected state compares publication/occurrence/exact body, never
+Post alone. A direct chapter entry shows only its admitted current chapter and bounded ancestors until an explicit
+Contents read. Ordinary chapter/contents navigation may retain the outline; Back/Forward still prepares admission
+and rereads the exact URL. The compatibility coordinate window retains at most eight observed predecessor operands;
+it does not drive append or expansion. Source retirement, publication/current release/structure, locale, session,
+viewer/credential replacement, pagehide and departure discard all branches, pending reads and focus. A same-address
+admission refresh starts a fresh outline. Late completions cannot populate a replacement owner.
+
+Each catalogue host observation makes at most three native operations; Subject discovery makes one. Each source
+observation makes at most 32: chapter `7 + ancestors + changedRelease`, contents
+`5 + parentProbe + ancestors + selectedResolves`. Each operation retains Content's own bounds: at most 40 consumer
+rows per source page (native maximum 20), 24 ancestors and two neighbours. Body bytes are at most 2 MiB per
+resolution. Consumer cursors allow 8,192 characters; native/route cursors allow 4,096. No private checkpoint enters
+the retained outline or a public link.
 
 Checkpoint transport costs one body-free metadata request on initial observation and one after each successful
 save or clear. A later chapter open still performs its existing exact-body admission and canonical-byte verification.
@@ -261,8 +275,8 @@ save or clear. A later chapter open still performs its existing exact-body admis
 and stories. It is never a production source. Story IDs remain `interfaces-hosted-book-reader` with named states
 `nested-contents`, `exact-chapter`, `sparse-continuation`, `failed-page-recovery`, `moved-occurrence`,
 `unavailable-navigation` and `retired-reading`. `multiple-contents-pages`, `nested-level-return` and
-`failed-previous-retry` cover bounded contents traversal, independent parent restoration, frozen chapter return
-and exact failed-Previous recovery; `saved-continue` and `independent-checkpoint-failure` cover checkpoint
+`failed-previous-retry` cover branch append, independent sibling restoration, frozen chapter return
+and exact failed-page recovery; `saved-continue` and `independent-checkpoint-failure` cover checkpoint
 presentation independently of the body. Review at 390px/1280px in light/dark and all eight locale globals.
 The reading column keeps the shared reading measure, wrapping controls, focus rings and safe area spacing.
 
@@ -272,7 +286,8 @@ The saved Continue example opens its exact saved occurrence. The checkpoint-unav
 unsaved progress edit under Review reading progress; Retry does not reset that edit. Checkpoint controls are the
 same presentation used by the native owner, with explicitly local illustrative state. Main review stories remain
 manual and stable; set the Storybook `readerJourney` parameter to `true` to run the retained interaction assertions.
-Only their destination selectors change from buttons to canonical links; their outcome assertions stay unchanged.
+Branch disclosure and append selectors use buttons; exact chapter destinations remain canonical links. Superseded
+replacing-page assertions now require retained siblings and rows, while exact-body and retirement assertions stay intact.
 
 `book-checkpoint-recovery.stories.tsx` mounts the actual checkpoint component inside the shared Book reader with
 installed native response shapes. Its named states are `saved`, `unknown-save`, `unknown-clear`, `failed-read` and

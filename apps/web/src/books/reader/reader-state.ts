@@ -41,7 +41,7 @@ export type BookReaderNavigation = (
   focus: BookReaderFocus,
 ) => void;
 
-/** One bounded page, observed coordinate window and exact chapter return; no body cache or progress command. */
+/** One center page and independent, explicitly revealed outline branches; no body cache or progress command. */
 export function createBookReader(
   source: HostedBookSource,
   initialAddress: BookAddress,
@@ -58,6 +58,8 @@ export function createBookReader(
   const observation = source.getSnapshot();
   const contents = options.contentsNavigation ?? createBookContentsNavigation();
   const contentsGeneration = contents.generation();
+  const outline = contents.outline;
+  const branchRequests = new Map<string | null, { controller: AbortController; address: BookContentsAddress }>();
   let active = true;
   let connected = false;
   let connection = 0;
@@ -77,6 +79,11 @@ export function createBookReader(
     ticket += 1;
     request?.abort();
     request = undefined;
+    for (const { controller, address } of branchRequests.values()) {
+      controller.abort();
+      outline.cancel(address);
+    }
+    branchRequests.clear();
     contentsReturn = null;
     if (!options.contentsNavigation) contents.retire();
     publish({ address: snapshot.address, state: 'retired', page: null, focus: null });
@@ -87,7 +94,11 @@ export function createBookReader(
       if (contents.generation() === contentsGeneration) contents.retire();
       retire();
     }
-    if (!guard() || contents.generation() !== contentsGeneration) retire();
+    if (!guard()) {
+      if (contents.generation() === contentsGeneration) contents.retire();
+      retire();
+    }
+    if (contents.generation() !== contentsGeneration) retire();
     return active && connected;
   };
   const read = async (address: BookAddress, focus: BookReaderState['focus'] = { kind: 'heading' }) => {
@@ -110,7 +121,7 @@ export function createBookReader(
     const ownConnection = connection;
     const controller = new AbortController();
     request = controller;
-    // Retire the body/rows before dispatch, including on same-address refresh and failed continuation.
+    // A center read retires its former body. Branch reads never replace this page.
     publish({ address, state: 'loading', page: null, focus: null });
     const operands = { address, locale, limit: BOOK_CONTENTS_LIMIT, ancestorLimit: BOOK_ANCESTOR_LIMIT } as const;
     try {
@@ -121,7 +132,11 @@ export function createBookReader(
       if (!current() || ownTicket !== ticket || ownConnection !== connection) return;
       if (result.state === 'ready' && !bookPageMatches(operands, result.page)) result = { state: 'unavailable' };
       request = undefined;
-      if (result.state === 'ready' && address.kind === 'contents') contents.observe(address);
+      if (result.state === 'ready' && result.page.kind === 'contents') {
+        contents.observe(result.page.address);
+        outline.accept(result.page);
+        outline.root(result.page.address);
+      }
       publish(
         result.state === 'ready'
           ? {
@@ -139,6 +154,29 @@ export function createBookReader(
       publish({ address, state: 'unavailable', page: null, focus });
     }
   };
+  const readBranch = async (address: BookContentsAddress) => {
+    if (!current() || branchRequests.has(address.parentOccurrenceId)) return;
+    if (!samePublication(initialAddress.publication, address.publication)) return;
+    const controller = new AbortController();
+    const attempt = { controller, address };
+    const ownConnection = connection;
+    branchRequests.set(address.parentOccurrenceId, attempt);
+    outline.begin(address);
+    const operands = { address, locale, limit: BOOK_CONTENTS_LIMIT, ancestorLimit: BOOK_ANCESTOR_LIMIT } as const;
+    try {
+      await Promise.resolve();
+      if (!current() || ownConnection !== connection) return;
+      const result = await source.read(operands, controller.signal);
+      if (!current() || ownConnection !== connection || branchRequests.get(address.parentOccurrenceId) !== attempt)
+        return;
+      if (result.state === 'ready') {
+        if (result.page.kind === 'contents' && bookPageMatches(operands, result.page)) outline.accept(result.page);
+        else outline.fail(address, 'unavailable');
+      } else outline.fail(address, result.state);
+    } finally {
+      if (branchRequests.get(address.parentOccurrenceId) === attempt) branchRequests.delete(address.parentOccurrenceId);
+    }
+  };
   const move = (address: BookAddress, focus: BookReaderFocus = { kind: 'heading' }) => {
     if (!options.navigate) {
       void read(address, focus);
@@ -150,6 +188,7 @@ export function createBookReader(
     options.navigate(address, origin, focus);
   };
   return {
+    outline,
     getSnapshot: () => snapshot,
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -170,6 +209,11 @@ export function createBookReader(
         ticket += 1;
         request?.abort();
         request = undefined;
+        for (const { controller, address } of branchRequests.values()) {
+          controller.abort();
+          outline.cancel(address);
+        }
+        branchRequests.clear();
         stopSource?.();
         stopSource = undefined;
         // Strict Mode can reconnect this same visit; its former queued requests stay retired.
@@ -181,11 +225,44 @@ export function createBookReader(
     },
     current,
     retire,
+    retireBoundary() {
+      if (contents.generation() === contentsGeneration) contents.retire();
+      retire();
+    },
     read,
+    toggleBranch(address: BookContentsAddress) {
+      if (!current()) return;
+      const branch = outline.branch(address.parentOccurrenceId);
+      if (branch?.expanded) {
+        outline.collapse(address.parentOccurrenceId);
+        return;
+      }
+      outline.expand(address);
+      if (!branch?.page && branch?.state !== 'loading') void readBranch(branch?.attempt ?? address);
+    },
+    moreBranch(parent: string | null) {
+      if (!current()) return;
+      const branch = outline.branch(parent);
+      if (branch?.state !== 'ready' || branch.page?.continuation.state !== 'more') return;
+      void readBranch({
+        ...branch.address,
+        selection: snapshot.address.selection,
+        cursor: branch.page.continuation.cursor,
+      });
+    },
+    retryBranch(parent: string | null) {
+      if (!current()) return;
+      const branch = outline.branch(parent);
+      if (branch?.state === 'loading') return;
+      if (branch?.attempt) void readBranch(branch.attempt);
+      else if (branch) void readBranch(branch.address);
+    },
     resolveContents: contents.resolve,
     openChapter(address: BookChapterAddress, focus: BookReaderFocus = { kind: 'heading' }) {
       if (!current() || snapshot.state === 'loading') return;
-      if (snapshot.address.kind === 'contents') contentsReturn = { ...snapshot.address, selection: address.selection };
+      const origin = outline.origin(address.selection.occurrenceId);
+      if (origin || snapshot.address.kind === 'contents')
+        contentsReturn = { ...(origin ?? (snapshot.address as BookContentsAddress)), selection: address.selection };
       move(address, focus);
     },
     openContents(

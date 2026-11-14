@@ -206,8 +206,8 @@ export function createIllustrativeHostedBook(state: IllustrativeBookState = 'nes
           if (
             state === 'failed-previous' &&
             query.parentId === ids.nested &&
-            query.cursor === illustrativeBookCursor &&
-            lastNestedCursor === illustrativeBookLastCursor &&
+            query.cursor === illustrativeBookLastCursor &&
+            lastNestedCursor === illustrativeBookCursor &&
             !failed
           ) {
             failed = true;

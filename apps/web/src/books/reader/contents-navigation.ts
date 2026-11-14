@@ -1,4 +1,5 @@
 import type { BookContentsAddress } from './source';
+import { createBookOutline } from './outline-state';
 
 export const BOOK_CONTENTS_PREDECESSORS = 8;
 
@@ -23,6 +24,7 @@ const same = (a: BookContentsCoordinate, b: BookContentsCoordinate) =>
 
 /** Eight observed predecessors plus current/staged operands; never a page or a cursor generated from order. */
 export function createBookContentsNavigation() {
+  const outline = createBookOutline();
   let window: BookContentsWindow = { predecessors: [], current: null, staged: null };
   let first = false;
   let generation = 0;
@@ -31,9 +33,11 @@ export function createBookContentsNavigation() {
       (value) => value && value.parentOccurrenceId === parentOccurrenceId,
     );
   return {
+    outline,
     getSnapshot: () => window,
     generation: () => generation,
     retire() {
+      outline.retire();
       generation += 1;
       first = false;
       window = { predecessors: [], current: null, staged: null };

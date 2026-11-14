@@ -479,8 +479,11 @@ export function HostedBookVisitView({
         contentsReturn={visit.contentsReturn}
         admission={admission}
         locale={locale}
-        hrefForAddress={(address) =>
-          withBookCatalogueReturn(hostedBookAddressHref(address, locale, origin, visit.subjectId), catalogueReturn)
+        hrefForAddress={(address, contentsReturn) =>
+          withBookCatalogueReturn(
+            hostedBookAddressHref(address, locale, contentsReturn ?? origin, visit.subjectId),
+            catalogueReturn,
+          )
         }
         onNavigate={open}
         onReload={reread}

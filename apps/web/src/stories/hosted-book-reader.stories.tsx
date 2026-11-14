@@ -33,6 +33,8 @@ import type {
 } from '../books/reader/source';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { AppShell } from '../shell/app-shell';
+import { PatternStory } from './page';
 
 type SavedReading = { address: BookChapterAddress; title: string };
 type CheckpointState = 'none' | 'saved' | 'unavailable';
@@ -209,66 +211,75 @@ function BookJourney({
     [runtime],
   );
   return (
-    <QueryClientProvider client={runtime.client}>
-      <main className="min-w-0">
-        <aside className="mx-auto grid max-w-[52rem] gap-2 px-4 pt-4 text-xs text-muted-foreground sm:px-8">
-          <p role="note">
-            Illustrative native-format Content responses through the actual mapper and shared reader. Checkpoint
-            controls use local examples of the installed contract. These are not native publication or save acceptance.
-            Review manually; set the readerJourney story parameter to run the retained interaction assertions.
-          </p>
-          <Button
-            className="min-h-11 justify-self-start text-xs"
-            variant="ghost"
-            onClick={() => runtime.book.replace()}
-          >
-            Replace publication / target / viewer admission
-          </Button>
-        </aside>
-        {address ? (
-          <HostedBookReader
-            address={address}
-            source={runtime.book.source}
-            readingIdentity={runtime.book}
-            locale={getLocale()}
-            hrefForAddress={(target) =>
-              hostedBookAddressHref(target, getLocale(), address.kind === 'contents' ? address : contentsReturn)
-            }
-            contentsReturn={contentsReturn}
-            contentsNavigation={runtime.navigation.contents}
-            onNavigate={(target, origin, focus) => {
-              runtime.navigation.captureFocus(focus);
-              setFocusOnRead(runtime.navigation.focusOnRead());
-              setContentsReturn(origin);
-              setAddress(target);
-            }}
-            {...(focusOnRead ? { focusOnRead } : {})}
-            {...(checkpoint === 'unavailable'
-              ? {
-                  renderProgress: (_page: BookChapterPage, current: () => boolean) => (
-                    <IllustrativeProgress current={current} />
-                  ),
+    <PatternStory visitor="Signed Out" path={`/books/${illustrativeBookIds.catalogue}/read`}>
+      <QueryClientProvider client={runtime.client}>
+        <AppShell communities={null}>
+          <div className="min-w-0">
+            <aside className="mx-auto grid max-w-[52rem] gap-2 px-4 pt-4 text-xs text-muted-foreground sm:px-8">
+              <p role="note">
+                Illustrative native-format Content responses through the actual mapper and shared reader. Checkpoint
+                controls use local examples of the installed contract. These are not native publication or save
+                acceptance. Review manually; set the readerJourney story parameter to run the retained interaction
+                assertions.
+              </p>
+              <Button
+                className="min-h-11 justify-self-start text-xs"
+                variant="ghost"
+                onClick={() => runtime.book.replace()}
+              >
+                Replace publication / target / viewer admission
+              </Button>
+            </aside>
+            {address ? (
+              <HostedBookReader
+                address={address}
+                source={runtime.book.source}
+                readingIdentity={runtime.book}
+                locale={getLocale()}
+                hrefForAddress={(target, origin) =>
+                  hostedBookAddressHref(
+                    target,
+                    getLocale(),
+                    origin ?? (address.kind === 'contents' ? address : contentsReturn),
+                  )
                 }
-              : {})}
-            renderCheckpoint={(page, current) => (
-              <IllustrativeCheckpoint
-                page={page}
-                current={current}
-                initialState={checkpoint}
-                saved={saved}
-                setSaved={setSaved}
-                open={(target) => {
-                  setFocusOnRead({ owner: document.activeElement, focus: { kind: 'heading' } });
+                contentsReturn={contentsReturn}
+                contentsNavigation={runtime.navigation.contents}
+                onNavigate={(target, origin, focus) => {
+                  runtime.navigation.captureFocus(focus);
+                  setFocusOnRead(runtime.navigation.focusOnRead());
+                  setContentsReturn(origin);
                   setAddress(target);
                 }}
+                {...(focusOnRead ? { focusOnRead } : {})}
+                {...(checkpoint === 'unavailable'
+                  ? {
+                      renderProgress: (_page: BookChapterPage, current: () => boolean) => (
+                        <IllustrativeProgress current={current} />
+                      ),
+                    }
+                  : {})}
+                renderCheckpoint={(page, current) => (
+                  <IllustrativeCheckpoint
+                    page={page}
+                    current={current}
+                    initialState={checkpoint}
+                    saved={saved}
+                    setSaved={setSaved}
+                    open={(target) => {
+                      setFocusOnRead({ owner: document.activeElement, focus: { kind: 'heading' } });
+                      setAddress(target);
+                    }}
+                  />
+                )}
               />
+            ) : (
+              <p role="status">{m.book_reader_loading()}</p>
             )}
-          />
-        ) : (
-          <p role="status">{m.book_reader_loading()}</p>
-        )}
-      </main>
-    </QueryClientProvider>
+          </div>
+        </AppShell>
+      </QueryClientProvider>
+    </PatternStory>
   );
 }
 
@@ -298,8 +309,8 @@ async function nestedJourney({
   if (!parameters.readerJourney) return;
   const canvas = within(canvasElement);
   await canvas.findByText('Part I · The journey');
-  await userEvent.click(canvas.getByRole('link', { name: `${m.book_reader_contents()} · Part I · The journey` }));
-  await userEvent.click(await canvas.findByRole('link', { name: `${m.book_reader_contents()} · The observatory` }));
+  await userEvent.click(canvas.getByRole('button', { name: `${m.book_reader_contents()} · Part I · The journey` }));
+  await userEvent.click(await canvas.findByRole('button', { name: `${m.book_reader_contents()} · The observatory` }));
   const first = await canvas.findByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` });
   await userEvent.click(first);
   await canvas.findByRole('heading', { level: 1, name: 'Dawn / 黎明' });
@@ -319,7 +330,7 @@ async function failedPage({
 }) {
   if (!parameters.readerJourney) return;
   const canvas = within(canvasElement);
-  await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_more() }));
+  await userEvent.click(await canvas.findByRole('button', { name: m.book_reader_more() }));
   await canvas.findByText(m.book_reader_unavailable());
   await userEvent.click(canvas.getByRole('button', { name: m.book_reader_retry() }));
   await canvas.findByText('Dawn, an echo / 再読');
@@ -356,23 +367,20 @@ async function pageRoundTrip({
 }) {
   if (!parameters.readerJourney) return;
   const canvas = within(canvasElement);
-  await canvas.findByText('Dawn / 黎明');
-  await expect(canvas.queryByRole('link', { name: m.book_reader_previous_page() })).toBeNull();
-  await userEvent.click(canvas.getByRole('link', { name: m.book_reader_more() }));
-  await canvas.findByText('Dawn, an echo / 再読');
-  await userEvent.click(canvas.getByRole('link', { name: m.book_reader_previous_page() }));
-  await canvas.findByText('Dawn / 黎明');
-  await userEvent.click(canvas.getByRole('link', { name: m.book_reader_more() }));
+  await canvas.findByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` });
+  await userEvent.click(canvas.getByRole('button', { name: m.book_reader_more() }));
   const chapter = await canvas.findByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn, an echo / 再読` });
   const frozen = new URL(chapter.getAttribute('href')!, window.location.origin);
-  await expect(frozen.searchParams.get('returnCursor')).toBe('illustrative:opaque/+page=2');
+  await expect(frozen.searchParams.get('returnCursor')).toBe(illustrativeBookCursor);
   await expect(frozen.searchParams.get('release')).toBe(illustrativeBookIds.release);
+  await expect(canvas.getByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` })).toBeVisible();
   await userEvent.click(chapter);
   await canvas.findByRole('article');
+  await expect(
+    canvas.getByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn, an echo / 再読` }),
+  ).toHaveAttribute('aria-current', 'location');
   await userEvent.click(canvas.getAllByRole('button', { name: m.book_reader_contents(), exact: true })[0]!);
-  await canvas.findByText('Dawn, an echo / 再読');
-  await expect(canvas.getByRole('link', { name: m.book_reader_previous_page() })).toBeVisible();
-  await expect(canvas.queryByText('Dawn / 黎明')).toBeNull();
+  await expect(canvas.getByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` })).toBeVisible();
 }
 
 export const MultipleContentsPages: Story = { args: { state: 'multiple-pages' }, play: pageRoundTrip };
@@ -381,26 +389,22 @@ export const NestedLevelReturn: Story = {
   play: async ({ canvasElement, parameters }) => {
     if (!parameters.readerJourney) return;
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_more() }));
-    await userEvent.click(
-      await canvas.findByRole('link', { name: `${m.book_reader_contents()} · Part I · The journey` }),
-    );
-    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_more() }));
-    await userEvent.click(await canvas.findByRole('link', { name: `${m.book_reader_contents()} · The observatory` }));
-    await canvas.findByText('Dawn / 黎明');
-    await userEvent.click(canvas.getByRole('link', { name: 'Part I · The journey', exact: true }));
-    await canvas.findByText('The observatory');
+    await userEvent.click(await canvas.findByRole('button', { name: m.book_reader_more() }));
+    const part = await canvas.findByRole('button', { name: `${m.book_reader_contents()} · Part I · The journey` });
+    await userEvent.click(part);
+    await userEvent.click(await canvas.findByRole('button', { name: m.book_reader_more() }));
+    await userEvent.click(await canvas.findByRole('button', { name: `${m.book_reader_contents()} · The observatory` }));
+    await canvas.findByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` });
+    await userEvent.click(part);
+    await expect(part).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(part);
+    await expect(part).toHaveAttribute('aria-expanded', 'true');
+    await expect(canvas.getByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` })).toBeVisible();
     await expect(
-      new URL(
-        canvas.getByRole('link', { name: m.book_reader_first_page() }).getAttribute('href')!,
-        window.location.origin,
-      ).searchParams.get('parent'),
-    ).toBe(illustrativeBookIds.part);
-    await userEvent.click(canvas.getByRole('link', { name: m.book_reader_root() }));
-    await canvas.findByText('Part I · The journey');
-    await expect(
-      canvas.queryByText('Part II · The coast, the town, and the long way home / 海岸、町、そして帰り道'),
-    ).toBeNull();
+      canvas.getByRole('button', {
+        name: `${m.book_reader_contents()} · Part II · The coast, the town, and the long way home / 海岸、町、そして帰り道`,
+      }),
+    ).toBeVisible();
   },
 };
 export const FailedPreviousRetry: Story = {
@@ -408,16 +412,15 @@ export const FailedPreviousRetry: Story = {
   play: async ({ canvasElement, parameters }) => {
     if (!parameters.readerJourney) return;
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('link', { name: m.book_reader_more() }));
-    await canvas.findByText('Dawn, an echo / 再読');
-    await userEvent.click(canvas.getByRole('link', { name: m.book_reader_more() }));
-    await canvas.findByText(m.book_reader_empty());
-    await userEvent.click(canvas.getByRole('link', { name: m.book_reader_previous_page() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.book_reader_more() }));
+    await canvas.findByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn, an echo / 再読` });
+    await userEvent.click(canvas.getByRole('button', { name: m.book_reader_more() }));
     await canvas.findByText(m.book_reader_unavailable());
-    await expect(canvas.getByText(m.book_reader_contents_recovery())).toBeVisible();
+    await expect(canvas.getByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn / 黎明` })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.book_reader_retry() }));
-    await canvas.findByText('Dawn, an echo / 再読');
-    await expect(canvas.queryByText('Dawn / 黎明')).toBeNull();
+    await expect(
+      canvas.getByRole('link', { name: `${m.book_reader_open_chapter()} · Dawn, an echo / 再読` }),
+    ).toBeVisible();
   },
 };
 
