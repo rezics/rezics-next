@@ -128,7 +128,9 @@ function stringIndex(
       const previousValue = previous?.value ?? payloads.get(node.id);
       if (!previousValue) throw new Error('Hosted draft point sequence write is missing its occurrence value');
       const value =
-        node.subtreeHeight === undefined || node.subtreeHeight === previousValue.subtreeHeight
+        node.subtreeHeight === undefined ||
+        node.subtreeHeight === null ||
+        node.subtreeHeight === previousValue.subtreeHeight
           ? previousValue
           : { ...previousValue, subtreeHeight: node.subtreeHeight };
       inner.writeNode({ ...node, value });

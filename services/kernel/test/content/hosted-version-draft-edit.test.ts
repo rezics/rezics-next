@@ -3,6 +3,7 @@ import type { CommandTransaction } from '../../src/command/command.ts';
 import {
   createVersionedOutlineSequenceReadWriteSet,
   type VersionedOutlineSequenceNode,
+  type VersionedOutlineSequenceReadWriteSet,
 } from '../../src/content/versioned-outline-sequence.ts';
 import { commitHostedVersionDraftMoveInTransaction } from '../../src/content/hosted-version-draft-edit-command.ts';
 import { prepareHostedVersionDraftMovePlan } from '../../src/content/hosted-version-draft-edit.ts';
@@ -70,7 +71,7 @@ function makeIndexes(snapshots: Readonly<{ siblings: Snapshot; preorder: Snapsho
   return accesses;
 }
 
-function commit(snapshot: Snapshot, access: HostedVersionDraftMoveIndexes[keyof HostedVersionDraftMoveIndexes]) {
+function commit(snapshot: Snapshot, access: VersionedOutlineSequenceReadWriteSet<string>): Snapshot {
   return new Map([...snapshot, ...access.nodeWrites]);
 }
 

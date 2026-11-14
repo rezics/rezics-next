@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   createVersionedOutlineSequenceReadWriteSet,
   type VersionedOutlineSequenceNode,
+  type VersionedOutlineSequenceReadWriteSet,
 } from '../../src/content/versioned-outline-sequence.ts';
 import { prepareHostedVersionDraftPointPlan } from '../../src/content/hosted-version-draft-points.ts';
 import {
@@ -66,7 +67,7 @@ function indexes(snapshots: Readonly<{ siblings: Snapshot; preorder: Snapshot; c
   } satisfies HostedVersionDraftPointIndexes;
 }
 
-function commit(snapshot: Snapshot, access: HostedVersionDraftPointIndexes[keyof HostedVersionDraftPointIndexes]) {
+function commit(snapshot: Snapshot, access: VersionedOutlineSequenceReadWriteSet<string>): Snapshot {
   return new Map([...snapshot, ...access.nodeWrites]);
 }
 

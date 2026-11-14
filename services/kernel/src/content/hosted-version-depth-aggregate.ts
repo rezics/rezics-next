@@ -7,7 +7,8 @@ import {
 export type HostedVersionDepthFact = Readonly<{
   occurrenceId: string;
   parentId: string | null;
-  kind: 'part' | 'chapter';
+  /** Ancestor summaries need not repeat kind; selected source facts do. */
+  kind?: 'part' | 'chapter';
   subtreeHeight: number;
 }>;
 

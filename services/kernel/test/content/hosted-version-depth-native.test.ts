@@ -100,7 +100,7 @@ test('nested draft moves repair depth after subtree moves and removals at the ex
   }
 
   const bounded = (records: readonly SqlObserver['records'][number][]) => {
-    const probes = [readNode.sql, readOccurrence.sql, readSiblingRoot.sql, readChildDepth.sql];
+    const probes: readonly string[] = [readNode.sql, readOccurrence.sql, readSiblingRoot.sql, readChildDepth.sql];
     expect(records.filter((entry) => probes.includes(entry.statement)).length).toBeLessThan(512);
     const commit = records.find((entry) => entry.statement === commitVersion.sql);
     expect(commit).toBeDefined();
