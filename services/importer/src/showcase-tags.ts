@@ -1578,7 +1578,6 @@ export async function loadReviewedTagCandidatePages(
     const seen = new Set<string>();
     const seenCursors = new Set<string>();
     let cursor: string | undefined;
-    let adoption: ReturnType<typeof safeCandidatePage>['adoption'] = null;
     let restartRequired = false;
     for (let index = 0; index < maxPages; index += 1) {
       let native: ReturnType<typeof safeCandidatePage>;
@@ -1597,8 +1596,11 @@ export async function loadReviewedTagCandidatePages(
         }
         throw error;
       }
-      if (index === 0) adoption = native.adoption;
-      else if (adoption?.head !== native.adoption?.head || adoption?.mode !== native.adoption?.mode) {
+      const firstPage = pages[0];
+      if (
+        firstPage &&
+        (firstPage.adoption?.head !== native.adoption?.head || firstPage.adoption?.mode !== native.adoption?.mode)
+      ) {
         restartRequired = true;
         break;
       }
@@ -1612,6 +1614,7 @@ export async function loadReviewedTagCandidatePages(
       pages.push(page);
       candidates.push(...page.candidates);
       if (page.next === null) {
+        const adoption = pages[0]?.adoption ?? null;
         return {
           pages,
           candidates,
