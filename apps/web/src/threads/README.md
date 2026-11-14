@@ -376,8 +376,8 @@ Main routed review stories are manual and stable: `board.stories.tsx` and `threa
 continuation and independent attachment/watch/activity failure. `thread-conversation-walks.stories.tsx` separately
 pins branch/reply/Board return, an unchanged local draft, exact Retry and citation inspection. Regional previews
 remain existing regression sources and do not replace these routed entries.
-Runtime, native, browser, visual and ordinary test acceptance are deferred to the dev verifier; the final explicit
-workspace typecheck remains the source check. Existing regression assertions remain authoritative.
+Source-only delivery does not establish compiler, test, runtime, native, browser or visual acceptance. The dev
+verifier owns deferred execution; keep unexecuted checks unverified and existing regression assertions authoritative.
 
 `PostReadingFrame` owns the byline-to-body hierarchy and the visible permalink/focus surface; its action and reply
 context slots consume the existing controls unchanged. The action row after the body uses the installed `FeedActionBar` detail port
