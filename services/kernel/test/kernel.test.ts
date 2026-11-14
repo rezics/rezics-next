@@ -5,8 +5,6 @@ import { createPool } from '../src/database/pool.ts';
 import { createKernel, type Kernel } from '../src/http/kernel.ts';
 import { openApiDocument } from '../src/http/openapi.ts';
 import { actionCatalogue } from '../src/http/request.ts';
-import { hostedPublicationActivationRoutes } from '../src/content/hosted-publication-preparation-routes.ts';
-import type { HostedPublicationPreparationDependencies } from '../src/content/hosted-publication-preparation.ts';
 import { bootstrapRelease } from '../src/semantic/definitions.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -188,6 +186,9 @@ const typed = [
   'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$progress',
   'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$cancel',
   'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$seal',
+  'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$startActivation',
+  'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$advanceActivation',
+  'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$activate',
   'POST /v1/hostedCatalogues/:id/$revise',
   'POST /v1/hostedCatalogues/:id/$appendRootChapter',
   'POST /v1/hostedCatalogues/:id/$insertDraftPoint',
@@ -698,31 +699,11 @@ const activationPaths = [
   'POST /v1/hostedCatalogues/:id/publicationPreparations/:stageId/$activate',
 ] as const;
 
-test('the unmounted activation factory registers three commands that createKernel does not serve', () => {
-  const served = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
-  const servedPaths = served.routes.map(({ method, path }) => `${method} ${path}`);
-  expect(activationPaths.filter((path) => servedPaths.includes(path))).toEqual([]);
-
-  const deps: HostedPublicationPreparationDependencies = {
-    pool,
-    access: {} as HostedPublicationPreparationDependencies['access'],
-    tokens: {} as HostedPublicationPreparationDependencies['tokens'],
-    clock: () => new Date(),
-    routeKey: new Uint8Array(32),
-  };
-  const candidate = createKernel({
-    receiptKeys: testReceiptKeys(),
-    pool,
-    routeKey: new Uint8Array(32),
-    modules: [
-      (app) => {
-        hostedPublicationActivationRoutes(app as Parameters<typeof hostedPublicationActivationRoutes>[0], deps);
-      },
-    ],
-  });
-  const candidatePaths = candidate.routes.map(({ method, path }) => `${method} ${path}`);
-  expect(activationPaths.every((path) => candidatePaths.includes(path))).toBe(true);
-  const paths = openApiDocument(candidate).paths;
+test('the ordinary kernel mounts activation commands with their retained operations', () => {
+  const app = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
+  const servedPaths = app.routes.map(({ method, path }) => `${method} ${path}`);
+  expect(activationPaths.every((path) => servedPaths.includes(path))).toBe(true);
+  const paths = openApiDocument(app).paths;
   const stage = paths['/v1/hostedCatalogues/{id}/publicationPreparations/{stageId}:startActivation']?.post;
   expect(stage).toMatchObject({
     operationId: 'hosted_catalogue.prepare_release_start_activation',
