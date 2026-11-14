@@ -404,7 +404,13 @@ test('21-target authority restarts after cross-home consent revoke and activates
   let current = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId);
   expect(current.value).toMatchObject({ state: 'checking', checkedTargetCount: '20', totalTargetCount: '22' });
   const resumedPageContext = commandContext();
-  current = await advanceActivation(activationDeps, f.native.author, catalogueId, candidate.stageId, resumedPageContext);
+  current = await advanceActivation(
+    activationDeps,
+    f.native.author,
+    catalogueId,
+    candidate.stageId,
+    resumedPageContext,
+  );
   const resumedPageReplay = await advanceActivation(
     activationDeps,
     f.native.author,
@@ -438,7 +444,13 @@ test('21-target authority restarts after cross-home consent revoke and activates
   const activationContext = commandContext();
   let activated: Awaited<ReturnType<typeof activateHostedPublicationCandidate>>;
   try {
-    activated = await activateCandidate(activationDeps, f.native.author, catalogueId, candidate.stageId, activationContext);
+    activated = await activateCandidate(
+      activationDeps,
+      f.native.author,
+      catalogueId,
+      candidate.stageId,
+      activationContext,
+    );
   } finally {
     await observer.close();
   }
@@ -833,9 +845,9 @@ test.each([true, false])(
           transactionId: activated.transactionId,
           position: activated.position,
         });
-        await expect(
-          activateCandidate(deps, author, catalogueId, stageId),
-        ).rejects.toBeInstanceOf(HostedPublicationActivationNotFoundError);
+        await expect(activateCandidate(deps, author, catalogueId, stageId)).rejects.toBeInstanceOf(
+          HostedPublicationActivationNotFoundError,
+        );
         expect(await publicationId(catalogueId)).toBe(activated.value.publicationId);
       }
     } finally {

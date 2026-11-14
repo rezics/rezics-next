@@ -87,13 +87,7 @@ test('authorized author prepares and activates a Book across account homes with 
     while (authority.value.state === 'checking') {
       const advanceContext = commandContext();
       authority = await nativeRequest(f.native.system.access, author, deps.pool, advanceContext, (actor, context) =>
-        advanceHostedPublicationActivationAuthority(
-          deps,
-          actor,
-          catalogueId,
-          stageId,
-          context,
-        ),
+        advanceHostedPublicationActivationAuthority(deps, actor, catalogueId, stageId, context),
       );
     }
     expect(authority.value.state).toBe('ready');
