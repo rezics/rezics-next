@@ -7,6 +7,7 @@ import type {
   SessionProof,
   KindConsentParticipant,
   KindConsentInvalidationReceiver,
+  NativeSessionRevocationBinding,
 } from '@rezics/auth-contract';
 import type { MetadataConfigurationStore, MetadataScrubPage } from './metadata-scrub.ts';
 export type {
@@ -61,6 +62,8 @@ export {
   type AutomatedCreationBinding,
 } from './native-workflow-proofs.ts';
 export { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
+export { createSessionRevocationResultReader } from './native-session-revocation.ts';
+export type { NativeSessionRevocationBinding, NativeSessionRevocationResultPort } from '@rezics/auth-contract';
 export { createRecoveryEstablishmentVerifier, type RecoveryEstablishmentEvidence } from './recovery-establishment.ts';
 export {
   readRecoveryCopySource,
@@ -507,7 +510,12 @@ export interface AuthService {
     }): Promise<void>;
     /** Bounded cleanup is valid only after a durable Access floor; remaining
      * native rows cannot pass sessionProof and expire when presented. */
-    revokeSessions(accountId: string, options?: { boundedCleanup: true; barrier: InvalidationReceipt }): Promise<void>;
+    revokeSessions(
+      accountId: string,
+      options?:
+        | { boundedCleanup: true; barrier: InvalidationReceipt }
+        | { original: NativeSessionRevocationBinding; deadline: number },
+    ): Promise<void>;
     registerWebsiteClient(input: WebsiteClientRegistration): Promise<void>;
     registerClient(input: {
       clientId: string;

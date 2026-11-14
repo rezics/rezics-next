@@ -12,6 +12,8 @@ import {
   type RenameAccountPageAccess,
 } from './account-profile-source.ts';
 import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
+import { authorizedSessionRevocation, sessionRevocationContinuation } from './lifecycle-review-source.ts';
+import { installLifecycleSessionRevocationResults } from './lifecycle-review.ts';
 import { createManagementMembershipAccess, type ManagementMembershipAccess } from './management-membership-source.ts';
 import {
   createOrganizationMembershipPageAccess,
@@ -60,6 +62,8 @@ import {
   createCommittedContinuations,
   ContinuationDeniedError,
   COMMITTED_CONTINUATION_RESUME_BUDGET_MS,
+  COMMITTED_CONTINUATION_PURPOSE,
+  committedContinuationDigest,
 } from './committed-continuations.ts';
 import { workflowApprovalBinding, WorkflowApprovalUnavailableError } from './workflow-approvals.ts';
 import { readAccount } from './account-data.ts';
@@ -77,6 +81,7 @@ import { readNativeCopyActors, readNativeCreationContext } from './native-creati
  * staging records, command receipts, or lifecycle history to locate a match.
  */
 export type NativeWorkflowProofPorts = {
+  readSessionRevocationResult?: AuthWorkflowProofPorts['readSessionRevocationResult'];
   recordPending(input: { accountId: string; reservationId: string; reference: string }): Promise<void>;
   pendingReference(input: { accountId: string; reservationId: string }): Promise<string | null>;
   provisioningEvidence(input: { accountId: string; reservationId: string }): Promise<unknown>;
@@ -210,6 +215,11 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const { pool, access, actions, referenceKeys, proofs } = config;
   if (config.clock) installAccessClock(access, config.clock);
   const workflow = proofs.workflow as AuthWorkflowProofPorts;
+  const readSessionRevocationResult = workflow.readSessionRevocationResult?.bind(workflow);
+  installLifecycleSessionRevocationResults(
+    access,
+    readSessionRevocationResult ? { readSessionRevocationResult } : undefined,
+  );
   const internalLifecycle = createLifecycleInternals({
     pool,
     routeKey: config.routeKey,
@@ -455,6 +465,19 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     approvalBinding: (context) => workflowApprovalBinding(context),
     readContinuation: (operationKey, accountId) => continuations.read(operationKey, accountId),
     authorizeContinuation: (reference, entry) => continuations.authorizeStep(reference, entry),
+    async authorizeSessionRevocation(input, { deadline }) {
+      const root = required(await sessionRevocationContinuation(pool, deadline, input));
+      const entry = required(
+        root.allowlist.find((item) => item.step === 'revoke-auth-sessions' && item.target === root.accountId),
+      );
+      const reference = seal(referenceKeys, COMMITTED_CONTINUATION_PURPOSE, {
+        route: root.route,
+        continuationId: root.continuationId,
+        digest: committedContinuationDigest(root),
+      });
+      const authorization = await continuations.authorizeStep(reference, entry);
+      return required(await authorizedSessionRevocation(pool, deadline, root, authorization));
+    },
     readAccount: async (accountId) => {
       const route = routeOf(accountId);
       return route === null ? null : readAccount(pool, route, accountId);
