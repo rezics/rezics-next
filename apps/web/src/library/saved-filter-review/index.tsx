@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import type { FilterDocument } from '@rezics/filter';
 import {
   collectionFacetRequest,
@@ -89,6 +89,15 @@ type ValueState =
       partial?: boolean;
     };
 
+type ReviewInteractionIntent = {
+  kind: 'disclosure' | 'read' | 'return';
+  target: 'review' | 'values' | 'return';
+  stage: 'origin' | 'review' | 'values' | 'result';
+  binding: string;
+  origin: HTMLElement;
+  ownedFocus: boolean;
+};
+
 const emptyLabels = () => ({}) as Record<string, Record<string, Record<string, string>>>;
 const reviewButtonClass =
   'inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
@@ -117,6 +126,12 @@ export function SavedFilterReviewPanel({
   authorityRef.current = authority;
   const readSequence = useRef(0);
   const valueSequence = useRef(0);
+  const openerRef = useRef<HTMLButtonElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const resultRef = useRef<HTMLHeadingElement>(null);
+  const valueStatusRef = useRef<HTMLDivElement>(null);
+  const fallbackRef = useRef<HTMLDivElement>(null);
+  const interactionIntentRef = useRef<ReviewInteractionIntent | null>(null);
   const [state, setState] = useState<PanelState>({ phase: 'closed', binding: '' });
   const [values, setValues] = useState<ValueState>({ phase: 'idle', binding: '', labels: emptyLabels() });
   const shown: PanelState = state.binding === binding ? state : { phase: 'closed', binding };
@@ -134,6 +149,7 @@ export function SavedFilterReviewPanel({
   useLayoutEffect(() => {
     readSequence.current += 1;
     valueSequence.current += 1;
+    interactionIntentRef.current = null;
     setState({ phase: 'closed', binding });
     setValues({ phase: 'idle', binding, labels: emptyLabels() });
   }, [binding]);
@@ -141,9 +157,87 @@ export function SavedFilterReviewPanel({
     () => () => {
       readSequence.current += 1;
       valueSequence.current += 1;
+      interactionIntentRef.current = null;
     },
     [],
   );
+
+  function focusWithoutScroll(target: HTMLElement | null): boolean {
+    if (!target?.isConnected) return false;
+    target.focus({ preventScroll: true });
+    return document.activeElement === target;
+  }
+
+  function capturedFocusStillOwnsReview(intent: ReviewInteractionIntent): boolean {
+    if (!intent.ownedFocus) return false;
+    return document.activeElement === intent.origin || document.activeElement === document.body;
+  }
+
+  useLayoutEffect(() => {
+    const intent = interactionIntentRef.current;
+    if (!intent) return;
+    if (intent.binding !== binding || bindingRef.current !== binding) {
+      interactionIntentRef.current = null;
+      return;
+    }
+
+    if (intent.target === 'return') {
+      if (shown.phase !== 'closed') return;
+      const opener = openerRef.current?.isConnected ? openerRef.current : null;
+      focusWithoutScroll(opener ?? fallbackRef.current);
+      interactionIntentRef.current = null;
+      return;
+    }
+
+    if (intent.target === 'values') {
+      if (intent.stage === 'origin' && shownValues.phase === 'loading') {
+        if (!capturedFocusStillOwnsReview(intent)) {
+          interactionIntentRef.current = null;
+          return;
+        }
+        intent.stage = 'values';
+        if (!focusWithoutScroll(valueStatusRef.current)) interactionIntentRef.current = null;
+        return;
+      }
+      if (intent.stage === 'values' && shownValues.phase !== 'loading') {
+        interactionIntentRef.current = null;
+      }
+      return;
+    }
+
+    if (intent.stage === 'origin') {
+      if (shown.phase === 'closed') return;
+      if (!capturedFocusStillOwnsReview(intent)) {
+        interactionIntentRef.current = null;
+        return;
+      }
+      if (shown.phase === 'reading') {
+        intent.stage = 'review';
+        if (!focusWithoutScroll(headingRef.current)) interactionIntentRef.current = null;
+      } else if (shown.phase === 'ready') {
+        intent.stage = 'result';
+        focusWithoutScroll(resultRef.current);
+        interactionIntentRef.current = null;
+      } else {
+        intent.stage = 'review';
+        focusWithoutScroll(headingRef.current);
+        interactionIntentRef.current = null;
+      }
+      return;
+    }
+
+    if (intent.stage === 'review') {
+      if (shown.phase === 'reading') {
+        if (document.activeElement !== headingRef.current) interactionIntentRef.current = null;
+        return;
+      }
+      if (shown.phase === 'ready' && document.activeElement === headingRef.current) {
+        intent.stage = 'result';
+        focusWithoutScroll(resultRef.current);
+      }
+      interactionIntentRef.current = null;
+    }
+  }, [binding, shown.phase, shownValues.phase]);
 
   function isCurrent(sequence: number, kind: 'read' | 'values', expectedBinding: string): boolean {
     return (
@@ -156,8 +250,32 @@ export function SavedFilterReviewPanel({
     );
   }
 
-  async function openReview() {
+  function captureInteractionIntent(
+    kind: ReviewInteractionIntent['kind'],
+    target: ReviewInteractionIntent['target'],
+    origin: HTMLElement,
+  ) {
+    interactionIntentRef.current = {
+      kind,
+      target,
+      stage: 'origin',
+      binding,
+      origin,
+      ownedFocus: typeof document !== 'undefined' && document.activeElement === origin,
+    };
+  }
+
+  function isIntentFocusTarget(intent: ReviewInteractionIntent, target: EventTarget | null): boolean {
+    if (intent.target === 'return') return target === openerRef.current || target === fallbackRef.current;
+    if (intent.stage === 'origin') return target === intent.origin;
+    if (intent.stage === 'review') return target === headingRef.current;
+    if (intent.stage === 'values') return target === valueStatusRef.current;
+    return target === resultRef.current;
+  }
+
+  async function openReview(kind: 'disclosure' | 'read', origin: HTMLElement) {
     if (!authorized) return;
+    captureInteractionIntent(kind, 'review', origin);
     const sequence = ++readSequence.current;
     valueSequence.current += 1;
     setValues({ phase: 'idle', binding, labels: emptyLabels() });
@@ -179,15 +297,17 @@ export function SavedFilterReviewPanel({
     }
   }
 
-  function returnUnchanged() {
+  function returnUnchanged(kind: 'disclosure' | 'return', origin: HTMLElement) {
+    captureInteractionIntent(kind, 'return', origin);
     readSequence.current += 1;
     valueSequence.current += 1;
     setValues({ phase: 'idle', binding, labels: emptyLabels() });
     setState({ phase: 'closed', binding, returned: true });
   }
 
-  async function loadValues(page: Extract<SavedFilterReviewPage, { state: 'ready' }>) {
+  async function loadValues(page: Extract<SavedFilterReviewPage, { state: 'ready' }>, origin: HTMLElement) {
     if (!authorized) return;
+    captureInteractionIntent('read', 'values', origin);
     const sequence = ++valueSequence.current;
     const labels = emptyLabels();
     setValues({ phase: 'loading', binding, labels });
@@ -239,20 +359,58 @@ export function SavedFilterReviewPanel({
   if (scope.viewerId !== scope.ownerId) return null;
   if (!authorized)
     return (
-      <p className="text-sm text-muted-foreground" role="status">
-        {m.saved_filter_review_denied()}
-      </p>
+      <div
+        ref={fallbackRef}
+        role="group"
+        tabIndex={-1}
+        aria-label={m.saved_filter_review_heading()}
+        className="min-w-0 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
+      >
+        <p className="text-sm text-muted-foreground" role="status">
+          {m.saved_filter_review_denied()}
+        </p>
+      </div>
     );
 
   return (
-    <div className="min-w-0 space-y-3 break-words">
+    <div
+      ref={fallbackRef}
+      role="group"
+      tabIndex={-1}
+      aria-label={m.saved_filter_review_heading()}
+      className="min-w-0 space-y-3 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
+      onBlurCapture={(event) => {
+        const intent = interactionIntentRef.current;
+        if (!intent) return;
+        const next = event.relatedTarget;
+        if (next && event.currentTarget.contains(next as Node)) {
+          if (!isIntentFocusTarget(intent, next)) interactionIntentRef.current = null;
+          return;
+        }
+        const originIsBeingReplaced =
+          intent.stage === 'origin' &&
+          intent.ownedFocus &&
+          intent.origin === event.target &&
+          (next === null || next === document.body || !intent.origin.isConnected);
+        if (!originIsBeingReplaced) interactionIntentRef.current = null;
+      }}
+      onFocusCapture={(event) => {
+        const intent = interactionIntentRef.current;
+        if (intent && !isIntentFocusTarget(intent, event.target)) interactionIntentRef.current = null;
+      }}
+    >
       <button
+        ref={openerRef}
         type="button"
         className={reviewButtonClass}
         aria-expanded={expanded}
         aria-controls={expanded ? panelId : undefined}
         disabled={!authorized || shown.phase === 'reading'}
-        onClick={() => (expanded ? returnUnchanged() : void openReview())}
+        onClick={(event) =>
+          expanded
+            ? returnUnchanged('disclosure', event.currentTarget)
+            : void openReview('disclosure', event.currentTarget)
+        }
       >
         {expanded ? m.saved_filter_review_return() : m.saved_filter_review_open()}
       </button>
@@ -265,15 +423,39 @@ export function SavedFilterReviewPanel({
           id={panelId}
           aria-labelledby={panelId + '-heading'}
           className="min-w-0 space-y-4 rounded-xl border border-border p-4"
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return;
+            const active = document.activeElement;
+            if (!(active instanceof HTMLElement) || !event.currentTarget.contains(active)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            returnUnchanged('return', active);
+          }}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 space-y-2">
-              <h2 id={panelId + '-heading'} className="text-lg font-semibold">
+              <h2
+                ref={headingRef}
+                id={panelId + '-heading'}
+                tabIndex={-1}
+                className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
                 {m.saved_filter_review_heading()}
               </h2>
+              <h3
+                ref={resultRef}
+                tabIndex={-1}
+                className="break-words text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                {shown.phase === 'ready' ? shown.page.title : scope.title}
+              </h3>
               <p className="max-w-prose text-sm text-muted-foreground">{m.saved_filter_review_intro()}</p>
             </div>
-            <button type="button" className={reviewButtonClass} onClick={returnUnchanged}>
+            <button
+              type="button"
+              className={reviewButtonClass}
+              onClick={(event) => returnUnchanged('return', event.currentTarget)}
+            >
               {m.saved_filter_review_return()}
             </button>
           </div>
@@ -281,7 +463,11 @@ export function SavedFilterReviewPanel({
           {shown.phase === 'denied' ? (
             <div role="alert" className="space-y-2">
               <p>{m.saved_filter_review_denied()}</p>
-              <button type="button" className={reviewButtonClass} onClick={() => void openReview()}>
+              <button
+                type="button"
+                className={reviewButtonClass}
+                onClick={(event) => void openReview('read', event.currentTarget)}
+              >
                 {m.saved_filter_review_retry()}
               </button>
             </div>
@@ -289,7 +475,11 @@ export function SavedFilterReviewPanel({
           {shown.phase === 'unavailable' ? (
             <div role="alert" className="space-y-2">
               <p>{m.saved_filter_review_unavailable()}</p>
-              <button type="button" className={reviewButtonClass} onClick={() => void openReview()}>
+              <button
+                type="button"
+                className={reviewButtonClass}
+                onClick={(event) => void openReview('read', event.currentTarget)}
+              >
                 {m.saved_filter_review_retry()}
               </button>
             </div>
@@ -299,8 +489,9 @@ export function SavedFilterReviewPanel({
               page={shown.page}
               labels={shownValues.labels}
               values={shownValues}
-              onReadValues={() => void loadValues(shown.page)}
-              onRefresh={() => void openReview()}
+              onReadValues={(origin) => void loadValues(shown.page, origin)}
+              onRefresh={(origin) => void openReview('read', origin)}
+              valueStatusRef={valueStatusRef}
             />
           ) : null}
         </section>
@@ -315,12 +506,14 @@ function ReviewContent({
   values,
   onReadValues,
   onRefresh,
+  valueStatusRef,
 }: {
   page: Extract<SavedFilterReviewPage, { state: 'ready' }>;
   labels: Record<string, Record<string, Record<string, string>>>;
   values: ValueState;
-  onReadValues: () => void;
-  onRefresh: () => void;
+  onReadValues: (origin: HTMLElement) => void;
+  onRefresh: (origin: HTMLElement) => void;
+  valueStatusRef: Ref<HTMLDivElement>;
 }) {
   const locale = getLocale();
   const tree = savedFilterReviewTree(page.rule.filter, page.accepted, page.current, locale);
@@ -331,55 +524,63 @@ function ReviewContent({
       : m.saved_filter_review_value_labels_retry();
   return (
     <div className="min-w-0 space-y-4">
-      <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
-        <div className="min-w-0">
-          <dt className="text-sm font-medium">{m.saved_filter_review_accepted_release()}</dt>
-          <dd className="break-all">
-            <code>{page.rule.releaseDigest}</code>
-          </dd>
+      <div className="min-w-0 space-y-4">
+        <div className="min-w-0 space-y-3">
+          <h4 className="font-semibold">{m.saved_filter_review_operands()}</h4>
+          <ul className="min-w-0 space-y-3">{renderReviewTree(tree, labels, locale)}</ul>
         </div>
-        {page.current.digest ? (
-          <div className="min-w-0">
-            <dt className="text-sm font-medium">{m.saved_filter_review_current_release()}</dt>
-            <dd className="break-all">
-              <code>{page.current.digest}</code>
-            </dd>
+        {page.accepted.state !== 'ready' ? (
+          <div role="status" className="space-y-2">
+            <p>{m.saved_filter_review_accepted_unavailable()}</p>
+            <button
+              type="button"
+              className={reviewButtonClass}
+              onClick={(event) => onRefresh(event.currentTarget)}
+            >
+              {m.saved_filter_review_retry()}
+            </button>
           </div>
         ) : null}
-      </dl>
-      {page.accepted.state !== 'ready' ? (
-        <div role="status" className="space-y-2">
-          <p>{m.saved_filter_review_accepted_unavailable()}</p>
-          <button type="button" className={reviewButtonClass} onClick={onRefresh}>
-            {m.saved_filter_review_retry()}
-          </button>
-        </div>
-      ) : null}
-      {page.current.state !== 'ready' ? <p role="status">{m.saved_filter_review_current_unavailable()}</p> : null}
-      <div className="min-w-0 space-y-3">
-        <h3 className="font-semibold">{m.saved_filter_review_operands()}</h3>
-        <ul className="min-w-0 space-y-3">{renderReviewTree(tree, labels, locale)}</ul>
+        {page.current.state !== 'ready' ? (
+          <p role="status">{m.saved_filter_review_current_unavailable()}</p>
+        ) : null}
       </div>
       <details className="min-w-0">
         <summary className="cursor-pointer py-2 underline underline-offset-4 focus-visible:outline-2">
           {m.saved_filter_review_exact()}
         </summary>
+        <dl className="grid min-w-0 gap-2 border-t border-border py-3 sm:grid-cols-2">
+          <div className="min-w-0">
+            <dt className="text-sm font-medium">{m.saved_filter_review_accepted_release()}</dt>
+            <dd className="break-all">
+              <code>{page.rule.releaseDigest}</code>
+            </dd>
+          </div>
+          {page.current.digest ? (
+            <div className="min-w-0">
+              <dt className="text-sm font-medium">{m.saved_filter_review_current_release()}</dt>
+              <dd className="break-all">
+                <code>{page.current.digest}</code>
+              </dd>
+            </div>
+          ) : null}
+        </dl>
         <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
           {JSON.stringify(page.rule.filter, null, 2)}
         </pre>
       </details>
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2 border-t border-border pt-3">
         <p className="text-sm text-muted-foreground">{m.saved_filter_review_value_help()}</p>
         {!valueType ? <p role="status">{m.saved_filter_review_value_labels_no_scope()}</p> : null}
         <button
           type="button"
           className={reviewButtonClass}
           disabled={values.phase === 'loading' || !valueType || page.current.state !== 'ready'}
-          onClick={onReadValues}
+          onClick={(event) => onReadValues(event.currentTarget)}
         >
           {values.phase === 'loading' ? m.saved_filter_review_value_labels_loading() : valueButtonLabel}
         </button>
-        <ValueStatus values={values} />
+        <ValueStatus values={values} targetRef={valueStatusRef} />
       </div>
       <div className="space-y-2 border-t border-border pt-3">
         <p className="text-sm text-muted-foreground">{m.saved_filter_review_edit_help()}</p>
@@ -413,7 +614,7 @@ function renderReviewTree(
           {groupLabel}
           {node.reference ? (
             <>
-              : <code>{node.reference}</code>
+              : <code className="break-all">{node.reference}</code>
             </>
           ) : null}
         </p>
@@ -478,7 +679,7 @@ function renderReviewTree(
       ) : null}
       {value.range ? (
         <p>
-          {m.saved_filter_review_range()} <code>{JSON.stringify(value.range)}</code>
+          {m.saved_filter_review_range()} <code className="break-all">{JSON.stringify(value.range)}</code>
         </p>
       ) : null}
       {value.qualifiers?.length ? (
@@ -486,7 +687,7 @@ function renderReviewTree(
           {value.qualifiers.map((qualifier, index) => (
             <li key={value.path + '-qualifier-' + index} className="min-w-0 break-words">
               <p>
-                {m.saved_filter_review_qualifier()} <code>{qualifier.property}</code>
+                {m.saved_filter_review_qualifier()} <code className="break-all">{qualifier.property}</code>
               </p>
               {qualifier.acceptedLabel ? (
                 <p>
@@ -501,22 +702,33 @@ function renderReviewTree(
               <CurrentFieldStatus state={qualifier.currentState} />
               {qualifier.range ? (
                 <p>
-                  {m.saved_filter_review_range()} <code>{JSON.stringify(qualifier.range)}</code>
+                  {m.saved_filter_review_range()} <code className="break-all">{JSON.stringify(qualifier.range)}</code>
                 </p>
               ) : null}
               <ul className="min-w-0 space-y-1">
-                {qualifier.values.map((entry, valueIndex) => (
-                  <li key={value.path + '-qualifier-value-' + index + '-' + valueIndex}>
-                    <span>{m.saved_filter_review_value_unlabelled()} </span>
-                    <code className="break-all">{entry.exact}</code>
-                  </li>
-                ))}
+                {qualifier.values.map((entry, valueIndex) => {
+                  const currentLabel = disclosedValueLabel(labels, qualifier.property, entry.exact, locale);
+                  return (
+                    <li
+                      key={value.path + '-qualifier-value-' + index + '-' + valueIndex}
+                      className="min-w-0 break-words"
+                    >
+                      {currentLabel ? (
+                        <span>
+                          {m.saved_filter_review_current_label()} {currentLabel}{' '}
+                        </span>
+                      ) : (
+                        <span>{m.saved_filter_review_value_unlabelled()} </span>
+                      )}
+                      <code className="break-all">{entry.exact}</code>
+                    </li>
+                  );
+                })}
               </ul>
             </li>
           ))}
         </ul>
       ) : null}
-      {value.exact ? <pre className="whitespace-pre-wrap break-all text-xs">{value.exact}</pre> : null}
     </li>
   );
 }
@@ -529,13 +741,26 @@ function CurrentFieldStatus({ state }: { state: CurrentFieldState }) {
   return null;
 }
 
-function ValueStatus({ values }: { values: ValueState }) {
-  if (values.phase === 'loading' || values.phase === 'idle') return null;
-  if (values.phase === 'ready') return <p role="status">{m.saved_filter_review_value_labels_ready()}</p>;
-  if (values.phase === 'empty') return <p role="status">{m.refinement_no_values()}</p>;
-  if (values.phase === 'no-scope') return <p role="status">{m.saved_filter_review_value_labels_no_scope()}</p>;
-  if (values.phase === 'refused') return <p role="alert">{m.saved_filter_review_value_labels_refused()}</p>;
-  if (values.phase === 'preparing') return <p role="status">{m.saved_filter_review_value_labels_preparing()}</p>;
-  if (values.phase === 'restart') return <p role="alert">{m.saved_filter_review_value_labels_restart()}</p>;
-  return <p role="alert">{m.saved_filter_review_value_labels_unavailable()}</p>;
+function ValueStatus({ values, targetRef }: { values: ValueState; targetRef: Ref<HTMLDivElement> }) {
+  let message: ReactNode = null;
+  if (values.phase === 'loading') message = <p role="status">{m.saved_filter_review_value_labels_loading()}</p>;
+  else if (values.phase === 'ready') message = <p role="status">{m.saved_filter_review_value_labels_ready()}</p>;
+  else if (values.phase === 'empty') message = <p role="status">{m.refinement_no_values()}</p>;
+  else if (values.phase === 'no-scope') message = <p role="status">{m.saved_filter_review_value_labels_no_scope()}</p>;
+  else if (values.phase === 'refused') message = <p role="alert">{m.saved_filter_review_value_labels_refused()}</p>;
+  else if (values.phase === 'preparing') message = <p role="status">{m.saved_filter_review_value_labels_preparing()}</p>;
+  else if (values.phase === 'restart') message = <p role="alert">{m.saved_filter_review_value_labels_restart()}</p>;
+  else if (values.phase === 'unavailable') message = <p role="alert">{m.saved_filter_review_value_labels_unavailable()}</p>;
+  return (
+    <div
+      ref={targetRef}
+      tabIndex={-1}
+      className="min-w-0 break-words focus-visible:outline-2 focus-visible:outline-offset-2"
+    >
+      {message}
+      {'partial' in values && values.partial ? (
+        <p role="status">{m.saved_filter_review_value_labels_ready()}</p>
+      ) : null}
+    </div>
+  );
 }
