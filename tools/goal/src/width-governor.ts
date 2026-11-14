@@ -4,11 +4,7 @@ import { agentReportingEvidence } from './agents.ts';
 import { migrate } from './db.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
-import {
-  stoppedActionHint,
-  stoppedActionProjection,
-  type StoppedActionHint,
-} from './stopped-action.ts';
+import { stoppedActionHint, stoppedActionProjection, type StoppedActionHint } from './stopped-action.ts';
 
 // Compatibility exports for synthetic callers; production reads its own loaded policy.
 export const WIDTH_WORKER_THRESHOLD = defaultPolicy.width.workerThreshold;

@@ -159,11 +159,7 @@ function currentTypingRecoveryNeed(
     typingEvidencePending?: { command?: unknown };
   },
 ): { missingPredicate: string; actionable: boolean } | null {
-  if (
-    task.brief.kind === 'verification' ||
-    attemptBody.state !== 'exited' ||
-    !successfulSourceAttempt(attemptBody)
-  )
+  if (task.brief.kind === 'verification' || attemptBody.state !== 'exited' || !successfulSourceAttempt(attemptBody))
     return null;
 
   const pendingEvidence = attemptBody.typingEvidencePending;

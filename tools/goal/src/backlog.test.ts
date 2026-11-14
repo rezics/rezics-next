@@ -592,10 +592,9 @@ test('a product task stopped for over an hour without action is cancelled into i
     .run('retrying', JSON.stringify({ status: 'pending', options: {} }));
   task(f.db, 'typing', 'stopped', { goal: 'web', manager: 'web', markdown: 'Completed source' }, 8);
   const typingTask = f.db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('typing')!;
-  f.db.query('UPDATE worker_tasks SET body=? WHERE id=?').run(
-    JSON.stringify({ ...JSON.parse(typingTask.body), currentAttempt: 1 }),
-    'typing',
-  );
+  f.db
+    .query('UPDATE worker_tasks SET body=? WHERE id=?')
+    .run(JSON.stringify({ ...JSON.parse(typingTask.body), currentAttempt: 1 }), 'typing');
   f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
     'typing',
     JSON.stringify({
@@ -618,10 +617,9 @@ test('a product task stopped for over an hour without action is cancelled into i
   const ownerlessTask = f.db
     .query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?')
     .get('typing-owner-unknown')!;
-  f.db.query('UPDATE worker_tasks SET body=? WHERE id=?').run(
-    JSON.stringify({ ...JSON.parse(ownerlessTask.body), currentAttempt: 1 }),
-    'typing-owner-unknown',
-  );
+  f.db
+    .query('UPDATE worker_tasks SET body=? WHERE id=?')
+    .run(JSON.stringify({ ...JSON.parse(ownerlessTask.body), currentAttempt: 1 }), 'typing-owner-unknown');
   f.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
     'typing-owner-unknown',
     JSON.stringify({
@@ -681,9 +679,9 @@ test('a product task stopped for over an hour without action is cancelled into i
   expect(receiverNotice?.event.summary).toContain('Task owner web or the configured operations manager');
   expect(receiverNotice?.event.summary).toContain('authenticated owner authorization to receive compiler evidence');
   expect(receiverNotice?.event.summary).toContain('typing-recover typing --expected-attempt 1');
-  const unknownOwnerNotice = f.inbox.pending('supermanager').find(({ event: delivered }) =>
-    delivered.summary.includes('typing-owner-unknown'),
-  );
+  const unknownOwnerNotice = f.inbox
+    .pending('supermanager')
+    .find(({ event: delivered }) => delivered.summary.includes('typing-owner-unknown'));
   expect(unknownOwnerNotice?.event.summary).toContain('Task owner is unknown');
   expect(unknownOwnerNotice?.event.summary).toContain('identify the receiver');
   expect(unknownOwnerNotice?.event.summary).toContain('typing-recover typing-owner-unknown --expected-attempt 1');
@@ -871,7 +869,9 @@ test('administrative notices preserve an authenticated no-work disposition while
   expect((saved as { low_work_scope: string }).low_work_scope).toBe(recorded.scope);
 
   const setGoalState = (status: 'active' | 'paused', waitingForInbox: boolean, origin?: string) => {
-    const manager = f.db.query<{ state: string }, [string]>('SELECT state FROM manager_sessions WHERE id=?').get('web')!;
+    const manager = f.db
+      .query<{ state: string }, [string]>('SELECT state FROM manager_sessions WHERE id=?')
+      .get('web')!;
     const state = JSON.parse(manager.state) as {
       [key: string]: unknown;
       goalState: { [key: string]: unknown };
@@ -884,9 +884,9 @@ test('administrative notices preserve an authenticated no-work disposition while
   };
   setGoalState('paused', true, 'automatic');
   expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
-  expect(
-    f.db.query('SELECT low_work_scope FROM backlog_goals WHERE goal=?').get('web'),
-  ).toMatchObject({ low_work_scope: recorded.scope });
+  expect(f.db.query('SELECT low_work_scope FROM backlog_goals WHERE goal=?').get('web')).toMatchObject({
+    low_work_scope: recorded.scope,
+  });
   setGoalState('active', false);
   expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
 

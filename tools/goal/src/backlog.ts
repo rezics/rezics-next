@@ -1227,8 +1227,7 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
       continue;
     }
     const goal = task.brief?.goal;
-    const owner =
-      typeof task.brief?.manager === 'string' && task.brief.manager.trim() ? task.brief.manager : null;
+    const owner = typeof task.brief?.manager === 'string' && task.brief.manager.trim() ? task.brief.manager : null;
     if (!goal || goal === 'control-plane' || task.brief?.target === 'stabilize') continue;
     // Original proofs hold check custody that cancellation does not release; their owner decides.
     if (task.brief?.kind === 'verification') continue;

@@ -347,7 +347,9 @@ test('preserved terminal proofs and unresolved cancels stay counted but cause no
     expect(cancelled).toEqual(['ordinary-stop', 'superseded-source']);
     const typingEvents = inbox.pending('typing');
     const typingNotice = typingEvents.find(({ event: delivered }) => delivered.summary.includes('evidence receiver'));
-    expect(typingNotice?.event.summary).toContain('the structured current compiler command or check identity is unavailable');
+    expect(typingNotice?.event.summary).toContain(
+      'the structured current compiler command or check identity is unavailable',
+    );
     expect(typingNotice?.event.summary).toContain('typing-recover typing-only --expected-attempt 1');
     const row = db
       .query<{ body: string }, [string]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=1')
@@ -367,8 +369,19 @@ test('completed source stays with its evidence receiver until exact evidence res
     const now = Date.UTC(2026, 0, 2);
     const old = new Date(now - 2 * 60 * 60_000).toISOString();
     const inbox = new SqliteManagerInbox(db, temp.path, () => now);
-    const consumedOwner = prepareTypingRecovery(db, temp.path, 'consumed-owner', 'quiet-owner', 'quiet-owner', true, 1, old);
-    const originalTaskBody = db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('consumed-owner')!.body;
+    const consumedOwner = prepareTypingRecovery(
+      db,
+      temp.path,
+      'consumed-owner',
+      'quiet-owner',
+      'quiet-owner',
+      true,
+      1,
+      old,
+    );
+    const originalTaskBody = db
+      .query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?')
+      .get('consumed-owner')!.body;
     const originalAttemptBody = db
       .query<{ body: string }, [string, number]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
       .get('consumed-owner', 1)!.body;
@@ -498,16 +511,13 @@ test('completed source stays with its evidence receiver until exact evidence res
     });
     expect(backlog.expired).toEqual([{ goal: 'failed-source-goal', taskId: 'failed-source' }]);
     expect(cancelled).toEqual(['failed-source']);
-    expect(recoverCalls).toEqual([
-      'consumed-owner',
-      'consumed-operations',
-      'grant-awaiting-run',
-      'consumed-terminal',
-    ]);
+    expect(recoverCalls).toEqual(['consumed-owner', 'consumed-operations', 'grant-awaiting-run', 'consumed-terminal']);
     for (const owner of ['quiet-owner', 'quiet-operations', 'pending-grant', 'terminal-result']) {
-      const event = inbox.pending(owner).find(
-        ({ event: delivered }) => delivered.kind === 'instruction' && delivered.summary.includes('evidence receiver'),
-      );
+      const event = inbox
+        .pending(owner)
+        .find(
+          ({ event: delivered }) => delivered.kind === 'instruction' && delivered.summary.includes('evidence receiver'),
+        );
       expect(event?.event.summary).toContain('authenticated manager session');
       expect(event?.event.summary).toContain(`typing-recover ${event?.event.taskId} --expected-attempt 1`);
     }
@@ -528,33 +538,52 @@ test('completed source stays with its evidence receiver until exact evidence res
       evidenceReceivingStopped: 1,
       actionableEvidenceReceivingStopped: 1,
     });
-    expect(received.snapshot.goals.find(({ goal }) => goal === 'quiet-owner')?.evidenceReceiverActions[0]).toMatchObject({
+    expect(
+      received.snapshot.goals.find(({ goal }) => goal === 'quiet-owner')?.evidenceReceiverActions[0],
+    ).toMatchObject({
       missingPredicate: 'authenticated failure classification of the exact terminal compiler result',
     });
     expect(received.snapshot.goals.find(({ goal }) => goal === 'failed-source-goal')).toMatchObject({
       actionableStopped: 1,
       evidenceReceivingStopped: 0,
     });
-    expect(received.snapshot.goals.find(({ goal }) => goal === 'quiet-operations')?.evidenceReceiverActions[0])
-      .toMatchObject({ missingPredicate: 'the exact compiler result and verified terminal custody' });
-    expect(db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('consumed-owner')!.body)
-      .toBe(originalTaskBody);
     expect(
-      db.query<{ body: string }, [string, number]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
+      received.snapshot.goals.find(({ goal }) => goal === 'quiet-operations')?.evidenceReceiverActions[0],
+    ).toMatchObject({ missingPredicate: 'the exact compiler result and verified terminal custody' });
+    expect(
+      db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('consumed-owner')!.body,
+    ).toBe(originalTaskBody);
+    expect(
+      db
+        .query<{ body: string }, [string, number]>('SELECT body FROM worker_attempts WHERE task_id=? AND attempt=?')
         .get('consumed-owner', 1)!.body,
     ).toBe(originalAttemptBody);
     expect(
-      db.query<{ body: string }, [string, number]>(
-        "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'",
-      ).get('consumed-owner', 1)!.body,
+      db
+        .query<{ body: string }, [string, number]>(
+          "SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='typing-recovery-authorized'",
+        )
+        .get('consumed-owner', 1)!.body,
     ).toBe(originalAuthorization);
 
-    const laterAttempt = prepareTypingRecovery(db, temp.path, 'later-attempt', 'later-owner', 'later-owner', true, 7, old);
+    const laterAttempt = prepareTypingRecovery(
+      db,
+      temp.path,
+      'later-attempt',
+      'later-owner',
+      'later-owner',
+      true,
+      7,
+      old,
+    );
     const laterTask = JSON.parse(
       db.query<{ body: string }, [string]>('SELECT body FROM worker_tasks WHERE id=?').get('later-attempt')!.body,
     ) as { currentAttempt: number; [key: string]: unknown };
     laterTask.currentAttempt = 2;
-    db.query('UPDATE worker_tasks SET current_attempt=2, body=? WHERE id=?').run(JSON.stringify(laterTask), 'later-attempt');
+    db.query('UPDATE worker_tasks SET current_attempt=2, body=? WHERE id=?').run(
+      JSON.stringify(laterTask),
+      'later-attempt',
+    );
     db.query('INSERT INTO worker_attempts(task_id,attempt,body) VALUES (?,2,?)').run(
       'later-attempt',
       JSON.stringify({
