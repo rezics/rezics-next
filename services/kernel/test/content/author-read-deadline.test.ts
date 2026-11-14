@@ -57,9 +57,7 @@ for (const blocked of ['BEGIN', 'SET LOCAL statement_timeout', 'SELECT source', 
     );
     const retry = connection();
     const pool = poolFor(stalled, retry);
-    await expect(withAuthorReadConnection(pool, Date.now() + 100, read)).rejects.toBeInstanceOf(
-      AccessUnavailableError,
-    );
+    await expect(withAuthorReadConnection(pool, Date.now() + 100, read)).rejects.toBeInstanceOf(AccessUnavailableError);
     await stalled.releaseWait;
     expect(stalled.statements).not.toContain('ROLLBACK');
     expect(stalled.releaseError()).toBeInstanceOf(AccessUnavailableError);
