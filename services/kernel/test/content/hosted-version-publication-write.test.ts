@@ -504,6 +504,12 @@ test('binds a legacy baseline insertion and replacement to native snapshots and 
          WHERE route=$1 AND catalogue_id=$2 AND head_revision_id=$4`,
         [route, nativeFixture.catalogueId, legacyPublicationId, draftId],
       );
+      await tx.query(
+        `INSERT INTO content.hosted_version_revision
+         (route,catalogue_id,revision_id,revision_kind,generation_id,generation_kind,sequence)
+         VALUES ($1,$2,$3,'publication',$4,'candidate',$5)`,
+        [route, nativeFixture.catalogueId, legacyPublicationId, baseline.generationId, baseline.sequence.toString()],
+      );
       return baseline;
     });
     const writeStart = observer.records.length;
@@ -535,7 +541,6 @@ test('binds a legacy baseline insertion and replacement to native snapshots and 
           chapterId: nativeFixture.newOccurrenceId(),
           anchor,
         }),
-        preparedBaseline: { sourcePublicationId: legacyPublicationId, snapshot: baselineSnapshot },
       }),
     );
     expect(inserted.plan.logicalWork.touchedIndexPathNodes).toBeLessThan(512);
@@ -573,7 +578,6 @@ test('binds a legacy baseline insertion and replacement to native snapshots and 
           },
           target: target('revision-replacement'),
         }),
-        preparedBaseline: null,
       }),
     );
     expect(replacement.plan.logicalWork.touchedIndexPathNodes).toBe(0);
@@ -624,7 +628,6 @@ test('binds a legacy baseline insertion and replacement to native snapshots and 
             },
             target: target('revision-stale'),
           }),
-          preparedBaseline: null,
         }),
       ),
     ).rejects.toBeInstanceOf(HostedVersionPublicationWriteError);

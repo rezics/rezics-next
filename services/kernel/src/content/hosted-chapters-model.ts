@@ -3,6 +3,12 @@ import type { ContentReadDependencies } from './reads.ts';
 export { HOSTED_PLACEMENT_LIMIT, HOSTED_DEPTH_LIMIT, HOSTED_PAGE_LIMIT } from './hosted-chapters-limits.ts';
 export type HostedDependencies = ContentReadDependencies;
 export type HostedCommandContext = Readonly<{ idempotencyKey: string; deadline: number; requestId: string }>;
+/** Immutable metadata version; targets and bytes remain in their ordinary Post homes. */
+export type HostedChapterLanguages = Readonly<{
+  version: string;
+  defaultLanguage: string | null;
+  namespaceId?: string;
+}>;
 export type HostedChapterTarget = Readonly<{
   threadId: string;
   postId: string;
@@ -16,7 +22,10 @@ type PlacementBase = Readonly<{
   title: string;
 }>;
 export type HostedPlacement = PlacementBase &
-  (Readonly<{ kind: 'part'; target?: never }> | Readonly<{ kind: 'chapter'; target: HostedChapterTarget }>);
+  (
+    | Readonly<{ kind: 'part'; target?: never }>
+    | Readonly<{ kind: 'chapter'; target: HostedChapterTarget; bodyLanguages?: HostedChapterLanguages }>
+  );
 export type OrderedHostedPlacement = HostedPlacement & Readonly<{ ordinal: number }>;
 export type HostedStructureInput = Readonly<{ placements: readonly HostedPlacement[] }>;
 export type HostedCreateInput = HostedStructureInput & Readonly<{ postId: string; threadId: string }>;
@@ -81,9 +90,20 @@ export type HostedOccurrenceView = Readonly<{
   (
     | Readonly<{ availability: 'unavailable'; kind: 'part' | 'chapter' }>
     | Readonly<{ availability: 'available'; kind: 'part'; title: string; target: null }>
-    | Readonly<{ availability: 'available'; kind: 'chapter'; title: string; target: HostedChapterTarget }>
+    | Readonly<{
+        availability: 'available';
+        kind: 'chapter';
+        title: string;
+        target: HostedChapterTarget;
+        selectedLanguage?: string | null;
+      }>
   );
-export type HostedReadSelection = Readonly<{ revisionId?: string; kind?: 'structure' | 'publication' }>;
+export type HostedReadSelection = Readonly<{
+  revisionId?: string;
+  kind?: 'structure' | 'publication';
+  language?: string;
+  preferredLanguages?: string;
+}>;
 /** Same-home retains its original identity; all-homes states whether the native
  * locator census and this author's outstanding source projections are complete. */
 export type HostedOwnerInventoryScope = Readonly<{

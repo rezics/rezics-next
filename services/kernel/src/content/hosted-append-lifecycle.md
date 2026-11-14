@@ -58,6 +58,19 @@ bindings, not a promise that native revision bytes survive. No title/digest is d
 
 ## Implemented private-title pages
 
+Ordered payloads keep authored titles in the encoded occurrence object's `title` pair and in the index node's
+encoded `value` object's `title` pair. Terminal disposition replaces only that primitive string with an explicit
+null title and sets a one-way `title_redacted` flag; IDs, targets, language namespace references and tree coordinates
+remain unchanged. Raw generation and occurrence/index-value keysets contain at most 100 rows per command.
+An exact indexed `hosted_version_revision` publication reference retains its entire candidate generation,
+including historical releases; no per-row manifest scan or second publication witness is required.
+The existing native terminal authority and receipts authorize these pages. Ordered inserts lock that same anchor
+and refuse terminal resurrection. Candidate-claim deletion retains its existing separate guard and authority.
+Builder receiving points retain a separate nullable title copy. Their `(input_id,source_ordinal)` raw pages use
+the same terminal authority, one-way null/flag transition and 100-row bound, without changing canonical snapshots
+or the builder's existing deletion policy. Publication staging candidates store no title: the staging reader
+derives it from the pinned source and retains only identities, order, target and language-namespace metadata.
+
 `20261113035450_hosted_private_title_redaction.sql` retains every identity, exact target binding, source header,
 placement coordinate, descriptor count and watermark. Both payload tables have a nullable title and a checked
 `title_redacted` flag. Inserts require an ordinary non-null title. Updates permit only the one-way transition

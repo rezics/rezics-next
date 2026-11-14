@@ -302,6 +302,7 @@ export class StudioController {
       this.saveAttempt || this.createAttempt || this.nativeCreateAttempt || this.organizeAttempt || this.publishAttempt,
     );
   canOrganize = (): boolean => Boolean(this.bookPort && this.state.structure?.canOrganize);
+  canBindChapterLanguage = (): boolean => this.canOrganize() && this.bookPort?.canBindChapterLanguage?.() === true;
   private async run<T>(
     operation: StudioOperation,
     action: (signal: AbortSignal) => Promise<StudioResult<T>>,

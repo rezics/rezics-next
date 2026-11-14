@@ -19,6 +19,7 @@ import {
   hostedKey,
   hostedPublish,
   hostedRevise,
+  hostedBindLanguage,
   hostedSelection,
   hostedOutlineWindowRequest,
   hostedRootAppendRequest,
@@ -71,6 +72,28 @@ export const reviseHostedBook = createServerFn({ method: 'POST' })
   )
   .handler(({ data }) =>
     admitted((native, signal) => native.revise(data.catalogueId, data.body, data.idempotencyKey, signal), true),
+  );
+
+export const bindHostedChapterLanguage = createServerFn({ method: 'POST' })
+  .validator((input: unknown) =>
+    v.parse(
+      v.strictObject({
+        catalogueId: hostedId,
+        occurrenceId: hostedId,
+        body: hostedBindLanguage,
+        idempotencyKey: hostedKey,
+      }),
+      input,
+    ),
+  )
+  .handler(({ data }) =>
+    admitted(
+      (native, signal) =>
+        native.bindLanguage
+          ? native.bindLanguage(data.catalogueId, data.occurrenceId, data.body, data.idempotencyKey, signal)
+          : Promise.resolve(hostedFailure('unavailable', 'Chapter language association is unavailable.')),
+      true,
+    ),
   );
 
 export const publishHostedBook = createServerFn({ method: 'POST' })
@@ -271,6 +294,8 @@ export const hostedBookNative: HostedBookNative = {
   readOwn: (accountId, catalogueId, signal, expectedViewer) =>
     readOwnedHostedBook({ data: { accountId, catalogueId, expectedViewer }, signal }),
   create: (body, idempotencyKey, signal) => createHostedBook({ data: { body, idempotencyKey }, signal }),
+  bindLanguage: (catalogueId, occurrenceId, body, idempotencyKey, signal) =>
+    bindHostedChapterLanguage({ data: { catalogueId, occurrenceId, body, idempotencyKey }, signal }),
   revise: (catalogueId, body, idempotencyKey, signal) =>
     reviseHostedBook({ data: { catalogueId, body, idempotencyKey }, signal }),
   publish: (catalogueId, body, idempotencyKey, signal) =>

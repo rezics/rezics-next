@@ -893,6 +893,22 @@ foreign/stale refusal, same-account replacement, late responses and dirty editor
 remain unchanged. Source validation formats changed files and runs one affected Web typecheck; native, browser,
 Storybook, ordinary acceptance, root and growth checks remain deferred.
 
+## Chapter body-language associations
+
+A chapter's organization menu opens one central language-association form. It consumes the current clean saved
+selection or the existing Versions inspector's admitted historical exact revision; account draft browsing and
+Post editing keep their existing owners. Authors enter the published language/title, inspect exact source details
+and explicitly attach. The canonical default can declare a language only with its unchanged exact target; other
+bodies remain alternatives. No Post ID entry, new picker, body copy or Post write is added.
+
+The Book organizer sends the association through its existing CAS, idempotency and uncertain-command pipeline.
+Unknown recovery retains the original version, language, title, default choice and key; native failure preserves
+saved Posts. Unsent fields join the organization canvas's departure guard. A stale Book requires reopening its
+current draft. The native owner still validates target authority, the current head and every frozen publication.
+Native create, revise and direct publication use the canonical ordered representation. Studio exposes no mutable-draft
+or public-baseline conversion controls. Ordinary bounded selected-publication preparation, progress and activation
+remain explicit author actions; every published selection retains its exact frozen structure and body revisions.
+
 ## Shared release review language
 
 Decision: Book and article release review uses distinct `studio_release_*` messages in all eight launch locales,
@@ -995,7 +1011,7 @@ replacement aborts the visit and discards late replies. Activation remains a sep
 Sources read before design: Content's [Authoring and release and Prepared Book publication](../../../../services/kernel/src/content/hosted-chapters.md),
 `hosted-publication-preparation-routes.ts`, `hosted-publication-preparation-schemas.ts`, the focused native HTTP test
 `hosted-publication-preparation-http.test.ts`, architecture's [Release selection and retention](../../../../docs/architecture.md#release-selection-and-retention),
-`routes/studio.tsx`, `hosted-legacy-baseline-native.ts`, and `hosted-publication-point.ts`.
+`routes/studio.tsx`, `hosted-release-preparation-native.ts`, and `hosted-publication-point.ts`.
 
 Decision: one focused state/transport proof covers retry, remount and stale authority, with only the named interrupted
 desktop and expired narrow stories. Preparation uses the generated KernelClient catalogue and stage operations.

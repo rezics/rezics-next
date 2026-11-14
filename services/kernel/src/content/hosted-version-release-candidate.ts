@@ -374,6 +374,7 @@ function valueFor(item: HostedPublicationStagedCandidate): CandidateValue {
     subtreeHeight: 0,
     chapterCount: item.kind === 'chapter' ? 1n : 0n,
     target: item.kind === 'chapter' ? item.target : null,
+    ...(item.bodyLanguages === undefined ? {} : { bodyLanguages: item.bodyLanguages }),
   };
 }
 

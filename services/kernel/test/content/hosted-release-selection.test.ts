@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { AccessClient } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
-import { hostedReleasePlacements, type HostedPlacementRow } from '../../src/content/hosted-chapters-store.ts';
+import { hostedReleasePlacements, type HostedPlacementRow } from '../../src/content/hosted-maintenance-manifest.ts';
 import { selectHostedRelease } from '../../src/content/hosted-chapters-tree.ts';
 import { HOSTED_APPEND_DESCRIPTOR_SELECT } from '../../src/content/hosted-chapters-append.ts';
 

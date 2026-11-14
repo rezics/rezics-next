@@ -1,9 +1,14 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import { hostedId, type HostedRead } from './native-api';
+import { canonicalLanguageKey } from '@rezics/definitions/language';
 
 const digest = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/));
 const revision = v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,18}$/));
+const bodyLanguage = v.pipe(
+  v.string(),
+  v.check((value) => canonicalLanguageKey(value) === value),
+);
 const position = v.strictObject({
   blockId: v.pipe(v.string(), v.minLength(1), v.maxLength(128)),
   offset: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(2097152)),
@@ -12,6 +17,8 @@ export const checkpointAddressSchema = v.strictObject({
   catalogueId: hostedId,
   publicationRevisionId: hostedId,
   occurrenceId: hostedId,
+  bodyLanguage: v.optional(bodyLanguage),
+  targetPostId: hostedId,
   targetRevisionId: hostedId,
   targetSha256: digest,
   documentPosition: v.nullable(position),
@@ -30,6 +37,7 @@ const metadata = v.variant('availability', [
     position: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
     kind: v.literal('chapter'),
     title: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+    bodyLanguage: v.optional(bodyLanguage),
     target: v.strictObject({ threadId: hostedId, postId: hostedId, revisionId: hostedId, sha256: digest }),
   }),
 ]);
@@ -51,7 +59,7 @@ export type CheckpointView =
       subjectId: string;
       revision: string;
       address: CheckpointAddress;
-      resume: { availability: 'available'; title: string } | { availability: 'unavailable' };
+      resume: { availability: 'available'; title: string; targetPostId: string } | { availability: 'unavailable' };
     };
 export const checkpointCommandSchema = v.variant('kind', [
   v.strictObject({
@@ -87,7 +95,10 @@ export async function readHostedCheckpoint(
   if (
     metadata.occurrenceId !== address.occurrenceId ||
     (metadata.availability === 'available' &&
-      (metadata.target.revisionId !== address.targetRevisionId || metadata.target.sha256 !== address.targetSha256))
+      ((address.bodyLanguage !== undefined && metadata.bodyLanguage !== address.bodyLanguage) ||
+        metadata.target.postId !== address.targetPostId ||
+        metadata.target.revisionId !== address.targetRevisionId ||
+        metadata.target.sha256 !== address.targetSha256))
   )
     return { state: 'unavailable' };
   return {
@@ -99,7 +110,7 @@ export async function readHostedCheckpoint(
       address,
       resume:
         metadata.availability === 'available'
-          ? { availability: 'available', title: metadata.title }
+          ? { availability: 'available', title: metadata.title, targetPostId: metadata.target.postId }
           : { availability: 'unavailable' },
     },
   };

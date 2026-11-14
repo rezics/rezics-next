@@ -9,10 +9,6 @@ import type { SearchPageData } from '../src/search/search';
 import { literaryGrainExample } from '../src/features/catalogue/literary-reader/examples';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const actualStart = await import('@tanstack/react-start');
-const actualServer = await import('@tanstack/react-start/server');
-mock.module('@tanstack/react-start', () => ({ ...actualStart, ...start }));
-mock.module('@tanstack/react-start/server', () => ({ ...actualServer, ...start }));
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -40,6 +36,11 @@ for (const key of [
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+// Install the browser before live application imports capture browser-only read eligibility.
+const actualStart = await import('@tanstack/react-start');
+const actualServer = await import('@tanstack/react-start/server');
+mock.module('@tanstack/react-start', () => ({ ...actualStart, ...start }));
+mock.module('@tanstack/react-start/server', () => ({ ...actualServer, ...start }));
 const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');

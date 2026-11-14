@@ -3,15 +3,20 @@ import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { deadlineClient, within } from './access-port.ts';
+import { disposeHostedOrderedTitles } from './hosted-ordered-title-lifecycle.ts';
 import {
   pageHostedLifecycleRevisions,
   redactHostedLifecyclePlacements,
   redactHostedLifecycleStream,
+  redactHostedLifecycleLanguageFacts,
+  redactHostedLifecycleLanguageSnapshots,
   type HostedLifecycleAnchor,
   type HostedLifecycleContext,
   type HostedLifecyclePlacementCursor,
   type HostedLifecycleRevisionCursor,
   type HostedLifecycleStreamCursor,
+  type HostedLifecycleLanguageFactCursor,
+  type HostedLifecycleLanguageSnapshotCursor,
 } from './hosted-append-lifecycle.ts';
 
 export type HostedDispositionStep = <T>(name: string, action: () => Promise<T>) => Promise<T>;
@@ -113,6 +118,33 @@ export async function disposeHostedTitles(
     if (!inventory.value.next) break;
     afterRevision = inventory.value.next.afterRevision;
   }
+
+  let factCursor: HostedLifecycleLanguageFactCursor = {
+    afterOccurrence: null,
+    afterLanguage: null,
+    afterVersion: null,
+  };
+  for (;;) {
+    const result = await page('language-facts', factCursor, (context) =>
+      redactHostedLifecycleLanguageFacts(pool, anchor, factCursor, context),
+    );
+    if (!result.value.next) break;
+    factCursor = result.value.next;
+  }
+
+  let snapshotCursor: HostedLifecycleLanguageSnapshotCursor = {
+    afterNamespace: null,
+    afterOccurrence: null,
+    afterLanguage: null,
+  };
+  for (;;) {
+    const result = await page('language-snapshots', snapshotCursor, (context) =>
+      redactHostedLifecycleLanguageSnapshots(pool, anchor, snapshotCursor, context),
+    );
+    if (!result.value.next) break;
+    snapshotCursor = result.value.next;
+  }
+  await disposeHostedOrderedTitles(pool, anchor, deadline, step);
 }
 
 /** Account erasure already knows the author. Resolve only the exact catalogue

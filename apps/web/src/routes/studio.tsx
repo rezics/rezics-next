@@ -11,8 +11,6 @@ import {
   HostedRootAppendEntry,
   HostedDraftPointEntry,
   HostedReleasePreparationEntry,
-  HostedLegacyBaselineEntry,
-  baselineCopy,
   releaseCopy,
   HostedInventoryVisit,
   HostedDraftPicker,
@@ -53,7 +51,6 @@ const searchSchema = v.pipe(
     books: v.optional(v.literal('1')),
     append: v.optional(v.literal('1')),
     points: v.optional(v.literal('1')),
-    baseline: v.optional(v.literal('1')),
     prepare: v.optional(v.literal('1')),
     stageId: v.optional(hostedId),
     ownerAccount: v.optional(hostedId),
@@ -71,11 +68,8 @@ const searchSchema = v.pipe(
     draftCursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(32768))),
   }),
   v.check((value) => !(value.catalogueId && value.postId) && !(value.books && (value.catalogueId || value.postId))),
-  v.check(
-    (value) => !(value.append || value.points || value.baseline || value.prepare) || value.catalogueId !== undefined,
-  ),
-  v.check((value) => !value.baseline || !(value.append || value.points)),
-  v.check((value) => !value.prepare || !(value.append || value.points || value.baseline)),
+  v.check((value) => !(value.append || value.points || value.prepare) || value.catalogueId !== undefined),
+  v.check((value) => !value.prepare || !(value.append || value.points)),
   v.check((value) => !value.stageId || value.prepare === '1'),
   v.check(
     (value) =>
@@ -132,7 +126,6 @@ function StudioRoute() {
       <BookStudioEntry
         append={search.append === '1'}
         points={search.points === '1'}
-        baseline={search.baseline === '1'}
         prepare={search.prepare === '1'}
         stageId={search.stageId ?? null}
         owner={loaded.value}
@@ -423,20 +416,17 @@ function documentRow(selection: StudioSelection, fallbackState: StudioDocument['
 function BookStudioEntry({
   append,
   points,
-  baseline,
   prepare,
   stageId,
   ...props
 }: Parameters<typeof BookStudioVisit>[0] & {
   append: boolean;
   points: boolean;
-  baseline: boolean;
   prepare: boolean;
   stageId: string | null;
 }) {
   if (prepare)
     return <HostedReleasePreparationEntry {...props} stageId={stageId} activation={hostedReleaseActivationTransport} />;
-  if (baseline) return <HostedLegacyBaselineEntry {...props} />;
   if (points) return <HostedDraftPointEntry {...props} />;
   if (append) return <HostedRootAppendEntry {...props} />;
   return <BookStudioVisit {...props} />;
@@ -453,15 +443,6 @@ function BookPublicationTools({ owner, locale }: { owner: HostedOwnedBook; local
         )}
       >
         {releaseCopy[locale].entry}
-      </a>
-      <a
-        className="inline-flex min-h-11 items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        href={localizeHref(
-          `/studio?catalogueId=${owner.item.catalogueId}&baseline=1&ownerAccount=${owner.viewer.accountId}&ownerEpoch=${owner.viewer.authnEpoch}`,
-          { locale: locale },
-        )}
-      >
-        {baselineCopy[locale].entry}
       </a>
     </nav>
   );

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import readReceipt from '../../src/command/read-receipt.sql';
-import { HOSTED_PLACEMENT_SELECT } from '../../src/content/hosted-chapters-store.ts';
+import { HOSTED_PLACEMENT_SELECT } from '../../src/content/hosted-maintenance-manifest.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { hostedChaptersFixture } from './support/hosted-chapters-fixture.ts';
 import { observeSql, type SqlExecution } from './support/sql-observer.ts';

@@ -9,6 +9,8 @@ import type { SessionEnv } from '../../session/client';
 import { carriesSession } from '../../session/csrf';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { createHostedCatalogueApi, hostedId } from './native-api';
+import { bookLanguagePreferenceSchema } from './address';
+import { bookLanguagePreferenceWithinBounds } from './languages';
 import { nativeBookRequestWithinBounds, readHostedBook } from './native-mapper';
 import {
   BOOK_ANCESTOR_LIMIT,
@@ -22,6 +24,12 @@ import {
 
 const selection = v.strictObject({
   occurrenceId: hostedId,
+  bodyLanguage: v.optional(
+    v.pipe(
+      v.string(),
+      v.check((value) => bookLanguagePreferenceWithinBounds({ language: value, preferredLanguages: [] })),
+    ),
+  ),
   body: v.strictObject({
     postId: hostedId,
     revisionId: hostedId,
@@ -29,13 +37,20 @@ const selection = v.strictObject({
   }),
 });
 const publication = v.strictObject({ id: hostedId, structureRevisionId: hostedId, releaseRevisionId: hostedId });
+export const nativeBookChapterAddressSchema = v.strictObject({
+  kind: v.literal('chapter'),
+  publication,
+  selection,
+  languagePreference: v.optional(bookLanguagePreferenceSchema),
+});
 const request = v.strictObject({
   address: v.variant('kind', [
-    v.strictObject({ kind: v.literal('chapter'), publication, selection }),
+    nativeBookChapterAddressSchema,
     v.strictObject({
       kind: v.literal('contents'),
       publication,
       selection: v.nullable(selection),
+      languagePreference: v.optional(bookLanguagePreferenceSchema),
       parentOccurrenceId: v.nullable(hostedId),
       cursor: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
     }),
@@ -48,6 +63,7 @@ const viewer = v.variant('kind', [
   v.strictObject({ kind: v.literal('anonymous') }),
   v.strictObject({ kind: v.literal('session'), subject: v.pipe(v.string(), v.minLength(1), v.maxLength(1024)) }),
 ]);
+export const hostedBookViewerSchema = viewer;
 export type HostedBookViewer = v.InferOutput<typeof viewer>;
 const input = v.strictObject({
   request,

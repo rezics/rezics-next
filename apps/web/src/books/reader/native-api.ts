@@ -1,3 +1,4 @@
+import { canonicalLanguageKey } from '@rezics/definitions/language';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
@@ -8,6 +9,10 @@ export const hostedId = v.pipe(
   v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
 );
 const digest = v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/));
+const language = v.pipe(
+  v.string(),
+  v.check((value) => canonicalLanguageKey(value) === value),
+);
 const title = v.pipe(v.string(), v.minLength(1), v.maxLength(256));
 const target = v.strictObject({ threadId: hostedId, postId: hostedId, revisionId: hostedId, sha256: digest });
 const slot = {
@@ -18,7 +23,14 @@ const slot = {
 const occurrence = v.union([
   v.strictObject({ ...slot, kind: v.picklist(['part', 'chapter']), availability: v.literal('unavailable') }),
   v.strictObject({ ...slot, kind: v.literal('part'), availability: v.literal('available'), title, target: v.null() }),
-  v.strictObject({ ...slot, kind: v.literal('chapter'), availability: v.literal('available'), title, target }),
+  v.strictObject({
+    ...slot,
+    kind: v.literal('chapter'),
+    availability: v.literal('available'),
+    title,
+    target,
+    selectedLanguage: v.exactOptional(v.nullable(language)),
+  }),
 ]);
 const revision = {
   catalogueId: hostedId,
@@ -54,7 +66,24 @@ export type HostedRevision = NonNullable<Awaited<ReturnType<CatalogueResource['g
 export type HostedPage = NonNullable<Awaited<ReturnType<CatalogueResource['children']['get']>>['data']>;
 export type HostedMetadata = NonNullable<Awaited<ReturnType<OccurrenceResource['metadata']['get']>>['data']>;
 export type HostedResolution = NonNullable<Awaited<ReturnType<OccurrenceResource['get']>>['data']>;
-export type HostedOccurrence = HostedPage['items'][number];
+export type HostedBodyResolution = HostedResolution & { selectedLanguage: string | null };
+export type HostedLanguagePage = {
+  catalogueId: string;
+  revisionId: string;
+  kind: 'structure' | 'publication';
+  sourceRevisionId: string | null;
+  occurrenceId: string;
+  items: { language: string; title: string; target: v.InferOutput<typeof target>; isDefault: boolean }[];
+  nextCursor: string | null;
+};
+const languagesSchema = v.strictObject({
+  ...revision,
+  occurrenceId: hostedId,
+  items: v.pipe(v.array(v.strictObject({ language, title, target, isDefault: v.boolean() })), v.maxLength(20)),
+  nextCursor: v.nullable(v.pipe(v.string(), v.maxLength(4096))),
+});
+const bodySchema = v.strictObject({ ...resolutionSchema.entries, selectedLanguage: v.nullable(language) });
+export type HostedOccurrence = HostedPage['items'][number] & { selectedLanguage?: string | null };
 export type HostedFailure = { state: 'denied' | 'not-found' | 'unavailable' | 'changed' };
 export type HostedRead<T> = { state: 'ready'; value: T } | HostedFailure;
 export type HostedQuery = Readonly<{
@@ -64,8 +93,15 @@ export type HostedQuery = Readonly<{
   cursor?: string;
   limit?: string;
   direction?: 'previous' | 'next';
+  language?: string;
+  preferredLanguages?: string;
+  targetPostId?: string;
+  targetRevisionId?: string;
+  targetSha256?: string;
 }>;
 export type HostedCatalogueApi = Readonly<{
+  languages?(id: string, occurrenceId: string, query: HostedQuery): Promise<HostedRead<HostedLanguagePage>>;
+  body?(id: string, occurrenceId: string, query: HostedQuery): Promise<HostedRead<HostedBodyResolution>>;
   catalogue(id: string, query: HostedQuery & { includeTitle?: '1' }): Promise<HostedRead<HostedRevision>>;
   children(id: string, query: HostedQuery): Promise<HostedRead<HostedPage>>;
   metadata(id: string, occurrenceId: string, query: HostedQuery): Promise<HostedRead<HostedMetadata>>;
@@ -123,6 +159,30 @@ export function createHostedCatalogueApi(
     return result.success ? result.output : null;
   };
   return {
+    languages: (id, occurrenceId, query) =>
+      read(
+        () =>
+          client
+            .hostedCatalogues({ id })
+            .occurrences({ occurrenceId })
+            .languages.get({ ...options, query }),
+        (data) => {
+          const result = v.safeParse(languagesSchema, data);
+          return result.success ? result.output : null;
+        },
+      ),
+    body: (id, occurrenceId, query) =>
+      read(
+        () =>
+          client
+            .hostedCatalogues({ id })
+            .occurrences({ occurrenceId })
+            .body.get({ ...options, query }),
+        (data) => {
+          const result = v.safeParse(bodySchema, data);
+          return result.success ? result.output : null;
+        },
+      ),
     catalogue: (id, query) => read(() => client.hostedCatalogues({ id }).get({ ...options, query }), decodeRevision),
     children: (id, query) =>
       read(() => client.hostedCatalogues({ id }).children.get({ ...options, query }), decodePage),

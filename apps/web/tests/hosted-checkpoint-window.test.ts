@@ -14,6 +14,7 @@ test('checkpoint list decoding accepts safe positions and preserves exact target
     catalogueId: id,
     publicationRevisionId: id,
     occurrenceId: id,
+    targetPostId: id,
     targetRevisionId: id,
     targetSha256: sha256,
     documentPosition: { blockId: 'saved-block', offset: 2097152 },
@@ -39,6 +40,7 @@ test('checkpoint list decoding accepts safe positions and preserves exact target
       state: 'unavailable',
     });
   for (const defect of [
+    { ...row, address: { ...address, targetPostId: '00000000-0000-7000-8000-000000000002' } },
     { ...row, metadata: { ...metadata, position: 512, target: { ...metadata.target, sha256: 'b'.repeat(64) } } },
     { ...row, address: { ...address, documentPosition: { blockId: 'saved-block', offset: 2097153 } } },
     { ...row, metadata: { ...metadata, document: null } },
@@ -57,6 +59,9 @@ const loaded = (title: string, nextCursor: string | null = null): HostedCheckpoi
       catalogueId: 'catalogue',
       publicationRevisionId: 'publication',
       occurrenceId: 'chapter',
+      targetPostId: 'post',
+      targetRevisionId: 'revision',
+      targetSha256: 'a'.repeat(64),
     },
   ],
   nextCursor,

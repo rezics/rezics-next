@@ -16,6 +16,9 @@ export function matchesCheckpointChapter(address: CheckpointAddress, page: BookP
     address.catalogueId === page.address.publication.id &&
     address.publicationRevisionId === page.address.publication.releaseRevisionId &&
     address.occurrenceId === page.address.selection.occurrenceId &&
+    // An omitted key selects the canonical default; the complete body tuple still binds this position.
+    (address.bodyLanguage === undefined || address.bodyLanguage === page.address.selection.bodyLanguage) &&
+    address.targetPostId === page.address.selection.body.postId &&
     address.targetRevisionId === page.address.selection.body.revisionId &&
     address.targetSha256 === page.address.selection.body.sha256
   );

@@ -1,7 +1,8 @@
 import type { HostedDiscoveryPage } from './discovery';
 import type { HostedCatalogueApi, HostedFailure } from './native-api';
-import { bookPublicationFromNative } from './native-mapper';
-import type { HostedBookVisitInput } from './address';
+import { bookPublicationFromNative, bookSelectionFromNative } from './native-mapper';
+import { nativeBookPreference } from './languages';
+import { bookPreferenceFromSearch, type HostedBookVisitInput } from './address';
 import type { HostedBookViewer } from './native-read';
 import type { NativeHostedBookAdmission } from './native-source';
 import type { BookAddress, BookContentsAddress, BookSelection } from './source';
@@ -28,6 +29,8 @@ export async function observeHostedBookVisit(
   fallbackTitle: string,
 ): Promise<HostedBookVisit> {
   const { catalogueId, search } = input;
+  const preference = bookPreferenceFromSearch(search);
+  const preferenceAddress = preference ? { languagePreference: preference } : {};
   const current = await api.catalogue(catalogueId, { kind: 'publication', includeTitle: '1' });
   if (current.state !== 'ready') return current;
   const currentPublication = bookPublicationFromNative(current.value);
@@ -49,6 +52,14 @@ export async function observeHostedBookVisit(
     const resolved = await api.metadata(catalogueId, search.occurrence, {
       kind: 'publication',
       revisionId: frozen.value.revisionId,
+      ...(search.bodyPost
+        ? {
+            ...(search.bodyLanguage ? { language: search.bodyLanguage } : {}),
+            targetPostId: search.bodyPost,
+            targetRevisionId: search.bodyRevision!,
+            targetSha256: search.bodySha256!,
+          }
+        : nativeBookPreference(preference)),
     });
     if (resolved.state !== 'ready') return resolved;
     const row = resolved.value.occurrence;
@@ -62,14 +73,16 @@ export async function observeHostedBookVisit(
       return { state: 'unavailable' };
     if (row.availability !== 'available') return { state: 'denied' };
     if (row.kind !== 'chapter') return { state: 'not-found' };
-    selection = {
-      occurrenceId: row.occurrenceId,
-      body: {
-        postId: row.target.postId,
-        revisionId: row.target.revisionId,
-        sha256: row.target.sha256,
-      },
-    };
+    selection = bookSelectionFromNative(row);
+    if (!selection) return { state: 'unavailable' };
+    if (
+      search.bodyPost &&
+      (search.bodyPost !== selection.body.postId ||
+        search.bodyRevision !== selection.body.revisionId ||
+        search.bodySha256 !== selection.body.sha256 ||
+        (search.bodyLanguage !== undefined && search.bodyLanguage !== selection.bodyLanguage))
+    )
+      return { state: 'changed' };
   }
   const chapter = search.view === 'chapter' || (search.view === undefined && !!selection);
   if (chapter && !selection) return { state: 'not-found' };
@@ -77,11 +90,13 @@ export async function observeHostedBookVisit(
     kind: 'contents',
     publication,
     selection,
+    ...preferenceAddress,
     parentOccurrenceId: search.parent ?? null,
     cursor: search.cursor ?? null,
   };
   // Native disclosure selected the exact frozen target. The reader rechecks its current access on every read.
-  const address: BookAddress = chapter && selection ? { kind: 'chapter', publication, selection } : contents;
+  const address: BookAddress =
+    chapter && selection ? { kind: 'chapter', publication, selection, ...preferenceAddress } : contents;
   return {
     state: 'ready',
     ...(search.subject ? { subjectId: search.subject } : {}),
@@ -91,6 +106,7 @@ export async function observeHostedBookVisit(
           kind: 'contents',
           publication,
           selection,
+          ...preferenceAddress,
           parentOccurrenceId: search.returnParent ?? null,
           cursor: search.returnCursor ?? null,
         }

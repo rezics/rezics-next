@@ -1,7 +1,11 @@
 import type { AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { RevisionPreconditionError } from './commands.ts';
-import { InvalidHostedStructureError, type HostedChapterTarget } from './hosted-chapters-model.ts';
+import {
+  InvalidHostedStructureError,
+  type HostedChapterTarget,
+  type HostedChapterLanguages,
+} from './hosted-chapters-model.ts';
 import type { HostedVersionPointValue } from './hosted-version-draft-write.ts';
 import {
   HostedVersionHeadChangedError,
@@ -35,6 +39,7 @@ export type HostedVersionDraftUpdateWrite = Readonly<{
   target: HostedChapterTarget | null;
   transactionId: string;
   recordedAt: string;
+  bodyLanguages?: HostedChapterLanguages;
 }>;
 
 type HostedOccurrenceIdentity = Readonly<{
@@ -146,7 +151,10 @@ export async function commitHostedVersionDraftUpdate(
       )
     ).rows[0];
     if (!identity) throw new Error('Hosted draft update occurrence has no permanent identity');
-    const value = nextPointValue(occurrence.value, identity, write.title, write.target);
+    const value = {
+      ...nextPointValue(occurrence.value, identity, write.title, write.target),
+      ...(write.bodyLanguages === undefined ? {} : { bodyLanguages: write.bodyLanguages }),
+    };
 
     const storeWrite = createHostedVersionWrite<HostedVersionPointValue>(client, snapshot);
     const siblings = hostedVersionSequence(storeWrite, 'sibling');

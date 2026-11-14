@@ -14,7 +14,6 @@ import {
   type HostedVersionPublicationInsertion,
   type HostedVersionPublicationOccurrence,
   type HostedVersionPublicationOccurrenceChange,
-  type HostedVersionPublicationBaseline,
   type HostedVersionPublicationStoredValue,
   type HostedVersionPublicationValue,
   type HostedVersionPublicationWritePlan,
@@ -53,7 +52,12 @@ type Insertion = Readonly<{
 function valueOf(placement: OrderedHostedPlacement): HostedVersionPublicationValue {
   return placement.kind === 'part'
     ? { kind: 'part', title: placement.title }
-    : { kind: 'chapter', title: placement.title, target: placement.target };
+    : {
+        kind: 'chapter',
+        title: placement.title,
+        target: placement.target,
+        ...(placement.bodyLanguages === undefined ? {} : { bodyLanguages: placement.bodyLanguages }),
+      };
 }
 
 function sameTarget(left: HostedChapterTarget, right: HostedChapterTarget): boolean {
@@ -67,9 +71,11 @@ function sameTarget(left: HostedChapterTarget, right: HostedChapterTarget): bool
 
 function chapterValue(
   value: HostedVersionPublicationValue,
-): Readonly<{ kind: 'chapter'; title: string; target: HostedChapterTarget }> | null {
+):
+  | (Extract<HostedVersionPublicationValue, { kind: 'chapter' }> & { title: string; target: HostedChapterTarget })
+  | null {
   return value.kind === 'chapter' && value.title !== null && value.target !== null
-    ? { kind: 'chapter', title: value.title, target: value.target }
+    ? { ...value, kind: 'chapter', title: value.title, target: value.target }
     : null;
 }
 
@@ -298,7 +304,12 @@ export async function writeHostedVersionPublicationPoint(
     const change: HostedVersionPublicationOccurrenceChange = {
       occurrenceId: publicChapter.occurrenceId,
       ...current,
-      value: { ...currentValue, target: draftChapter.target },
+      value: {
+        kind: 'chapter',
+        title: currentValue.title,
+        target: draftChapter.target,
+        ...(draftChapter.bodyLanguages === undefined ? {} : { bodyLanguages: draftChapter.bodyLanguages }),
+      },
     };
     occurrenceChanges.set(change.occurrenceId, change);
   } else {
@@ -428,7 +439,12 @@ function storedValue(value: HostedVersionPublicationValue, chapterCount: bigint)
 function publicationValue(value: StoredPublicationValue): HostedVersionPublicationValue {
   return value.kind === 'part'
     ? { kind: 'part', title: value.title }
-    : { kind: 'chapter', title: value.title, target: value.target };
+    : {
+        kind: 'chapter',
+        title: value.title,
+        target: value.target,
+        ...(value.bodyLanguages === undefined ? {} : { bodyLanguages: value.bodyLanguages }),
+      };
 }
 
 function stringIndex(
@@ -473,25 +489,10 @@ function stringIndex(
   };
 }
 
-function baselineSnapshotMatches(left: HostedVersionSnapshot, right: HostedVersionSnapshot): boolean {
-  return (
-    left.route === right.route &&
-    left.catalogueId === right.catalogueId &&
-    left.generationId === right.generationId &&
-    left.generationKind === right.generationKind &&
-    left.sequence === right.sequence &&
-    left.preorderRootId === right.preorderRootId &&
-    left.chapterRootId === right.chapterRootId &&
-    left.placementCount === right.placementCount &&
-    left.chapterCount === right.chapterCount
-  );
-}
-
 async function exactPublicationSnapshot(
   client: CommandTransaction,
   catalogueId: string,
   selection: HostedPointSelection,
-  preparedBaseline: HostedVersionPublicationBaseline | null,
 ): Promise<HostedVersionSnapshot> {
   const resolved = await resolveHostedVersionRevision(client, catalogueId, selection.expectedPublicationId);
   if (resolved.kind === 'missing' || resolved.revisionKind !== 'publication') {
@@ -518,28 +519,7 @@ async function exactPublicationSnapshot(
     return snapshot;
   }
 
-  if (
-    preparedBaseline === null ||
-    preparedBaseline.sourcePublicationId !== selection.expectedPublicationId ||
-    preparedBaseline.snapshot.generationKind !== 'candidate' ||
-    preparedBaseline.snapshot.catalogueId !== catalogueId
-  ) {
-    throw new HostedVersionPublicationWriteError('stale-publication');
-  }
-  const snapshot = await readHostedVersionSnapshot(
-    client,
-    catalogueId,
-    preparedBaseline.snapshot.generationId,
-    preparedBaseline.snapshot.sequence,
-  );
-  if (
-    snapshot === null ||
-    snapshot.generationKind !== 'candidate' ||
-    !baselineSnapshotMatches(snapshot, preparedBaseline.snapshot)
-  ) {
-    throw new HostedVersionPublicationWriteError('stale-publication');
-  }
-  return snapshot;
+  throw new HostedVersionPublicationWriteError('stale-publication');
 }
 
 function nativePublicationPort(
@@ -609,7 +589,6 @@ export type HostedVersionPublicationPointCommitInput = Readonly<{
   recordedTransactionId: string;
   recordedAt: string;
   selection: HostedPointSelection;
-  preparedBaseline: HostedVersionPublicationBaseline | null;
 }>;
 
 export type HostedVersionPublicationPointCommit = Readonly<{
@@ -622,7 +601,7 @@ export async function commitHostedVersionPublicationPoint(
   client: CommandTransaction,
   input: HostedVersionPublicationPointCommitInput,
 ): Promise<HostedVersionPublicationPointCommit> {
-  const snapshot = await exactPublicationSnapshot(client, input.catalogueId, input.selection, input.preparedBaseline);
+  const snapshot = await exactPublicationSnapshot(client, input.catalogueId, input.selection);
   const write = createHostedVersionWrite<StoredPublicationValue>(client, snapshot);
   const port = nativePublicationPort(client, snapshot, input.selection, write);
   const plan = await writeHostedVersionPublicationPoint(input.selection, port);

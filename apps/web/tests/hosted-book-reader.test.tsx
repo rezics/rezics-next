@@ -673,9 +673,14 @@ test.each(['nested', 'moved'] as const)(
             : occurrence
               ? await api.resolve(ids.catalogue, occurrence, query)
               : await api.catalogue(ids.catalogue, query);
-      return Response.json(result.state === 'ready' ? result.value : {}, {
-        status: result.state === 'ready' ? 200 : 503,
-      });
+      return Response.json(
+        result.state === 'ready'
+          ? { ...result.value, ...(url.pathname.endsWith('/body') ? { selectedLanguage: null } : {}) }
+          : {},
+        {
+          status: result.state === 'ready' ? 200 : 503,
+        },
+      );
     };
     const native = createHostedCatalogueApi(
       createKernelClient('https://kernel.test', { fetch: transport }),
@@ -726,7 +731,7 @@ test.each(['nested', 'moved'] as const)(
         .filter((url) => url.pathname.endsWith(`/occurrences/${ids.first}/metadata`))
         .map((url) => url.searchParams.get('revisionId')),
     ).toEqual(state === 'moved' ? [ids.currentRelease] : []);
-    expect(urls.filter((url) => url.pathname.endsWith(`/occurrences/${ids.first}`))).toHaveLength(1);
+    expect(urls.filter((url) => url.pathname.endsWith(`/occurrences/${ids.first}/body`))).toHaveLength(1);
     expect(
       urls.filter((url) => url.pathname.endsWith('/navigation')).map((url) => url.searchParams.get('limit')),
     ).toEqual(['1', '1']);
@@ -958,7 +963,9 @@ test('canonical reader links preserve native occurrence, frozen release and boun
     expect(url.searchParams.get('returnCursor')).toBe(illustrativeBookCursor);
     expect(url.searchParams.get('occurrence')).toBe(ids.reused);
     expect(url.searchParams.get('release')).toBe(ids.release);
-    expect(url.searchParams.has('postId')).toBe(false); // The host resolves the target from the frozen publication.
+    expect(url.searchParams.get('bodyPost')).toBe(chapter.selection.body.postId);
+    expect(url.searchParams.get('bodyRevision')).toBe(chapter.selection.body.revisionId);
+    expect(url.searchParams.get('bodySha256')).toBe(chapter.selection.body.sha256);
   }
   host = document.createElement('main');
   document.body.append(host);
@@ -1339,6 +1346,7 @@ test('native checkpoints use body-free metadata for observation and CAS readback
     catalogueId: ids.catalogue,
     publicationRevisionId: ids.release,
     occurrenceId: ids.first,
+    targetPostId: ids.post,
     targetRevisionId: ids.revision,
     targetSha256: sha256,
     documentPosition: { blockId: 'saved-native-block', offset: 37 },
@@ -1408,6 +1416,7 @@ test('native checkpoints use body-free metadata for observation and CAS readback
   expect(available.state === 'ready' && available.value.state === 'saved' && available.value.resume).toEqual({
     availability: 'available',
     title: 'Dawn / 黎明',
+    targetPostId: ids.post,
   });
   expect(available.state === 'ready' && available.value.state === 'saved' && available.value.address).toEqual(address);
   expectMetadataReads(2);
@@ -1437,7 +1446,7 @@ test('native checkpoints use body-free metadata for observation and CAS readback
       subjectId: ids.post,
       revision: '2',
       address,
-      resume: { availability: 'available', title: 'Dawn / 黎明' },
+      resume: { availability: 'available', title: 'Dawn / 黎明', targetPostId: ids.post },
     },
   });
   const put = requests.find((request) => request.method === 'PUT')!;
@@ -1503,6 +1512,7 @@ test('checkpoint save and restore use the authored anchor in a code-only chapter
     catalogueId: chapter.publication.id,
     publicationRevisionId: chapter.publication.releaseRevisionId!,
     occurrenceId: chapter.selection.occurrenceId,
+    targetPostId: chapter.selection.body.postId,
     targetRevisionId: chapter.selection.body.revisionId,
     targetSha256: chapter.selection.body.sha256,
     documentPosition: { blockId: 'code-anchor', offset: 73 },
@@ -1562,7 +1572,7 @@ test('checkpoint save and restore use the authored anchor in a code-only chapter
           state: 'saved',
           subjectId: ids.post,
           revision: '1',
-          resume: { availability: 'available', title: 'Saved' },
+          resume: { availability: 'available', title: 'Saved', targetPostId: chapter.selection.body.postId },
           address: savedAddress,
         },
       }),
@@ -1643,6 +1653,7 @@ test('block positions are article-scoped, exact, once-only and cancelled by scro
     catalogueId: chapter.publication.id,
     publicationRevisionId: chapter.publication.releaseRevisionId!,
     occurrenceId: chapter.selection.occurrenceId,
+    targetPostId: chapter.selection.body.postId,
     targetRevisionId: chapter.selection.body.revisionId,
     targetSha256: chapter.selection.body.sha256,
     documentPosition: { blockId: 'saved', offset: 37 },
@@ -1652,7 +1663,7 @@ test('block positions are article-scoped, exact, once-only and cancelled by scro
     subjectId: ids.post,
     revision: '1',
     address,
-    resume: { availability: 'available' as const, title: 'Saved' },
+    resume: { availability: 'available' as const, title: 'Saved', targetPostId: chapter.selection.body.postId },
   };
   const original = window.scrollBy;
   const scroll = mock(() => {});
@@ -1754,11 +1765,12 @@ test('a fresh exact reading restores the private block after admission and leave
           state: 'saved',
           subjectId: ids.post,
           revision: '1',
-          resume: { availability: 'available', title: 'Saved' },
+          resume: { availability: 'available', title: 'Saved', targetPostId: chapter.selection.body.postId },
           address: {
             catalogueId: chapter.publication.id,
             publicationRevisionId: chapter.publication.releaseRevisionId!,
             occurrenceId: chapter.selection.occurrenceId,
+            targetPostId: chapter.selection.body.postId,
             targetRevisionId: chapter.selection.body.revisionId,
             targetSha256: chapter.selection.body.sha256,
             documentPosition: { blockId: block.dataset.blockId!, offset: 73 },
@@ -2169,4 +2181,216 @@ test('Book reading display remains usable with blocked storage and bounds text s
     read.mockRestore();
     write.mockRestore();
   }
+});
+
+test('Book language choice mints an exact body address while Automatic and chapter navigation preserve independent preference', async () => {
+  const { fromPlainText, serializeDocument } = await import('@rezics/document');
+  const { hostedBookAddressHref, parseHostedBookSearch } = await import('../src/books/reader/address');
+  const { observeHostedBookVisit } = await import('../src/books/reader/visit');
+  const book = createIllustrativeHostedBook();
+  const { api } = await book.ready;
+  const original = await book.chapter();
+  const body = fromPlainText('Le gardien ouvre les volets. Ce texte français est un corps publié distinct.');
+  const bytes = new TextEncoder().encode(serializeDocument(body));
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  const sha256 = Array.from(new Uint8Array(hash), (part) => part.toString(16).padStart(2, '0')).join('');
+  const french = {
+    ...original,
+    selection: {
+      occurrenceId: ids.first,
+      bodyLanguage: 'fr',
+      body: {
+        postId: ids.harborPost,
+        revisionId: ids.harborRevision,
+        sha256,
+      },
+    },
+  };
+  const selectFrench = (query: import('../src/books/reader/native-api').HostedQuery) =>
+    query.language === 'fr' ||
+    (!query.targetPostId && !query.language && query.preferredLanguages?.split(',').includes('fr'));
+  const metadata = mock(
+    async (id: string, occurrence: string, query: import('../src/books/reader/native-api').HostedQuery) => {
+      const value = await api.metadata(id, occurrence, query);
+      if (value.state !== 'ready' || occurrence !== ids.first || !selectFrench(query)) return value;
+      return {
+        state: 'ready' as const,
+        value: {
+          ...value.value,
+          occurrence: {
+            ...value.value.occurrence,
+            availability: 'available' as const,
+            kind: 'chapter' as const,
+            title: 'Les volets',
+            selectedLanguage: 'fr',
+            target: { threadId: ids.thread, ...french.selection.body },
+          },
+        },
+      };
+    },
+  );
+  const exact = mock(
+    async (id: string, occurrence: string, query: import('../src/books/reader/native-api').HostedQuery) => {
+      const value = await api.resolve(id, occurrence, query);
+      if (value.state !== 'ready') return value;
+      if (query.language !== 'fr')
+        return { state: 'ready' as const, value: { ...value.value, selectedLanguage: null } };
+      expect(query).toMatchObject({
+        targetPostId: ids.harborPost,
+        targetRevisionId: ids.harborRevision,
+        targetSha256: sha256,
+      });
+      const head = await metadata(id, occurrence, query);
+      if (head.state !== 'ready') return head;
+      return {
+        state: 'ready' as const,
+        value: {
+          ...head.value,
+          selectedLanguage: 'fr',
+          document: {
+            encoding: 'base64' as const,
+            canonicalBytes: btoa(String.fromCharCode(...bytes)),
+            sha256,
+            authorId: ids.author,
+            licence: 'CC-BY-4.0',
+          },
+        },
+      };
+    },
+  );
+  const native = { ...api, metadata, body: exact };
+  const languages: import('../src/books/reader/languages').BookLanguageSource = {
+    list: mock(async () => ({
+      state: 'ready',
+      value: { choices: [{ language: 'fr', title: 'Les volets', selection: french.selection }], nextCursor: null },
+    })),
+    select: mock(async (_address, preference) => ({
+      state: 'ready',
+      value: {
+        address: preference.language === 'fr' ? french : original,
+        language: preference.language === 'fr' ? 'fr' : null,
+        title: preference.language === 'fr' ? 'Les volets' : 'Dawn / 黎明',
+      },
+    })),
+  };
+  const source = {
+    ...book.source,
+    languages,
+    read: mock((request: BookReadRequest, signal: AbortSignal) =>
+      readHostedBook(native, request, 'Published book', signal),
+    ),
+  };
+  const render = await mount(source, original, {
+    hrefForAddress: (address, origin) => hostedBookAddressHref(address, 'en', origin),
+  });
+  await click(host.querySelector<HTMLElement>('[data-slot="book-language-controls"] summary')!);
+  expect(languages.list).toHaveBeenCalledTimes(1);
+  await click(button('frLes volets'));
+  expect(host.querySelector('article')?.textContent).toContain('Le gardien ouvre les volets.');
+  expect(host.querySelector('article')?.getAttribute('lang')).toBe('fr');
+  expect(host.getAttribute('lang')).not.toBe('fr');
+  const selected = source.read.mock.calls.at(-1)![0].address;
+  expect(selected.selection).toEqual(french.selection);
+  expect(selected.languagePreference?.language).toBe('fr');
+  const next = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) =>
+    link.textContent?.startsWith(m.book_reader_next()),
+  )!;
+  const nextSearch = parseHostedBookSearch(Object.fromEntries(new URL(next.href).searchParams));
+  expect(nextSearch.language).toBe('fr');
+  const exactHref = hostedBookAddressHref(selected, 'en');
+  const search = parseHostedBookSearch(Object.fromEntries(new URL(exactHref, 'https://reader.test').searchParams));
+  expect(search.bodyLanguage).toBe('fr');
+  expect(search.bodySha256).toBe(sha256);
+  const restored = await observeHostedBookVisit(
+    native,
+    { catalogueId: ids.catalogue, locale: 'en', search },
+    { kind: 'anonymous' },
+    'Book',
+  );
+  expect(restored.state === 'ready' && restored.address.selection).toEqual(french.selection);
+  await click(host.querySelector<HTMLElement>('[data-slot="book-language-controls"] summary')!);
+  await click(button(m.book_reader_language_automatic()));
+  expect(source.read.mock.calls.at(-1)![0].address.languagePreference?.language).toBeNull();
+  expect(host.querySelector('article')?.textContent).toContain('The keeper opened the eastern shutters.');
+  await render({ address: selected });
+  expect(host.querySelector('article')?.textContent).toContain('Le gardien ouvre les volets.');
+  expect(source.read.mock.calls.at(-1)![0].address.selection).toEqual(french.selection);
+});
+
+test('Book language metadata pages replace sparsely and retired requests cannot restore private language choices', async () => {
+  const book = createIllustrativeHostedBook();
+  await book.ready;
+  const address = await book.chapter();
+  const pending =
+    deferred<
+      import('../src/books/reader/languages').BookLanguageResult<
+        import('../src/books/reader/languages').BookLanguagePage
+      >
+    >();
+  const list = mock(async (_address: typeof address, cursor: string | null) =>
+    cursor === null
+      ? { state: 'ready' as const, value: { choices: [], nextCursor: 'language-page-2' } }
+      : pending.promise,
+  );
+  const source = { ...book.source, languages: { list, select: mock(async () => ({ state: 'unavailable' as const })) } };
+  await mount(source, address);
+  await click(host.querySelector<HTMLElement>('[data-slot="book-language-controls"] summary')!);
+  expect(host.textContent).toContain(m.book_reader_language_empty());
+  await click(button(m.book_reader_language_more()));
+  expect(list).toHaveBeenCalledTimes(2);
+  expect(list.mock.calls[1]![1]).toBe('language-page-2');
+  await act(async () =>
+    client.setQueryData(['session'], { state: 'signed-in', subject: ids.author, csrfToken: 'replacement' }),
+  );
+  await act(async () =>
+    pending.resolve({
+      state: 'ready',
+      value: {
+        choices: [
+          { language: 'fr', title: 'Private delayed label', selection: { ...address.selection, bodyLanguage: 'fr' } },
+        ],
+        nextCursor: null,
+      },
+    }),
+  );
+  expect(host.textContent).not.toContain('Private delayed label');
+  expect(host.querySelector('[data-slot="book-language-controls"]')).toBeNull();
+});
+
+test('Book language exact bytes remain readable when only current placement is concealed, without bypassing the selected body gate', async () => {
+  const book = createIllustrativeHostedBook('moved');
+  const { api } = await book.ready;
+  const address = await book.chapter();
+  const body = mock(async (...args: Parameters<typeof api.resolve>) => {
+    const result = await api.resolve(...args);
+    return result.state === 'ready'
+      ? { state: 'ready' as const, value: { ...result.value, selectedLanguage: null } }
+      : result;
+  });
+  const metadata = mock(async (...args: Parameters<typeof api.metadata>) =>
+    args[1] === ids.first && args[2].revisionId === ids.currentRelease
+      ? { state: 'denied' as const }
+      : api.metadata(...args),
+  );
+  const request: BookReadRequest = { address, locale: 'en', limit: 40, ancestorLimit: 24 };
+  const visible = await readHostedBook({ ...api, body, metadata }, request, 'Book', new AbortController().signal);
+  expect(visible.state).toBe('ready');
+  if (visible.state !== 'ready' || visible.page.kind !== 'chapter')
+    throw new Error('Expected the independently admitted exact body');
+  expect(visible.page.address).toEqual(address);
+  expect(visible.page.currentLocationUnavailable).toBe(true);
+  expect(visible.page.contents.parentOccurrenceId).toBe(ids.nested);
+  const frozen = await api.resolve(ids.catalogue, ids.first, { kind: 'publication', revisionId: ids.release });
+  if (frozen.state !== 'ready' || !frozen.value.document) throw new Error('Expected frozen canonical bytes');
+  expect(visible.page.body.document).toEqual(
+    JSON.parse(Buffer.from(frozen.value.document.canonicalBytes, 'base64').toString('utf8')),
+  );
+  expect(
+    await readHostedBook(
+      { ...api, body: async () => ({ state: 'denied' }), metadata },
+      request,
+      'Book',
+      new AbortController().signal,
+    ),
+  ).toEqual({ state: 'denied' });
 });

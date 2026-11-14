@@ -45,6 +45,16 @@ whole-book scan. Saved reading checkpoints retain their exact body identity. Do 
 different language body. Extend the existing native author-to-reader journey and mounted reader tests to prove
 published alternatives, fallback, exact-link preservation and access revocation; source presence alone is not parity.
 
+The optional language port makes one replacing page request of at most 20 native alternatives after explicit opening,
+with sparse More, exact failed-page Retry and First page. Selection performs one body-free native metadata choice,
+then opens the resulting exact address through the ordinary reader. Prepared viewer and current-publication fences
+apply to both operations. Display controls add no body read or language inference. Caller preferences use the shared
+`@rezics/definitions/language` grammar and bounded exact-key order. URL `bodyLanguage`, `bodyPost`, `bodyRevision`
+and `bodySha256` retain immutable body coordinates separately from `language`/`preferred` for future destinations.
+Omission of the language key pins the semantic canonical default, not a guessed tag. Contents, ancestors and
+previous/next propagate preference while preserving the current body's exact selector. A different preference
+retires revealed outline pages so their labels and targets cannot leak into the replacement choice.
+
 ## Production admission and links
 
 `routes/books.$id.read.tsx` follows the existing file-route generator and locale rewrite. It has no public cache,
@@ -261,8 +271,8 @@ parts/chapters and moves. The separate `legacy-final` reference at `1ac6ed6e0668
 CJK controls in `apps/web/features/work-page/reader.tsx` and `reader-settings.ts`, plus author creation, movement,
 private save and explicit saved-text publication in `features/studio/{chapter-list,chapter-editor,publish-dialog}`.
 This is a source comparison, not observed legacy runtime or completed mounted parity. The current native frozen
-publication supplies body language/direction; an alternate translated-chapter chooser remains a producer/Studio
-handoff and is not simulated by changing the reader's interface locale.
+publication supplies body language/direction. The language chooser now selects native published title/body alternatives
+through exact addresses; interface locale is independent. Native/mounted execution remains required for parity.
 
 The current implementation improves the older per-chapter publication flow with one selected frozen TOC and exact
 body revisions, stable occurrence links after moves, and body-free private checkpoint metadata. Its native/browser

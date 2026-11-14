@@ -21,6 +21,8 @@ import { ShellContextNavigation } from '../../shell/contextual-navigation';
 import { BookOutlineView } from './outline';
 import { ReaderWorkspace } from './reader-workspace';
 import { BookDisplaySettings, useBookDisplay } from './display-settings';
+import { sameBookLanguagePreference } from './languages';
+import { BookLanguageControls } from './language-controls';
 import { PostReadingBody } from '../../threads/post-reading-body';
 import type { BookContentsMovement, BookContentsNavigation } from './contents-navigation';
 import { createCheckpointPosition, type CheckpointPosition } from './checkpoint-position';
@@ -76,15 +78,30 @@ export function HostedBookReader({
   const client = useContext(QueryClientContext);
   const session = useMemo(() => readerSessionSource(client), [client]);
   const addressKey = JSON.stringify(address);
-  const boundary = useRef({ source, addressKey, locale, readingIdentity, publication: address.publication });
+  const boundary = useRef({
+    source,
+    addressKey,
+    locale,
+    readingIdentity,
+    publication: address.publication,
+    languagePreference: address.languagePreference,
+  });
   const former = boundary.current;
   if (
     former.locale !== locale ||
+    !sameBookLanguagePreference(former.languagePreference, address.languagePreference) ||
     !samePublication(former.publication, address.publication) ||
     (former.addressKey === addressKey && (former.source !== source || former.readingIdentity !== readingIdentity))
   )
     contentsNavigation?.retire();
-  boundary.current = { source, addressKey, locale, readingIdentity, publication: address.publication };
+  boundary.current = {
+    source,
+    addressKey,
+    locale,
+    readingIdentity,
+    publication: address.publication,
+    languagePreference: address.languagePreference,
+  };
   const readLocale = useCallback(() => locale, [locale]);
   const owner = useMemo(() => ({}), [source, addressKey, locale, readingIdentity]);
   const incarnation = useRef({ owner, generation: 0 });
@@ -130,6 +147,7 @@ export function HostedBookReader({
     <BookReaderView
       {...props}
       reader={reader}
+      languageSource={source.languages}
       locale={locale}
       {...(focusOnRead !== undefined ? { focusOwner: focusOnRead.owner } : {})}
       restart={() => {
@@ -148,6 +166,7 @@ type ViewProps = Pick<HostedBookReaderProps, 'hrefForAddress' | 'renderProgress'
   locale: string;
   restart: () => void;
   focusOwner?: Element | null;
+  languageSource?: import('./languages').BookLanguageSource;
 };
 
 function BookReaderView({
@@ -158,6 +177,7 @@ function BookReaderView({
   renderProgress,
   renderCheckpoint,
   focusOwner,
+  languageSource,
 }: ViewProps) {
   const state = useSyncExternalStore(reader.subscribe, reader.getSnapshot, reader.getSnapshot);
   const options = { locale: locale as never };
@@ -191,6 +211,14 @@ function BookReaderView({
       if (address.kind === 'chapter') reader.openChapter(address, focus);
       else reader.openContents(address, movement, focus);
     }, keyboard);
+  const changeLanguage = useCallback(
+    (address: import('./source').BookChapterAddress, keyboard: boolean) => {
+      if (!reader.current() || reader.getSnapshot() !== state) return;
+      intent.current = keyboard ? { owner: document.activeElement } : null;
+      reader.openChapter(address, keyboard ? { kind: 'heading' } : null);
+    },
+    [reader, state, intent],
+  );
   const currentPage = useRef(page);
   currentPage.current = page;
 
@@ -436,51 +464,69 @@ function BookReaderView({
             </nav>
           ) : null
         }
-        controls={page?.kind === 'chapter' ? (
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b pb-3">
-            <Button
-              className={`${control} gap-2 px-2`}
-              variant="ghost"
-              onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}
+        controls={
+          page?.kind === 'chapter' ? (
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b pb-3">
+              <Button
+                className={`${control} gap-2 px-2`}
+                variant="ghost"
+                onClick={(event) => act((focus) => reader.openContents(undefined, 'exact', focus), event.detail === 0)}
+              >
+                <List aria-hidden="true" className="size-4 shrink-0" />
+                {labels.contents}
+              </Button>
+              <Button
+                className={`${control} gap-2 px-2 text-muted-foreground`}
+                variant="ghost"
+                aria-pressed={pinNavigation}
+                onClick={() => setPinNavigation((value) => !value)}
+              >
+                {pinNavigation ? (
+                  <PinOff aria-hidden="true" className="size-4 shrink-0" />
+                ) : (
+                  <Pin aria-hidden="true" className="size-4 shrink-0" />
+                )}
+                {pinNavigation ? m.book_reader_hide_controls({}, options) : m.book_reader_show_controls({}, options)}
+              </Button>
+            </div>
+          ) : null
+        }
+        readingPosition={
+          page && renderCheckpoint ? (
+            <ProgressRegion
+              key={JSON.stringify(page.address)}
+              unavailable={m.book_reader_progress_unavailable({}, options)}
             >
-              <List aria-hidden="true" className="size-4 shrink-0" />
-              {labels.contents}
-            </Button>
-            <Button
-              className={`${control} gap-2 px-2 text-muted-foreground`}
-              variant="ghost"
-              aria-pressed={pinNavigation}
-              onClick={() => setPinNavigation((value) => !value)}
-            >
-              {pinNavigation ? (
-                <PinOff aria-hidden="true" className="size-4 shrink-0" />
-              ) : (
-                <Pin aria-hidden="true" className="size-4 shrink-0" />
-              )}
-              {pinNavigation ? m.book_reader_hide_controls({}, options) : m.book_reader_show_controls({}, options)}
-            </Button>
-          </div>
-        ) : null}
-        readingPosition={page && renderCheckpoint ? (
-          <ProgressRegion
-            key={JSON.stringify(page.address)}
-            unavailable={m.book_reader_progress_unavailable({}, options)}
-          >
-            <CheckpointOwner
-              render={renderCheckpoint}
-              page={page}
-              current={isPageCurrent}
-              position={checkpointPosition}
-            />
-          </ProgressRegion>
-        ) : null}
+              <CheckpointOwner
+                render={renderCheckpoint}
+                page={page}
+                current={isPageCurrent}
+                position={checkpointPosition}
+              />
+            </ProgressRegion>
+          ) : null
+        }
         busy={state.state === 'loading'}
         locale={locale}
         readingMode={pinNavigation ? 'pinned' : 'flow'}
       >
         {page?.kind === 'chapter' ? (
           <>
+            {page.currentLocationUnavailable && (
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.book_reader_language_location_unavailable({}, options)}
+              </p>
+            )}
             <BookDisplaySettings {...display} locale={locale} />
+            {languageSource && (
+              <BookLanguageControls
+                source={languageSource}
+                page={page}
+                current={isPageCurrent}
+                navigate={changeLanguage}
+                locale={locale}
+              />
+            )}
             <article
               ref={article}
               data-size={display.display.size}

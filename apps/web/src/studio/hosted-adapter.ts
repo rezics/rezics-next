@@ -11,6 +11,8 @@ import {
 } from './contract';
 import {
   hostedKey,
+  hostedBindLanguage,
+  type HostedBindLanguage,
   type HostedBook,
   type HostedBookNative,
   type HostedCreate,
@@ -38,6 +40,7 @@ type Attempt = {
   unresolved: boolean;
   command:
     | { kind: 'create'; body: HostedCreate }
+    | { kind: 'bind-language'; catalogueId: string; occurrenceId: string; body: HostedBindLanguage }
     | { kind: 'revise'; catalogueId: string; body: HostedRevise }
     | { kind: 'publish'; catalogueId: string; body: HostedPublish };
 };
@@ -59,6 +62,7 @@ export class HostedBookAdapter implements BookOrganizerPort {
   ) {}
 
   isCurrent = (): boolean => this.current();
+  canBindChapterLanguage = (): boolean => typeof this.native.bindLanguage === 'function';
   hasUnresolvedCommand = (): boolean => Boolean(this.attempt?.unresolved);
   currentStructure = (): BookStructure | null => (this.book ? hostedBookStructure(this.book) : null);
   chapterTargets = () =>
@@ -146,9 +150,19 @@ export class HostedBookAdapter implements BookOrganizerPort {
     const result =
       command.kind === 'create'
         ? await this.native.create(command.body, attempt.key, signal)
-        : command.kind === 'revise'
-          ? await this.native.revise(command.catalogueId, command.body, attempt.key, signal)
-          : await this.native.publish(command.catalogueId, command.body, attempt.key, signal);
+        : command.kind === 'bind-language'
+          ? this.native.bindLanguage
+            ? await this.native.bindLanguage(
+                command.catalogueId,
+                command.occurrenceId,
+                command.body,
+                attempt.key,
+                signal,
+              )
+            : hostedFailure('unavailable', 'Chapter language association is unavailable.')
+          : command.kind === 'revise'
+            ? await this.native.revise(command.catalogueId, command.body, attempt.key, signal)
+            : await this.native.publish(command.catalogueId, command.body, attempt.key, signal);
     if (!this.current() || signal.aborted) return ended();
     if (!result.ok) {
       attempt.unresolved = result.error.kind === 'uncertain' || result.error.kind === 'unavailable';
@@ -217,77 +231,104 @@ export class HostedBookAdapter implements BookOrganizerPort {
         const selected =
           change.kind === 'insert' ? null : placements.find((entry) => entry.occurrenceId === change.occurrenceId);
         if (change.kind !== 'insert' && !selected) return invalid();
-        if (change.kind === 'remove') {
-          const removed = new Set(
-            rows
-              .filter(
-                (row) =>
-                  row.placement.occurrenceId === change.occurrenceId || row.ancestors.includes(change.occurrenceId),
-              )
-              .map((row) => row.placement.occurrenceId),
-          );
-          placements = placements.filter((entry) => !removed.has(entry.occurrenceId));
-        } else if (change.kind === 'rename') {
-          placements = placements.map((entry) => (entry === selected ? { ...entry, title: change.title } : entry));
-        } else if (change.kind === 'pin') {
-          if (selected?.target.kind !== 'chapter' || selected.target.document.postId !== change.document.postId)
-            return invalid();
-          placements = placements.map((entry) =>
-            entry === selected ? { ...entry, target: { kind: 'chapter', document: change.document } } : entry,
-          );
-        } else {
-          const entry: BookPlacement =
-            change.kind === 'insert'
-              ? {
-                  occurrenceId: await hostedOccurrenceId(input.catalogueId, input.idempotencyKey),
-                  parentOccurrenceId: change.parentOccurrenceId,
-                  title: change.title,
-                  target: change.target,
-                }
-              : { ...selected!, parentOccurrenceId: change.parentOccurrenceId };
-          if (change.kind === 'move') placements = placements.filter((candidate) => candidate !== selected);
-          const siblings = placements.filter((candidate) => candidate.parentOccurrenceId === change.parentOccurrenceId);
-          const before =
-            change.beforeOccurrenceId === null
-              ? null
-              : siblings.find((candidate) => candidate.occurrenceId === change.beforeOccurrenceId);
-          if (change.beforeOccurrenceId !== null && !before) return invalid();
-          const index = before
-            ? placements.indexOf(before)
-            : siblings.length
-              ? placements.indexOf(siblings[siblings.length - 1]!) + 1
-              : placements.length;
-          placements.splice(index, 0, entry);
-        }
-        const next = bookTocRows({ ...structure, placements });
-        const nativePlacements: HostedPlacement[] = [];
-        for (const row of next) {
-          const entry = row.placement;
-          const address = {
-            occurrenceId: entry.occurrenceId,
-            parentId: entry.parentOccurrenceId,
-            position: row.index,
-            title: entry.title,
+        if (change.kind === 'bind-language') {
+          if (selected?.target.kind !== 'chapter' || !this.native.bindLanguage) return invalid();
+          const target = await this.target(change.document, signal);
+          if (!target.ok) return target;
+          const body = v.safeParse(hostedBindLanguage, {
+            expectedRevisionId: input.expectedRevision,
+            language: change.language,
+            title: change.title,
+            target: target.value,
+            makeDefault: change.makeDefault,
+          });
+          if (!body.success) return invalid();
+          attempt = {
+            signature,
+            key: input.idempotencyKey,
+            unresolved: false,
+            command: {
+              kind: 'bind-language',
+              catalogueId: input.catalogueId,
+              occurrenceId: change.occurrenceId,
+              body: body.output,
+            },
           };
-          if (entry.target.kind === 'part') nativePlacements.push({ ...address, kind: 'part' });
-          else {
-            const target = await this.target(entry.target.document, signal);
-            if (!target.ok) return target;
-            nativePlacements.push({ ...address, kind: 'chapter', target: target.value });
+        } else {
+          if (change.kind === 'remove') {
+            const removed = new Set(
+              rows
+                .filter(
+                  (row) =>
+                    row.placement.occurrenceId === change.occurrenceId || row.ancestors.includes(change.occurrenceId),
+                )
+                .map((row) => row.placement.occurrenceId),
+            );
+            placements = placements.filter((entry) => !removed.has(entry.occurrenceId));
+          } else if (change.kind === 'rename') {
+            placements = placements.map((entry) => (entry === selected ? { ...entry, title: change.title } : entry));
+          } else if (change.kind === 'pin') {
+            if (selected?.target.kind !== 'chapter' || selected.target.document.postId !== change.document.postId)
+              return invalid();
+            placements = placements.map((entry) =>
+              entry === selected ? { ...entry, target: { kind: 'chapter', document: change.document } } : entry,
+            );
+          } else {
+            const entry: BookPlacement =
+              change.kind === 'insert'
+                ? {
+                    occurrenceId: await hostedOccurrenceId(input.catalogueId, input.idempotencyKey),
+                    parentOccurrenceId: change.parentOccurrenceId,
+                    title: change.title,
+                    target: change.target,
+                  }
+                : { ...selected!, parentOccurrenceId: change.parentOccurrenceId };
+            if (change.kind === 'move') placements = placements.filter((candidate) => candidate !== selected);
+            const siblings = placements.filter(
+              (candidate) => candidate.parentOccurrenceId === change.parentOccurrenceId,
+            );
+            const before =
+              change.beforeOccurrenceId === null
+                ? null
+                : siblings.find((candidate) => candidate.occurrenceId === change.beforeOccurrenceId);
+            if (change.beforeOccurrenceId !== null && !before) return invalid();
+            const index = before
+              ? placements.indexOf(before)
+              : siblings.length
+                ? placements.indexOf(siblings[siblings.length - 1]!) + 1
+                : placements.length;
+            placements.splice(index, 0, entry);
           }
+          const next = bookTocRows({ ...structure, placements });
+          const nativePlacements: HostedPlacement[] = [];
+          for (const row of next) {
+            const entry = row.placement;
+            const address = {
+              occurrenceId: entry.occurrenceId,
+              parentId: entry.parentOccurrenceId,
+              position: row.index,
+              title: entry.title,
+            };
+            if (entry.target.kind === 'part') nativePlacements.push({ ...address, kind: 'part' });
+            else {
+              const target = await this.target(entry.target.document, signal);
+              if (!target.ok) return target;
+              nativePlacements.push({ ...address, kind: 'chapter', target: target.value });
+            }
+          }
+          // Validate exact native addresses and bounds before retaining a command for replay.
+          hostedBookStructure({ revision: book.revision, placements: nativePlacements });
+          attempt = {
+            signature,
+            key: input.idempotencyKey,
+            unresolved: false,
+            command: {
+              kind: 'revise',
+              catalogueId: input.catalogueId,
+              body: { expectedRevisionId: input.expectedRevision, placements: nativePlacements },
+            },
+          };
         }
-        // Validate exact native addresses and bounds before retaining a command for replay.
-        hostedBookStructure({ revision: book.revision, placements: nativePlacements });
-        attempt = {
-          signature,
-          key: input.idempotencyKey,
-          unresolved: false,
-          command: {
-            kind: 'revise',
-            catalogueId: input.catalogueId,
-            body: { expectedRevisionId: input.expectedRevision, placements: nativePlacements },
-          },
-        };
       }
       if (!this.current() || signal.aborted) return ended();
       const result = await this.execute(attempt, signal);
