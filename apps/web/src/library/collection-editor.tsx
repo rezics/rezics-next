@@ -10,7 +10,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
-import { useEffect, useState, type DragEvent, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
@@ -49,11 +49,24 @@ export function CollectionMetadataEditor({
   children: ReactNode;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const detailsSummaryRef = useRef<HTMLElement>(null);
+  const previousDetailsOpen = useRef(false);
   const invalidText =
     textSubmitted && (!!collectionTextIssue('title', title) || !!collectionTextIssue('description', description));
   useEffect(() => {
     if (invalidText) setDetailsOpen(true);
   }, [invalidText]);
+  useEffect(() => {
+    if (
+      previousDetailsOpen.current &&
+      !detailsOpen &&
+      detailsSummaryRef.current?.isConnected &&
+      !detailsRef.current?.contains(document.activeElement)
+    )
+      detailsSummaryRef.current.focus();
+    previousDetailsOpen.current = detailsOpen;
+  }, [detailsOpen]);
   return (
     <form
       noValidate
@@ -62,14 +75,20 @@ export function CollectionMetadataEditor({
       onSubmit={onSubmit}
     >
       <details
+        ref={detailsRef}
         data-collection-details
         open={detailsOpen || invalidText}
         onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
       >
-        <summary className="min-h-11 cursor-pointer rounded-lg py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <summary
+          id="collection-edit-details-trigger"
+          ref={detailsSummaryRef}
+          aria-controls="collection-edit-fields"
+          className="min-h-11 scroll-mt-4 cursor-pointer rounded-lg py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
           {m.library_collection_details()}
         </summary>
-        <div className="space-y-5 pt-3">
+        <div id="collection-edit-fields" className="min-w-0 space-y-5 pt-3">
           <Field className="min-w-0 gap-2">
             <FieldLabel htmlFor="collection-edit-title">{m.library_collection_title()}</FieldLabel>
             <Input

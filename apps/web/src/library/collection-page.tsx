@@ -156,6 +156,7 @@ import {
   fieldClass,
   CollectionPresentationFields,
 } from './collection-editor';
+import { CollectionAuthoringWorkspace } from './collection-authoring-workspace';
 import {
   buildCollectionSaveReviewPlan,
   collectionSaveHasUnknown,
@@ -2038,42 +2039,47 @@ function CollectionPageLifetime({
           unavailable={page.memberState === 'unavailable'}
           emptyLabel={m.library_collection_empty()}
         />
-        {editing && ownerCurrent ? (
-          <section className="min-w-0 space-y-2 border-b border-border pb-4" data-collection-authoring-heading>
-            <h2 className="text-xl font-semibold tracking-tight">{m.collection_workbench_heading()}</h2>
-            <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.collection_workbench_help()}</p>
-            <nav className="flex flex-wrap gap-2" aria-label={m.collection_workbench_heading()}>
-              <a
-                className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                href="#collection-member-canvas-heading"
-              >
-                {m.library_collection_members()}
-              </a>
-              <a
-                className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                href="#collection-edit-details"
-              >
-                {m.library_collection_details()}
-              </a>
-            </nav>
-          </section>
-        ) : null}
-        <div
-          className={
-            editing && ownerCurrent
-              ? 'grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]'
-              : 'contents'
+        <CollectionAuthoringWorkspace
+          editing={editing && ownerCurrent}
+          heading={
+            editing && ownerCurrent ? (
+              <section className="min-w-0 space-y-2 border-b border-border pb-4" data-collection-authoring-heading>
+                <h2 className="text-xl font-semibold tracking-tight">{m.collection_workbench_heading()}</h2>
+                <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+                  {m.collection_workbench_help()}
+                </p>
+                <nav className="flex flex-wrap gap-2" aria-label={m.collection_workbench_heading()}>
+                  <a
+                    className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    href="#collection-member-canvas-heading"
+                  >
+                    {m.library_collection_members()}
+                  </a>
+                  <a
+                    className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    href="#collection-edit-details-trigger"
+                  >
+                    {m.library_collection_details()}
+                  </a>
+                  <a
+                    className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    href="#collection-primary-save"
+                  >
+                    {m.library_collection_save()}
+                  </a>
+                </nav>
+              </section>
+            ) : undefined
           }
-          data-collection-workbench={editing && ownerCurrent ? '' : undefined}
-        >
+          memberCanvas={(
           <section className="min-w-0" aria-labelledby="collection-member-canvas-heading" data-collection-member-canvas>
-            <h2
+            <h3
               id="collection-member-canvas-heading"
               tabIndex={editing ? -1 : undefined}
               className={editing ? 'mb-2 scroll-mt-4 text-lg font-semibold' : 'sr-only'}
             >
               {m.library_collection_members()}
-            </h2>
+            </h3>
             {editing ? (
               <p className="mb-4 max-w-prose text-sm leading-relaxed text-muted-foreground">
                 {m.collection_workbench_members_help()}
@@ -2123,10 +2129,15 @@ function CollectionPageLifetime({
             {editing &&
             ownerCurrent &&
             (selectedIds.size > 0 || batchRemovalIds.size > 0 || transfer !== null || !!bulkOccurrenceCapture) ? (
-              <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3" data-collection-selection>
-                <p className="me-auto self-center text-sm text-muted-foreground">
+              <div
+                className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3"
+                data-collection-selection
+                role="group"
+                aria-labelledby="collection-selection-heading"
+              >
+                <h4 id="collection-selection-heading" className="me-auto self-center text-sm text-muted-foreground">
                   {m.library_collection_selection_count({ count: selectedIds.size })}
-                </p>
+                </h4>
                 <Button
                   type="button"
                   variant="outline"
@@ -2423,14 +2434,18 @@ function CollectionPageLifetime({
               />
             )}
           </section>
-          {editing && ownerCurrent ? (
+          )}
+          metadata={editing && ownerCurrent ? (
             <aside
               id="collection-edit-details"
               tabIndex={-1}
               className="min-w-0 scroll-mt-4 space-y-4"
-              aria-label={m.library_collection_details()}
+              aria-labelledby="collection-metadata-heading"
               data-collection-authoring-details
             >
+              <h3 id="collection-metadata-heading" className="sr-only">
+                {m.library_collection_details()}
+              </h3>
               <CollectionMetadataEditor
                 textSubmitted={textSubmitted}
                 title={title}
@@ -2524,9 +2539,9 @@ function CollectionPageLifetime({
                 </details>
               </CollectionMetadataEditor>
             </aside>
-          ) : null}
-          {editing && ownerCurrent && (draftChanged || transfer || activeSave) ? (
-            <div className="col-span-full min-w-0">
+          ) : undefined}
+          review={
+            editing && ownerCurrent && (draftChanged || transfer || activeSave) ? (
               <CollectionEditReview
                 plan={activePlan}
                 initial={activeInitial}
@@ -2549,9 +2564,51 @@ function CollectionPageLifetime({
                   ? { onDiscardUnavailable: discardUnavailableDraftOperation }
                   : {})}
               />
-            </div>
-          ) : null}
-        </div>
+            ) : undefined
+          }
+          saveActions={
+            editing && ownerCurrent ? (
+              <section
+                className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm xl:sticky xl:bottom-3 xl:z-20"
+                data-collection-save
+                aria-labelledby="collection-save-heading"
+              >
+                <h3 id="collection-save-heading" className="sr-only">
+                  {m.library_collection_save()}
+                </h3>
+                <Button
+                  id="collection-primary-save"
+                  className="h-auto min-h-11 max-w-full min-w-0 flex-1 scroll-mt-4 whitespace-normal px-5 py-3 sm:flex-none"
+                  type="submit"
+                  form="collection-edit-form"
+                  disabled={!hydrated || pending || conflict || transfer !== null}
+                >
+                  {writing ? m.library_collection_save_pending() : m.library_collection_save()}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal py-3"
+                  disabled={pending || conflict || draftFrozen}
+                  onClick={cancelEditing}
+                >
+                  {m.library_collection_cancel()}
+                </Button>
+                <p
+                  className="basis-full min-w-0 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
+                  data-collection-save-help
+                >
+                  {m.collection_workbench_save_help()}
+                </p>
+                {!saveConfirmed && (memberDraftChanged || transfer) ? (
+                  <span role="status" className="text-sm text-muted-foreground">
+                    {m.library_collection_unsaved_members()}
+                  </span>
+                ) : null}
+              </section>
+            ) : undefined
+          }
+        />
         {!editing && ownerCurrent && saveRunView?.complete ? (
           <CollectionEditReview
             plan={saveRunView.plan}
@@ -2562,41 +2619,6 @@ function CollectionPageLifetime({
             complete
             recoverCurrent={false}
           />
-        ) : null}
-        {editing && ownerCurrent ? (
-          <div
-            className="sticky bottom-3 z-20 flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm"
-            data-collection-save
-          >
-            <Button
-              className="h-auto min-h-11 max-w-full flex-1 whitespace-normal px-5 py-3 sm:flex-none"
-              type="submit"
-              form="collection-edit-form"
-              disabled={!hydrated || pending || conflict || transfer !== null}
-            >
-              {writing ? m.library_collection_save_pending() : m.library_collection_save()}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal py-3"
-              disabled={pending || conflict || draftFrozen}
-              onClick={cancelEditing}
-            >
-              {m.library_collection_cancel()}
-            </Button>
-            <p
-              className="basis-full text-xs leading-relaxed text-muted-foreground sm:order-last"
-              data-collection-save-help
-            >
-              {m.collection_workbench_save_help()}
-            </p>
-            {!saveConfirmed && (memberDraftChanged || transfer) ? (
-              <span role="status" className="text-sm text-muted-foreground">
-                {m.library_collection_unsaved_members()}
-              </span>
-            ) : null}
-          </div>
         ) : null}
         {page.next && !editing ? (
           <nav aria-label={m.library_collection_members()}>
