@@ -11,7 +11,11 @@ export type LoanCommand =
   | { operation: 'extend'; input: { loanId: string; revision: number; dueOn: string } }
   | { operation: 'return'; input: { loanId: string; revision: number; returnedOn: string } };
 export type LoanIntent = LoanCommand & { idempotencyKey: string };
-export type LoanDispatch = (intent: LoanIntent, headers: HeadersInit, current: () => boolean) => Promise<LoanWriteResult | null>;
+export type LoanDispatch = (
+  intent: LoanIntent,
+  headers: HeadersInit,
+  current: () => boolean,
+) => Promise<LoanWriteResult | null>;
 export type LoanIntentState =
   | { phase: 'idle' | 'retired' }
   | { phase: 'pending'; intent: LoanIntent; uncertain: boolean }
@@ -53,8 +57,12 @@ export class LoanCommandIntent {
     if (this.state.phase === 'retired' || (this.mounted && !this.users) || !this.origin.isCurrent()) return false;
     if (!this.operation) return true;
     const headers = this.origin.headers(this.operation);
-    return this.origin.isCurrent(this.operation) && !!headers && !!this.capturedHeaders &&
-      sameHeaders(headers, this.capturedHeaders);
+    return (
+      this.origin.isCurrent(this.operation) &&
+      !!headers &&
+      !!this.capturedHeaders &&
+      sameHeaders(headers, this.capturedHeaders)
+    );
   };
   mount = () => {
     this.mounted = true;
@@ -62,7 +70,9 @@ export class LoanCommandIntent {
     return () => {
       this.users--;
       // Close late callbacks immediately, while allowing React's synchronous effect reconnect.
-      queueMicrotask(() => { if (!this.users) this.retire(); });
+      queueMicrotask(() => {
+        if (!this.users) this.retire();
+      });
     };
   };
   retire = () => {
@@ -71,14 +81,20 @@ export class LoanCommandIntent {
     if (this.state.phase !== 'retired') this.publish({ phase: 'retired' });
   };
   correct = () => {
-    if (!this.current()) { this.retire(); return; }
+    if (!this.current()) {
+      this.retire();
+      return;
+    }
     if (this.state.phase !== 'refused') return;
     this.capturedHeaders = null;
     this.operation = null;
     this.publish({ phase: 'idle' });
   };
   start = async (command: LoanCommand) => {
-    if (!this.current()) { this.retire(); return; }
+    if (!this.current()) {
+      this.retire();
+      return;
+    }
     if (this.state.phase !== 'idle') return;
     const operation = command.operation === 'create' ? 'copy.create' : 'copy.update';
     const headers = this.origin.headers(operation);
@@ -90,7 +106,10 @@ export class LoanCommandIntent {
     await this.send(intent, false);
   };
   retry = async () => {
-    if (!this.current()) { this.retire(); return; }
+    if (!this.current()) {
+      this.retire();
+      return;
+    }
     if (this.state.phase !== 'uncertain') return;
     await this.send(this.state.intent, true);
   };
@@ -100,11 +119,17 @@ export class LoanCommandIntent {
     try {
       result = await this.dispatch(intent, new Headers(this.capturedHeaders!), this.current);
     } catch {
-      if (!this.current()) { this.retire(); return; }
+      if (!this.current()) {
+        this.retire();
+        return;
+      }
       this.publish({ phase: 'uncertain', intent });
       return;
     }
-    if (!this.current() || !result) { this.retire(); return; }
+    if (!this.current() || !result) {
+      this.retire();
+      return;
+    }
     if (result.ok) this.publish({ phase: 'saved', intent, result });
     else if (uncertain || result.reason === 'unavailable')
       this.publish({ phase: 'uncertain', intent, refusal: result });
