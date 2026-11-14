@@ -15,6 +15,7 @@ import {
   MAX_MODULE_MAP_CHARACTERS,
   MODULE_MAP_POINTER,
   MODULE_MAP_TRUNCATION,
+  modulesForBriefPaths,
   validateBaseline,
   writeGraphCache,
 } from './architecture';
@@ -340,16 +341,26 @@ describe('architecture boundaries', () => {
     expect(overflowing).toContain('mod000|');
   });
 
-  test('keeps path-selected maps bounded and preserves owned Search entries when dependencies overflow', () => {
+  test('keeps selected rows complete and deterministic, with exact fit and overflow accounting', () => {
     const committed = loadManifest(process.cwd());
-    const selected = formatModuleMap(committed, ['services/kernel/src/search/query.ts']);
+    const searchPaths = ['services/kernel/src/search/query.ts'];
+    const searchModules = modulesForBriefPaths(committed, searchPaths);
+    const selected = formatModuleMap(committed, searchPaths);
+    const selectedRowIds = selected
+      .split('\n')
+      .slice(1, -1)
+      .map((row) => row.split('|', 1)[0]!);
+    const expectedRowIds = searchModules
+      .map(({ id }) => id.replace(/^kernel-/, 'k').replace(/^web-/, 'w'));
     const searchRow = selected.split('\n').find((row) => row.startsWith('ksearch|'))!;
     expect(searchRow).toMatch(/^ksearch\|d\|/);
-    expect(searchRow).toContain('k/search:');
+    expect(searchRow).toContain('search:{');
     expect(searchRow).toContain('index.ts');
+    expect(selectedRowIds).toEqual(expectedRowIds);
     expect(selected).toContain(MODULE_MAP_POINTER);
+    expect(selected).not.toContain(MODULE_MAP_TRUNCATION);
     expect(selected).not.toMatch(/^wsearch\|/m);
-    expect(selected.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
+    expect(formatModuleMap(committed, searchPaths)).toBe(selected);
 
     const fitting = manifest([
       {
@@ -378,36 +389,32 @@ describe('architecture boundaries', () => {
     expect(complete).not.toContain(MODULE_MAP_TRUNCATION);
     expect(complete.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
 
-    const overflowing = manifest([
-      {
-        id: 'owned',
-        kind: 'adapter',
-        owner: 'platform',
-        paths: ['src/owned/**'],
-        publicEntries: ['src/owned/index.ts', 'src/owned/public.ts'],
-        allowedDependencies: Array.from({ length: 40 }, (_, index) => `dep${String(index).padStart(2, '0')}`),
-        capabilities: [],
-      },
-      ...Array.from({ length: 40 }, (_, index) => ({
-        id: `dep${String(index).padStart(2, '0')}`,
-        kind: 'core' as const,
-        owner: 'platform',
-        paths: [`src/d${index}/**`],
-        publicEntries: Array.from(
-          { length: 16 },
-          (_, entry) => `src/d${index}/entry-${entry}-quite-long-public-name.ts`,
-        ),
-        allowedDependencies: [],
-        capabilities: [],
-      })),
-    ]);
-    const overflow = formatModuleMap(overflowing, ['src/owned/index.ts']);
-    expect(overflow.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
-    expect(overflow).toContain('owned|');
-    expect(overflow).toContain('src/owned:{index.ts,public.ts}');
-    expect(overflow).toContain(MODULE_MAP_POINTER);
-    expect(overflow).toContain(MODULE_MAP_TRUNCATION);
-    expect(overflow).toContain('dep00,dep01');
+    const selectedMapWithEntryLength = (entryLength: number): string =>
+      formatModuleMap(
+        manifest([
+          {
+            id: 'owned',
+            kind: 'adapter',
+            owner: 'platform',
+            paths: ['src/owned/**'],
+            publicEntries: entryLength === 0 ? [] : ['x'.repeat(entryLength)],
+            allowedDependencies: [],
+            capabilities: [],
+          },
+        ]),
+        ['src/owned/index.ts'],
+      );
+    const emptyMap = selectedMapWithEntryLength(0);
+    const exactEntryLength = MAX_MODULE_MAP_CHARACTERS - emptyMap.length + 1;
+    const exactFit = selectedMapWithEntryLength(exactEntryLength);
+    const oneCharacterOver = selectedMapWithEntryLength(exactEntryLength + 1);
+    expect(exactFit.length).toBe(MAX_MODULE_MAP_CHARACTERS);
+    expect(exactFit).toContain(MODULE_MAP_POINTER);
+    expect(exactFit).not.toContain(MODULE_MAP_TRUNCATION);
+    expect(oneCharacterOver.length).toBe(MAX_MODULE_MAP_CHARACTERS + 1);
+    expect(oneCharacterOver).toContain('owned|d|');
+    expect(oneCharacterOver).toContain(MODULE_MAP_POINTER);
+    expect(oneCharacterOver).not.toContain(MODULE_MAP_TRUNCATION);
   });
 
   test('registers extracted packages and admitted source edges at public entries', () => {

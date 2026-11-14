@@ -1,5 +1,13 @@
 # Scripts
 
+## Architecture module maps
+
+Path-scoped module maps include every selected owned and allowed-dependency row in deterministic module-ID order.
+They group shared public-entry directories as `directory:{...}`. The character limit and truncation marker apply to
+unscoped maps; a path-scoped map remains complete and can exceed that limit when its selected rows require it.
+
+Decision: path-scoped module maps keep every selected row in sorted ID order, compact shared entry directories, and may exceed the map limit when completeness requires it; unscoped truncation stays bounded.
+
 ## Workspace imports
 
 `bun scripts/workspace-imports.ts` checks each workspace's source and declaration files against its own manifest,
