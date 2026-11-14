@@ -495,18 +495,19 @@ test('legacy membership preparation leaves its native candidate for the next bou
   const relevance = async (_request: ReleaseGroupingRequest, after: string | null) => {
     nativePositions.push(after);
     const offset = after === null ? 0 : Number(after);
-    const keys = offset === 0
-      ? [
-          {
-            id: f.id(6),
-            pool: 'pool-0',
-            partition: subjectPartition(f.id(6)),
-            name: null,
-            securityRevision: 0,
-            after: '1',
-          },
-        ]
-      : [];
+    const keys =
+      offset === 0
+        ? [
+            {
+              id: f.id(6),
+              pool: 'pool-0',
+              partition: subjectPartition(f.id(6)),
+              name: null,
+              securityRevision: 0,
+              after: '1',
+            },
+          ]
+        : [];
     return { keys, after: String(offset + keys.length), exhausted: keys.length === 0 };
   };
   const state = f.relevanceProgress.state;

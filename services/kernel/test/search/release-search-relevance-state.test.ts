@@ -45,10 +45,7 @@ function fakeDatabase() {
   const branches = new Map<string, string>();
   const workDeltas = new Map<string, Set<string>>();
   const roots = new Map<string, Set<string>>();
-  const builds = new Map<
-    string,
-    { nextPosition: string | null; nextWork: string | null; works: Set<string> }
-  >();
+  const builds = new Map<string, { nextPosition: string | null; nextWork: string | null; works: Set<string> }>();
   const queries: string[] = [];
   const cleanup: string[] = [];
   const trieEdgesPerLookup: number[] = [];
@@ -185,8 +182,33 @@ function fakeDatabase() {
         return { rows: candidates.filter((work) => present.has(work)).map((work_id) => ({ work_id })) };
       }
       if (sql.includes('search.release_relevance_advance')) {
-        const [execution, parent, proposed, branchHash, digest, principal, requestHash, generation, cutHash, expires, now, emitted] =
-          values as unknown as [string, string, string, string, string, string, string, number, string, Date, Date, string[]];
+        const [
+          execution,
+          parent,
+          proposed,
+          branchHash,
+          digest,
+          principal,
+          requestHash,
+          generation,
+          cutHash,
+          expires,
+          now,
+          emitted,
+        ] = values as unknown as [
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          number,
+          string,
+          Date,
+          Date,
+          string[],
+        ];
         const session = executions.get(execution);
         const parentPosition = positions.get(key(execution, parent));
         if (
@@ -205,9 +227,7 @@ function fakeDatabase() {
         if (existing) {
           const position = positions.get(key(execution, existing))!;
           return {
-            rows: [
-              { execution_id: execution, id: existing, work_digest: position.digest, membership_ready: true },
-            ],
+            rows: [{ execution_id: execution, id: existing, work_digest: position.digest, membership_ready: true }],
           };
         }
         if (parentPosition.root === null)
