@@ -115,6 +115,34 @@ function JourneyRoot({
 
 The shared navigation pattern is `Patterns/Navigation/Contributions` (public leaf, private pending, offered/gated creation, locale/path). It uses the delivered components; source integration and prepared patterns establish neither native journey acceptance nor full page/visual review.
 
+## Current workspace navigation
+
+Decision: Book and Studio declare `ShellContextNavigation({ label, children })` from
+`shell/contextual-navigation.tsx` inside their existing route, reader and data providers. The shell places that
+one current region after global links and before Following, in the expanded desktop sidebar or the existing open
+phone navigation Menu. Reading and editing stay in the center canvas without another route sidebar.
+
+The declaration portals its children from the consumer's React tree; the shell stores only live owner identities
+and the admitted host, never navigation elements, callbacks carrying private data or copied reader state. The
+deepest mounted router match owns the region. Within one match the latest mounted declaration wins; removing it
+restores the remaining owner. Path replacement retires the previous scope before layout effects, while query and
+fragment changes keep the current scope. Registration cleanup removes only its exact owner instance, including
+effect replay. Unmounting or retiring a reader removes its portal in the same commit without waiting for shell
+registration cleanup. Labels and children update directly from consumer props and retain the consumer's contexts.
+
+The collapsed desktop rail has no contextual tree; its existing expand control restores the region. On phones,
+opening the existing navigation Menu admits its host, and closing it removes that tree. Changing viewport removes
+the old host before admitting the other surface. Keep editable state and dirty-page protection in the route, above
+the declaration, so drawer and collapse changes cannot discard an editor draft. Consumers use ordinary anchors or
+router Links for selection, with their existing blocked-departure behavior. Menu owns dismissal and keyboard focus
+return, including physical DOM capture for links rendered through a portal; the region schedules no focus work.
+
+The consumer owns its localized label and row copy, exposure checks and private mount gates. There are no added
+shell strings, I/O, persistence, navigation contributions or per-row projection. Cost is one live region and
+O(rendered navigation). Focused regression source covers replacement/removal, nested owner selection, context
+retention and single desktop/phone placement. App Shell stories cover the current region, collapsed rail and phone
+keyboard close/return; runtime and integrated Book/Studio acceptance are separate verifier work.
+
 ## Phone navigation clearance
 
 `PhoneNavigationClearance` scopes one `--bottom-nav-height` value around the shell and observes its own phone
