@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchStatement } from '@rezics/definitions/bulk';
 import { createImportTransport } from '../src/import-client.ts';
-import { readCurrentCandidatePages, safeCandidatePage } from '../src/showcase-current-reads.ts';
+import {
+  currentSourceRead,
+  publicHasCitation,
+  publicHasValue,
+  readCurrentCandidatePages,
+  safeCandidatePage,
+} from '../src/showcase-current-reads.ts';
 import { ShowcaseJournal } from '../src/showcase-journal.ts';
 import {
   admitSelectedSynopsisSupport,
@@ -15,6 +21,62 @@ import {
 
 const original = '019a1b2c-3d4e-7f00-8a00-000000000001';
 const canonical = '019a1b2c-3d4e-7f00-8a00-000000000002';
+
+test('current provider and citation evidence ignores deprecated or non-value history and scans later rows', () => {
+  const uri = 'https://source.test/101';
+  const valueStatement = (property: string, content: unknown, rank: string, type = 'value') => ({
+    rank,
+    property: { id: property },
+    value: { type, content },
+    references: [
+      { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: uri } }] },
+    ],
+  });
+  const record = { provider: 'bangumi', sourceKey: '101', subjectId: original, nativeType: 'schema:Work' } as const;
+  const read = (rows: unknown[], citations = rows) =>
+    ({
+      subject: { id: canonical, type: 'schema:Work', statements: { 'wdt:P5732': rows, 'schema:name': citations } },
+    }) as never;
+
+  const retired = read(
+    [valueStatement('wdt:P5732', '101', 'deprecated')],
+    [valueStatement('schema:name', 'Name', 'deprecated')],
+  );
+  expect(publicHasValue(retired, 'wdt:P5732', '101')).toBe(false);
+  expect(currentSourceRead(retired, record)).toBe(false);
+  expect(publicHasCitation(retired, uri)).toBe(false);
+
+  const historyThenCurrent = read(
+    [valueStatement('wdt:P5732', '101', 'deprecated'), valueStatement('wdt:P5732', '101', 'preferred')],
+    [valueStatement('schema:name', 'Name', 'deprecated'), valueStatement('schema:name', 'Name', 'preferred')],
+  );
+  expect(publicHasValue(historyThenCurrent, 'wdt:P5732', '101')).toBe(true);
+  expect(currentSourceRead(historyThenCurrent, record)).toBe(true);
+  expect(publicHasCitation(historyThenCurrent, uri)).toBe(true);
+  expect(publicHasValue(read([valueStatement('wdt:P5732', '101', 'normal', 'somevalue')]), 'wdt:P5732', '101')).toBe(
+    false,
+  );
+  expect(
+    publicHasValue(
+      read([{ property: { id: 'wdt:P5732' }, value: { type: 'value', content: '101' } }]),
+      'wdt:P5732',
+      '101',
+    ),
+  ).toBe(false);
+  expect(publicHasCitation(read([], [valueStatement('schema:name', 'Name', 'normal')]), uri)).toBe(true);
+  expect(
+    publicHasCitation(
+      read([], [
+        {
+          property: { id: 'schema:name' },
+          value: { type: 'value', content: 'Name' },
+          references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: uri } }] }],
+        },
+      ]),
+      uri,
+    ),
+  ).toBe(false);
+});
 
 test('candidate page normalization drops tombstones and builds selection only at the terminal page', () => {
   const statement: BatchStatement = {

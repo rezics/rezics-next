@@ -42,6 +42,15 @@ import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const nativeDataType = (property: string) => bundledRelease.properties[property]!.datatype;
+const nativeValueStatement = (
+  property: string,
+  content: unknown,
+  rank: 'normal' | 'preferred' | 'deprecated' = 'normal',
+) => ({
+  rank,
+  property: { id: property },
+  value: { type: 'value', content },
+});
 
 test('selected dump candidates publish exact intent, resume retryable steps, and retain permanent refusals', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-publication-'));
@@ -89,7 +98,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     type: 'skos:ConceptScheme',
     sourceExternalId: 'vocabulary:vndb.tag.cont',
     labels: { en: 'cont' },
-    statements: { 'schema:url': [{ value: { type: 'value', content: tagSchemeUri } }] },
+    statements: { 'schema:url': [nativeValueStatement('schema:url', tagSchemeUri)] },
   });
   subjects.set(tagConceptId, {
     id: tagConceptId,
@@ -97,8 +106,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     sourceExternalId: 'vocabulary:vndb.tag.cont:g105',
     labels: { und: 'Reviewed tag' },
     statements: {
-      'schema:url': [{ value: { type: 'value', content: tagConceptUri } }],
-      'skos:inScheme': [{ value: { type: 'value', content: tagSchemeId } }],
+      'schema:url': [nativeValueStatement('schema:url', tagConceptUri)],
+      'skos:inScheme': [nativeValueStatement('skos:inScheme', tagSchemeId)],
     },
   });
   subjects.set(graphParentId, {
@@ -107,8 +116,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     sourceExternalId: 'vocabulary:vndb.tag.cont:g106',
     labels: { und: 'Related tag' },
     statements: {
-      'schema:url': [{ value: { type: 'value', content: graphParentUri } }],
-      'skos:inScheme': [{ value: { type: 'value', content: tagSchemeId } }],
+      'schema:url': [nativeValueStatement('schema:url', graphParentUri)],
+      'skos:inScheme': [nativeValueStatement('skos:inScheme', tagSchemeId)],
     },
   });
   const bySource = new Map<string, string>();
@@ -181,6 +190,25 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
   const read = (id: string) => {
     const subject = subjects.get(id);
     if (!subject) throw new Error('Missing fake subject');
+    const nativeRow = (property: string, value: unknown) => {
+      const row = value as Record<string, unknown>;
+      const candidate = [...candidates.values()].find((entry) => entry.statement === value);
+      const selectedRank = candidate
+        ? adopted.get(`${id}\0${property}`)?.selection.find((entry) => entry.candidate === candidate.id)?.rank
+        : undefined;
+      return {
+        ...row,
+        id: candidate?.id ?? row.id,
+        rank: selectedRank ?? row.rank ?? 'normal',
+        property: row.property ?? { id: property },
+      };
+    };
+    const statements = Object.fromEntries(
+      Object.entries(subject.statements).map(([property, rows]) => [
+        property,
+        rows.map((row) => nativeRow(property, row)),
+      ]),
+    );
     if (/^[vr][1-9][0-9]*$/u.test(subject.sourceExternalId)) {
       const property = 'wdt:P3180';
       const identity = [...candidates.values()].find(
@@ -191,23 +219,29 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         subject: {
           ...subject,
           statements: {
-            ...subject.statements,
-            ...(identity ? { [property]: [identity.statement] } : {}),
+            ...statements,
+            ...(identity ? { [property]: [nativeRow(property, identity.statement)] } : {}),
           },
         },
       } as unknown as ReviewedSubjectRead;
     }
     const identity = /^(?:(person|character):)?([0-9]+)$/u.exec(subject.sourceExternalId);
-    if (!identity) return { subject } as unknown as ReviewedSubjectRead;
+    if (!identity) return { subject: { ...subject, statements } } as unknown as ReviewedSubjectRead;
     const property = identity[1] === 'person' ? 'wdt:P6298' : identity[1] === 'character' ? 'wdt:P6296' : 'wdt:P5732';
     return {
       subject: {
         ...subject,
         statements: {
-          ...subject.statements,
+          ...statements,
           [property]: [
             {
+              rank: 'normal',
               property: { id: property },
+              id: [...candidates.values()].find(
+                (candidate) =>
+                  candidate.statement.property.id === property &&
+                  candidate.source?.external_id === subject.sourceExternalId,
+              )?.id,
               value: { type: 'value', content: identity[2] },
               references: [
                 {
@@ -306,8 +340,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       sourceExternalId: 'manual:unrelated-parent',
       labels: { en: 'Unrelated parent' },
       statements: {
-        'schema:url': [{ value: { type: 'value', content: 'https://fixture.test/unrelated-parent' } }],
-        'skos:inScheme': [{ value: { type: 'value', content: tagSchemeId } }],
+        'schema:url': [nativeValueStatement('schema:url', 'https://fixture.test/unrelated-parent')],
+        'skos:inScheme': [nativeValueStatement('skos:inScheme', tagSchemeId)],
       },
     });
     candidates.set(graphUnrelatedId, {
@@ -444,7 +478,8 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
         const value = read(id);
         const rawRows = value.subject.statements['schema:abstract'] ?? [];
         const currentRows = rawRows.map((row) => {
-          const candidate = [...candidates.values()].find((entry) => entry.statement === row);
+          const rowId = row && typeof row === 'object' ? (row as { id?: unknown }).id : undefined;
+          const candidate = typeof rowId === 'string' ? candidates.get(rowId) : undefined;
           if (!candidate) return row;
           const synopsis = (() => {
             const retained = synopsisDocuments.get(candidate.id);
@@ -1083,10 +1118,35 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
 
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    unavailableReviewSubjects.add(vndbTargetId);
+    unavailableReviewSubjects.add(tagConceptId);
+    const unavailableBinding = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(unavailableBinding.status).toBe('incomplete');
+    expect(unavailableBinding.omissions).toContainEqual({
+      provider: 'vndb',
+      sourceKey: 'v2',
+      code: 'public-view-unavailable',
+    });
+    expect(subjects.get(membership.command.subject)!.statements['schema:genre']).toContainEqual(
+      membership.command.statement,
+    );
+    expect(
+      unavailableBinding.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')
+        ?.assertions,
+    ).not.toContainEqual(expect.objectContaining({ property: 'schema:genre' }));
+
+    unavailableReviewSubjects.delete(tagConceptId);
     subjects.get(tagConceptId)!.statements['skos:inScheme'] = [
-      { value: { type: 'value', content: '00000000-0000-4000-8000-000000000043' } },
+      nativeValueStatement('skos:inScheme', tagSchemeId, 'deprecated'),
     ];
+    unavailableReviewSubjects.add(vndbTargetId);
     const withdrawn = await publishShowcase({
       plan,
       result,
@@ -1106,12 +1166,39 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
           .id!,
       )!.statements['schema:genre'],
     ).toEqual([]);
+    expect(
+      withdrawn.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')?.assertions,
+    ).toContainEqual(expect.objectContaining({ property: 'schema:name' }));
+    expect(withdrawn.omissions).toContainEqual({
+      provider: 'vndb',
+      sourceKey: 'v2',
+      code: 'vocabulary-binding-missing',
+    });
 
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     unavailableReviewSubjects.delete(vndbTargetId);
-    subjects.get(tagConceptId)!.statements['skos:inScheme'] = [{ value: { type: 'value', content: tagSchemeId } }];
+    subjects.get(tagConceptId)!.statements['skos:inScheme'] = [
+      nativeValueStatement('skos:inScheme', tagSchemeId, 'deprecated'),
+      nativeValueStatement('skos:inScheme', tagSchemeId, 'preferred'),
+    ];
     publicReadIds.clear();
+    const restoredBinding = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(restoredBinding.status).toBe('published');
+    expect(subjects.get(membership.command.subject)!.statements['schema:genre']).toContainEqual(
+      membership.command.statement,
+    );
+    expect(
+      restoredBinding.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')?.assertions,
+    ).toContainEqual(expect.objectContaining({ candidateId: membershipCandidateId, property: 'schema:genre' }));
     const withheldSource = withdrawn.published.find(
       (record) => record.provider === 'vndb' && record.sourceKey === 'r1',
     );
@@ -1121,11 +1208,6 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       (record) => record.provider === 'vndb' && record.sourceKey === 'v2',
     );
     expect(withheldTagWork?.assertions.some((assertion) => assertion.property === 'schema:genre')).toBe(false);
-    expect(withdrawn.omissions).toContainEqual({
-      provider: 'vndb',
-      sourceKey: 'v2',
-      code: 'vocabulary-binding-missing',
-    });
     expect(accepted.has(membershipCandidateId)).toBe(true);
     tagSpoiler = 1;
     preparedTags = await prepareSelectedTags();
