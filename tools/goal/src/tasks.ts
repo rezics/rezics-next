@@ -2057,8 +2057,7 @@ export class WorkerTasks {
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
       if (!leftoversPrepared) {
         await this.settleRetryProcesses(taskId, task.currentAttempt);
-        if (!task.workspace && nextBrief.kind !== 'verification')
-          this.prepareRetryLeftovers(task, old?.attempt ?? 0);
+        if (!task.workspace && nextBrief.kind !== 'verification') this.prepareRetryLeftovers(task, old?.attempt ?? 0);
       }
       const pools = this.poolPolicies.read();
       // A chained task's first attempt continues the landed session it was offered: route, pool and resume follow it.

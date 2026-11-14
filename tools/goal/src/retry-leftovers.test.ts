@@ -29,26 +29,33 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
 `;
 
 function delayGitStatusOnce(h: ReturnType<typeof harness>) {
-  const oldPath = process.env.PATH, oldQueue = process.env.REZICS_TEST_CAPACITY_QUEUE;
-  const oldTimeout = h.settings.policy!.merge.commandTimeoutMs, bin = join(h.root, '.temp', 'slow-git');
+  const oldPath = process.env.PATH,
+    oldQueue = process.env.REZICS_TEST_CAPACITY_QUEUE;
+  const oldTimeout = h.settings.policy!.merge.commandTimeoutMs,
+    bin = join(h.root, '.temp', 'slow-git');
   const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
   mkdirSync(bin, { recursive: true });
-  writeFileSync(join(bin, 'git'), `#!/bin/sh
+  writeFileSync(
+    join(bin, 'git'),
+    `#!/bin/sh
 if [ "$1" = status ] && [ "$2" = --porcelain=v1 ] && [ ! -e "$(pwd -P)/.temp/status-timeout" ]; then
   touch "$(pwd -P)/.temp/status-timeout"; echo $$ > "$(pwd -P)/.temp/status-pid"
   find "$REZICS_TEST_CAPACITY_QUEUE" -maxdepth 1 -type f -print > "$(pwd -P)/.temp/status-ticket-seen"
   exec /usr/bin/env bun -e 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000)'
 fi
 exec ${JSON.stringify(realGit)} "$@"
-`);
+`,
+  );
   chmodSync(join(bin, 'git'), 0o755);
   process.env.PATH = `${bin}:${oldPath ?? ''}`;
   process.env.REZICS_TEST_CAPACITY_QUEUE = join(h.settings.stateDirectory, 'capacity-queue');
   h.settings.policy!.merge.commandTimeoutMs = 750;
   return {
     restore: () => {
-      if (oldPath === undefined) delete process.env.PATH; else process.env.PATH = oldPath;
-      if (oldQueue === undefined) delete process.env.REZICS_TEST_CAPACITY_QUEUE; else process.env.REZICS_TEST_CAPACITY_QUEUE = oldQueue;
+      if (oldPath === undefined) delete process.env.PATH;
+      else process.env.PATH = oldPath;
+      if (oldQueue === undefined) delete process.env.REZICS_TEST_CAPACITY_QUEUE;
+      else process.env.REZICS_TEST_CAPACITY_QUEUE = oldQueue;
       h.settings.policy!.merge.commandTimeoutMs = oldTimeout;
     },
   };
@@ -160,9 +167,12 @@ test('a genuine leftover Git error keeps its task diagnosis without a shared tim
 
     expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
     const failure = JSON.parse(h.store.events(task.id, 1).find((event) => event.kind === 'retry-setup-failed')!.body);
-    expect(failure).toMatchObject({ diagnostic: {
-      commandText: 'git status --porcelain=v1 --untracked-files=normal', timedOut: false,
-    } });
+    expect(failure).toMatchObject({
+      diagnostic: {
+        commandText: 'git status --porcelain=v1 --untracked-files=normal',
+        timedOut: false,
+      },
+    });
     expect(failure.diagnostic.message).toContain('index file smaller than expected');
     expect(inbox.pending(task.brief.manager).map((entry) => entry.event.kind)).toContain('environment');
     expect(inbox.pending('operations')).toHaveLength(0);
@@ -213,13 +223,15 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
       expect([h.store.task(task.id).currentAttempt, h.store.attempts(task.id).length]).toEqual([1, 1]);
       expect(intent).toMatchObject({ status: 'pending', options: { evidence: h.briefFile } });
       expect(Date.parse(intent!.options.notBefore ?? '')).toBeGreaterThan(Date.now());
-      const failure = JSON.parse(
-        h.store.events(task.id, 1).find((event) => event.kind === 'retry-setup-failed')!.body,
-      );
+      const failure = JSON.parse(h.store.events(task.id, 1).find((event) => event.kind === 'retry-setup-failed')!.body);
       expect(failure).toMatchObject({
         step: 'checking worktree leftovers',
         diagnostic: {
-          operation: 'git status', errorCode: 'ETIMEDOUT', timedOut: true, timeoutMs: 750, signal: 'SIGTERM',
+          operation: 'git status',
+          errorCode: 'ETIMEDOUT',
+          timedOut: true,
+          timeoutMs: 750,
+          signal: 'SIGTERM',
           commandText: 'git status --porcelain=v1 --untracked-files=normal',
         },
       });
@@ -251,7 +263,9 @@ test('a timed-out leftover inspection retains its durable retry and folds one sh
       const worktree = h.store.task(task.id).worktree;
       expect(h.store.task(task.id).currentAttempt).toBe(2);
       expect(h.store.retryIntent({ taskId: task.id, attempt: 1 })).toMatchObject({
-        status: 'started', nextAttempt: 2, options: { evidence: h.briefFile },
+        status: 'started',
+        nextAttempt: 2,
+        options: { evidence: h.briefFile },
       });
       expect(readFileSync(join(worktree, '.temp/launch-count'), 'utf8')).toBe('2');
       expect(readFileSync(join(worktree, '.temp/launch-2-args'), 'utf8')).toContain('fixture-session-1');
