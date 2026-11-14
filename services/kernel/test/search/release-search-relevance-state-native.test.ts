@@ -65,8 +65,7 @@ test('native relevance membership reads exact resumed branch membership', async 
     expect(await state.seen(binding, right, candidates, now + 3)).toEqual(new Set([seed, rightWork]));
   } finally {
     try {
-      if (execution)
-        await pool.query('DELETE FROM search.release_relevance_execution WHERE id = $1', [execution]);
+      if (execution) await pool.query('DELETE FROM search.release_relevance_execution WHERE id = $1', [execution]);
     } finally {
       await pool.end();
     }
