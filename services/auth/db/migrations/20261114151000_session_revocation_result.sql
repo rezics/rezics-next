@@ -42,3 +42,6 @@ END $$;
 CREATE TRIGGER auth_session_revocation_result_immutable
 BEFORE UPDATE ON public.auth_effect_receipt
 FOR EACH ROW EXECUTE FUNCTION public.auth_session_revocation_result_immutable();
+
+-- migrate:down
+-- Forward only: recorded session revocation results retain their native authority.
