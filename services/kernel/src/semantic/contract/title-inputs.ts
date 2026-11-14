@@ -18,8 +18,5 @@ export type SemanticTitleInputsObservation =
 
 /** Empty subjects observes the same ID-independent whole-source basis and returns no entries. */
 export type SemanticTitleInputs = Readonly<{
-  observe(input: {
-    subjects: readonly string[];
-    deadline: number;
-  }): Promise<SemanticTitleInputsObservation>;
+  observe(input: { subjects: readonly string[]; deadline: number }): Promise<SemanticTitleInputsObservation>;
 }>;

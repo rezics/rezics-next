@@ -43,13 +43,19 @@ type ObserverDependencies = Readonly<{
 function validInputs(subjects: readonly string[], deadline: number): void {
   if (!Array.isArray(subjects) || subjects.length > SEMANTIC_TITLE_INPUT_MAX_ORIGINALS)
     throw new RangeError('Semantic title inputs accept at most 100 originals');
-  if (new Set(subjects).size !== subjects.length || subjects.some((id) => typeof id !== 'string' || routeOf(id) === null))
+  if (
+    new Set(subjects).size !== subjects.length ||
+    subjects.some((id) => typeof id !== 'string' || routeOf(id) === null)
+  )
     throw new TypeError('Semantic title inputs require exact routed originals');
   if (!Number.isFinite(deadline)) throw new TypeError('Semantic title inputs require a finite deadline');
 }
 
 /** Stable, ID-independent digest over every current native home and the active Definitions release. */
-export function semanticTitleBasisVersion(homes: readonly Partition[], release: { digest: string; head: number }): string | null {
+export function semanticTitleBasisVersion(
+  homes: readonly Partition[],
+  release: { digest: string; head: number },
+): string | null {
   if (
     homes.length !== HOME_COUNT ||
     typeof release.digest !== 'string' ||
@@ -114,7 +120,8 @@ export function bindSemanticTitleInputRows(
   if (terminals.some((terminal) => terminal === null || routeOf(terminal) === null)) return null;
   const expected = new Set([...originals, ...(terminals as string[])]);
   const byId = new Map(rows.map((row) => [row.id, row]));
-  if (byId.size !== rows.length || byId.size !== expected.size || [...expected].some((id) => !byId.has(id))) return null;
+  if (byId.size !== rows.length || byId.size !== expected.size || [...expected].some((id) => !byId.has(id)))
+    return null;
 
   const entries: SemanticTitleInputEntry[] = [];
   for (let index = 0; index < originals.length; index++) {
@@ -160,7 +167,9 @@ export function createSemanticTitleInputsObserver(dependencies: ObserverDependen
       if (subjects.length === 0) {
         const after = await dependencies.readBasis(deadline);
         dependencies.requireDeadline(deadline);
-        return after?.version === before.version ? { status: 'current', basis: before.version, entries: [] } : unavailable;
+        return after?.version === before.version
+          ? { status: 'current', basis: before.version, entries: [] }
+          : unavailable;
       }
       const entries = await dependencies.readBatch(subjects, deadline);
       dependencies.requireDeadline(deadline);
@@ -200,7 +209,9 @@ async function readNativeTitleBatch(
       // This reader preserves Semantic's current pending/bootstrap and one-hop identity rules.
       const mappings = await readIdentityMappings(pool, originals);
       if (mappings.length !== originals.length || mappings.some((mapping) => mapping.state !== 'mapped')) return null;
-      const terminalIds = mappings.map((mapping) => (mapping as Extract<IdentityMapping, { state: 'mapped' }>).terminal);
+      const terminalIds = mappings.map(
+        (mapping) => (mapping as Extract<IdentityMapping, { state: 'mapped' }>).terminal,
+      );
       const titleIds = new Set(terminalIds);
       const requested = [...new Set([...originals, ...terminalIds])];
       const homes = new Map<number, string[]>();
