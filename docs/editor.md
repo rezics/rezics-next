@@ -87,6 +87,13 @@ identity rules. Resolve virtual prefixes without retaining a native resolution c
 a real final document to the live editor. Explicit selection restoration preserves direction, bookmark and stored
 marks; it is part of the owned command rather than an invisible flag equivalence claim.
 
+Owned history evaluation may index native map sequences to skip only provably untouched contiguous segments.
+Native StepMaps, mirror identities and leaf recovery/deletion results remain unchanged. The index is an exact
+private Mappable evaluator, not a new map representation. It must honor inverted input ranges, slice boundaries,
+append/copy-on-write views and the actual mirror-array identity; unknown or unindexable cases use native evaluation.
+The reached remap CPU failure and differential requirements are recorded in
+[native mapping research](research/editor-native-mapping-gpt-6.md).
+
 Only a factory-proven topology/ID-preserving whole append batch may bypass redundant UniqueID step replay. Mixed
 or unknown batches follow normal identity repair. Content/profile validation and outgoing snapshot limits always
 remain active. Check encoded output expansion before allocation/dispatch, and validate the complete result. Clear

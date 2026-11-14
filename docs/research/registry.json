@@ -1,6 +1,13 @@
 {
   "reports": [
     {
+      "path": "docs/research/editor-native-mapping-gpt-6.md",
+      "topic": "editor-native-mapping",
+      "researcher": "gpt-6",
+      "state": "adopted",
+      "decision": "docs/editor.md#bounded-bulk-text-execution"
+    },
+    {
       "path": "docs/research/editor-bulk-text-gpt-6.md",
       "topic": "editor-bulk-text",
       "researcher": "gpt-6",
