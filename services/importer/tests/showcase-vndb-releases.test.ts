@@ -285,7 +285,9 @@ function port(
             ? {
                 id,
                 type: 'wd:Q20631656',
-                statements: { 'wdt:P3180': [{ value: { type: 'value', content: sourceId } }] },
+                statements: {
+                  'wdt:P3180': [{ rank: 'normal', value: { type: 'value', content: sourceId } }],
+                },
               }
             : { id },
         } as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
