@@ -38,6 +38,7 @@ import {
   workerCheckHostBudgetRefusalReport,
   workerCheckHostWithdrawnLegacyTypingCheckMatchesAttempt,
   workerCheckHostWithdrawnRetryIsRecoverable,
+  workerCheckHostCommandMatchesSettlement,
   workerCheckHostTerminalSourceRepair,
 } from './worker-check-budget.ts';
 
@@ -191,7 +192,7 @@ export function reconcileQueuedTypingFailureRetryOutcome(
         attempt.typingEvidencePending?.command &&
         !settlement.ok &&
         settlement.kind === 'evidence-unavailable' &&
-        JSON.stringify(attempt.typingEvidencePending.command) === JSON.stringify(settlement.command) &&
+        workerCheckHostCommandMatchesSettlement(attempt.typingEvidencePending.command, settlement.command) &&
         workerCheckHostAttemptCheckCustody(task.worktree, task.id, ref.attempt, attempt.checks ?? []) === 'unknown'
       )
         return 'source-amendment-compiler-hold';

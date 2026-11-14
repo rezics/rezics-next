@@ -45,6 +45,7 @@ import {
   settleWorkerCheckHostBudget,
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
+  workerCheckHostCommandMatchesSettlement,
   workerCheckHostAttemptCheckCustody,
   workerCheckHostAttemptHasResultlessCleanup,
   workerCheckHostHasRetainedKernelTypingRun,
@@ -65,6 +66,19 @@ import {
 } from './worker-check-budget.ts';
 
 const product = { brief: { goal: 'web', kind: 'implementation' as const } };
+
+test('compiler settlement identity unwraps the admitted launcher and retains exact argv semantics', () => {
+  const wrapped = ['--local', '--', 'bun', 'scripts/typecheck.ts'];
+  const compiler = ['bun', 'scripts/typecheck.ts'];
+  expect(workerCheckHostCommandMatchesSettlement(wrapped, compiler)).toBe(true);
+  expect(workerCheckHostCommandMatchesSettlement([...wrapped, '--strict'], compiler)).toBe(false);
+  expect(workerCheckHostCommandMatchesSettlement(['--local', '--', 'sh', '-c', compiler.join(' ')], compiler)).toBe(
+    false,
+  );
+  expect(workerCheckHostCommandMatchesSettlement(['--local', '--', 'env', 'MODE=fast', ...compiler], compiler)).toBe(
+    false,
+  );
+});
 
 function recoveryProof(result: Awaited<ReturnType<typeof recoverWorkerTyping>>) {
   if (!('proof' in result)) throw new Error('Expected typing recovery to issue a compiler proof');

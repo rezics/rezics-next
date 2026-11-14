@@ -2378,7 +2378,8 @@ export function workerCheckHostTerminalTypingFailure(input: {
   if (
     settled.ok ||
     settled.kind !== 'typing-failure' ||
-    (input.pendingCommand !== undefined && JSON.stringify(input.pendingCommand) !== JSON.stringify(settled.command)) ||
+    (input.pendingCommand !== undefined &&
+      !workerCheckHostCommandMatchesSettlement(input.pendingCommand, settled.command)) ||
     workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) !== 'terminal'
   )
     return;
@@ -2604,13 +2605,13 @@ export function workerCheckHostTerminalSourceRepair(input: {
   if (settled.kind === 'typing-failure')
     return (
       (input.pendingCommand === undefined ||
-        JSON.stringify(input.pendingCommand) === JSON.stringify(settled.command)) &&
+        workerCheckHostCommandMatchesSettlement(input.pendingCommand, settled.command)) &&
       workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) === 'terminal'
     );
   if (
     input.allowUnavailableSourceAmendment &&
     input.pendingCommand !== undefined &&
-    JSON.stringify(input.pendingCommand) === JSON.stringify(settled.command) &&
+    workerCheckHostCommandMatchesSettlement(input.pendingCommand, settled.command) &&
     workerCheckHostAttemptCheckCustody(input.worktree, input.taskId, input.attempt, input.checkIds) === 'terminal'
   )
     return true;
@@ -2912,6 +2913,19 @@ export function expandCheckCommands(argv: readonly string[]): string[][] {
       .filter((tokens) => tokens.length > 0);
   }
   return command.length ? [command] : [];
+}
+
+/** Compare the same admitted compiler argv through its worker-check launcher without dropping operands or env. */
+export function workerCheckHostCommandMatchesSettlement(
+  pendingCommand: readonly string[],
+  settledCommand: readonly string[] | undefined,
+): boolean {
+  return Boolean(
+    pendingCommand.length &&
+      settledCommand?.length &&
+      isDeepStrictEqual(wrapperExecutionArgv(pendingCommand), wrapperExecutionArgv(settledCommand)) &&
+      isDeepStrictEqual(expandCheckCommands(pendingCommand), expandCheckCommands(settledCommand)),
+  );
 }
 
 export type OrdinaryProductCheckKind = 'typecheck' | 'money-test' | 'test' | 'native' | 'browser' | 'growth' | 'other';
