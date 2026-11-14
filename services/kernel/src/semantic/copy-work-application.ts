@@ -129,7 +129,9 @@ export async function readCopyWorkDisclosureWith(
         fenceTuples.push(...observed.tuples);
         fencedSubjects.push(...observed.owners);
       }
-      const taken = await reader.readTakenFenceKeys(deps, fenceTuples);
+      const fenceObservation = await reader.readTakenFenceKeys(deps, fenceTuples);
+      cuts.push(...fenceObservation.cuts);
+      const taken = fenceObservation.taken;
       if (taken.size) {
         for (let index = 0; index < fenceTuples.length; index++) {
           if (!taken.has(reader.fenceKey(fenceTuples[index]!))) continue;

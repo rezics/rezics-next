@@ -328,19 +328,19 @@ export function createCopyWorkDisclosureNativeReader(): CopyWorkDisclosureNative
         byHome.set(home, list);
       }
       const taken = new Set<string>();
+      const cuts: CopyWorkPartitionCut[] = [];
       for (const [home, sourceTuples] of byHome) {
         const unique = [...new Map(sourceTuples.map((tuple) => [fenceKey(tuple), tuple])).values()];
-        const rows = (
-          await snapshot(deps, home, async (client) => {
-            const found = [];
-            for (let offset = 0; offset < unique.length; offset += 100)
-              found.push(...(await readFences(client, unique.slice(offset, offset + 100))));
-            return found;
-          })
-        ).value;
-        for (const row of rows) if (row.takenDown) taken.add(fenceKey(row));
+        const observed = await snapshot(deps, home, async (client) => {
+          const found = [];
+          for (let offset = 0; offset < unique.length; offset += 100)
+            found.push(...(await readFences(client, unique.slice(offset, offset + 100))));
+          return found;
+        });
+        cuts.push(observed.cut);
+        for (const row of observed.value) if (row.takenDown) taken.add(fenceKey(row));
       }
-      return taken;
+      return { taken, cuts };
     },
     async readSummaries(deps, ids, options) {
       return readSummaries(deps, ids, options);

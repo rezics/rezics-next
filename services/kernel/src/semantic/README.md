@@ -1305,8 +1305,14 @@ Hidden members and unprovable partial sets do not leak undisclosed IDs,
 counts or serialized keys. Four current-head locators are lookahead: a full
 window is `unsupported`, never a pretended three-row complete set. Labels
 come from `readSubjectSummaries` in batches of at most 256 targets. The
-returned `current()` re-observes source and target partition cuts and Access;
-it is not a boolean that claims a later commit is safe.
+returned `current()` re-observes source, target and imported Source-fence
+partition cuts and Access; it is not a boolean that claims a later commit is
+safe.
+
+Decision: retain each exact imported Source-fence read cut with its taken-key
+result and include every fence home in copy-work cut reconciliation and
+`current()`. Conflicting observations of one home make the batch unavailable;
+a later provider-field takedown or restoration makes the old witness stale.
 
 Decision: the bundled `schema:exampleOfWork` slot is single-valued, so native
 writes admit one work per edition. The producer still proves a three-plus-
@@ -1322,7 +1328,9 @@ or two different partition cuts for one home during assembly answers
 - Touches: at most 100 raw inputs (U distinct sources), identity mappings in
   chunks of 100, one current-head locator window of 4 Global present
   `schema:exampleOfWork` rows per source, current relation facts for those
-  locators, and at most 3U summary targets in 256-id batches. Partition
+  locators, and at most 3U summary targets in 256-id batches. At most 3U
+  exact Source-fence tuples are deduplicated and read in 100-tuple batches,
+  with one snapshot and retained cut per distinct tuple home. Partition
   metadata, link checkpoints and Access run per addressed home. No
   source-history enumeration, all-home scan, cross-partition SQL join or
   per-row HTTP hydration.

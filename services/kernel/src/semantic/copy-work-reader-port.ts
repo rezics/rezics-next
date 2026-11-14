@@ -145,6 +145,10 @@ export type CopyWorkSourceObservation = {
   membership: CopyWorkMembership | null;
 };
 export type CopyWorkPartitionCut = Readonly<{ partition: number; epoch: number; position: bigint }>;
+export type CopyWorkFenceObservation = Readonly<{
+  taken: ReadonlySet<string>;
+  cuts: readonly CopyWorkPartitionCut[];
+}>;
 export type CopyWorkSourceHomeObservation = Readonly<{
   found: Map<string, CopyWorkSourceObservation>;
   tuples: SourceFenceTuple[];
@@ -177,7 +181,7 @@ export type CopyWorkDisclosureNativeReader = Readonly<{
   readTakenFenceKeys(
     deps: CopyWorkDisclosureDependencies,
     tuples: readonly SourceFenceTuple[],
-  ): Promise<ReadonlySet<string>>;
+  ): Promise<CopyWorkFenceObservation>;
   readSummaries(
     deps: CopyWorkDisclosureDependencies,
     ids: readonly string[],
