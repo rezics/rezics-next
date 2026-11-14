@@ -1,13 +1,12 @@
 import type { Pool } from 'pg';
 import {
   readAccount,
-  deadlineClient,
   commandAccessContext,
   requireCommandAdmission,
   admitGroup,
 } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
-import { throwAccessUnavailable } from '../access/unavailable.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
@@ -16,7 +15,7 @@ import {
   releaseOperationalTime,
   type AuthoritativeTime,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection, withBoundedReadOnlyTransaction } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -85,10 +84,10 @@ export function createPins(deps: { pool: Pool; access: Access; tokens: KeyRing; 
           ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
         }),
         () =>
-          withConnection(pool, async (connection) => {
-            const client = deadlineClient(connection, deadline);
-            await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-            try {
+          withBoundedReadOnlyTransaction(
+            pool,
+            deadline,
+            async (client) => {
               const current = await readAccount(client, route, account.accountId);
               if (
                 !current ||
@@ -133,13 +132,19 @@ export function createPins(deps: { pool: Pool; access: Access; tokens: KeyRing; 
                       new Date(authoritativeTimeValue(time)).getTime(),
                     )
                   : null;
-              await client.query('COMMIT');
               return { ids, revision: stored.revision, next };
-            } catch (error) {
-              await connection.query('ROLLBACK');
-              throw error;
-            }
-          }),
+            },
+            {
+              deadlineError: () => new AccessUnavailableError('deadline'),
+              // Keep the causal failure when cleanup reaches the deadline.
+              mapError(error) {
+                throwAccessUnavailable(error);
+                return error;
+              },
+              // Settled PostgreSQL server errors are exempted by the lifetime helper.
+              isUncertainSettledQueryError: () => true,
+            },
+          ),
       );
       if (page.ids.length) await targetGate(account, deadline, time!);
       const pins = [];
@@ -205,13 +210,18 @@ export function createPins(deps: { pool: Pool; access: Access; tokens: KeyRing; 
             // Business failure belongs to a fresh NEW pin, after exact receipt replay.
             try {
               if (!remove) {
-                const stored = await withConnection(pool, (connection) =>
-                  readPins(
-                    deadlineClient(connection, deadline),
-                    routeOf(account.accountId)!,
-                    account.accountId,
-                    runPinStoreStatement,
-                  ),
+                const stored = await withBoundedReadConnection(
+                  pool,
+                  deadline,
+                  (client) => readPins(client, routeOf(account.accountId)!, account.accountId, runPinStoreStatement),
+                  {
+                    deadlineError: () => new AccessUnavailableError('deadline'),
+                    mapError(error) {
+                      throwAccessUnavailable(error);
+                      return error;
+                    },
+                    isUncertainSettledQueryError: () => true,
+                  },
                 );
                 // Monotone CAS makes this probe safe: a changed list cannot enter the fresh body.
                 if (stored.revision === input.revision && !stored.ids.includes(collectionId)) {
