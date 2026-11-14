@@ -205,8 +205,7 @@ test('Game genre evidence, shared reads, and verified bindings follow importer r
           'schema:url': [statement(bangumiGameSourceGenreScheme, 'preferred')],
         });
       const index = ids.indexOf(id);
-      const membershipRank =
-        index === 1 && state === 'retired' ? 'deprecated' : index === 2 ? 'preferred' : 'normal';
+      const membershipRank = index === 1 && state === 'retired' ? 'deprecated' : index === 2 ? 'preferred' : 'normal';
       return subject(id, 'skos:Concept', {
         'schema:url': [statement(uris[index]!, index === 0 && state === 'retired' ? 'deprecated' : 'normal')],
         'skos:inScheme': [statement(schemeId, membershipRank)],

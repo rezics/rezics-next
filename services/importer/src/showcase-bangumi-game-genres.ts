@@ -316,8 +316,7 @@ export function createShowcaseBangumiGameGenreLookup(
     const conceptRead = await read(run, binding.id);
     if ('error' in conceptRead) return { state: failure(conceptRead.error) };
     const concept = conceptRead.subject;
-    if (!concept)
-      return { state: await missingAssociation(run, binding.id, 'schema:url', binding.sourceUri) };
+    if (!concept) return { state: await missingAssociation(run, binding.id, 'schema:url', binding.sourceUri) };
     if (concept.type !== 'skos:Concept') return { state: 'wrong-scheme' };
     if (!hasCurrentValue(concept, 'skos:inScheme', profile.schemeId)) {
       if ((concept.statements['skos:inScheme'] ?? []).length) return { state: 'wrong-scheme' };
