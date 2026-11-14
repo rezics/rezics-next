@@ -7,7 +7,7 @@ import { readAccount } from './access-port.ts';
 import accountShare from '../access/account-share.sql';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { withConnection } from '../database/pool.ts';
+import { withBoundedReadConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { accessCheck } from '../request/access-check.ts';
@@ -434,7 +434,11 @@ export function createAniListImport(deps: Dependencies) {
     }
   }
   // Keep source payloads out of command receipts, events and exception text.
-  async function snapshot<T>(actor: Actor, body: (client: PoolClient, account: AccountActor) => Promise<T>) {
+  async function snapshot<T>(
+    actor: Actor,
+    deadline: number,
+    body: (client: PoolClient, account: AccountActor) => Promise<T>,
+  ) {
     const account = owner(actor),
       route = requireRoute(account.accountId);
     const check = await accessCheck(
@@ -442,37 +446,50 @@ export function createAniListImport(deps: Dependencies) {
       account,
       'library_entry:read',
       { route, id: account.accountId },
-      { pool, deadline: deadlineFor(5000) },
+      { pool, deadline },
     );
-    return withConnection(pool, async (client) => {
-      await client.query('BEGIN');
-      try {
-        await partitionReadClient(client, partitionOf(route));
-        await accountShare.run(client, { route, account_id: account.accountId });
-        const current = await readAccount(client, route, account.accountId);
-        if (
-          !current ||
-          current.kind !== 'actor' ||
-          current.state !== 'active' ||
-          current.fenced ||
-          !Number.isSafeInteger(account.authnEpoch) ||
-          account.authnEpoch < 1 ||
-          current.minimumAuthnEpoch > BigInt(account.authnEpoch) ||
-          !(await check(client, await mintReadTime(client, clock)))
-        )
-          throw new GrantDeniedError();
-        const result = await body(client, account);
-        await client.query('COMMIT');
-        return result;
-      } catch (e) {
-        await client.query('ROLLBACK');
-        throw e;
-      }
-    });
+    let transactionOpen = false;
+    return withBoundedReadConnection(
+      pool,
+      deadline,
+      async (client) => {
+        await client.query('BEGIN');
+        transactionOpen = true;
+        try {
+          await partitionReadClient(client, partitionOf(route));
+          await accountShare.run(client, { route, account_id: account.accountId });
+          const current = await readAccount(client, route, account.accountId);
+          if (
+            !current ||
+            current.kind !== 'actor' ||
+            current.state !== 'active' ||
+            current.fenced ||
+            !Number.isSafeInteger(account.authnEpoch) ||
+            account.authnEpoch < 1 ||
+            current.minimumAuthnEpoch > BigInt(account.authnEpoch) ||
+            !(await check(client, await mintReadTime(client, clock)))
+          )
+            throw new GrantDeniedError();
+          const result = await body(client, account);
+          await client.query('COMMIT');
+          transactionOpen = false;
+          return result;
+        } catch (error) {
+          try {
+            await client.query('ROLLBACK');
+            transactionOpen = false;
+          } catch {
+            // Keep the source failure; the bounded owner retires an open transaction.
+          }
+          throw error;
+        }
+      },
+      { isUncertainWorkError: () => transactionOpen },
+    );
   }
-  async function load<T = Stored>(actor: Actor, id: string, ordinal: number): Promise<T> {
+  async function load<T = Stored>(actor: Actor, id: string, ordinal: number, deadline = deadlineFor(5000)): Promise<T> {
     requireRoute(id);
-    return snapshot(actor, async (client, account) => {
+    return snapshot(actor, deadline, async (client, account) => {
       const row = (
         await client.query<{ payload: T }>(
           'SELECT payload FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=$4',
@@ -483,13 +500,13 @@ export function createAniListImport(deps: Dependencies) {
       return row.payload;
     });
   }
-  async function match(actor: Actor, row: AniListRow): Promise<AniListMatch> {
+  async function match(actor: Actor, row: AniListRow, deadline = deadlineFor(5000)): Promise<AniListMatch> {
     const candidates: string[] = [],
       claims: unknown[] = [];
     let unavailable = false;
     for (const identifier of row.identifiers) {
       const route = tupleRoute(deps.routeKey, identifier.source, identifier.externalId);
-      const claim = await withConnection(pool, async (client) => {
+      const claim = await withBoundedReadConnection(pool, deadline, async (client) => {
         await partitionReadClient(client, partitionOf(route));
         return readClaim.run(client, { route, source: identifier.source, external_id: identifier.externalId });
       });
@@ -497,7 +514,7 @@ export function createAniListImport(deps: Dependencies) {
         claims.push([identifier, null]);
         continue;
       }
-      const observed = await observe(actor, claim.subject_id);
+      const observed = await observe(actor, claim.subject_id, deadline);
       if (!observed) {
         unavailable = true;
         claims.push([identifier, 'unavailable']);
@@ -520,15 +537,15 @@ export function createAniListImport(deps: Dependencies) {
       fingerprint: hash(claims),
     };
   }
-  async function observe(actor: Actor, subjectId: string): Promise<AniListObservation | null> {
-    const at = await withConnection(pool, (client) => mintReadTime(client, clock));
+  async function observe(actor: Actor, subjectId: string, deadline = deadlineFor(5000)): Promise<AniListObservation | null> {
+    const at = await withBoundedReadConnection(pool, deadline, (client) => mintReadTime(client, clock));
     const observed = await readLibraryProfileSourceObservation(
-      { pool, access, actor, at, deadline: deadlineFor(5000) },
+      { pool, access, actor, at, deadline },
       subjectId,
     );
     if (!observed) return null;
     const { source, anchor } = observed;
-    const current = await snapshot(actor, (client, account) =>
+    const current = await snapshot(actor, deadline, (client, account) =>
       readEntry(client, requireRoute(account.accountId), account.accountId, source.subjectId),
     );
     return {
@@ -736,9 +753,11 @@ export function createAniListImport(deps: Dependencies) {
     return result.value;
   }
   async function page(actor: Actor, id: string, after: number) {
-    const header = await load<Header>(actor, id, -1);
+    const deadline = deadlineFor(5000),
+      header = await load<Header>(actor, id, -1, deadline);
     const raw = await snapshot(
       actor,
+      deadline,
       async (client, account) =>
         (
           await client.query<{ ordinal: number; payload: Stored }>(
@@ -767,8 +786,8 @@ export function createAniListImport(deps: Dependencies) {
           currentScore = { status: 'unavailable' as const, reason: error.reason };
         }
       }
-      const matching = await match(actor, row.payload.source);
-      const inspected = matching.state === 'matched' ? await observe(actor, matching.candidates[0]!) : null;
+      const matching = await match(actor, row.payload.source, deadline);
+      const inspected = matching.state === 'matched' ? await observe(actor, matching.candidates[0]!, deadline) : null;
       const { profile, profileBinding: _profileBinding, ...publicObservation } = inspected ?? {};
       const observation = inspected ? propose(publicObservation as AniListObservation, row.payload.source) : null;
       const {
@@ -794,7 +813,7 @@ export function createAniListImport(deps: Dependencies) {
         consumptionDateOutcome: row.payload.consumptionDateIntent?.outcome ?? null,
       });
     }
-    await snapshot(actor, async () => undefined);
+    await snapshot(actor, deadline, async () => undefined);
     const result = { header, rows, next: raw.length === 20 ? raw[raw.length - 1]!.ordinal : null };
     if (Buffer.byteLength(JSON.stringify(result)) > ANILIST_LABEL_LIMITS.pageBytes) throw new AniListInputError();
     return result;
@@ -802,12 +821,13 @@ export function createAniListImport(deps: Dependencies) {
   async function review(actor: Actor, id: string, ordinal: number, input: AniListReviewInput, key: string) {
     if (input.fields.some((field) => !field.isWellFormed() || field.includes('\0'))) throw new AniListInputError();
     if (input.skip && (input.progress || input.score)) throw new AniListInputError();
-    const account = owner(actor),
-      stored = await load(actor, id, ordinal);
-    const matching = await match(actor, stored.source);
+    const deadline = deadlineFor(5000),
+      account = owner(actor),
+      stored = await load(actor, id, ordinal, deadline);
+    const matching = await match(actor, stored.source, deadline);
     const selected = input.subjectId ?? (matching.state === 'matched' ? matching.candidates[0] : undefined);
     if (!input.skip && !selected) throw new LibraryConflictError();
-    const inspected = selected ? await observe(actor, selected) : null;
+    const inspected = selected ? await observe(actor, selected, deadline) : null;
     const { profile, profileBinding, ...publicObservation } = inspected ?? {};
     const observation = selected
       ? propose(inspected ? (publicObservation as AniListObservation) : null, stored.source)
@@ -852,7 +872,7 @@ export function createAniListImport(deps: Dependencies) {
           present: true,
           value: stored.source.evidence.score,
           lexeme: stored.source.scoreLexeme ?? null,
-          scale: (await load<Header>(actor, id, -1)).scoreFormat,
+          scale: (await load<Header>(actor, id, -1, deadline)).scoreFormat,
           validity: scoreField?.validity ?? 'unknown',
           reason: scoreField?.reason ?? 'The source score value was retained without a field mapping.',
         },
@@ -939,12 +959,13 @@ export function createAniListImport(deps: Dependencies) {
     stored: Stored,
     sourceReviewToken: string,
     subjectId: string,
+    deadline = deadlineFor(5000),
   ) {
     const review = stored.review,
       reviewed = review?.observation;
     if (!review || !reviewed || review.id !== sourceReviewToken || reviewed.subjectId !== subjectId) return null;
-    const matching = await match(actor, stored.source),
-      current = await observe(actor, subjectId);
+    const matching = await match(actor, stored.source, deadline),
+      current = await observe(actor, subjectId, deadline);
     if (
       !current ||
       matching.fingerprint !== review.match.fingerprint ||
@@ -1233,9 +1254,9 @@ export function createAniListImport(deps: Dependencies) {
       deadline = deadlineFor(20_000);
     for (const confirmation of confirmations) {
       if (signal?.aborted || Date.now() >= deadline) break;
-      const header = await load<Header>(actor, id, -1);
+      const header = await load<Header>(actor, id, -1, deadline);
       if (header.cancelled) break;
-      const stored = await load(actor, id, confirmation.ordinal);
+      const stored = await load(actor, id, confirmation.ordinal, deadline);
       const reviewed = stored.review;
       if (
         !reviewed ||
@@ -1264,8 +1285,8 @@ export function createAniListImport(deps: Dependencies) {
       let scoreCurrent: 'current' | 'stale' | null = null;
       if (reviewed.score && !reviewed.score.native.consented) {
         const question = await readScoreQuestion(actor);
-        const current = await observe(actor, reviewed.score.native.target.subjectId);
-        const matching = await match(actor, stored.source);
+        const current = await observe(actor, reviewed.score.native.target.subjectId, deadline);
+        const matching = await match(actor, stored.source, deadline);
         scoreCurrent =
           hash(question) !== hash(reviewed.score.native.question) ||
           !current ||
@@ -1398,11 +1419,11 @@ export function createAniListImport(deps: Dependencies) {
       if (reviewed.progress && hash(stored.source) === reviewed.sourceFingerprint) {
         progressCheckpoint = await executeProgressAdoption(actor, sessions, reviewed.progress, stored.progress, {
           async canceled() {
-            return (await load<Header>(actor, id, -1)).cancelled;
+            return (await load<Header>(actor, id, -1, deadline)).cancelled;
           },
           async binding() {
-            const matching = await match(actor, stored.source);
-            const current = await observe(actor, reviewed.progress!.subjectId);
+            const matching = await match(actor, stored.source, deadline);
+            const current = await observe(actor, reviewed.progress!.subjectId, deadline);
             if (
               matching.fingerprint !== reviewed.match.fingerprint ||
               !current ||
@@ -1452,8 +1473,8 @@ export function createAniListImport(deps: Dependencies) {
         reviewed.observation?.proposedState
       ) {
         const observed = reviewed.observation;
-        const current = await observe(actor, observed.subjectId),
-          matching = await match(actor, stored.source);
+        const current = await observe(actor, observed.subjectId, deadline),
+          matching = await match(actor, stored.source, deadline);
         if (
           !current ||
           current.subjectId !== observed.subjectId ||
@@ -1531,7 +1552,11 @@ export function createAniListImport(deps: Dependencies) {
         !outcomes.some((outcome) => outcome.score?.status === 'unavailable' || outcome.score?.status === 'skipped'),
     };
   }
-  function dateAdmission(actor: Actor, identity: AniListDateAdmissionIdentity): ProgressSessionJournalAdmission {
+  function dateAdmission(
+    actor: Actor,
+    identity: AniListDateAdmissionIdentity,
+    deadline = deadlineFor(5000),
+  ): ProgressSessionJournalAdmission {
     return {
       identity,
       assert: async (tx) => {
@@ -1561,9 +1586,9 @@ export function createAniListImport(deps: Dependencies) {
           hash(current.source) !== identity.sourceFingerprint
         )
           throw new LibraryConflictError();
-        const matching = await match(actor, current.source);
+        const matching = await match(actor, current.source, deadline);
         if (matching.fingerprint !== identity.matchFingerprint) throw new LibraryConflictError();
-        const live = await observe(actor, String(identity.subjectId));
+        const live = await observe(actor, String(identity.subjectId), deadline);
         if (
           !live ||
           live.subjectId !== identity.subjectId ||
@@ -1599,8 +1624,9 @@ export function createAniListImport(deps: Dependencies) {
     };
   }
   async function reviewConsumptionDates(actor: Actor, id: string, input: AniListDateReviewInput, key: string) {
-    const account = owner(actor),
-      stored = await load(actor, id, input.ordinal),
+    const deadline = deadlineFor(5000),
+      account = owner(actor),
+      stored = await load(actor, id, input.ordinal, deadline),
       sourceReview = stored.review;
     if (
       !sourceReview ||
@@ -1610,9 +1636,9 @@ export function createAniListImport(deps: Dependencies) {
       hash(stored.source) !== sourceReview.sourceFingerprint
     )
       throw new LibraryConflictError();
-    const matching = await match(actor, stored.source),
+    const matching = await match(actor, stored.source, deadline),
       subjectId = sourceReview.observation.subjectId,
-      live = await observe(actor, subjectId);
+      live = await observe(actor, subjectId, deadline);
     if (
       matching.fingerprint !== sourceReview.match.fingerprint ||
       !live ||
@@ -1683,9 +1709,10 @@ export function createAniListImport(deps: Dependencies) {
     id: string,
     ordinal: number,
     review: ImportConsumptionDateReview,
+    deadline = deadlineFor(5000),
   ) {
-    const header = await load<Header>(actor, id, -1),
-      stored = await load(actor, id, ordinal);
+    const header = await load<Header>(actor, id, -1, deadline),
+      stored = await load(actor, id, ordinal, deadline);
     if (
       header.cancelled ||
       !stored.review ||
@@ -1694,8 +1721,8 @@ export function createAniListImport(deps: Dependencies) {
       stored.consumptionDateReview?.version !== review.version
     )
       return false;
-    const matching = await match(actor, stored.source),
-      live = await observe(actor, review.subjectId);
+    const matching = await match(actor, stored.source, deadline),
+      live = await observe(actor, review.subjectId, deadline);
     if (
       matching.fingerprint !== review.matchFingerprint ||
       !live ||
@@ -1736,12 +1763,13 @@ export function createAniListImport(deps: Dependencies) {
     )
       throw new AniListInputError();
     const account = owner(actor),
-      selected = input.rows;
+      selected = input.rows,
+      deadline = deadlineFor(20_000);
     const result = await applyImportConsumptionDateRows(
       selected,
       signal,
       async (item) => {
-        const stored = await load(actor, id, item.ordinal),
+        const stored = await load(actor, id, item.ordinal, deadline),
           reviewed = stored.consumptionDateReview;
         if (!reviewed || reviewed.version !== item.version || stored.review?.id !== reviewed.sourceReviewToken) {
           return {
@@ -1773,7 +1801,7 @@ export function createAniListImport(deps: Dependencies) {
             clientId: account.clientId,
             requestedBy: account.requestedBy ?? null,
           },
-          admission = dateAdmission(actor, identity),
+          admission = dateAdmission(actor, identity, deadline),
           intent = await executeImportConsumptionDateIntent({
             review: reviewed,
             fields: item.fields,
@@ -1781,7 +1809,7 @@ export function createAniListImport(deps: Dependencies) {
             nativeRequestKey,
             admissionIdentity: identity,
             admission,
-            isCurrent: () => currentConsumptionDates(actor, id, item.ordinal, reviewed),
+            isCurrent: () => currentConsumptionDates(actor, id, item.ordinal, reviewed, deadline),
             async persist(next) {
               try {
                 await save(
@@ -1875,7 +1903,13 @@ export function createAniListImport(deps: Dependencies) {
     );
     return { cancelled: true };
   }
-  const labelAdoption = createAniListLabelAdoption({ ...deps, load, snapshot, match, observe });
+  const labelAdoption = createAniListLabelAdoption({
+    ...deps,
+    load,
+    snapshot: (actor, body) => snapshot(actor, deadlineFor(5000), body),
+    match,
+    observe,
+  });
   return {
     preview,
     page,
