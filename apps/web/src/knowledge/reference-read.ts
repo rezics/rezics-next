@@ -4,6 +4,7 @@ import { admitKnowledgePrivateHead } from './private-knowledge';
 import { readKnowledgePublicDocument } from './public-read';
 import { referenceBlock, type KnowledgeReferenceTarget } from './reference-model';
 
+/** Ready sha256 is immutable citation source identity, not the digest of a redacted display body. */
 export type ReferenceInspection =
   | { state: 'ready'; documentId: string; revisionId: string; sha256: string; title: string; body: DocumentSnapshot }
   | { state: 'unavailable' | 'denied' | 'not-found' | 'retired' | 'signed-out' };
@@ -23,7 +24,8 @@ export async function inspectKnowledgeReference(
 ): Promise<ReferenceInspection> {
   const target = input.target;
   if (target.kind === 'subject') return { state: 'unavailable' };
-  let document: { documentId: string; revisionId: string; sha256?: string; title: string; body: DocumentSnapshot };
+  let citationDigest: string;
+  let document: { documentId: string; revisionId: string; title: string; body: DocumentSnapshot };
   if (input.notebookId !== null) {
     if (!privateAccess) return { state: 'denied' };
     const address = { accountId: privateAccess.accountId, notebookId: input.notebookId, documentId: target.documentId };
@@ -38,7 +40,10 @@ export async function inspectKnowledgeReference(
       });
     const admitted = await admitKnowledgePrivateHead(result.status, result.data, address);
     if (admitted.state !== 'ready') return { state: admitted.state };
+    if (typeof admitted.head.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(admitted.head.sha256))
+      return { state: 'unavailable' };
     document = admitted.head;
+    citationDigest = admitted.head.sha256;
   } else {
     const result = await readKnowledgePublicDocument(client, {
       documentId: target.documentId,
@@ -47,11 +52,12 @@ export async function inspectKnowledgeReference(
     });
     if (result.state !== 'ready') return { state: result.state === 'preparing' ? 'unavailable' : result.state };
     document = result.document;
+    citationDigest = result.document.sourceSha256;
   }
   if (
     target.kind === 'revision' &&
     (document.revisionId !== target.revisionId ||
-      document.sha256 !== target.sha256 ||
+      citationDigest !== target.sha256 ||
       (target.blockId !== undefined && !referenceBlock(document.body, target.blockId)))
   )
     return { state: 'unavailable' };
@@ -59,7 +65,7 @@ export async function inspectKnowledgeReference(
     state: 'ready',
     documentId: document.documentId,
     revisionId: document.revisionId,
-    sha256: document.sha256!,
+    sha256: citationDigest,
     title: document.title,
     body: document.body,
   };

@@ -109,7 +109,7 @@ test('exact citations survive publication updates, close on withdrawal and reope
       kind: 'revision',
       documentId: document.documentId,
       revisionId: document.revisionId,
-      sha256: a.value.document.sha256,
+      sha256: a.value.document.sourceSha256,
       blockId: 'a-block',
     },
   };

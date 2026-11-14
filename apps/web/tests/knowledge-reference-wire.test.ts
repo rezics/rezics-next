@@ -57,6 +57,7 @@ function dto(draft = problem()) {
       subjectIds: [notebookId],
       canonicalBytes: Buffer.from(source).toString('base64'),
       sha256: createHash('sha256').update(source).digest('hex'),
+      sourceSha256: createHash('sha256').update(source).digest('hex'),
       references: draft.references,
       provenance: null,
       subjectId: notebookId,
@@ -173,7 +174,7 @@ test('HTTP boundary refuses oversized, malformed or mismatched manifests without
 });
 test('selected exact inspection sends one native query and never falls back on digest, revision, block or availability failure', async () => {
   const native = dto({ body: fromPlainText('Original theorem assumptions.', 'blocks'), references: [] });
-  const target = { kind: 'revision' as const, documentId, revisionId, sha256: native.document.sha256 };
+  const target = { kind: 'revision' as const, documentId, revisionId, sha256: native.document.sourceSha256 };
   let response = native;
   const { calls, client } = clientFor(() => Response.json(response));
   expect((await inspectKnowledgeReference(client, { target, locale: 'en', notebookId: null })).state).toBe('ready');
@@ -203,4 +204,29 @@ test('selected exact inspection sends one native query and never falls back on d
     'not-found',
   );
   expect(unavailable.calls).toHaveLength(1);
+});
+
+test('public exact citation compares immutable source digest while showing only independently verified projected text', async () => {
+  const projected = dto({ body: fromPlainText('Disclosed theorem assumptions.', 'blocks'), references: [] });
+  const sourceSha256 = createHash('sha256')
+    .update(serializeDocument(fromPlainText('Original private theorem notes.', 'blocks')))
+    .digest('hex');
+  projected.document.sourceSha256 = sourceSha256;
+  const native = clientFor(() => Response.json(projected));
+  const target = { kind: 'revision' as const, documentId, revisionId, sha256: sourceSha256 };
+  const read = await inspectKnowledgeReference(native.client, { target, locale: 'en', notebookId: null });
+  expect(read.state).toBe('ready');
+  if (read.state !== 'ready') throw new Error('Expected an exact published projection');
+  expect(read.sha256).toBe(sourceSha256);
+  expect(JSON.stringify(read.body)).toContain('Disclosed theorem assumptions.');
+  expect(JSON.stringify(read.body)).not.toContain('Original private theorem notes.');
+  expect(
+    (
+      await inspectKnowledgeReference(native.client, {
+        target: { ...target, sha256: projected.document.sha256 },
+        locale: 'en',
+        notebookId: null,
+      })
+    ).state,
+  ).toBe('unavailable');
 });

@@ -9,6 +9,7 @@ import {
   authoritativeTimeValue,
   noEffect,
   principalCommandIdentity,
+  preflightCommandReceipt,
   runCommand,
   type AuthoritativeTime,
   type CommandAuthorization,
@@ -90,17 +91,20 @@ async function accountUpdateAuthorization(
 ): Promise<CommandAuthorization> {
   const route = routed(ownerId);
   if (actor.kind !== 'account' || actor.accountId !== ownerId) throw new KnowledgeNotFoundError();
-  const check = await accessCheck(
-    deps.access,
-    actor,
-    'account:update',
-    { route, id: ownerId },
-    { pool: deps.pool, deadline: context.deadline },
-  );
   return {
     action: 'account:update',
     resource: { route, id: ownerId },
-    async authorize(tx) {
+    prepare() {
+      return accessCheck(
+        deps.access,
+        actor,
+        'account:update',
+        { route, id: ownerId },
+        { pool: deps.pool, deadline: context.deadline },
+      );
+    },
+    async authorize(tx, _attempt, evidence) {
+      const check = evidence as Awaited<ReturnType<typeof accessCheck>>;
       if (!(await check(tx as AccessClient))) throw new ContentForbiddenError();
       return 'execute';
     },
@@ -419,21 +423,29 @@ export async function createKnowledgeNotebook(
   input: KnowledgeCreateNotebookInput,
   context: KnowledgeCommandContext,
 ) {
+  input = structuredClone(input);
   if (typeof input.title !== 'string' || !input.title.trim() || input.title.includes('\0') || input.title.length > 256)
     throw new KnowledgeInvalidInputError();
   const owner = accountId(actor);
   const route = routed(owner);
+  const kind = 'content.knowledge.notebook.create';
+  const base = await accountUpdateAuthorization(deps, actor, owner, context);
+  const options = commandOptions(actor, route, context, kind, owner, input, base);
+  const replay = await preflightCommandReceipt<{ notebookId: string; structureRevisionId: string }>(deps.pool, options);
+  if (replay) return replay;
+  const verifySubject = await preparePublicSubjects(deps, input.subjectId, [], context.deadline);
+  const authorization: CommandAuthorization = {
+    ...base,
+    async prepare(attempt) {
+      if (!(await verifySubject())) throw new KnowledgeNotFoundError();
+      return base.prepare!(attempt);
+    },
+  };
   const notebookId = newId(route);
   const structureRevisionId = newId(route);
-  const kind = 'content.knowledge.notebook.create';
-  const authorization = await accountUpdateAuthorization(deps, actor, owner, context);
-  const verifySubject = await preparePublicSubjects(deps, input.subjectId, [], context.deadline);
-  authorization.prepare = async () => {
-    if (!(await verifySubject())) throw new KnowledgeNotFoundError();
-  };
-  return runCommand(
+  return runCommand<{ notebookId: string; structureRevisionId: string }>(
     deps.pool,
-    commandOptions(actor, route, context, kind, notebookId, input, authorization),
+    { ...options, authorization },
     async (tx, { transactionId, time }) => {
       const inserted = await tx.query(
         `INSERT INTO content.knowledge_notebook
@@ -494,6 +506,7 @@ export async function createKnowledgeDocument(
   input: KnowledgeCreateDocumentInput,
   context: KnowledgeCommandContext,
 ) {
+  input = structuredClone(input);
   return writeKnowledgeDocument(deps, actor, notebookId, input, context, {
     kind: 'content.knowledge.document.create',
     receiptInput: input,
@@ -502,6 +515,14 @@ export async function createKnowledgeDocument(
 }
 
 /** Shared destination path: account authority, structure CAS, ancestry, private insert, event and receipt. */
+type KnowledgeWrittenDocument = Readonly<{
+  notebookId: string;
+  documentId: string;
+  placementId: string;
+  revisionId: string;
+  structureRevisionId: string;
+}>;
+
 export async function writeKnowledgeDocument(
   deps: KnowledgeDependencies,
   actor: Actor,
@@ -518,7 +539,7 @@ export async function writeKnowledgeDocument(
   const owner = await knowledgeNotebookOwner(deps.pool, notebookId);
   if (!owner || owner.route !== route) throw new KnowledgeNotFoundError();
   const ownerId = owner.owner_account_id;
-  const authorization = fenceKnowledgeAuthorization(
+  const destinationAuthorization = fenceKnowledgeAuthorization(
     await accountUpdateAuthorization(deps, actor, ownerId, context),
     route,
     notebookId,
@@ -526,21 +547,37 @@ export async function writeKnowledgeDocument(
     undefined,
     placement.parentPlacementId === null ? [] : [placement.parentPlacementId],
   );
+  const kind = source.kind;
+  const options = commandOptions(
+    actor,
+    route,
+    context,
+    kind,
+    notebookId,
+    source.receiptInput,
+    destinationAuthorization,
+  );
+  const replay = await preflightCommandReceipt<KnowledgeWrittenDocument>(deps.pool, options);
+  if (replay) return replay;
   let document: StoredBody;
   let provenance: KnowledgeProvenance | null;
-  authorization.prepare = async () => {
-    const selected = await source.prepare();
-    document = storedBody(selected.input);
-    provenance = selected.provenance;
+  const authorization: CommandAuthorization = {
+    ...destinationAuthorization,
+    async prepare(attempt) {
+      const selected = await source.prepare();
+      document = storedBody(selected.input);
+      provenance = selected.provenance;
+      // Foreign source reads can outlast Access evidence; prepare this attempt's destination proof afterward.
+      return destinationAuthorization.prepare!(attempt);
+    },
   };
   const documentId = newId(route);
   const revisionId = newId(route);
   const placementId = newId(route);
   const structureRevisionId = newId(route);
-  const kind = source.kind;
-  return runCommand(
+  return runCommand<KnowledgeWrittenDocument>(
     deps.pool,
-    commandOptions(actor, route, context, kind, notebookId, source.receiptInput, authorization),
+    { ...options, authorization },
     async (tx, { transactionId, time }) => {
       const current = await tx.query<{
         owner_account_id: string;
@@ -700,8 +737,10 @@ export async function moveKnowledgePlacement(
     ),
   );
   const verifySubject = await preparePublicSubjects(deps, notebookOwner.subject_id, [], context.deadline);
-  authorization.prepare = async () => {
+  const prepareAuthority = authorization.prepare!;
+  authorization.prepare = async (attempt) => {
     if (!(await verifySubject())) throw new KnowledgeNotFoundError();
+    return prepareAuthority(attempt);
   };
 
   const structureRevisionId = newId(route);
@@ -1021,8 +1060,10 @@ export async function setKnowledgePublication(
           return preparePublicSubjects(deps, selected.subject_id, selected.subject_ids, context.deadline);
         })();
   if (verifySubject) {
-    authorization.prepare = async () => {
+    const prepareAuthority = authorization.prepare!;
+    authorization.prepare = async (attempt) => {
       if (!(await verifySubject())) throw new KnowledgeNotFoundError();
+      return prepareAuthority(attempt);
     };
   }
   const publicationId = input.revisionId === null ? null : newId(owner.route);

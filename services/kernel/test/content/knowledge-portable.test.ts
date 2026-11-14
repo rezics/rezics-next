@@ -3,6 +3,7 @@ import { fromPlainText, normalizeDocument, serializeDocument, type DocumentSnaps
 import {
   canonicalKnowledgeJson,
   knowledgeDigest,
+  knowledgeProvenanceOrNull,
   KNOWLEDGE_REFERENCE_DEFINITION,
   makeKnowledgeExport,
   parseKnowledgeExport,
@@ -93,6 +94,30 @@ test('portable envelope and contained Document validate independently and detect
   expect(() => parseKnowledgeExport(malformedBody)).toThrow('snapshot');
   const wrongSelection = makeKnowledgeExport({ ...payload, selection: { ...selection, sha256: 'b'.repeat(64) } });
   expect(() => parseKnowledgeExport(wrongSelection)).toThrow('representation digest mismatch');
+  const publicSelection = {
+    ...selection,
+    representation: 'public' as const,
+    publicationId: newId(0),
+    sourceSha256: 'c'.repeat(64),
+  };
+  const published = makeKnowledgeExport({ ...payload, representation: 'public', selection: publicSelection });
+  const reseal = (change: Record<string, unknown>) => {
+    const { sha256: _old, ...altered } = { ...published, ...change };
+    return { ...altered, sha256: knowledgeDigest(canonicalKnowledgeJson(altered)) };
+  };
+  expect(() => parseKnowledgeExport(reseal({ selection }))).toThrow('selection representation mismatch');
+  expect(() => parseKnowledgeExport(reseal({ selection: { ...selection, representation: 'public' } }))).toThrow(
+    'Invalid knowledge export envelope',
+  );
+  expect(() => parseKnowledgeExport(reseal({ provenance: selection }))).toThrow('provenance representation mismatch');
+  const wronglyPublicAuthoring = { ...selection, publicationId: newId(0) };
+  expect(() => makeKnowledgeExport({ ...payload, selection: wronglyPublicAuthoring })).toThrow(
+    'selection publication mismatch',
+  );
+  expect(parseKnowledgeExport(published)).toEqual(published);
+  expect(publicSelection.sourceSha256).not.toBe(publicSelection.sha256);
+  expect(knowledgeProvenanceOrNull({ ...publicSelection, sourceSha256: undefined })).toBeNull();
+  expect(knowledgeProvenanceOrNull({ ...publicSelection, notebookId: newId(0) })).toBeNull();
 });
 
 test('copy remaps local component/reference/block identities and fragment links while preserving opaque math and exact external citations', () => {
