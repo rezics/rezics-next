@@ -2,7 +2,7 @@ import type { AccessWorkAccounting } from '../access/work.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient, commandAccessContext, readAccount, readAccountCommandState } from './access-port.ts';
+import { commandAccessContext, readAccount, readAccountCommandState } from './access-port.ts';
 import {
   mintReadTime,
   releaseOperationalTime,
@@ -15,7 +15,6 @@ import { contributionDeleted, readContributionAttributions } from './access-port
 import { readPublicViews } from './access-port.ts';
 import publicGeneration from './collection-public-generation.sql';
 import { collectionReadEligibility, type CollectionReadObservation } from './collection-read-eligibility.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from '../request/access-check.ts';
@@ -42,14 +41,17 @@ import {
   type CollectionMetadataHistoryPage,
   type CollectionMetadataHistorySnapshot,
 } from './collection-metadata-history.ts';
-import { subjectCollections } from './listing.ts';
+import {
+  executeSubjectCollectionPairs,
+  subjectCollectionCountPlan,
+  subjectCollectionPairPlan,
+} from './subject-collection-read-bounds.ts';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { readableSubjects, resolveSubject } from './subject-anchor.ts';
 import collectionRead from './collection-reads-collection.sql';
 import { collectionDirectoryPagePlan, collectionDirectoryRowPlan } from './collection-directory-bounds.ts';
 import memberPage from './collection-reads-members.sql';
-import { subjectCollectionCountPlan } from './subject-collection-read-bounds.ts';
 import {
   authorizeCollectionRule,
   prepareCollectionRuleAuthority,
@@ -74,6 +76,7 @@ import type { ViewerPersonalActionsReader, ViewerPersonalActionsPage } from './v
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
 import { specializeCollectionListPolicy } from './collection-list-policy.ts';
+import { withCollectionReadConnection, withCollectionReadSnapshot } from './collection-read-connection.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;
@@ -311,18 +314,8 @@ function cursorToken(cursor: unknown): string | null {
   return cursor;
 }
 
-async function readOnly<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const value = await work(client);
-      await client.query('COMMIT');
-      return value;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
-  });
+function readOnly<T>(pool: Pool, deadline: number, work: (client: QueryClient) => Promise<T>): Promise<T> {
+  return withCollectionReadSnapshot(pool, deadline, (client) => work(queryOf(client)));
 }
 
 export function createCollectionReads(
@@ -364,8 +357,7 @@ export function createCollectionReads(
     if (route === null || accountRoute === null) throw notFound();
     const update = await accessCheck(access, viewer, 'collection:update', { route, id }, { pool, deadline });
     async function capture(checks: readonly import('../request/access.ts').AccessCheck[] = [], at?: AuthoritativeTime) {
-      return readOnly(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
+      return readOnly(pool, deadline, async (client) => {
         const time = at ?? (await mintReadTime(client, dependencies.clock));
         try {
           const account = await readAccount(client, accountRoute!, accountViewer.accountId);
@@ -410,8 +402,8 @@ export function createCollectionReads(
     }
     const original = await capture();
     // Walk the stored expanded meaning; never re-admit it against a newer release.
-    const finalTime = await withConnection(pool, (client) =>
-      mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+    const finalTime = await withCollectionReadConnection(pool, deadline, (client) =>
+      mintReadTime(client, dependencies.clock),
     );
     try {
       const checks = await prepareCollectionRuleAuthority(
@@ -455,8 +447,7 @@ export function createCollectionReads(
       { route, id, eligibility: collectionReadEligibility({ route, id }, sink) },
       observation?.attempt ? commandAccessContext(context, observation.attempt) : context,
     );
-    return readOnly(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
+    return readOnly(pool, deadline, async (client) => {
       const account =
         actor(viewer) && routeOf(viewer.accountId) !== null
           ? await collectionReadAccount(client, routeOf(viewer.accountId)!, viewer.accountId, work)
@@ -522,8 +513,7 @@ export function createCollectionReads(
     const accountRoute = routeOf(viewer.accountId);
     if (route === null || accountRoute === null) throw notFound();
     const check = await accessCheck(access, viewer, 'collection:update', { route, id }, { pool, deadline });
-    return readOnly(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
+    return readOnly(pool, deadline, async (client) => {
       const time = await mintReadTime(client, dependencies.clock);
       try {
         const account = await readAccount(client, accountRoute, viewer.accountId);
@@ -765,7 +755,7 @@ export function createCollectionReads(
         { route: routeOf(row.id)!, id: row.id },
         { pool, deadline },
       );
-      editor = await withConnection(pool, (client) => check(deadlineClient(client, deadline)));
+      editor = await withCollectionReadConnection(pool, deadline, (client) => check(client));
     }
     if (row.coverMediaId !== null || owner) {
       const final = await loadCollection(viewer, row.id, deadline);
@@ -803,8 +793,8 @@ export function createCollectionReads(
     const curatorId = row.curatorAccountId;
     const attribution = curatorId
       ? ((
-          await withConnection(pool, (client) =>
-            readContributionAttributions(deadlineClient(client, deadline), [curatorId]),
+          await withCollectionReadConnection(pool, deadline, (client) =>
+            readContributionAttributions(client, [curatorId]),
           )
         ).get(curatorId) ?? null)
       : null;
@@ -812,7 +802,7 @@ export function createCollectionReads(
       return { attribution };
     const collectionRoute = routeOf(row.id);
     if (collectionRoute === null) return { attribution };
-    const members = await withConnection(pool, (client) =>
+    const members = await withCollectionReadConnection(pool, deadline, (client) =>
       client.query<{ generation: string; subjectId: string | null }>(publicGeneration.sql, [collectionRoute, row.id]),
     );
     const generation = members.rows[0]?.generation;
@@ -829,8 +819,8 @@ export function createCollectionReads(
       return false;
     const route = routeOf(viewer.accountId);
     if (route === null) return false;
-    const account = await withConnection(pool, (client) =>
-      readAccount(deadlineClient(client, deadline), route, viewer.accountId),
+    const account = await withCollectionReadConnection(pool, deadline, (client) =>
+      readAccount(client, route, viewer.accountId),
     );
     return account !== null && grantCapable(account, viewer);
   }
@@ -893,8 +883,8 @@ export function createCollectionReads(
     if (route === null) throw notFound();
     // Presentation visibility is read before opening the page transaction. A visible account path
     // needs no private account read; only a hidden view needs the existing curator exception.
-    const publicViews = await withConnection(pool, (client) =>
-      readPublicViews(deadlineClient(client, deadline), [curatorAccountId]),
+    const publicViews = await withCollectionReadConnection(pool, deadline, (client) =>
+      readPublicViews(client, [curatorAccountId]),
     );
     const visible = publicViews.get(curatorAccountId)?.collections === true;
     const curator = (!publicOnly || !visible) && (await seesAll(viewer, curatorAccountId, deadline));
@@ -925,8 +915,7 @@ export function createCollectionReads(
         : [];
     const shownLogical = logical.slice(0, page.limit);
     const remaining = page.limit - shownLogical.length;
-    const result = await readOnly(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
+    const result = await readOnly(pool, deadline, async (client) => {
       const partition = await readPartition(client, partitionOf(route));
       if (!partition) throw new ProblemError('partition_unavailable');
       if (cursor && cursor.epoch !== partition.epoch) throw new ProblemError('stale_cursor');
@@ -998,8 +987,8 @@ export function createCollectionReads(
       ...(ownerManagement ? { ownerManagement: 'owner' as const, ownerAccountId: curatorAccountId } : {}),
     };
     const presented = presentation ? await presentation.present(body) : body;
-    const currentViews = await withConnection(pool, (client) =>
-      readPublicViews(deadlineClient(client, deadline), [curatorAccountId]),
+    const currentViews = await withCollectionReadConnection(pool, deadline, (client) =>
+      readPublicViews(client, [curatorAccountId]),
     );
     if (curator && !(await seesAll(viewer, curatorAccountId, deadline))) throw notFound();
     if (!curator && currentViews.get(curatorAccountId)?.collections !== true)
@@ -1017,8 +1006,8 @@ export function createCollectionReads(
       )
         throw new ProblemError('dependency_unavailable');
     }
-    const current = await withConnection(pool, (client) =>
-      readPartition(deadlineClient(client, deadline), partitionOf(route)),
+    const current = await withCollectionReadConnection(pool, deadline, (client) =>
+      readPartition(client, partitionOf(route)),
     );
     if (!current) throw new ProblemError('partition_unavailable');
     if (
@@ -1080,8 +1069,8 @@ export function createCollectionReads(
       if (!source) throw notFound();
       const reader =
         viewer.kind === 'account'
-          ? await withConnection(pool, (client) =>
-              readAccount(deadlineClient(client, deadline), routeOf(viewer.accountId)!, viewer.accountId),
+          ? await withCollectionReadConnection(pool, deadline, (client) =>
+              readAccount(client, routeOf(viewer.accountId)!, viewer.accountId),
             )
           : null;
       return JSON.stringify({ source, reader, viewer }, (_key, value) =>
@@ -1187,7 +1176,7 @@ export function createCollectionReads(
       routeOf(viewer.accountId) !== route
     )
       throw notFound();
-    const saved = await readOnly(pool, (client) => readSavedCollectionRule(client, route, collectionId));
+    const saved = await readOnly(pool, deadline, (client) => readSavedCollectionRule(client, route, collectionId));
     if (!saved) throw new ProblemError('dependency_unavailable');
     if (saved.collectionRevision !== collection.revision || saved.sourceGeneration !== collection.sourceGeneration)
       throw new ProblemError('stale_cursor');
@@ -1195,12 +1184,12 @@ export function createCollectionReads(
     if (admission.source === 'catalogue') {
       if (!dependencies.search || !dependencies.routeKey) throw new ProblemError('dependency_unavailable');
       const limit = options.limit ?? DEFAULT_PAGE_SIZE;
-      const time = await withConnection(pool, (client) =>
-        mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+      const time = await withCollectionReadConnection(pool, deadline, (client) =>
+        mintReadTime(client, dependencies.clock),
       );
       const lifetime = async () => {
-        const account = await withConnection(pool, (client) =>
-          readAccount(deadlineClient(client, deadline), route, viewer.accountId),
+        const account = await withCollectionReadConnection(pool, deadline, (client) =>
+          readAccount(client, route, viewer.accountId),
         );
         if (!account || !grantCapable(account, viewer)) throw notFound();
         return {
@@ -1217,7 +1206,7 @@ export function createCollectionReads(
             { time: at, read: true },
             deadline,
           );
-          await readOnly(pool, (client) => authorizeCollectionRule(client, { time: at }, checks));
+          await readOnly(pool, deadline, (client) => authorizeCollectionRule(client, { time: at }, checks));
           await revalidate();
         };
         const firstLifetime = await lifetime();
@@ -1238,8 +1227,8 @@ export function createCollectionReads(
             ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
             scope: { access, actor: viewer, routeKey: dependencies.routeKey, nativeT: time, deadline },
             async revalidate() {
-              const finalTime = await withConnection(pool, (client) =>
-                mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+              const finalTime = await withCollectionReadConnection(pool, deadline, (client) =>
+                mintReadTime(client, dependencies.clock),
               );
               try {
                 await authorize(finalTime);
@@ -1299,13 +1288,13 @@ export function createCollectionReads(
           { time, read: true },
           deadline,
         );
-        await readOnly(pool, (client) => authorizeCollectionRule(client, { time }, checks));
+        await readOnly(pool, deadline, (client) => authorizeCollectionRule(client, { time }, checks));
         await revalidate();
       };
       await authorize(binding.input.at);
       const result = await readBoundOwnerFilterPage(dependencies, admission, options, binding);
-      const finalTime = await withConnection(pool, (client) =>
-        mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+      const finalTime = await withCollectionReadConnection(pool, deadline, (client) =>
+        mintReadTime(client, dependencies.clock),
       );
       try {
         await authorize(finalTime);
@@ -1347,7 +1336,7 @@ export function createCollectionReads(
       parameters: { collectionId },
     };
     const position = memberPosition(unseal(cursorToken(page.cursor), binding), route, collection.orderEpoch);
-    const rows = await readOnly(pool, (client) =>
+    const rows = await readOnly(pool, deadline, (client) =>
       memberPage.run(queryOf(client), {
         route,
         collection_id: collectionId,
@@ -1393,10 +1382,11 @@ export function createCollectionReads(
     const resolution = await resolveSubject(anchors, viewer, subjectId, undefined, { pool, deadline });
     if (resolution === null) throw notFound();
     const route = routeOf(subjectId)!;
-    const counts = await subjectCollectionCountPlan({
+    const countPlan = subjectCollectionCountPlan({
       partition_no: partitionOf(route),
       subject_ids: [subjectId],
-    }).run(pool);
+    });
+    const counts = await withCollectionReadConnection(pool, deadline, (client) => countPlan.run(client));
     const count = counts[0]?.publicCollectionCount ?? 0;
     const binding: CursorBinding = {
       operation: 'library.subject.collections',
@@ -1404,18 +1394,26 @@ export function createCollectionReads(
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const after = subjectPosition(cursor);
-    const partition = await withConnection(pool, (client) =>
-      readPartition(deadlineClient(client, deadline), partitionOf(route)),
+    const partition = await withCollectionReadConnection(pool, deadline, (client) =>
+      readPartition(client, partitionOf(route)),
     );
     if (!partition) throw new ProblemError('partition_unavailable');
     if (cursor && cursor.epoch !== partition.epoch) throw new ProblemError('stale_cursor');
-    const pairs = await subjectCollections(pool, subjectId, after, page.limit + 1);
+    const pairPlan = subjectCollectionPairPlan({
+      route,
+      subject_id: subjectId,
+      after: after ?? '00000000-0000-0000-0000-000000000000',
+      limit: page.limit + 1,
+    });
+    const pairRows = await withCollectionReadConnection(pool, deadline, (client) =>
+      executeSubjectCollectionPairs(client, pairPlan),
+    );
+    const pairs = pairRows.map((row) => ({ ...row, updatedAt: new Date(row.updatedAt).toISOString() }));
     const considered = pairs.slice(0, page.limit);
     const shown: PublicCollectionView[] = [];
     const observations: { row: StoredCollection; visible: boolean }[] = [];
     if (considered.length > 0) {
-      await readOnly(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
+      await readOnly(pool, deadline, async (client) => {
         for (const pair of considered) {
           const row = await collectionDirectoryRowPlan({
             route: pair.collectionRoute,
@@ -1461,8 +1459,7 @@ export function createCollectionReads(
     // Count and pair observations remain separate. This terminal pass certifies
     // only considered Collection/current disclosure evidence, never a new count.
     if (observations.length) {
-      await readOnly(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
+      await readOnly(pool, deadline, async (client) => {
         for (const original of observations) {
           const row = await collectionDirectoryRowPlan({
             route: routeOf(original.row.id)!,
@@ -1483,8 +1480,8 @@ export function createCollectionReads(
         }
       });
     }
-    const current = await withConnection(pool, (client) =>
-      readPartition(deadlineClient(client, deadline), partitionOf(route)),
+    const current = await withCollectionReadConnection(pool, deadline, (client) =>
+      readPartition(client, partitionOf(route)),
     );
     if (!current) throw new ProblemError('partition_unavailable');
     if (

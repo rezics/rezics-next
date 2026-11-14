@@ -2496,6 +2496,9 @@ Decision: the Library owns complete nine-axis actor-command declarations for add
 
 ### Collection read
 
+Decision: Every Collection checkout, source snapshot, public-generation read, maintained count and pair seek shares
+the original visit deadline; uncertain transaction clients are discarded without post-expiry rollback.
+
 - Touches: `collection:read`, with public eligibility. Eligibility reads the Collection primary key once into a sink, and the load does not read it again when that sink has seen the row. A repeatable-read transaction may also read the viewer account. Public and unlisted rows are returned. A private row is returned only to a live grant-capable curator.
 - Bound: The Collection point is `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the account read when the viewer is an account, the Access check, and begin and commit.
 - Growth check: `test/library/growth-collections.test.ts`: `Collection read has constant rows and statements as collections and its members grow`. Whole-operation rows and statements are constant and blocks logarithmic at scales 1, 4 and 16, including authorization. Other accounts' and the curator's own other Collections and members, Access rows, receipts, outbox and write-basis rows grow by 500 x scale per partition; each probe Collection has 250 x scale members (250, 1000 and 4000). Every run uses a fresh probe.
