@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { act, createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { dirname } from 'node:path';
 
 const { Window } = await import(
@@ -58,6 +59,11 @@ test('clipboard denial selects the exact current reference and retirement hides 
   for (const revisionId of ['revision-1', null] as const) {
     const currentReport = { ...report, id: `report-${revisionId ?? 'without-revision'}`, revisionId };
     await act(async () => root.render(createElement(ReporterStatusPage, { report: currentReport, isCurrent })));
+    expect(host.textContent?.split(m.reporter_status_pending())).toHaveLength(2);
+    expect(host.querySelectorAll('h1')).toHaveLength(1);
+    expect(host.querySelectorAll('h2')).toHaveLength(3);
+    expect(host.textContent).toContain(m.reporter_status_retained_submission());
+    expect(host.querySelectorAll('a')).toHaveLength(1);
     const details = host.querySelector('details')!;
     expect(details.open).toBe(false);
     details.open = true;
@@ -177,4 +183,21 @@ test('clipboard denial selects the exact current reference and retirement hides 
   await act(() => root.unmount());
   await rejectCopy();
   expect(host.querySelector('textarea')).toBeNull();
+});
+
+test('status loading, failure, closed and concealed keep exact history return without retained report fields', () => {
+  const returnHref = '/en/moderation/reports?cursor=original%2Fpage&reportId=report-1';
+  for (const state of ['loading', 'unavailable', 'closed', 'concealed'] as const) {
+    const content = renderToStaticMarkup(
+      createElement(ReporterStatusPage,
+        state === 'unavailable' ? { onRetry: () => undefined, returnHref } : { state, returnHref },
+      ),
+    );
+    expect(content).toContain(returnHref.replaceAll('&', '&amp;'));
+    expect(content).toContain(m.reporter_history_return());
+    expect(content).not.toContain(report.evidence);
+    expect(content).not.toContain('<details');
+    expect(content).not.toContain('post-1');
+    expect(content).toContain(state === 'unavailable' ? 'role="alert"' : 'role="status"');
+  }
 });

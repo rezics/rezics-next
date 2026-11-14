@@ -9330,7 +9330,7 @@
   "report_title": "檢舉此內容",
   "report_unavailable": "檢舉功能暫時無法使用，請稍後再試。",
   "report_verification": "驗證",
-  "reporter_history_actions_hint": "選擇檢舉後即可開啟狀態連結。開啟狀態會確認目前結果；此列顯示的是載入紀錄時的結果。",
+  "reporter_history_actions_hint": "選擇這則檢舉後即可開啟狀態連結，確認最新結果。",
   "reporter_history_continuation_unavailable": "無法載入下一頁，請重試。",
   "reporter_history_continue": "載入更多檢舉",
   "reporter_history_denied": "目前工作階段無法查看檢舉紀錄。",

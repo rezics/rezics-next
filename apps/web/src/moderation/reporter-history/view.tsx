@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Badge } from '@rezics/ui/shadcn/badge';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { viewerExposureLifetime, viewerExposureQuery } from '../../kernel/viewer-exposure';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
@@ -385,6 +385,7 @@ function HistoryEntry({
   onSelect: (reportId: string) => void | Promise<void>;
   onOpenStatus?: (reportId: string, cursor?: string) => Promise<void>;
 }) {
+  const actionHintId = useId();
   const summary = entry.targetSummary;
   const targetLabel =
     summary.state === 'available'
@@ -431,7 +432,7 @@ function HistoryEntry({
       }
       preview={<HistoryReference entry={entry} />}
       actions={
-        <div className="min-w-0 space-y-2">
+        <div className="min-w-0 space-y-2" role="group" aria-label={targetLabel} aria-describedby={actionHintId}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <button
               type="button"
@@ -474,7 +475,9 @@ function HistoryEntry({
               </button>
             )}
           </div>
-          <p className="max-w-prose text-sm leading-6 text-muted-foreground">{m.reporter_history_actions_hint()}</p>
+          <p id={actionHintId} className="max-w-prose text-sm leading-6 text-muted-foreground">
+            {m.reporter_history_actions_hint()}
+          </p>
         </div>
       }
     />

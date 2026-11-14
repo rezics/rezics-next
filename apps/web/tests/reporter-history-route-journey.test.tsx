@@ -111,14 +111,14 @@ test('served operands, exact own status and recovery form one fresh private rout
     };
   };
   const statuses: string[] = [];
-  let statusMode: 'loaded' | 'closed' = 'loaded';
+  let statusMode: 'loaded' | 'unavailable' | 'closed' | 'concealed' = 'loaded';
   mock.module('../src/moderation/reporter-history/server', () => ({ ...historyServer, readReporterHistory: read }));
   mock.module('../src/moderation/reporter-status-read', () => ({
     ...statusServer,
     readReporterStatus: async ({ data }: { data: { id: string; generation: string } }) => {
       statuses.push(data.id);
-      if (statusMode === 'closed')
-        return { ...data, readerOrigin: origin, viewer: origin, result: { state: 'closed' } };
+      if (statusMode !== 'loaded')
+        return { ...data, readerOrigin: origin, viewer: origin, result: { state: statusMode } };
       return {
         ...data,
         readerOrigin: origin,
@@ -198,6 +198,9 @@ test('served operands, exact own status and recovery form one fresh private rout
       );
     });
     expect(reads).toEqual([{}]);
+    expect(statuses).toEqual([]);
+    expect(host.querySelector('a[data-reporter-status]')).toBeNull();
+    expect(host.innerHTML).not.toContain(targetId);
     await click('Load more');
     expect(router.state.location.search).toEqual({ cursor });
     expect(host.textContent).toContain('next page could not be loaded');
@@ -221,12 +224,16 @@ test('served operands, exact own status and recovery form one fresh private rout
     await click('Select report');
     expect(router.state.location.search).toEqual({ reportId: otherId });
     expect(window.document.activeElement === host.querySelector('[aria-pressed="true"]')).toBe(true);
+    expect(statuses).toEqual([]);
     await click('Load more');
     const selectedAddress = history.location.href;
+    const historyReadsBeforeStatus = reads.length;
     await follow(host.querySelector<HTMLAnchorElement>('a[href*="historyReportId"]')!);
     expect(statuses).toEqual([otherId]);
+    expect(reads).toHaveLength(historyReadsBeforeStatus);
     expect(host.textContent).toContain('Exact own Realm evidence');
     expect(host.textContent).toContain('Dismissed');
+    expect(host.textContent?.split('Dismissed')).toHaveLength(2);
     expect(host.textContent).toContain('Realm');
     expect(window.document.activeElement === host.querySelector('h1')).toBe(true);
     const back = host.querySelector<HTMLAnchorElement>('a')!;
@@ -265,12 +272,22 @@ test('served operands, exact own status and recovery form one fresh private rout
     await act(async () => {
       await router.navigate({ href: selectedAddress });
     });
-    statusMode = 'closed';
-    await follow(host.querySelector<HTMLAnchorElement>('a[href*="historyReportId"]')!);
-    expect(host.textContent).toContain('not available on this platform');
-    expect(host.textContent).not.toContain('Exact own Realm evidence');
-    await follow(host.querySelector<HTMLAnchorElement>('a')!);
-    expect(router.state.location.search).toEqual({ cursor, reportId: otherId });
+    for (const [state, message] of [
+      ['unavailable', 'could not be loaded'],
+      ['closed', 'not available on this platform'],
+      ['concealed', 'unknown or not visible'],
+    ] as const) {
+      statusMode = state;
+      await follow(host.querySelector<HTMLAnchorElement>('a[href*="historyReportId"]')!);
+      expect(host.textContent).toContain(message);
+      expect(host.textContent).not.toContain('Exact own Realm evidence');
+      expect(host.querySelector('details')).toBeNull();
+      const back = host.querySelector<HTMLAnchorElement>('a')!;
+      expect(new URL(back.href).searchParams.get('cursor')).toBe(cursor);
+      await follow(back);
+      expect(router.state.location.search).toEqual({ cursor, reportId: otherId });
+      expect(window.document.activeElement === host.querySelector('[aria-pressed="true"]')).toBe(true);
+    }
     statusMode = 'loaded';
     mode = 'preparing';
     await click('Refresh');

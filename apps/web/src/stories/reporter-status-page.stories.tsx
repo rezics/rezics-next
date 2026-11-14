@@ -46,6 +46,7 @@ export const SubmittedReport: Story = {
     await canvas.findByRole('heading', { level: 1, name: m.reporter_status_heading() });
     await expect(canvas.getAllByRole('main')).toHaveLength(1);
     const page = within(canvas.getByRole('main'));
+    await expect(page.getAllByText(m.moderation_dismissed(), { exact: true })).toHaveLength(1);
     await expect(page.getByText(m.moderation_dismissed(), { exact: true })).toBeVisible();
     await expect(page.getByText(m.reporter_status_dismissed_explanation())).toBeVisible();
     await expect(page.getByText(m.report_spam(), { exact: true })).toBeVisible();
@@ -101,21 +102,32 @@ export const IllustrativeLongReferences: Story = {
   },
 };
 
+export const PendingReview: Story = {
+  name: 'Illustrative pending review without extra evidence',
+  render: () => <ReporterStatusPage report={{ ...submittedReport, outcome: null, resolvedAt: null, evidence: null }} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByText(m.reporter_status_pending(), { exact: true })).toHaveLength(1);
+    await expect(canvas.getByText(m.reporter_status_awaiting_review())).toBeVisible();
+    await expect(canvas.getByText(m.reporter_status_no_evidence())).toBeVisible();
+  },
+};
+
 /** Explicit page-state fixtures complement the actual routed SubmittedReport story above. */
-function ReadStatePage({ retired = false }: { retired?: boolean }) {
+function ReadStatePage({ state = 'unavailable' }: { state?: 'loading' | 'unavailable' | 'concealed' | 'closed' }) {
   const [cache] = useState(() => new QueryClient());
   const [router] = useState(() => {
     const route = createRootRoute({
       component: () => (
         <AppShell>
-          {retired ? (
-            <ReporterStatusPage state="concealed" />
-          ) : (
+          {state === 'unavailable' ? (
             <ReporterStatusPage
               onRetry={async () => {
                 throw new Error('Report status unavailable');
               }}
             />
+          ) : (
+            <ReporterStatusPage state={state} />
           )}
         </AppShell>
       ),
@@ -132,4 +144,6 @@ function ReadStatePage({ retired = false }: { retired?: boolean }) {
   );
 }
 export const ReadUnavailable: Story = { render: () => <ReadStatePage /> };
-export const SessionRetired: Story = { render: () => <ReadStatePage retired /> };
+export const SessionRetired: Story = { render: () => <ReadStatePage state="concealed" /> };
+export const LoadingStatus: Story = { render: () => <ReadStatePage state="loading" /> };
+export const ClosedStatus: Story = { render: () => <ReadStatePage state="closed" /> };

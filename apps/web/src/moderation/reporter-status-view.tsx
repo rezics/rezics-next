@@ -57,7 +57,7 @@ export function ReporterStatusPage(
         }}
         className="mb-6 inline-flex min-h-11 min-w-11 max-w-full items-center gap-2 rounded-md py-2 text-sm font-medium whitespace-normal text-muted-foreground underline-offset-4 wrap-anywhere hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <ArrowLeft className="size-4" aria-hidden="true" />
+        <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
         {props.returnHref ? m.reporter_history_return() : m.reporter_status_back()}
       </a>
       {'report' in props ? (
@@ -269,7 +269,7 @@ export function ReporterStatusResultPage({
 
 export function ReporterStatusReadState({ state }: { state: 'loading' | 'concealed' | 'closed' }) {
   return (
-    <section className="space-y-6" aria-labelledby="reporter-status-heading">
+    <div className="space-y-6">
       <h1 id="reporter-status-heading" tabIndex={-1} className={statusHeading}>
         {m.reporter_status_heading()}
       </h1>
@@ -280,7 +280,7 @@ export function ReporterStatusReadState({ state }: { state: 'loading' | 'conceal
             ? m.reporter_status_read_closed()
             : m.reporter_status_read_concealed()}
       </p>
-    </section>
+    </div>
   );
 }
 
@@ -345,7 +345,7 @@ export function ReporterStatusView({
         <ol aria-label={m.reporter_status_timeline()} className="grid gap-5 sm:grid-cols-2">
           <li className="flex gap-3">
             <Check className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               <p className="font-medium">{m.reporter_status_submitted()}</p>
               <p className="text-sm leading-6 text-muted-foreground">
                 <ReportTime instant={report.createdAt} />
@@ -354,7 +354,7 @@ export function ReporterStatusView({
           </li>
           <li className="flex gap-3">
             <StatusIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               <p className="font-medium">{m.reporter_status_reviewed()}</p>
               <p className="text-sm leading-6 text-muted-foreground">
                 {report.resolvedAt ? (
@@ -556,7 +556,7 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
               <span>{m.reporter_status_reference()}</span>
               <textarea
                 ref={manualReferenceRef}
-                className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-sm leading-6 select-text"
+                className="min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-sm leading-6 select-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 readOnly
                 rows={reference.length}
                 value={referenceText}
@@ -612,7 +612,7 @@ export function ReporterStatusFailure({ onRetry }: { onRetry: Retry }) {
     }
   }
   return (
-    <section className="space-y-6" aria-labelledby="reporter-status-heading">
+    <div className="space-y-6">
       <h1 id="reporter-status-heading" tabIndex={-1} className={statusHeading}>
         {m.reporter_status_heading()}
       </h1>
@@ -632,6 +632,6 @@ export function ReporterStatusFailure({ onRetry }: { onRetry: Retry }) {
         {retrying ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : null}
         {retrying ? m.reporter_status_retrying() : m.sources_retry()}
       </Button>
-    </section>
+    </div>
   );
 }

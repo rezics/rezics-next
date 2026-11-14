@@ -169,15 +169,17 @@ cursor. Selection still starts its own first window. Status return rereads the c
 
 The supplied public target label leads each row, followed by the native reason and submitted/reviewed times. An
 unavailable target has no label, target ID, kind or destination in history markup or attributes. It still has its
-own report reference, outcome and selection, which enables its exact status action. Report and submitted-revision references remain
-inspectable in a native disclosure; available target references never substitute for report identity. Unknown native
-reason strings remain readable. Rows keep native order and frontier, with no lookup, hydration or invented context.
+own report reference, outcome and selection, which enables its exact status action. Report and submitted-revision
+references remain inspectable in a native disclosure; available target references never substitute for report identity.
+Unknown native reason strings remain readable. Rows keep native order and frontier, with no lookup, hydration or
+invented context.
 
 The single outcome describes the supplied history observation. Help beside the row actions explains the selection
 gate and distinguishes it from a fresh exact status read. Unselected status entry would discard the existing return
-coordinates and keyboard orientation, so presentation retains the selected-only anchor. The status page leads with its own observed outcome and explanation, then presents
-timeline, submitted reason/evidence, target availability and inspectable references as plain sections. It retains the
-submitted target reference even when that exact status response marks the target unavailable; availability never
+coordinates and keyboard orientation, so presentation retains the selected-only anchor. The status page leads with its
+own observed outcome and explanation, then presents timeline, submitted reason/evidence, target availability and
+inspectable references as plain sections. It retains the submitted target reference even when that exact status
+response marks the target unavailable; availability never
 creates target navigation. Only history's supplied public target destination is an independent target link.
 
 Loading drops private rows and controls. Preparation, unavailable selection, sparse continuation, failed same-cursor

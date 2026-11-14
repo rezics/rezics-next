@@ -9330,7 +9330,7 @@
   "report_title": "Signaler ce contenu",
   "report_unavailable": "Les signalements sont temporairement indisponibles. Veuillez réessayer.",
   "report_verification": "Vérification",
-  "reporter_history_actions_hint": "Sélectionnez un signalement pour activer son lien de statut. L’ouverture vérifie le résultat actuel ; cette ligne affiche celui de l’historique.",
+  "reporter_history_actions_hint": "Sélectionnez ce signalement pour activer son lien de statut. Ouvrez-le pour vérifier le résultat actuel.",
   "reporter_history_continuation_unavailable": "Impossible de charger la page suivante. Réessayez.",
   "reporter_history_continue": "Charger plus de signalements",
   "reporter_history_denied": "Votre historique n’est pas disponible pour cette session.",

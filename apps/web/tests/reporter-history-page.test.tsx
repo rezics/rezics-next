@@ -89,7 +89,7 @@ test('My reports is a signed-in Library destination without a private operation 
   ).toBe(cursor);
 });
 
-test('mounted history replaces one page, retries the exact cursor, opens selected status and retires on exposure replacement', async () => {
+test('mounted history replaces one page, retries the exact cursor, gates exact status and retires on exposure replacement', async () => {
   const { dirname } = await import('node:path');
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -175,6 +175,20 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
       root.render(draw());
     });
     expect(container.textContent).toContain('First private report');
+    const firstRow = container.querySelector('ol > li')!;
+    expect(firstRow.querySelector('h2')?.textContent).toBe('First private report');
+    expect(firstRow.textContent?.split(m.reporter_status_pending())).toHaveLength(2);
+    expect(firstRow.querySelector('button')?.getAttribute('aria-pressed')).toBe('false');
+    expect(firstRow.querySelector('a[data-reporter-status]')).toBeNull();
+    expect([...firstRow.querySelectorAll('button')].find((button) => button.disabled)?.textContent).toBe(
+      m.reporter_status_view(),
+    );
+    const target = firstRow.querySelector<HTMLAnchorElement>('a[data-slot="list-row-link"]')!;
+    expect(target.getAttribute('href')).toBe(`/v1/threads/${targetId}`);
+    target.addEventListener('click', (event) => event.preventDefault(), { once: true });
+    await act(() => target.click());
+    expect(firstRow.querySelector('button')?.getAttribute('aria-pressed')).toBe('false');
+    expect(reads).toEqual([]);
 
     const continueButton = [...container.querySelectorAll('button')].find((button) =>
       button.textContent?.includes('Load more'),
@@ -212,6 +226,7 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
     expect(reads[2]).toEqual({ reportId: secondReportId });
     const statusLink = container.querySelector<HTMLAnchorElement>('a[href*="historyReportId"]');
     if (!statusLink) throw new Error('Selecting a report should reopen its existing status journey');
+    expect(container.querySelectorAll('a[data-reporter-status]')).toHaveLength(1);
     const statusUrl = new URL(statusLink.href);
     expect(statusUrl.pathname).toBe(`/en/moderation/reports/${secondReportId}`);
     expect(statusUrl.searchParams.get('historyCursor')).toBeNull();
@@ -264,6 +279,7 @@ test('localized page states distinguish preparation, completion, denial, continu
     expect(sparse).toContain('continue to the next page');
     expect(sparse).not.toContain('You have not submitted any reports');
     expect(render({ state: 'denied' })).toContain('not available for this session');
+    expect(render({ state: 'loading' })).toContain(m.reporter_history_loading());
     expect(render({ state: 'unavailable' }, { cursor: 'same-frontier' })).toContain('next page could not be loaded');
     expect(
       render({ state: 'loaded', nativeSourceFingerprint: 'source', page: page([], undefined) }, { reportId }),
@@ -287,6 +303,37 @@ test('localized page states distinguish preparation, completion, denial, continu
       expect(sparse).toContain('continue to the next page');
       expect(sparse).not.toContain('You have not submitted any reports');
       expect(render({ state: 'denied' })).toContain(m.reporter_history_denied());
+      const withheldTarget = '55555555-5555-8555-8555-456755555555';
+      const withheldReport = entry('66666666-6666-8666-8666-567866666666', 'Never disclose this label');
+      const withheld: ReporterHistoryEntry = {
+        ...withheldReport,
+        target: { kind: 'realm', id: withheldTarget },
+        reason: 'native_reason_retained',
+        targetSummary: { state: 'unavailable' },
+        actions: { ...withheldReport.actions, target: null },
+      };
+      const markup = render(
+        {
+          state: 'loaded',
+          nativeSourceFingerprint: 'source',
+          page: page([
+            entry(reportId, 'A recognizable public title'),
+            { ...entry(secondReportId, 'Another public title'), outcome: 'actioned', resolvedAt: '2026-10-28T08:00:00.000Z' },
+            withheld,
+          ], 'same/frontier', secondReportId),
+        },
+        { cursor: 'same/frontier', reportId: secondReportId },
+      );
+      expect(markup.match(/data-reporter-status/g)).toHaveLength(1);
+      expect(markup.match(/<time /g)).toHaveLength(4);
+      expect(markup.split(m.moderation_actioned())).toHaveLength(2);
+      expect(markup).toContain('A recognizable public title');
+      expect(markup).toContain('native_reason_retained');
+      expect(markup).toContain(m.reporter_history_item_unavailable());
+      expect(markup).not.toContain(withheldTarget);
+      expect(markup).not.toContain('Never disclose this label');
+      expect(markup).toContain('data-report-id');
+      expect(markup).toContain('aria-pressed="true"');
     }
   } finally {
     setLocale(currentLocale, { reload: false });
