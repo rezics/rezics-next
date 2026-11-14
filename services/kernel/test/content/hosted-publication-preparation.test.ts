@@ -19,18 +19,27 @@ test('progress observes retained preparation without materializing or advancing,
   const occurrenceId = f.newOccurrenceId();
   const target = f.target(await native.thread());
   const created = await native.command('/v1/hostedCatalogues', {
-    postId: catalogueId, threadId,
+    postId: catalogueId,
+    threadId,
     placements: [{ occurrenceId, parentId: null, position: 0, title: 'Retained chapter', kind: 'chapter', target }],
   });
-  const published = await native.command(`${path}:publish`, {
-    expectedRevisionId: created.revisionId, expectedPublicationId: null, occurrenceIds: [occurrenceId],
-  }, 200);
+  const published = await native.command(
+    `${path}:publish`,
+    {
+      expectedRevisionId: created.revisionId,
+      expectedPublicationId: null,
+      occurrenceIds: [occurrenceId],
+    },
+    200,
+  );
   const stageId = f.newOccurrenceId();
   const stagePath = `${path}/publicationPreparations/${stageId}`;
   const call = (operation: string, body = {}, key?: string) =>
     native.call('POST', `${stagePath}:${operation}`, body, key ? { key } : {});
-  const retainedState = async () => (await native.pool.query(
-    `SELECT
+  const retainedState = async () =>
+    (
+      await native.pool.query(
+        `SELECT
        (SELECT count(*)::text FROM content.hosted_tree_generation
         WHERE route=$1 AND catalogue_id=$2) AS generations,
        (SELECT count(*)::text FROM content.hosted_tree_snapshot_version
@@ -38,10 +47,14 @@ test('progress observes retained preparation without materializing or advancing,
        (SELECT to_jsonb(candidate) FROM content.hosted_version_release_candidate candidate
         WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3) AS candidate,
        publication_id FROM content.hosted_catalogue WHERE route=$1 AND catalogue_id=$2`,
-    [route, catalogueId, stageId],
-  )).rows[0];
+        [route, catalogueId, stageId],
+      )
+    ).rows[0];
   const started = await native.call('POST', `${path}:prepareRelease`, {
-    stageId, expectedRevisionId: created.revisionId, expectedPublicationId: published.revisionId, mode: 'whole',
+    stageId,
+    expectedRevisionId: created.revisionId,
+    expectedPublicationId: published.revisionId,
+    mode: 'whole',
   });
   expect(started.status).toBe(202);
   const initial = await retainedState();
@@ -94,13 +107,28 @@ test('progress observes retained preparation without materializing or advancing,
   expect(retained.status).toBe(200);
   expect(retained.value).toEqual(sealed.value);
 
-  const moved = await native.command(`${path}:appendRootChapter`, {
-    expectedRevisionId: created.revisionId, occurrenceId: f.newOccurrenceId(), title: 'Later draft', target,
-  }, 200);
+  const moved = await native.command(
+    `${path}:appendRootChapter`,
+    {
+      expectedRevisionId: created.revisionId,
+      occurrenceId: f.newOccurrenceId(),
+      title: 'Later draft',
+      target,
+    },
+    200,
+  );
   for (const changePublication of [false, true]) {
-    const release = changePublication ? await native.command(`${path}:publish`, {
-      expectedRevisionId: moved.revisionId, expectedPublicationId: published.revisionId, occurrenceIds: [],
-    }, 200) : published;
+    const release = changePublication
+      ? await native.command(
+          `${path}:publish`,
+          {
+            expectedRevisionId: moved.revisionId,
+            expectedPublicationId: published.revisionId,
+            occurrenceIds: [],
+          },
+          200,
+        )
+      : published;
     const beforeRead = await retainedState();
     expect(beforeRead.publication_id).toBe(release.revisionId);
     expect((await call('progress')).value).toEqual(retained.value);
@@ -108,30 +136,48 @@ test('progress observes retained preparation without materializing or advancing,
     expect((await call('progress', {}, emptyKey)).value).toEqual(empty.value);
     expect((await call('advance', { stepId: f.newOccurrenceId() })).status).toBe(412);
     expect((await call('seal')).status).toBe(412);
-    expect((await native.call('POST', `${path}:prepareRelease`, {
-      stageId: f.newOccurrenceId(), expectedRevisionId: created.revisionId,
-      expectedPublicationId: published.revisionId, mode: 'whole',
-    })).status).toBe(412);
+    expect(
+      (
+        await native.call('POST', `${path}:prepareRelease`, {
+          stageId: f.newOccurrenceId(),
+          expectedRevisionId: created.revisionId,
+          expectedPublicationId: published.revisionId,
+          mode: 'whole',
+        })
+      ).status,
+    ).toBe(412);
     expect(await retainedState()).toEqual(beforeRead);
   }
 
   // Candidate/source/epoch mismatches must still withhold an existing checkpoint.
   for (const column of ['input_version', 'owner_epoch'] as const) {
-    await native.pool.query(`UPDATE content.hosted_version_release_candidate SET ${column}=${column}+1
-      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`, [route, catalogueId, stageId]);
+    await native.pool.query(
+      `UPDATE content.hosted_version_release_candidate SET ${column}=${column}+1
+      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, catalogueId, stageId],
+    );
     expect((await call('progress')).status).toBe(404);
-    await native.pool.query(`UPDATE content.hosted_version_release_candidate SET ${column}=${column}-1
-      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`, [route, catalogueId, stageId]);
+    await native.pool.query(
+      `UPDATE content.hosted_version_release_candidate SET ${column}=${column}-1
+      WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+      [route, catalogueId, stageId],
+    );
   }
   expect((await native.call('POST', `${stagePath}:progress`, {}, { key: progressKey, other: true })).status).toBe(403);
-  await native.pool.query(`UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
-    WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`, [route, catalogueId, stageId]);
+  await native.pool.query(
+    `UPDATE content.hosted_publication_staging SET expires_at=clock_timestamp()-interval '1 second'
+    WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+    [route, catalogueId, stageId],
+  );
   const expired = await call('progress');
   expect(expired.status).toBe(200);
   expect(expired.value).toMatchObject({ stage: { state: 'expired' }, candidate: null, candidateReady: false });
   expect((await call('cancel')).value).toEqual(expired.value);
   expect((await call('progress', {}, progressKey)).value).toEqual(retained.value);
-  await native.pool.query(`UPDATE content.hosted_publication_staging SET owner_epoch=owner_epoch+1
-    WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`, [route, catalogueId, stageId]);
+  await native.pool.query(
+    `UPDATE content.hosted_publication_staging SET owner_epoch=owner_epoch+1
+    WHERE route=$1 AND catalogue_id=$2 AND stage_id=$3`,
+    [route, catalogueId, stageId],
+  );
   expect((await call('progress', {}, progressKey)).status).toBe(404);
 });
