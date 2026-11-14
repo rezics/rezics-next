@@ -42,11 +42,7 @@ export { ownerSummaryUnchanged, revalidateOwnerCurrentSummaries } from './disclo
 
 /** Request-scoped analysis is supplied by the installed native adapter, never by HTTP. */
 export type SearchDisclosurePorts = Readonly<{
-  analyze(
-    index: string,
-    analyzer: Analyzer,
-    texts: readonly string[],
-  ): Promise<readonly (readonly EngineToken[])[]>;
+  analyze(index: string, analyzer: Analyzer, texts: readonly string[]): Promise<readonly (readonly EngineToken[])[]>;
 }>;
 
 /** Native hierarchy/storage costs retain the existing admitted reservation dimensions. */

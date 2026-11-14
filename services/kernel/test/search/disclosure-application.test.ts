@@ -124,9 +124,7 @@ test('current text uses the bound physical analyzer and an invocation-local anal
   const application = createSearchDisclosureApplication({
     analyze: async (index, analyzer, texts) => {
       calls.push(index + ':' + analyzer + ':' + texts.join('|'));
-      return texts.map((text) => [
-        { token: text.toLowerCase(), position: 0, startOffset: 0, endOffset: text.length },
-      ]);
+      return texts.map((text) => [{ token: text.toLowerCase(), position: 0, startOffset: 0, endOffset: text.length }]);
     },
   });
   const subject = releasedMultilingualSubject();
