@@ -43,6 +43,7 @@ import { findAllowedPool, poolBurnStatus } from './allowance.ts';
 import { nearCeilingSweepAdmissions, readRetainedPoolReadings } from './pacing.ts';
 import { admissionProfiles, type RoutingTable } from './routing.ts';
 import { recordFlow } from './flow.ts';
+import { readWidthSnapshot, type WidthSnapshot } from './width-governor.ts';
 import {
   BACKLOG_DISPATCHED_DIRECTORY as DISPATCHED_DIRECTORY,
   BACKLOG_DISPATCHING_DIRECTORY as CLAIM_DIRECTORY,
@@ -874,7 +875,9 @@ async function chainLanded(
 async function dispatchReady(
   runtime: BacklogRuntime,
   now: number,
-): Promise<Pick<BacklogSweep, 'dispatched' | 'continued' | 'refused' | 'returned' | 'chained'>> {
+): Promise<
+  Pick<BacklogSweep, 'dispatched' | 'continued' | 'refused' | 'returned' | 'chained'> & { eligibleWidth: number }
+> {
   const root = backlogDirectory(runtime.stateDirectory);
   const goals = directories(root);
   const dispatched: BacklogSweep['dispatched'] = [];
@@ -900,6 +903,7 @@ async function dispatchReady(
       Math.max(0, breakdown.readyWaiting - policy.backlog.allowanceWaitingBound),
   );
   let available = Math.max(0, Math.min(allowedSlots, perSweep));
+  const initialAvailable = available;
   let sweepLeft = perSweep;
   for (const goal of goals) {
     const research = await recoverResearchClaims(runtime, goal, available);
@@ -1067,7 +1071,15 @@ async function dispatchReady(
   }
   notifyUrgentReturns(runtime, urgentReturnedByManager);
   for (const [goal, entries] of refusedByGoal) notifyRefusals(runtime, goal, entries);
-  return { dispatched, continued, refused, returned, chained };
+  const startedFromAllowedBudget = Math.max(0, initialAvailable - available);
+  return {
+    dispatched,
+    continued,
+    refused,
+    returned,
+    chained,
+    eligibleWidth: Math.max(0, allowedSlots - startedFromAllowedBudget),
+  };
 }
 
 type StoppedRow = { id: string; current_attempt: number; body: string; stopped_action: StoppedActionHint | null };
@@ -1408,27 +1420,135 @@ type LowWorkDispositionRow = {
   low_work_scope: string | null;
 };
 
-/** Wake each running Goal manager below the low-water mark, at most once an hour unless its scope changed. */
-function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
+const SOURCE_BRIEF_KINDS = new Set(['implementation', 'interface', 'bulk-text', 'claim']);
+const TERMINAL_DEPENDENCIES = new Set(['integrated', 'merged', 'stopped', 'cancelled', 'verified']);
+
+function hasWritableSourcePath(paths: string[]): boolean {
+  return paths.some((path) => {
+    const normalized = path.replaceAll('\\', '/').replace(/^\.\//, '');
+    if (normalized === 'docs' || normalized.startsWith('docs/')) return false;
+    return !/\.(?:md|mdx|rst|adoc)$/i.test(normalized);
+  });
+}
+
+function briefDependencies(markdown: string): string[] | undefined {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
+  if (!match) return;
+  try {
+    const front = Bun.YAML.parse(match[1]!);
+    if (!front || typeof front !== 'object' || Array.isArray(front)) return;
+    const after = (front as Record<string, unknown>).after;
+    if (after === undefined) return [];
+    if (!Array.isArray(after) || after.some((entry) => typeof entry !== 'string')) return;
+    return after as string[];
+  } catch {
+    return;
+  }
+}
+
+function unresolvedDependencies(db: Database, ids: string[]): Set<string> {
+  const unresolved = new Set<string>();
+  if (!ids.length) return unresolved;
+  if (!tableExists(db, 'worker_tasks')) return new Set(ids);
+  for (let offset = 0; offset < ids.length; offset += 400) {
+    const page = ids.slice(offset, offset + 400);
+    const placeholders = page.map(() => '?').join(',');
+    const rows = db
+      .query(`SELECT id, json_extract(body, '$.state') AS state FROM worker_tasks WHERE id IN (${placeholders})`)
+      .all(...page) as { id: string; state: string | null }[];
+    const states = new Map(rows.map((row) => [row.id, row.state]));
+    for (const id of page) if (!TERMINAL_DEPENDENCIES.has(states.get(id) ?? '')) unresolved.add(id);
+  }
+  return unresolved;
+}
+
+/** Count current, writable source briefs while respecting existing dependency and continuation duplicate disposition. */
+function runnableSourceSupply(runtime: BacklogRuntime, goal: string): { ready: number; files: number } {
+  const directory = backlogDirectory(runtime.stateDirectory, goal);
+  const files = briefs(directory);
+  const candidates: { file: string; markdown: string; after: string[] }[] = [];
+  for (const file of files) {
+    let markdown: string;
+    try {
+      markdown = readFileSync(file, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
+    }
+    const brief = readBriefSizeSnapshot(markdown);
+    const after = briefDependencies(markdown);
+    if (!brief || !brief.kind || !SOURCE_BRIEF_KINDS.has(brief.kind) || !hasWritableSourcePath(brief.paths) || !after)
+      continue;
+    candidates.push({ file, markdown, after });
+  }
+
+  const dependencies = [...new Set(candidates.flatMap((candidate) => candidate.after))];
+  const unresolved = unresolvedDependencies(runtime.db, dependencies);
+  let admission: ReturnType<typeof continuationAdmissionProjection> | undefined;
+  let ready = 0;
+  for (const candidate of candidates) {
+    if (candidate.after.some((id) => unresolved.has(id))) continue;
+    if (basename(candidate.file).startsWith('continuation-')) {
+      admission ??= continuationAdmissionProjection(runtime.stateDirectory, goal, runtime.policy ?? defaultPolicy);
+      const continuation = readBriefContinuation(candidate.markdown);
+      const duplicate = continuationOverlap(
+        runtime.db,
+        runtime.stateDirectory,
+        goal,
+        candidate.markdown,
+        continuation?.taskId,
+        [candidate.file],
+        runtime.policy?.brief,
+        continuation?.expectedAttempt,
+        admission,
+      );
+      if (duplicate.reason) continue;
+    }
+    ready++;
+  }
+  return { ready, files: files.length };
+}
+
+/** Wake each running Goal manager below runnable-source low-water, at most once an hour unless its scope changed. */
+async function wakeLowBacklogs(runtime: BacklogRuntime, now: number, eligibleWidth: number): Promise<string[]> {
   const { db } = runtime;
   if (!tableExists(db, 'manager_sessions')) return [];
   const woken: string[] = [];
+  let width: WidthSnapshot | undefined;
   for (const row of db.query('SELECT id, state FROM manager_sessions ORDER BY id').all() as ManagerRow[]) {
-    let state: { kind?: string; status?: string; goal?: string; goalState?: { status?: string } | null };
+    let state: {
+      kind?: string;
+      status?: string;
+      goal?: string;
+      waitingForInbox?: boolean;
+      goalPauseOrigin?: string;
+      goalState?: { status?: string } | null;
+    };
     try {
       state = JSON.parse(row.state);
     } catch {
       continue;
     }
     if (state.kind === 'resident-supermanager' || state.status !== 'running') continue;
-    if (['paused', 'budgetLimited', 'complete'].includes(state.goalState?.status ?? '')) continue;
+    const goalStatus = state.goalState?.status ?? '';
+    const controllerParked =
+      goalStatus === 'paused' && state.waitingForInbox === true && state.goalPauseOrigin === 'automatic';
+    if (
+      ['budgetLimited', 'usageLimited', 'complete'].includes(goalStatus) ||
+      (goalStatus === 'paused' && !controllerParked)
+    )
+      continue;
     const goals = ownedGoals(state);
     if (!goals.length) continue;
     let delivered = false;
     for (const goal of goals) {
       const directory = backlogDirectory(runtime.stateDirectory, goal);
-      const ready = briefs(directory).length;
-      if (ready >= (runtime.policy ?? defaultPolicy).backlog.lowWater) continue;
+      const supply = runnableSourceSupply(runtime, goal);
+      if (
+        supply.ready >= (runtime.policy ?? defaultPolicy).backlog.lowWater &&
+        !(supply.ready === 0 && eligibleWidth > 0)
+      )
+        continue;
       const previous = db
         .query(
           `SELECT low_wake_at, low_work_manager, low_work_session, low_work_scope
@@ -1447,6 +1567,12 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
         )
           continue;
       }
+      width ??= await readWidthSnapshot(db, now, {
+        yieldBetweenPages: true,
+        includeStopped: false,
+        policy: runtime.policy ?? defaultPolicy,
+      });
+      const registered = width.goals.find((entry) => entry.goal === goal);
       const woke = db
         .transaction(() => {
           const current = db
@@ -1485,9 +1611,10 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
             goalId: goal,
             kind: 'instruction',
             summary:
-              `Backlog low: ${ready} ready brief(s) in ${directory}. Write ready briefs there to keep about ${(runtime.policy ?? defaultPolicy).backlog.lowWater}, ` +
-              "each a complete outcome from your Goal definition's Done when list not yet accepted; when fewer exist, say so in a handoff instead of writing slivers. " +
-              'The controller dispatches the oldest whenever worker slots are free.',
+              `Runnable source low: ${supply.ready} ready source brief(s) in ${directory} (${supply.files} Markdown backlog file(s)); eligible width ${eligibleWidth} worker slot(s). ` +
+              `Registered source starts ${registered?.sourceReady ?? 0} (${registered?.sourcePendingStarts ?? 0} durable pending); held ${registered?.sourceHolds ?? 0} (${registered?.sourceDependencyHolds ?? 0} dependencies, ${registered?.sourceWaiting ?? 0} check or custody waits); live source writers ${registered?.sourceWriters ?? 0}. ` +
+              'Refill with complete source outcomes before current writers finish; low-water is an alert, not a quota. ' +
+              'Source supply and eligible width are separate observations; ordinary source starts continue under existing admission.',
           });
           return true;
         })
@@ -1528,9 +1655,9 @@ export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSwee
     migrate(runtime.db, backlogMigrations);
     const now = (runtime.now ?? Date.now)();
     const expired = await expireStoppedTasks(runtime, now);
-    const { dispatched, continued, refused, returned, chained } = await dispatchReady(runtime, now);
+    const { dispatched, continued, refused, returned, chained, eligibleWidth } = await dispatchReady(runtime, now);
     deliverResearchCompletions(runtime, now);
-    const woken = wakeLowBacklogs(runtime, now);
+    const woken = await wakeLowBacklogs(runtime, now, eligibleWidth);
     return { dispatched, continued, chained, refused, returned, expired, woken };
   } finally {
     lease.release();

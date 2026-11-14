@@ -651,16 +651,51 @@ test('a product task stopped for over an hour without action is cancelled into i
   expect(typingRecoveryCalls).toHaveLength(1);
 });
 
-test('a running manager below eight ready briefs is woken at most once an hour', async () => {
+test('a controller-parked manager below eight ready briefs is woken at most once an hour', async () => {
   const f = fixture({ workerCap: 0 });
-  manager(f.db, 'web', { kind: 'managed', status: 'running', goal: 'web', goalState: { status: 'active' } });
+  manager(f.db, 'web', {
+    kind: 'managed',
+    status: 'running',
+    goal: 'web',
+    waitingForInbox: true,
+    goalPauseOrigin: 'automatic',
+    goalState: { status: 'paused' },
+  });
   manager(f.db, 'search', { kind: 'managed', status: 'running', goal: 'search', goalState: { status: 'active' } });
   manager(f.db, 'paused', { kind: 'managed', status: 'paused', goal: 'paused' });
+  manager(f.db, 'operator-paused', {
+    kind: 'managed',
+    status: 'running',
+    goal: 'operator-paused',
+    waitingForInbox: false,
+    goalPauseOrigin: 'user',
+    goalState: { status: 'paused' },
+  });
+  manager(f.db, 'finished', {
+    kind: 'managed',
+    status: 'running',
+    goal: 'finished',
+    goalState: { status: 'complete' },
+  });
   manager(f.db, 'limited', {
     kind: 'managed',
     status: 'running',
     goal: 'limited',
     goalState: { status: 'budgetLimited' },
+  });
+  manager(f.db, 'usage-limited', {
+    kind: 'managed',
+    status: 'running',
+    goal: 'usage-limited',
+    goalState: { status: 'usageLimited' },
+  });
+  manager(f.db, 'missing-park-intent', {
+    kind: 'managed',
+    status: 'running',
+    goal: 'missing-park-intent',
+    waitingForInbox: false,
+    goalPauseOrigin: 'automatic',
+    goalState: { status: 'paused' },
   });
   manager(f.db, 'supermanager', { kind: 'resident-supermanager', status: 'running', threadId: 'session' });
   for (const [goal, count] of [
@@ -673,15 +708,62 @@ test('a running manager below eight ready briefs is woken at most once an hour',
   expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
   const events = f.inbox.pending('web');
   expect(events).toHaveLength(1);
-  expect(events[0]!.event.summary).toContain('Backlog low: 7 ready brief(s)');
-  expect(events[0]!.event.summary).toContain('keep about 8');
+  expect(events[0]!.event.summary).toContain('Runnable source low: 7 ready source brief(s)');
+  expect(events[0]!.event.summary).toContain('eligible width 0 worker slot(s)');
+  expect(events[0]!.event.summary).toContain('low-water is an alert, not a quota');
   expect(events[0]!.event.summary).toContain(join(f.state, 'backlog', 'web'));
-  for (const id of ['search', 'paused', 'limited', 'supermanager']) expect(f.inbox.pending(id)).toHaveLength(0);
+  for (const id of [
+    'search',
+    'paused',
+    'operator-paused',
+    'finished',
+    'limited',
+    'usage-limited',
+    'missing-park-intent',
+    'supermanager',
+  ])
+    expect(f.inbox.pending(id)).toHaveLength(0);
 
   f.clock.now += BACKLOG_WAKE_INTERVAL_MS - 1;
   expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
   f.clock.now += 1;
   expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+});
+
+test('zero runnable source with eligible width wakes once while docs, proof, duplicates and dependency holds stay out of supply', async () => {
+  const f = fixture({ workerCap: 1 });
+  manager(f.db, 'web', {
+    kind: 'managed',
+    status: 'running',
+    goal: 'web',
+    waitingForInbox: true,
+    goalPauseOrigin: 'automatic',
+    goalState: { status: 'paused' },
+  });
+  const docs = complete.replace('paths: [result.txt]', 'paths: [docs/README.md]');
+  const proof = complete.replace('kind: implementation', 'kind: verification');
+  const duplicateA = continuationBrief('source-task-a', 1, 'web');
+  const duplicateB = continuationBrief('source-task-b', 1, 'web');
+  const dependency = complete.replace('waiting: []', 'waiting: []\nafter: [missing-source-task]');
+  for (const [name, text] of [
+    ['docs.md', docs],
+    ['proof.md', proof],
+    ['continuation-source-task-a-1-duplicate.md', duplicateA],
+    ['continuation-source-task-b-1-duplicate.md', duplicateB],
+    ['dependency.md', dependency],
+  ] as const)
+    brief(f.state, 'web', name, 0, text);
+
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
+  const notices = f.inbox.pending('web');
+  expect(notices).toHaveLength(1);
+  expect(notices[0]!.event.summary).toContain('0 ready source brief(s)');
+  expect(notices[0]!.event.summary).toContain('5 Markdown backlog file(s)');
+  expect(notices[0]!.event.summary).toContain('eligible width 1 worker slot(s)');
+  expect(notices[0]!.event.summary).toContain('Registered source starts 0 (0 durable pending)');
+  expect(notices[0]!.event.summary).toContain('live source writers 0');
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
+  expect(f.inbox.pending('web')).toHaveLength(1);
 });
 
 test('administrative notices preserve an authenticated no-work disposition while scoped receiving evidence rearms it', async () => {
@@ -706,7 +788,7 @@ test('administrative notices preserve an authenticated no-work disposition while
   });
 
   expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
-  const lowBacklogReminder = f.inbox.pending('web').find(({ event }) => event.summary.startsWith('Backlog low:'));
+  const lowBacklogReminder = f.inbox.pending('web').find(({ event }) => event.from === 'system:backlog-low-water');
   expect(lowBacklogReminder?.event.from).toBe('system:backlog-low-water');
   await expect(backlogDisposition(f, 'web', 'no-work', 'foreign', 'foreign-session')).rejects.toThrow(
     'authenticated unique running owner',
@@ -979,7 +1061,7 @@ test('configured backlog limits govern settling, dispatch width and manager wake
   brief(f.state, 'web', 'ready.md', 101);
   brief(f.state, 'web', 'still-writing.md', 100);
   expect((await sweepBacklog(f.runtime)).dispatched.map((entry) => entry.brief)).toEqual(['ready.md']);
-  expect(f.inbox.pending('web')[0]!.event.summary).toContain('keep about 2');
+  expect(f.inbox.pending('web')[0]!.event.summary).toContain('1 ready source brief(s)');
   f.runtime.workerCap = 0;
   f.clock.now += 199;
   expect((await sweepBacklog(f.runtime)).woken).toEqual([]);

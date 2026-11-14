@@ -38,6 +38,18 @@ export type WidthCounts = {
   ready: number;
   actionableReady: number;
   pendingStarts: number;
+  /** Registered ready tasks whose brief declares writable product source. */
+  sourceReady: number;
+  /** Durable start requests among registered source tasks. */
+  sourcePendingStarts: number;
+  /** Source tasks held by dependencies or a waiting attempt. */
+  sourceHolds: number;
+  /** Source tasks held on an `after` dependency. */
+  sourceDependencyHolds: number;
+  /** Source attempts waiting for checks or physical ownership. */
+  sourceWaiting: number;
+  /** Source writers with a current process identity confirmed live. */
+  sourceWriters: number;
   held: number;
   actionableHeld: number;
   stopped: number;
@@ -59,6 +71,8 @@ export type WidthSnapshot = {
 
 export type WidthSnapshotOptions = {
   policy?: ControlPolicy | undefined;
+  /** Backlog refill only needs current starts, holds and writers; omit stop-history classification there. */
+  includeStopped?: boolean;
   /** Yield between indexed pages when called from the manager-host sweep. */
   yieldBetweenPages?: boolean;
   /** Test seam; production uses the existing process identity helper. */
@@ -82,6 +96,8 @@ type WidthRow = {
   process_boot: string | null;
   process_group: number | null;
   cli: string | null;
+  brief_kind: string | null;
+  brief_paths: string | null;
   pending_start: number;
   progressing_dependencies: number;
 };
@@ -99,6 +115,12 @@ function emptyCounts(): MutableCounts {
     ready: 0,
     actionableReady: 0,
     pendingStarts: 0,
+    sourceReady: 0,
+    sourcePendingStarts: 0,
+    sourceHolds: 0,
+    sourceDependencyHolds: 0,
+    sourceWaiting: 0,
+    sourceWriters: 0,
     held: 0,
     actionableHeld: 0,
     stopped: 0,
@@ -139,6 +161,7 @@ function pageQuery(
   limit: number,
   hasRetryIntents: boolean,
   hasWorkerEvents: boolean,
+  includeStopped: boolean,
 ): WidthRow[] {
   const pendingStart = hasRetryIntents
     ? `EXISTS (
@@ -147,6 +170,7 @@ function pageQuery(
           AND json_extract(i.body, '$.status')='pending'
       )`
     : '0';
+  const taskStates = includeStopped ? "'ready', 'held', 'running', 'stopped'" : "'ready', 'held', 'running'";
   return db
     .query(
       `SELECT c.sequence, c.task_id, c.current_attempt,
@@ -164,6 +188,8 @@ function pageQuery(
         c.process_boot,
         c.process_group,
         c.cli,
+        json_extract(t.body, '$.brief.kind') AS brief_kind,
+        json_extract(t.body, '$.brief.paths') AS brief_paths,
         CASE WHEN ${pendingStart} THEN 1 ELSE 0 END AS pending_start,
         CASE WHEN c.task_state='held' THEN (
           SELECT count(*) FILTER (WHERE d.task_state IN ('ready','running','landing')) > 0
@@ -176,12 +202,32 @@ function pageQuery(
           WHERE held.id=c.task_id
         ) ELSE 0 END AS progressing_dependencies
       FROM worker_current_attempts AS c
+      LEFT JOIN worker_tasks AS t ON t.id=c.task_id
       WHERE c.sequence > ?
-        AND c.task_state IN ('ready', 'held', 'running', 'stopped')
+        AND c.task_state IN (${taskStates})
       ORDER BY c.sequence
       LIMIT ?`,
     )
     .all(afterSequence, limit) as WidthRow[];
+}
+
+const SOURCE_BRIEF_KINDS = new Set(['implementation', 'interface', 'bulk-text', 'claim']);
+
+function writableSourceBrief(row: WidthRow): boolean {
+  if (!row.brief_kind || !SOURCE_BRIEF_KINDS.has(row.brief_kind) || typeof row.brief_paths !== 'string') return false;
+  let paths: unknown;
+  try {
+    paths = JSON.parse(row.brief_paths);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(paths)) return false;
+  return paths.some((path) => {
+    if (typeof path !== 'string') return false;
+    const normalized = path.replaceAll('\\', '/').replace(/^\.\//, '');
+    if (normalized === 'docs' || normalized.startsWith('docs/')) return false;
+    return !/\.(?:md|mdx|rst|adoc)$/i.test(normalized);
+  });
 }
 
 function addRow(
@@ -209,6 +255,7 @@ function addRow(
   };
 
   const taskState = row.task_state;
+  const source = writableSourceBrief(row);
   const attemptRunning = taskState === 'running' && row.attempt_state === 'running';
   if (attemptRunning) {
     const identity = isProcessIdentity(row);
@@ -219,6 +266,7 @@ function addRow(
       if (evidence.unknown) increment('unknownCodexClassification');
     } else if (processIsLive(identity)) {
       increment('running');
+      if (source) increment('sourceWriters');
       if (evidence.codex) increment('codexRunning');
       if (evidence.unknown) increment('unknownCodexClassification');
     }
@@ -227,14 +275,21 @@ function addRow(
   if (taskState === 'ready') {
     increment('ready');
     if (row.pending_start !== 1) increment('actionableReady');
+    if (source) {
+      increment('sourceReady');
+      if (row.pending_start === 1) increment('sourcePendingStarts');
+    }
   } else if (taskState === 'held') {
     increment('held');
     if (row.progressing_dependencies !== 1) increment('actionableHeld');
+    if (source) increment('sourceDependencyHolds');
   } else if (taskState === 'stopped') {
     increment('stopped');
     if (isActionableStop(db, row.task_id, row.current_attempt, row.stopped_action, policy))
       increment('actionableStopped');
   }
+  if (source && (taskState === 'held' || row.attempt_state === 'waiting')) increment('sourceHolds');
+  if (source && row.attempt_state === 'waiting') increment('sourceWaiting');
   if (row.pending_start === 1) increment('pendingStarts');
   if (row.attempt_state === 'waiting') increment('waiting');
 }
@@ -265,10 +320,11 @@ function readSnapshotSync(
   const processIsLive = options.processIsLive ?? sameProcess;
   const policy = options.policy ?? defaultPolicy;
   const pageSize = policy.width.pageSize;
+  const includeStopped = options.includeStopped ?? true;
   // The cursor precedes every persisted sequence; it is not a page-size policy.
   let cursor = -1;
   for (;;) {
-    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents, hasWorkerEvents);
+    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents, hasWorkerEvents, includeStopped);
     for (const row of rows) addRow(row, system, goals, processIsLive, db, policy);
     if (rows.length < pageSize) break;
     cursor = rows[rows.length - 1]!.sequence;
@@ -289,10 +345,11 @@ async function readSnapshotAsync(
   const processIsLive = options.processIsLive ?? sameProcess;
   const policy = options.policy ?? defaultPolicy;
   const pageSize = policy.width.pageSize;
+  const includeStopped = options.includeStopped ?? true;
   // The cursor precedes every persisted sequence; it is not a page-size policy.
   let cursor = -1;
   for (;;) {
-    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents, hasWorkerEvents);
+    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents, hasWorkerEvents, includeStopped);
     for (const row of rows) addRow(row, system, goals, processIsLive, db, policy);
     if (rows.length < pageSize) break;
     cursor = rows[rows.length - 1]!.sequence;
@@ -326,17 +383,27 @@ function noLongerActiveManager(db: Database, managerId: string): boolean {
   const state = db
     .query(
       `SELECT json_extract(state, '$.status') AS status,
-        json_extract(state, '$.goalState.status') AS goal_status
+        json_extract(state, '$.goalState.status') AS goal_status,
+        json_extract(state, '$.waitingForInbox') AS waiting_for_inbox,
+        json_extract(state, '$.goalPauseOrigin') AS goal_pause_origin
       FROM manager_sessions WHERE id=?`,
     )
-    .get(managerId) as { status?: string | null; goal_status?: string | null } | null;
+    .get(managerId) as {
+    status?: string | null;
+    goal_status?: string | null;
+    waiting_for_inbox?: number | null;
+    goal_pause_origin?: string | null;
+  } | null;
   if (!state) return false;
+  const controllerParked =
+    state.goal_status === 'paused' && state.waiting_for_inbox === 1 && state.goal_pause_origin === 'automatic';
   return (
     state.status === 'paused' ||
     state.status === 'complete' ||
     state.status === 'renewal-failed' ||
-    state.goal_status === 'paused' ||
+    (state.goal_status === 'paused' && !controllerParked) ||
     state.goal_status === 'budgetLimited' ||
+    state.goal_status === 'usageLimited' ||
     state.goal_status === 'complete'
   );
 }
@@ -356,11 +423,12 @@ function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): stri
     `Width governor: this Goal has ${goal.running} confirmed live workers (${goal.unknownRunning} current running attempts have unknown process identity); ` +
     `Codex subset ${goal.codexRunning} confirmed live (${codexUnknown} Codex evidence unknown); ` +
     `current work counts: ready ${goal.ready}, durable pending starts ${goal.pendingStarts}, held ${goal.held}, stopped ${goal.stopped}, waiting ${goal.waiting}; actionable stops ${goal.actionableStopped}. ` +
+    `Source status: registered starts ${goal.sourceReady} (${goal.sourcePendingStarts} durable pending); held ${goal.sourceHolds} (${goal.sourceDependencyHolds} dependencies, ${goal.sourceWaiting} check or custody waits); live source writers ${goal.sourceWriters}. ` +
     'Recover, reshape, or dispatch real work. ' +
     (goal.actionableStopped
       ? `Act within ${stoppedAge}: recover completed source waiting only for compiler typing evidence first; then handle actual stopped source as before: retry with a rewritten brief, split it, or cancel it. `
       : '') +
-    `Keep at least ${policy.backlog.lowWater} ready briefs in your backlog. ` +
+    'Use the backlog refill notice for runnable source supply and eligible width; low-water is an alert, not a target or quota. ' +
     'Unsubmitted work is not observable from runtime metadata.'
   );
 }
