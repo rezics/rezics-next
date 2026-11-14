@@ -6,30 +6,72 @@ import {
   type FollowCountPartitionPorts,
   type FollowCountReadPorts,
   type FollowCountReads,
+  type FollowCountTarget,
+  type CountDestination,
   type LibraryAccountActor,
   type LibraryActor,
   type CountKey,
 } from '../contract/index.ts';
 import { followCountScalar } from '../core/index.ts';
 
-/** Read authority is established before health and data. Provisional results are
- * withheld until final health and (for Subjects) identity currentness are proven. */
-export function createFollowCountReadApplication<Time>(ports: FollowCountReadPorts<Time>): FollowCountReads {
+/** Provisional scalars stay private until health and target authority are current,
+ * then the caller is re-admitted against the home captured before selection. */
+export function createFollowCountReadApplication<Time, Admission>(
+  ports: FollowCountReadPorts<Time, Admission>,
+): FollowCountReads {
   async function read<T>(
     actor: LibraryActor,
     deadline: number,
-    body: (owner: LibraryAccountActor, time: Time) => Promise<T>,
+    body: (
+      owner: LibraryAccountActor,
+      time: Time,
+    ) => Promise<Readonly<{ value: T; current?: (time: Time) => Promise<void> }>>,
   ) {
     if (actor.kind !== 'account') throw new FollowCountReadRefusedError('authentication_required');
     if (!actor.scopes.includes('follow:list')) throw new FollowCountReadRefusedError('forbidden');
-    const time = await ports.authenticate(actor, deadline);
-    await ports.health();
-    const result = await ports.within(deadline, () => body(actor, time));
-    await ports.health();
-    return result;
+    return ports.within(deadline, async () => {
+      const selectedAt = await ports.admit(actor, deadline);
+      const time = await ports.time(deadline);
+      await ports.health();
+      const result = await body(actor, time);
+      await ports.health();
+      let absent: FollowCountTargetAbsentError | undefined;
+      try {
+        if (result.current) await result.current(await ports.time(deadline));
+      } catch (error) {
+        // A revoked caller may also lose target management. Preserve the caller
+        // refusal before concealing a target whose final authority was denied.
+        if (!(error instanceof FollowCountTargetAbsentError)) throw error;
+        absent = error;
+      }
+      await ports.admit(actor, deadline, selectedAt);
+      if (absent) throw absent;
+      return result.value;
+    });
   }
   async function management(owner: LibraryAccountActor, action: string, id: string, time: Time, deadline: number) {
     if (!(await ports.management(owner, action, id, time, deadline))) throw new FollowCountTargetAbsentError();
+  }
+  async function collectionAuthority(
+    owner: LibraryAccountActor,
+    requested: FollowCountTarget,
+    destination: CountDestination,
+    time: Time,
+    deadline: number,
+  ) {
+    const collection = await ports.collection(destination, deadline);
+    if (collection?.state !== 'active') throw new FollowCountTargetAbsentError();
+    if (collection.visibility !== 'public') {
+      if (!collection.curatorAccountId || ports.route(collection.curatorAccountId) === null)
+        throw new FollowCountTargetAbsentError();
+      const curator = await ports.accountState(collection.curatorAccountId, deadline);
+      if (curator === null || curator === 'deleted') throw new FollowCountTargetAbsentError();
+    }
+    await management(owner, 'collection:update', requested.targetId, time, deadline);
+  }
+  async function spaceAuthority(owner: LibraryAccountActor, id: string, time: Time, deadline: number) {
+    if (!(await ports.spaceExists(id, time, deadline))) throw new FollowCountTargetAbsentError();
+    await management(owner, 'space:manage', id, time, deadline);
   }
   return {
     target(actor, requested, deadline) {
@@ -43,32 +85,38 @@ export function createFollowCountReadApplication<Time>(ports: FollowCountReadPor
           if (!accountId) throw new FollowCountTargetAbsentError();
           if (accountId !== owner.accountId) await management(owner, 'account:manage', accountId, time, deadline);
         } else if (requested.targetType === 'collection') {
-          const collection = await ports.collection(destination, deadline);
-          if (collection?.state !== 'active') throw new FollowCountTargetAbsentError();
-          if (collection.visibility !== 'public') {
-            if (!collection.curatorAccountId || ports.route(collection.curatorAccountId) === null)
-              throw new FollowCountTargetAbsentError();
-            const curator = await ports.accountState(collection.curatorAccountId, deadline);
-            if (curator === null || curator === 'deleted') throw new FollowCountTargetAbsentError();
-          }
-          await management(owner, 'collection:update', requested.targetId, time, deadline);
+          await collectionAuthority(owner, requested, destination, time, deadline);
         } else {
-          if (!(await ports.spaceExists(requested.targetId, time, deadline))) throw new FollowCountTargetAbsentError();
-          await management(owner, 'space:manage', requested.targetId, time, deadline);
+          await spaceAuthority(owner, requested.targetId, time, deadline);
         }
         const followerCount = followCountScalar(await ports.total(destination, requested.targetType, deadline));
-        if (requested.targetType === 'subject') {
-          const current = await ports.destination(requested);
-          const binding = await ports.accountForAgent(current.targetId);
-          if (current.targetId !== destination.targetId || current.epoch !== destination.epoch || binding !== accountId)
-            throw new FollowCountUnavailableError('Count identity changed during read');
-        }
-        return { ...requested, followerCount };
+        return {
+          value: { ...requested, followerCount },
+          async current(at: Time) {
+            if (requested.targetType === 'subject') {
+              if (!(await ports.subjectReadable(owner, requested.targetId, at)))
+                throw new FollowCountTargetAbsentError();
+              if (accountId !== owner.accountId) await management(owner, 'account:manage', accountId!, at, deadline);
+              const current = await ports.destination(requested);
+              const binding = await ports.accountForAgent(current.targetId);
+              if (
+                current.targetId !== destination.targetId ||
+                current.epoch !== destination.epoch ||
+                binding !== accountId
+              )
+                throw new FollowCountUnavailableError('Count identity changed during read');
+            } else if (requested.targetType === 'collection') {
+              await collectionAuthority(owner, requested, destination, at, deadline);
+            } else {
+              await spaceAuthority(owner, requested.targetId, at, deadline);
+            }
+          },
+        };
       });
     },
     outgoing(actor, deadline) {
       return read(actor, deadline, async (owner) => ({
-        followingCount: followCountScalar(await ports.outgoing(owner, deadline)),
+        value: { followingCount: followCountScalar(await ports.outgoing(owner, deadline)) },
       }));
     },
   };

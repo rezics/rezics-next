@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../../command/command.ts';
 import { withConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem-error.ts';
+import { GrantDeniedError } from '../../access/contract/errors.ts';
 import { accessCheck } from '../../request/access-check.ts';
 import type { Access, AccessClient } from '../../request/access.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
@@ -18,6 +19,8 @@ import {
 } from '../contract/index.ts';
 import { readCollection } from '../collection-store.ts';
 import { resolveSubject } from '../subject-anchor.ts';
+import { admitPrivateFollowRead, type FollowReadAdmission } from '../follow-read-admission.ts';
+import { withFollowWork } from '../follow-operation-bounds.ts';
 
 import { countRoute } from './follow-count-runtime.ts';
 import { requireFollowCountHealth } from './follow-count-observation.ts';
@@ -47,24 +50,10 @@ export function createNativeFollowCountReads(
   access: Access,
   ports: NativeFollowCountReadPorts,
 ): FollowCountReads {
-  const application = createFollowCountReadApplication<AuthoritativeTime>({
+  const application = createFollowCountReadApplication<AuthoritativeTime, FollowReadAdmission>({
     route: routeOf,
-    authenticate(owner, deadline) {
-      return withConnection(pool, async (client) => {
-        const db = ports.deadlineClient(client, deadline);
-        const current = await ports.account(db, countRoute(owner.accountId), owner.accountId);
-        if (
-          !current ||
-          current.state !== 'active' ||
-          current.fenced ||
-          !Number.isSafeInteger(owner.authnEpoch) ||
-          owner.authnEpoch < 1 ||
-          current.minimumAuthnEpoch > BigInt(owner.authnEpoch)
-        )
-          throw new ProblemError('invalid_credentials');
-        return mintReadTime(db);
-      });
-    },
+    admit: (owner, deadline, expected) => admitPrivateFollowRead(pool, owner, deadline, expected),
+    time: (deadline) => withConnection(pool, (client) => mintReadTime(ports.deadlineClient(client, deadline))),
     health: () => requireFollowCountHealth(pool),
     within: ports.within,
     destination: (target) => ports.destination(pool, target),
@@ -124,10 +113,11 @@ export function createNativeFollowCountReads(
       });
     },
   });
-  async function wire<T>(body: () => Promise<T>): Promise<T> {
+  async function wire<T>(deadline: number, body: () => Promise<T>): Promise<T> {
     try {
-      return await body();
+      return await withFollowWork(deadline, body);
     } catch (error) {
+      if (error instanceof GrantDeniedError) throw new ProblemError('invalid_credentials');
       if (error instanceof FollowCountReadRefusedError) throw new ProblemError(error.reason);
       if (error instanceof FollowCountTargetAbsentError) throw new ProblemError('not_found');
       if (
@@ -140,7 +130,7 @@ export function createNativeFollowCountReads(
     }
   }
   return {
-    target: (actor, target, deadline) => wire(() => application.target(actor, target, deadline)),
-    outgoing: (actor, deadline) => wire(() => application.outgoing(actor, deadline)),
+    target: (actor, target, deadline) => wire(deadline, () => application.target(actor, target, deadline)),
+    outgoing: (actor, deadline) => wire(deadline, () => application.outgoing(actor, deadline)),
   };
 }

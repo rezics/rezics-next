@@ -428,6 +428,7 @@ export function followCommandPlan(original: FollowCommandOriginal, deadline: num
       if (
         sql === 'COMMIT' ||
         sql === 'ROLLBACK' ||
+        sql === 'BEGIN' ||
         sql === 'BEGIN ISOLATION LEVEL SERIALIZABLE' ||
         sql === 'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY' ||
         sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' ||

@@ -12,12 +12,13 @@ import * as collections from '../../src/library/collection-store.ts';
 import { bindCommandHistoryEvidence } from '../../src/history/application/index.ts';
 import { ACCOUNT_ROLE_BITS } from '../../src/history/contract/contracts.ts';
 import type { AccountActor } from '../../src/request/access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { capture, measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { createFollowCountsDriver } from './support/follow-counts-driver.ts';
 
 let db: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
@@ -133,18 +134,19 @@ async function snapshot() {
     UNION ALL SELECT 'follow', to_jsonb(f) FROM library.follow f) AS rows ORDER BY kind, row::text`);
   return result.rows;
 }
-async function waitForFollowContribution() {
+async function waitForFollowRead(relation: string, database = db) {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
-    const waiting = await db.admin.query(
+    const waiting = await database.admin.query(
       `SELECT 1 FROM pg_stat_activity
        WHERE pid <> pg_backend_pid() AND datname=current_database()
-         AND wait_event_type='Lock' AND query ILIKE '%semantic.account_agent_subject%' LIMIT 1`,
+         AND wait_event_type='Lock' AND query ILIKE $1 LIMIT 1`,
+      [`%${relation}%`],
     );
     if (waiting.rowCount) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error('FULL Follow read did not reach the contribution lookup lock');
+  throw new Error(`Follow read did not reach the ${relation} lookup lock`);
 }
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -609,7 +611,7 @@ test('mounted FULL Follow reads recheck the owner after delayed contribution enr
     await blocker.query('BEGIN');
     await blocker.query('LOCK TABLE semantic.account_agent_subject IN ACCESS EXCLUSIVE MODE');
     pending = request('GET', `/v1/follows/${targetId}?view=FULL`);
-    await waitForFollowContribution();
+    await waitForFollowRead('semantic.account_agent_subject');
     await db.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2', [
       routeOf(accounts.owner),
       accounts.owner,
@@ -628,6 +630,109 @@ test('mounted FULL Follow reads recheck the owner after delayed contribution enr
     ]);
   }
 });
+
+test('mounted private counts withhold totals after caller, home or management changes during assembly', async () => {
+  const driver = await createFollowCountsDriver();
+  try {
+    const fixture = await driver.fixture('collection');
+    await json(
+      await driver.request(fixture.follower.credential, `/v1/follows/${fixture.target.targetId}`, {
+        method: 'PUT',
+        headers: { 'Idempotency-Key': JSON.stringify(randomUUID()) },
+      }),
+    );
+    await driver.reconcile(fixture.follower, fixture.target);
+    const database = driver.world.native.growth;
+    for (const operation of ['target', 'outgoing'] as const) {
+      const principal = operation === 'target' ? fixture.granted : fixture.follower;
+      const path =
+        operation === 'target' ? `/v1/followCounts/collection/${fixture.target.targetId}` : '/v1/followCounts/outgoing';
+      const expected = operation === 'target' ? { ...fixture.target, followerCount: 1 } : { followingCount: 1 };
+      const relation = operation === 'target' ? 'library.follow_count_total' : 'library.follow_count_owner';
+      const route = routeOf(principal.accountId)!;
+      const partition = partitionOf(route);
+      const account = (
+        await database.admin.query(
+          'SELECT state,authn_fenced,minimum_authn_epoch FROM access.account WHERE route=$1 AND account_id=$2',
+          [route, principal.accountId],
+        )
+      ).rows[0]!;
+      const home = (
+        await database.admin.query('SELECT epoch,moved_to FROM core.partition WHERE partition_no=$1', [partition])
+      ).rows[0]!;
+      const changes = [
+        'floor',
+        'state',
+        'fenced',
+        'epoch',
+        'moved',
+        ...(operation === 'target' ? (['management'] as const) : []),
+      ] as const;
+      for (const change of changes) {
+        expect(await json(await driver.request(principal.credential, path))).toEqual(expected);
+        const blocker = await database.admin.connect();
+        let pending: Promise<Response> | undefined;
+        try {
+          try {
+            await blocker.query('BEGIN');
+            await blocker.query(`LOCK TABLE ${relation} IN ACCESS EXCLUSIVE MODE`);
+            pending = driver.request(principal.credential, path);
+            await waitForFollowRead(relation, database);
+            if (change === 'management') {
+              await driver.revokeManagement(fixture);
+            } else if (change === 'epoch' || change === 'moved') {
+              await database.admin.query(
+                change === 'epoch'
+                  ? 'UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1'
+                  : "UPDATE core.partition SET moved_to='count-read-moved' WHERE partition_no=$1",
+                [partition],
+              );
+            } else {
+              const assignment = {
+                floor: 'minimum_authn_epoch=minimum_authn_epoch+1',
+                state: "state='suspended'",
+                fenced: 'authn_fenced=true',
+              }[change];
+              await database.admin.query(`UPDATE access.account SET ${assignment} WHERE route=$1 AND account_id=$2`, [
+                route,
+                principal.accountId,
+              ]);
+            }
+          } finally {
+            try {
+              await blocker.query('ROLLBACK');
+            } finally {
+              blocker.release();
+            }
+          }
+          const unavailable = change === 'epoch' || change === 'moved';
+          const refused = await problem(
+            await pending!,
+            change === 'management' ? 404 : unavailable ? 503 : 401,
+            change === 'management' ? 'not_found' : unavailable ? 'dependency_unavailable' : 'invalid_credentials',
+          );
+          expect(refused).not.toHaveProperty('followerCount');
+          expect(refused).not.toHaveProperty('followingCount');
+        } finally {
+          await pending;
+          await database.admin.query(
+            'UPDATE access.account SET state=$3,authn_fenced=$4,minimum_authn_epoch=$5 WHERE route=$1 AND account_id=$2',
+            [route, principal.accountId, account.state, account.authn_fenced, account.minimum_authn_epoch],
+          );
+          await database.admin.query('UPDATE core.partition SET epoch=$2,moved_to=$3 WHERE partition_no=$1', [
+            partition,
+            home.epoch,
+            home.moved_to,
+          ]);
+        }
+      }
+      if (operation === 'outgoing')
+        expect(await json(await driver.request(principal.credential, path))).toEqual(expected);
+    }
+  } finally {
+    await driver.close();
+  }
+}, 120_000);
 
 test('private reads conceal owner unknown and malformed ids and denied writes leave state unchanged', async () => {
   const id = await subject();

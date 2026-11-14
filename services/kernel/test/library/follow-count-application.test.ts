@@ -25,7 +25,8 @@ const owner: LibraryAccountActor = {
 };
 const target = { targetType: 'subject', targetId: 'original' } as const;
 const key: CountKey = { ...target, accountId: owner.accountId };
-const time = Object.freeze({ nativeTime: 'retained' });
+const time: Readonly<{ nativeTime: string }> = Object.freeze({ nativeTime: 'retained' });
+const home = Object.freeze({ nativeHome: 'initial' });
 const health = {
   sampledAt: 'sample',
   oldestPendingAt: null,
@@ -33,14 +34,19 @@ const health = {
   consumerOldestPendingAt: null,
 };
 
-function reads(overrides: Partial<FollowCountReadPorts<typeof time>> = {}) {
+function reads(overrides: Partial<FollowCountReadPorts<typeof time, typeof home>> = {}) {
   const calls: string[] = [];
-  const ports: FollowCountReadPorts<typeof time> = {
+  const ports: FollowCountReadPorts<typeof time, typeof home> = {
     route: () => 16,
-    async authenticate(actor, deadline) {
+    async admit(actor, deadline, expected) {
       expect(actor).toBe(owner);
       expect(deadline).toBe(123);
-      calls.push('authority');
+      if (expected !== undefined) expect(expected).toBe(home);
+      calls.push(expected === undefined ? 'authority' : 'readmit');
+      return home;
+    },
+    async time(deadline) {
+      expect(deadline).toBe(123);
       return time;
     },
     async health() {
@@ -98,8 +104,19 @@ function reads(overrides: Partial<FollowCountReadPorts<typeof time>> = {}) {
 test('private counts admit current authority, retain native time and distinguish ready zero from unknown', async () => {
   const { app, calls } = reads();
   expect(await app.target(owner, target, 123)).toEqual({ ...target, followerCount: 0 });
-  expect(calls).toEqual(['authority', 'health', 'identity', 'agent', 'total', 'identity', 'agent', 'health']);
+  expect(calls).toEqual([
+    'authority',
+    'health',
+    'identity',
+    'agent',
+    'total',
+    'health',
+    'identity',
+    'agent',
+    'readmit',
+  ]);
   expect(await app.outgoing(owner, 123)).toEqual({ followingCount: 0 });
+  expect(calls.slice(-4)).toEqual(['health', 'outgoing', 'health', 'readmit']);
   for (const value of [undefined, '-1', '1.5', '9007199254740992']) {
     const { app } = reads({
       async total() {
@@ -113,7 +130,7 @@ test('private counts admit current authority, retain native time and distinguish
     await expect(app.outgoing(owner, 123)).rejects.toBeInstanceOf(FollowCountUnavailableError);
   }
   const denied = reads({
-    async authenticate() {
+    async admit() {
       throw new Error('revoked');
     },
   });
@@ -132,12 +149,17 @@ test('final health, identity epoch and agent binding can each withhold a provisi
   });
   await expect(unhealthy.app.outgoing(owner, 123)).rejects.toBeInstanceOf(FollowCountUnavailableError);
   expect(unhealthy.calls).toEqual(['authority', 'outgoing']);
-  for (const changed of ['epoch', 'binding'] as const) {
+  for (const changed of ['epoch', 'binding', 'terminal'] as const) {
     let identities = 0,
       bindings = 0;
     const { app } = reads({
       async destination() {
-        return { route: 16, targetId: 'terminal', epoch: ++identities === 2 && changed === 'epoch' ? 2n : 1n };
+        const moved = ++identities === 2;
+        return {
+          route: 16,
+          targetId: moved && changed === 'terminal' ? 'relocated' : 'terminal',
+          epoch: moved && changed === 'epoch' ? 2n : 1n,
+        };
       },
       async accountForAgent() {
         return ++bindings === 2 && changed === 'binding' ? 'other' : owner.accountId;
@@ -169,6 +191,91 @@ test('nonpublic Collection counts retain curator terminal fencing and native man
   });
   await expect(withdrawn.app.target(owner, collection, 123)).rejects.toBeInstanceOf(FollowCountTargetAbsentError);
   expect(withdrawn.calls).not.toContain('total');
+  let states = 0;
+  const changed = reads({
+    async collection() {
+      return { state: 'active', visibility: 'private', curatorAccountId: 'curator' };
+    },
+    async accountState() {
+      return ++states === 1 ? 'active' : 'deleted';
+    },
+  });
+  await expect(changed.app.target(owner, collection, 123)).rejects.toBeInstanceOf(FollowCountTargetAbsentError);
+  expect(changed.calls).toContain('total');
+  expect(changed.calls.at(-1)).toBe('readmit');
+});
+
+test('both count reads withhold assembled totals when final caller or stable-home admission fails', async () => {
+  for (const operation of ['target', 'outgoing'] as const) {
+    let assembled = false;
+    const { app, calls } = reads({
+      async accountForAgent() {
+        return 'managed-account';
+      },
+      async management() {
+        return !assembled;
+      },
+      async total() {
+        assembled = true;
+        return '17';
+      },
+      async outgoing() {
+        assembled = true;
+        return '19';
+      },
+      async admit(actor, deadline, expected) {
+        expect(actor).toBe(owner);
+        expect(deadline).toBe(123);
+        if (expected) {
+          expect(expected).toBe(home);
+          expect(assembled).toBe(true);
+          expect(calls.filter((call) => call === 'health')).toHaveLength(2);
+          throw new FollowCountReadRefusedError('forbidden');
+        }
+        return home;
+      },
+    });
+    await expect(
+      operation === 'target' ? app.target(owner, target, 123) : app.outgoing(owner, 123),
+    ).rejects.toBeInstanceOf(FollowCountReadRefusedError);
+  }
+});
+
+test('final target management uses a fresh native instant and preserves target-specific authority', async () => {
+  const current = { nativeTime: 'current' };
+  for (const targetType of ['subject', 'collection', 'space'] as const) {
+    let times = 0;
+    const checked: string[] = [];
+    const { app, calls } = reads({
+      async time() {
+        return times++ === 0 ? time : current;
+      },
+      async accountForAgent() {
+        return 'managed-account';
+      },
+      async subjectReadable() {
+        return true;
+      },
+      async management(actor, action, id, at, deadline) {
+        expect(actor).toBe(owner);
+        expect(deadline).toBe(123);
+        checked.push(`${action}:${id}`);
+        expect(at).toBe(checked.length === 1 ? time : current);
+        return checked.length === 1;
+      },
+    });
+    await expect(app.target(owner, { targetType, targetId: 'original' }, 123)).rejects.toBeInstanceOf(
+      FollowCountTargetAbsentError,
+    );
+    const action = {
+      subject: 'account:manage:managed-account',
+      collection: 'collection:update:original',
+      space: 'space:manage:original',
+    }[targetType];
+    expect(checked).toEqual([action, action]);
+    expect(calls).toContain('total');
+    expect(calls.at(-1)).toBe('readmit');
+  }
 });
 
 test('delivery re-reads current source, retains the receiving locator before apply and never ACKs a failed commit', async () => {

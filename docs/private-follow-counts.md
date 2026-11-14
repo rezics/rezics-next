@@ -50,13 +50,15 @@ same account-agent rule; operator/organization authority is evaluated on the **r
 an operator pointer, organization membership or an agent-id/account-id coincidence. Other account-management command
 anchors in Access documentation do not redefine this count-specific decision.
 
-Perform one management check per requested target count page, independent of the number of follower edges; the
-resolved account's self branch needs none. Authentication and exposure-gate checks are separate admission checks.
+Perform management checks before selecting the total and at a fresh native instant after final health, independent
+of the number of follower edges; the resolved account's self branch needs none. Both passes retain native target
+visibility/existence rules and the Subject identity epoch and account binding. Authentication and exposure-gate
+checks are separate admission checks.
 Reuse ordinary Access preparation and evaluation with the request deadline, not a permission cache or per-edge checks.
 Unknown, inactive, hidden, deleted or not-visible targets and failed management authority all conceal as `404 not_found`.
 Resolve target existence/visibility through its native reader; a private Collection's valid management grant must not
 be defeated by the curator-only command helper. Empty account-agent resolution never permits guessing ownership.
-Revoke a grant/role and the same bearer loses count access on the next request.
+Revoke a grant/role during assembly and the final management check withholds the provisional count.
 Native unverified graph agents resolve only through their exact persisted Semantic link and current public account; catalogue subjects still require the existing verification pointer.
 
 The follower always sees its own outgoing follows, including follows of ordinary unowned subjects. Target management
@@ -104,6 +106,12 @@ stale/revoked authentication is `401 invalid_credentials`; closed exposure gate 
 [Accounts platform-gate authority](accounts.md#8-platform-gates). Existing own
 outgoing requests retain their native authentication/gate checks.
 Never mount the route with optional authentication or substitute caller-asserted identity.
+
+Decision: both count reads reuse private Follow admission to capture the active, unfenced actor, authentication
+floor and active home epoch before selection. After assembly, final health and current target authority, re-admit
+the caller against that initial home immediately before returning. Each admission releases its account/home
+checkout before foreign work. Initial and final work share the original deadline and native Follow work frame;
+an intervening home epoch change is unavailable even if the home becomes active again.
 
 Success uses `Cache-Control: private, no-store`. Errors use `application/problem+json`, native status/code and
 `type=https://rezics.com/problems/<code>`, without either count field. Unavailable Access or unavailable/incomplete

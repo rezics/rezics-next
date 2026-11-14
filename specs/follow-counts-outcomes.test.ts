@@ -96,6 +96,7 @@ test('Space management uses its installed role through native Access', async () 
   const measured = await native().measure(() => count(f, 1, f.granted.credential));
   expect(measured.trace.managementChecks).toEqual([
     { action: 'space:manage', resource: { route: routeOf(f.target.targetId)!, id: f.target.targetId } },
+    { action: 'space:manage', resource: { route: routeOf(f.target.targetId)!, id: f.target.targetId } },
   ]);
   await native().revokeManagement(f);
   await problem(await native().request(f.granted.credential, targetPath(f.target)), 404, 'not_found');
@@ -111,6 +112,7 @@ test('person agent self automated operator and organization owner resolve the ac
     else {
       const result = await native().measure(() => count(f, 1));
       expect(result.trace.managementChecks).toEqual([
+        { action: 'account:manage', resource: { route: routeOf(f.targetAccountId!)!, id: f.targetAccountId! } },
         { action: 'account:manage', resource: { route: routeOf(f.targetAccountId!)!, id: f.targetAccountId! } },
       ]);
     }
@@ -176,12 +178,13 @@ test('hidden account agent resolution is empty and cannot be replaced with guess
   await problem(await native().request(f.granted.credential, targetPath(f.target)), 404, 'not_found');
 });
 
-test('one management authorization is performed per count page independent of follower edges', async () => {
+test('initial and final management authorizations stay independent of follower edges', async () => {
   const f = await followed();
   for (const scale of [1, 4, 16]) {
     await native().seed(f, scale, 'target_followers');
     const result = await native().measure(() => count(f, 1 + 128 * scale));
     expect(result.trace.managementChecks).toEqual([
+      { action: 'collection:update', resource: { route: routeOf(f.target.targetId)!, id: f.target.targetId } },
       { action: 'collection:update', resource: { route: routeOf(f.target.targetId)!, id: f.target.targetId } },
     ]);
   }
