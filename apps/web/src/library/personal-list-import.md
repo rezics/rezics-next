@@ -1,5 +1,23 @@
 # Personal list import
 
+Decision: AniList, Bangumi and MAL keep eight observed predecessor coordinates plus the current coordinate in
+their existing page owners. Previous rereads the exact retained operand; First rereads native `-1` for AniList and
+Bangumi and `0` for MAL, including at the retained edge. Only a successful read changes the trail; a failed read
+keeps the displayed page and explicitly retries its requested coordinate. Movement reads one bounded page, stores
+no old page bodies, grants no score consent and sends no write. AniList/Bangumi retain their existing off-page
+review metadata; MAL confirms only the displayed page and retains its draft field choices for a later native reread.
+A returned page retires any absent or replaced review authority and consent, while acknowledged outcomes and exact
+uncertain write operands remain independent. Upload replacement, cancellation and reader retirement clear the trail
+and retire late reads. Wrapped 44px navigation follows First, Previous, Next in keyboard order; successful movement
+focuses its page status and failed movement leaves explicit retry and recovery controls. No prefetch or ordinal
+arithmetic supplies a predecessor.
+
+Navigation design sources: this owner; the declared AniList/Bangumi controllers and all three page/review owners;
+their port contracts and installed native page adapters (`anilist({importId}).get`, `bangumi({uploadId}).get`,
+`mal({id}).get`); and the main checkout's `.reference/INDEX.md` provider entries. Focused provider tests and named
+navigation stories are delivered as source; execution and native/browser/keyboard/phone/theme/locale acceptance
+remain with the verifier.
+
 Decision: bind the generated `KernelClient.libraryImports.vndb` methods from the mounted native route. Eden's
 `libraryImports` surface is a function, so Web reads `vndb` by property access rather than an object/`in` check. A row
 enters the apply selection only after explicit target and independent state or score review; confirmation applies only the

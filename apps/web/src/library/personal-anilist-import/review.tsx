@@ -1,3 +1,4 @@
+import { ImportPageNavigation, useImportPageFocus } from '../personal-list-import/page-navigation';
 import type { ReactNode } from 'react';
 import type { AniListRow, AniListRowMeta } from './contract';
 import { ImportDetails, ImportEmpty } from '../personal-list-import/presentation';
@@ -13,6 +14,8 @@ export function AniListReviewPage({
   onSave,
   onChoose,
   onNext,
+  onPrevious,
+  onFirst,
   onConfirm,
   onRefreshQuestion,
   renderLabels,
@@ -22,17 +25,20 @@ export function AniListReviewPage({
   onSave: (draft: RowDraft) => void;
   onChoose: (draft: RowDraft) => void;
   onNext: () => void;
+  onPrevious: () => void;
+  onFirst: () => void;
   onConfirm: () => void;
   onRefreshQuestion: () => void;
   renderLabels?: (row: AniListRow, meta: AniListRowMeta | undefined) => ReactNode;
 }) {
+  const pageStatus = useImportPageFocus(snap.after);
   const metadata = new Map(snap.meta.map((row) => [row.ordinal, row]));
   const reviewed = snap.meta.filter((row) => row.reviewId).length;
   return (
     <section className="space-y-6" data-anilist-stage="review">
       <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
       <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
-      <p role="status">
+      <p ref={pageStatus} role="status" tabIndex={-1} className="rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
         {m.library_anilist_page_status({
           shown: snap.page.length,
           total: snap.count,
@@ -99,12 +105,16 @@ export function AniListReviewPage({
           );
         })}
       </ul>
+      <ImportPageNavigation
+        position={snap.position}
+        hasNext={snap.next !== null}
+        nextLabel={m.library_anilist_next_page()}
+        busy={busy || snap.cancelled}
+        onFirst={onFirst}
+        onPrevious={onPrevious}
+        onNext={onNext}
+      />
       <div className="flex flex-wrap gap-3">
-        {snap.next !== null ? (
-          <AniListAction type="button" variant="outline" disabled={busy} onClick={onNext}>
-            {m.library_anilist_next_page()}
-          </AniListAction>
-        ) : null}
         <AniListAction type="button" disabled={busy || snap.cancelled || reviewed === 0} onClick={onConfirm}>
           {m.library_anilist_continue_confirm()}
         </AniListAction>

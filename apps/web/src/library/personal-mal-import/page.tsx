@@ -1,3 +1,4 @@
+import { ImportPageCoordinates, ImportPageReadRecovery } from '../personal-list-import/page-navigation';
 import { ImportDetails, ImportJourney, ImportReturn } from '../personal-list-import/presentation';
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
@@ -33,6 +34,12 @@ import type { SourceAdmissionOutcome } from '../rich-private-entry/admission';
 import type { MalDeliveryCustody, MalOwnVoteReadback, MalQuestion } from './contract';
 
 type Stage = 'upload' | 'review' | 'confirm' | 'results';
+type PageRequest = {
+  command: Extract<MalCommand, { kind: 'page' }>;
+  switchToReview: boolean;
+  preserveFields: boolean;
+};
+
 type Notice = MalFailure | MalUnknown | { kind: 'too-large' } | null;
 
 function noticeText(notice: Notice): string | null {
@@ -78,6 +85,13 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   const [stage, setStage] = useState<Stage>(() => commandStage(restored?.command ?? null));
   const [page, setPage] = useState<MalPage | null>(null);
   const [after, setAfter] = useState(0);
+  const coordinates = useRef(new ImportPageCoordinates(0));
+  const [position, setPosition] = useState(() => coordinates.current.position());
+  const pageRequest = useRef<PageRequest | null>(null);
+  const [pageFailure, setPageFailure] = useState<PageRequest | null>(null);
+  const draftReviews = useRef(new Map<number, string | null>());
+  const generation = useRef(0);
+  const sending = useRef(false);
   const [drafts, setDrafts] = useState<Record<number, RowDraft>>({});
   const [result, setResult] = useState<MalApplyPage | null>(restored?.result ?? null);
   const [busy, setBusy] = useState(false);
@@ -114,7 +128,17 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     return visit.current() && sender.current.subject === visit.subject && sender.current.csrfToken === visit.csrfToken;
   }
 
+  function retireCoordinates() {
+    coordinates.current.retire();
+    pageRequest.current = null;
+    setPageFailure(null);
+    setPosition(coordinates.current.position());
+  }
+
   function resetPrivate() {
+    generation.current += 1;
+    retireCoordinates();
+    draftReviews.current.clear();
     delivery.current = null;
     if (unknownCommand) visit.resolveDelivery(unknownCommand);
     unknownRef.current = null;
@@ -181,10 +205,20 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     sourceConsent = confirmFlags.current,
     retry = false,
   ) {
-    if (!live() || busy || (unknownRef.current && (!retry || !sameCommand(unknownRef.current, command)))) return;
+    if (!live() || sending.current || (unknownRef.current && (!retry || !sameCommand(unknownRef.current, command)))) return;
+    const token = generation.current;
+    sending.current = true;
     setBusy(true);
-    const response = await send();
-    setBusy(false);
+    let response: T | MalFailure | MalUnknown;
+    try {
+      response = await send();
+    } finally {
+      if (token === generation.current) {
+        sending.current = false;
+        setBusy(false);
+      }
+    }
+    if (token !== generation.current) return;
     if (response.kind === 'unknown') {
       const lost = response as MalUnknown;
       const custody: MalDeliveryCustody = {
@@ -237,18 +271,31 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     const rows = withPreview(nextPage.rows).map((row) =>
       row.review?.version === retiredReviews.current.get(row.index) ? { ...row, review: null } : row,
     );
+    uploadId.current = nextPage.id;
     for (const row of rows) titles.current.set(row.index, row.title);
     setPage({ ...nextPage, rows });
     setAfter(cursor);
-    setDrafts((current) =>
-      Object.fromEntries(
-        rows.map((row) => {
-          const next = draftFromRow(row);
-          const prior = current[row.index];
-          return [row.index, preserveFields && prior ? { ...next, fields: prior.fields } : next];
-        }),
-      ),
-    );
+    if (nextPage.canceled) retireCoordinates();
+    else {
+      coordinates.current.observe(cursor);
+      setPosition(coordinates.current.position());
+    }
+    pageRequest.current = null;
+    setPageFailure(null);
+    // Keep only draft state across pages. Native rereads supply every row and review again.
+    const priorVersions = new Map(draftReviews.current);
+    for (const row of rows) draftReviews.current.set(row.index, row.review?.version ?? null);
+    setDrafts((current) => {
+      const next = { ...current };
+      for (const row of rows) {
+        const prior = current[row.index];
+        const sameReview = priorVersions.has(row.index) && priorVersions.get(row.index) === (row.review?.version ?? null);
+        next[row.index] = prior && sameReview
+          ? prior
+          : { ...draftFromRow(row), ...(preserveFields && prior ? { fields: prior.fields } : {}) };
+      }
+      return next;
+    });
     if (switchToReview) setStage('review');
   }
 
@@ -257,10 +304,20 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     cursor: number,
     switchToReview = true,
     preserveFields = false,
+    retry = false,
   ): Promise<MalPage | null> {
+    if (!live() || sending.current || (unknownRef.current && !retry)) return null;
+    const token = generation.current;
     const command: Extract<MalCommand, { kind: 'page' }> = { kind: 'page', id, after: cursor };
-    const response = await run(command, () => port.page(command));
-    if (response?.kind !== 'page' || !live()) return null;
+    const request = { command, switchToReview, preserveFields };
+    pageRequest.current = request;
+    setPageFailure(null);
+    const response = await run(command, () => port.page(command), confirmFlags.current, retry);
+    if (!live() || token !== generation.current) return null;
+    if (response?.kind !== 'page') {
+      if (response && response.kind !== 'unknown') setPageFailure(request);
+      return null;
+    }
     if (!preserveFields) {
       setVoteReadbacks(new Map());
     } else {
@@ -300,7 +357,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       setNotice({ kind: 'too-large' });
       return;
     }
+    if (!live() || sending.current || unknownRef.current) return;
     const previous = uploadId.current;
+    resetPrivate();
     if (previous) {
       const remove: Extract<MalCommand, { kind: 'delete' }> = {
         kind: 'delete',
@@ -309,7 +368,6 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       };
       const deleted = await run(remove, () => port.delete(remove));
       if (!deleted || deleted.kind !== 'done' || !live()) return;
-      resetPrivate();
     }
     const command: Extract<MalCommand, { kind: 'preview' }> = { kind: 'preview', key: newCommandKey(), xml };
     const response = await run(command, () => port.preview(command));
@@ -511,8 +569,8 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         await loadPage(response.id, 0);
       }
     } else if (command.kind === 'page') {
-      const response = await run(command, () => port.page(command), sourceConsent, true);
-      if (response?.kind === 'page' && live()) acceptPage(response.page, command.after, true, false);
+      const request = pageRequest.current;
+      await loadPage(command.id, command.after, request?.switchToReview ?? true, request?.preserveFields ?? false, true);
     } else if (command.kind === 'review') {
       const response = await run(command, () => port.review(command), sourceConsent, true);
       if (response?.kind === 'reviewed' && live()) await loadPage(command.id, after, true, true);
@@ -542,7 +600,11 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         await admitQueued();
       }
     } else if (command.kind === 'cancel') {
-      await run(command, () => port.cancel(command), sourceConsent, true);
+      const response = await run(command, () => port.cancel(command), sourceConsent, true);
+      if (response?.kind === 'done' && live()) {
+        retireCoordinates();
+        await loadPage(command.id, after);
+      }
     } else {
       const response = await run(command, () => port.delete(command), sourceConsent, true);
       if (response?.kind === 'done' && live()) resetPrivate();
@@ -572,6 +634,12 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
             {m.library_mal_retry_command()}
           </MalAction>
         </div>
+      ) : null}
+      {pageFailure && !unknownCommand ? (
+        <ImportPageReadRecovery
+          busy={locked}
+          onRetry={() => void loadPage(pageFailure.command.id, pageFailure.command.after, pageFailure.switchToReview, pageFailure.preserveFields, true)}
+        />
       ) : null}
       {stage === 'upload' ? (
         <>
@@ -605,6 +673,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
           questionUnavailable={questionUnavailable}
           voteReadbacks={voteReadbacks}
           after={after}
+          position={position}
           busy={locked}
           onReadQuestion={() => void readQuestion()}
           onReadVote={(row, draft) => void readVote(row, draft.target)}
@@ -618,7 +687,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
             }
           }}
           onSave={(draft) => void saveReview(draft)}
-          onNext={() => page.next !== null && uploadId.current && void loadPage(uploadId.current, page.next)}
+          onNext={() => !locked && !page.canceled && page.next !== null && uploadId.current && void loadPage(uploadId.current, page.next)}
+          onPrevious={() => !locked && !page.canceled && position.previous !== null && uploadId.current && void loadPage(uploadId.current, position.previous)}
+          onFirst={() => !locked && !page.canceled && position.canFirst && uploadId.current && void loadPage(uploadId.current, coordinates.current.first)}
           onConfirm={() => {
             confirmFlags.current = { privacy: false, timestamps: false };
             setConfirmPrivacy(false);
@@ -709,7 +780,10 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
               key: newCommandKey(),
             };
             const response = await run(command, () => port.cancel(command));
-            if (response?.kind === 'done' && live()) await loadPage(id, after);
+            if (response?.kind === 'done' && live()) {
+              retireCoordinates();
+              await loadPage(id, after);
+            }
           }}
         >
           {m.library_mal_label_cancel()}

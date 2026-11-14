@@ -1,3 +1,4 @@
+import { ImportPageNavigation, useImportPageFocus, type ImportPagePosition } from '../personal-list-import/page-navigation';
 import { ImportDetails, ImportEmpty } from '../personal-list-import/presentation';
 import { m } from '../../paraglide/messages.js';
 import type { MalOwnVoteReadback, MalPage, MalQuestion } from './contract';
@@ -13,12 +14,15 @@ export function MalReviewPage({
   questionUnavailable,
   voteReadbacks,
   after,
+  position,
   busy,
   onReadQuestion,
   onReadVote,
   onChangeDraft,
   onSave,
   onNext,
+  onPrevious,
+  onFirst,
   onConfirm,
 }: {
   page: MalPage;
@@ -28,14 +32,18 @@ export function MalReviewPage({
   questionUnavailable: boolean;
   voteReadbacks: Map<string, MalOwnVoteReadback>;
   after: number;
+  position: ImportPagePosition;
   busy: boolean;
   onReadQuestion: () => void;
   onReadVote: (row: MalPage['rows'][number], draft: RowDraft) => void;
   onChangeDraft: (draft: RowDraft) => void;
   onSave: (draft: RowDraft) => void;
   onNext: () => void;
+  onPrevious: () => void;
+  onFirst: () => void;
   onConfirm: () => void;
 }) {
+  const pageStatus = useImportPageFocus(after);
   const reviewed = page.rows.filter((row) => row.review).length;
   const hasUnsavedReview = page.rows.some((row) => {
     const draft = drafts[row.index];
@@ -45,7 +53,7 @@ export function MalReviewPage({
     <section className="space-y-6" data-mal-stage="review">
       <h2 className="text-xl font-semibold">{m.library_import_review()}</h2>
       <p className="text-sm text-muted-foreground">{m.library_import_review_help()}</p>
-      <p role="status">
+      <p ref={pageStatus} role="status" tabIndex={-1} className="rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
         {m.library_mal_page_status({
           shown: page.rows.length,
           total: page.total,
@@ -88,12 +96,17 @@ export function MalReviewPage({
           </li>
         ))}
       </ul>
+      <ImportPageNavigation
+        position={position}
+        hasNext={page.next !== null}
+        nextLabel={m.library_mal_next_page()}
+        busy={busy || page.canceled}
+        onFirst={onFirst}
+        onPrevious={onPrevious}
+        onNext={onNext}
+      />
+      <p className="text-sm text-muted-foreground">{m.library_import_page_confirm_local()}</p>
       <div className="flex flex-wrap gap-3">
-        {page.next !== null ? (
-          <MalAction type="button" variant="outline" disabled={busy} onClick={onNext}>
-            {m.library_mal_next_page()}
-          </MalAction>
-        ) : null}
         <MalAction
           type="button"
           disabled={busy || page.canceled || reviewed === 0 || hasUnsavedReview}

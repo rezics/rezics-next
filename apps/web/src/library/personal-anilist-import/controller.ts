@@ -1,3 +1,4 @@
+import { ImportPageCoordinates, type ImportPagePosition } from '../personal-list-import/page-navigation';
 import {
   ANILIST_UPLOAD_BYTES,
   boundedHeader,
@@ -45,6 +46,8 @@ export type AniListJourneySnapshot = {
   count: number;
   after: number;
   next: number | null;
+  position: ImportPagePosition;
+  pageReadFailed: boolean;
   cancelled: boolean;
   scoreFormat: AniListScoreFormat | null;
   completeness: AniListCompleteness | null;
@@ -181,7 +184,7 @@ function metaFromRow(
     target: review?.input.subjectId ?? observation?.subjectId ?? previous?.target ?? null,
     proposedState: observation?.proposedState ?? previous?.proposedState ?? null,
     current: observation?.current ?? previous?.current ?? null,
-    reviewId: previous?.reviewInvalidated ? null : (review?.id ?? previous?.reviewId ?? null),
+    reviewId: previous?.reviewInvalidated ? null : (review?.id ?? null),
     skip: previous?.skip ?? review?.input.skip ?? false,
     replace: previous?.replace ?? review?.input.replace ?? false,
     applyStatus: previous?.applyStatus ?? review?.input.fields.includes('status') ?? true,
@@ -196,7 +199,7 @@ function metaFromRow(
     scoreUnits: previous?.reviewInvalidated
       ? (previous.scoreUnits ?? null)
       : (scoreReviewMeta(row)?.units ?? previous?.scoreUnits ?? null),
-    scoreReview: previous?.reviewInvalidated ? null : (scoreReviewMeta(row) ?? previous?.scoreReview ?? null),
+    scoreReview: previous?.reviewInvalidated ? null : scoreReviewMeta(row),
     nativeVoteConsent:
       !previous?.reviewInvalidated &&
       previous?.nativeVoteConsent &&
@@ -245,6 +248,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   let stopApply = false;
   let confirmPrivacy = false;
   let confirmTimestamps = false;
+  const coordinates = new ImportPageCoordinates(-1);
+  let pageRequest: { command: Extract<AniListCommand, { kind: 'page' }>; loadedStage: 'review' | 'results' } | null = null;
   let generation = 0;
   let questionGeneration = 0;
   let question: AniListQuestion | null = null;
@@ -288,6 +293,10 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   function snapshot(): AniListJourneySnapshot {
+    if (!live()) {
+      coordinates.retire();
+      pageRequest = null;
+    }
     retain();
     return {
       stage,
@@ -297,6 +306,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       count,
       after,
       next,
+      position: coordinates.position(),
+      pageReadFailed: pageRequest !== null && !busy && unknown === null,
       cancelled,
       scoreFormat,
       completeness,
@@ -318,6 +329,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
 
   function clearPrivate(resetStage: AniListStage = 'upload'): void {
     generation += 1;
+    coordinates.retire();
+    pageRequest = null;
     unknown = null;
     applyCommand = null;
     applyQueue = [];
@@ -353,9 +366,11 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     send: () => Promise<T | AniListFailure | AniListUnknown>,
     retry = false,
   ): Promise<T | undefined> {
-    if (!live() || busy) return;
+    if (!live() || busy || (unknown !== null && !retry)) return;
+    const token = generation;
     busy = true;
     const response = await send();
+    if (token !== generation) return;
     if (!live()) {
       // Retiring display/callbacks must not discard an uncertain original label sender.
       if ((command.kind === 'review-labels' || command.kind === 'apply-labels') && response.kind === 'unknown') {
@@ -400,9 +415,12 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     retry = false,
     loadedStage: 'review' | 'results' = 'review',
   ): Promise<AniListJourneySnapshot> {
+    if (!live() || busy || (unknown !== null && !retry)) return snapshot();
+    const token = generation;
     const command: Extract<AniListCommand, { kind: 'page' }> = { kind: 'page', importId: id, after: cursor };
+    pageRequest = { command, loadedStage };
     const response = await run(command, () => port.page(command), retry);
-    if (!response || response.kind !== 'page' || !live()) return snapshot();
+    if (!response || response.kind !== 'page' || !live() || token !== generation) return snapshot();
     const current = response.page;
     importId = id;
     page = current.rows;
@@ -413,10 +431,26 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     completeness = current.completeness;
     count = current.header.count || count;
     for (const row of current.rows) meta.set(row.ordinal, metaFromRow(row, meta.get(row.ordinal), scoreFormat));
+    pageRequest = null;
+    if (cancelled) coordinates.retire();
+    else coordinates.observe(cursor);
     cost.recordPage(current);
     stage = cancelled ? 'cancelled' : loadedStage;
     retain();
     return snapshot();
+  }
+
+  function retryPage(): Promise<AniListJourneySnapshot> {
+    const request = pageRequest;
+    return request && !unknown
+      ? loadPage(request.command.importId, request.command.after, true, request.loadedStage)
+      : Promise.resolve(snapshot());
+  }
+
+  function movePage(cursor: number | null): Promise<AniListJourneySnapshot> {
+    return importId && cursor !== null && stage === 'review' && !cancelled && !unknown && !busy
+      ? loadPage(importId, cursor)
+      : Promise.resolve(snapshot());
   }
 
   async function readQuestion(): Promise<AniListJourneySnapshot> {
@@ -439,7 +473,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   async function preview(upload: string, format?: AniListScoreFormat | null): Promise<AniListJourneySnapshot> {
-    if (!live()) return snapshot();
+    if (!live() || busy || unknown || stage === 'applying') return snapshot();
     if (!upload) {
       notice = { kind: 'empty' };
       return snapshot();
@@ -449,6 +483,11 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       return snapshot();
     }
     const previous = importId;
+    if (previous) clearPrivate();
+    else {
+      coordinates.retire();
+      pageRequest = null;
+    }
     if (previous) {
       const remove: Extract<AniListCommand, { kind: 'cancel' }> = {
         kind: 'cancel',
@@ -459,7 +498,6 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       await port.cancel(remove);
       cost.recordCall('cancel');
       if (!live()) return snapshot();
-      clearPrivate();
     }
     uploadText = upload;
     const command: Extract<AniListCommand, { kind: 'preview' }> = {
@@ -768,8 +806,15 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   async function retryUnknown(): Promise<AniListJourneySnapshot> {
     const command = unknown;
     if (!command || !live()) return snapshot();
-    if (command.kind === 'preview') return preview(command.upload, command.scoreFormat);
-    if (command.kind === 'page') return loadPage(command.importId, command.after, true);
+    if (command.kind === 'preview') {
+      const response = await run(command, () => port.preview(command), true);
+      if (response?.kind !== 'previewed' || !live()) return snapshot();
+      importId = response.importId;
+      count = response.count;
+      uploadText = null;
+      return loadPage(response.importId, -1);
+    }
+    if (command.kind === 'page') return loadPage(command.importId, command.after, true, pageRequest?.loadedStage ?? 'review');
     if (command.kind === 'review') {
       const response = await run(command, () => port.review(command), true);
       if (response?.kind === 'reviewed' && importId) return loadPage(importId, after);
@@ -813,6 +858,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     }
     await run(command, () => port.cancel(command), true);
     if (!notice) {
+      coordinates.retire();
+      pageRequest = null;
       cancelled = true;
       stage = command.remove ? 'removed' : outcomes.length ? 'results' : 'cancelled';
       if (command.remove) clearPrivate('removed');
@@ -848,6 +895,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     };
     const response = await run(command, () => port.cancel(command));
     if (!response || response.kind !== 'cancelled' || !live()) return snapshot();
+    coordinates.retire();
+    pageRequest = null;
     cancelled = true;
     stage = outcomes.length ? 'results' : 'cancelled';
     retain();
@@ -1038,7 +1087,10 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     retryFailed,
     cancelAdmission,
     discard,
-    nextPage: () => (importId && next !== null ? loadPage(importId, next) : Promise.resolve(snapshot())),
+    nextPage: () => movePage(next),
+    previousPage: () => movePage(coordinates.position().previous),
+    firstPage: () => movePage(coordinates.position().canFirst ? coordinates.first : null),
+    retryPage,
     refresh: async () => {
       if (heldUnknown()) return snapshot();
       for (const row of page) {

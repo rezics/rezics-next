@@ -1,3 +1,4 @@
+import { ImportPageReadRecovery } from '../personal-list-import/page-navigation';
 import { ImportDetails, ImportJourney, ImportReturn } from '../personal-list-import/presentation';
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
@@ -91,6 +92,9 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
           {m.library_bangumi_retry_command()}
         </BangumiAction>
       ) : null}
+      {snap.pageReadFailed ? (
+        <ImportPageReadRecovery busy={locked} onRetry={() => void act((current) => current.retryPage())} />
+      ) : null}
       {snap.stage === 'upload' ? (
         <BangumiUploadForm
           busy={locked}
@@ -116,6 +120,8 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
               )
             }
             onNext={() => void act((current) => current.nextPage())}
+            onPrevious={() => void act((current) => current.previousPage())}
+            onFirst={() => void act((current) => current.firstPage())}
             onConfirm={() => act((current) => current.openConfirm())}
           />
         </div>

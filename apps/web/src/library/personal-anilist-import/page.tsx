@@ -1,3 +1,4 @@
+import { ImportPageReadRecovery } from '../personal-list-import/page-navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -92,6 +93,9 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           {m.library_anilist_retry_command()}
         </AniListAction>
       ) : null}
+      {snap.pageReadFailed ? (
+        <ImportPageReadRecovery busy={locked} onRetry={() => void act((current) => current.retryPage())} />
+      ) : null}
       {snap.stage === 'upload' ? (
         <AniListUploadForm
           busy={locked}
@@ -127,6 +131,8 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
             }
             onRefreshQuestion={() => void act((current) => current.readQuestion())}
             onNext={() => void act((current) => current.nextPage())}
+            onPrevious={() => void act((current) => current.previousPage())}
+            onFirst={() => void act((current) => current.firstPage())}
             onConfirm={() => act((current) => current.openConfirm())}
             renderLabels={(row, meta) =>
               row.labelEvidence && meta?.labels ? (

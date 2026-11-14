@@ -1,3 +1,4 @@
+import { ImportPageCoordinates, type ImportPagePosition } from '../personal-list-import/page-navigation';
 import {
   BANGUMI_UPLOAD_BYTES,
   chunkChoices,
@@ -36,6 +37,8 @@ export type BangumiJourneySnapshot = {
   count: number;
   after: number;
   next: number | null;
+  position: ImportPagePosition;
+  pageReadFailed: boolean;
   cancelled: boolean;
   page: BangumiRow[];
   meta: BangumiRowMeta[];
@@ -56,7 +59,7 @@ function defaultChoice(): { state: BangumiApplyState; skip: boolean } {
 
 function metaFromRow(row: BangumiRow, previous?: BangumiRowMeta): BangumiRowMeta {
   const review = row.review;
-  const reviewReplaced = !!review && review.token !== previous?.reviewToken;
+  const reviewReplaced = review?.token !== previous?.reviewToken;
   return {
     ordinal: row.ordinal,
     title: bangumiTitle(row.evidence.source, untitled),
@@ -67,9 +70,9 @@ function metaFromRow(row: BangumiRow, previous?: BangumiRowMeta): BangumiRowMeta
     proposedState: review?.proposedState ?? previous?.proposedState ?? null,
     current: review?.current ?? previous?.current ?? null,
     conflict: review?.conflict ?? previous?.conflict ?? false,
-    reviewToken: review?.token ?? previous?.reviewToken ?? null,
+    reviewToken: review?.token ?? null,
     choice: previous?.choice ?? defaultChoice(),
-    scoreReview: review?.score ?? previous?.scoreReview ?? null,
+    scoreReview: review?.score ?? null,
     scoreConsent: reviewReplaced ? false : (previous?.scoreConsent ?? false),
     outcome: row.outcome ?? previous?.outcome ?? null,
     entryReadback: reviewReplaced ? null : (previous?.entryReadback ?? null),
@@ -106,6 +109,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   let stopApply = false;
   let confirmPrivacy = false;
   let confirmTimestamps = false;
+  const coordinates = new ImportPageCoordinates(-1);
+  let pageRequest: { command: Extract<BangumiCommand, { kind: 'page' }>; loadedStage: 'review' | 'results' } | null = null;
   let generation = 0;
 
   function live(): boolean {
@@ -133,6 +138,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   }
 
   function snapshot(): BangumiJourneySnapshot {
+    if (!live()) {
+      coordinates.retire();
+      pageRequest = null;
+    }
     retain();
     return {
       stage,
@@ -142,6 +151,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       count,
       after,
       next,
+      position: coordinates.position(),
+      pageReadFailed: pageRequest !== null && !busy && unknown === null,
       cancelled,
       page,
       meta: [...meta.values()].sort((left, right) => left.ordinal - right.ordinal),
@@ -157,6 +168,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
 
   function clearPrivate(resetStage: BangumiStage = 'upload'): void {
     generation += 1;
+    coordinates.retire();
+    pageRequest = null;
     unknown = null;
     applyCommand = null;
     applyQueue = [];
@@ -188,14 +201,15 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     retry = false,
   ): Promise<T | undefined> {
     if (!live() || busy || (unknown !== null && !retry)) return;
+    const token = generation;
     busy = true;
     let response: T | BangumiFailure | BangumiUnknown;
     try {
       response = await send();
     } finally {
-      busy = false;
+      if (token === generation) busy = false;
     }
-    if (!live()) return;
+    if (!live() || token !== generation) return;
     if (command.kind !== 'admit-source') cost.recordCall(command.kind, retry);
     if (response.kind === 'unknown') {
       unknown = (response as BangumiUnknown).command;
@@ -237,13 +251,18 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     }
   }
 
-  async function loadPage(id: string, cursor: number, retry = false): Promise<BangumiJourneySnapshot> {
+  async function loadPage(
+    id: string,
+    cursor: number,
+    retry = false,
+    loadedStage: 'review' | 'results' = 'review',
+  ): Promise<BangumiJourneySnapshot> {
+    if (!live() || busy || (unknown !== null && !retry)) return snapshot();
+    const token = generation;
     const command: Extract<BangumiCommand, { kind: 'page' }> = { kind: 'page', uploadId: id, after: cursor };
+    pageRequest = { command, loadedStage };
     const response = await run(command, () => port.page(command), retry);
-    if (!response || response.kind !== 'page' || !live()) {
-      if (live() && uploadId === id && notice?.kind === 'not-found') clearPrivate('removed');
-      return snapshot();
-    }
+    if (!response || response.kind !== 'page' || !live() || token !== generation) return snapshot();
     const current = response.page;
     uploadId = current.uploadId;
     page = current.rows;
@@ -254,10 +273,26 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       if (row.review?.token === retiredReviews.get(row.ordinal)) row.review = null;
       meta.set(row.ordinal, metaFromRow(row, meta.get(row.ordinal)));
     }
+    pageRequest = null;
+    if (cancelled) coordinates.retire();
+    else coordinates.observe(cursor);
     cost.recordPage(current);
-    stage = cancelled ? 'cancelled' : 'review';
+    stage = cancelled ? 'cancelled' : loadedStage;
     retain();
     return snapshot();
+  }
+
+  function retryPage(): Promise<BangumiJourneySnapshot> {
+    const request = pageRequest;
+    return request && !unknown
+      ? loadPage(request.command.uploadId, request.command.after, true, request.loadedStage)
+      : Promise.resolve(snapshot());
+  }
+
+  function movePage(cursor: number | null): Promise<BangumiJourneySnapshot> {
+    return uploadId && cursor !== null && stage === 'review' && !cancelled && !unknown && !busy
+      ? loadPage(uploadId, cursor)
+      : Promise.resolve(snapshot());
   }
 
   async function preview(upload: string): Promise<BangumiJourneySnapshot> {
@@ -271,6 +306,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       return snapshot();
     }
     const previous = uploadId;
+    clearPrivate();
     if (previous) {
       const remove: Extract<BangumiCommand, { kind: 'delete' }> = {
         kind: 'delete',
@@ -280,7 +316,6 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       await port.delete(remove);
       cost.recordCall('delete');
       if (!live()) return snapshot();
-      clearPrivate();
     }
     uploadText = upload;
     const command: Extract<BangumiCommand, { kind: 'preview' }> = { kind: 'preview', key: newCommandKey(), upload };
@@ -515,7 +550,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       uploadText = null;
       return loadPage(response.uploadId, -1);
     }
-    if (command.kind === 'page') return loadPage(command.uploadId, command.after, true);
+    if (command.kind === 'page') return loadPage(command.uploadId, command.after, true, pageRequest?.loadedStage ?? 'review');
     if (command.kind === 'review') {
       const response = await run(command, () => port.review(command), true);
       if (response?.kind === 'reviewed' && uploadId) return loadPage(uploadId, after);
@@ -548,6 +583,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     if (command.kind === 'cancel') {
       await run(command, () => port.cancel(command), true);
       if (!notice) {
+        coordinates.retire();
+        pageRequest = null;
         cancelled = true;
         stage = 'cancelled';
       }
@@ -580,6 +617,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     const command: Extract<BangumiCommand, { kind: 'cancel' }> = { kind: 'cancel', uploadId: id, key: newCommandKey() };
     const response = await run(command, () => port.cancel(command));
     if (!response || response.kind !== 'cancelled' || !live()) return snapshot();
+    coordinates.retire();
+    pageRequest = null;
     cancelled = true;
     stage = outcomes.length ? 'results' : 'cancelled';
     retain();
@@ -678,7 +717,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     retryFailed,
     cancelAdmission,
     discard,
-    nextPage: () => (uploadId && next !== null ? loadPage(uploadId, next) : Promise.resolve(snapshot())),
+    nextPage: () => movePage(next),
+    previousPage: () => movePage(coordinates.position().previous),
+    firstPage: () => movePage(coordinates.position().canFirst ? coordinates.first : null),
+    retryPage,
     refresh: () => (uploadId ? loadPage(uploadId, after) : Promise.resolve(snapshot())),
     inspectCurrent,
     cost: () => snapshot().cost,
