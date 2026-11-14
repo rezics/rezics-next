@@ -209,7 +209,10 @@ export function MemberReadingItem({
           <div data-content-item-slot="visual" className={cn('shrink-0', independentControlsClassName)}>
             <div
               data-slot="member-list-row-cover"
-              className={cn('shrink-0', presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24')}
+              className={cn(
+                'shrink-0',
+                presentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24',
+              )}
             >
               <Cover {...cover} size="fill" decorative />
             </div>
