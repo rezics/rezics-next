@@ -195,6 +195,9 @@ export function PersonalLibraryPage({
   const clearTypeView: ShelfPresentationIntent = { ...firstPage };
   delete clearTypeView.type;
   const clearTypeHref = shelfHref(locale, clearTypeView);
+  const clearStateView: ShelfPresentationIntent = { ...firstPage };
+  delete clearStateView.state;
+  const clearStateHref = shelfHref(locale, clearStateView);
   const typeLabel = page.typeLabel ?? m.library_type_unnamed();
   const firstUse = shelfSummaryFirstUse(summary?.page, page, effectiveCursor);
   const heading = page.state
@@ -289,10 +292,7 @@ export function PersonalLibraryPage({
               {page.state ? (
                 <span className="inline-flex min-h-9 max-w-full flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1">
                   <span>{m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}</span>
-                  <a
-                    href={shelfHref(locale, { ...firstPage, state: undefined })}
-                    className="min-h-8 content-center underline underline-offset-4"
-                  >
+                  <a href={clearStateHref} className="min-h-8 content-center underline underline-offset-4">
                     {m.library_clear_state()}
                   </a>
                 </span>
@@ -560,6 +560,7 @@ export function LabelShelfPage({
         <PageHeading>{m.account_sign_in()}</PageHeading>
       </div>
     );
+  const { label: _label, cursor: _cursor, ...libraryView } = view(page.label.id);
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl space-y-5 text-foreground" data-personal-label-shelf>
       <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
@@ -569,10 +570,7 @@ export function LabelShelfPage({
           </PageHeading>
           <p className="mt-1 text-sm text-muted-foreground">{m.library_shelf_label_scope()}</p>
         </div>
-        <a
-          href={shelfHref(locale, { ...view(page.label.id), label: undefined, cursor: undefined })}
-          className={buttonVariants({ variant: 'outline' })}
-        >
+        <a href={shelfHref(locale, libraryView)} className={buttonVariants({ variant: 'outline' })}>
           {m.library_heading()}
         </a>
       </header>
