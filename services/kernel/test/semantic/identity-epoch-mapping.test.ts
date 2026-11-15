@@ -59,11 +59,14 @@ test('account-agent verify mapping drains from original Access source for linked
     const pins = await f.nativeAdmissionPins(input.job, native.control_partition);
     expect(pins).toEqual({ attempt: 'acquired', prepared: 'prepared', acquired: 'acquired' });
     const progress = await f.drainMapping(input.job, 512);
-    expect(progress.at(-1)).toMatchObject({
+    const final = progress.at(-1)!;
+    expect(final).toMatchObject({
       job: input.job,
       state: 'complete',
       receipt: { step: 'mapping', version: 1 },
     });
+    const ack = await identityEpochStore().reconcileStepReceipt(f.pool, final.receipt);
+    expect(ack).toEqual(final);
     const job = await f.readJob(input.job);
     expect(job!.mapping!.state).toBe('complete');
     expect(job!.receipt).toEqual(input.receipt);
