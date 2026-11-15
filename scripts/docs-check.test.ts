@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { lstat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -116,6 +116,28 @@ describe('documentation budgets and registry', () => {
     expect(output(result)).toContain(
       'research-state | docs/research/known.md | invalid state pending | remedy: use open, adopted or rejected',
     );
+  });
+
+  test('recognizes registered aliases only when their target is a tracked Markdown file inside the repository', async () => {
+    write('tools/research/original.md', '# Original report\n');
+    mkdirSync(path.join(root, 'docs/research'), { recursive: true });
+    symlinkSync('../../tools/research/original.md', path.join(root, 'docs/research/alias.md'));
+    symlinkSync(process.execPath, path.join(root, 'docs/research/external.md'));
+    write(
+      'docs/research/registry.json',
+      JSON.stringify({
+        reports: [
+          { path: 'docs/research/alias.md', topic: 'alias', researcher: 'tester', state: 'open' },
+          { path: 'docs/research/external.md', topic: 'external', researcher: 'tester', state: 'open' },
+        ],
+      }),
+    );
+    commit();
+    const result = output(await runDocsCheck(root));
+    expect(result).not.toContain('research-missing | docs/research/alias.md');
+    expect(result).toContain('research-missing | docs/research/external.md');
+    rmSync(path.join(root, 'tools/research/original.md'));
+    expect(output(await runDocsCheck(root))).toContain('research-missing | docs/research/alias.md');
   });
 
   test('reports a shrink and lowers a baseline entry without raising it', async () => {

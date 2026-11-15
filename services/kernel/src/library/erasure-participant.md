@@ -146,6 +146,6 @@ that never reached ready and remains independent of Commerce financial retention
 The original closed History receiving families and their proofs are unchanged. These live-copy dispositions do
 not certify old unknown copies, original outbox/record/SDK custody, six-driver identity effect coverage, public
 retention authority, final maintenance/root or all-copy closure. The participant remains pending for its actual
-remaining gaps above. The [Library identity retirement dependency](README.md#identity-retirement-dependency-retained)
+remaining gaps above. The [Library identity retirement dependency](README.md#native-identity-participant-prerequisites)
 retains the real unavailable page/false verifier and exhaustive same-home seal obligations; it is not replaced by
 this protocol. Normal source implementation and typing are separate from deferred native/physical/privacy proof.

@@ -982,8 +982,8 @@ The looser existing growth assertion is insufficient proof, not an observed fail
 and measure the tighter owner bound. Performance owns cross-pool attribution, original attempt/phase and physical
 measurements; unavailable counters are never zero. No growth measurement was supplied by these reports.
 
-The [Library Goal](goals/library.md#acceptance) links all five Library reviews and the exact page route/story appendix;
-the [Commerce Goal](goals/commerce.md#acceptance) links the three Commerce reviews. Preserve each report's original
+The [Library Goal](goals/library.md#dependencies-and-acceptance) links all five Library reviews and the exact page route/story appendix;
+the [Commerce Goal](goals/commerce.md#dependencies-and-acceptance) links the three Commerce reviews. Preserve each report's original
 source binding and runner commands. Stories and recordings are inventory, not native or rendered approval. Native,
 acceptance and browser execution remain deferred to integration; Library Done-when 1–7 and interface evidence remain
 unmeasured. Capability-manifest and page-stories mapping belong to the separate mapping brief.
@@ -1082,7 +1082,7 @@ actual admitted job/source/scope, exhaustive six-driver expected effects/current
 verification without foreign IO, receiving/custody/fence placement, every intermediate-page and final sealed-zero
 verification, and exact nested SQL/cost bounds. The live-copy gate supplies none of that missing effects seal. The
 existing SDK/Source/Account/Library/History retirement chain and the held original producer/consumer dependencies
-remain as qualified in the [owner dependency contract](../services/kernel/src/library/README.md#identity-retirement-dependency-retained).
+remain as qualified in the [owner dependency contract](../services/kernel/src/library/README.md#native-identity-participant-prerequisites).
 
 ## Uploaded Bangumi collections
 

@@ -7,7 +7,7 @@ Shared fixture delivery, credential reachability, profile writers and ordinary e
 against integration base `21a2c4bbb75a3d17f3d25666a61cfd6c0eb0f679`; unrelated capability evidence remains historical.
 The current quality adoption corrects the named Commerce/Library source inventories below against retained base
 `9af617622e95add1ffa390e110f4e7168726ea13`. It does not rebind earlier reports or refresh unrelated Search,
-Content or Accounts guidance. The [Commerce](commerce.md#acceptance) and [Library](library.md#acceptance) Goals
+Content or Accounts guidance. The [Commerce](commerce.md#dependencies-and-acceptance) and [Library](library.md#dependencies-and-acceptance) Goals
 link all eight source-bound reports and their exact original commands. Commerce Done-when 1–6, Library 1–7 and
 interface evidence remain unmeasured; no current failure exit or passing stage is inferred from source inspection.
 It does not validate product completion, execute native cases, or replace the full Goal with a smaller test list.

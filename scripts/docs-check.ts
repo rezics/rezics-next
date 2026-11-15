@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { lstatSync as fsLstatSync } from 'node:fs';
-import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 type Budget = { path: string; kind: 'file' | 'directory'; bytes: number };
@@ -788,7 +788,23 @@ export async function runDocsCheck(
       );
   }
   for (const row of registryRows) {
-    if (typeof row?.path === 'string' && !researchFiles.includes(row.path))
+    if (typeof row?.path !== 'string') continue;
+    let exists = researchFiles.includes(row.path);
+    if (!exists && row.path.startsWith('docs/research/') && tracked.includes(row.path)) {
+      try {
+        const target = await realpath(path.join(root, row.path));
+        const relative = path.relative(root, target).split(path.sep).join('/');
+        exists =
+          !relative.startsWith('..') &&
+          !path.isAbsolute(relative) &&
+          relative.endsWith('.md') &&
+          tracked.includes(relative) &&
+          (await lstat(target)).isFile();
+      } catch {
+        // Missing or external report aliases remain unavailable.
+      }
+    }
+    if (!exists)
       violations.push(
         safeLine(
           'research-missing',

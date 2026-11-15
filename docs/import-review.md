@@ -47,7 +47,7 @@ bun scripts/datasets/cross-media-seed.ts \
 ```
 
 Use an ordinary provisioned automated account, first-party client, owner-only private JWK and the importer
-permissions in the [importer runbook](../services/importer/README.md#command-line), plus `subject:read`.
+permissions in the [importer runbook](../services/importer/README.md#command-line-metadata-and-recovery), plus `subject:read`.
 This command does not grant permissions or accept/adopt candidates. The existing importer owns private SQLite
 state, source fences, immutable operation keys, metadata attribution, proposal reconciliation and VNDB statistics.
 Equal-date VNDB observation corrections and rebinding stay in `run_aggregate_operations` until

@@ -3526,7 +3526,7 @@ the platform's privacy contact. The deletion confirmation names that channel. Se
 of each data owner. The confirmation also describes the terminal barrier, retained contributions and attribution,
 operator/ownership consequences, and lists every owned OAuth client. Owned OAuth clients are deleted with the
 account through the [Auth schema](../../../auth/db/schema.sql)'s `auth_client_userId_fkey` cascade; this ends other
-people's grants to those clients as well. The physical cleanup gaps below and in [Auth](../../../auth/README.md#known-retention-gaps)
+people's grants to those clients as well. The physical cleanup gaps below and in [Auth](../../../auth/README.md#remaining-producer-and-composition-gaps)
 remain work to do, not exceptions to the policy.
 
 A deleted account's public identity is `{ id, state, kind }` only. Contribution attribution on retained public
@@ -3615,7 +3615,7 @@ payloads that remain personal data. A retention purpose describes the store's op
 basis or permission for indefinite retention. “No deadline” means no enforced erasure deadline was found. Expiry
 of authority, a closed validity interval or a terminal flag does not itself erase a row. Except where noted, the
 [Access schema](../../db/access/schema.sql) has no account-deletion cascade. Auth has its
-[own inventory](../../../auth/README.md#retention-inventory); other domains decide their own data lifetimes.
+[own inventory](../../../auth/README.md#native-erasure-and-custody); other domains decide their own data lifetimes.
 
 The dispositions below describe the current implementation, not completion of the
 [Access and Auth participant contract](../../../../docs/deletion.md#access-and-auth-participants). Schema citations

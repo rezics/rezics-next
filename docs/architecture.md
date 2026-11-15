@@ -135,7 +135,7 @@ changes only the selected item and affected index paths. A large selection is pr
 steps, then made current by one atomic compare-and-set under current source authority. Until activation the
 previous selection remains current. Reuse this lifecycle across content; an ordinary article can publish in one
 step, and a Book adds ordered membership and source rules through its
-[Content contract](../services/kernel/src/content/hosted-chapters.md#book-publication-contract).
+[Content contract](../services/kernel/src/content/hosted-chapters.md#authoring-and-release).
 
 Publication selects a version. [Access](../services/kernel/src/access/README.md) and the target owner decide
 what the reader may see now. [Commerce](../services/kernel/src/commerce/README.md) owns offers, payment and

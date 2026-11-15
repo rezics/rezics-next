@@ -618,7 +618,7 @@ Collection and Account IDs. The forward migration removes only the obsolete gene
 
 Consent changes cancel originals in the same home. Observation deletion cascades the bounded original control;
 existing migrations and ordinary Collection tables are unchanged. The full callable declarations and remaining raw
-interval/foreign receipt operands are documented in [Access](../access/README.md#native-kind-audience-contract).
+interval/foreign receipt operands are documented in [Access](../access/README.md#retained-kind-audience-contract).
 Source checkpoints are post-vote progress, not committed pre-Type raw input. Decision: Kind raw-original input
 is one nine-axis Library plan with explicit zero engineRequests at NativeCollectionWork; native Type stays
 unavailable. The admitted definition now resolves the genuine committed identity receipt independently of the

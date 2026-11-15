@@ -886,7 +886,7 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [auth-barriers]: ../services/kernel/src/access/auth-barriers.ts
 [signing]: ../services/auth/src/signing.ts
 [command-admission]: ../services/kernel/src/access/command-admission.ts
-[refresh-patch]: ../patches/@better-auth%252Foauth-provider@1.8.0-beta.2.patch
+[refresh-patch]: ../patches/@better-auth%252Foauth-provider@1.8.0-beta.3.patch
 [web-session-routes]: ../apps/web/src/session/routes.ts
 [web-session-store]: ../apps/web/src/session/store.ts
 [media-routes]: ../services/kernel/src/content/media-routes.ts

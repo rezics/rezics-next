@@ -61,7 +61,7 @@ rows and exact uncertain-command operands.
 
 ## Native label adoption
 
-The [label adoption owner](../../../../../docs/library-import-anilist-labels.md) defines the retained evidence and
+The [label adoption owner](../../../../docs/library-import-anilist-labels.md) defines the retained evidence and
 immutable native review. The same page calls generated `:reviewLabels` and `:applyLabels` with separate label epochs,
 exact review UUIDs and ordered source selections. Positive native evidence supplies checkbox choices; false and
 unsupported representations remain visible evidence. Subject identity uses native match or explicit Subject choice.

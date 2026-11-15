@@ -10,7 +10,7 @@ Search starts the trending timer plus one runner, so adapter defaults require
 `startedServices.search` to exceed that single runner invocation. Public rating-sort consumption
 remains the existing native-rating-outcomes suite. Native execution of those suites, frozen Search API
 suites against this driver, production scope activation and promotion remain pending. This document is not
-evidence that the proof passed. The [Search contract](../../src/search/README.md#visibility-completeness-and-convergence), [Semantic witness and dependency design](../../src/semantic/relation-facets-design.md), and [durable rebuild design](../../src/semantic/relation-facet-rebuilds-design.md) remain authoritative for their product behavior. Research rationale is in the [visibility report](../../../../docs/research/search-visibility-witnesses.md) and [worker harness report](../../../../docs/research/search-worker-outcome-harness.md).
+evidence that the proof passed. The [Search contract](../../src/search/README.md#indexed-membership-current-disclosure-and-convergence), [Semantic witness and dependency design](../../src/semantic/relation-facets-design.md), and [durable rebuild design](../../src/semantic/relation-facet-rebuilds-design.md) remain authoritative for their product behavior. Research rationale is in the [visibility report](../../../../docs/research/search-visibility-witnesses.md) and [worker harness report](../../../../docs/research/search-worker-outcome-harness.md).
 
 Keep analyzer-token results, native source/query/evidence results and the six-path seeded browser journey as
 separate acceptance records at the checked revision. The CJK source case independently reads the current source

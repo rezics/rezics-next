@@ -80,13 +80,13 @@ Reviewed resolvedReferences keys use v1 plus compact UTF-8 JSON for the exact or
 
 ## Exact-quantity handoff
 
-For every exact-quantity assertion, preserve every actual source qualifier losslessly in the same native statement through reviewed mappings and the admitted property's schema. If any qualifier would be skipped, unsupported, unresolved or semantically narrowed, withhold the whole measurement and diagnose the loss. The value schema is closed to amount and unit, with neither lowerBound nor upperBound and no serialized exact flag; see the [Definitions owner API](../definitions/README.md#exact-quantities).
+For every exact-quantity assertion, preserve every actual source qualifier losslessly in the same native statement through reviewed mappings and the admitted property's schema. If any qualifier would be skipped, unsupported, unresolved or semantically narrowed, withhold the whole measurement and diagnose the loss. The value schema is closed to amount and unit, with neither lowerBound nor upperBound and no serialized exact flag; see the [Definitions owner API](../definitions/README.md#public-classification-and-genuine-measurements).
 
 Wikidata wikidata-6 composes the complete cited candidate with the actual bundled property and calls public checkStatementInput before emission, retaining final batch validation. Time keeps signed 4–16 digit nonzero years, Gregorian/Julian calendar, precision 9/10/11 and optional safe timezone and nonnegative uncertainty. Quantity amount, bounds and unit remain exact lexical strings. Unsupported or incomplete values withhold the entire statement with bounded diagnostics. The complete candidate and all source references remain intact; rejecting a proposal does not authorize rewriting evidence or prior commands.
 
 ## Identity, citations and media boundary
 
-Caller context supplies existing subject IDs and resolved references; source IDs and titles never resolve identity. Statements cite the source record and required field occurrence. Without a bound subject or available media, conversion may return only a deferred cover intent. It never fetches bytes or invents a media ID. The importer owns media admission, publication, replay and takedown; see the [importer media contract](../../services/importer/README.md#shared-showcase-and-media) and [deletion policy](../../docs/deletion.md).
+Caller context supplies existing subject IDs and resolved references; source IDs and titles never resolve identity. Statements cite the source record and required field occurrence. Without a bound subject or available media, conversion may return only a deferred cover intent. It never fetches bytes or invents a media ID. The importer owns media admission, publication, replay and takedown; see the [importer media contract](../../services/importer/README.md#cover-acquisition-and-media) and [deletion policy](../../docs/deletion.md).
 
 ## Cost derivation
 

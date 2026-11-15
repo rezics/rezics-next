@@ -51,7 +51,7 @@ status deselection survives the saved review and confirmation, so labels and sco
 native per-value outcomes, assignment identities and remaining source indices. A separate exact canonical Subject
 assignment read reports current facts after acknowledgement and does not settle uncertain dispatch. Native limits,
 reservations, expiry, authorization and cancellation remain authoritative; see the
-[tag adoption owner](../../../docs/library-import-mal-labels.md).
+[tag adoption owner](../../../../docs/library-import-mal-labels.md).
 
 Confirmation separates status effect, retained source evidence, score effect and source admission. Results also separate
 the overall row outcome, whether status was applied, the score receipt and any later current-vote reading. A state result
@@ -92,5 +92,5 @@ supplied unavailable reason through the same flow. Same-home selected votes comp
 foreign-home `atomic_guard_unavailable` is shown verbatim and leaves status and source effects visible. Native, signed-in
 browser and full importer acceptance remain with their existing owners and controller.
 
-The native caller-cost account is in [personal MAL import](../../../docs/library-import-mal.md). Its bounded page,
+The native caller-cost account is in [personal MAL import](../../../../docs/library-import-mal.md). Its bounded page,
 guard, prepared vote command, receipt, journal and transaction work are unchanged by the Web composition.

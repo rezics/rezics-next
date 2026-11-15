@@ -253,7 +253,7 @@ of both original/native copy and source roles and both write-basis effects. A sh
 once. Each basis retains its own transaction, source position and provenance. It preserves the original seal,
 native delivery, current-xact and other-caller semantics. No maintenance-role count or successful empty page
 proves completeness.
-The [eight-axis capture ledger](../semantic/identity-epoch-contract.md#search-original-role-capture-and-funding)
+The [eight-axis capture ledger](../semantic/identity-epoch-contract.md#public-output-finite-work)
 includes immediate writes, FKs, both queues/sequences and complete nested/deferred effects, with retained
 failure/rollback and repeated charges from the same original frame. The actual default frame cannot fund its
 five-empty-seek fixed deferred reservation. Missing Source/release/binding/projection and engine composition

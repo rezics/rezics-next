@@ -85,7 +85,7 @@ growth and promoted-revision acceptance remain separate from illustrative source
 
 ## Admission and command custody
 
-The shared [Library visit contract](../../../../docs/library-and-collections.md#destinations-and-actions) applies.
+The shared [Library visit contract](../../../../../docs/library-and-collections.md#destinations-and-actions) applies.
 A native signed-in `403` keeps the requested kind, cursor and locale as a private permission page; it replaces rows
 and inspection without supplying read or Follow authority. It remains distinct from empty, not-found, preparing,
 unsupported and dependency-unavailable results. Only an explicit current-owner refresh may replace that state.
