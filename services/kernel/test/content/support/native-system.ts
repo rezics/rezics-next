@@ -192,8 +192,8 @@ async function createNativeContentSystemWithOptions(
       instant = parsed;
     };
     let nativeAuth: AuthService;
-    let access: ReturnType<typeof createAccess>;
-    let actions: ReturnType<typeof actionCatalogue>;
+    let composedAccess: ReturnType<typeof createAccess> | undefined;
+    let composedActions: ReturnType<typeof actionCatalogue> | undefined;
     const createFreshAccess: ContentSystem['createFreshAccess'] = (observeJwks) => {
       let fresh: ReturnType<typeof createAccess>;
       let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
@@ -225,6 +225,10 @@ async function createNativeContentSystemWithOptions(
       });
       // The production resolver mounts Commerce's native current buyer-fact
       // reader. A prebuilt Access passed to Kernel must already contain it.
+      // Auth JWKS fetch stays lazy: nativeAuth is installed after Kernel, before
+      // any request. Catalogue comes from Kernel's access factory during mount,
+      // or from the finished composition for a later cold verifier.
+      if (composedActions === undefined) throw new NativeContentSystemUnfinishedError();
       fresh = createKernelAccessResolver({
         pool,
         tokens: tokenKeys,
@@ -246,7 +250,7 @@ async function createNativeContentSystemWithOptions(
               },
             },
           }),
-      }).resolveAccess({ actions });
+      }).resolveAccess({ actions: composedActions });
       return fresh;
     };
     // Compile the shared Access instance from Kernel's completed native catalogue.
@@ -261,11 +265,11 @@ async function createNativeContentSystemWithOptions(
       content: { cursorNow: () => clock().getTime() },
       access: (config) => {
         if (!config.actions) throw new TypeError('Native content system requires the composed action catalogue');
-        actions = config.actions;
+        composedActions = config.actions;
         return createFreshAccess();
       },
       onAccessReady(ready) {
-        access = ready;
+        composedAccess = ready;
       },
       writeRate: createWriteRateLimiter({
         secret: crypto.randomUUID() + crypto.randomUUID(),
@@ -289,6 +293,11 @@ async function createNativeContentSystemWithOptions(
         }),
         ratePeer: () => '127.0.0.1',
       });
+    if (composedAccess === undefined || composedActions === undefined) {
+      throw new NativeContentSystemUnfinishedError();
+    }
+    const access = composedAccess;
+    const actions = composedActions;
     const proofs = createNativeWorkflowProofPorts({ database: authPool });
     const bindings = createNativeAccountBindings({
       pool,
