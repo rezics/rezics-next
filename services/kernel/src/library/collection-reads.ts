@@ -68,7 +68,7 @@ import { ordinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 import { releaseNativeOwnerFilterRead } from './owner-filter-native-binding.ts';
 import { bindOwnerFilterRead, readBoundOwnerFilterPage, readOwnerFilterPage } from './owner-filter-plan.ts';
 
-import { readCollectionSourceMembers } from './owner-index-members.ts';
+import { readPublicCollectionMembers } from './public-collection-members.ts';
 import { grantCapable } from './account-grant.ts';
 import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
 import { createCollectionPreviewPreparation, type PreviewPreparationDependencies } from './collection-preview-work.ts';
@@ -1185,20 +1185,16 @@ export function createCollectionReads(
       // Explicit COMPLETE output is the entire public read authority. Never load the curator's rule here.
       if (options.filter !== undefined || (options.sort !== undefined && options.sort !== 'id'))
         throw new ProblemError('unsupported_query');
-      return readCollectionSourceMembers(dependencies, {
+      return readPublicCollectionMembers(dependencies, {
         actor: viewer,
         collectionId,
-        scope: 'activated_output',
+        sourceGeneration: collection.sourceGeneration,
         limit: options.limit ?? DEFAULT_PAGE_SIZE,
         ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
         ...(options.view === undefined ? {} : { view: options.view }),
         ...(options.languages === undefined ? {} : { languages: options.languages }),
         deadline,
-        revalidateOwner: revalidate,
-        async readSourceVersion() {
-          await revalidate();
-          return collection.sourceGeneration;
-        },
+        revalidate,
       });
     }
     // An explicit admitted owner query selects the private working graph even after public activation.

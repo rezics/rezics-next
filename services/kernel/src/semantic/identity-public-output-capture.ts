@@ -9,6 +9,7 @@ import canonicalize from 'canonicalize';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import {
   currentCommand,
+  noEffect,
   currentCommandResources,
   registerCommandCallback,
   runCommand,
@@ -88,6 +89,11 @@ import gateStartSQL from './identity-public-output-gate-start.sql';
 import gateCloseSQL from './identity-public-output-gate-close.sql';
 import gateSQL from './identity-public-output-gate.sql';
 import stageSQL from './identity-public-output-stage.sql';
+import selectedCaptureSQL from './identity-public-output-selected-capture.sql';
+import readableOriginalsSQL from './identity-public-output-readable-originals.sql';
+import resumeSQL from './identity-public-output-resume.sql';
+import releaseSizeSQL from './identity-public-output-release-size.sql';
+import { readRelease } from './definition-release-read.ts';
 
 const PURPOSE = 'identity-public-output-capture';
 const EVENT = 'com.rezics.semantic.public-output.capture.v1';
@@ -498,6 +504,74 @@ export function createPublicIdentityOutputCapture(
       });
     });
   }
+  /** Default Library publication uses the output generation as its capture ID. Each call resumes the
+   * producer's persisted progress and compares the immutable activation before using any hold. */
+  async function advancePublication(
+    publication: T.PublicIdentityOutputAcceptance['publication'],
+    releaseDigest: string,
+    options: T.PublicIdentityOutputWork,
+  ) {
+    const captureId = publication.generation;
+    id(captureId);
+    if (routeOf(publication.collectionId) !== publication.route || !/^sha256:[0-9a-f]{64}$/.test(releaseDigest))
+      throw new TypeError('Invalid Collection publication capture locator');
+    const home = partitionOf(publication.route);
+    return execute(options, async (work) => {
+      const before = await read(options.deadline, async (tx) => {
+        const accepted = await one<Accepted>(tx, acceptedSQL, [home, captureId]);
+        if (!accepted) return null;
+        const native = accepted.binding.tuple.identity;
+        if (
+          native.route !== publication.route ||
+          native.collectionId !== publication.collectionId ||
+          native.outputGeneration !== publication.generation ||
+          !equal(native.activation, publication.activation) ||
+          accepted.definition.meaning.digest !== releaseDigest
+        )
+          return refuse('binding', 'changed');
+        const progress = await one<Pick<Progress, 'version' | 'exhausted'>>(tx, resumeSQL, [home, captureId]);
+        if (!progress) return refuse('provenance');
+        return { capture: locator(accepted), progress };
+      });
+      if (!before) {
+        const release = await read(options.deadline, async (tx) => {
+          const size = await one<{ bytes: number }>(tx, releaseSizeSQL, [releaseDigest]);
+          if (!size || size.bytes > 2097152) return refuse('binding');
+          work.admitResultBytes('public-output-release', size.bytes);
+          return readRelease(tx, releaseDigest, { composed: false });
+        });
+        if (!release) return refuse('binding');
+        // A no-filter ID order defines the output itself. No working Collection predicate enters public custody.
+        work.admitResultBytes('public-output-definition', 2097152);
+        const definition = await binding.resolve(
+          {
+            source,
+            meaning: { digest: releaseDigest, release },
+            capture: { sort: 'id', size: 20, filterDocument: undefined, text: undefined },
+          },
+          { deadline: options.deadline },
+        );
+        if (definition.status !== 'resolved') return refuse('binding');
+        const accepted = await work.compose((allowance) =>
+          captureAcceptance({ captureId, definition: definition.definition, publication }, { ...options, allowance }),
+        );
+        if (accepted.status !== 'accepted') return refuse(accepted.reason, accepted.status, accepted.dependency);
+        return { status: 'more' as const };
+      }
+      if (before.progress.exhausted) {
+        const sealed = await work.compose((allowance) => seal(before.capture, { ...options, allowance }));
+        if (sealed.status !== 'sealed') return refuse(sealed.reason, sealed.status, sealed.dependency);
+        return { status: 'sealed' as const };
+      }
+      const page = await work.compose((allowance) =>
+        capturePage(before.capture, before.progress.version, 8, { ...options, allowance }),
+      );
+      if (page.status !== 'progress' && page.status !== 'exhausted')
+        return refuse(page.reason, page.status, page.dependency);
+      return { status: 'more' as const };
+    });
+  }
+
   async function currentMappings(
     ids: readonly string[],
     work: NativeCollectionWork,
@@ -757,7 +831,8 @@ export function createPublicIdentityOutputCapture(
           };
         }
         const p = await one<Progress>(tx, progressSQL, [l.partition, l.captureId]);
-        if (!p || !p.exhausted || p.pending) return refuse('closure');
+        if (!p || !p.exhausted || p.pending || p.raw_count !== a.binding.tuple.publication.members)
+          return refuse('closure');
         const n = await component(tx);
         await tx.query(sealInsertSQL.sql, [
           l.partition,
@@ -1144,6 +1219,7 @@ export function createPublicIdentityOutputCapture(
   }
   return {
     accept: captureAcceptance,
+    advancePublication,
     capturePage,
     seal,
     ready,
@@ -1386,6 +1462,88 @@ export async function readPublicIdentityOutputCaptureCurrent(
         ...(error.dependency ? { dependency: error.dependency } : {}),
         work: work.receipt(),
       };
+    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+    throw error;
+  }
+}
+
+export type PublicOutputOriginalKey = Readonly<{ terminal: string; original: string }>;
+
+/** One selected COMPLETE output and its committed canonical seal, current under the native hold through commit. */
+export async function readSelectedPublicIdentityOutput(
+  pool: Pool,
+  selection: { collectionId: string; sourceGeneration: string; after: PublicOutputOriginalKey | null; limit: number },
+  options: T.PublicIdentityOutputWork,
+  nativeOutput: NativePublicOutputPort,
+) {
+  const { collectionId, sourceGeneration, after, limit } = selection;
+  const route = routeOf(collectionId);
+  if (
+    route === null ||
+    !/^[1-9][0-9]*$/.test(sourceGeneration) ||
+    !Number.isInteger(limit) ||
+    limit < 0 ||
+    limit > 100
+  )
+    throw new TypeError('Invalid selected public Collection output');
+  if (after) {
+    id(after.terminal);
+    id(after.original);
+  }
+  const home = partitionOf(route);
+  const work = new NativeCollectionWork(options.allowance, options.deadline);
+  try {
+    const result = await instrumentNativeCollectionWork(
+      pool,
+      work,
+      (sql, values) => outputCaptureFootprint(work, sql, values),
+      () =>
+        withSingleCommandAttempt(() =>
+          runCommand(pool, { partition: home, deadline: options.deadline }, async (tx) => {
+            const locators = (
+              await tx.query<{ captureId: string; bindingDigest: string }>(selectedCaptureSQL.sql, [
+                route,
+                collectionId,
+                sourceGeneration,
+              ])
+            ).rows;
+            if (locators.length !== 1) return refuse('binding');
+            const a = await load(tx, { kind: 'public-output', partition: home, ...locators[0]! });
+            const identity = a.binding.tuple.identity;
+            if (identity.collectionId !== collectionId || identity.generation !== sourceGeneration)
+              return refuse('binding', 'changed');
+            await eligible(tx, a, work, options.deadline, nativeOutput);
+            const seal = await one<Seal>(tx, sealSQL, [home, a.capture_id]);
+            if (!seal || seal.raw_count !== a.binding.tuple.publication.members) return refuse('closure');
+
+            const zero = '00000000-0000-0000-0000-000000000000';
+            const rows =
+              limit === 0
+                ? []
+                : (
+                    await tx.query<PublicOutputOriginalKey>(readableOriginalsSQL.sql, [
+                      home,
+                      a.capture_id,
+                      after?.terminal ?? zero,
+                      after?.original ?? zero,
+                      limit + 1,
+                    ])
+                  ).rows;
+            return noEffect({
+              status: 'ready' as const,
+              generation: identity.outputGeneration,
+              epoch: identity.ownerEpoch,
+              digest: seal.manifest_digest,
+              rows: rows.slice(0, limit),
+              more: rows.length > limit,
+            });
+          }),
+        ),
+    );
+    return { ...result.value, work: work.receipt() };
+  } catch (error) {
+    if (error instanceof Refusal)
+      return { status: error.status, reason: error.reason, work: work.receipt() };
     if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
     throw error;
   }

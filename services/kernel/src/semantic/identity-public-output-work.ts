@@ -1,6 +1,15 @@
 import { memoizedValue } from '../memoized.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
+import {
+  NATIVE_PUBLIC_OUTPUT_JOURNEYS,
+  nativePublicOutputWorkDimensions,
+} from '../library/native-public-output-bounds.ts';
+import { repeatBound, sumBounds } from '@rezics/bounds';
+import selectedCaptureSQL from './identity-public-output-selected-capture.sql';
+import readableOriginalsSQL from './identity-public-output-readable-originals.sql';
+import resumeSQL from './identity-public-output-resume.sql';
+import releaseSizeSQL from './identity-public-output-release-size.sql';
 import s0 from './identity-public-output-accepted.sql';
 import s1 from './identity-public-output-insert.sql';
 import s2 from './identity-public-output-progress.sql';
@@ -59,6 +68,7 @@ import gateSQL from './identity-public-output-gate.sql';
 import stageSQL from './identity-public-output-stage.sql';
 import timeSQL from '../command/time.sql';
 import fenceSQL from '../command/fence.sql';
+import noEffectFenceSQL from '../command/no-effect-fence.sql';
 import nativeSQL from './identity-epoch-store-insert-native-commit.sql';
 import regSQL from './public-filter-source-binding-register.sql';
 import defineSQL from './public-filter-source-binding-define.sql';
@@ -84,6 +94,10 @@ function plans() {
     plans,
     () =>
       new Map<string, Plan>([
+        [resumeSQL.sql, [1, 8, 1, 128, 0, 0, 1]],
+        [releaseSizeSQL.sql, [1, 8, 1, 64, 0, 0, 1]],
+        [selectedCaptureSQL.sql, [8, 64, 8, 512, 0, 0, 4]],
+        [readableOriginalsSQL.sql, [101, 808, 1, 12288, 101, 0, 1]],
         [stageSQL.sql, [17, 168, 21, 32768, 0, 0, 3, 3]],
         [gateSQL.sql, [6, 48, 6, 1024, 0, 0, 1]],
         [gateCloseSQL.sql, [5, 56, 7, 1024, 0, 0, 2, 2]],
@@ -143,6 +157,7 @@ function plans() {
         [s38.sql, [1, 24, 3, 131072, 0, 0, 2, 2]],
         [timeSQL.sql, [1, 8, 1, 128, 0, 0, 1]],
         [fenceSQL.sql, [0, 40, 5, 128, 0, 0, 1]],
+        [noEffectFenceSQL.sql, [0, 8, 1, 128, 0, 0, 1]],
         [nativeSQL.sql, [1, 32, 4, 128, 0, 0, 1]],
         [regSQL.sql, [2, 32, 4, 256, 0, 0, 1]],
         [defineSQL.sql, [3, 40, 5, 128, 0, 0, 1]],
@@ -231,6 +246,14 @@ export function outputCaptureFootprint(
     candidateKeys = n;
     bytes = n * 64;
   }
+  if (sql === readableOriginalsSQL.sql) {
+    const n = Number(values[4]);
+    if (!Number.isInteger(n) || n < 1 || n > 101) return undefined;
+    identityMetadataRows = n;
+    nativeRows = n * 8;
+    candidateKeys = n;
+    bytes = n * 120;
+  }
   if (sql === s17.sql) {
     const n = (values[2] as unknown[]).length;
     if (n > 100) return undefined;
@@ -241,6 +264,7 @@ export function outputCaptureFootprint(
     bytes = n * 64;
     emptySeeks = n;
   }
+  if (sql === noEffectFenceSQL.sql && values[2] != null && values[2] !== 'null') return undefined;
   if (sql === fenceSQL.sql) {
     const events = typeof values[1] === 'string' ? JSON.parse(values[1]) : values[1];
     if (
@@ -263,4 +287,49 @@ export function outputCaptureFootprint(
     bytes: bytes + Buffer.byteLength(sql) + Buffer.byteLength(input),
     emptySeeks,
   };
+}
+
+/** The reader visits one Collection home, with a selected capture lookup, accepted/scope/lock/fence/seal points,
+ * one bounded original range and all transaction controls. Each repeated currentness pass pays again. */
+export function publicOutputReadWork(visits: number): WorkDimensions {
+  const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
+  return nativePublicOutputWorkDimensions(
+    repeatBound(
+      sumBounds(native.revalidate, native.lock, {
+        candidateKeys: 101,
+        nativeRows: 1024,
+        identityMetadataRows: 132,
+        emptySeeks: 16,
+        nativePoints: 32,
+        witnessKeys: 0,
+        statements: 16,
+        bytes: 2146304,
+        engineRequests: 0,
+      }),
+      visits,
+    ),
+  );
+}
+
+/** A worker call takes at most one acceptance, eight-key page, or seal. The Source subcalls reserve
+ * their Library declarations; the Semantic envelope includes two accepted/definition reads, repeated
+ * mapping snapshots, up to sixteen original/terminal cuts, native event fences and cleanup controls. */
+export function publicOutputAdvanceWork(): WorkDimensions {
+  const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
+  return nativePublicOutputWorkDimensions(sumBounds(
+    native.bindNew,
+    native.read,
+    repeatBound(sumBounds(native.revalidate, native.lock), 3),
+    {
+      candidateKeys: 100,
+      nativeRows: 4096 + 16 * 512,
+      identityMetadataRows: 512 + 16 * 64,
+      emptySeeks: 512 + 16 * 64,
+      nativePoints: 512 + 16 * 64,
+      witnessKeys: 16 * 4,
+      statements: 128 + 16 * 48,
+      bytes: 8 * 2097152 + 16 * 131072,
+      engineRequests: 0,
+    },
+  ));
 }
