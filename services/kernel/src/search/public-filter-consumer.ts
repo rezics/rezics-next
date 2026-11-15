@@ -1,4 +1,5 @@
 import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
+import { publicFilterCaptureDependencies } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import type { NativePublicFilterPublicationCompletion } from '../semantic/public-filter-source-binding.ts';
@@ -187,15 +188,6 @@ export function compilePublicFilterConsumerCapture(
   const properties = [
     ...new Set(filter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
   ];
-  const dependencyProperties = [
-    ...new Set(
-      filter?.leaves.flatMap((leaf) =>
-        leaf.facet === 'statement'
-          ? [leaf.property, ...(leaf.qualifiers?.map((qualifier) => qualifier.property) ?? [])]
-          : [],
-      ),
-    ),
-  ];
   const derived = {
     query: text?.query,
     filter: filter?.query,
@@ -238,20 +230,7 @@ export function compilePublicFilterConsumerCapture(
     ...(copied.ratingPhase === undefined ? {} : { ratingPhase: copied.ratingPhase }),
   };
 
-  // Containing source properties preserve every qualifier/range/unit association in compiler leaves.
-  // Functional keys name the existing sort declarations, including all text fields and tie breakers.
-  const orders = new Set<PublicFilterConsumerCaptureInput['sort']>(['id', capture.sort]);
-  if (text !== undefined) {
-    orders.add('relevance');
-    orders.add('name');
-  }
-  if (capture.sort === 'collections' || capture.sort === 'rating') orders.add('name');
-  const coverageProperties = [...new Set([...dependencyProperties, ...(overflowProperties ?? [])])];
-  const dependencyKeys: PublicFilterDependencyKey[] = [
-    { kind: 'type' },
-    ...coverageProperties.map((property): PublicFilterDependencyKey => ({ kind: 'property', property })),
-    ...[...orders].map((order): PublicFilterDependencyKey => ({ kind: 'order', order })),
-  ];
+  const dependencyKeys = publicFilterCaptureDependencies(capture, filter?.leaves ?? []);
   return freeze({
     capture,
     meaning,
