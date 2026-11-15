@@ -1,3 +1,4 @@
+-- migrate:up
 ALTER TABLE library.collection_retained_output
   ADD COLUMN activation_epoch integer,
   ADD COLUMN activation_position bigint,
