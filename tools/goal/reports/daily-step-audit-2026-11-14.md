@@ -32,6 +32,7 @@ event window; additional time from incomplete intervals is unknown. Nested inter
 Recorded resolver tokens below are not an allowance or money conversion. A diagnostic, rejection or conflict is a
 recorded catch, not proof of a unique avoided production defect. Zero timing samples mean unknown time.
 Current inventories, line totals, live queues and trailing-seven-day metrics in the CLI output are excluded.
+Chaining decline categories use the parsed event `detail.reason`, not current task inventory.
 
 ## Dispatch through promotion
 
@@ -80,8 +81,8 @@ an operation ID, candidate/base/configuration, open-violation state, complete-sn
 count, start/end, outcome and diagnostic class. Today's delta-only total cannot baseline the combined cost.
 Success requires at most one candidate graph build per evaluation, complete reconciliation coverage when needed,
 and no lost fatal diagnostics or incorrect violation closures. Compare total architecture time per candidate and
-landing p50/p90 against the measured pre-change day, stratified by changed-file count and open-violation state; report integrations
-and offered work. Lower comparable time with unchanged correctness coverage demonstrates benefit. Missing
+landing p50/p90 against the measured pre-change day, stratified by changed-file count and open-violation state;
+report integrations and offered work. Lower comparable time with unchanged correctness coverage demonstrates benefit. Missing
 coverage or no reduction does not. Allowance savings stay unknown until attributable measurements exist.
 Adoption belongs to the control-plane owner in `tools/goal/README.md`; that document is outside this brief.
 
