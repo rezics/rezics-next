@@ -1,7 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
-import type { Pool, PoolClient, QueryConfig } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { readNativeWorkReleaseCards } from '../../src/semantic/work-release-cards.ts';
+import selectedFacts from '../../src/semantic/slots-read-selection.sql';
 import type { WorkReleaseCardMembershipLink } from '../../src/semantic/copy-work-reader-port.ts';
 import {
   createReleasedDiscoveryFixture,
@@ -15,6 +16,7 @@ let selectedFieldQueryCount = 0;
 let postSlowFieldQueryCount = 0;
 let slowFieldClient: PoolClient | undefined;
 let slowFieldReleaseError: Error | undefined;
+let slowFieldReleased = false;
 let completeSlowFieldQuery: (() => void) | undefined;
 let slowFieldQuerySettled: Promise<void> | undefined;
 
@@ -23,53 +25,39 @@ const fixturePromise = createReleasedDiscoveryFixture({
   kernelPool(url) {
     const pool = createPool(url);
     kernelPool = pool;
-    const connect = pool.connect.bind(pool);
-    (pool as Pool & { connect: Pool['connect'] }).connect = (async () => {
-      const client = await connect();
-      const query = client.query.bind(client);
-      const release = client.release.bind(client);
-      let released = false;
-
-      client.query = ((input: QueryConfig | string, values?: unknown[]) => {
-        const text = typeof input === 'string' ? input : input.text;
-        if (observeSelectedFieldQueries && slowFieldClient) postSlowFieldQueryCount += 1;
-        if (observeSelectedFieldQueries && text.includes('SELECT * FROM semantic.fact')) {
-          selectedFieldQueryCount += 1;
-          if (selectedFieldQueryCount === 1) {
-            slowFieldClient = client;
-            return new Promise((resolve, reject) => {
-              setTimeout(() => {
-                if (released) {
-                  completeSlowFieldQuery?.();
-                  reject(new Error('A retired card snapshot cannot dispatch its field query'));
-                  return;
-                }
-                query(input, values).then(
-                  (result) => {
-                    completeSlowFieldQuery?.();
-                    resolve(result);
-                  },
-                  (error: unknown) => {
-                    completeSlowFieldQuery?.();
-                    reject(error);
-                  },
-                );
-              }, 1_200);
-            }) as unknown as ReturnType<PoolClient['query']>;
+    pool.on('connect', (client) => {
+      client.query = new Proxy(client.query, {
+        apply(query, receiver, args) {
+          const input = args[0];
+          const text = typeof input === 'string' ? input : input?.text;
+          // Other pool clients may continue background work while this snapshot expires.
+          if (observeSelectedFieldQueries && client === slowFieldClient) postSlowFieldQueryCount += 1;
+          if (
+            observeSelectedFieldQueries &&
+            (text === selectedFacts.sql || text === selectedFacts['~standard'].query.text)
+          ) {
+            selectedFieldQueryCount += 1;
+            if (selectedFieldQueryCount === 1) {
+              slowFieldClient = client;
+              return new Promise<void>((resolve) => setTimeout(resolve, 1_200))
+                .then(() => {
+                  if (slowFieldReleased)
+                    throw new Error('A retired card snapshot cannot dispatch its field query');
+                  return Reflect.apply(query, receiver, args);
+                })
+                .finally(() => completeSlowFieldQuery?.());
+            }
           }
-        }
-        return query(input, values) as ReturnType<PoolClient['query']>;
-      }) as PoolClient['query'];
-
-      client.release = ((error?: Error) => {
-        if (client === slowFieldClient) {
-          released = true;
-          slowFieldReleaseError = error;
-        }
-        return Reflect.apply(release, client, [error]);
-      }) as PoolClient['release'];
-      return client;
-    }) as Pool['connect'];
+          return Reflect.apply(query, receiver, args);
+        },
+      });
+    });
+    pool.on('release', (error, client) => {
+      if (client === slowFieldClient) {
+        slowFieldReleased = true;
+        slowFieldReleaseError = error;
+      }
+    });
     return pool;
   },
 });
@@ -143,6 +131,7 @@ test('release cards stop selected-field work at their original explicit deadline
   selectedFieldQueryCount = 0;
   postSlowFieldQueryCount = 0;
   slowFieldReleaseError = undefined;
+  slowFieldReleased = false;
   slowFieldQuerySettled = new Promise<void>((resolve) => {
     completeSlowFieldQuery = () => resolve();
   });

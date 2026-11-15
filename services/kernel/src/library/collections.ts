@@ -1030,9 +1030,7 @@ export function createCollectionCommands(config: {
     const route = collectionRoute(collectionId);
     const owner = accountActor(actor);
     if (typeof draft.subjectId !== 'string') throw notFound();
-    // Collection authorization and the subject anchor are independent reads.
-    // Start the subject read before the command so both finish inside the actor's observation.
-    const subjectPromise = resolveSubject({ pool, access, ...(clock ? { clock } : {}) }, owner, draft.subjectId);
+    let subject: Awaited<ReturnType<typeof resolveSubject>> = null;
     const input = {
       collectionId,
       subjectId: draft.subjectId,
@@ -1054,7 +1052,6 @@ export function createCollectionCommands(config: {
             if (current.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
             const memberId = newId(route);
             const placed = await placeInCollection(tx, route, collectionId, position, memberId, false);
-            const subject = await subjectPromise;
             if (!subject || (subject.subjectId !== draft.subjectId && subject.requestedSubjectId !== draft.subjectId))
               throw notFound();
             if (placed.respace.length > 0) {
@@ -1075,6 +1072,15 @@ export function createCollectionCommands(config: {
               throw notFound();
             }
             return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
+          },
+          undefined,
+          async (time) => {
+            subject = await resolveSubject(
+              { pool, access, ...(clock ? { clock } : {}) },
+              owner,
+              draft.subjectId,
+              time,
+            );
           },
         ),
       (dispatch) => withCollectionOrderDeclaration('edit', dispatch),

@@ -53,7 +53,7 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     held--;
   });
   await bootstrapRelease(pool, bundledRelease);
-  const auth = await nativeFixture(pool, () => db.openPool({ max: 1 }));
+  const auth = await nativeFixture(pool, () => db.openPool({ max: 8 }));
   const service = auth.host.service;
   const kernel = testKernel({
     pool,
