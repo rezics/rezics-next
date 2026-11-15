@@ -4,7 +4,11 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import type { WorkClient } from '../work/client.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { SubjectSourceKeyTraversal as SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
-import type { PublicFilterConsumerContext, PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
+import type {
+  PublicFilterConsumerContext,
+  PublicFilterConsumerJob,
+  PublicFilterConsumerUnavailable,
+} from './public-filter-consumer-contract.ts';
 import type { GenerationPublicationJob } from './generation-publication.ts';
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { OpenSearch } from './opensearch.ts';
@@ -85,6 +89,22 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
   let paused = false;
   let stopped = false;
   const running = new Set<Promise<unknown>>();
+  type PublicationPhase = 'prepare' | 'step' | 'activate';
+  const unavailable = new Map<PublicationPhase, string>();
+  const reportUnavailable = (phase: PublicationPhase, generation: number, result: PublicFilterConsumerUnavailable) => {
+    const state = `${generation}:${result.reason}`;
+    if (unavailable.get(phase) === state) return;
+    unavailable.set(phase, state);
+    console.warn(
+      JSON.stringify({
+        event: 'search.public_preparation.unavailable',
+        prefix: options.prefix,
+        generation,
+        phase,
+        reason: result.reason,
+      }),
+    );
+  };
   const track = <T>(deadline: number, operation: () => Promise<T>): Promise<T> => {
     const promise = withRequestDeadline(deadline, operation);
     running.add(promise);
@@ -144,7 +164,11 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         });
       }
       const prepared = await options.runtime.preparePublication(state.generation, context);
-      if (prepared.status !== 'preparing') return advance(state, 1000);
+      if (prepared.status !== 'preparing') {
+        reportUnavailable('prepare', state.generation, prepared);
+        return advance(state, 1000);
+      }
+      unavailable.delete('prepare');
       return advance({ ...state, publication: prepared.job.job, phase: 'native' });
     }
     const retained = await withBoundedReadConnection(
@@ -164,6 +188,8 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     // frontier whose Source adapter is unavailable; it must not gate this existing lifecycle.
     if (state.phase !== 'activate') {
       const reconciliation = await options.runtime.publication.step(job, context);
+      if (reconciliation.status === 'unavailable') reportUnavailable('step', state.generation, reconciliation);
+      else unavailable.delete('step');
       return advance(
         { ...state, phase: reconciliation.status === 'reconciled' ? 'activate' : 'native' },
         reconciliation.status === 'progress' || reconciliation.status === 'reconciled' ? 0 : 1000,
@@ -171,6 +197,8 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     }
     if (calendarFormat === 1) await markSubjectCalendarReady(search, options.prefix, state.generation);
     const activated = await options.runtime.publication.activate(job, context);
+    if (activated.status === 'unavailable') reportUnavailable('activate', state.generation, activated);
+    else unavailable.delete('activate');
     if (activated.status === 'activated') return advance(null);
     return advance(activated.status === 'preparing' ? { ...state, phase: 'native' } : state, 1000);
   }
