@@ -68,7 +68,7 @@ test('uncertain phases discard without rollback and the next read succeeds', asy
     });
     const expired = withReadTransaction(
       database,
-      (tx) => (phase === 'SELECT' ? tx.query('SELECT slow') : Promise.resolve('old')),
+      async (tx) => (phase === 'SELECT' ? tx.query('SELECT slow') : 'old'),
       Date.now() + 30,
     );
     await expect(expired).rejects.toBeInstanceOf(AccessUnavailableError);

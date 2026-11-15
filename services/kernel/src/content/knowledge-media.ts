@@ -8,6 +8,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { accessCheck } from './access-port.ts';
 import { mediaParentSnapshot } from './media-parent.ts';
 import { prepareEditionSubjectIdentities } from './edition-subject.ts';
+import { readDocumentMediaPresentations } from './media-presentation.ts';
 import type { MediaDependencies } from './media.ts';
 import {
   knowledgeMediaReservationSelection,
@@ -23,11 +24,12 @@ export async function knowledgeMediaReservationParent(
   client: AccessClient,
   documentId: string,
   ownerId: string,
+  forUpdate = false,
 ): Promise<boolean> {
   const route = routeOf(documentId);
   const ownerRoute = routeOf(ownerId);
   if (route === null || ownerRoute === null || partitionOf(route) !== partitionOf(ownerRoute)) return false;
-  const source = await knowledgeMediaReservationSelection(client, route, documentId);
+  const source = await knowledgeMediaReservationSelection(client, route, documentId, forUpdate);
   return source?.owner_account_id === ownerId;
 }
 
@@ -121,4 +123,19 @@ export async function prepareKnowledgeMediaRead(
     return visibleSubjects();
   };
   return (await current()) ? { publiclyVisible, verify, current } : null;
+}
+
+/** Public projection and owner publication preview reuse ordinary Media admission.
+ * The returned IDs carry no bytes, signing capability, or persisted read grant.
+ */
+export async function readKnowledgeMediaAvailability(
+  deps: MediaDependencies,
+  actor: Actor,
+  ids: readonly string[],
+  selection: KnowledgeMediaSelection,
+  deadline: number,
+): Promise<ReadonlySet<string>> {
+  if (ids.length === 0) return new Set();
+  const page = await readDocumentMediaPresentations(deps, actor, ids, { deadline, knowledge: selection });
+  return new Set(page.images.map((image) => image.id));
 }

@@ -160,7 +160,8 @@ test('native identity birth, control-home changes and redirects retire title cur
 
   const survivor = await createSubject(`Surviving title ${randomUUID()}`);
   const beforeMerge = await currentBasis();
-  const [redirected, kept] = [identity, survivor].sort();
+  const redirected = identity < survivor ? identity : survivor;
+  const kept = identity < survivor ? survivor : identity;
   const merged = await driver.request(
     'acceptor',
     'POST',

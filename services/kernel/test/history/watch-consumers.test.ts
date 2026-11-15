@@ -96,12 +96,14 @@ test('watch copies minimize only after the real account barrier and effects sett
      WHERE partition_no=$1 AND account_id=$2 AND artifact_type IN ('command-receipt/v1','outbox-event/v1')`,
     [partition, owner.accountId],
   );
-  const receipt = sourceLocators.rows.find(
-    (row) =>
-      row.artifact_type === 'command-receipt/v1' &&
-      decodeLocator('command-receipt/v1', row.locator).artifactType === 'command-receipt/v1' &&
-      decodeLocator('command-receipt/v1', row.locator).commandKindId === COMMAND_HISTORY_KINDS['content.watch.remove'],
-  )!;
+  const receipt = sourceLocators.rows.find((row) => {
+    if (row.artifact_type !== 'command-receipt/v1') return false;
+    const locator = decodeLocator('command-receipt/v1', row.locator);
+    return (
+      locator.artifactType === 'command-receipt/v1' &&
+      locator.commandKindId === COMMAND_HISTORY_KINDS['content.watch.remove']
+    );
+  })!;
   const event = sourceLocators.rows.find((row) => {
     if (row.artifact_type !== 'outbox-event/v1') return false;
     const locator = decodeLocator('outbox-event/v1', row.locator);

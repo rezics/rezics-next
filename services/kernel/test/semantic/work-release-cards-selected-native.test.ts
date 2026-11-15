@@ -121,7 +121,7 @@ test('native edition cards use adopted scalars across rejection, replacement and
   expect(rejected.fields['schema:inLanguage'].statements.map(({ id }: any) => id)).toEqual([
     selectedLanguage.candidate,
   ]);
-  expect(card(work, compact).fields['schema:datePublished'].statements[0].value.content).toEqual(date('02'));
+  expect((await card(work, compact)).fields['schema:datePublished'].statements[0].value.content).toEqual(date('02'));
   const ordinary = body(await fixture.read(edition));
   expect(ordinary.subject.statements['schema:datePublished'].find(({ id }: any) => id === rejectedDate).rank).toBe(
     'deprecated',

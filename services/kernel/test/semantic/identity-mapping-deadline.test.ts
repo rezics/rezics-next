@@ -61,11 +61,11 @@ test('mapping evidence passes share one fresh deadline and preserve the exact on
   const releaseErrors: Array<Error | boolean | undefined> = [];
   let activeSnapshots = 0;
   const harness = readerHarness(async (sql, values) => {
-    if (sql === owners) {
+    if (sql === owners.sql) {
       const home = (values?.[0] as number[])[0]!;
       return { rows: [{ partition_no: home, epoch: home === sourceHome ? 3 : 4, write_state: 'active' }] };
     }
-    if (sql === sources) {
+    if (sql === sources.sql) {
       sourceKeys.push((values?.[0] as string[])[0]!);
       return {
         rows: [
@@ -85,7 +85,7 @@ test('mapping evidence passes share one fresh deadline and preserve the exact on
         ],
       };
     }
-    if (sql === current)
+    if (sql === current.sql)
       return {
         rows: [
           {
@@ -126,18 +126,18 @@ test('mapping evidence passes share one fresh deadline and preserve the exact on
 });
 
 test('a slow home expires the original ambient deadline and prevents the next home query', async () => {
-  const ids = [newId(0x20), newId(0x30)];
+  const ids: [string, string] = [newId(0x20), newId(0x30)];
   const originalDeadline = Date.now() + 250;
   const sourceKeys: string[] = [];
   const releaseErrors: Array<Error | boolean | undefined> = [];
   let slowQueryFinished!: () => void;
   const slowFinished = new Promise<void>((resolve) => (slowQueryFinished = resolve));
   const harness = readerHarness(async (sql, values) => {
-    if (sql === owners) {
+    if (sql === owners.sql) {
       const home = (values?.[0] as number[])[0]!;
       return { rows: [{ partition_no: home, epoch: 3, write_state: 'active' }] };
     }
-    if (sql === sources) {
+    if (sql === sources.sql) {
       sourceKeys.push((values?.[0] as string[])[0]!);
       if (sourceKeys.length === 3) {
         await Bun.sleep(350);

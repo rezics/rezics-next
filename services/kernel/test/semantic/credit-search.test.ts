@@ -344,11 +344,13 @@ test('credit, name, concealment, merge and release changes invalidate the origin
   const nativeIdentityMappings = identityMappings.readIdentityMappings;
   const mappedIdentity = spyOn(identityMappings, 'readIdentityMappings').mockImplementation(async (readPool, ids) => {
     const mappings = await nativeIdentityMappings(readPool, ids);
-    return mappings.map((mapping, index) =>
-      ids[index] === author.id || ids[index] === extra.id
-        ? { ...mapping, state: 'mapped' as const, terminal: duplicate.id, epoch: 1n }
-        : mapping,
-    );
+    return mappings.map((mapping, index): (typeof mappings)[number] => {
+      const original = ids[index];
+      if (original === undefined) throw new Error('Native mapping has no corresponding requested identity');
+      return original === author.id || original === extra.id
+        ? { state: 'mapped', original, terminal: duplicate.id, epoch: 1n }
+        : mapping;
+    });
   });
   try {
     const mapped = await receiveCreditSearch(adapter, work.id);

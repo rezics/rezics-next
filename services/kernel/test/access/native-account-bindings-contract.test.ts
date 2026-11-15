@@ -8,6 +8,7 @@ import type {
   AuthSessionPort,
   AuthCredentialPort,
   AuthRecoveryPort,
+  NativeSessionRevocationResultPort,
   BarrierProofPort,
   ProvisioningEvidencePort,
   TrustedAccessPorts,
@@ -36,6 +37,7 @@ import { systemClock } from '../../src/clock.ts';
 
 test('ordinary durable composition requires actual native factories and Auth-host proof capabilities', () => {
   expectTypeOf<NativeWorkflowProofPorts>().toEqualTypeOf<{
+    readSessionRevocationResult?: NativeSessionRevocationResultPort['readSessionRevocationResult'];
     recordPending(input: { accountId: string; reservationId: string; reference: string }): Promise<void>;
     pendingReference(input: { accountId: string; reservationId: string }): Promise<string | null>;
     provisioningEvidence(input: { accountId: string; reservationId: string }): Promise<unknown>;

@@ -298,15 +298,18 @@ export async function reserveMedia(
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   let boardRead: AccessCheck | undefined;
   let threadCreate: AccessCheck | undefined;
+  let knowledgeUpdate: AccessCheck | undefined;
   const board = newThreadTarget ? { route: route(newThreadTarget.boardId), id: newThreadTarget.boardId } : undefined;
   const base = parentCreationAuthorization({
     access: dependencies.access,
     actor,
-    action: knowledge ? 'account:update' : realm ? 'realm:manage' : 'media:create',
+    action: realm ? 'realm:manage' : 'media:create',
     parent: {
       resource: knowledge ? ownerResource : (board ?? { route: r, id: containerId }),
       async validate(client, time) {
-        if (knowledge) return knowledgeMediaReservationParent(client, containerId, owner.accountId);
+        if (knowledge) return (
+          await knowledgeMediaReservationParent(client, containerId, owner.accountId)
+        ) && !!knowledgeUpdate && await knowledgeUpdate(client, time);
         if (realm)
           return (
             (await readRealmHead.run(client, { route: r, id: containerId, at: authoritativeTimeValue(time) })) !== null
@@ -372,7 +375,12 @@ export async function reserveMedia(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
-      if (avatar || realm || knowledge) return base.prepare!(attempt);
+      if (knowledge) {
+        knowledgeUpdate = await accessCheck(dependencies.access, actor, 'account:update', ownerResource,
+          commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt));
+        return base.prepare!(attempt);
+      }
+      if (avatar || realm) return base.prepare!(attempt);
       if (board) {
         boardRead = await accessCheck(dependencies.access, actor, 'board:read', board, {
           pool: dependencies.pool,
@@ -452,6 +460,9 @@ export async function reserveMedia(
     },
     async authorize(tx, attempt, evidence) {
       const mode = await base.authorize(tx, attempt, evidence);
+      if (knowledge && (!knowledgeUpdate || !(await knowledgeUpdate(tx, attempt.time)) ||
+          !(await knowledgeMediaReservationParent(tx, containerId, owner.accountId, true))))
+        throw new GrantDeniedError();
       if (newThreadTarget) {
         const target = await readThreadTarget.run(tx, { route: r, id: containerId });
         if (target) throw new NewThreadTargetExistsError();
@@ -636,7 +647,7 @@ export async function completeMedia(
       if (row.purpose === 'knowledge-image') {
         if (partitionOf(route(owner.accountId)) !== partitionOf(r) ||
             !knowledgeOwnerUpdate || !(await knowledgeOwnerUpdate(tx, attempt.time)) ||
-            !(await knowledgeMediaReservationParent(tx, body.containerId, owner.accountId)))
+            !(await knowledgeMediaReservationParent(tx, body.containerId, owner.accountId, true)))
           throw new GrantDeniedError();
       }
       if (row.purpose === 'realm-icon' || row.purpose === 'realm-banner') {

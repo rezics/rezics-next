@@ -413,12 +413,11 @@ test('settled read wrappers preserve native array rows and a stricter caller tim
 
 test('adapter options preserve owner deadline and settled PostgreSQL errors', async () => {
   let checkouts = 0;
-  const expiredPool = {
-    async connect() {
-      checkouts += 1;
-      throw new Error('expired checkout must not start');
-    },
-  } as Pool;
+  const expiredPool = connection().pool;
+  expiredPool.connect = () => {
+    checkouts += 1;
+    throw new Error('expired checkout must not start');
+  };
   const expired = await withManagedAdviceReadConnection(expiredPool, Date.now() - 1, async () => 'unused').catch(
     (error: unknown) => error,
   );
