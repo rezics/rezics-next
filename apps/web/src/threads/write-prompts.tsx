@@ -1,6 +1,7 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { websiteSignInHref } from '../session/return-target';
 
 export function ExistingReviewNotice({ reviewId }: { reviewId: string }) {
   const locale = getLocale();
@@ -29,7 +30,7 @@ export function SignInPrompt({
   label?: string;
   compact?: boolean;
 }) {
-  const href = `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`;
+  const href = websiteSignInHref(returnTo);
   const text = label ?? m.account_sign_in();
   if (compact)
     return (

@@ -8,6 +8,7 @@ import { ContributionActionsPageScope } from './contribution-actions/host';
 import { ProfileReadingResponse, ProfileReadingStatus } from './reader-presentation/view';
 import type { ProfileReading } from './reader-presentation/adapter';
 import { PublicAccountLinks } from './view';
+import { AccountFollow } from './follow';
 import { ContributionWindowRouteScope, type ContributionWindowRoute } from './contribution-windows/route';
 
 /** Keep the native composition, Content activity and Library readers on the production account path. */
@@ -58,6 +59,9 @@ export function PublicProfilePage({
               curation={
                 <>
                   {reading && <ProfileReadingStatus reading={reading} locale={props.locale} />}
+                  {(!props.view || props.view === 'overview') && props.page.account && props.page.subject ? (
+                    <AccountFollow key={props.page.subject} targetId={props.page.subject} />
+                  ) : null}
                   {props.page.account && (
                     <PublicAccountLinks
                       handle={props.page.account.handle}

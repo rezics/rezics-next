@@ -1,3 +1,4 @@
+import { websiteSignInHref } from '../../session/return-target';
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -225,7 +226,7 @@ export function HomeFeed({
           failureActions={{
             auth: (
               <a
-                href={`/${locale}/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/`)}`}
+                href={websiteSignInHref(`/${locale}`)}
                 className={`${buttonVariants()} h-auto min-h-7 max-w-full whitespace-normal`}
               >
                 {m.account_sign_in({}, options)}

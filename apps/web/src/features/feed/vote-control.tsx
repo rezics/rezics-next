@@ -1,3 +1,4 @@
+import { websiteSignInHref } from '../../session/return-target';
 import { ArrowBigDownIcon, ArrowBigUpIcon } from 'lucide-react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ThreadReactions, type ThreadReactionsProps } from '../../threads/thread-reactions';
@@ -34,7 +35,7 @@ export function VoteControl({
         settleWithRead={reaction.settleWithRead ?? true}
       />
     );
-  const signIn = `/${locale}/auth/sign-in?return_to=${encodeURIComponent(href ?? `/${locale}/`)}`;
+  const signIn = websiteSignInHref(href ?? `/${locale}`);
   const arrow = (direction: 'upvote' | 'downvote') => {
     const Icon = direction === 'upvote' ? ArrowBigUpIcon : ArrowBigDownIcon;
     const label = direction === 'upvote' ? m.reaction_upvote({}, options) : m.reaction_downvote({}, options);
