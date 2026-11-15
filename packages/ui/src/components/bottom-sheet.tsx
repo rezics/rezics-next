@@ -49,7 +49,7 @@ export function BottomSheet({
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
             {before}
-            <DrawerTitle className="min-w-0 flex-1 truncate text-left">{title}</DrawerTitle>
+            <DrawerTitle className="min-w-0 flex-1 text-left [overflow-wrap:anywhere]">{title}</DrawerTitle>
             <DrawerClose
               render={
                 <Button variant="ghost" className="min-h-11 shrink-0" data-responsive-control-id={closeControlId} />
@@ -58,7 +58,9 @@ export function BottomSheet({
               {label}
             </DrawerClose>
           </div>
-          {description ? <DrawerDescription className="px-4 pt-2">{description}</DrawerDescription> : null}
+          {description ? (
+            <DrawerDescription className="min-w-0 px-4 pt-2 [overflow-wrap:anywhere]">{description}</DrawerDescription>
+          ) : null}
           <div
             className={`min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${className ?? ''}`}
           >
