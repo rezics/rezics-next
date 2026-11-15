@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { bundledDigest } from '@rezics/definitions/bundled';
-import { fromPlainText } from '@rezics/document';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { documentText, fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { authoredProperties } from '../../src/features/catalogue/authored-properties.ts';
 import type { KernelClient } from '@rezics/client';
 import { buildSearchImage, cgroupArgs, waitForSearch } from '../../../../services/kernel/scripts/search.ts';
 import { currentNativeLifecycle } from './lifecycle.ts';
@@ -192,11 +193,18 @@ async function createSubject(
   text: string,
   relations: Record<string, unknown[]> = {},
 ): Promise<BookCatalogueIdentity> {
+  const hasSynopsis = authoredProperties(bundledRelease, type).includes('schema:abstract');
+  if (hasSynopsis !== (type !== 'bf:Instance'))
+    throw new Error(`Bundled ${type} changed its authored synopsis admission; review its fixture prose contract`);
+  // Edition prose describes this publication; Book and Series prose is an authored work synopsis.
   const input = {
     type,
     labels: { en: label },
+    ...(type === 'bf:Instance' ? { descriptions: { en: text } } : {}),
     statements: {
-      'schema:abstract': [abstract(text, `https://example.org/native-book-catalogue/${marker}/${type}/text`)],
+      ...(hasSynopsis
+        ? { 'schema:abstract': [abstract(text, `https://example.org/native-book-catalogue/${marker}/${type}/text`)] }
+        : {}),
       ...relations,
     },
   } satisfies NativeSubjectCreate;
@@ -230,14 +238,50 @@ async function readCreatedSubject(
       id: string;
       type: string;
       labels: Record<string, string>;
-      statements: Record<string, { value: { content: unknown } }[]>;
+      descriptions: Record<string, string>;
+      statements: Record<string, { id: string; value: { type: string; content: unknown } }[]>;
     };
   }>(response, 200, `GET /v1/subjects/${expected.id}`);
   const subject = body.subject;
   if (subject.id !== expected.id || subject.type !== expected.type || subject.labels.en !== expected.label)
     throw new Error(`GET /v1/subjects/${expected.id} returned a different fixture identity`);
-  if (!JSON.stringify(subject.statements['schema:abstract'] ?? []).includes(expected.text))
-    throw new Error(`GET /v1/subjects/${expected.id} omitted its original fixture text`);
+  if (expected.type === 'bf:Instance') {
+    if (subject.descriptions.en !== expected.text || subject.statements['schema:abstract']?.length)
+      throw new Error(`GET /v1/subjects/${expected.id} did not preserve its Edition description without a work synopsis`);
+  } else {
+    const synopsis = subject.statements['schema:abstract']?.find((statement) => {
+      const content = statement.value.content;
+      return statement.value.type === 'value' && isRecord(content) && content.language === 'en';
+    });
+    const content = synopsis?.value.content;
+    if (!synopsis || !isRecord(content) || typeof content.document !== 'string' || typeof content.digest !== 'string')
+      throw new Error(`GET /v1/subjects/${expected.id} omitted its selected authored synopsis locator`);
+    const selected = await responseJson<{
+      document: {
+        id: string;
+        subjectId: string;
+        candidateId: string;
+        digest: string;
+        language: string;
+        availability: string;
+        body: DocumentSnapshot;
+      };
+    }>(
+      await stack.kernel(`/v1/documents/${encodeURIComponent(content.document)}`),
+      200,
+      `GET /v1/documents/${content.document}`,
+    );
+    if (
+      selected.document.id !== content.document ||
+      selected.document.subjectId !== expected.id ||
+      selected.document.language !== 'en' ||
+      selected.document.availability !== 'available' ||
+      selected.document.candidateId !== synopsis.id ||
+      selected.document.digest !== content.digest ||
+      documentText(selected.document.body).trim() !== expected.text
+    )
+      throw new Error(`GET /v1/documents/${content.document} did not preserve the selected original fixture synopsis`);
+  }
   if (
     relation &&
     !subject.statements[relation.property]?.some((statement) => statement.value.content === relation.target)
