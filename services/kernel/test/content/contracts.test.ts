@@ -617,7 +617,7 @@ function publishedModels(): void {
     Equal<
       media.MediaReservationInput,
       Readonly<{
-        purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+        purpose: 'post-image' | 'knowledge-image' | 'avatar' | 'realm-icon' | 'realm-banner';
         mediaType: string;
         byteCount: number;
         sha256?: string;
@@ -641,7 +641,7 @@ function publishedModels(): void {
       GenericReservation['body'],
       | {
           containerId: string;
-          purpose: 'post-image' | 'avatar';
+          purpose: 'post-image' | 'knowledge-image' | 'avatar';
           mediaType: ImageMediaType;
           byteCount: number;
           sha256?: string;
@@ -741,7 +741,7 @@ function publishedModels(): void {
       media.MediaMetadata,
       | (MediaMetadataBase &
           Readonly<{
-            purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+            purpose: 'post-image' | 'knowledge-image' | 'avatar' | 'realm-icon' | 'realm-banner';
             mediaType: string;
             byteCount: number;
           }>)
