@@ -62,7 +62,7 @@ function request(
   method: string,
   path: string,
   persona: 'owner' | 'other' | 'anonymous' = 'owner',
-  requestKey = key,
+  requestKey = randomUUID(),
   signal?: AbortSignal,
 ) {
   return app.handle(
