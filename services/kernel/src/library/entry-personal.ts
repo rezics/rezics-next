@@ -899,7 +899,9 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     const created = timestampColumns(parsed.sourceCreated);
     const updated = timestampColumns(parsed.sourceUpdated);
     const requestInput = {
-      ...entryPersonalSourceObservationRequestInput('admit', subjectId, input, admission?.input),
+      subjectId,
+      ...parsed,
+      ...(admission?.input === undefined ? {} : { importAdmission: admission.input }),
       ...(archiveGuard ? { archiveReviewGuard: archiveGuard } : {}),
     };
     return runner.ownAccountPrepared(
