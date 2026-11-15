@@ -33,11 +33,11 @@ WITH args AS MATERIALIZED (
  WHERE jsonb_array_length((SELECT inputs FROM args)) BETWEEN 1 AND 2
 ), qualified AS MATERIALIZED (
  SELECT m.route,m.original,m.control_group,m.closure_generation,m.closure_incarnation,m.owner_epoch,g.version::text AS basis_version,
-  sha256(convert_to(jsonb_build_array(
+  CASE WHEN m.closure_state='withdrawn' THEN retained.source_image_digest ELSE sha256(convert_to(jsonb_build_array(
    'rezics.semantic.mapping-point-withdraw/v1',e.job_id,e.job_epoch,e.unit,e.scope_digest,e.plan_digest,e.transaction_id,
    p.node,p.epoch,p.write_state,p.moved_to,s.subject_id,s.recorded_transaction_id,s.xmin::text,
    to_jsonb(m),d.revision::text,d.captured_revision::text,r.sequence,r.target,r.recorded_transaction_id
-  )::text,'UTF8')) AS source_image
+  )::text,'UTF8')) END AS source_image
  FROM source m JOIN frame valid ON true JOIN effect e ON true JOIN owner p ON true
  JOIN semantic.subject s ON s.route=m.route AND s.subject_id=m.original
  JOIN semantic.identity_epoch_dirty d ON d.route=m.route AND d.original=m.original
@@ -95,9 +95,25 @@ WITH args AS MATERIALIZED (
  JOIN semantic.identity_epoch_native_commit ack_commit ON ack_commit.partition_no=p.partition_no
   AND ack_commit.transaction_id=m.closure_ack_transaction
   AND ack_commit.xmin::text=m.closure_ack_xid AND ack_commit.purpose='bootstrap'
+ LEFT JOIN LATERAL (
+  SELECT prior.source_image_digest FROM semantic.identity_epoch_mapping_effect prior
+  JOIN semantic.identity_epoch_mapping_payload payload
+   ON payload.partition_no=prior.partition_no AND payload.job_id=prior.job_id AND payload.unit=prior.unit
+  JOIN semantic.identity_epoch_native_commit prior_commit
+   ON prior_commit.partition_no=prior.partition_no AND prior_commit.transaction_id=prior.transaction_id
+   AND prior_commit.purpose='mapping' AND prior_commit.xmin=prior.xmin
+   AND prior_commit.epoch=p.epoch AND prior_commit.position<=p.position
+  WHERE prior.partition_no=p.partition_no AND prior.job_id=e.job_id AND prior.job_epoch=e.job_epoch
+   AND prior.scope_digest=e.scope_digest AND prior.transaction_id<>e.transaction_id
+   AND prior.source_image_version=1 AND octet_length(prior.source_image_digest)=32
+   AND payload.result->>'action'='source'
+   AND (payload.result->'change'->>'original')::uuid=m.original
+  ORDER BY prior.unit DESC LIMIT 1
+ ) retained ON true
  WHERE m.closure_state IN ('active','withdrawn') AND m.control_partition=p.partition_no AND m.owner_epoch=p.epoch
-  AND m.source_revision=d.revision AND d.revision=d.captured_revision
-  AND coalesce(r.target,m.original)=m.closure_immediate
+  AND ((m.closure_state='active' AND m.source_revision=d.revision AND d.revision=d.captured_revision
+    AND coalesce(r.target,m.original)=m.closure_immediate)
+   OR (m.closure_state='withdrawn' AND retained.source_image_digest IS NOT NULL))
   AND m.closure_successor_ticket IS NULL AND m.closure_successor_original IS NULL
   AND m.closure_ticket_reservation IS NULL AND m.closure_source_reservation IS NULL
   AND m.closure_cancelled_successor IS NOT TRUE AND m.closure_claim IS NULL AND m.closure_mutation_xid IS NULL
@@ -113,11 +129,11 @@ WITH args AS MATERIALIZED (
 ), foreign_qualified AS MATERIALIZED (
  SELECT m.route,m.original,m.control_group,m.closure_generation,m.closure_incarnation,m.owner_epoch,
   c.basis_version::text AS basis_version,
-  sha256(convert_to(jsonb_build_array(
+  CASE WHEN m.closure_state='withdrawn' THEN retained.source_image_digest ELSE sha256(convert_to(jsonb_build_array(
    'rezics.semantic.mapping-point-withdraw/v1',e.job_id,e.job_epoch,e.unit,e.scope_digest,e.plan_digest,e.transaction_id,
    p.node,p.epoch,p.write_state,p.moved_to,s.subject_id,s.recorded_transaction_id,s.xmin::text,
    to_jsonb(m),d.revision::text,d.captured_revision::text,r.sequence,r.target,r.recorded_transaction_id
-  )::text,'UTF8')) AS source_image
+  )::text,'UTF8')) END AS source_image
  FROM source m JOIN frame valid ON true JOIN effect e ON true JOIN owner p ON true
  JOIN semantic.subject s ON s.route=m.route AND s.subject_id=m.original
  JOIN semantic.identity_epoch_dirty d ON d.route=m.route AND d.original=m.original
@@ -148,9 +164,26 @@ WITH args AS MATERIALIZED (
  JOIN semantic.identity_epoch_native_commit ack_commit ON ack_commit.partition_no=p.partition_no
   AND ack_commit.transaction_id=m.closure_ack_transaction
   AND ack_commit.xmin::text=m.closure_ack_xid AND ack_commit.purpose='bootstrap'
+ LEFT JOIN LATERAL (
+  SELECT prior.source_image_digest FROM semantic.identity_epoch_mapping_effect prior
+  JOIN semantic.identity_epoch_mapping_payload payload
+   ON payload.partition_no=prior.partition_no AND payload.job_id=prior.job_id AND payload.unit=prior.unit
+  JOIN semantic.identity_epoch_native_commit prior_commit
+   ON prior_commit.partition_no=prior.partition_no AND prior_commit.transaction_id=prior.transaction_id
+   AND prior_commit.purpose='mapping' AND prior_commit.xmin=prior.xmin
+   AND prior_commit.epoch=p.epoch AND prior_commit.position<=p.position
+  WHERE prior.partition_no=p.partition_no AND prior.job_id=e.job_id AND prior.job_epoch=e.job_epoch
+   AND prior.scope_digest=e.scope_digest AND prior.transaction_id<>e.transaction_id
+   AND prior.source_image_version=1 AND octet_length(prior.source_image_digest)=32
+   AND payload.result->>'action'='source'
+   AND (payload.result->'change'->>'original')::uuid=m.original
+  ORDER BY prior.unit DESC LIMIT 1
+ ) retained ON true
  WHERE m.closure_state IN ('active','withdrawn') AND m.control_partition<>p.partition_no AND m.owner_epoch=p.epoch
-  AND m.owner_epoch=c.source_epoch AND m.source_revision=d.revision AND d.revision=d.captured_revision
-  AND coalesce(r.target,m.original)=m.closure_immediate
+  AND m.owner_epoch=c.source_epoch
+  AND ((m.closure_state='active' AND m.source_revision=d.revision AND d.revision=d.captured_revision
+    AND coalesce(r.target,m.original)=m.closure_immediate)
+   OR (m.closure_state='withdrawn' AND retained.source_image_digest IS NOT NULL))
   AND m.closure_successor_ticket IS NULL AND m.closure_successor_original IS NULL
   AND m.closure_ticket_reservation IS NULL AND m.closure_source_reservation IS NULL
   AND m.closure_cancelled_successor IS NOT TRUE AND m.closure_claim IS NULL AND m.closure_mutation_xid IS NULL

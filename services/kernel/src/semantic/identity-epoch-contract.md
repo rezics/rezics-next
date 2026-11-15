@@ -1684,9 +1684,15 @@ claims a foreign successor/claim nor clears one, and it supplies no participant 
 current command's mutation XID binds the actual Source write; another job, unit, command or stale source image
 cannot consume it. Same-unit replay uses its actual retained native effect rather than withdrawing again.
 A later same-job unit of that original re-binds the withdrawn point's mutation XID in its own command before
-Source SQL or mapping publication writes. That re-bind reuses the committed exact-key custody row whose
-native pins still match, including once the source phase has withdrawn the point, then retires the binding
-again before commit.
+Source SQL or mapping publication writes. Once the source phase has withdrawn the point, that re-bind consumes
+the committed exact-key custody row and the prior same-job source effect's mapping commit and stored source
+image. It does not re-apply the active dirty-head or redirect-immediate predicate: that source effect advances
+the dirty revision and redirect while custody and the installed original keep the withdrawn enrollment,
+registration, install and source-revision image. Active initial withdrawal still requires the current dirty
+head, redirect and every native receipt. Same-home reuse proves that prior effect without consulting custody.
+Publication may then advance terminal, control group, control partition and source revision; completion
+checks the held pre-publication custody and the current command effect, not those new mapping control fields.
+The re-bind retires the binding again before commit.
 
 The existing mapping publication/source handoff must retire only that distinguishable same-job point binding
 and leave the Source withdrawn for existing output-closure enrollment. It does not manufacture an active ACK,
