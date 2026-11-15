@@ -1,3 +1,4 @@
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import type {
   KnowledgeNavigationAddress,
   KnowledgeNavigationPage,
@@ -48,7 +49,15 @@ export class KnowledgeNavigationReading {
     if (this.retired || !this.current()) return;
     const sequence = ++this.sequence;
     this.publish({ state: 'preparing', frontier });
-    const result = await this.read(frontier.request);
+    let result: KnowledgeNavigationResult;
+    try {
+      result = await this.read(frontier.request);
+    } catch (error) {
+      if (this.retired || !this.current() || this.sequence !== sequence) return;
+      if (isPlatformClosedError(error)) throw error;
+      this.publish({ state: 'unavailable', frontier });
+      return;
+    }
     if (this.retired || !this.current() || this.sequence !== sequence) return;
     if (result.state !== 'ready') {
       this.publish({ state: result.state, frontier });
