@@ -611,11 +611,21 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
         // native commit row, before the command's receipt and outbox are written.
         registerCommandCallback(tx, async (frameTransactionId) => {
           if (frameTransactionId !== transactionId || currentCommand(tx).partition !== proposed.home) throw stale();
+          const sourceOriginal = proposed.action === 'source' ? (head.change?.original ?? null) : null;
           const captured = await query(
             tx,
             measured,
-            `SELECT semantic.capture_identity_epoch_source_image($1,$2,$3,$4,$5,$6) AS digest`,
-            [proposed.home, job.jobId, job.epoch.toString(), head.unit + 1, saved.scope_digest, transactionId],
+            `SELECT semantic.capture_identity_epoch_source_image($1,$2,$3,$4,$5,$6,$7::uuid,$8::text) AS digest`,
+            [
+              proposed.home,
+              job.jobId,
+              job.epoch.toString(),
+              head.unit + 1,
+              saved.scope_digest,
+              transactionId,
+              sourceOriginal,
+              proposed.action === 'source' ? 'source' : null,
+            ],
           );
           const image = captured.rows[0]?.digest;
           if (captured.rowCount !== 1 || !Buffer.isBuffer(image) || image.length !== 32)

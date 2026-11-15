@@ -97,8 +97,6 @@ WITH args AS MATERIALIZED (
   AND ack_commit.xmin::text=m.closure_ack_xid AND ack_commit.purpose='bootstrap'
  LEFT JOIN LATERAL (
   SELECT prior.source_image_digest FROM semantic.identity_epoch_mapping_effect prior
-  JOIN semantic.identity_epoch_mapping_payload payload
-   ON payload.partition_no=prior.partition_no AND payload.job_id=prior.job_id AND payload.unit=prior.unit
   JOIN semantic.identity_epoch_native_commit prior_commit
    ON prior_commit.partition_no=prior.partition_no AND prior_commit.transaction_id=prior.transaction_id
    AND prior_commit.purpose='mapping' AND prior_commit.xmin=prior.xmin
@@ -106,8 +104,7 @@ WITH args AS MATERIALIZED (
   WHERE prior.partition_no=p.partition_no AND prior.job_id=e.job_id AND prior.job_epoch=e.job_epoch
    AND prior.scope_digest=e.scope_digest AND prior.transaction_id<>e.transaction_id
    AND prior.source_image_version=1 AND octet_length(prior.source_image_digest)=32
-   AND payload.result->>'action'='source'
-   AND (payload.result->'change'->>'original')::uuid=m.original
+   AND prior.source_action='source' AND prior.source_original=m.original
   ORDER BY prior.unit DESC LIMIT 1
  ) retained ON true
  WHERE m.closure_state IN ('active','withdrawn') AND m.control_partition=p.partition_no AND m.owner_epoch=p.epoch
@@ -166,8 +163,6 @@ WITH args AS MATERIALIZED (
   AND ack_commit.xmin::text=m.closure_ack_xid AND ack_commit.purpose='bootstrap'
  LEFT JOIN LATERAL (
   SELECT prior.source_image_digest FROM semantic.identity_epoch_mapping_effect prior
-  JOIN semantic.identity_epoch_mapping_payload payload
-   ON payload.partition_no=prior.partition_no AND payload.job_id=prior.job_id AND payload.unit=prior.unit
   JOIN semantic.identity_epoch_native_commit prior_commit
    ON prior_commit.partition_no=prior.partition_no AND prior_commit.transaction_id=prior.transaction_id
    AND prior_commit.purpose='mapping' AND prior_commit.xmin=prior.xmin
@@ -175,8 +170,7 @@ WITH args AS MATERIALIZED (
   WHERE prior.partition_no=p.partition_no AND prior.job_id=e.job_id AND prior.job_epoch=e.job_epoch
    AND prior.scope_digest=e.scope_digest AND prior.transaction_id<>e.transaction_id
    AND prior.source_image_version=1 AND octet_length(prior.source_image_digest)=32
-   AND payload.result->>'action'='source'
-   AND (payload.result->'change'->>'original')::uuid=m.original
+   AND prior.source_action='source' AND prior.source_original=m.original
   ORDER BY prior.unit DESC LIMIT 1
  ) retained ON true
  WHERE m.closure_state IN ('active','withdrawn') AND m.control_partition<>p.partition_no AND m.owner_epoch=p.epoch
