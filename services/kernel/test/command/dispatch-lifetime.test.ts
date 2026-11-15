@@ -629,7 +629,7 @@ test('event, callback and native source profiles refuse before the final setting
   const source = ownerFixture();
   await expect(
     source.run(async (tx) => {
-      declareCommandRecordSources(tx, [{ kind: 'context', contextId: 'de110000-0000-4000-8000-000000000001' }]);
+      declareCommandRecordSources(tx, [{ kind: 'context', contextId: newId(partition << 4) }]);
       return 1;
     }),
   ).rejects.toThrow('Unsupported dispatch lifetime');
