@@ -22,6 +22,8 @@ import { exportSections } from '../../src/library/library-export-format.ts';
 import { decodeLibraryArchive, type ArchiveRecord } from '../../src/library/library-archive.ts';
 import { createLibraryArchiveCollectionRecovery } from '../../src/library/library-archive-collection-recovery.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { bindNativeLibraryFixture } from './support/native-library-fixture-binding.ts';
+let restoreLibraryBinding: (() => void) | undefined;
 let workClient: WorkClient;
 let db: GrowthDatabase, app: ReturnType<typeof createKernel>;
 let fixture: Awaited<ReturnType<typeof createRealAccess<{ owner: string; other: string }>>>;
@@ -120,6 +122,9 @@ beforeAll(async () => {
     clock: () => new Date(now),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     access: fixture.access,
+    onAccessReady(access) {
+      restoreLibraryBinding = bindNativeLibraryFixture({ pool: db.pool, access, routeKey, clock: () => new Date(now) });
+    },
     writeRate: createWriteRateLimiter({
       secret: 'library-export-fixture-rate-secret',
       overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
@@ -192,6 +197,7 @@ beforeAll(async () => {
     await sql`INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload) VALUES(${route},${owner},${copy},${ordinal},${{ source, review: { id: 'never-export-review-id' }, outcome: { receipt: 'never-export-receipt' } }})`;
 });
 afterAll(async () => {
+  restoreLibraryBinding?.();
   await workClient?.close();
   await db?.close();
 });
