@@ -1756,7 +1756,11 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           };
           if (scopedRequest.scope.kind === 'realm') {
             const prepared = await sourceRequest(() =>
-              scope.realm.prepare(catalogue, scopeWork.remaining(), kindDigest(current)),
+              scope.realm.prepare(
+                { and: [{ realm: { id: scopedRequest.scope.id } }, catalogue] },
+                scopeWork.remaining(),
+                kindDigest(current),
+              ),
             );
             scopeWork.native(prepared.work);
             return {
