@@ -38,13 +38,8 @@ export function LinkEditBlock({
   const id = useId();
   const composing = useRef(false);
   return (
-    <form
+    <div
       className="min-w-0 w-full p-1"
-      onSubmit={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!composing.current) onApply();
-      }}
       onCompositionStart={() => {
         composing.current = true;
       }}
@@ -53,7 +48,11 @@ export function LinkEditBlock({
       }}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing || event.keyCode === 229 || composing.current) return;
-        if (event.key === 'Escape') {
+        if (event.key === 'Enter' && event.target instanceof HTMLInputElement) {
+          event.preventDefault();
+          event.stopPropagation();
+          onApply();
+        } else if (event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();
           onCancel();
@@ -99,12 +98,19 @@ export function LinkEditBlock({
           <Button type="button" variant="ghost" className={wrappingAction} onClick={onCancel}>
             {labels.cancel}
           </Button>
-          <Button type="submit" variant="secondary" className={wrappingAction}>
+          <Button
+            type="button"
+            variant="secondary"
+            className={wrappingAction}
+            onClick={() => {
+              if (!composing.current) onApply();
+            }}
+          >
             {labels.apply}
           </Button>
         </Field>
       </FieldGroup>
-    </form>
+    </div>
   );
 }
 
