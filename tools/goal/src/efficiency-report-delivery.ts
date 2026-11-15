@@ -286,7 +286,7 @@ function sameObservation(left: DeliveryRow, right: ObservationCandidate): boolea
   );
 }
 
-/** The observation and rendered report claim one UTC bucket in the same first-write transaction. */
+/** Collect outside the writer lock, then atomically claim one UTC bucket with a first-write recheck. */
 export function captureFrozenHourlyEfficiencyReport(
   db: Database,
   bucketValue: string,
@@ -296,6 +296,39 @@ export function captureFrozenHourlyEfficiencyReport(
 ): CaptureResult {
   const bucket = parseUtcHour(bucketValue);
   migrate(db, efficiencyReportMigrations);
+
+  // Report collectors read Git, native rollouts and historical projections. Never hold SQLite's sole writer
+  // while that work runs: the short commit below rechecks the bucket and preserves the first stored result.
+  let prepared: { observation: HourlyObservationData; report: string; reportRef: string } | undefined;
+  if (!deliveryRow(db, bucket.start)) {
+    const observation = createObservation();
+    if (observation.windowStart !== bucket.start || observation.windowEnd !== bucket.end)
+      throw new Error('hourly observation window must match its UTC bucket');
+    if (
+      observation.attribution === 'measured' &&
+      (!Number.isSafeInteger(observation.productLines) ||
+        observation.productLines! < 0 ||
+        !observation.sourceRevision)
+    )
+      throw new Error('measured hourly observation requires product lines and a source revision');
+    if (
+      observation.webAttribution === 'measured' &&
+      (!Number.isSafeInteger(observation.webProductLines) ||
+        observation.webProductLines! < 0 ||
+        !observation.sourceRevision)
+    )
+      throw new Error('measured Web hourly observation requires product lines and a source revision');
+    if (
+      observation.backfillAttribution === 'measured' &&
+      (!Number.isSafeInteger(observation.backfillProductLines) ||
+        observation.backfillProductLines! < 0 ||
+        !observation.backfillFromRevision)
+    )
+      throw new Error('measured integration backfill requires product lines and a prior source revision');
+    const report = render(observation);
+    const reportRef = createHash('sha256').update(report).digest('hex');
+    prepared = { observation, report, reportRef };
+  }
 
   return db
     .transaction(() => {
@@ -337,32 +370,7 @@ export function captureFrozenHourlyEfficiencyReport(
         };
       }
 
-      const observation = createObservation();
-      if (observation.windowStart !== bucket.start || observation.windowEnd !== bucket.end)
-        throw new Error('hourly observation window must match its UTC bucket');
-      if (
-        observation.attribution === 'measured' &&
-        (!Number.isSafeInteger(observation.productLines) ||
-          observation.productLines! < 0 ||
-          !observation.sourceRevision)
-      )
-        throw new Error('measured hourly observation requires product lines and a source revision');
-      if (
-        observation.webAttribution === 'measured' &&
-        (!Number.isSafeInteger(observation.webProductLines) ||
-          observation.webProductLines! < 0 ||
-          !observation.sourceRevision)
-      )
-        throw new Error('measured Web hourly observation requires product lines and a source revision');
-      if (
-        observation.backfillAttribution === 'measured' &&
-        (!Number.isSafeInteger(observation.backfillProductLines) ||
-          observation.backfillProductLines! < 0 ||
-          !observation.backfillFromRevision)
-      )
-        throw new Error('measured integration backfill requires product lines and a prior source revision');
-      const report = render(observation);
-      const reportRef = createHash('sha256').update(report).digest('hex');
+      const { observation, report, reportRef } = prepared!;
       db.query(
         `INSERT INTO efficiency_report_deliveries(
           hour_bucket, report_ref, report, status, created_at,

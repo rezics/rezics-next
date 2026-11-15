@@ -1,9 +1,9 @@
-import { Database } from 'bun:sqlite';
+import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { migrate } from './db.ts';
+import { databaseStage, migrate, openReadOnlyDb } from './db.ts';
 import { type NativeUnitContext, nativeUnitContext, NATIVE_UNIT_CONTEXT_VARIABLE } from './native-unit-context.ts';
 
 export const nativeUnitMigrations = [
@@ -63,16 +63,16 @@ type NativeGoal = { goal_id: string; objective: string; status: string; updated_
 type NativeThread = { id: string; cwd: string; rollout_path: string; source: string };
 
 export function readNativeGoal(codexHome: string, threadId: string): { goal: NativeGoal; thread: NativeThread } {
-  const goals = new Database(join(codexHome, 'goals_1.sqlite'), { readonly: true });
+  const goals = openReadOnlyDb(join(codexHome, 'goals_1.sqlite'));
   let threads: Database | undefined;
   try {
-    threads = new Database(join(codexHome, 'state_5.sqlite'), { readonly: true });
-    const goal = goals
+    threads = openReadOnlyDb(join(codexHome, 'state_5.sqlite'));
+    const goal = databaseStage(goals, 'native Goal lookup', () => goals
       .query('SELECT goal_id, objective, status, updated_at_ms FROM thread_goals WHERE thread_id=?')
-      .get(threadId) as NativeGoal | null;
-    const thread = threads
+      .get(threadId)) as NativeGoal | null;
+    const thread = databaseStage(threads, 'native thread lookup', () => threads!
       .query('SELECT id, cwd, rollout_path, source FROM threads WHERE id=?')
-      .get(threadId) as NativeThread | null;
+      .get(threadId)) as NativeThread | null;
     if (!goal || !thread) throw new Error('Native unit needs an existing Codex thread and native Goal');
     return { goal, thread };
   } finally {
@@ -138,7 +138,7 @@ function readUnitAcceptance(briefPath: string): { hash: string; acceptance: Nati
 
 export function registeredNativeUnits(db: Database): NativeUnit[] {
   if (!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='native_execution_units'").get()) return [];
-  return (db.query('SELECT body FROM native_execution_units ORDER BY id').all() as { body: string }[]).map((row) =>
+  return (databaseStage(db, 'native registry lookup', () => db.query('SELECT body FROM native_execution_units ORDER BY id').all()) as { body: string }[]).map((row) =>
     JSON.parse(row.body),
   );
 }
@@ -244,7 +244,7 @@ export function nativeUnitEnvironment(
 export function observeNativeUnitContext(env: Record<string, string | undefined>): NativeUnitContext | undefined {
   const context = nativeUnitContext(env);
   if (!context) return undefined;
-  const db = new Database(context.registry, { readonly: true });
+  const db = openReadOnlyDb(context.registry);
   try {
     const unit = registeredNativeUnits(db).find((candidate) => candidate.id === context.unit);
     if (!unit) throw new Error('Native unit check context is not registered');
