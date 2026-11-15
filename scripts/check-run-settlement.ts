@@ -257,6 +257,15 @@ export type CheckRunStateOptions = {
 
 export type CheckRunSnapshotReleaseKind = 'cancelled-before-start' | 'successful-delivered-no-artifacts';
 
+/** A local discard decision pins the failed original; it never substitutes final or return evidence. */
+export type CheckRunFailedSnapshotDiscardDecision = {
+  abandonReturns: boolean;
+  bindingSha256: string;
+  physical: CheckRunPhysicalIdentity;
+  native: NonNullable<CheckRunNativeDisposition>;
+  finalSha256: string;
+};
+
 export type CheckRunInvocationPage = {
   ids: string[];
   after: string | null;
@@ -2963,6 +2972,73 @@ export async function releaseCheckRunSnapshot(
   });
 }
 
+/** Explicitly abandon failed-return recovery without accepting or rewriting the failed original result. */
+export async function discardCheckRunFailedSnapshot(
+  invocationId: string,
+  nonce: string,
+  decision: CheckRunFailedSnapshotDiscardDecision,
+  remove: (record: CheckRunInvocationRecord) => void | Promise<void>,
+  options: CheckRunStateOptions = {},
+): Promise<CheckRunInvocationRecord> {
+  return mutateRecord(invocationId, options, async (directory, record) => {
+    if (record.nonce !== nonce) throw new Error('check-run-settlement: wrong invocation nonce');
+    if (decision.abandonReturns !== true)
+      throw new Error('check-run-settlement: failed snapshot discard requires explicit return-recovery abandonment');
+    const physical = validatePhysical(decision.physical);
+    const native = validateNative(decision.native);
+    const final = record.final;
+    const custody = record.finalCustody;
+    if (
+      record.phase !== 'unknown' ||
+      record.snapshotCustody !== 'owned' ||
+      !record.snapshot ||
+      !record.candidateWorkspace ||
+      record.snapshot.sourceSha256 !== record.binding.sourceSha256 ||
+      !record.physical ||
+      !record.native ||
+      !final ||
+      !custody
+    )
+      throw new Error('check-run-settlement: failed snapshot has no exact retained terminal custody');
+    if (
+      boundedHash(decision.bindingSha256, 'discard binding hash') !== checkRunBindingHash(record.binding) ||
+      physical.host !== record.physical.host ||
+      physical.run !== record.physical.run ||
+      !native ||
+      native.exitCode === 0 ||
+      record.native.exitCode === 0 ||
+      native.exitCode !== record.native.exitCode ||
+      native.lifetimeFailure !== record.native.lifetimeFailure ||
+      native.receiptSha256 !== record.native.receiptSha256 ||
+      final.invocationId !== record.invocationId ||
+      final.nonce !== record.nonce ||
+      checkRunBindingHash(final.binding) !== checkRunBindingHash(record.binding) ||
+      final.physical.host !== physical.host ||
+      final.physical.run !== physical.run ||
+      final.native?.exitCode !== native.exitCode ||
+      final.native.lifetimeFailure !== native.lifetimeFailure ||
+      final.native.receiptSha256 !== native.receiptSha256 ||
+      boundedHash(decision.finalSha256, 'discard final hash') !== custody.originalFinalSha256 ||
+      validateFinalCustodyIdentity(record, custody) !== ''
+    )
+      throw new Error('check-run-settlement: failed snapshot discard differs from the original binding or result');
+    if (
+      final.cleanup.disposition !== 'unknown' ||
+      final.cleanup.remote !== 'verified' ||
+      final.cleanup.transportChild !== 'reaped' ||
+      final.cleanup.source !== 'verified' ||
+      final.cleanup.localWorktree !== 'retained' ||
+      !['delivered', 'received', 'reconciled', 'not-required'].includes(custody.delivery)
+    )
+      throw new Error('check-run-settlement: failed snapshot remote, transport or source cleanup is unverified');
+    await remove(record);
+    const updated = await updateRecord(directory, record, { snapshotCustody: 'removed' });
+    const cleaned = await cleanupPrivateReferencesUnderLock(directory, updated, options);
+    if (cleaned.failure) throw cleaned.failure;
+    return cleaned.record;
+  });
+}
+
 export async function discardCheckRunPreparedExecution(
   invocationId: string,
   nonce: string,
@@ -3072,10 +3148,11 @@ function usage(): string {
     '  bun scripts/check-run-settlement.ts reconcile <invocation-id> [--cleanup-only] [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts reconcile --descriptor <absolute-private-json> [--hosts <absolute-hosts-json>] [--state-dir <absolute-dir>]',
     '  bun scripts/check-run-settlement.ts maintain [--cursor <invocation-id>] [--limit 1-64] [--apply] [--max-removals 0-2] [--state-dir <absolute-dir>]',
+    '  bun scripts/check-run-settlement.ts discard-failed-snapshot <invocation-id> --nonce <original-nonce> --abandon-returns [--state-dir <absolute-dir>]',
   ].join('\n');
 }
 
-if (import.meta.main) {
+async function main(): Promise<void> {
   const [operation, ...args] = Bun.argv.slice(2);
   const stateAt = args.indexOf('--state-dir');
   const stateDirectory = stateAt >= 0 ? args[stateAt + 1] : undefined;
@@ -3127,6 +3204,23 @@ if (import.meta.main) {
             ...(cleanupOnly ? { cleanupOnly: true } : {}),
           });
       process.stdout.write(`${JSON.stringify(reconciled)}\n`);
+    } else if (operation === 'discard-failed-snapshot') {
+      const selected = stateAt < 0 ? args : [...args.slice(0, stateAt), ...args.slice(stateAt + 2)];
+      if (
+        selected.length !== 4 ||
+        selected[1] !== '--nonce' ||
+        selected[3] !== '--abandon-returns' ||
+        (stateAt >= 0 && (!stateDirectory || !isAbsolute(stateDirectory)))
+      )
+        throw new Error('discard-failed-snapshot requires an id, original --nonce and --abandon-returns');
+      const checkRun = await import('./check-run.ts');
+      const discarded = await checkRun.discardRegisteredCheckRunFailedSnapshot(
+        selected[0]!,
+        selected[2]!,
+        true,
+        stateOptions,
+      );
+      process.stdout.write(`${JSON.stringify(discarded)}\n`);
     } else if (operation === 'maintain') {
       const cursorAt = args.indexOf('--cursor');
       const limitAt = args.indexOf('--limit');
@@ -3156,4 +3250,11 @@ if (import.meta.main) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n${usage()}\n`);
     process.exitCode = 2;
   }
+}
+
+if (import.meta.main) {
+  void main().catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n${usage()}\n`);
+    process.exitCode = 2;
+  });
 }
