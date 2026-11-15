@@ -2134,7 +2134,8 @@ def retain_stop_intent(action):
         if (root/'command-started').exists(): phase='command'
         else:
             try:
-                progress=json.loads((root/'.temp/check-host/preparation-progress.json').read_text())
+                with (root/'.temp/check-host/preparation-progress.json').open() as source:
+                    progress=json.loads(source.read(1025))
                 value=progress.get('phase')
                 if isinstance(value,str) and 1<=len(value)<=64 and all(c in 'abcdefghijklmnopqrstuvwxyz-' for c in value):
                     phase=value
@@ -2157,9 +2158,12 @@ def retain_stop_intent(action):
         if len(existing.splitlines())>=16: raise ValueError('stop telemetry record bound reached')
         os.write(descriptor,line)
     except Exception:
-        print('remote-check: stop-intent telemetry unavailable',file=sys.stderr)
+        try: print('remote-check: stop-intent telemetry unavailable',file=sys.stderr)
+        except Exception: pass
     finally:
-        if descriptor is not None: os.close(descriptor)
+        if descriptor is not None:
+            try: os.close(descriptor)
+            except OSError: pass
 
 pid=record['pid']; started=record['started']
 if not current(pid,started): sys.exit(0)

@@ -32,8 +32,8 @@ while True:time.sleep(.01)
   expect(existsSync(join(directory, '.remote-check-supervisor'))).toBe(true);
   const marker = JSON.parse(readFileSync(join(directory, '.remote-check-supervisor'), 'utf8'));
   const program = supervisorStopProgram.replaceAll('/srv/rezics-check', hostRoot);
-  const stop = (reason = 'controller-cleanup', recordOnly = false) => spawnSync('python3',
-    ['-c', program, directory, reason, ...(recordOnly ? ['record-only'] : [])], { encoding: 'utf8', timeout: 3000 });
+  const stop = (reason = 'controller-cleanup', recordOnly = false, closeStderr = false) => spawnSync('python3',
+    ['-c', (closeStderr ? 'import os; os.close(2)\n' : '') + program, directory, reason, ...(recordOnly ? ['record-only'] : [])], { encoding: 'utf8', timeout: 3000 });
   return { hostRoot, run, directory, retained, marker, child, stop,
     async close() { if (child.exitCode === null) child.kill('SIGKILL'); await child.exited; rmSync(hostRoot, { recursive: true, force: true }); } };
 }
@@ -90,6 +90,14 @@ test('stop-intent bounds and telemetry failure never prevent the original owned 
     expect(await blocked.child.exited).toBe(0);
     expect(JSON.parse(readFileSync(join(blocked.directory, 'received-signal.json'), 'utf8')).observed).toBeNull();
   } finally { await blocked.close(); }
+  const disconnected = await ownedFixture();
+  try {
+    writeFileSync(join(disconnected.hostRoot, 'receipts'), 'unavailable telemetry directory');
+    const result = disconnected.stop('lease-orphan', false, true);
+    expect(result.status).toBe(0);
+    expect(await disconnected.child.exited).toBe(0);
+    expect(JSON.parse(readFileSync(join(disconnected.directory, 'received-signal.json'), 'utf8')).signal).toBe(15);
+  } finally { await disconnected.close(); }
 });
 
 test('controller stop retains its intent before the existing systemctl stop action', async () => {
