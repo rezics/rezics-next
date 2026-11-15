@@ -4,7 +4,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../paraglide/messages.js';
 import { useCandidateReading, type CandidateReading } from './candidate-reading-application';
 import { subjectHref } from '../../subject/load-subject';
-import { useLayoutEffect, useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { defaultReader, type Reader } from '../../subject/reader';
 import { useSession } from '../../session/query';
 import { useSearchLibraryActionHost } from '../../search/library-action-port';
@@ -13,7 +13,11 @@ import { catalogueEntries } from '../catalogue/catalogue-entry';
 import type { ConceptRead } from '../catalogue/source-concept-explorer';
 import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './source-concept-reading/hierarchy';
 import { ConceptMembershipReading } from './source-concept-reading/membership';
-import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
+import {
+  useConceptVisit,
+  type ConceptPage,
+  type ConceptTransport,
+} from './source-concept-reading/visit';
 import { originatingConceptReturn } from './source-concept-reading/origin';
 import {
   conceptVisitAddressFor,
@@ -21,6 +25,7 @@ import {
   conceptTargetHref,
   conceptVisitDescriptorFor,
   subjectVisitHref,
+  currentnessMatches,
   type ConceptFocus,
   type ConceptHierarchyAddress,
   type ConceptVisitDescriptor,
@@ -52,6 +57,117 @@ type Props = {
     | ((address: ConceptHierarchyAddress | undefined, options?: { replace?: boolean }) => void)
     | undefined;
 };
+
+type PresentationIntent = {
+  key: string;
+  focusAtStart?: ConceptFocus | undefined;
+  sourceGeneration?: number | undefined;
+  cancelled: boolean;
+  consumed: boolean;
+  start: () => void;
+  stop: () => void;
+};
+
+function watchPresentationIntent(
+  key: string,
+  focusAtStart?: ConceptFocus | undefined,
+  sourceGeneration?: number | undefined,
+): PresentationIntent {
+  const trigger = document.activeElement;
+  let listening = false;
+  let intent: PresentationIntent;
+  const movement = (event: Event) => {
+    if (event.type === 'focusin' && event.target === trigger) return;
+    intent.cancelled = true;
+    intent.stop();
+  };
+  const start = () => {
+    if (listening || intent.cancelled || intent.consumed) return;
+    listening = true;
+    for (const name of ['focusin', 'pointerdown', 'keydown']) document.addEventListener(name, movement, true);
+  };
+  const stop = () => {
+    if (!listening) return;
+    listening = false;
+    for (const name of ['focusin', 'pointerdown', 'keydown']) document.removeEventListener(name, movement, true);
+  };
+  intent = { key, focusAtStart, sourceGeneration, cancelled: false, consumed: false, start, stop };
+  intent.start();
+  return intent;
+}
+
+function sameFocus(left: ConceptFocus | undefined, right: ConceptFocus | undefined) {
+  return left?.section === right?.section && left?.row === right?.row;
+}
+
+function currentAddressMatches(
+  history: { addresses: (string | undefined)[]; truncated: boolean },
+  index: number,
+  read: ConceptPage | undefined,
+  address: ConceptHierarchyAddress | undefined,
+) {
+  return (
+    !address ||
+    (!!read &&
+      currentnessMatches(read, address) &&
+      index === address.index &&
+      history.truncated === address.truncated &&
+      history.addresses.length === address.addresses.length &&
+      address.addresses.every((cursor, addressIndex) => history.addresses[addressIndex] === (cursor ?? undefined)))
+  );
+}
+
+function focusTargetFor(article: HTMLElement, focus: ConceptFocus): HTMLElement | undefined {
+  if (focus.row && focus.section === 'hierarchy') {
+    const row = [...article.querySelectorAll<HTMLElement>('[data-concept-hierarchy-row]')].find(
+      (element) => element.dataset.conceptHierarchyRow === focus.row,
+    );
+    return row?.querySelector<HTMLElement>('a') ?? undefined;
+  }
+  if (focus.row && ['scheme', 'code', 'broader'].includes(focus.section)) {
+    const row = [...article.querySelectorAll<HTMLElement>('[data-concept-association-row]')].find(
+      (element) => element.dataset.conceptAssociationRow === focus.row,
+    );
+    return row?.querySelector<HTMLElement>('a[data-concept-target]') ?? undefined;
+  }
+  if (focus.section === 'works') {
+    return article.querySelector<HTMLElement>('[id="concept-tagged-works-heading"]') ?? undefined;
+  }
+  return undefined;
+}
+
+function focusRowMissingFor(article: HTMLElement, focus: ConceptFocus): boolean {
+  if (focus.row && focus.section === 'hierarchy') {
+    return ![...article.querySelectorAll<HTMLElement>('[data-concept-hierarchy-row]')].some(
+      (element) => element.dataset.conceptHierarchyRow === focus.row,
+    );
+  }
+  if (focus.row && ['scheme', 'code', 'broader'].includes(focus.section)) {
+    return ![...article.querySelectorAll<HTMLElement>('[data-concept-association-row]')].some(
+      (element) => element.dataset.conceptAssociationRow === focus.row,
+    );
+  }
+  return false;
+}
+
+function noticeTargetFor(article: HTMLElement, section: ConceptFocus['section']): HTMLElement | undefined {
+  const id =
+    section === 'hierarchy'
+      ? 'concept-narrower-heading'
+      : section === 'works'
+        ? 'concept-tagged-works-heading'
+        : `concept-${section}-heading`;
+  return article.querySelector<HTMLElement>(`[id="${id}"]`) ?? undefined;
+}
+
+function visibleArticleTarget(article: HTMLElement, target: HTMLElement): boolean {
+  if (!article.isConnected || !target.isConnected || !article.contains(target)) return false;
+  if (target.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+  const view = target.ownerDocument.defaultView;
+  if (!view) return false;
+  const style = view.getComputedStyle(target);
+  return style.display !== 'none' && style.visibility !== 'hidden' && target.getClientRects().length > 0;
+}
 
 export function SourceConceptView(props: Props) {
   const admission = useCandidateReading({
@@ -101,6 +217,25 @@ function ConceptVisitView({
 }) {
   const o = { locale: locale as never };
   const returnTo = originatingConceptReturn(suppliedReturn, locale);
+  const articleRef = useRef<HTMLElement>(null);
+  const returnAddress =
+    hierarchyAddress ??
+    (conceptVisit
+      ? {
+          subject: conceptVisit.subject,
+          ...(conceptVisit.role ? { role: conceptVisit.role } : {}),
+          current: conceptVisit.current,
+          addresses: conceptVisit.addresses,
+          index: conceptVisit.index,
+          truncated: conceptVisit.truncated,
+          focus: conceptVisit.focus,
+        }
+      : undefined);
+  const routeAddressKey = returnAddress ? JSON.stringify([id, role, returnAddress]) : undefined;
+  const routeFocus = returnAddress?.focus;
+  const routeIntentRef = useRef<PresentationIntent | undefined>(undefined);
+  const previousRouteIntentRef = useRef<PresentationIntent | undefined>(undefined);
+  const noticeIntentRef = useRef<PresentationIntent | undefined>(undefined);
   const visit = useConceptVisit({
     id,
     role,
@@ -111,6 +246,9 @@ function ConceptVisitView({
     onAddressChange: onHierarchyChange,
   });
   const { read, error, busy } = visit;
+  const reportFocusMissingRef = useRef(visit.reportFocusMissing);
+  reportFocusMissingRef.current = visit.reportFocusMissing;
+  const statusRef = visit.statusRef;
   const source = useCandidateReading(
     {
       candidate: 'concept-source',
@@ -139,6 +277,40 @@ function ConceptVisitView({
   const immediateReturn =
     conceptVisit && conceptVisit.subject !== id ? conceptVisitHref(conceptVisit, locale, returnTo) : undefined;
 
+  useLayoutEffect(() => {
+    const current = routeIntentRef.current;
+    if (current && current.key === routeAddressKey) {
+      current.start();
+    } else {
+      current?.stop();
+      if (current) previousRouteIntentRef.current = current;
+      if (routeAddressKey) {
+        routeIntentRef.current = watchPresentationIntent(
+          routeAddressKey,
+          visit.focus,
+          read?.admitted && source.active ? source.generation : undefined,
+        );
+        previousRouteIntentRef.current = undefined;
+      } else {
+        routeIntentRef.current = undefined;
+      }
+    }
+    return () => {
+      const active = routeIntentRef.current;
+      if (!active || active.key !== routeAddressKey) return;
+      active.stop();
+    };
+  }, [routeAddressKey, visit.focus, read?.admitted, source.active, source.generation]);
+
+  useLayoutEffect(
+    () => () => {
+      routeIntentRef.current?.stop();
+      previousRouteIntentRef.current?.stop();
+      noticeIntentRef.current?.stop();
+    },
+    [],
+  );
+
   const addressFor = (focus: ConceptFocus) => {
     if (!read?.admitted) return;
     return conceptVisitAddressFor(read, visit.history, visit.index, worksRoute, focus, locale, returnTo);
@@ -164,41 +336,177 @@ function ConceptVisitView({
   const workReturnHref = (_subject: { id: string }) => addressFor({ section: 'works' });
 
   useLayoutEffect(() => {
-    if (!visit.focus || visit.loading || visit.busy || !read?.admitted) return;
-    const focus = visit.focus;
-    const focusWithin = (selector: string, attribute: string) =>
-      [...document.querySelectorAll<HTMLElement>(selector)].find((element) => element.dataset[attribute] === focus.row);
-    let target: HTMLElement | undefined;
-    if (focus.row && focus.section === 'hierarchy') {
-      target = focusWithin('[data-concept-hierarchy-row]', 'conceptHierarchyRow')?.querySelector('a') ?? undefined;
-    } else if (focus.row && ['scheme', 'code', 'broader'].includes(focus.section)) {
-      target =
-        focusWithin('[data-concept-association-row]', 'conceptAssociationRow')?.querySelector(
-          'a[data-concept-target]',
-        ) ?? undefined;
-    } else if (focus.section === 'works') {
-      target = document.getElementById('concept-tagged-works-heading') ?? undefined;
-    }
-    if (target) {
-      target.focus();
+    if (!routeFocus) return;
+    const intent = routeIntentRef.current;
+    if (!intent || intent.consumed || !sameFocus(visit.focus, routeFocus) || visit.focus === intent.focusAtStart) return;
+    if (intent.cancelled) {
+      intent.consumed = true;
+      intent.stop();
       return;
     }
-    visit.reportFocusMissing();
-  }, [visit.focus, visit.loading, visit.busy, visit.completed, read, visit.reportFocusMissing]);
+    if (visit.loading || visit.busy || !read?.admitted || !source.active || !admission.active()) return;
+    if (!currentAddressMatches(visit.history, visit.index, read, returnAddress)) return;
+    if (intent.sourceGeneration === undefined) intent.sourceGeneration = source.generation;
+    else if (intent.sourceGeneration !== source.generation) {
+      intent.cancelled = true;
+      intent.consumed = true;
+      intent.stop();
+      return;
+    }
+    if (
+      routeFocus.section === 'hierarchy' &&
+      visit.hierarchy?.state !== 'available' &&
+      visit.hierarchy?.state !== 'lagging'
+    )
+      return;
 
+    const article = articleRef.current;
+    if (!article || !article.isConnected) return;
+    const target = focusTargetFor(article, routeFocus);
+    if (!target) {
+      intent.consumed = true;
+      intent.stop();
+      if (
+        focusRowMissingFor(article, routeFocus) &&
+        read?.admitted &&
+        source.active &&
+        admission.active() &&
+        currentAddressMatches(visit.history, visit.index, read, returnAddress) &&
+        sameFocus(visit.focus, routeFocus)
+      )
+        reportFocusMissingRef.current();
+      return;
+    }
+    if (
+      intent.cancelled ||
+      articleRef.current !== article ||
+      !article ||
+      !visibleArticleTarget(article, target) ||
+      visit.loading ||
+      visit.busy ||
+      !read?.admitted ||
+      !source.active ||
+      !admission.active() ||
+      intent.sourceGeneration !== source.generation ||
+      !currentAddressMatches(visit.history, visit.index, read, returnAddress) ||
+      !sameFocus(visit.focus, routeFocus)
+    ) {
+      intent.consumed = true;
+      intent.stop();
+      return;
+    }
+    intent.consumed = true;
+    intent.stop();
+    target.focus();
+  }, [
+    routeAddressKey,
+    returnAddress,
+    routeFocus?.section,
+    routeFocus?.row,
+    visit.focus,
+    visit.loading,
+    visit.busy,
+    visit.completed,
+    visit.history,
+    visit.index,
+    visit.hierarchy?.state,
+    read,
+    source.active,
+    source.generation,
+    admission.generation,
+    admission.active,
+  ]);
+
+  const noticeKey = visit.notice ? JSON.stringify([visit.notice, visit.noticeSection ?? 'hierarchy']) : undefined;
   useLayoutEffect(() => {
-    if (!visit.notice || visit.loading || visit.busy) return;
-    const section = visit.noticeSection ?? 'hierarchy';
-    const id =
-      section === 'hierarchy'
-        ? 'concept-narrower-heading'
-        : section === 'works'
-          ? 'concept-tagged-works-heading'
-          : `concept-${section}-heading`;
-    document.getElementById(id)?.focus();
-  }, [visit.notice, visit.noticeSection, visit.loading, visit.busy]);
+    const current = noticeIntentRef.current;
+    if (!noticeKey) {
+      current?.stop();
+      noticeIntentRef.current = undefined;
+      return;
+    }
+    let intent = current;
+    if (!intent || intent.key !== noticeKey) {
+      intent?.stop();
+      intent = watchPresentationIntent(noticeKey);
+      noticeIntentRef.current = intent;
+    } else {
+      intent.start();
+    }
+    if (intent.consumed) return;
+    if (intent.cancelled) {
+      intent.consumed = true;
+      intent.stop();
+      return;
+    }
+    if (visit.loading || visit.busy || !read?.admitted) return;
+    if (!admission.active() || !source.active) {
+      if (!admission.active()) {
+        intent.consumed = true;
+        intent.stop();
+      }
+      return;
+    }
+    if (intent.sourceGeneration === undefined) intent.sourceGeneration = source.generation;
+    else if (intent.sourceGeneration !== source.generation) {
+      intent.consumed = true;
+      intent.stop();
+      return;
+    }
+    const cancelledReturn = routeIntentRef.current?.cancelled || previousRouteIntentRef.current?.cancelled;
+    if (cancelledReturn) {
+      intent.consumed = true;
+      intent.stop();
+      previousRouteIntentRef.current = undefined;
+      return;
+    }
+    const article = articleRef.current;
+    const heading = article ? noticeTargetFor(article, visit.noticeSection ?? 'hierarchy') : undefined;
+    const status = statusRef.current;
+    const target =
+      article && heading && visibleArticleTarget(article, heading)
+        ? heading
+        : article && status && visibleArticleTarget(article, status)
+          ? status
+          : undefined;
+    if (
+      !target ||
+      articleRef.current !== article ||
+      !article ||
+      !visibleArticleTarget(article, target) ||
+      visit.loading ||
+      visit.busy ||
+      !read?.admitted ||
+      !source.active ||
+      !admission.active() ||
+      intent.sourceGeneration !== source.generation ||
+      noticeKey !== JSON.stringify([visit.notice, visit.noticeSection ?? 'hierarchy'])
+    ) {
+      intent.consumed = true;
+      intent.stop();
+      return;
+    }
+    intent.consumed = true;
+    intent.stop();
+    previousRouteIntentRef.current = undefined;
+    target.focus();
+  }, [
+    routeAddressKey,
+    noticeKey,
+    visit.loading,
+    visit.busy,
+    visit.notice,
+    visit.noticeSection,
+    read,
+    source.active,
+    source.generation,
+    statusRef,
+    admission.generation,
+    admission.active,
+  ]);
   return (
     <article
+      ref={articleRef}
       className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
       aria-busy={visit.loading || busy}
     >
