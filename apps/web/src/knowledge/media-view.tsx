@@ -22,7 +22,7 @@ export function useKnowledgeImagePresentations(
     sessionSource = readerSessionSource(client);
   const revision = useSyncExternalStore(sessionSource.subscribe, sessionSource.snapshot, sessionSource.serverSnapshot);
   const index = useMemo(() => knowledgeImageSources(body), [body]);
-  const sourcesKey = JSON.stringify(index.sources),
+  const sourcesKey = JSON.stringify([...index.sources].sort()),
     selectionKey = JSON.stringify(own);
   const session = sessionSource.read();
   const viewer = session?.state === 'signed-in' ? (session.subject ?? null) : null;
@@ -118,7 +118,7 @@ function KnowledgeImage({
           {alt ? ` — ${alt}` : ''}
         </div>
       )}
-      {phase === 'failed' && image ? (
+      {phase === 'failed' && (image || ownedOriginal) ? (
         <Button
           type="button"
           variant="outline"

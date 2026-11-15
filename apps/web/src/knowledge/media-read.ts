@@ -101,8 +101,8 @@ export const readKnowledgeMediaRequest = createServerFn({ method: 'GET' })
     let authorization: string | undefined;
     if (privateSources)
       try {
-        await prepareSession(incoming, env as Partial<SessionEnv>);
-        if (data.viewer && sessionSubject(incoming) === data.viewer)
+        const refused = await prepareSession(incoming, env as Partial<SessionEnv>);
+        if (!refused && data.viewer && sessionSubject(incoming) === data.viewer)
           authorization = viewerCredential(incoming) ?? undefined;
       } catch {
         /* Public-context images remain independently readable anonymously. */

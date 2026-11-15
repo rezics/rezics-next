@@ -94,3 +94,47 @@ test('the host reuses the existing document upload port and inserts only a canon
     createKnowledgeImageUploader({ documentId: 'unsaved', readBody: () => draft, current: () => true, upload }),
   ).toThrow();
 });
+
+test('metadata batches preserve distinct original contexts and sibling failures without loading bodies', async () => {
+  const { readKnowledgeMediaGroups } = await import('../src/knowledge/media-read');
+  const sources = [
+    knowledgeMediaSource(id(6), published),
+    knowledgeMediaSource(id(7), published),
+    knowledgeMediaSource(id(8)),
+  ];
+  const calls: { ids: readonly string[]; selection: KnowledgeMediaSelection }[] = [];
+  const result = await readKnowledgeMediaGroups(
+    { sources, own, viewer: id(9), locale: 'en' },
+    async (ids, selection) => {
+      calls.push({ ids, selection });
+      if (selection.representation === 'authoring') return { kind: 'unavailable' };
+      return {
+        kind: 'ready',
+        images: new Map(
+          ids.map((mediaId) => [
+            mediaId,
+            {
+              id: mediaId,
+              containerId: selection.documentId,
+              digest: 'a'.repeat(64),
+              width: 640,
+              height: 480,
+              variants: [{ format: 'webp' as const, width: 640, height: 480 }],
+              placeholder: null,
+              focalPoint: null,
+              credit: null,
+            },
+          ]),
+        ),
+      };
+    },
+  );
+  expect(calls).toHaveLength(2);
+  expect(calls.find((call) => call.selection.representation === 'public')).toEqual({
+    ids: [id(6), id(7)],
+    selection: published,
+  });
+  expect(result.state === 'ready' && result.images.map((image) => image.source).sort()).toEqual(
+    sources.slice(0, 2).sort(),
+  );
+});
