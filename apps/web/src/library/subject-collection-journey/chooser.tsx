@@ -100,6 +100,7 @@ export function CollectionChooserPanel({
     element: null,
   });
   const windowBlurred = useRef(false);
+  const activationDetail = useRef(0);
   const callbacks = useRef({ current, readPage, onSelect, hydrated, csrfToken, admitted });
   callbacks.current = { current, readPage, onSelect, hydrated, csrfToken, admitted };
   const [page, setPage] = useState<BoundCollectionPage<ChooserCollectionRow>>(() =>
@@ -285,14 +286,21 @@ export function CollectionChooserPanel({
     else focusVisibleHeading();
   }
 
-  async function load(visit: SubjectCollectionVisit, control: HTMLElement) {
+  async function load(visit: SubjectCollectionVisit, control: HTMLElement, keyboard: boolean) {
     const episode = ++version.current;
-    const intent = beginFocusIntent(episode, control);
+    const intent = keyboard ? beginFocusIntent(episode, control) : null;
+    if (!intent) focusIntent.current = null;
     busyRef.current = true;
     retireInspection();
     setBusy(true);
     setIssue(null);
     setPage((currentPage) => replaceCollectionPage(currentPage, [], null, visit));
+    // Move a deliberate keyboard read once, before a pointer choice or newer selection can land.
+    if (intent && live.current && callbacks.current.current()) {
+      focusVisibleHeading();
+      if (focusIntent.current === intent && heading.current?.ownerDocument.activeElement === heading.current)
+        focusIntent.current = null;
+    }
     try {
       const response = await callbacks.current.readPage(visit.cursor);
       if (!retained(episode)) return;
@@ -305,7 +313,7 @@ export function CollectionChooserPanel({
       if (retained(episode)) setIssue(collectionReadFailure(error));
     } finally {
       if (retained(episode)) {
-        finishFocusIntent(intent);
+        if (intent) finishFocusIntent(intent);
         busyRef.current = false;
         setBusy(false);
       }
@@ -322,6 +330,8 @@ export function CollectionChooserPanel({
       !admission.admitted
     )
       return;
+    // A newer selection retires a pending heading redirect from an older read.
+    focusIntent.current = null;
     const target = { id: row.id, title: row.title };
     setSelected(target);
     callbacks.current.onSelect(target);
@@ -332,7 +342,15 @@ export function CollectionChooserPanel({
   const episode = version.current;
   const inspected = inspection && rowCurrent(inspection.page, inspection.row, inspection.episode) ? inspection : null;
   return (
-    <div className="max-h-[70vh] w-full min-w-0 overflow-y-auto p-4 sm:w-80">
+    <div
+      className="max-h-[70vh] w-full min-w-0 overflow-y-auto p-4 sm:w-80"
+      onClickCapture={(event) => {
+        activationDetail.current = event.detail;
+      }}
+      onKeyDownCapture={(event) => {
+        if (event.key === 'Enter') activationDetail.current = 0;
+      }}
+    >
       <h3 ref={heading} tabIndex={-1} className="mb-2 text-sm font-medium">
         {m.library_subject_chooser_heading()}
       </h3>
@@ -349,6 +367,7 @@ export function CollectionChooserPanel({
             void load(
               firstCollectionVisit(),
               event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]') ?? event.currentTarget,
+              activationDetail.current === 0,
             );
           }}
         >
@@ -373,7 +392,7 @@ export function CollectionChooserPanel({
                 type="button"
                 variant="outline"
                 disabled={busy || !hydrated}
-                onClick={(event) => void load(firstCollectionVisit(), event.currentTarget)}
+                onClick={(event) => void load(firstCollectionVisit(), event.currentTarget, event.detail === 0)}
               >
                 {m.library_subject_continuation_restart()}
               </Button>
@@ -424,7 +443,13 @@ export function CollectionChooserPanel({
               onClose={() => closeInspection(inspected)}
               onChoose={() => {
                 if (inspectionRef.current !== inspected) return;
+                const keyboardChoice = activationDetail.current === 0;
                 choose(inspected.row, inspected.page, inspected.episode);
+                if (!keyboardChoice) {
+                  if (inspectionRef.current !== inspected) return;
+                  retireInspection();
+                  return;
+                }
                 closeInspection(inspected);
               }}
             />
@@ -438,7 +463,7 @@ export function CollectionChooserPanel({
                   disabled={busy || !hydrated}
                   onClick={(event) => {
                     const previous = previousCollectionVisit(page.visit);
-                    if (previous) void load(previous, event.currentTarget);
+                    if (previous) void load(previous, event.currentTarget, event.detail === 0);
                   }}
                 >
                   {m.library_subject_continuation_previous()}
@@ -449,7 +474,7 @@ export function CollectionChooserPanel({
                   type="button"
                   variant="outline"
                   disabled={busy || !hydrated}
-                  onClick={(event) => void load(firstCollectionVisit(), event.currentTarget)}
+                  onClick={(event) => void load(firstCollectionVisit(), event.currentTarget, event.detail === 0)}
                 >
                   {m.library_subject_continuation_restart()}
                 </Button>
@@ -459,7 +484,7 @@ export function CollectionChooserPanel({
                   type="button"
                   variant="outline"
                   disabled={busy || !hydrated}
-                  onClick={(event) => void load(nextCollectionVisit(page.visit, page.next), event.currentTarget)}
+                  onClick={(event) => void load(nextCollectionVisit(page.visit, page.next), event.currentTarget, event.detail === 0)}
                 >
                   {m.library_subject_continuation_next()}
                 </Button>

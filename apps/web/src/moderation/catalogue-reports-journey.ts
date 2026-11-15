@@ -29,6 +29,7 @@ export type CatalogueReportsPageState =
       subject: CatalogueSubjectState;
       reason: string;
       action: CatalogueReportsActionState;
+      command?: CatalogueReportsCommandContext | null;
     };
 export type CatalogueSubjectState =
   | { state: 'idle' | 'loading' | 'unavailable' | 'error' }
@@ -40,6 +41,11 @@ export type CatalogueReportsActionState =
   | { state: 'failed'; reason: Exclude<CatalogueReportActionResult, { ok: true }>['state'] }
   | { state: 'confirmed'; result: Extract<CatalogueReportActionResult, { ok: true }>['result'] };
 
+export type CatalogueReportsCommandContext = {
+  report: CatalogueReport;
+  input: CatalogueReportActionInput;
+};
+
 export type CatalogueReportsJourneyOptions = {
   cache: QueryClient;
   initial: CatalogueReportsRead;
@@ -48,7 +54,7 @@ export type CatalogueReportsJourneyOptions = {
   action: CatalogueReportCommand;
 };
 
-/** One private catalogue visit owns its report evidence, selected target, and exact pending command. */
+/** One private visit keeps browsed report state separate from its single retained exact command context. */
 export function createCatalogueReportsJourney({
   cache,
   initial,
@@ -65,6 +71,8 @@ export function createCatalogueReportsJourney({
   let reason = '';
   let actionState: CatalogueReportsActionState = { state: 'idle' };
   let command: CatalogueReportActionInput | null = null;
+  let commandContext: CatalogueReportsCommandContext | null = null;
+  let pageRecoveryLoading = false;
   let pageGeneration = 0;
   let subjectGeneration = 0;
   let actionGeneration = 0;
@@ -86,7 +94,9 @@ export function createCatalogueReportsJourney({
     subject = { state: 'idle' };
     reason = '';
     command = null;
+    commandContext = null;
     actionState = { state: 'idle' };
+    pageRecoveryLoading = false;
     result = { state: 'denied', reports: [], next: null };
     identity.changed();
     publish();
@@ -99,8 +109,9 @@ export function createCatalogueReportsJourney({
   function snapshot(): CatalogueReportsPageState {
     if (retired || !owner.healthy()) return { state: 'denied', reports: [], next: null };
     if (result.state === 'loaded' && !owner.available()) return { state: 'loading', reports: [], next: null };
+    if (pageRecoveryLoading) return { state: 'loading', reports: [], next: null };
     if (result.state !== 'loaded') return { state: result.state, reports: [], next: null };
-    return { state: 'loaded', reports, next, selectedId, subject, reason, action: actionState };
+    return { state: 'loaded', reports, next, selectedId, subject, reason, action: actionState, command: commandContext };
   }
 
   function clearPage(nextResult: CatalogueReportsRead['result']) {
@@ -111,7 +122,9 @@ export function createCatalogueReportsJourney({
     subject = { state: 'idle' };
     reason = '';
     command = null;
+    commandContext = null;
     actionState = { state: 'idle' };
+    pageRecoveryLoading = false;
     identity.changed();
     publish();
     if (selectedId) void select(selectedId);
@@ -126,19 +139,24 @@ export function createCatalogueReportsJourney({
     selectedId = reportId;
     subject = { state: 'loading' };
     reason = '';
-    command = null;
-    actionState = { state: 'idle' };
+    if (actionState.state === 'invalid') actionState = { state: 'idle' };
     identity.changed();
     publish();
     try {
       const current = await readSubject(report.target.id, report.id);
       if (!owner.owns(ticket) || attempt !== subjectGeneration) return;
       if (current.subjectId !== report.target.id || !(await owner.accepts(current))) return owner.retire();
+      if (!owner.owns(ticket) || attempt !== subjectGeneration) return;
       if (current.result.state === 'loaded' && current.result.report) {
         const fresh = current.result.report;
-        reports = reports.map((item) =>
-          item.id === fresh.id ? { ...item, outcome: fresh.outcome, resolvedAt: fresh.resolvedAt } : item,
-        );
+        const confirmedDismissal =
+          actionState.state === 'confirmed' &&
+          actionState.result.kind === 'dismissed' &&
+          actionState.result.reportId === fresh.id;
+        if (!confirmedDismissal)
+          reports = reports.map((item) =>
+            item.id === fresh.id ? { ...item, outcome: fresh.outcome, resolvedAt: fresh.resolvedAt } : item,
+          );
       }
       subject = current.result;
     } catch {
@@ -157,17 +175,21 @@ export function createCatalogueReportsJourney({
     reason = '';
     actionState = { state: 'idle' };
     command = null;
+    commandContext = null;
     result = { state: 'error', reports: [], next: null };
     reports = [];
     next = null;
+    pageRecoveryLoading = true;
     publish();
     try {
       const page = await readPage(cursor ? { cursor } : {});
       if (!owner.owns(ticket) || attempt !== pageGeneration) return;
       if (page.cursor !== (cursor ?? null) || !(await owner.accepts(page))) return owner.retire();
+      if (!owner.owns(ticket) || attempt !== pageGeneration) return;
       clearPage(page.result);
     } catch {
       if (owner.owns(ticket) && attempt === pageGeneration) {
+        pageRecoveryLoading = false;
         result = { state: 'error', reports: [], next: null };
         publish();
       }
@@ -194,7 +216,11 @@ export function createCatalogueReportsJourney({
         );
         actionState = { state: 'confirmed', result };
       } else if (result.kind === 'visibility' && result.subjectId === input.subjectId) {
-        subject = { state: 'changed', visibility: result.visibility };
+        const selected = reports.find((report) => report.id === selectedId);
+        if (selected?.target.id === result.subjectId) {
+          subjectGeneration++;
+          subject = { state: 'changed', visibility: result.visibility };
+        }
         actionState = { state: 'confirmed', result };
       } else {
         actionState = { state: 'failed', reason: 'error' };
@@ -223,6 +249,7 @@ export function createCatalogueReportsJourney({
             subject: { state: 'idle' as const },
             reason: '',
             action: { state: 'idle' as const },
+            command: null,
           }
         : { state: 'loading' as const, reports: [], next: null },
     subscribe(listener: () => void) {
@@ -279,6 +306,10 @@ export function createCatalogueReportsJourney({
       };
       const idempotencyKey = identity.keyFor(intent);
       command = Object.freeze({ ...intent, idempotencyKey }) as CatalogueReportActionInput;
+      commandContext = Object.freeze({
+        report: Object.freeze({ ...report, target: Object.freeze({ ...report.target }) }),
+        input: command,
+      });
       void send(command);
     },
     retryAction() {
