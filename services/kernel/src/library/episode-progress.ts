@@ -1,3 +1,4 @@
+import { sameLibraryProfilePin } from './profile-pin.ts';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import { readAccount } from './access-port.ts';
@@ -182,7 +183,7 @@ export function createEpisodeProgressCommands(config: Dependencies) {
               (!observation ||
                 source?.kind !== 'supported' ||
                 source.subjectId !== expected.subjectId ||
-                JSON.stringify(source.pin) !== JSON.stringify(expected.profilePin) ||
+                !sameLibraryProfilePin(source.pin, expected.profilePin) ||
                 observation.anchor.requestedSubjectId !== expected.requestedSubjectId ||
                 observation.anchor.acceptingType !== expected.acceptingType ||
                 observation.anchor.identityEpoch.toString() !== expected.identityEpoch ||
@@ -215,7 +216,7 @@ export function createEpisodeProgressCommands(config: Dependencies) {
           current = fact.session;
         if (
           current.revision !== intent.revision ||
-          (intent.add.length && JSON.stringify(fact.pin) !== JSON.stringify(prepared.pin))
+          (intent.add.length && !sameLibraryProfilePin(fact.pin, prepared.pin))
         )
           throw new ProgressConflictError();
         const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
