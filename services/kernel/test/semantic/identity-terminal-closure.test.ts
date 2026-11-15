@@ -107,35 +107,15 @@ test('terminal directory preserves caller order, duplicate originals and positiv
   }
 });
 
-for (const disposition of ['cycle', 'missing', 'deleted', 'moved', 'unknown'] as const) {
+for (const disposition of ['cycle', 'missing', 'absent-terminal', 'moved', 'unknown'] as const) {
   test(`native ${disposition} retains unavailable custody without guessing a terminal`, async () => {
     const db = await isolatedDeployment();
     try {
-      const ids = await seedChain(db, 2);
+      const ids = await seedChain(db, 2, 0x7100, 3, disposition === 'absent-terminal' ? 'absent' : 'present');
       const [a, b, terminal] = ids as [string, string, string];
       if (disposition === 'cycle') await historicalEdge(db, terminal, a);
       if (disposition === 'missing') await historicalEdge(db, b, newId(0x7340));
-      if (disposition === 'deleted') {
-        // Remove the complete historical seed in FK order before native installation.
-        const historical = await db.admin.connect();
-        try {
-          await historical.query('BEGIN');
-          await historical.query('DELETE FROM semantic.revision WHERE route=$1 AND subject_id=$2', [
-            routeOf(terminal),
-            terminal,
-          ]);
-          await historical.query('DELETE FROM semantic.subject WHERE route=$1 AND subject_id=$2', [
-            routeOf(terminal),
-            terminal,
-          ]);
-          await historical.query('COMMIT');
-        } catch (error) {
-          await historical.query('ROLLBACK');
-          throw error;
-        } finally {
-          historical.release();
-        }
-      }
+      // Absence is staged in the historical snapshot; native immutable revisions are never deleted.
       await db.install();
       // These owners have not acquired closure custody; this tests unavailable
       // inputs, separately from the post-enrollment owner guard below.

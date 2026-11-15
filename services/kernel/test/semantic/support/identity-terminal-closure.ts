@@ -7,7 +7,7 @@ import {
   runIdentityTerminalCommand,
 } from '../../../src/semantic/identity-terminal-closure-command.ts';
 import { createPool } from '../../../src/database/pool.ts';
-import { routeOf } from '../../../src/route/route.ts';
+import { newId, routeOf } from '../../../src/route/route.ts';
 import { IDENTITY_EPOCH_PROGRESS } from '../../../src/semantic/events.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
@@ -38,9 +38,19 @@ const boundarySQL: Record<Boundary, RegExp> = {
 };
 
 /** Historical input only: no mapping, ready bit, source ACK or custody is seeded. */
-export async function seedChain(db: Deployment, length: number, firstRoute = 0x7100, homes = 3) {
+export async function seedChain(
+  db: Deployment,
+  length: number,
+  firstRoute = 0x7100,
+  homes = 3,
+  terminal: 'present' | 'absent' = 'present',
+) {
   const ids: string[] = [];
-  for (let index = 0; index <= length; index++) ids.push(await seedLegacyRoot(db, firstRoute + (index % homes) * 16));
+  for (let index = 0; index <= length; index++) {
+    const route = firstRoute + (index % homes) * 16;
+    // An incomplete historical snapshot may point at an endpoint with no source row or revision.
+    ids.push(index === length && terminal === 'absent' ? newId(route) : await seedLegacyRoot(db, route));
+  }
   for (let index = 0; index < length; index++) await historicalEdge(db, ids[index]!, ids[index + 1]!);
   return ids;
 }
