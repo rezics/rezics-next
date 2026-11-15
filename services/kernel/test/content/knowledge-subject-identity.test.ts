@@ -1,21 +1,39 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
 import type { IdentityIntent } from '../../src/semantic/identity-epoch-contract.ts';
 import { resumeIdentityEpochJob, waitIdentityEpochPublished } from '../../src/semantic/identity-epoch-coordinator.ts';
-import { cutoverFixture, installIdentityEpochPublication } from '../semantic/support/identity-epoch-cutover.ts';
+import { createSubjectIndex } from '../../src/search/indices.ts';
+import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { readSearchConfig } from '../../src/search/work.ts';
+import { startWorker } from '../../src/worker.ts';
+import { cutoverFixture } from '../semantic/support/identity-epoch-cutover.ts';
 import { digest, release } from '../semantic/support/identity-epoch.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 test('private Knowledge attachments stay on their originals through published merge and unmerge', async () => {
   const fixture = await cutoverFixture();
   try {
-    const worker = await installIdentityEpochPublication(fixture);
+    const { pool, real, accounts } = fixture;
+    const databaseUrl = pool.options.connectionString;
+    if (!databaseUrl || !process.env.OPENSEARCH_URL) throw new Error('Knowledge identity requires native Search');
+    const env = workerTestEnv({
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      KERNEL_SEARCH_PREFIX: `knowledge-identity-${randomUUID()}`,
+    });
+    const search = readSearchConfig(env);
+    if (!search) throw new Error('Knowledge identity requires the native Search producer');
+    await createSubjectIndex(createOpenSearch(search.url), search.prefix, 1);
+    const workerPool = createPool(databaseUrl);
+    workerPool.options.max = 8;
+    const worker = await startWorker({ databaseUrl, poolSize: 8, kernelPool: () => workerPool }, undefined, env);
     try {
-      const { pool, real, accounts } = fixture;
       const accessActions = ['account:read', 'account:update', 'subject:read'];
       const [owner, outsider] = await Promise.all([
         real.bearerFor('editor', accessActions),
@@ -104,8 +122,8 @@ test('private Knowledge attachments stay on their originals through published me
             },
           },
         );
-        await resumeIdentityEpochJob(pool, job);
-        await waitIdentityEpochPublished(pool, job);
+        await resumeIdentityEpochJob(workerPool, job);
+        await waitIdentityEpochPublished(workerPool, job);
         return job;
       }
 

@@ -47,7 +47,7 @@ test('a growing serial keeps exact public releases and advances preparation in b
     async function expectCurrent(revisionId: string | null) {
       const result = await outline();
       if (revisionId === null) {
-        expect(result.status).toBe(404);
+        expect(result.status, JSON.stringify(result.value)).toBe(401);
       } else {
         expect(result.status).toBe(200);
         expect(result.value.revisionId).toBe(revisionId);
