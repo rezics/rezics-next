@@ -43,20 +43,21 @@ export function EditorOutline({
   const deferred = useDeferredValue(doc);
   const outline = useMemo(() => editorOutline(deferred), [deferred]);
   return (
-    <section aria-label={labels.outline} className="flex flex-col gap-3 rounded-xl border p-3">
-      <div className="flex flex-wrap gap-4 text-sm text-muted-foreground" role="status">
+    <section aria-label={labels.outline} className="flex min-w-0 flex-col gap-3 rounded-xl border p-3">
+      <div className="flex min-w-0 flex-wrap gap-4 text-sm wrap-break-word text-muted-foreground" role="status">
         <span>{editorLabel(labels.wordCount, { count: outline.words })}</span>
         <span>{editorLabel(labels.characterCount, { count: outline.characters })}</span>
         <span>{editorLabel(labels.readingTime, { count: outline.minutes })}</span>
       </div>
       {outline.headings.length ? (
-        <nav aria-label={labels.outline} className="flex max-h-64 flex-col items-start gap-1 overflow-y-auto">
+        <nav aria-label={labels.outline} className="flex max-h-64 w-full min-w-0 flex-col gap-1 overflow-y-auto">
           {outline.headings.map((heading) => (
             <Button
               key={heading.id}
               type="button"
               variant="ghost"
-              className="h-auto max-w-full justify-start whitespace-normal text-start"
+              className="h-auto w-full min-w-0 max-w-full shrink justify-start whitespace-normal wrap-break-word text-start"
+              style={{ paddingInlineStart: `${0.75 * Math.min(Math.max(heading.level, 1) - 1, 5) + 0.75}rem` }}
               onClick={() => {
                 if (!isCurrent()) return;
                 let position: number | undefined;
@@ -75,7 +76,7 @@ export function EditorOutline({
           ))}
         </nav>
       ) : (
-        <p className="text-sm text-muted-foreground">{labels.outlineEmpty}</p>
+        <p className="min-w-0 text-sm wrap-break-word text-muted-foreground">{labels.outlineEmpty}</p>
       )}
     </section>
   );
