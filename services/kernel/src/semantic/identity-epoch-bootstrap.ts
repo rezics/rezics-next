@@ -143,6 +143,18 @@ function bootstrapCause(error: unknown): string {
   return 'error:unknown';
 }
 
+/** Retain only a deployed guard identity, never PostgreSQL's SQL text or argument context. */
+function bootstrapNativeContext(error: unknown): { nativeFunction?: string; nativeLine?: number } {
+  if (typeof error !== 'object' || error === null || !('where' in error) || typeof error.where !== 'string')
+    return {};
+  const context = /\bfunction ((?:semantic|core|access|editorial)\.[a-z_][a-z0-9_]{0,95})\([^\n]*?\) line ([1-9][0-9]{0,5}) at\b/.exec(
+    error.where.slice(0, 4096),
+  );
+  const nativeFunction = context?.[1];
+  const nativeLine = context?.[2];
+  return nativeFunction && nativeLine ? { nativeFunction, nativeLine: Number(nativeLine) } : {};
+}
+
 function reportBootstrapFailure(operation: BootstrapOperation, error: unknown): void {
   if (typeof error === 'object' && error !== null) {
     if (reportedBootstrapFailures.has(error)) return;
@@ -158,6 +170,7 @@ function reportBootstrapFailure(operation: BootstrapOperation, error: unknown): 
       phase: typeof operation.phase === 'function' ? operation.phase() : operation.phase,
       operation: operation.operation,
       cause: bootstrapCause(error),
+      ...bootstrapNativeContext(error),
     }),
   );
 }
