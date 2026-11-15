@@ -30,12 +30,13 @@ export async function publishKnowledgeMedia(
     throw new GrantDeniedError();
   if (routeOf(input.revisionId) !== route || routeOf(input.publicationId) !== route)
     throw new MediaUnavailableError();
-  const [result] = await publish.run(tx, {
+  const result = await publish.run(tx, {
     route,
     document_id: input.documentId,
     revision_id: input.revisionId,
     publication_id: input.publicationId,
     uploader_id: input.author.accountId,
   });
-  if (!result?.eligible || result.retainedCount !== result.mediaCount) throw new MediaUnavailableError();
+  if (!result?.eligible || result.mediaCount === null || result.retainedCount !== result.mediaCount)
+    throw new MediaUnavailableError();
 }
