@@ -6,7 +6,9 @@ import { readSearchConfig } from '../../../src/search/work.ts';
 import { subjectGenerations } from '../../../src/search/indices.ts';
 import { PUBLIC_PREPARATION_WORKFLOW } from '../../../src/search/public-preparation-store.ts';
 import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
+import { discoveryConsumer, subjectConsumer } from '../../../src/search/consumer-name.ts';
 import { readMembershipRouteKey } from '../../../src/access/membership-work-config.ts';
+import type { Pool } from 'pg';
 import { workerTestEnv } from '../../support/worker-env.ts';
 import { createOutcomeRpc, createOutcomeWorkerClock, OUTCOME_WORKER_READY_MESSAGE } from './outcome-rpc.ts';
 import { createSearchRunnerSlot } from './runner-slot.ts';
@@ -32,6 +34,154 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function noParams(params: unknown) {
   if (params !== undefined) throw new Error('This control takes no parameters');
+}
+
+type PublicationJobRow = {
+  job: string;
+  phase: string;
+  home: number;
+  pass: string;
+  fenced_pass: boolean;
+  family: string;
+  physical_target: string;
+  generation: string;
+  revision: string;
+  after_id: string | null;
+  fenced: boolean;
+  native_incarnation: string;
+};
+
+/** Failure inspection only: current publication row, home witnesses, writer copies and relay checkpoints. */
+async function inspectPublication(pool: Pool, prefix: string): Promise<Record<string, unknown>> {
+  const jobs = (
+    await pool.query<PublicationJobRow>(
+      `SELECT job::text, phase, home, pass::text, fenced_pass, family, physical_target,
+              generation::text, revision::text, after_id::text,
+              (fence IS NOT NULL) AS fenced, native_incarnation
+       FROM search.generation_publication
+       WHERE partition_no=0 AND prefix=$1
+       ORDER BY family, generation, job
+       LIMIT 4`,
+      [prefix],
+    )
+  ).rows;
+  const locators = (
+    await pool.query<{
+      id: string;
+      revision: string;
+      kind: string;
+      phase: string | null;
+      generation: number | null;
+      publication: string | null;
+      uuid: string | null;
+      due_at: string;
+    }>(
+      `SELECT id::text, revision::text, kind,
+              locator->>'phase' AS phase,
+              NULLIF(locator->>'generation','')::integer AS generation,
+              locator->>'publication' AS publication,
+              locator->>'uuid' AS uuid,
+              due_at::text
+       FROM search.public_preparation
+       WHERE partition_no=0 AND prefix=$1 AND kind='population'
+       ORDER BY due_at, id
+       LIMIT 4`,
+      [prefix],
+    )
+  ).rows;
+  if (jobs.length === 0) return { locators, jobs };
+  const jobIds = jobs.map((job) => job.job);
+  const homes = (
+    await pool.query<{ job: string; pass: string; count: number; min_home: number; max_home: number }>(
+      `SELECT job::text, pass::text, COUNT(*)::int AS count,
+              MIN(partition_no) AS min_home, MAX(partition_no) AS max_home
+       FROM search.generation_publication_home
+       WHERE job=ANY($1::uuid[])
+       GROUP BY job, pass`,
+      [jobIds],
+    )
+  ).rows;
+  const currentHomes = [...new Set(jobs.map((job) => job.home).filter((home) => home >= 0 && home < 4096))];
+  const targets = [...new Set(jobs.map((job) => job.physical_target))];
+  const visible =
+    currentHomes.length === 0
+      ? []
+      : (
+          await pool.query<{ partition: number; visible: string }>(
+            `SELECT partition_no AS partition, visible::text
+             FROM semantic.partition_subjects
+             WHERE partition_no=ANY($1::integer[])`,
+            [currentHomes],
+          )
+        ).rows;
+  const writers =
+    currentHomes.length === 0
+      ? []
+      : (
+          await pool.query<{
+            physical_target: string;
+            partition: number;
+            dispatch_state: string;
+            copies: number;
+            enrolled: number;
+          }>(
+            `SELECT physical_target, partition_no AS partition, dispatch_state,
+                    COUNT(*)::int AS copies,
+                    COUNT(*) FILTER (WHERE writer_token IS NOT NULL)::int AS enrolled
+             FROM search.identity_writer
+             WHERE physical_target=ANY($1::text[]) AND partition_no=ANY($2::integer[])
+             GROUP BY physical_target, partition_no, dispatch_state`,
+            [targets, currentHomes],
+          )
+        ).rows;
+  const gates = (
+    await pool.query<{
+      physical_target: string;
+      consumer: string;
+      incarnation: string;
+      publication_job: string | null;
+      fenced: boolean;
+      publication_home: number;
+      closed: boolean;
+    }>(
+      `SELECT physical_target, consumer, incarnation, publication_job::text,
+              (publication_fence IS NOT NULL) AS fenced, publication_home,
+              (closed_token IS NOT NULL) AS closed
+       FROM search.identity_writer_gate
+       WHERE partition_no=0 AND physical_target=ANY($1::text[])`,
+      [targets],
+    )
+  ).rows;
+  const consumers = [
+    ...new Set(
+      jobs.flatMap((job) => {
+        const generation = Number(job.generation);
+        if (!Number.isSafeInteger(generation) || generation < 1) return [];
+        return job.family === 'discovery'
+          ? [discoveryConsumer(prefix, generation)]
+          : [subjectConsumer(prefix, generation)];
+      }),
+    ),
+  ];
+  const checkpoints =
+    consumers.length === 0
+      ? []
+      : (
+          await pool.query<{
+            consumer: string;
+            partitions: number;
+            min_position: string;
+            max_position: string;
+          }>(
+            `SELECT consumer, COUNT(*)::int AS partitions,
+                    MIN(position)::text AS min_position, MAX(position)::text AS max_position
+             FROM core.consumer_checkpoint
+             WHERE consumer=ANY($1::text[])
+             GROUP BY consumer`,
+            [consumers],
+          )
+        ).rows;
+  return { locators, jobs, homes, visible, writers, gates, checkpoints };
 }
 
 function phase(name: string) {
@@ -264,7 +414,13 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
     } catch (error) {
       workflows = { error: failure(error) };
     }
-    return { prefix: config.prefix, runner, generations, workflows };
+    let publication: unknown;
+    try {
+      publication = await inspectPublication(context.pool, config.prefix);
+    } catch (error) {
+      publication = { error: failure(error) };
+    }
+    return { prefix: config.prefix, runner, generations, workflows, publication };
   }
 
   function control(method: string, params: unknown): unknown | Promise<unknown> {
