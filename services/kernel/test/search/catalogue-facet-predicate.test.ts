@@ -1,12 +1,25 @@
 import { expect, test } from 'bun:test';
-import { releaseDigest } from '@rezics/definitions';
+import { releaseDigest, type Release } from '@rezics/definitions';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { hasExactPublicFilterMeaning } from '../../src/search/public-filter-meaning.ts';
-import { FilterError, FILTER_LIMITS, walkFilter, type FilterRelease } from '@rezics/filter';
+import { admitFilter, FilterError, FILTER_LIMITS, parseFilter, walkFilter } from '@rezics/filter';
 import { catalogueFacetPredicate } from '../../src/search/catalogue-facet-predicate.ts';
 
-const release = (types: string[]): FilterRelease => ({
-  types: Object.fromEntries(types.map((type) => [type, {}])),
-  properties: {},
+const release = (types: string[]): Release => ({
+  ...bundledRelease,
+  types: Object.fromEntries(
+    types.map((type) => [
+      type,
+      bundledRelease.types[type] ?? {
+        iri: type,
+        labels: { en: type },
+        mappings: [],
+        bases: [],
+        properties: [],
+        facets: [],
+      },
+    ]),
+  ),
 });
 
 test('the default catalogue facet predicate covers every pinned concrete type in stable order', () => {
@@ -17,9 +30,11 @@ test('the default catalogue facet predicate covers every pinned concrete type in
 
 test('a 65-type catalogue uses bounded existing OR and type leaves without truncation', () => {
   const types = Array.from({ length: 65 }, (_, index) => `ex:Type${String(index).padStart(3, '0')}`);
-  const result = catalogueFacetPredicate(release([...types].reverse()), undefined);
+  const catalogue = release([...types].reverse());
+  const result = catalogueFacetPredicate(catalogue, undefined);
   if (result.kind !== 'predicate') throw new Error('Expected a complete type predicate');
-  const leaves = [...walkFilter(result.predicate)].filter((node) => 'type' in node);
+  const admitted = admitFilter(parseFilter(result.predicate), catalogue);
+  const leaves = [...walkFilter(admitted)].filter((node) => 'type' in node);
   expect(leaves).toHaveLength(2);
   expect(leaves.flatMap((node) => 'type' in node ? node.type.in : [])).toEqual(types);
   expect(leaves.every((node) => 'type' in node && node.type.in.length <= FILTER_LIMITS.in)).toBe(true);
