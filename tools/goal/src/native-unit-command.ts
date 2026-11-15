@@ -1,5 +1,4 @@
 import type { Database } from 'bun:sqlite';
-import { Database as Sqlite } from 'bun:sqlite';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -16,6 +15,7 @@ import {
 } from './native-units.ts';
 import { nativeUnitContext, NATIVE_UNIT_RUN_VARIABLE } from './native-unit-context.ts';
 import { renderGoalAuthorOpening, renderSupermanagerOpening, renderUnitOpening } from './prompts.ts';
+import { databaseStage, openReadOnlyDb } from './db.ts';
 
 function unitCaller(db: Database, settings: Settings, unit?: NativeUnit): void {
   const actor = authenticatedManager(db, {
@@ -25,13 +25,13 @@ function unitCaller(db: Database, settings: Settings, unit?: NativeUnit): void {
   if (actor?.id === settings.integration.supermanager) return;
   let current = process.env.CODEX_THREAD_ID ?? process.env.CODEX_SESSION_ID;
   if (unit && current) {
-    const native = new Sqlite(join(unit.codexHome, 'state_5.sqlite'), { readonly: true });
+    const native = openReadOnlyDb(join(unit.codexHome, 'state_5.sqlite'), settings.policy?.storage);
     try {
       const seen = new Set<string>();
       while (current && seen.size < 16 && !seen.has(current)) {
         if (current === unit.threadId) return;
         seen.add(current);
-        const thread = native.query('SELECT source FROM threads WHERE id=?').get(current) as { source: string } | null;
+        const thread = databaseStage(native, 'unit caller ancestry lookup', () => native.query('SELECT source FROM threads WHERE id=?').get(current)) as { source: string } | null;
         try {
           current = JSON.parse(thread?.source ?? 'null')?.subagent?.thread_spawn?.parent_thread_id;
         } catch {
