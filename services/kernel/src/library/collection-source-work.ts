@@ -35,6 +35,7 @@ import { COLLECTION_PUBLICATION_WORKFLOW } from './contract/index.ts';
 import publicationRecoverySQL from './collection-publication-recovery.sql';
 import publicationSupersededSQL from './collection-publication-superseded.sql';
 import { collectionPublicationOutputProducer } from './collection-publication-output.ts';
+import { reclaimSupersededCollectionOutput } from './collection-publication-reclaim.ts';
 import { publicOutputRetireWork } from '../semantic/identity-public-output-work.ts';
 import { withCollectionReadConnection } from './collection-read-connection.ts';
 import { workStepDeadline } from './collection-command-work.ts';
@@ -109,17 +110,26 @@ async function retireSupersededPublication(context: WorkContext, row: { route: n
   const deadline = workStepDeadline();
   const retired = await withCollectionReadConnection(context.pool, deadline, async (tx) =>
     (
-      await tx.query<{ captureId: string; bindingDigest: string }>(publicationSupersededSQL.sql, [
+      await tx.query<{ captureId: string; bindingDigest: string; disposed: boolean }>(publicationSupersededSQL.sql, [
         row.route,
         row.collection,
       ])
     ).rows[0],
   );
   if (!retired) return;
-  // One retained page or transition per visit. Pending or refused custody stays in the indexed source.
+  const { captureId, bindingDigest } = retired;
+  if (retired.disposed) {
+    await reclaimSupersededCollectionOutput(
+      context.pool,
+      { route: row.route, collectionId: row.collection, generation: captureId },
+      deadline,
+    );
+    return;
+  }
+  // Both cancellation and reclamation resume in bounded pages from the existing sweep.
   await collectionPublicationOutputProducer(context).retireSuperseded(
-    { kind: 'public-output', partition: partitionOf(row.route), ...retired },
-    { deadline, allowance: { reservationId: retired.captureId, remaining: publicOutputRetireWork() } },
+    { kind: 'public-output', partition: partitionOf(row.route), captureId, bindingDigest },
+    { deadline, allowance: { reservationId: captureId, remaining: publicOutputRetireWork() } },
   );
 }
 
