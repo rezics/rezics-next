@@ -10,6 +10,8 @@ import { withReadTransaction } from './read.ts';
 import { bindSemanticProducerRoles, type SemanticCopyRole } from './erasure-producer.ts';
 import proof from './identity-mapping-point-control-proof.sql';
 import proofRead from './identity-mapping-point-control-proof-read.sql';
+import depositSql from './identity-mapping-point-custody-deposit.sql';
+import depositRead from './identity-mapping-point-custody-deposit-read.sql';
 
 export type IdentityMappingPointControlProof = Readonly<{
   controlPartition: number;
@@ -191,4 +193,95 @@ export async function recordIdentityMappingPointControlProof(
   )
     throw unavailable('Committed control proof no longer matches its name');
   return committed;
+}
+
+type AdmittedInput = Readonly<{
+  terminal: string;
+  generation: string;
+  basisVersion: string;
+  controlPartition: number;
+  ownerEpoch: number;
+}>;
+function depositPin(home: number, committed: IdentityMappingPointControlProof): unknown[] {
+  return [
+    home, committed.jobId, committed.jobEpoch, committed.scopeDigest, committed.route, committed.original,
+    committed.terminal, committed.generation, committed.incarnation, committed.basisVersion, committed.ownerEpoch,
+    committed.controlPartition, committed.enrollment, committed.sourceRevision, committed.sourceEpoch,
+    committed.exportTransaction, committed.preparedTransactionId, committed.preparedEpoch, committed.preparedPosition,
+    committed.acquiredTransactionId, committed.acquiredEpoch, committed.acquiredPosition,
+    committed.registrationTransactionId, committed.registrationEpoch, committed.registrationPosition,
+    committed.registrationXid, committed.installTransactionId, committed.controlPartition, committed.transactionId,
+    committed.epoch, committed.position,
+  ];
+}
+async function depositIdentityMappingPointCustody(
+  pool: Pool,
+  measured: Work,
+  committed: IdentityMappingPointControlProof,
+  roles: readonly SemanticCopyRole[],
+): Promise<void> {
+  const home = partitionOf(committed.route);
+  if (home === committed.controlPartition) throw unavailable('Source deposit requires a foreign control home');
+  const pin = depositPin(home, committed);
+  const outcome = await runCommand(pool, { partition: home, deadline: Date.now() + 5000 }, async (tx, { transactionId }) => {
+    const command = currentCommand(tx);
+    if (command.basis !== null || command.partition !== home || command.transactionId !== transactionId)
+      throw unavailable('Source deposit requires its own mechanical command');
+    const result = await measuredQuery(tx, measured, depositSql.sql, [...pin, transactionId]);
+    const row = result.rows[0];
+    if (result.rows.length !== 1 || row === undefined || typeof row.inserted !== 'boolean')
+      throw unavailable('Source-home point deposit is not current');
+    const stored = uuid(row.transaction_id, 'deposit transaction');
+    if (row.inserted) {
+      if (stored !== transactionId) throw unavailable('Source-home point deposit is not current');
+      bindSemanticProducerRoles(tx, roles);
+      recordIdentityEpochNativeCommit(tx, 'mapping');
+      return {
+        value: stored,
+        events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: home, generation: committed.jobEpoch } }],
+      };
+    }
+    if (stored === transactionId) throw unavailable('Source-home point deposit is not current');
+    return noEffect(stored);
+  });
+  const stored = typeof outcome.value === 'string' ? outcome.value : '';
+  const visible = await withReadTransaction(pool, async (tx) => {
+    const result = await measuredQuery(tx, measured, depositRead.sql, pin);
+    return result.rows.length === 1 ? result.rows[0] : undefined;
+  });
+  if (visible === undefined || uuid(stored, 'deposit transaction') !== uuid(field(visible, 'transaction_id'), 'deposit transaction'))
+    throw unavailable('Committed source deposit is not visible');
+}
+
+/** Private mapping-step path. Same-home inputs return before any custody command. */
+export async function bindForeignMappingPointCustody(
+  pool: Pool,
+  measured: Work,
+  input: Readonly<{
+    job: IdentityJobRef;
+    scopeDigest: string;
+    original: string;
+    previousTerminal: string;
+    inputs: readonly AdmittedInput[];
+  }>,
+  roles: readonly SemanticCopyRole[],
+): Promise<void> {
+  if (input.inputs.length < 1 || input.inputs.length > 2) throw new TypeError('Invalid native point custody inputs');
+  const named = input.inputs.filter((basis) => basis.terminal === input.previousTerminal);
+  if (named.length > 1) throw unavailable('Point custody has no single admitted input');
+  const basis = named[0];
+  const route = routeOf(input.original);
+  if (route === null) throw new TypeError('Invalid native point custody original');
+  if (basis === undefined || partitionOf(route) === basis.controlPartition) return;
+  const committed = await recordIdentityMappingPointControlProof(pool, measured, {
+    job: input.job,
+    scopeDigest: input.scopeDigest,
+    original: input.original,
+    terminal: basis.terminal,
+    generation: basis.generation,
+    basisVersion: basis.basisVersion,
+    controlPartition: basis.controlPartition,
+    ownerEpoch: basis.ownerEpoch,
+  }, roles);
+  await depositIdentityMappingPointCustody(pool, measured, committed, roles);
 }
