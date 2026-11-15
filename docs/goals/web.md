@@ -2,8 +2,8 @@
 
 ## Outcome
 
-People can discover, contribute, discuss, collect and buy through accessible, localized interfaces, using the same
-capabilities and disclosure rules on every page and device.
+People can discover, contribute, discuss and collect through accessible, localized interfaces.
+[Public scope](../scope.md) governs all clauses below; closed Commerce journeys remain inactive by default.
 
 This is the manager-facing scope and acceptance index. Linked module documents own detailed contracts and current
 producer availability. Read the relevant owner section for an assignment; do not load every linked document into a

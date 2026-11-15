@@ -1,10 +1,9 @@
 # Commerce
 
-Commerce owns the purchase journey: offers, captured orders, payment evidence, account-bound benefit entitlements
-and attributed creator royalty statements. This is the current owner contract, adopted from the delivered
-[ownership and benefits research](../../../../docs/research/commerce-ownership-entitlements-benefits.md) and
-[payment evidence research](../../../../docs/research/commerce-payment-evidence-settlement.md).
-Research is evidence; this document owns purchase behavior. The [Commerce Goal](../../../../docs/goals/commerce.md)
+Commerce owns offers, orders, payment evidence, benefit entitlements and creator royalty statements. The
+[system boundary and release status](../../../../docs/commerce.md#system-boundary-and-release-status) governs all
+APIs and journeys: Commerce is closed and inactive by default. This contract retains purchase behavior for work
+explicitly requested by the maintainer. The [Commerce Goal](../../../../docs/goals/commerce.md)
 owns delivery, native acceptance and promotion requirements. [Library and Collections](../../../../docs/library-and-collections.md)
 owns personal facts; the separate [Library Goal](../../../../docs/goals/library.md) retains those obligations under
 the same commerce manager. [Future modules](../../../../docs/commerce-modules.md) owns the unimplemented financial

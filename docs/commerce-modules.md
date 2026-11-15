@@ -1,6 +1,11 @@
 # Commerce modules: current boundary and future foundations
 
-Owner: Commerce. This is the sole future Commerce module map, backed by the delivered [ownership and benefits research](research/commerce-ownership-entitlements-benefits.md) and [payment evidence and settlement research](research/commerce-payment-evidence-settlement.md). It does not replace the [current Commerce contract](../services/kernel/src/commerce/README.md), [scope](scope.md), [architecture](architecture.md), [Access](../services/kernel/src/access/README.md) or [Library](library-and-collections.md). Recommendations require manager adoption before runtime work.
+Owner: Commerce. This retained module map follows the [Commerce boundary](commerce.md#system-boundary-and-release-status)
+and [Closed; inactive by default](scope.md) status. It authorizes no proactive work. Evidence:
+[benefits](research/commerce-ownership-entitlements-benefits.md) and
+[payments](research/commerce-payment-evidence-settlement.md). The
+[purchase contract](../services/kernel/src/commerce/README.md), [architecture](architecture.md),
+[Access](../services/kernel/src/access/README.md) and [Library](library-and-collections.md) retain authority.
 
 **Adopted future foundation:** one double-entry ledger underlies future financial modules. **Current boundary:** no wallet, issued points/tokens, market, exchange, transferable-item implementation or ledger is introduced here. Current one-time offers, direct-account hosted Checkout, buyer orders/entitlements and creator statements remain the baseline. Points remain deferred. The current owner contract adopts one-time, account-bound, one immutable fixed-version benefit/quantity one and direct licensed sales by REZICS. Production eligibility/rights/setup remain EXTERNAL and unproved. The provider report supports separate payment, entitlement, provider cash and creator-liability evidence; it does not approve the business or settle pending commercial/shared choices.
 

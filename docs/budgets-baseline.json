@@ -23,7 +23,7 @@
     },
     {
       "path": "docs/commerce-modules.md",
-      "bytes": 41325
+      "bytes": 41288
     },
     {
       "path": "docs/development/**/*.md",
@@ -59,11 +59,11 @@
     },
     {
       "path": "docs/goals/commerce.capabilities.md",
-      "bytes": 168316
+      "bytes": 173336
     },
     {
       "path": "docs/goals/commerce.md",
-      "bytes": 14780
+      "bytes": 5672
     },
     {
       "path": "docs/goals/content.capabilities.md",
@@ -99,7 +99,7 @@
     },
     {
       "path": "docs/goals/web.md",
-      "bytes": 99893
+      "bytes": 18892
     },
     {
       "path": "docs/library-and-collections.md",
@@ -283,7 +283,7 @@
     },
     {
       "path": "services/kernel/src/commerce/README.md",
-      "bytes": 105868
+      "bytes": 117042
     },
     {
       "path": "services/kernel/src/community/README.md",

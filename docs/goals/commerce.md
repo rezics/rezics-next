@@ -1,5 +1,9 @@
 # Commerce
 
+Status: [Closed; inactive by default](../scope.md). The [Commerce boundary](../commerce.md#system-boundary-and-release-status)
+governs its APIs and journeys. The outcomes below are retained for explicitly requested future work; they are not
+first-public release gates. The separately scoped [Library Goal](library.md) continues under its own release scope.
+
 ## Outcome
 
 Buyers discover, purchase and use the exact offered benefit. Creators manage offers and historical sales, and can
@@ -22,10 +26,9 @@ distinguish attributed earnings from an actually attested external payment.
 - Creator offers, sales and statements distinguish historical payment, present entitlement, provider bank payout,
   attributed earnings, reserves/payability and actual external payment attestation. Unknown financial meaning stays
   visible, with recorded units, currency, exponent, sign and tax evidence retaining their captured meaning.
-- The linked [Library Goal](library.md) completes the personal Library, common Collections, profiles, labels, copies,
-  all admitted progress modes, follows, publication, filtering, imports and lifecycle without deferral or weakened
-  native and page acceptance. Private state, payment and source mappings confer no publication or protected-use
-  authority.
+- The linked [Library Goal](library.md) owns its independent personal-fact outcomes and acceptance. Neither its
+  delivery nor ordinary Library use depends on Commerce activation. Private state, payment and source mappings
+  confer no publication or protected-use authority.
 - Owner, other-account, anonymous, suspended/revoked/terminal and repair personas have their specified outcomes
   through real Auth/Access, Kernel and durable work. Current authority precedes receipt lookup; exact retry retains
   original operands, key and credential. Bounded native work, currentness, lifecycle and custody meet their owners'

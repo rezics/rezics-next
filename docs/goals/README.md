@@ -3,14 +3,14 @@
 A tracked Goal brief defines a bounded product outcome. Product documents own behaviour; the brief links them.
 [Development workflow](../development/README.md) owns the method.
 
-The active definitions are:
+These tracked definitions follow [public scope](../scope.md), which controls which portions may advance:
 
 - [Accounts and platform gates](accounts.md)
 - [Semantic catalogue and Zones](semantic.md)
 - [Search and composition](search.md)
 - [Content and communities](content.md)
 - [Subject-connected knowledge workspaces](knowledge-workspaces.md) — Content owns the coordinating contract
-- [Commerce](commerce.md)
+- [Commerce](commerce.md) — closed; inactive by default
 - [Library and Collections](library.md) — separate owner documentation
 - [Imports](imports.md)
 - [Web and Auth interfaces](web.md)
@@ -19,6 +19,7 @@ The active definitions are:
 
 The resident allocates these outcomes under [phase ownership](../development/delivery.md#implementation-and-acceptance).
 Domain names identify contracts, not managers. Separate documents do not create another manager or control-plane Goal.
+Commerce's closed status does not suspend Library delivery or make Commerce completion a Library release gate.
 
 The completed kernel foundation is described by its [module contract](../../services/kernel/README.md), not a second
 active Goal. Catalogue work is included in semantic. Interoperability has no separate active definition until its

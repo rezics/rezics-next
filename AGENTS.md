@@ -1,6 +1,6 @@
 # AI agent instructions
 
-REZICS is being rewritten. This repository contains only rebuilt parts.
+REZICS is being rewritten; this repository contains only rebuilt parts.
 
 ## Precedence
 
@@ -12,21 +12,19 @@ REZICS is being rewritten. This repository contains only rebuilt parts.
 
 ## Language
 
-Everything in this repository is in English: code, comments, documents and commit messages. When you move a topic in
-from rezics-next-discussion (Traditional Chinese), rewrite it in English; do not machine-translate it. Do not record who
-said or decided what. Drop superseded material instead of carrying it over.
+Code, comments, documents and commits are in English. Rewrite topics from rezics-next-discussion in English; do not
+machine-translate them. Omit attribution of decisions and superseded material.
 
 ## One authority per topic
 
-When a topic moves into this repository, replace its page in rezics-next-discussion with a pointer in the same change.
-A topic is never authoritative in both places.
+When moving a topic here, replace its rezics-next-discussion page with a pointer in the same change. Never keep two authorities.
 
 ## Legacy code
 
 The `legacy` branch (tags `legacy-final` and `legacy-main-final`) is a read-only reference.
 
 - Do not merge it or copy it wholesale.
-- Use it as a behaviour reference, and for differential tests where the meaning is unchanged.
+- Use it for behaviour reference and differential tests where meaning is unchanged.
 - Port a piece only when the new contracts need it. Add tests for it, and name the source in the commit message as
   `legacy-final:<path>`.
 
@@ -34,25 +32,26 @@ The `legacy` branch (tags `legacy-final` and `legacy-main-final`) is a read-only
 
 - Put temporary files in `.temp/`.
 - Keep task and ticket IDs out of code and documents; put them in commit messages.
+- Infer the requirement behind an example; trace shared causes and affected peers without waiting for each case
+  to be named. Fix the owner module and affected uses, preserving domain differences. Workers stay within assigned
+  paths and hand off related findings; managers own cross-owner follow-through. Finish the requirement, not just
+  the named example; avoid unrelated rewrites or audits.
 - Follow [agent conduct](docs/development/agent-conduct.md): bounded reading and verification, act instead of asking,
   no receipts.
-- Deliver a lot of good code: [delivery efficiency](docs/development/efficiency.md) sets the throughput target. Deleting
-  bad code is encouraged and never offsets output.
-- Keep instructions and documents within their layers, owners and budgets:
+- [Delivery efficiency](docs/development/efficiency.md) sets throughput targets. Delete bad code; deletions never offset output.
+- Respect instruction and document layers, owners and budgets:
   [instructions and documentation](docs/development/documentation.md).
 
 ## Communication
 
-The hierarchy exists because it is faster, not to stop peers talking. Every agent may, and must, raise a problem or a
-rule that gives bad results with its manager or the peer concerned as soon as it sees it.
+Hierarchy serves speed. Every agent must promptly raise problems or harmful rules with its manager or the peer concerned.
 
 Rules, lessons and decisions go in this repository, never in agent memory.
 
 ## Failure discipline
 
-- A failure seen twice is fixed as a class, in the control plane or its owner module, not by another script or a
-  manual cleanup.
-- Everything an attempt starts (processes, containers, volumes, ports) is owned by that attempt and is gone when it ends.
+- Fix a failure seen twice as a class in its owner module or control plane, not another script or manual cleanup.
+- Each attempt owns and cleans up its processes, containers, volumes and ports when it ends.
 - Older worktrees read the shared `.temp/goal` config: add no key their code rejects, and run the CLI from an old
   worktree after changing either.
 - Every watcher, alarm and wake-up spends model allowance; add one only when its cost is counted.

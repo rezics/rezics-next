@@ -46,6 +46,12 @@ its owning page, or an inline disclosure when it still supports the current job.
 secondary list in an overview. For a Book, identity, synopsis, ratings and a small review sample help readers
 decide what to read; related works belong in their own view.
 
+Interface text gives the action the user needs, its outcome, any meaningful consequence and recovery. It keeps
+real domain distinctions, including uncertainty, privacy, licensing and destructive effects, and does not repeat
+a heading or explain an obvious control. Place internal design intent and transport, projection, native, bounded
+and readback mechanics in the owning document rather than in a visible helper paragraph. Give useful uncommon
+detail through the existing inline disclosure.
+
 Keep the global sidebar to a few essential destinations and a compact list of the user's actual subscriptions.
 A task-specific tool belongs in its owning view or menu. Read current destinations from the shared native
 follow contract; the shell neither creates another subscription model nor infers destinations from ownership.
