@@ -825,6 +825,9 @@ A pending capture keeps members unavailable, including when a publication declar
 Source sweep resumes COMPLETE built-in publications with missing seals. It advances cancellation of a superseded
 capture from the newer monotone Collection source generation and preserves the generation selected for terminal
 public retention. Cancellation releases the exact hold only after the persisted gate and retained cuts close.
+Once terminal retention selects a public built-in generation, the ordinary reader can use its still-held seal
+through the exact retained publication receipt and terminal account fence. The frozen branch supplies read
+authority only. Account-free successor custody and the remaining physical de-identification stay pending.
 `collection-publication-http.test.ts` retains the unmet real API/default-worker acceptance and focused closed
 grammar/privacy assertions. It uses the existing native fixture and actual output rows/receipt, with no replacement
 worker or domain backend. Schema availability and local typing do not establish that native acceptance.

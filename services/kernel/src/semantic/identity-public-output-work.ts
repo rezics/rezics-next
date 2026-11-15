@@ -297,7 +297,7 @@ export function publicOutputReadWork(visits: number): WorkDimensions {
   const native = NATIVE_PUBLIC_OUTPUT_JOURNEYS();
   return nativePublicOutputWorkDimensions(
     repeatBound(
-      sumBounds(native.revalidate, native.lock, {
+      sumBounds(native.revalidate, native.lock, native.frozenRead, {
         candidateKeys: 101,
         nativeRows: 1024,
         identityMetadataRows: 132,

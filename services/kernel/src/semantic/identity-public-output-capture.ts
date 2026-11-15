@@ -287,6 +287,7 @@ async function eligible(
   work: NativeCollectionWork,
   deadline: number,
   nativeOutput: NativePublicOutputPort,
+  allowFrozenRead = false,
 ): Promise<void> {
   const l = locator(a),
     pool = currentCommandResources(tx).pool;
@@ -309,7 +310,16 @@ async function eligible(
   const held = await work.compose(async (allowance) =>
     nativeOutput.revalidateNativePublicCollectionOutputHold(tx, a.binding, context(tx, pool, deadline, allowance)),
   );
-  if (held.status !== 'locked' || !equal(held.binding, a.binding)) return refuse('current', 'changed');
+  if (held.status !== 'locked' || !equal(held.binding, a.binding)) {
+    const lockFrozen = nativeOutput.lockNativeFrozenCollectionOutput;
+    if (allowFrozenRead && lockFrozen) {
+      const frozen = await work.compose((allowance) =>
+        lockFrozen(tx, a.binding, context(tx, pool, deadline, allowance)),
+      );
+      if (frozen.status === 'locked' && equal(frozen.binding, a.binding)) return;
+    }
+    return refuse('current', 'changed');
+  }
   const current = await work.compose(async (allowance) =>
     nativeOutput.lockNativePublicCollectionOutput(tx, a.binding.tuple.identity, context(tx, pool, deadline, allowance)),
   );
@@ -1529,7 +1539,7 @@ export async function readSelectedPublicIdentityOutput(
             const identity = a.binding.tuple.identity;
             if (identity.collectionId !== collectionId || identity.generation !== sourceGeneration)
               return refuse('binding', 'changed');
-            await eligible(tx, a, work, options.deadline, nativeOutput);
+            await eligible(tx, a, work, options.deadline, nativeOutput, true);
             const seal = await one<Seal>(tx, sealSQL, [home, a.capture_id]);
             if (!seal || seal.raw_count !== a.binding.tuple.publication.members) return refuse('closure');
 
