@@ -124,7 +124,7 @@ export const Route = createRootRouteWithContext<{
     preserveErrorResponse(matches);
     const missing = failure?.missing;
     const hiddenAgentHandle = missing && /^\/(?:[^/]+\/)?@[^/]+(?:\/[^/]+)?$/.test(path);
-    const safePath = hiddenAgentHandle ? `/${locale}` : path;
+    const safePath = hiddenAgentHandle ? '/' : path;
     const context = {
       origin,
       locale,

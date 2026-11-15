@@ -1,3 +1,4 @@
+import { locales as siteLocales } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin.ts';
 
 // Private workspaces and editor paths below a locale (docs/seo.md Indexing). Robots wildcards match any sequence,
@@ -62,8 +63,11 @@ export function robotsResponse(request: Request, { origin, locales }: RobotsOpti
     [
       'User-agent: *',
       'Allow: /',
-      ...notCrawledRoutes.map((route) => `Disallow: /*${route}`),
-      ...locales.flatMap((locale) => notCrawledRoutes.map((route) => `Disallow: /${locale}${route}`)),
+      ...notCrawledRoutes.map((route) => `Disallow: ${route}`),
+      ...(locales.length ? locales : siteLocales).flatMap((locale) => [
+        `Disallow: /${locale}/auth/`,
+        ...notCrawledRoutes.map((route) => `Disallow: /${locale}${route}`),
+      ]),
       ...notCrawledPaths.map((path) => `Disallow: ${path}`),
       `Sitemap: ${base}/sitemap.xml`,
     ].join('\n') + '\n';

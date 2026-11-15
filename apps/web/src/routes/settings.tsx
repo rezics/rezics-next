@@ -17,7 +17,8 @@ export const Route = createFileRoute('/settings')({
     const sessionAccess = await requirePrivatePageAccess(context);
     // Settings hashes choose a job. Its composition owns deliberate heading focus;
     // initial links and reloads must not trigger the router's fragment scroll.
-    context.location.state.__hashScrollIntoViewOptions = false;
+    if (context.location.hash.replace(/^#/, '') !== 'account-tools')
+      context.location.state.__hashScrollIntoViewOptions = false;
     return { sessionAccess };
   },
   loader: async ({ context }) =>

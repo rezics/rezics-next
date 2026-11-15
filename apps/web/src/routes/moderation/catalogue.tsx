@@ -4,6 +4,7 @@ import { CatalogueReportsVisit, catalogueReportsSearch } from '../../moderation/
 
 export const Route = createFileRoute('/moderation/catalogue')({
   validateSearch: catalogueReportsSearch,
+  head: () => ({ meta: [{ name: 'robots', content: 'noindex, nofollow' }] }),
   component: CatalogueReportsRoute,
 });
 

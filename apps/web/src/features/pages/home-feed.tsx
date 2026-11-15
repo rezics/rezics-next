@@ -165,11 +165,14 @@ export function HomeFeed({
       <header className="space-y-4 border-b border-border pb-5">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight">{m.nav_home({}, options)}</h1>
-          {stream === 'home' ? (
-            <p role="note" className="text-sm text-muted-foreground">
-              {m.home_feed_public_discovery_unavailable({}, options)}
-            </p>
-          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <a
+            href={`/${locale}/boards`}
+            className={`${buttonVariants({ variant: 'link' })} h-auto min-h-7 whitespace-normal px-0`}
+          >
+            {m.board_directory_heading({}, options)}
+          </a>
         </div>
         <nav aria-label={m.nav_home({}, options)} className="flex flex-wrap items-center gap-2">
           <Button
@@ -209,7 +212,6 @@ export function HomeFeed({
           {questionControl}
         </HomeFeedControls>
       </div>
-      {catalogue}
       <div className="min-w-0 max-w-3xl space-y-4">
         <HomeReactionRecovery scope={recovery} locale={locale} onRefresh={onRetry} />
         <h2 className="text-xl font-semibold">{feedHeading}</h2>
@@ -245,7 +247,9 @@ export function HomeFeed({
                   commandRecovery={{
                     ...recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`),
                     start(command) {
-                      recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`).start(command);
+                      recovery.recovery
+                        .port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`)
+                        .start(command);
                       reactions.retire();
                     },
                   }}
@@ -317,6 +321,7 @@ export function HomeFeed({
           }
         />
       </div>
+      {stream === 'home' && (!page || page.sources.discovery !== 'ready') ? catalogue : null}
     </main>
   );
 }

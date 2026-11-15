@@ -1,10 +1,26 @@
 import { pageHead } from '../shell/head';
+import { coverSrc } from '../media/cover-src';
+import type { Locale } from '../paraglide/runtime.js';
 import type { SpacePageData } from './space';
 
 export function communityPageHead(page: SpacePageData | undefined, origin: string, locale: string, path: string) {
-  if (!page) return pageHead({ robots: 'noindex, follow' }, { origin, locale: locale as never, path });
+  const context = { origin, locale: locale as Locale, path };
+  if (!page) return pageHead({ robots: 'noindex, follow' }, context);
   const canonical = `${origin}/${locale}${path}`;
-  const description = page.space.summary || page.realm?.summary || '';
+  const publicRealm = page.realm?.visibility === 'public' ? page.realm : null;
+  const indexable = (!page.realm || !!publicRealm) && !['concealed', 'unavailable'].includes(page.realmCarrier ?? '');
+  const description = page.space.summary || publicRealm?.summary || '';
+  const cover = page.space.banner;
+  const variant = cover?.variants.find((candidate) => candidate.format === 'webp') ?? cover?.variants.at(-1);
+  const image =
+    cover && variant && indexable
+      ? {
+          url: coverSrc(cover.media, variant.format, variant.width),
+          width: variant.width,
+          height: Math.max(1, Math.round((cover.height * variant.width) / cover.width)),
+          alt: page.space.title,
+        }
+      : undefined;
   const graph = {
     '@context': 'https://schema.org',
     '@graph': [
@@ -19,13 +35,15 @@ export function communityPageHead(page: SpacePageData | undefined, origin: strin
         '@type': 'BreadcrumbList',
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: 'REZICS', item: `${origin}/${locale}` },
-          ...(page.realm?.visibility === 'public'
+          ...(publicRealm
             ? [
                 {
                   '@type': 'ListItem',
                   position: 2,
-                  name: page.realm.title,
-                  item: `${origin}/${locale}/realms/${encodeURIComponent(page.realm.id)}`,
+                  name: publicRealm.title,
+                  item: path.startsWith('/spaces/')
+                    ? canonical
+                    : `${origin}/${locale}/realms/${encodeURIComponent(publicRealm.id)}`,
                 },
                 { '@type': 'ListItem', position: 3, name: page.space.title },
               ]
@@ -39,19 +57,10 @@ export function communityPageHead(page: SpacePageData | undefined, origin: strin
       title: page.space.title,
       description,
       type: 'website',
-      ...(page.realm?.published.find((subject) => subject.cover)?.cover
-        ? {
-            image: {
-              url: `/media/${page.realm.published.find((subject) => subject.cover)!.cover!.media}/webp-1200`,
-              width: 1200,
-              height: 630,
-              alt: page.space.title,
-            },
-          }
-        : {}),
-      ...(page.realm?.visibility === 'protected' ? { robots: 'noindex, follow' } : {}),
+      ...(image ? { image } : {}),
+      ...(indexable ? {} : { robots: 'noindex, follow' }),
       jsonLd: graph,
     },
-    { origin, locale: locale as never, path },
+    context,
   );
 }

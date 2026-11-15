@@ -15,7 +15,7 @@ import {
   setCookie,
   validId,
 } from './cookies.ts';
-import { LOGIN_RETURN_COOKIE, safeRecoveryReturn } from './unavailable';
+import { LOGIN_RETURN_COOKIE, recoveryReturnLocale, safeRecoveryReturn } from './unavailable';
 import { returnTarget } from './return-target';
 
 const invalid = () => problem(400, 'invalid_request', 'Invalid Request');
@@ -82,7 +82,11 @@ async function callback(request: Request, env: SessionEnv): Promise<Response> {
     url.searchParams.get('state') !== transaction.state
   )
     throw invalid();
-  if (url.searchParams.has('error')) return redirect(transaction.returnTo);
+  if (url.searchParams.has('error')) {
+    const locale = recoveryReturnLocale(transaction.returnTo);
+    // The consumed authorization cannot reopen a guarded route after cancellation.
+    return redirect(locale ? `/${locale}` : '/');
+  }
   const config = await authClient(env);
   let tokens;
   try {

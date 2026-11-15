@@ -2,6 +2,7 @@ import { createContext, useContext, useState, type ContextType, type ReactNode }
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
+import { voteDisplayNumber } from '../../ratings/question-contract';
 import { locales } from '../../paraglide/runtime.js';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { SubjectRatingControl } from './rating-control';
@@ -261,6 +262,7 @@ export function RatingsView({
   const threshold = question && ['episode', 'character'].includes(question.grain) ? 10 : 5;
   const hasPersonalAnswer = !control && supplied && supplied.own !== null && question;
 
+  const displayNumber = question ? voteDisplayNumber(locale, question) : null;
   return (
     <section data-slot="rating-summary" aria-labelledby={`${id}-title`} className={sectionClass}>
       <h2 id={`${id}-title`} className={headingClass}>
@@ -338,17 +340,17 @@ export function RatingsView({
                 session={control.session}
                 subjectId={control.subjectId}
               />
-            ) : supplied ? (
+            ) : supplied && displayNumber ? (
               <div className="space-y-2">
                 <p data-slot="own-rating" className="text-2xl font-semibold tabular-nums">
-                  {number(supplied.own!)} / {number(question.scale.max)}
+                  {displayNumber.value(supplied.own!)} / {displayNumber.max}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {m.rating_native_scale(
                     {
-                      min: number(question.scale.min),
-                      max: number(question.scale.max),
-                      step: number(question.scale.displayStep),
+                      min: displayNumber.min,
+                      max: displayNumber.max,
+                      step: displayNumber.step,
                     },
                     options,
                   )}

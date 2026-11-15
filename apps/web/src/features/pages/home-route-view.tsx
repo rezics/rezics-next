@@ -68,7 +68,9 @@ export function Home() {
     <HomeFeedConsumer
       key={`${locale}:${viewer?.scope ?? 'public'}`}
       initial={loaded.feed}
-      catalogue={<HomeCatalogue result={loaded.catalogue} locale={locale} />}
+      catalogue={
+        loaded.catalogue === undefined ? undefined : <HomeCatalogue result={loaded.catalogue} locale={locale} />
+      }
       locale={locale}
       signedIn={viewer !== null}
       read={read}
