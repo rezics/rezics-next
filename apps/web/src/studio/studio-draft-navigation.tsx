@@ -67,7 +67,7 @@ function DraftEntry({
       <Button
         type="button"
         variant="ghost"
-        className="studio-navigation-row"
+        className="studio-navigation-row min-w-0 max-w-full"
         aria-current={active ? 'page' : undefined}
         aria-labelledby={`${id}-title`}
         aria-describedby={`${id}-status`}
@@ -75,9 +75,11 @@ function DraftEntry({
         onClick={() => onOpen(document.postId)}
       >
         <FileText aria-hidden="true" />
-        <span className="studio-navigation-document-copy">
-          <span id={`${id}-title`}>{title}</span>
-          <span id={`${id}-status`} className="studio-navigation-document-state">
+        <span className="studio-navigation-document-copy min-w-0">
+          <span id={`${id}-title`} className="min-w-0 [overflow-wrap:anywhere]">
+            {title}
+          </span>
+          <span id={`${id}-status`} className="studio-navigation-document-state min-w-0 [overflow-wrap:anywhere]">
             {status}
           </span>
         </span>
