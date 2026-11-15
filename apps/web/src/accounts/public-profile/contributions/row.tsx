@@ -198,9 +198,6 @@ function ContributionVisit({
               ) : (
                 <ContextUnavailable locale={locale} />
               )}
-              {review && (!isRecord(review.target) || review.target.state !== 'available') ? (
-                <ContextUnavailable locale={locale} />
-              ) : null}
               {review?.citation && isRecord(review.citation) && review.citation.state === 'available' ? (
                 <p className="text-sm text-muted-foreground">
                   {m.profile_contribution_historical_citation({}, options)}
