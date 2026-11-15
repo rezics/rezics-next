@@ -1,7 +1,7 @@
 WITH request AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :subject_id::uuid AS subject_id, :source::text AS source,
-         :cursor_order::bigint AS cursor_order, :cursor_digest::text AS cursor_digest,
-         :ceiling_order::bigint AS ceiling_order
+         :cursor_order::nullable(bigint) AS cursor_order, :cursor_digest::nullable(text) AS cursor_digest,
+         :ceiling_order::nullable(bigint) AS ceiling_order
 ), input AS NOT MATERIALIZED (
   SELECT request.route, request.subject_id, request.source, request.cursor_order,
          request.cursor_digest, request.ceiling_order, p.epoch::text AS "subjectEpoch"

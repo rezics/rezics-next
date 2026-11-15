@@ -6,7 +6,9 @@ import sharp, { type Metadata } from 'sharp';
 import type { ImageFixture, Source, Container } from '../../../../../specs/content-media-driver.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
-import { newId, partitionOf } from '../../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
+import { readPartition } from '../../../src/partition/partition.ts';
+import { mediaParentBoard } from '../../../src/content/media-parent.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { principalCommandIdentity } from '../../../src/command/command.ts';
@@ -123,6 +125,48 @@ export async function provisionMediaContainers(
     visibility: 'published',
   });
   const posts = new Map<string, { id: string; revisionId: string }>();
+  async function threadFailureFacts(key: string): Promise<Record<string, unknown>> {
+    const target = threadTarget(system.routeKey, author.actor.accountId, key);
+    const facts: Record<string, unknown> = { key, boardId: board.id, threadId: target.id, threadRoute: target.route };
+    const observe = async (name: string, read: () => Promise<unknown>) => {
+      try { facts[name] = await read(); }
+      catch (error) { facts[name] = { error: error instanceof Error ? error.name : 'unknown' }; }
+    };
+    // Failure-only observations never replace the original response or provide permission.
+    await observe('boardReadStatus', async () => (await system.transport.capture(new Request(
+      `https://content.test/v1/boards/${encodeURIComponent(board.id)}`,
+      { headers: { authorization: `Bearer ${author.bearer}` } },
+    ))).response.status);
+    const boardRoute = routeOf(board.id);
+    if (boardRoute !== null) {
+      const client = await system.database.pool.connect();
+      try {
+        await observe('boardPartition', async () => {
+          const current = await readPartition(client, partitionOf(boardRoute));
+          return current ? { writeState: current.writeState, epoch: current.epoch } : null;
+        });
+        await observe('boardRow', async () => (await client.query(
+          `SELECT visibility,purpose,realm_id FROM content.board WHERE route=$1 AND board_id=$2`,
+          [boardRoute, board.id],
+        )).rows[0] ?? null);
+        await observe('boardParent', async () => {
+          const current = await mediaParentBoard(client, board.id);
+          return { kind: current.kind, visibility: current.visibility, availability: current.availability,
+            realmId: current.realm_id, purpose: current.purpose };
+        });
+      } finally { client.release(); }
+    }
+    await observe('threadExists', async () => (await system.database.pool.query(
+      'SELECT 1 FROM content.thread WHERE route=$1 AND thread_id=$2', [target.route, target.id],
+    )).rows.length === 1);
+    const principal = principalCommandIdentity(author.actor).principal;
+    await observe('receiptExists', async () => (await system.database.pool.query(
+      `SELECT 1 FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2 AND principal_id=$3
+       AND command_kind='content.thread.create' AND idempotency_key=$4`,
+      [partitionOf(target.route), principal.kind, principal.id, key],
+    )).rows.length === 1);
+    return facts;
+  }
   async function create(key: string): Promise<Container> {
     const { response } = await system.transport.capture(
       new Request('https://content.test/v1/threads', {
@@ -142,8 +186,16 @@ export async function provisionMediaContainers(
         }),
       }),
     );
-    if (response.status !== 201)
-      throw new Error(`Media fixture thread creation failed (${response.status}): ${await response.text()}`);
+    if (response.status !== 201) {
+      const original = await response.text();
+      const points = response.status === 404
+        ? await threadFailureFacts(key).catch((error: unknown) => ({
+            diagnosticError: error instanceof Error ? error.name : 'unknown',
+          }))
+        : null;
+      const facts = points === null ? '' : `; fixture points=${JSON.stringify(points)}`;
+      throw new Error(`Media fixture thread creation failed (${response.status}): ${original}${facts}`);
+    }
     const { thread } = await response.json();
     posts.set(thread.id, { id: thread.firstPost.id, revisionId: thread.firstPost.revisionId });
     return { id: thread.id, route: thread.route, partition: partitionOf(thread.route) };
