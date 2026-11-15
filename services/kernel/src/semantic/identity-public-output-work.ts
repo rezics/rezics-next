@@ -9,6 +9,7 @@ import { repeatBound, sumBounds } from '@rezics/bounds';
 import selectedCaptureSQL from './identity-public-output-selected-capture.sql';
 import readableOriginalsSQL from './identity-public-output-readable-originals.sql';
 import resumeSQL from './identity-public-output-resume.sql';
+import supersededSQL from './identity-public-output-superseded.sql';
 import releaseSizeSQL from './identity-public-output-release-size.sql';
 import s0 from './identity-public-output-accepted.sql';
 import s1 from './identity-public-output-insert.sql';
@@ -94,6 +95,7 @@ function plans() {
     plans,
     () =>
       new Map<string, Plan>([
+        [supersededSQL.sql, [2, 16, 2, 128, 0, 0, 2]],
         [resumeSQL.sql, [1, 8, 1, 128, 0, 0, 1]],
         [releaseSizeSQL.sql, [1, 8, 1, 64, 0, 0, 1]],
         [selectedCaptureSQL.sql, [8, 64, 8, 512, 0, 0, 4]],
@@ -332,4 +334,15 @@ export function publicOutputAdvanceWork(): WorkDimensions {
       engineRequests: 0,
     },
   ));
+}
+
+/** Cancellation funds a retained page (at most sixteen cut releases) or one native transition.
+ * The exact supersession check, repeated accepted/gate reads, and Core fences share this caller frame. */
+export function publicOutputRetireWork(): WorkDimensions {
+  return nativePublicOutputWorkDimensions(
+    sumBounds(
+      { ...publicOutputAdvanceWork(), engineRequests: 0 },
+      NATIVE_PUBLIC_OUTPUT_JOURNEYS().release,
+    ),
+  );
 }

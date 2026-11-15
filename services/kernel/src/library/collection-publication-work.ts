@@ -1,8 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { createPublicIdentityOutputCapture } from '../semantic/identity-public-output-capture.ts';
 import { publicOutputAdvanceWork } from '../semantic/identity-public-output-work.ts';
 import { withCollectionReadSnapshot } from './collection-read-connection.ts';
-import { requireLibraryDomain } from './domain-binding.ts';
+import { collectionPublicationOutputProducer } from './collection-publication-output.ts';
 import {
   advanceCollectionPublicationEpisodePhase,
   readCollectionPublicationEpisode,
@@ -178,13 +177,7 @@ async function captureSelectedOutput(context: Context, input: WorkflowInput): Pr
     readCollectionPublicationEpisode(tx, locator),
   );
   if (episode?.phase !== 'complete' || episode.source.rule.kind !== 'builtin') return 'done';
-  const native = requireLibraryDomain().nativePublicOutput;
-  if (!native) throw unavailable();
-  const { access } = context.getAuthorization();
-  const producer = createPublicIdentityOutputCapture(
-    { pool: context.pool, access, routeKey: readMembershipWorkConfig(context.env).routeKey, clock: context.clock },
-    native,
-  );
+  const producer = collectionPublicationOutputProducer(context);
   const { transactionId, position, sourceGeneration } = episode.output.publication;
   const result = await producer.advancePublication(
     { ...episode.output.ref, activation: { transactionId, position, sourceGeneration } },
@@ -248,13 +241,16 @@ export function registerCollectionPublicationWork(context: WorkContext): void {
     intervalSeconds: 1,
   });
   const continueCapture = DBOS.registerStep(
-    async (input: WorkflowInput, segment: number) => {
+    async (input: WorkflowInput, segment: number, recoveryRoot?: string) => {
       const locator = validate(input);
+      const root = recoveryRoot ?? locator.publicationId;
+      if (root !== locator.publicationId && !root.startsWith(`${locator.publicationId}:recovery:`))
+        throw new TypeError('Invalid Collection output continuation');
       await context.client.enqueue(
         {
           queueName: 'workflows',
           workflowName: COLLECTION_PUBLICATION_WORKFLOW,
-          workflowID: `${locator.publicationId}:output:${segment}`,
+          workflowID: `${root}:output:${segment}`,
           workflowIDReusePolicy: 'return-existing',
         },
         input,
@@ -287,7 +283,8 @@ export function registerCollectionPublicationWork(context: WorkContext): void {
       for (let page = 0; page < 100; page++) {
         if ((await capture(input)) === 'done') return;
       }
-      await continueCapture(input, (outputSegment ?? 0) + 1);
+      const root = outputSegment === undefined ? undefined : DBOS.workflowID!.split(':output:')[0];
+      await continueCapture(input, (outputSegment ?? 0) + 1, root);
     },
     { name: COLLECTION_PUBLICATION_WORKFLOW },
   );

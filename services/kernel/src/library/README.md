@@ -821,7 +821,10 @@ data. The mounted service uses the real begin/status/initiator readers; the sing
 registers locator-only staging and final activation. After native activation, the built-in publication workflow binds the same COMPLETE output to Semantic's public
 capture and resumes its stored eight-key continuation until it can seal. The public members reader uses that
 selected seal, checks live original and terminal disclosure, and binds cursors to the generation and manifest.
-A pending capture keeps members unavailable, including when a publication declares zero members.
+A pending capture keeps members unavailable, including when a publication declares zero members. The existing
+Source sweep resumes COMPLETE built-in publications with missing seals. It advances cancellation of a superseded
+capture from the newer monotone Collection source generation and preserves the generation selected for terminal
+public retention. Cancellation releases the exact hold only after the persisted gate and retained cuts close.
 `collection-publication-http.test.ts` retains the unmet real API/default-worker acceptance and focused closed
 grammar/privacy assertions. It uses the existing native fixture and actual output rows/receipt, with no replacement
 worker or domain backend. Schema availability and local typing do not establish that native acceptance.
