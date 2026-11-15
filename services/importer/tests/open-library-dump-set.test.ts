@@ -215,6 +215,27 @@ test('member ceiling is 64 and is not pre-allocated', async () => {
   expect(OPEN_LIBRARY_DUMP_SET_MAX_MEMBERS).toBe(64);
 });
 
+test('rejects nested containers in a flat manifest field as an invalid manifest', async () => {
+  const root = await directory();
+  try {
+    const path = join(root, 'manifest.json');
+    await writeFile(
+      path,
+      '{"version":1,"source":"openlibrary","members":[{"family":"author","path":{"nested":["member"]},"compression":"none"}]}',
+      { mode: 0o600 },
+    );
+    const error = await admitOpenLibraryDumpSet(path).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(OpenLibraryDumpSetError);
+    if (!(error instanceof OpenLibraryDumpSetError)) return;
+    expect(error.reason).toBe('manifest');
+    expect(error.memberIndex).toBe(0);
+    expect(error.identity).toBe('invalid-input');
+    expect(error.message).toBe('Input is unavailable or invalid (member 0).');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('admits the canonical v1 manifest with explicit per-member none and gzip', async () => {
   const root = await directory();
   try {

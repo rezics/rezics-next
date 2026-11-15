@@ -125,24 +125,30 @@ function parseNumber(text: string, start: number): { value: number; index: numbe
   return { value, index: start + raw.length };
 }
 
-function parseValue(text: string, start: number): { value: unknown; index: number } {
+function parseScalar(text: string, start: number, memberIndex: number | null): { value: unknown; index: number } {
   const index = skipWs(text, start);
   const char = text[index];
   if (char === '"') {
     const parsed = parseString(text, index);
     return { value: parsed.value, index: parsed.index };
   }
-  if (char === '{') return parseObject(text, index);
-  if (char === '[') return parseArray(text, index);
   if (char === 't' && text.slice(index, index + 4) === 'true') return { value: true, index: index + 4 };
   if (char === 'f' && text.slice(index, index + 5) === 'false') return { value: false, index: index + 5 };
   if (char === 'n' && text.slice(index, index + 4) === 'null') return { value: null, index: index + 4 };
   if (char === '-' || (char !== undefined && char >= '0' && char <= '9')) return parseNumber(text, index);
-  fail('manifest');
+  fail('manifest', memberIndex);
 }
 
-function parseObject(text: string, start: number): { value: Record<string, unknown>; index: number } {
-  let index = start + 1;
+/** Only the root may contain the members array. Member objects contain scalars. */
+function parseKeyedObject(
+  text: string,
+  start: number,
+  memberIndex: number | null,
+  root: boolean,
+): { value: Record<string, unknown>; index: number } {
+  let index = skipWs(text, start);
+  if (text[index] !== '{') fail('manifest', memberIndex);
+  index++;
   const value: Record<string, unknown> = {};
   const keys = new Set<string>();
   index = skipWs(text, index);
@@ -154,7 +160,10 @@ function parseObject(text: string, start: number): { value: Record<string, unkno
     keys.add(parsedKey.value);
     index = skipWs(text, parsedKey.index);
     if (text[index] !== ':') fail('manifest');
-    const parsedValue = parseValue(text, index + 1);
+    const parsedValue =
+      root && parsedKey.value === 'members'
+        ? parseMembersArray(text, index + 1)
+        : parseScalar(text, index + 1, memberIndex);
     Object.defineProperty(value, parsedKey.value, {
       value: parsedValue.value,
       enumerable: true,
@@ -171,13 +180,20 @@ function parseObject(text: string, start: number): { value: Record<string, unkno
   }
 }
 
-function parseArray(text: string, start: number): { value: unknown[]; index: number } {
-  let index = start + 1;
+function parseMembersArray(text: string, start: number): { value: unknown[]; index: number } {
+  let index = skipWs(text, start);
+  if (text[index] !== '[') fail('manifest');
+  index++;
   const value: unknown[] = [];
   index = skipWs(text, index);
   if (text[index] === ']') return { value, index: index + 1 };
   for (;;) {
-    const parsed = parseValue(text, index);
+    const memberIndex = value.length;
+    index = skipWs(text, index);
+    const parsed =
+      text[index] === '{'
+        ? parseKeyedObject(text, index, memberIndex, false)
+        : parseScalar(text, index, memberIndex);
     value.push(parsed.value);
     index = skipWs(text, parsed.index);
     if (text[index] === ',') {
@@ -190,11 +206,10 @@ function parseArray(text: string, start: number): { value: unknown[]; index: num
 }
 
 function parseManifestJson(text: string): Record<string, unknown> {
-  const parsed = parseValue(text, 0);
+  const parsed = parseKeyedObject(text, 0, null, true);
   const index = skipWs(text, parsed.index);
   if (index !== text.length) fail('manifest');
-  if (!parsed.value || typeof parsed.value !== 'object' || Array.isArray(parsed.value)) fail('manifest');
-  return parsed.value as Record<string, unknown>;
+  return parsed.value;
 }
 
 function ownKeys(value: object): string[] {
