@@ -119,8 +119,8 @@ installation is unavailable; changed, expired or concurrently consumed progress 
 per new retained chain. The index/preparation retain no body, account locator, private ancestry or permission result.
 
 At account-erasure time, private notebook structure, attachments, heads, unselected revisions and owner links are
-erased. An eligible current publication retains only its selected immutable revision and permitted public fields as
-a de-identified contribution, without its notebook ancestor chain or account identity. The existing publication
+erased. An eligible current publication retains the immutable revisions selected in its current lifecycle generation
+and permitted public fields as a de-identified contribution, without its notebook ancestor chain or account identity. The existing publication
 record remains the source; no second publication store or writer is introduced. A publication already withdrawn at
 the erasure fence has no retained public selection. Moderation and later source withdrawal continue to govern the
 retained contribution.
