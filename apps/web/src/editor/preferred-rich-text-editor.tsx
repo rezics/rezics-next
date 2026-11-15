@@ -10,7 +10,7 @@ import { useMemo } from 'react';
 /** Every Web authoring host uses one account/device/session preference binding. */
 export function PreferredRichTextEditor(props: RichTextEditorProps) {
   const preferences = useEditorPreferences();
-  const media = useEditorImagePresentation(props.value);
+  const media = useEditorImagePresentation(props.value, !props.renderImage);
   const mediaVisitKey = useMemo(
     () => ({ viewer: media.visitKey, host: props.mediaVisitKey }),
     [media.visitKey, props.mediaVisitKey],

@@ -43,6 +43,7 @@ import { pageHeadContext } from '../shell/head-context';
 import { getLocale, localizeHref, type Locale } from '../paraglide/runtime.js';
 import { historicalReaderSource, type HistoricalReaderSource } from '../threads/historical-reader-provenance';
 import { hostedReleaseActivationTransport } from '../studio/hosted-release-activation-actions';
+import { hostedOwnerBookHref } from '../studio/hosted-inventory';
 
 const searchSchema = v.pipe(
   v.strictObject({
@@ -442,10 +443,7 @@ function BookPublicationTools({ owner, locale }: { owner: HostedOwnedBook; local
     <nav className="studio-action-row">
       <a
         className="underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        href={localizeHref(
-          `/studio?catalogueId=${owner.item.catalogueId}&prepare=1&ownerAccount=${owner.viewer.accountId}&ownerEpoch=${owner.viewer.authnEpoch}`,
-          { locale: locale },
-        )}
+        href={localizeHref(`${hostedOwnerBookHref(owner.item, owner.viewer)}&prepare=1`, { locale: locale })}
       >
         {releaseCopy[locale].entry}
       </a>
@@ -590,5 +588,19 @@ function BookStudioVisit({
         <StudioWorkspace {...workspace} publicationTools={<BookPublicationTools owner={owner} locale={locale} />} />
       </main>
     );
-  return <StudioResultMessage result={result} />;
+  if (!result || result.ok || result.error.kind !== 'unavailable') return <StudioResultMessage result={result} />;
+  return (
+    <>
+      <StudioResultMessage result={result} />
+      <section className="mx-auto w-full max-w-4xl px-4 pb-8">
+        <a
+          className="studio-toc-open"
+          href={localizeHref(`${hostedOwnerBookHref(book, owner.viewer)}&points=1`, { locale })}
+        >
+          {m.studio_draft_point_entry({}, { locale })}
+        </a>
+        <BookPublicationTools owner={owner} locale={locale} />
+      </section>
+    </>
+  );
 }

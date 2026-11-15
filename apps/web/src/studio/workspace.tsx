@@ -98,6 +98,7 @@ export function StudioWorkbench({
   publicationTools,
   onDepartureRiskChange,
 }: StudioWorkspaceProps & { controller: StudioController }) {
+  const chapterOnly = input.profile.kind === 'book' && input.profile.structure === null;
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [starter] = useState(() =>
     bookStart
@@ -211,7 +212,19 @@ export function StudioWorkbench({
   }, [atRisk]);
   useEffect(() => {
     const save = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+      if (
+        !event.defaultPrevented &&
+        !event.isComposing &&
+        event.keyCode !== 229 &&
+        !event.getModifierState('AltGraph') &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === 's' &&
+        event.target instanceof HTMLInputElement &&
+        writingCanvas.current?.contains(event.target) &&
+        event.target.dataset.studioTitle === 'true'
+      ) {
         event.preventDefault();
         if (!startingBook && canvas === 'document') void controller.save();
       }
@@ -600,51 +613,53 @@ export function StudioWorkbench({
               {...(bookHistory ? { history: bookHistory } : {})}
             />
           ) : null}
-          <section
-            aria-label={
-              input.profile.kind === 'book'
-                ? m.studio_workspace_drafts({}, options)
-                : m.studio_workspace_articles({}, options)
-            }
-            className="studio-stack"
-          >
-            <h2>
-              {input.profile.kind === 'book'
-                ? m.studio_workspace_drafts({}, options)
-                : m.studio_workspace_articles({}, options)}
-            </h2>
-            <p className="studio-help">
-              {input.profile.kind === 'book'
-                ? m.studio_workspace_book_drafts_help({}, options)
-                : m.studio_workspace_article_drafts_help({}, options)}
-            </p>
-            {draftPicker ? (
-              <HostedDraftPickerView
-                picker={draftPicker}
-                disabled={atRisk || Boolean(selected?.invalid)}
-                onSelect={open}
-              />
-            ) : null}
-            <StudioDraftNavigation
-              documents={draftDocuments}
-              activePostId={canvas === 'document' ? postId : null}
-              disabled={blocked}
-              onOpen={open}
-            />
-            {!draftDocuments.length ? <p>{m.studio_workspace_empty_page({}, options)}</p> : null}
-            {state.documents.nextCursor ? (
-              <Button
-                type="button"
-                variant="outline"
+          {!chapterOnly ? (
+            <section
+              aria-label={
+                input.profile.kind === 'book'
+                  ? m.studio_workspace_drafts({}, options)
+                  : m.studio_workspace_articles({}, options)
+              }
+              className="studio-stack"
+            >
+              <h2>
+                {input.profile.kind === 'book'
+                  ? m.studio_workspace_drafts({}, options)
+                  : m.studio_workspace_articles({}, options)}
+              </h2>
+              <p className="studio-help">
+                {input.profile.kind === 'book'
+                  ? m.studio_workspace_book_drafts_help({}, options)
+                  : m.studio_workspace_article_drafts_help({}, options)}
+              </p>
+              {draftPicker ? (
+                <HostedDraftPickerView
+                  picker={draftPicker}
+                  disabled={atRisk || Boolean(selected?.invalid)}
+                  onSelect={open}
+                />
+              ) : null}
+              <StudioDraftNavigation
+                documents={draftDocuments}
+                activePostId={canvas === 'document' ? postId : null}
                 disabled={blocked}
-                onClick={() => void controller.loadDocuments()}
-              >
-                {controller.failedPageCursor() === state.documents.nextCursor
-                  ? m.own_drafts_retry({}, { locale: getLocale() })
-                  : m.studio_workspace_next({}, options)}
-              </Button>
-            ) : null}
-          </section>
+                onOpen={open}
+              />
+              {!draftDocuments.length ? <p>{m.studio_workspace_empty_page({}, options)}</p> : null}
+              {state.documents.nextCursor ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={blocked}
+                  onClick={() => void controller.loadDocuments()}
+                >
+                  {controller.failedPageCursor() === state.documents.nextCursor
+                    ? m.own_drafts_retry({}, { locale: getLocale() })
+                    : m.studio_workspace_next({}, options)}
+                </Button>
+              ) : null}
+            </section>
+          ) : null}
           <details className="studio-technical">
             <summary>{copy.workDetails}</summary>
             <p>{m.studio_workspace_private_help({}, options)}</p>
@@ -743,7 +758,9 @@ export function StudioWorkbench({
               </header>
               <div className="studio-document-toolbar">
                 <div className="min-w-0 flex-1">
-                  <span className="studio-toolbar-current" aria-hidden="true">{documentTitle}</span>
+                  <span className="studio-toolbar-current" aria-hidden="true">
+                    {documentTitle}
+                  </span>
                   <p className="studio-help" role="status">
                     {state.operation === 'save'
                       ? m.studio_workspace_saving({}, options)
@@ -821,6 +838,7 @@ export function StudioWorkbench({
               >
                 <label htmlFor={`${id}-title`}>{m.studio_workspace_title({}, options)}</label>
                 <Input
+                  data-studio-title="true"
                   id={`${id}-title`}
                   value={selected.title}
                   disabled={
@@ -866,7 +884,9 @@ export function StudioWorkbench({
                   onUploadState={(uploadState) => {
                     if (editorCurrent()) controller.uploadState(uploadState !== 'ready');
                   }}
-                  onSave={() => void controller.save()}
+                  onSave={() => {
+                    if (editorCurrent()) void controller.save();
+                  }}
                 />
                 <WorkbenchRegion title={copy.draftActions} attention={discard || selected.dirty}>
                   <ExactVersionDetails exact={selected.source.revision.exact} />
@@ -956,26 +976,28 @@ export function StudioWorkbench({
               </p>
             </section>
           )}
-          <div className="studio-publication-region">
-            {!input.canPublish || input.publicationUnavailableReason ? (
-              <p className="studio-help" role="status">
-                {input.publicationUnavailableReason ?? m.studio_release_unavailable({}, options)}
-              </p>
-            ) : null}
-            <WorkbenchRegion
-              title={copy.publication}
-              attention={
-                Boolean(state.review || state.published) ||
-                state.operation === 'review' ||
-                state.operation === 'withdraw-review'
-              }
-            >
-              <p className="studio-help">{m.studio_workspace_private_help({}, options)}</p>
-              {publicationTools}
-              <StudioPublication controller={controller} state={state} />
-              {hostedReleaseReader ? <HostedReleaseReaderLink binding={hostedReleaseReader} /> : null}
-            </WorkbenchRegion>
-          </div>
+          {!chapterOnly ? (
+            <div className="studio-publication-region">
+              {!input.canPublish || input.publicationUnavailableReason ? (
+                <p className="studio-help" role="status">
+                  {input.publicationUnavailableReason ?? m.studio_release_unavailable({}, options)}
+                </p>
+              ) : null}
+              <WorkbenchRegion
+                title={copy.publication}
+                attention={
+                  Boolean(state.review || state.published) ||
+                  state.operation === 'review' ||
+                  state.operation === 'withdraw-review'
+                }
+              >
+                <p className="studio-help">{m.studio_workspace_private_help({}, options)}</p>
+                {publicationTools}
+                <StudioPublication controller={controller} state={state} />
+                {hostedReleaseReader ? <HostedReleaseReaderLink binding={hostedReleaseReader} /> : null}
+              </WorkbenchRegion>
+            </div>
+          ) : null}
         </div>
       </fieldset>
       {starter ? (

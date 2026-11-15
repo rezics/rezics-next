@@ -1204,9 +1204,11 @@ export function RichTextEditor({
           .flatMap((slot) => {
             const toolbar = container?.querySelector(`[data-slot="${slot}"]`);
             return toolbar
-              ? [...toolbar.querySelectorAll<HTMLButtonElement>(
-                  'button:not([disabled])[tabindex="0"], button:not([disabled]):not([tabindex])',
-                )]
+              ? [
+                  ...toolbar.querySelectorAll<HTMLButtonElement>(
+                    'button:not([disabled])[tabindex="0"], button:not([disabled]):not([tabindex])',
+                  ),
+                ]
               : [];
           })
           .find((button) => button.getClientRects().length > 0);
@@ -1216,14 +1218,14 @@ export function RichTextEditor({
           return;
         }
       }
-      if (editable && modifier && event.key.toLowerCase() === 's' && latest.current.onSave) {
+      if (editable && editor?.view.hasFocus() && modifier && event.key.toLowerCase() === 's' && latest.current.onSave) {
         event.preventDefault();
-        const current = editor;
-        if (current) flushRef.current(current);
-        latest.current.onSave();
+        if (editor.view.composing || !isCurrent()) return;
+        flushRef.current(editor);
+        if (isCurrent() && lastPublishedDoc.current === editor.state.doc) latest.current.onSave?.();
       }
     },
-    [editor, editable, ownsWorkbench],
+    [editor, editable, isCurrent, ownsWorkbench],
   );
 
   const handleCompositionEnd = useCallback(() => {

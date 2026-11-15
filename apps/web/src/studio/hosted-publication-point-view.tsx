@@ -153,10 +153,12 @@ export function HostedPublicationPointView({
   visit,
   locale,
   onBack,
+  preparationHref,
 }: {
   visit: HostedPublicationPointVisit;
   locale: Locale;
   onBack?: () => void;
+  preparationHref?: string;
 }) {
   const state = useSyncExternalStore(visit.subscribe, visit.snapshot, visit.snapshot);
   const feedback = useRef<HTMLHeadingElement>(null);
@@ -181,9 +183,19 @@ export function HostedPublicationPointView({
         <p className="studio-help max-w-prose">{m.studio_point_publication_help({}, options)}</p>
         <div className="studio-action-row">
           {onBack ? (
-            <Button type="button" variant="outline" onClick={onBack}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={phase === 'submitting' || phase === 'uncertain'}
+              onClick={onBack}
+            >
               {m.studio_point_back_draft({}, options)}
             </Button>
+          ) : null}
+          {preparationHref && phase !== 'submitting' && phase !== 'uncertain' ? (
+            <a className="studio-toc-open" href={localizeHref(preparationHref, options)}>
+              {m.studio_book_prepare_release({}, options)}
+            </a>
           ) : null}
           <a className="studio-toc-open" href={localizeHref(`/studio?catalogueId=${state.owner.catalogueId}`, options)}>
             {m.studio_draft_point_editor({}, options)}
@@ -195,7 +207,12 @@ export function HostedPublicationPointView({
           <dt>{m.studio_draft_point_head_label({}, options)}</dt>
           <dd>{state.owner.headRevisionId}</dd>
           <dt>{m.studio_point_public_outline({}, options)}</dt>
-          <dd>{state.owner.publicationId ?? m.studio_point_first_release({}, options)}</dd>
+          <dd>
+            {state.owner.publicationId ??
+              (preparationHref
+                ? m.studio_book_first_release_pending({}, options)
+                : m.studio_point_first_release({}, options))}
+          </dd>
         </dl>
         <section className="studio-stack" aria-label={m.studio_draft_point_operation({}, options)}>
           <h2>{m.studio_draft_point_operation({}, options)}</h2>
