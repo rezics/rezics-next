@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { loadDocumentMedia, type DocumentImagePresentation } from '../src/threads/document-media';
+import { loadDocumentMedia, loadKnowledgeDocumentMedia, type DocumentImagePresentation } from '../src/threads/document-media';
 import { documentImageForPost, receiveThreadDocumentMedia } from '../src/threads/document-media-read';
 import { loadThreadPage, type ThreadPost } from '../src/threads/thread-page';
 import type { ThreadReadingPage } from '../src/threads/thread-reading';
@@ -313,4 +313,25 @@ describe('Sole document image adapter and native media in ordinary thread bodies
     expect(withheld).not.toContain(image.id);
     expect(calls.filter((request) => request.url.endsWith('/media/presentations'))).toHaveLength(batches);
   });
+});
+
+
+test('Knowledge presentation loading shares native metadata transport and binds the returned container', async () => {
+  const selection = {
+    representation: 'public' as const, documentId: id(31), revisionId: id(32),
+    sourceSha256: 'b'.repeat(64), publicationId: id(33),
+  };
+  const requested: unknown[] = [];
+  const native = client(async (request) => {
+    requested.push(await request.json());
+    expect(new URL(request.url).pathname).toBe('/v1/media/presentations');
+    expect(request.headers.get('authorization')).toBe('Bearer current-reader');
+    return Response.json({ images: [{ ...image, containerId: selection.documentId }] });
+  });
+  const result = await loadKnowledgeDocumentMedia(native, [image.id], selection, 'Bearer current-reader');
+  expect(requested).toEqual([{ ids: [image.id], knowledge: selection }]);
+  expect(result.kind).toBe('ready');
+  if (result.kind === 'ready') expect(result.images.get(image.id)?.variants).toEqual(image.variants);
+  const unrelated = client(() => Response.json({ images: [image] }));
+  expect((await loadKnowledgeDocumentMedia(unrelated, [image.id], selection)).kind).toBe('unavailable');
 });
