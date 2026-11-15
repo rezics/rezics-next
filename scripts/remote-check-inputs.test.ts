@@ -247,8 +247,10 @@ test('direct Kernel client emission is source-pinned before producer launch', as
       pinned.expectedSourceSha256,
     );
     const receipt = generated.indexOf('prepared input evidence unavailable');
+    const commandStarted = generated.indexOf(`touch ${join(fixture.root, 'command-started')}\n`);
     expect(receipt).toBeGreaterThanOrEqual(0);
-    expect(receipt).toBeLessThan(generated.indexOf('command-started'));
+    expect(commandStarted).toBeGreaterThanOrEqual(0);
+    expect(receipt).toBeLessThan(commandStarted);
   } finally {
     cleanup(fixture);
   }
