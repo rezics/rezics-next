@@ -6,7 +6,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { createKernelClient } from '../../../../packages/client/src/index.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { purgeOwnedGraphPage as purge } from '../../src/library/erasure-owned-graph.ts';
-import { newId } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
@@ -315,7 +315,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   });
   expect(decoded.fullRestoration).toBe(false);
 
-  await fixture.grant({ route, id: subjectIds[4]! }, 'owner', 'subject:read');
+  await fixture.grant({ route: routeOf(subjectIds[4]!)!, id: subjectIds[4]! }, 'owner', 'subject:read');
   const archiveBase64 = Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })).toString(
     'base64',
   );
@@ -490,7 +490,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   ]);
   expect(directCollections.collections.find((item) => item.id === collection)?.eligible).toBe(true);
 
-  await fixture.grant({ route, id: subjectIds[4]! }, 'other', 'subject:read');
+  await fixture.grant({ route: routeOf(subjectIds[4]!)!, id: subjectIds[4]! }, 'other', 'subject:read');
   const otherActor = await recoveryAccess.authenticate(fixture.bearer('other'), {
     pool: db.pool,
     deadline: Date.now() + 10_000,
