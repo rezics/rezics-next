@@ -16,6 +16,7 @@ import type {
   IdentityStepProgress,
 } from '../../../src/semantic/identity-epoch-contract.ts';
 import { routeOf } from '../../../src/route/route.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../../../src/semantic/events.ts';
 import { digest, epochFixture, home, identityEpochDatabase, nativeMappingStep, release } from './identity-epoch.ts';
 import { approvedVerification } from './identity-epoch-cutover.ts';
 import { appendEdge, type Deployment } from './identity-terminal-closure.ts';
@@ -223,6 +224,24 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
       publish: (job: IdentityJobRef) =>
         runCommand(f.pool, { partition: identityJobPartition(job) }, (tx) => identityEpochStore().publish(tx, job)),
       operationBackendIds: () => new Set(backends),
+      /** Subject/revision/redirect/member facts plus non-progress outbox. Mapping emits identity-epoch.progress wakes. */
+      async sourceFactSnapshot(ids: string[]) {
+        const facts = await f.snapshot(ids);
+        const sourceEvents = (
+          await f.admin.query<{ digest: string }>(
+            `SELECT md5(coalesce((SELECT jsonb_agg(o ORDER BY o.partition_no,o.position,o.event_seq)
+              FROM core.outbox o WHERE o.type <> $1)::text,'null')) AS digest`,
+            [IDENTITY_EPOCH_PROGRESS],
+          )
+        ).rows[0]!.digest;
+        return {
+          subjects: facts.subjects,
+          revisions: facts.revisions,
+          redirects: facts.redirects,
+          members: facts.members,
+          sourceEvents,
+        };
+      },
       async nativeRows(job: IdentityJobRef) {
         const home = identityJobPartition(job);
         const head = (

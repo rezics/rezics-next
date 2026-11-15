@@ -112,10 +112,10 @@ test('account-agent verify mapping refuses a changed acquired pin on an active f
     expect(native.closure_state).toBe('active');
     expect(native.source_home).not.toBe(native.control_partition);
     expect(native.control_group).toBe(input.control);
-    const before = await f.snapshot([intent.redirected, input.control]);
+    const before = await f.sourceFactSnapshot([intent.redirected, input.control]);
     await f.closeAcquiredPin(input.job, native.control_partition);
     await expect(f.drainMapping(input.job, 512)).rejects.toMatchObject({ code: 'identity_epoch_unavailable' });
-    expect(await f.snapshot([intent.redirected, input.control])).toEqual(before);
+    expect(await f.sourceFactSnapshot([intent.redirected, input.control])).toEqual(before);
     expect(await f.nativeSource(intent.redirected)).toEqual(native);
     expect(await f.nativeDirectRedirect(intent.redirected)).toBe(input.control);
     expect((await f.readJob(input.job))!.mapping?.state).not.toBe('complete');
