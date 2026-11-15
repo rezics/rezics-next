@@ -993,7 +993,7 @@ if (script.includes('/proc/loadavg')) {
       rmSync(dir + '/' + hostKey + '.slot.' + slot + '.memory', { force: true });
       log({ kind: 'release', slot, slotHeld: slotHeld() });
     }
-    process.exit(0);
+    process.exit(config.slotReleaseExit ?? 0);
   };
   holdUntilRelease(() => release());
 } else if (script.includes("printf 'STOPPED")) {
@@ -1332,6 +1332,7 @@ type HostConfig = {
   reconciliationStatus?: Record<string, unknown>;
   retainedPreparationAbort?: boolean;
   stallHeartbeats?: boolean;
+  slotReleaseExit?: number;
   gitFetchExit?: number;
   available?: number;
   tmpBytes?: number;
@@ -10720,4 +10721,49 @@ time.sleep(10)`] }] });
     diagnostics: { ...receipt.diagnostics, logTail: 'x'.repeat(8193) } }, identity)).toBeNull();
   expect(parseRemotePreparationAbortEvidence({ ...evidence,
     diagnostics: { ...receipt.diagnostics, phaseElapsedMs: -1 } }, identity)).toBeNull();
+});
+
+
+test('real caller cancellation uses exact remote stop before releasing its lease', async () => {
+  const fixture = scenario({ a: { available: 8e9, hang: true, silentHang: true } });
+  const directory = workspace();
+  const child = Bun.spawn([process.execPath, '--eval', `
+    import { remoteCheck, readHosts } from ${JSON.stringify(remoteCheck)};
+    const cancellation = new AbortController();
+    try {
+      await remoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE), workspace: ${JSON.stringify(directory)},
+        command: ['true'], maxMs: 5000, started: () => setTimeout(() => cancellation.abort(), 100),
+      }, cancellation.signal);
+    } catch { process.exitCode = cancellation.signal.aborted ? 0 : 1; }
+  `], { env: fixture.env, stdout: 'pipe', stderr: 'pipe' });
+  const [code, , stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+  const events = fixture.events();
+  const stopped = events.findIndex(event => event.kind === 'stop');
+  const released = events.findIndex(event => event.kind === 'release');
+  expect(stopped).toBeGreaterThanOrEqual(0);
+  expect(released).toBeGreaterThan(stopped);
+  expect(events[stopped]!.slotHeld).toBe(true);
+  expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+});
+
+
+test('lease cleanup uncertainty surfaces unknown settlement rather than a successful remote cleanup', async () => {
+  const fixture = scenario({ a: { available: 8e9, slotReleaseExit: 75 } });
+  const directory = workspace();
+  const child = Bun.spawn([process.execPath, '--eval', `
+    import { remoteCheck, readHosts } from ${JSON.stringify(remoteCheck)};
+    try {
+      await remoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE), workspace: ${JSON.stringify(directory)},
+        command: ['true'], settled: async value => console.log('SETTLED '+JSON.stringify(value)),
+      }, new AbortController().signal);
+    } catch (error) { console.error(String(error)); process.exitCode=1; }
+  `], { env: fixture.env, stdout: 'pipe', stderr: 'pipe' });
+  const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(1);
+  const settlement = JSON.parse(stdout.split('SETTLED ')[1]!.trim());
+  expect(settlement.native.exitCode).toBe(0);
+  expect(settlement.cleanup.status).toBe('unknown');
+  expect(settlement.cleanup.failures.join(' ')).toContain('slot lease release failed');
+  expect(stderr).toContain('slot lease cleanup');
 });

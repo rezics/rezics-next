@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { leaseCustodyCheckScript, leaseHolderProgram, slotScript, supervisorStopProgram } from './remote-check.ts';
+import { cleanupScript, leaseCustodyCheckScript, leaseHolderProgram, slotScript, supervisorStopProgram } from './remote-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const ownerProgram = String.raw`import json,os,signal,sys,time
@@ -139,12 +139,14 @@ test('actual slotScript EOF preserves the same generation and terminal physical 
   } finally { await f.close(); }
 });
 
-test('explicit TERM and the original deadline stop owned work while reservations remain held until termination', async () => {
-  for (const deadline of [false, true]) {
+test('explicit TERM INT HUP and the original deadline stop owned work while reservations remain held until termination', async () => {
+  for (const requested of ['SIGTERM', 'SIGINT', 'SIGHUP', 'deadline'] as const) {
+    const deadline = requested === 'deadline';
     const f = await fixture(false, deadline ? 60 : 10_000);
     try {
-      if (deadline) await f.holder.stdin.end(); else f.holder.kill('SIGTERM');
-      expect(await f.holder.exited, await f.stderr).toBe(143);
+      if (deadline) await f.holder.stdin.end(); else f.holder.kill(requested);
+      const expected = requested === 'SIGINT' ? 130 : requested === 'SIGHUP' ? 129 : 143;
+      expect(await f.holder.exited, await f.stderr).toBe(expected);
       await f.owner.exited;
       expect(JSON.parse(readFileSync(join(f.directory, 'signals.json'), 'utf8'))).toContain(15);
       expect(oldReader(f.hostRoot)).toBe('0 0 0');
@@ -184,5 +186,43 @@ test('a replaced memory path is never removed as though it were the original res
     const memory = join(f.hostRoot, 'slots/0.memory'); renameSync(memory, memory+'.original'); writeFileSync(memory, 'foreign\n');
     expect(f.proof().status).not.toBe(0); await f.holder.stdin.end(); await Bun.sleep(80);
     expect(f.holder.exitCode).toBeNull(); expect(readFileSync(memory, 'utf8')).toBe('foreign\n');
+  } finally { await f.close(); }
+});
+
+
+test('stale sweep and ordinary client-final cleanup preserve kernel-proved live lease custody', async () => {
+  const f = await fixture(true);
+  try {
+    const old = (Date.now() - 700_000) / 1000;
+    utimesSync(join(f.directory, '.alive'), old, old);
+    const swept = spawnSync('bash', [join(f.hostRoot, 'actual-slot-script.sh')], {
+      env: { ...process.env, PATH: `${join(f.hostRoot, 'bin')}:${process.env.PATH}` },
+      input: '', encoding: 'utf8', timeout: 3000,
+    });
+    expect(swept.status, swept.stderr).toBe(0);
+    expect(f.owner.exitCode).toBeNull();
+    expect(f.proof().status).toBe(0);
+    const final = cleanupScript(f.run, f.directory).replaceAll('/srv/rezics-check', f.hostRoot);
+    const refused = spawnSync('bash', ['-c', final], { encoding: 'utf8', timeout: 3000 });
+    expect(refused.status).toBe(75);
+    expect(refused.stderr).toContain('live reservation remains owned');
+    expect(f.owner.exitCode).toBeNull();
+    expect(f.proof().status).toBe(0);
+    await f.holder.stdin.end(); writeFileSync(join(f.directory, 'finish'), ''); await f.owner.exited;
+    expect(await f.holder.exited, await f.stderr).toBe(0);
+  } finally { await f.close(); }
+});
+
+
+test('terminal release does not unlink a symlink installed over the original byte record while waiting', async () => {
+  const f = await fixture();
+  try {
+    await f.holder.stdin.end(); await Bun.sleep(50);
+    const memory = join(f.hostRoot, 'slots/0.memory');
+    renameSync(memory, memory+'.original'); symlinkSync(memory+'.original', memory);
+    writeFileSync(join(f.directory, 'finish'), ''); await f.owner.exited;
+    expect(await f.holder.exited, await f.stderr).toBe(75);
+    expect(existsSync(memory)).toBe(true);
+    expect(readFileSync(memory, 'utf8')).toBe('4294967296\n');
   } finally { await f.close(); }
 });
