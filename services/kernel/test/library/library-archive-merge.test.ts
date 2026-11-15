@@ -675,8 +675,8 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   const journalBefore = await sessions.readSessionJournal(main.actor, targetSessionId);
   const repeatedJournalBefore = await sessions.readSessionJournal(main.actor, repeatedTargetSessionId);
   const progressChangesBefore = await f.pool.query<{ count: string }>(
-    'SELECT count(*)::text AS count FROM library.progress_change WHERE route=$1 AND account_id=$2 AND session_id=$3',
-    [routeOf(main.actor.accountId), main.actor.accountId, targetSessionId],
+    'SELECT count(*)::text AS count FROM library.progress_change WHERE route=$1 AND session_id=$2',
+    [routeOf(targetSessionId), targetSessionId],
   );
   const historyBefore = await f.pool.query(
     'SELECT revision FROM library.entry_state_change WHERE route=$1 AND account_id=$2 AND subject_id=$3 ORDER BY revision',
@@ -838,8 +838,8 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     completedAt: null,
   });
   const progressChangesAfter = await f.pool.query<{ count: string }>(
-    'SELECT count(*)::text AS count FROM library.progress_change WHERE route=$1 AND account_id=$2 AND session_id=$3',
-    [routeOf(main.actor.accountId), main.actor.accountId, targetSessionId],
+    'SELECT count(*)::text AS count FROM library.progress_change WHERE route=$1 AND session_id=$2',
+    [routeOf(targetSessionId), targetSessionId],
   );
   expect(progressChangesAfter.rows[0]?.count).toBe(progressChangesBefore.rows[0]?.count);
   const replayedFacts = await json(
@@ -1411,7 +1411,6 @@ test('cancellation stops pending effects and terminal erasure removes retained a
   ).toMatchObject({ privacy: { status: 'known', meaning: 'source_visible' } });
 
   const { id: deletedId } = await makeUpload(deletedOwner);
-  await f.grantAccountActions(deletedOwner.actor.accountId, ['account:delete']);
   await createLifecycleCommands({ pool: f.pool, access: f.access }).tombstone(
     { actor: deletedOwner.actor, deadline: deadlineFor(30_000) },
     { accountId: deletedOwner.actor.accountId, key: key() },
