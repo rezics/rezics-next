@@ -1162,7 +1162,6 @@ export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | nu
   return null;
 }
 const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
-const DEFAULT_PHASE_EVENT_POLL_MS = 500;
 export const DEFAULT_TRANSFER_TIMEOUT_MS = 120_000;
 // Base refresh and installs for dozens of concurrent checks exceeded three minutes on 2026-11-02.
 export const DEFAULT_PREPARATION_TIMEOUT_MS = 900_000;
@@ -5469,10 +5468,6 @@ run_directory=${quote(directory)}
 ${cleanupCommands()}`;
 }
 
-function heartbeatScript(directory: string): string {
-  return `touch ${quote(`${directory}/.alive`)}`;
-}
-
 function stopRunScript(id: string): string {
   const slice = quote(runSlice(id));
   return `systemctl stop ${slice} >/dev/null 2>&1 || true
@@ -5575,6 +5570,49 @@ function localRsyncSupportsZstd(): boolean {
 const recoveredOutputHeader = 'remote-check: recovered command output after disconnect run=';
 const recoveredOutputFooter = 'remote-check: end recovered command output run=';
 
+/** A retained abort may outlive both its run directory and a stuck SSH output channel. */
+export function retainedPreparationAbortScript(directory: string, host: string, run: string): string {
+  const reader = String.raw`import json,sys
+from pathlib import Path
+root=Path(${JSON.stringify(directory)}).parent.parent
+host=${JSON.stringify(host)}
+run=${JSON.stringify(run)}
+def read(name,limit):
+    p=root/'receipts'/run/name
+    if p.is_symlink() or not p.is_file() or p.stat().st_size>limit: raise ValueError('receipt unavailable')
+    return json.loads(p.read_bytes())
+try:
+    abort=read('preparation-status.json',8192)
+    resources=read('physical-resources.json',500000)
+    if (abort.get('schema')!=1 or abort.get('host')!=host or abort.get('run')!=run or
+            abort.get('status')!='infrastructure-failure' or abort.get('phase')!='abort' or
+            resources.get('schema')!=1 or resources.get('host')!=host or resources.get('run')!=run or
+            resources.get('boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or
+            resources.get('commandStartedMonoMs') is not None): raise ValueError('not this pre-command abort')
+    samples=resources['samples']
+    if (not 1<=len(samples)<=1444 or samples[-1].get('phase')!='terminal' or
+            any(sample.get('phase')=='command' for sample in samples) or
+            not isinstance(resources.get('terminalMonoMs'),(int,float))): raise ValueError('not terminal')
+    owner=resources['supervisor']
+    if type(owner['pid']) is not int or owner['pid']<=0: raise ValueError('invalid supervisor')
+    process=Path('/proc')/str(owner['pid'])
+    if process.exists():
+        fields=(process/'stat').read_text().rsplit(')',1)[1].split()
+        if fields[19]==owner['start']: raise ValueError('supervisor still present')
+    cgroup=resources['cgroup']
+    expected='/rezics.slice/rezics-check.slice/rezics-check-'+run.replace('-','_')+'.slice'
+    if cgroup['path']!=expected: raise ValueError('foreign cgroup')
+    group=Path('/sys/fs/cgroup'+expected)
+    if group.exists():
+        events=dict(line.split() for line in (group/'cgroup.events').read_text().splitlines())
+        if events.get('populated')!='0': raise ValueError('owned processes remain')
+    print('PREPARATION_ABORTED')
+except (OSError,ValueError,TypeError,KeyError,AttributeError,IndexError):
+    sys.exit(1)
+`;
+  return `# REMOTE_CHECK_RETAINED_ABORT\npython3 -c ${quote(reader)}`;
+}
+
 /** Reads status only from the exact host/run supervisor and optionally returns its bounded command output tail. */
 export function statusScript(directory: string, host: string, run: string, recoverOutput = true): string {
   const marker = quote(`${directory}/.remote-check-supervisor`);
@@ -5612,6 +5650,7 @@ type RemoteCommandStatus =
   | { kind: 'not-started' }
   | { kind: 'started' }
   | { kind: 'cleaning' }
+  | { kind: 'preparation-aborted' }
   | { kind: 'completed'; code: number };
 
 export function parseRemoteCommandStatus(
@@ -5622,10 +5661,11 @@ export function parseRemoteCommandStatus(
   const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
   const invalid =
     status.code !== 0 ||
-    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED' && recorded !== 'CLEANING') ||
+    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED' && recorded !== 'CLEANING' && recorded !== 'PREPARATION_ABORTED') ||
     parsed > 255;
   if (invalid)
     throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
+  if (recorded === 'PREPARATION_ABORTED') return { kind: 'preparation-aborted' };
   if (recorded === 'NOT_STARTED') return { kind: 'not-started' };
   if (recorded === 'STARTED') return { kind: 'started' };
   if (recorded === 'CLEANING') return { kind: 'cleaning' };
@@ -8748,6 +8788,8 @@ async function runLeased(
   let transportChildReaped = true;
   let native: RemotePhysicalRunReceipt | null = null;
   let preparedInputs: RemotePreparedInputsEvidence | null = null;
+  let preparationAbort: RemoteCheckSettlement['preparationAbort'];
+  let retainedAbortObserved = false;
   let returnManifest: RemoteReturnManifest = {
     schema: 1,
     status: options.returns?.length ? 'unknown' : 'empty',
@@ -8863,9 +8905,10 @@ async function runLeased(
     const deadlineAt = Date.now() + maxMs + 1_000;
     const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
     const heartbeatChildren = new Set<ReturnType<typeof Bun.spawn>>();
-    let phasePoll: ReturnType<typeof setInterval> | undefined;
+    let resolveRetainedAbort!: (value: 'preparation-aborted') => void;
+    const retainedAbortResult = new Promise<'preparation-aborted'>((resolve) => { resolveRetainedAbort = resolve; });
     const observeCommandStart = async () => {
-      if (!options.phaseEvent || phaseStartMarkerObserved || heartbeatChildren.size !== 0 || signal.aborted) return;
+      if (heartbeatChildren.size !== 0 || signal.aborted) return;
       let child: ReturnType<typeof Bun.spawn> | undefined;
       let probeTimer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -8874,7 +8917,7 @@ async function runLeased(
             sshExecutable(),
             ...sshOptions(host, connectionId),
             host.address,
-            statusScript(directory, host.name, id, false),
+            `${retainedPreparationAbortScript(directory, host.name, id)} || { ${statusScript(directory, host.name, id, false)}; }`,
           ],
           {
             stdin: 'ignore',
@@ -8904,9 +8947,12 @@ async function runLeased(
           return;
         }
         const status = parseRemoteCommandStatus(host, { code: statusCode, output: stdout, stdout });
-        if (status.kind !== 'started') return;
+        if (status.kind === 'preparation-aborted') {
+          resolveRetainedAbort('preparation-aborted');
+          return;
+        }
+        if (status.kind !== 'started' || phaseStartMarkerObserved || !options.phaseEvent) return;
         phaseStartMarkerObserved = true;
-        if (phasePoll) clearInterval(phasePoll);
         liveExecutionStartReported = publishPhaseEvent({
           schema: 1,
           kind: 'execution-started',
@@ -8921,24 +8967,9 @@ async function runLeased(
         if (child) heartbeatChildren.delete(child);
       }
     };
-    const heartbeat = setInterval(() => {
-      // A slow SSH channel must not accumulate another child every interval.
-      if (heartbeatChildren.size !== 0) return;
-      try {
-        const child = Bun.spawn(
-          [sshExecutable(), ...sshOptions(host, connectionId), host.address, heartbeatScript(directory)],
-          { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
-        );
-        heartbeatChildren.add(child);
-        void child.exited.then(() => heartbeatChildren.delete(child));
-      } catch (error) {
-        primaryFailure ??= error;
-      }
-    }, heartbeatMs);
-    phasePoll = options.phaseEvent
-      ? setInterval(() => void observeCommandStart(), Math.min(heartbeatMs, DEFAULT_PHASE_EVENT_POLL_MS))
-      : undefined;
-    if (phasePoll) void observeCommandStart();
+    // The existing heartbeat slot also observes retained terminal evidence; no second monitor is needed.
+    const heartbeat = setInterval(() => void observeCommandStart(), heartbeatMs);
+    void observeCommandStart();
     const commandResult = finished(run, signal);
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     const deadlineResult = new Promise<null>((resolve) => {
@@ -8946,8 +8977,13 @@ async function runLeased(
       deadlineTimer = setTimeout(() => resolve(null), Math.max(1, deadlineAt - Date.now()));
     });
     try {
-      const completed = await Promise.race([commandResult.then((value) => value), deadlineResult]);
-      if (completed === null) {
+      const completed = await Promise.race([commandResult.then((value) => value), retainedAbortResult, deadlineResult]);
+      if (completed === 'preparation-aborted') {
+        retainedAbortObserved = true;
+        executionNotStartedConfirmed = true;
+        commandTerminal = true;
+        code = 70;
+      } else if (completed === null) {
         console.error(`remote-check: deadline reached after ${maxMs} ms`);
         const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
         if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
@@ -8965,7 +9001,6 @@ async function runLeased(
       }
     } finally {
       clearInterval(heartbeat);
-      if (phasePoll) clearInterval(phasePoll);
       if (deadlineTimer) clearTimeout(deadlineTimer);
       await settleRunTransport();
       // No heartbeat channel may touch the run after its result is collected or its directory is removed.
@@ -8979,7 +9014,12 @@ async function runLeased(
         preserveRemoteRun = true;
         throw new RemoteTransportError(host.name, 'remote command', REMOTE_TRANSPORT_FAILURE, false);
       }
-      if (status.kind === 'not-started') {
+      if (status.kind === 'preparation-aborted') {
+        retainedAbortObserved = true;
+        executionNotStartedConfirmed = true;
+        commandTerminal = true;
+        code = 70;
+      } else if (status.kind === 'not-started') {
         commandTerminal = true;
         executionNotStartedConfirmed = true;
         settlementStarted = performance.now();
@@ -9008,7 +9048,7 @@ async function runLeased(
         await settleRunTransport();
         commandTerminal = true;
         code = REMOTE_DEADLINE_EXIT;
-      } else {
+      } else if (status.kind === 'completed') {
         code = status.code;
         commandTerminal = true;
       }
@@ -9022,57 +9062,69 @@ async function runLeased(
       );
       primaryFailure ??= error;
     }
-    let lifetimeFailure: RunLifetimeFailure | null = null;
-    if (code === REMOTE_DEADLINE_EXIT) {
-      try {
-        lifetimeFailure = await recoverRunLifetimeFailure(prepared, options.workspace);
-      } catch (error) {
-        console.error(
-          `remote-check: could not retrieve run lifetime receipt; retained on ${host.name} for ${id}: ${error instanceof Error ? error.message : error}`,
-        );
+    if (retainedAbortObserved) {
+      const recovered = await reconcileRemoteRunOwned({
+        hosts: [host], physical: { host: host.name, run: id }, workspace: options.workspace,
+        allowedHosts: [host.name],
+      }, signal);
+      preparationAbort = recovered.preparationAbort;
+      if (!remotePreparationAbortSettlementReady(recovered, { host: host.name, run: id }))
+        throw new Error('remote-check: retained preparation abort cleanup is unverified');
+      console.error(`remote-check: retained infrastructure preparation abort on ${host.name} run=${id}; tests never started`);
+      primaryFailure ??= new Error('remote-check: infrastructure preparation aborted before command start');
+    } else {
+      let lifetimeFailure: RunLifetimeFailure | null = null;
+      if (code === REMOTE_DEADLINE_EXIT) {
+        try {
+          lifetimeFailure = await recoverRunLifetimeFailure(prepared, options.workspace);
+        } catch (error) {
+          console.error(
+            `remote-check: could not retrieve run lifetime receipt; retained on ${host.name} for ${id}: ${error instanceof Error ? error.message : error}`,
+          );
+        }
       }
-    }
-    const resources = await recoverResources(prepared, options.workspace, code);
-    const physical: RemotePhysicalRunReceipt = {
-      schema: 1,
-      host: host.name,
-      run: id,
-      exitCode: code,
-      lifetimeFailure,
-      resources,
-    };
-    native = physical;
-    preparedInputs = options.expectedSourceSha256 === undefined ? null : await recoverPreparedInputs(prepared);
-    if (options.expectedSourceSha256 !== undefined && !preparedInputs) {
-      primaryFailure ??= new Error('remote-check: prepared source/generated input evidence is unavailable');
-    }
-    try {
-      await options.completed?.(physical);
-    } catch (error) {
-      primaryFailure ??= error;
-    }
-    try {
-      returnManifest = await copyReturns(
-        host,
-        directory,
-        connectionId,
-        options,
-        signal,
-        preparedInputs && preparedInputs.sourceSha256 === options.expectedSourceSha256
-          ? { host: native.host, run: native.run, exitCode: native.exitCode, sourceSha256: preparedInputs.sourceSha256 }
-          : undefined,
-      );
-    } catch (error) {
-      assertExecutionAllowed(options, signal);
-      const reason = error instanceof Error ? error.message.slice(0, 512) : 'unknown returns failure';
-      returnManifest = { schema: 1, status: 'failed', entries: [], missing: [], failures: [reason] };
-      if (native.exitCode !== 0) {
-        const cause = native.lifetimeFailure
-          ? 'recorded remote lifecycle infrastructure interruption'
-          : `native command exit ${native.exitCode}`;
-        console.error(`remote-check: returns failed after ${cause}: ${reason}`);
-      } else {
+      const resources = await recoverResources(prepared, options.workspace, code);
+      const physical: RemotePhysicalRunReceipt = {
+        schema: 1,
+        host: host.name,
+        run: id,
+        exitCode: code,
+        lifetimeFailure,
+        resources,
+      };
+      native = physical;
+      preparedInputs = options.expectedSourceSha256 === undefined ? null : await recoverPreparedInputs(prepared);
+      if (options.expectedSourceSha256 !== undefined && !preparedInputs) {
+        primaryFailure ??= new Error('remote-check: prepared source/generated input evidence is unavailable');
+      }
+      try {
+        await options.completed?.(physical);
+      } catch (error) {
         primaryFailure ??= error;
+      }
+      try {
+        returnManifest = await copyReturns(
+          host,
+          directory,
+          connectionId,
+          options,
+          signal,
+          preparedInputs && preparedInputs.sourceSha256 === options.expectedSourceSha256
+            ? { host: native.host, run: native.run, exitCode: native.exitCode, sourceSha256: preparedInputs.sourceSha256 }
+            : undefined,
+        );
+      } catch (error) {
+        assertExecutionAllowed(options, signal);
+        const reason = error instanceof Error ? error.message.slice(0, 512) : 'unknown returns failure';
+        returnManifest = { schema: 1, status: 'failed', entries: [], missing: [], failures: [reason] };
+        if (native.exitCode !== 0) {
+          const cause = native.lifetimeFailure
+            ? 'recorded remote lifecycle infrastructure interruption'
+            : `native command exit ${native.exitCode}`;
+          console.error(`remote-check: returns failed after ${cause}: ${reason}`);
+        } else {
+          primaryFailure ??= error;
+        }
       }
     }
   } catch (error) {
@@ -9126,6 +9178,7 @@ async function runLeased(
     host: host.name,
     run: id,
     native,
+    ...(preparationAbort ? { preparationAbort } : {}),
     preparedInputs,
     returns: returnManifest,
     cleanup,
