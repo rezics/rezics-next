@@ -249,8 +249,8 @@ async function createNativeContentSystemWithOptions(
       }).resolveAccess({ actions });
       return fresh;
     };
-    // Kernel resolves Access on a live request, after all routes are mounted.
-    // This same instance authenticates fixture credentials on this exact pool.
+    // Compile the shared Access instance from Kernel's completed native catalogue.
+    // Route-only reconstruction omits internal actions referenced by owner roles.
     const kernel = createKernel({
       receiptKeys: testReceiptKeys(),
       requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
@@ -259,15 +259,20 @@ async function createNativeContentSystemWithOptions(
       tokens: tokenKeys,
       clock,
       content: { cursorNow: () => clock().getTime() },
-      access: () => access,
+      access: (config) => {
+        if (!config.actions) throw new TypeError('Native content system requires the composed action catalogue');
+        actions = config.actions;
+        return createFreshAccess();
+      },
+      onAccessReady(ready) {
+        access = ready;
+      },
       writeRate: createWriteRateLimiter({
         secret: crypto.randomUUID() + crypto.randomUUID(),
         overrides: writeRateOverrides,
       }),
       ratePeer: () => '127.0.0.1',
     });
-    actions = actionCatalogue(kernel);
-    access = createFreshAccess();
     const createKernelForPool: ContentSystem['createKernelForPool'] = (targetPool, targetAccess) =>
       createKernel({
         receiptKeys: testReceiptKeys(),

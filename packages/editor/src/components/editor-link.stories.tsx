@@ -459,18 +459,149 @@ export const InlineLifetimeJourney: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: 'Remove link' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).not.toContain('https://edited.example/resource'));
 
+    // One public provider locator is used for both the diagnostic and the unchanged native click.
+    // No forced click, focus, scroll, retry, timer or timeout extension is introduced.
+    const diagnosticBrowser = await import('vitest/browser').catch(() => null);
+    let diagnosticSequence = 0;
+    const diagnosticElement = (element: Element | null) =>
+      element
+        ? {
+            tag: element.tagName.toLowerCase(),
+            id: element.id,
+            role: element.getAttribute('role'),
+            label: element.getAttribute('aria-label'),
+            slot: element.getAttribute('data-slot'),
+            text: element.matches('button, a, [role="option"], label')
+              ? (element.textContent ?? '').trim().slice(0, 64)
+              : null,
+            connected: element.isConnected,
+            disabled: 'disabled' in element ? Boolean((element as HTMLButtonElement).disabled) : null,
+            ariaDisabled: element.getAttribute('aria-disabled'),
+            matchesDisabled: element.matches(':disabled'),
+          }
+        : null;
+    const diagnosticTarget = (target: HTMLElement) => {
+      const document = target.ownerDocument;
+      const rectangle = target.getBoundingClientRect();
+      const x = rectangle.left + rectangle.width / 2,
+        y = rectangle.top + rectangle.height / 2;
+      const style = document.defaultView?.getComputedStyle(target);
+      const blockedAncestors: unknown[] = [];
+      for (let ancestor: HTMLElement | null = target; ancestor; ancestor = ancestor.parentElement) {
+        if (
+          ancestor.inert ||
+          ancestor.hasAttribute('inert') ||
+          ancestor.hasAttribute('data-base-ui-inert') ||
+          ancestor.hidden ||
+          ancestor.getAttribute('aria-hidden') === 'true'
+        ) {
+          blockedAncestors.push({
+            ...diagnosticElement(ancestor),
+            inert: ancestor.inert,
+            nativeInertAttribute: ancestor.hasAttribute('inert'),
+            baseUIInert: ancestor.hasAttribute('data-base-ui-inert'),
+            hidden: ancestor.hidden,
+            ariaHidden: ancestor.getAttribute('aria-hidden'),
+          });
+        }
+      }
+      const hit = document.elementFromPoint(x, y);
+      return {
+        target: diagnosticElement(target),
+        sameDocument: document === canvasElement.ownerDocument,
+        active: diagnosticElement(document.activeElement),
+        blockedAncestors,
+        rectangle: { x: rectangle.x, y: rectangle.y, width: rectangle.width, height: rectangle.height },
+        viewport: { width: document.defaultView?.innerWidth, height: document.defaultView?.innerHeight },
+        style: style
+          ? {
+              display: style.display,
+              visibility: style.visibility,
+              opacity: style.opacity,
+              pointerEvents: style.pointerEvents,
+              position: style.position,
+              zIndex: style.zIndex,
+            }
+          : null,
+        center: { x, y },
+        topmostAtCenter: diagnosticElement(hit),
+        hitIsTargetOrChild: !!hit && (target === hit || target.contains(hit)),
+        hitDialog: diagnosticElement(hit?.closest('[role="dialog"], [role="listbox"], [role="menu"]') ?? null),
+      };
+    };
+    const traceClick = async (target: HTMLElement) => {
+      const action = ++diagnosticSequence;
+      const started = performance.now();
+      const locator = diagnosticBrowser?.page.elementLocator(target);
+      const record = (stage: string, error?: unknown) => {
+        try {
+          let providerObservation: Record<string, unknown> = {};
+          try {
+            const matches = locator?.elements() ?? [];
+            providerObservation = {
+              providerLocator: locator?.serialize() ?? null,
+              providerLocalMatches: matches.length,
+              providerLocalMatchIsOriginal: matches.map((match) => match === target),
+            };
+          } catch (error) {
+            providerObservation = {
+              providerQueryError: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+            };
+          }
+          console.info(
+            JSON.stringify({
+              inlineTargetDiagnostic: true,
+              action,
+              stage,
+              elapsedMs: Math.round(performance.now() - started),
+              provider: diagnosticBrowser?.server.provider ?? 'storybook/test synthetic',
+              providerEnabled: null,
+              providerEnabledSource: 'The pinned Vitest Locator public API does not expose isEnabled',
+              ...providerObservation,
+              ...diagnosticTarget(target),
+              ...(error
+                ? {
+                    error:
+                      error instanceof Error
+                        ? `${error.name}: ${error.message}`.slice(0, 240)
+                        : String(error).slice(0, 240),
+                  }
+                : {}),
+            }),
+          );
+        } catch (error) {
+          console.info(
+            JSON.stringify({
+              inlineTargetDiagnostic: true,
+              action,
+              stage,
+              diagnosticError: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+            }),
+          );
+        }
+      };
+      record('before');
+      try {
+        if (diagnosticBrowser && locator) await diagnosticBrowser.userEvent.click(locator);
+        else await userEvent.click(target);
+        record('completed');
+      } catch (error) {
+        record('rejected', error);
+        throw error;
+      }
+    };
     console.info('Editor inline lifetime: selection and touch links');
     // The selection menu can create a link, and a touch visit can create, cancel, edit, and remove one.
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with selection target' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with selection target' }));
     textbox = await selectJourneyText(canvas);
     const formatSelection = within(await canvas.findByRole('toolbar', { name: 'Format text' }));
-    await userEvent.click(formatSelection.getByRole('button', { name: 'Link' }));
+    await traceClick(formatSelection.getByRole('button', { name: 'Link' }));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.type(address, 'https://selection.example');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await traceClick(canvas.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('https://selection.example'));
     let currentSelectionToolbar = within(await canvas.findByRole('toolbar', { name: 'Format text' }));
-    await userEvent.click(currentSelectionToolbar.getByRole('button', { name: 'Link' }));
+    await traceClick(currentSelectionToolbar.getByRole('button', { name: 'Link' }));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     expect(address).toHaveValue('https://selection.example');
     await userEvent.clear(address);
@@ -479,29 +610,29 @@ export const InlineLifetimeJourney: Story = {
     expect(JSON.stringify(evidence.latest)).toContain('https://selection.example');
     expect(JSON.stringify(evidence.latest)).not.toContain('https://selection-cancel.example');
     currentSelectionToolbar = within(await canvas.findByRole('toolbar', { name: 'Format text' }));
-    await userEvent.click(currentSelectionToolbar.getByRole('button', { name: 'Link' }));
+    await traceClick(currentSelectionToolbar.getByRole('button', { name: 'Link' }));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.clear(address);
     await userEvent.type(address, 'https://selection-edited.example');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await traceClick(canvas.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('https://selection-edited.example'));
     currentSelectionToolbar = within(await canvas.findByRole('toolbar', { name: 'Format text' }));
-    await userEvent.click(currentSelectionToolbar.getByRole('button', { name: 'Link' }));
+    await traceClick(currentSelectionToolbar.getByRole('button', { name: 'Link' }));
     await canvas.findByRole('textbox', { name: 'URL' });
-    await userEvent.click(currentSelectionToolbar.getByRole('button', { name: 'Remove link' }));
+    await traceClick(currentSelectionToolbar.getByRole('button', { name: 'Remove link' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).not.toContain('https://selection-edited.example'));
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Use touch toolbar' }));
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with touch target' }));
+    await traceClick(canvas.getByRole('button', { name: 'Use touch toolbar' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with touch target' }));
     textbox = await selectJourneyText(canvas);
     let touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await userEvent.click(touchToolbar.getByRole('button', { name: 'Bold' }));
+    await traceClick(touchToolbar.getByRole('button', { name: 'Bold' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('"type":"bold"'));
     touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await userEvent.click(touchToolbar.getByRole('button', { name: 'Link' }));
+    await traceClick(touchToolbar.getByRole('button', { name: 'Link' }));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.type(address, 'https://touch.example');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await traceClick(canvas.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('https://touch.example'));
     textbox = canvas.getByRole('textbox', { name: 'Post' });
     let touchAnchor = textbox.querySelector('a');
@@ -509,7 +640,7 @@ export const InlineLifetimeJourney: Story = {
     window.getSelection()?.collapse(touchAnchor!.firstChild!, 1);
     document.dispatchEvent(new Event('selectionchange'));
     touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await userEvent.click(touchToolbar.getByRole('button', { name: 'Link' }));
+    await traceClick(touchToolbar.getByRole('button', { name: 'Link' }));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.clear(address);
     await userEvent.type(address, 'https://touch-cancel.example');
@@ -517,23 +648,23 @@ export const InlineLifetimeJourney: Story = {
     expect(JSON.stringify(evidence.latest)).toContain('https://touch.example');
     expect(JSON.stringify(evidence.latest)).not.toContain('https://touch-cancel.example');
     touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await userEvent.click(touchToolbar.getByRole('button', { name: 'Link' }));
+    await traceClick(touchToolbar.getByRole('button', { name: 'Link' }));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.clear(address);
     await userEvent.type(address, 'https://touch-edited.example');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await traceClick(canvas.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('https://touch-edited.example'));
     textbox = canvas.getByRole('textbox', { name: 'Post' });
     touchAnchor = textbox.querySelector('a');
     window.getSelection()?.collapse(touchAnchor!.firstChild!, 1);
     document.dispatchEvent(new Event('selectionchange'));
     touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await userEvent.click(await canvas.findByRole('button', { name: 'Remove link' }));
+    await traceClick(await canvas.findByRole('button', { name: 'Remove link' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).not.toContain('https://touch-edited.example'));
 
     // Slash supports both a block command and link creation; command insertion keeps the slash text out of the doc.
-    await userEvent.click(canvas.getByRole('button', { name: 'Use selection toolbar' }));
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with empty document' }));
+    await traceClick(canvas.getByRole('button', { name: 'Use selection toolbar' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with empty document' }));
     textbox = await caretAtEnd(canvas);
     await userEvent.type(textbox, '/link');
     const slash = await canvas.findByRole('listbox', { name: 'Insert block' });
@@ -541,7 +672,7 @@ export const InlineLifetimeJourney: Story = {
     await userEvent.keyboard('{Enter}');
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.type(address, 'https://slash.example');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await traceClick(canvas.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('https://slash.example'));
     expect(canvas.getByRole('textbox', { name: 'Post' })).not.toHaveAttribute('data-slash-aria-owner');
     expect(canvas.getByRole('textbox', { name: 'Post' })).not.toHaveAttribute('aria-activedescendant');
@@ -550,7 +681,7 @@ export const InlineLifetimeJourney: Story = {
     expect(slashAnchor).not.toBeNull();
     window.getSelection()?.collapse(slashAnchor!.firstChild!, 1);
     document.dispatchEvent(new Event('selectionchange'));
-    await userEvent.click(await canvas.findByRole('button', { name: 'Edit link' }));
+    await traceClick(await canvas.findByRole('button', { name: 'Edit link' }));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     expect(address).toHaveValue('https://slash.example');
     await userEvent.clear(address);
@@ -562,19 +693,19 @@ export const InlineLifetimeJourney: Story = {
     slashAnchor = textbox.querySelector('a');
     window.getSelection()?.collapse(slashAnchor!.firstChild!, 1);
     document.dispatchEvent(new Event('selectionchange'));
-    await userEvent.click(await canvas.findByRole('button', { name: 'Edit link' }));
+    await traceClick(await canvas.findByRole('button', { name: 'Edit link' }));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.clear(address);
     await userEvent.type(address, 'https://slash-edited.example');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await traceClick(canvas.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('https://slash-edited.example'));
     textbox = canvas.getByRole('textbox', { name: 'Post' });
     slashAnchor = textbox.querySelector('a');
     window.getSelection()?.collapse(slashAnchor!.firstChild!, 1);
     document.dispatchEvent(new Event('selectionchange'));
-    await userEvent.click(await canvas.findByRole('button', { name: 'Remove link' }));
+    await traceClick(await canvas.findByRole('button', { name: 'Remove link' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).not.toContain('https://slash-edited.example'));
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with empty document' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with empty document' }));
     textbox = await caretAtEnd(canvas);
     await userEvent.type(textbox, '/h2');
     await canvas.findByRole('listbox', { name: 'Insert block' });
@@ -584,12 +715,12 @@ export const InlineLifetimeJourney: Story = {
     expect(JSON.stringify(evidence.latest)).not.toContain('/h2');
 
     // A URL draft follows its saved range through a legitimate edit and controlled echo in the same document.
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with two paragraphs' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with two paragraphs' }));
     textbox = await selectJourneyParagraph(canvas, 1, false);
     await userEvent.keyboard('{Control>}k{/Control}');
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.type(address, 'https://retained-draft.example');
-    await userEvent.click(canvas.getByRole('button', { name: 'Echo current document' }));
+    await traceClick(canvas.getByRole('button', { name: 'Echo current document' }));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     expect(address).toHaveValue('https://retained-draft.example');
     textbox = await selectJourneyParagraph(canvas, 0, true);
@@ -597,17 +728,17 @@ export const InlineLifetimeJourney: Story = {
     await waitFor(() => expect(journeyText(evidence.latest)).toContain('XFirst line'));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     expect(address).toHaveValue('https://retained-draft.example');
-    await userEvent.click(canvas.getByRole('button', { name: 'Apply' }));
+    await traceClick(canvas.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('https://retained-draft.example'));
 
     // A late Apply handler cannot reuse the same numeric position in a replacement document.
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with selection target' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with selection target' }));
     await caretAtEnd(canvas);
     await userEvent.keyboard('{Control>}k{/Control}');
     address = await canvas.findByRole('textbox', { name: 'URL' });
     await userEvent.type(address, 'https://retired-draft.example');
     const retainedSubmit = reactCallback(address.closest('form')!, 'onSubmit');
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with selection target' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with selection target' }));
     let stoppedRetiredSubmit = false;
     retainedSubmit({
       preventDefault: () => undefined,
@@ -621,19 +752,19 @@ export const InlineLifetimeJourney: Story = {
 
     // Same-position, same-query replacement retires the old request while preserving one fresh request.
     const sameStart = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with same query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with same query' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(sameStart + 1));
     const oldSame = evidence.requests[sameStart]!;
     expect(oldSame.query).toBe('same');
     const requestCountWithSamePending = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Echo current document' }));
+    await traceClick(canvas.getByRole('button', { name: 'Echo current document' }));
     expect(oldSame.signal.aborted).toBe(false);
     expect(evidence.requests.length).toBe(requestCountWithSamePending);
     const sameReplacementStart = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Use touch toolbar' }));
+    await traceClick(canvas.getByRole('button', { name: 'Use touch toolbar' }));
     await waitFor(() => expect(evidence.requests.length).toBe(sameReplacementStart));
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with same query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with same query' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(sameReplacementStart + 1));
     const freshSame = evidence.requests[sameReplacementStart]!;
@@ -650,7 +781,7 @@ export const InlineLifetimeJourney: Story = {
     // A retained option and keyboard callback from the old visit cannot affect the replacement document.
     const editorSurface = postControl(canvas).closest<HTMLElement>('[data-slot="rich-text-editor"]')!;
     const retainedKeyboard = reactCallback(editorSurface, 'onKeyDownCapture');
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with fresh document' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with fresh document' }));
     const freshSnapshot = evidence.latest;
     const publicationsBeforeStaleCallbacks = evidence.publications;
     const nativeKey = new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true, cancelable: true });
@@ -670,17 +801,17 @@ export const InlineLifetimeJourney: Story = {
 
     // A/B/A replacement rejects late success, error, and finally from both old requests, then admits fresh A.
     const abaStart = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with A' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with A' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(abaStart + 1));
     const requestA1 = evidence.requests[abaStart]!;
     expect(requestA1.query).toBe('a');
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with B' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with B' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(abaStart + 2));
     const requestB = evidence.requests[abaStart + 1]!;
     expect(requestB.query).toBe('b');
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with A' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with A' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(abaStart + 3));
     const requestA2 = evidence.requests[abaStart + 2]!;
@@ -700,32 +831,32 @@ export const InlineLifetimeJourney: Story = {
 
     // Source removal, readonly, disabled, profile change, and unmount all retire their own pending work.
     const removeIndex = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with source-removal query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with source-removal query' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(removeIndex + 1));
     const removedSourceRequest = evidence.requests[removeIndex]!;
-    await userEvent.click(canvas.getByRole('button', { name: 'Remove mention source' }));
+    await traceClick(canvas.getByRole('button', { name: 'Remove mention source' }));
     expect(removedSourceRequest.signal.aborted).toBe(true);
     removedSourceRequest.resolve(account('source-removed', '000000000105'));
     await Promise.resolve();
     expect(canvas.queryByRole('option')).toBeNull();
     expect(canvas.getByRole('textbox', { name: 'Post' })).toHaveAttribute('role', 'textbox');
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Restore mention source' }));
+    await traceClick(canvas.getByRole('button', { name: 'Restore mention source' }));
     const lockedIndex = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with locked query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with locked query' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(lockedIndex + 1));
     const readonlyRequest = evidence.requests[lockedIndex]!;
-    await userEvent.click(canvas.getByRole('button', { name: 'Make editor read only' }));
+    await traceClick(canvas.getByRole('button', { name: 'Make editor read only' }));
     readonlyRequest.resolve(account('readonly-late', '000000000106'));
     await Promise.resolve();
     expect(canvas.queryByRole('option')).toBeNull();
     expect(canvas.queryByText('Looking up account…')).toBeNull();
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Enable editor' }));
+    await traceClick(canvas.getByRole('button', { name: 'Enable editor' }));
     const reenabledIndex = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with fresh query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with fresh query' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(reenabledIndex + 1));
     evidence.requests[reenabledIndex]!.resolve(account('reenabled', '000000000107'));
@@ -734,17 +865,17 @@ export const InlineLifetimeJourney: Story = {
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('000000000107'));
 
     const disabledIndex = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with locked query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with locked query' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(disabledIndex + 1));
     const disabledRequest = evidence.requests[disabledIndex]!;
-    await userEvent.click(canvas.getByRole('button', { name: 'Disable editor' }));
+    await traceClick(canvas.getByRole('button', { name: 'Disable editor' }));
     disabledRequest.reject(new Error('late disabled lookup failure'));
     await Promise.resolve();
     expect(canvas.queryByRole('option')).toBeNull();
-    await userEvent.click(canvas.getByRole('button', { name: 'Enable editor' }));
+    await traceClick(canvas.getByRole('button', { name: 'Enable editor' }));
     const afterDisabledIndex = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with fresh query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with fresh query' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(afterDisabledIndex + 1));
     evidence.requests[afterDisabledIndex]!.resolve(account('after-disabled', '000000000112'));
@@ -753,12 +884,12 @@ export const InlineLifetimeJourney: Story = {
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('000000000112'));
 
     const profileIndex = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with profile pending query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with profile pending query' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(profileIndex + 1));
     const profileRequest = evidence.requests[profileIndex]!;
     const newProfileIndex = profileIndex + 1;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace profile query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace profile query' }));
     await waitFor(() => expect(canvas.getByRole('textbox', { name: 'Post' })).toHaveTextContent('@profile'));
     expect(profileRequest.signal.aborted).toBe(true);
     profileRequest.resolve(account('old-profile', '000000000108'));
@@ -772,18 +903,18 @@ export const InlineLifetimeJourney: Story = {
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('000000000109'));
 
     const unmountIndex = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with unmount query' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with unmount query' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(unmountIndex + 1));
     const unmountRequest = evidence.requests[unmountIndex]!;
-    await userEvent.click(canvas.getByRole('button', { name: 'Unmount editor' }));
+    await traceClick(canvas.getByRole('button', { name: 'Unmount editor' }));
     unmountRequest.resolve(account('unmounted', '000000000110'));
     await Promise.resolve();
     expect(canvas.queryByRole('textbox', { name: 'Post' })).toBeNull();
     expect(canvas.queryByRole('option')).toBeNull();
 
     const remountIndex = evidence.requests.length;
-    await userEvent.click(canvas.getByRole('button', { name: 'Mount editor' }));
+    await traceClick(canvas.getByRole('button', { name: 'Mount editor' }));
     await caretAtEnd(canvas);
     await waitFor(() => expect(evidence.requests.length).toBe(remountIndex + 1));
     evidence.requests[remountIndex]!.resolve(account('remounted', '000000000111'));
@@ -792,10 +923,10 @@ export const InlineLifetimeJourney: Story = {
     await waitFor(() => expect(JSON.stringify(evidence.latest)).toContain('000000000111'));
 
     // The phone sheet owns its deferred focus callback for this visit; a replacement retires it before it runs.
-    await userEvent.click(canvas.getByRole('button', { name: 'Use touch toolbar' }));
-    await userEvent.click(canvas.getByRole('button', { name: 'Replace with touch target' }));
+    await traceClick(canvas.getByRole('button', { name: 'Use touch toolbar' }));
+    await traceClick(canvas.getByRole('button', { name: 'Replace with touch target' }));
     touchToolbar = within(await canvas.findByRole('toolbar', { name: 'Formatting toolbar' }));
-    await userEvent.click(touchToolbar.getByRole('button', { name: 'Blocks' }));
+    await traceClick(touchToolbar.getByRole('button', { name: 'Blocks' }));
     const dialog = await page.findByRole('dialog', { name: 'Blocks' });
     const finalFocus = reactCallback(dialog, 'finalFocus');
     const frames: FrameRequestCallback[] = [];

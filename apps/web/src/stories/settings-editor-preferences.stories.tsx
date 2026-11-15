@@ -136,8 +136,11 @@ type MountedEditor = {
 type EditorElement = HTMLElement & { editor: MountedEditor };
 
 async function prepare(canvasElement: HTMLElement) {
-  const composition = canvasElement.querySelector('[data-editor-settings-story]');
-  if (!composition) throw new Error('Settings composition missing');
+  const composition = await waitFor(() => {
+    const current = canvasElement.querySelector('[data-editor-settings-story]');
+    if (!current || !compositions.has(current)) throw new Error('Settings composition is not ready');
+    return current;
+  });
   const bound = compositions.get(composition)!;
   const labels = localizedEditorPreferences();
   const panel = await within(canvasElement).findByRole('region', { name: labels.heading });
