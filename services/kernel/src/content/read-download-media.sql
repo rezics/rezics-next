@@ -1,4 +1,5 @@
 -- No variant enumeration: this is one exact object and one exact processed slot.
+-- Keep the row fence aligned with media-presentation.sql and the Work projection.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :media_id::uuid AS media_id,
          :format::text AS format, :width::integer AS width
