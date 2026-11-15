@@ -825,13 +825,22 @@ export function sourceStatisticRoutes(
     .get(
       declarations.route4.path,
       declarations.route4.options,
-      async ({ actor, params, query, authorizeCommand, admission, job }) => {
+      async ({ actor, params, query, authorize, admission, job }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        await authorizeCommand(root(), () => new GrantDeniedError());
+        const requireWriter = async () => {
+          const resource = root();
+          const allowed = await authorize(resource);
+          await withSourceRatingReadConnection(config().pool, job.deadline, async (client) => {
+            const partition = await readPartition(client, partitionOf(resource.route));
+            if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
+            if (!(await allowed(client))) throw new GrantDeniedError();
+          }, { repeatableRead: true });
+        };
         if (query.digest !== undefined && (query.cursor !== undefined || query.history !== undefined))
           throw new ProblemError('invalid_request');
         return admission.run('normal', job, async () => {
           try {
+            await requireWriter();
             const firstSubject = await subjectResolution(actor, params.id);
             if (!firstSubject || firstSubject.subjectId !== params.id) throw new SourceStatisticNotFoundError();
             const result = await observationReads().inspect({
@@ -843,7 +852,7 @@ export function sourceStatisticRoutes(
               ...(query.history === undefined ? {} : { history: true }),
               deadline: job.deadline,
             });
-            await authorizeCommand(root(), () => new GrantDeniedError());
+            await requireWriter();
             const finalSubject = await subjectResolution(actor, params.id);
             if (
               !finalSubject ||

@@ -1,17 +1,17 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText, normalizeDocument } from '@rezics/document';
 import { knowledgeMediaQuery, knowledgeMediaSource, type KnowledgeMediaSelection } from '@rezics/definitions/knowledge-media';
-import { createContentMediaDriver, currentMediaScenario } from './media-driver.ts';
+import { createKnowledgeMediaDriver, currentMediaUploadScenario } from './media-driver.ts';
 import { digest } from './support/media-fixtures.ts';
 import type { ContentCredential } from './support/system.ts';
 
 setDefaultTimeout(240_000);
-let driver: Awaited<ReturnType<typeof createContentMediaDriver>>;
-beforeAll(async () => { driver = await createContentMediaDriver(); });
+let driver: Awaited<ReturnType<typeof createKnowledgeMediaDriver>>;
+beforeAll(async () => { driver = await createKnowledgeMediaDriver(); });
 afterAll(async () => { await driver?.close(); });
 
 async function call(actor: ContentCredential | null, method: string, path: string, body?: unknown) {
-  return currentMediaScenario().system.kernel.handle(new Request(`https://content.test${path}`, {
+  return currentMediaUploadScenario().system.kernel.handle(new Request(`https://content.test${path}`, {
     method,
     headers: {
       ...(actor ? { authorization: `Bearer ${actor.bearer}` } : {}),
@@ -41,7 +41,7 @@ function downloadPath(mediaId: string, variant: string, knowledge?: KnowledgeMed
 }
 
 test('ordinary Knowledge upload completes through website Auth, processes real bytes and publishes an exact claimed derivative', async () => {
-  const { system } = currentMediaScenario();
+  const { system } = currentMediaUploadScenario();
   const author = system.actors.author;
   const { subject } = await json(await call(author, 'POST', '/v1/subjects', {
     type: 'skos:Concept', labels: { en: 'Native Knowledge image pipeline' },
