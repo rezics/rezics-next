@@ -110,16 +110,66 @@ WITH args AS MATERIALIZED (
    WHERE pending.partition_no=p.partition_no AND pending.transaction_id=m.closure_export_transaction
     AND pending.original=m.original)
  FOR UPDATE OF g,b,a
+), foreign_qualified AS MATERIALIZED (
+ SELECT m.route,m.original,m.control_group,m.closure_generation,m.closure_incarnation,m.owner_epoch,
+  c.basis_version::text AS basis_version,
+  sha256(convert_to(jsonb_build_array(
+   'rezics.semantic.mapping-point-withdraw/v1',e.job_id,e.job_epoch,e.unit,e.scope_digest,e.plan_digest,e.transaction_id,
+   p.node,p.epoch,p.write_state,p.moved_to,s.subject_id,s.recorded_transaction_id,s.xmin::text,
+   to_jsonb(m),d.revision::text,d.captured_revision::text,r.sequence,r.target,r.recorded_transaction_id
+  )::text,'UTF8')) AS source_image
+ FROM source m JOIN frame valid ON true JOIN effect e ON true JOIN owner p ON true
+ JOIN semantic.subject s ON s.route=m.route AND s.subject_id=m.original
+ JOIN semantic.identity_epoch_dirty d ON d.route=m.route AND d.original=m.original
+ LEFT JOIN LATERAL (
+  SELECT redirect.sequence,redirect.target,redirect.recorded_transaction_id FROM semantic.redirect redirect
+  WHERE redirect.route=m.route AND redirect.subject_id=m.original ORDER BY redirect.sequence DESC LIMIT 1
+ ) r ON true
+ JOIN input i ON i.control_partition<>p.partition_no AND i.terminal=m.control_group
+  AND i.generation=m.closure_generation
+  AND (SELECT count(*) FROM input named WHERE named.terminal=m.control_group)=1
+ JOIN semantic.identity_epoch_mapping_point_custody c ON c.partition_no=p.partition_no AND c.job_id=e.job_id
+  AND c.original=m.original AND c.job_epoch=e.job_epoch AND c.scope_digest=e.scope_digest AND c.route=m.route
+  AND c.terminal=i.terminal AND c.generation=i.generation AND c.basis_version=i.basis_version
+  AND c.owner_epoch=i.owner_epoch AND c.control_partition=i.control_partition AND c.control_partition<>p.partition_no
+  AND c.incarnation=m.closure_incarnation AND c.enrollment=m.closure_enrollment
+  AND c.source_revision=m.source_revision AND c.source_epoch=m.owner_epoch
+  AND c.export_transaction=m.closure_export_transaction
+  AND c.registration_transaction_id=m.closure_registration_transaction
+  AND c.install_transaction_id=m.closure_install_transaction
+  AND c.proof_partition=c.control_partition
+ JOIN semantic.identity_epoch_native_commit deposit_commit
+  ON deposit_commit.partition_no=c.partition_no AND deposit_commit.transaction_id=c.transaction_id
+  AND deposit_commit.purpose='mapping' AND deposit_commit.xmin=c.xmin
+  AND deposit_commit.epoch=p.epoch AND deposit_commit.position<=p.position
+ JOIN semantic.identity_epoch_native_commit install_commit ON install_commit.partition_no=p.partition_no
+  AND install_commit.transaction_id=m.closure_install_transaction
+  AND install_commit.xmin::text=m.closure_install_xid AND install_commit.purpose='bootstrap'
+ JOIN semantic.identity_epoch_native_commit ack_commit ON ack_commit.partition_no=p.partition_no
+  AND ack_commit.transaction_id=m.closure_ack_transaction
+  AND ack_commit.xmin::text=m.closure_ack_xid AND ack_commit.purpose='bootstrap'
+ WHERE m.closure_state IN ('active','withdrawn') AND m.control_partition<>p.partition_no AND m.owner_epoch=p.epoch
+  AND m.owner_epoch=c.source_epoch AND m.source_revision=d.revision AND d.revision=d.captured_revision
+  AND coalesce(r.target,m.original)=m.closure_immediate
+  AND m.closure_successor_ticket IS NULL AND m.closure_successor_original IS NULL
+  AND m.closure_ticket_reservation IS NULL AND m.closure_source_reservation IS NULL
+  AND m.closure_cancelled_successor IS NOT TRUE AND m.closure_claim IS NULL AND m.closure_mutation_xid IS NULL
+  AND install_commit.epoch=p.epoch AND install_commit.position<=p.position
+  AND ack_commit.epoch=p.epoch AND ack_commit.position<=p.position
+  AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_bootstrap_row pending
+   WHERE pending.partition_no=p.partition_no AND pending.transaction_id=m.closure_export_transaction
+    AND pending.original=m.original)
+  AND NOT EXISTS(SELECT 1 FROM qualified)
+), held AS MATERIALIZED (
+ SELECT * FROM qualified UNION ALL SELECT * FROM foreign_qualified
 ), withdrawn AS (
  UPDATE semantic.identity_epoch_mapping m SET closure_state='withdrawn',closure_mutation_xid=pg_current_xact_id()::text
- FROM qualified q WHERE m.route=q.route AND m.original=q.original
+ FROM held q WHERE m.route=q.route AND m.original=q.original
  RETURNING q.control_group::text,q.closure_generation::text,q.closure_incarnation::text,q.owner_epoch,q.basis_version,q.source_image
 )
 SELECT CASE
  WHEN NOT EXISTS(SELECT 1 FROM frame) THEN 'unavailable'
  WHEN (SELECT closure_state FROM source)='legacy' THEN 'legacy'
- WHEN (SELECT closure_state FROM source)='active'
-  AND (SELECT control_partition FROM source) IS DISTINCT FROM (SELECT home FROM args) THEN 'foreign-control'
  WHEN EXISTS(SELECT 1 FROM withdrawn) THEN 'withdrawn'
  ELSE 'unavailable' END AS status,
  (SELECT control_group FROM withdrawn) AS control_group,

@@ -46,8 +46,49 @@ WITH args AS MATERIALIZED (
   AND acquired.native_epoch=p.epoch AND acquired.native_position<=p.position
   AND (SELECT count(*) FROM gates)=1
  FOR UPDATE OF m,p,g,b,a
+), foreign_qualified AS MATERIALIZED (
+ SELECT m.route,m.original
+ FROM args i JOIN effect e ON true
+ JOIN core.partition p ON p.partition_no=i.home AND p.epoch=i.owner_epoch AND p.write_state='active'
+ JOIN semantic.identity_epoch_mapping m ON m.route=i.route AND m.original=i.original AND m.route/16=i.home
+ JOIN semantic.identity_epoch_mapping_fence f ON f.route=m.route AND f.destination=m.original
+  AND f.job_id=e.job_id AND f.job_epoch=e.job_epoch AND f.transaction_id=e.transaction_id
+  AND f.xmin::text=pg_current_xact_id()::xid::text
+ JOIN semantic.identity_epoch_mapping_point_custody c ON c.partition_no=i.home AND c.job_id=i.job
+  AND c.original=i.original AND c.job_epoch=i.job_epoch AND c.scope_digest=i.scope_digest AND c.route=i.route
+  AND c.terminal=i.control_group AND c.generation=i.generation AND c.incarnation=i.incarnation
+  AND c.basis_version=i.basis_version AND c.source_epoch=i.owner_epoch
+  AND c.control_partition<>i.home AND c.proof_partition=c.control_partition
+  AND c.enrollment=m.closure_enrollment AND c.generation=m.closure_generation AND c.incarnation=m.closure_incarnation
+  AND c.export_transaction=m.closure_export_transaction
+  AND c.registration_transaction_id=m.closure_registration_transaction
+  AND c.install_transaction_id=m.closure_install_transaction
+ JOIN semantic.identity_epoch_native_commit deposit_commit
+  ON deposit_commit.partition_no=c.partition_no AND deposit_commit.transaction_id=c.transaction_id
+  AND deposit_commit.purpose='mapping' AND deposit_commit.xmin=c.xmin
+  AND deposit_commit.epoch=p.epoch AND deposit_commit.position<=p.position
+ JOIN semantic.identity_epoch_native_commit install_commit ON install_commit.partition_no=p.partition_no
+  AND install_commit.transaction_id=m.closure_install_transaction
+  AND install_commit.xmin::text=m.closure_install_xid AND install_commit.purpose='bootstrap'
+  AND install_commit.epoch=p.epoch AND install_commit.position<=p.position
+ JOIN semantic.identity_epoch_native_commit ack_commit ON ack_commit.partition_no=p.partition_no
+  AND ack_commit.transaction_id=m.closure_ack_transaction
+  AND ack_commit.xmin::text=m.closure_ack_xid AND ack_commit.purpose='bootstrap'
+  AND ack_commit.epoch=p.epoch AND ack_commit.position<=p.position
+ WHERE m.owner_epoch=i.owner_epoch AND m.closure_state='withdrawn'
+  AND m.closure_generation=i.generation AND m.closure_incarnation=i.incarnation
+  AND m.closure_mutation_xid=pg_current_xact_id()::text AND m.xmin::text=pg_current_xact_id()::xid::text
+  AND m.closure_claim IS NULL AND m.closure_source_reservation IS NULL
+  AND m.closure_ticket_reservation IS NULL AND m.closure_successor_ticket IS NULL
+  AND m.closure_successor_original IS NULL AND m.closure_cancelled_successor IS NOT TRUE
+  AND (SELECT count(*) FROM gates)=1 AND NOT EXISTS(SELECT 1 FROM qualified)
+ FOR UPDATE OF m,p
 ), completed AS (
  UPDATE semantic.identity_epoch_mapping m SET closure_mutation_xid=NULL
- FROM qualified q WHERE m.route=q.route AND m.original=q.original RETURNING m.original
+ FROM (
+  SELECT route,original FROM qualified
+  UNION ALL
+  SELECT route,original FROM foreign_qualified
+ ) q WHERE m.route=q.route AND m.original=q.original RETURNING m.original
 )
 SELECT EXISTS(SELECT 1 FROM completed) AS completed;

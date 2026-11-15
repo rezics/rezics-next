@@ -36,6 +36,7 @@ import {
   beginIdentityMappingPointWithdrawal,
   completeIdentityMappingPointWithdrawal,
 } from './identity-mapping-point-withdrawal.ts';
+import { bindForeignMappingPointCustody } from './identity-mapping-point-custody.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { identityErasureRoles, bindSemanticProducerRoles, type SemanticCopyRole } from './erasure-producer.ts';
 
@@ -548,6 +549,27 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
     return completed(pool, job, latest.head, measured);
   }
   let local = await receipt(pool, job, proposed.home, head.unit + 1, digest, measured);
+  if (!local && (proposed.action === 'source' || proposed.action === 'mapping')) {
+    if (!head.change) throw stale();
+    await bindForeignMappingPointCustody(
+      pool,
+      measured,
+      {
+        job,
+        scopeDigest: saved.scope_digest,
+        original: head.change.original,
+        previousTerminal: head.change.previousTerminal,
+        inputs: saved.inputs.map((input) => ({
+          terminal: input.terminal,
+          generation: input.generation,
+          basisVersion: input.basis_version,
+          controlPartition: input.control_partition,
+          ownerEpoch: input.owner_epoch,
+        })),
+      },
+      mergedRoles(saved.roles, head.payload?.roles),
+    );
+  }
   if (!local) {
     await runCommand(pool, { partition: proposed.home, deadline: Date.now() + 5000 }, async (tx, { transactionId }) => {
       const existing = (
