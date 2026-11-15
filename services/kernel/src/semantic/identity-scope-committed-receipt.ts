@@ -387,7 +387,13 @@ function snapshotContext(context: IdentityScopeCommittedContext): IdentityScopeC
 
 function kindAdmission(pool: Pool, context: IdentityScopeCommittedKindContext) {
   const admission = currentCollectionKindInputAdmission(context.tx, context.preparation, context.work);
-  return admission?.pool === pool && admission.deadline === context.deadline ? admission : undefined;
+  if (admission?.pool !== pool || admission.deadline !== context.deadline) return undefined;
+  try {
+    context.work.assertReady();
+    return admission;
+  } catch {
+    return undefined;
+  }
 }
 
 function originalWork(pool: Pool, context: IdentityScopeCommittedContext): NativeCollectionWork | null {

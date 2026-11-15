@@ -224,6 +224,14 @@ establish acceptance. Runtime, compiler, lint, build and native acceptance check
 are deferred under the code-only launch policy. Later Commerce/identity receivers
 must exercise the contract in complete-definition dispatch with real native state.
 
+`test/semantic/identity-kind-native-receipt.test.ts` exercises both initial and
+repaired native writers, seeds the retained raw Kind input, and obtains real Core
+and Library operational admission. It checks cumulative statement charging without
+a maintenance context, unchanged deadline, refusal of a second ledger with the
+same reservation ID, native completion/version/seal, no checkout, and lock lifetime
+through commit/rollback. Closing the original also ends held evidence. Its seeded
+Kind input supplies no audience proof or complete-definition acceptance.
+
 Source material read includes current scope types and registration/advance/finish/
 repair/revalidation bodies; identity epoch native writer/contract/schema and native
 receipt reconcilers; Library custody and effects adapter; retained Kind scope,
