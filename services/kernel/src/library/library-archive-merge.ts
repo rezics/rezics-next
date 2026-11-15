@@ -1899,6 +1899,26 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           sessionStartedAt: effect.operands.sessionStartedAt,
           state: effect.operands.state,
         },
+        prepare: async () => {
+          await identityTime(async (at) => {
+            const observation = await readLibraryProfileSourceObservation(
+              { pool: deps.pool, access: deps.access, actor: owner, at, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+              subjectId,
+            );
+            const source = observation?.source;
+            if (
+              !observation ||
+              source?.kind !== 'supported' ||
+              source.subjectId !== subjectId ||
+              observation.anchor.identityEpoch.toString() !== profile.identityEpoch ||
+              observation.anchor.acceptingType !== profile.acceptingType ||
+              observation.anchor.requestedSubjectId !== profile.requestedSubjectId ||
+              !sameJson(archivedComponent(observation.anchor.component), profile.component) ||
+              !sameJson(source.pin, profile.pin)
+            )
+              throw new ProgressConflictError();
+          });
+        },
         assert: async (tx: CommandTransaction) => {
           const archive = object(effect.operands.archive);
           if (!archive || typeof archive.uploadId !== 'string') throw new ProgressConflictError();
@@ -1929,24 +1949,6 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
               session.rows[0]?.startedAt !== effect.operands.sessionStartedAt)
           )
             throw new ProgressConflictError();
-          await identityTime(async (at) => {
-            const observation = await readLibraryProfileSourceObservation(
-              { pool: deps.pool, access: deps.access, actor: owner, at, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
-              subjectId,
-            );
-            const source = observation?.source;
-            if (
-              !observation ||
-              source?.kind !== 'supported' ||
-              source.subjectId !== subjectId ||
-              observation.anchor.identityEpoch.toString() !== profile.identityEpoch ||
-              observation.anchor.acceptingType !== profile.acceptingType ||
-              observation.anchor.requestedSubjectId !== profile.requestedSubjectId ||
-              !sameJson(archivedComponent(observation.anchor.component), profile.component) ||
-              !sameJson(source.pin, profile.pin)
-            )
-              throw new ProgressConflictError();
-          });
         },
       };
       const result = await sessionCommands().patchSessionJournal(
