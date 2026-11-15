@@ -11,8 +11,12 @@ import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import type { SearchNativePorts } from '../../src/search/composition.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
-async function currentPage(driver: SearchDriver, body: Record<string, unknown>): Promise<HttpResponse> {
-  const deadline = Date.now() + 60_000;
+async function currentPage(
+  driver: SearchDriver,
+  body: Record<string, unknown>,
+  waitMs = 60_000,
+): Promise<HttpResponse> {
+  const deadline = Date.now() + waitMs;
   do {
     const response = await driver.request('anonymous', 'POST', '/v1/subjects:search', body);
     if (response.status === 200) return response;
@@ -21,7 +25,9 @@ async function currentPage(driver: SearchDriver, body: Record<string, unknown>):
     expect(response.headers.get('retry-after')).toBeTruthy();
     await Bun.sleep(100);
   } while (Date.now() < deadline);
-  throw new Error('The default public Search journey did not finish finite preparation within 60 seconds');
+  throw new Error(
+    `The default public Search journey did not finish finite preparation within ${waitMs / 1000} seconds`,
+  );
 }
 function subjects(
   response: HttpResponse,
@@ -85,6 +91,36 @@ async function currentSuggestions(driver: SearchDriver, query: string): Promise<
   } while (Date.now() < deadline);
   throw new Error('The default public suggestion journey did not finish finite preparation within 60 seconds');
 }
+
+test('default Subject Search activates and returns an authored Book', async () => {
+  const client = createDriverClient();
+  const driver = await client.init();
+  try {
+    const label = `Catalogue ${randomUUID().replaceAll('-', '')}`;
+    const created = await driver.request(
+      'editor',
+      'POST',
+      '/v1/subjects',
+      { type: 'schema:Book', labels: { en: label } },
+      { 'Idempotency-Key': JSON.stringify(randomUUID()) },
+    );
+    expect(created.status).toBe(201);
+    const { id } = created.body.subject as { id: string };
+    const page = await currentPage(driver, { text: label, languages: ['en'] }, 115_000);
+    expect(subjects(page)).toContainEqual(expect.objectContaining({ id, type: 'schema:Book', labels: { en: label } }));
+    expect((await client.inspect({ preparation: true })).workerStats?.preparation?.generations).toMatchObject({
+      active: 1,
+    });
+  } catch (error) {
+    const output = await client.inspect().then(
+      (state) => state.workerOutput.slice(-4000),
+      (failure) => String(failure).slice(0, 500),
+    );
+    throw new Error(`Native Book Search failed. Worker output:\n${output}`, { cause: error });
+  } finally {
+    await driver.close();
+  }
+}, 400_000);
 
 test('the default real Search journey provides useful current-authorized filled or exhausted pages with finite actual preparation and recovery', async () => {
   const client = createDriverClient(undefined, { advancedSearch: true });
