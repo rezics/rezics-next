@@ -10765,5 +10765,5 @@ test('lease cleanup uncertainty surfaces unknown settlement rather than a succes
   expect(settlement.native.exitCode).toBe(0);
   expect(settlement.cleanup.status).toBe('unknown');
   expect(settlement.cleanup.failures.join(' ')).toContain('slot lease release failed');
-  expect(stderr).toContain('run cleanup verification');
+  expect(stderr).toContain('slot lease cleanup');
 });
