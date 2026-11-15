@@ -226,7 +226,10 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
         loadInput: true,
         loadOutput: false,
       });
-      const matching = sample.filter((workflow) => record(workflow.input?.[0]) && workflow.input[0].prefix === config.prefix);
+      const matching = sample.filter((workflow) => {
+        const input = workflow.input?.[0];
+        return record(input) && input.prefix === config.prefix;
+      });
       const entries = [];
       for (const workflow of matching) {
         let steps: unknown;
@@ -252,7 +255,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
           completedAt: workflow.completedAt,
           delayUntil: workflow.delayUntilEpochMS,
           recoveryAttempts: workflow.recoveryAttempts,
-          error: workflow.error === undefined ? null : failure(workflow.error),
+          error: workflow.error == null ? null : failure(workflow.error),
           steps,
         });
       }
