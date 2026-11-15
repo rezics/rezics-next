@@ -16,8 +16,9 @@ import type {
   IdentityStepProgress,
 } from '../../../src/semantic/identity-epoch-contract.ts';
 import { routeOf } from '../../../src/route/route.ts';
-import { digest, epochFixture, identityEpochDatabase, nativeMappingStep, release } from './identity-epoch.ts';
+import { digest, epochFixture, home, identityEpochDatabase, nativeMappingStep, release } from './identity-epoch.ts';
 import { approvedVerification } from './identity-epoch-cutover.ts';
+import { appendEdge, type Deployment } from './identity-terminal-closure.ts';
 
 /** All production operations share the guarded native pool; admin only observes source rows. */
 export async function createIdentityMappingFixture(options: { poolMax: number; pool?: Pool; url?: string }) {
@@ -33,6 +34,8 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
       await f.close();
       throw error;
     }
+    const url = isolated?.url ?? options.url ?? process.env.DATABASE_URL!;
+    const terminalWriter = { url } as Deployment;
     const backends = new Set<number>();
     f.pool.on('acquire', (client) => {
       const backend = (client as unknown as { processID: number }).processID;
@@ -70,17 +73,16 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
       admit,
       prepare,
       async bootstrapHomes(ids: readonly string[]) {
-        for (const partition of new Set(ids.map((id) => routeOf(id)! >> 4))) {
-          let caughtUp = false;
-          for (let page = 0; page < 1000; page++) {
+        const homes = [...new Set([...ids].reverse().map((id) => home(id)))];
+        for (let page = 0; page < 1000; page++) {
+          let pending = false;
+          for (const partition of homes) {
             const progress = await stepIdentityEpochBootstrap(f.pool, partition);
-            if (progress.state === 'caught-up') {
-              caughtUp = true;
-              break;
-            }
+            if (progress.state !== 'caught-up') pending = true;
           }
-          if (!caughtUp) throw new Error('Native fixture bootstrap did not finish its finite source home');
+          if (!pending) return;
         }
+        throw new Error('Native fixture bootstrap did not finish its finite source home');
       },
       async admitMerge() {
         const redirected = (await f.create('Mapping original', 0x7310)).subject.id;
@@ -88,16 +90,22 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
         const job = await admit({ kind: 'merge', redirected, survivor, release: release.digest });
         return { job, survivor, redirectedOriginals: [redirected] };
       },
-      /** Admission only: mapping drain proves the Accounts job without Search/Library resume. */
+      /** Admission only: mapping drain proves the Accounts job without Search/Library resume.
+       * Native appendEdge builds the redirected graph; ordinary bootstrap then ACKs the foreign original. */
       async admitAccountAgentVerify() {
         const catalogue = (await f.create('Accounts mapping catalogue', 0x9d10)).subject.id;
+        const control = (await f.create('Accounts mapping control', 0x9e10)).subject.id;
+        if (home(catalogue) === home(control))
+          throw new Error('Accounts mapping control must occupy a distinct native home');
         const approved = await approvedVerification(f, catalogue);
         const agent = await ensureAccountAgent(f.pool, {
           account: approved.account,
           kind: 'person',
           name: 'Accounts mapping agent',
         });
-        await this.bootstrapHomes([catalogue, agent.subject.id, accountAgentId(approved.account)]);
+        await appendEdge(terminalWriter, control, control);
+        await appendEdge(terminalWriter, catalogue, control);
+        await this.bootstrapHomes([catalogue, control, agent.subject.id, accountAgentId(approved.account)]);
         const receipt = {
           kind: 'account-agent.verify' as const,
           account: approved.account,
@@ -108,7 +116,7 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
         for (let attempt = 0; attempt < 16; attempt++) {
           const progress = await stepIdentityEpochAdmission(f.pool, job);
           if (progress.state === 'pending')
-            return { job, catalogue, account: approved.account, agent: agent.subject.id, receipt, source };
+            return { job, catalogue, control, account: approved.account, agent: agent.subject.id, receipt, source };
           expect(progress.state).toBe('preparing');
         }
         throw new Error('Native Accounts admission did not finish within sixteen bounded steps');
@@ -132,6 +140,80 @@ export async function createIdentityMappingFixture(options: { poolMax: number; p
             [routeOf(original)!, original],
           )
         ).rows[0]?.target ?? null,
+      async nativeSource(original: string) {
+        const row = (
+          await f.admin.query<{
+            closure_state: string;
+            control_partition: number;
+            control_group: string;
+            source_home: number;
+            terminal: string;
+            registration: string | null;
+            install: string | null;
+            ack: string | null;
+            original_installed: boolean;
+          }>(
+            `SELECT m.closure_state, m.control_partition, m.control_group::text AS control_group,
+                    m.route/16 AS source_home, m.terminal::text,
+                    m.closure_registration_transaction::text AS registration,
+                    m.closure_install_transaction::text AS install,
+                    m.closure_ack_transaction::text AS ack,
+                    EXISTS(
+                      SELECT 1 FROM semantic.identity_epoch_original o
+                      WHERE o.partition_no=m.control_partition AND o.original=m.original AND o.present
+                        AND o.closure_state='installed'
+                    ) AS original_installed
+             FROM semantic.identity_epoch_mapping m WHERE m.original=$1`,
+            [original],
+          )
+        ).rows[0];
+        if (!row) throw new Error('Native mapping source row is missing');
+        const commits = (
+          await f.admin.query<{ kind: string }>(
+            `SELECT kind FROM (
+               SELECT 'registration' AS kind FROM semantic.identity_epoch_native_commit
+                WHERE partition_no=$1 AND transaction_id=$2::uuid AND purpose='bootstrap'
+               UNION ALL
+               SELECT 'install' FROM semantic.identity_epoch_native_commit
+                WHERE partition_no=$3 AND transaction_id=$4::uuid AND purpose='bootstrap'
+               UNION ALL
+               SELECT 'ack' FROM semantic.identity_epoch_native_commit
+                WHERE partition_no=$3 AND transaction_id=$5::uuid AND purpose='bootstrap'
+             ) c`,
+            [row.control_partition, row.registration, row.source_home, row.install, row.ack],
+          )
+        ).rows.map((entry) => entry.kind);
+        return { ...row, commits };
+      },
+      async nativeAdmissionPins(job: IdentityJobRef, partition: number) {
+        const row = (
+          await f.admin.query<{ attempt: string; prepared: string | null; acquired: string | null }>(
+            `SELECT a.state AS attempt, prepared.stage AS prepared, acquired.stage AS acquired
+             FROM semantic.identity_epoch_admission_attempt a
+             LEFT JOIN semantic.identity_epoch_admission_receipt prepared
+               ON prepared.partition_no=a.partition_no AND prepared.job_id=a.job_id
+              AND prepared.job_epoch=a.job_epoch AND prepared.scope_digest=a.scope_digest
+              AND prepared.stage='prepared' AND prepared.version=1
+             LEFT JOIN semantic.identity_epoch_admission_receipt acquired
+               ON acquired.partition_no=a.partition_no AND acquired.job_id=a.job_id
+              AND acquired.job_epoch=a.job_epoch AND acquired.scope_digest=a.scope_digest
+              AND acquired.stage='acquired' AND acquired.version=1
+             WHERE a.partition_no=$1 AND a.job_id=$2 AND a.job_epoch=$3`,
+            [partition, job.jobId, job.epoch.toString()],
+          )
+        ).rows[0];
+        if (!row) throw new Error('Native admission pins are missing');
+        return row;
+      },
+      async closeAcquiredPin(job: IdentityJobRef, partition: number) {
+        const closed = await f.admin.query(
+          `UPDATE semantic.identity_epoch_admission_attempt SET state='closed'
+           WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND state='acquired'
+           RETURNING partition_no`,
+          [partition, job.jobId, job.epoch.toString()],
+        );
+        expect(closed.rowCount).toBe(1);
+      },
       readJob: (job: IdentityJobRef) => withConnection(f.pool, (tx) => identityEpochStore().readJob(tx, job)),
       publish: (job: IdentityJobRef) =>
         runCommand(f.pool, { partition: identityJobPartition(job) }, (tx) => identityEpochStore().publish(tx, job)),
