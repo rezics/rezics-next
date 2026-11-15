@@ -7,7 +7,7 @@ import {
   runIdentityTerminalCommand,
 } from '../../../src/semantic/identity-terminal-closure-command.ts';
 import { createPool } from '../../../src/database/pool.ts';
-import { routeOf } from '../../../src/route/route.ts';
+import { newId, routeOf } from '../../../src/route/route.ts';
 import { IDENTITY_EPOCH_PROGRESS } from '../../../src/semantic/events.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
@@ -38,9 +38,19 @@ const boundarySQL: Record<Boundary, RegExp> = {
 };
 
 /** Historical input only: no mapping, ready bit, source ACK or custody is seeded. */
-export async function seedChain(db: Deployment, length: number, firstRoute = 0x7100, homes = 3) {
+export async function seedChain(
+  db: Deployment,
+  length: number,
+  firstRoute = 0x7100,
+  homes = 3,
+  terminal: 'present' | 'absent' = 'present',
+) {
   const ids: string[] = [];
-  for (let index = 0; index <= length; index++) ids.push(await seedLegacyRoot(db, firstRoute + (index % homes) * 16));
+  for (let index = 0; index <= length; index++) {
+    const route = firstRoute + (index % homes) * 16;
+    // An incomplete historical snapshot may point at an endpoint with no source row or revision.
+    ids.push(index === length && terminal === 'absent' ? newId(route) : await seedLegacyRoot(db, route));
+  }
   for (let index = 0; index < length; index++) await historicalEdge(db, ids[index]!, ids[index + 1]!);
   return ids;
 }
@@ -169,34 +179,60 @@ export async function atBoundary<T>(
     const query = client.query;
     saved.set(client, query);
     let matched = false;
-    client.query = async function (...args: unknown[]) {
-      const sql = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string })?.text ?? '');
-      if (/^BEGIN\b/.test(sql)) matched = false;
-      const parameters = args[1] as unknown[] | undefined;
+    client.query = function (...args: unknown[]) {
+      const { sql, values: parameters } = statementOf(args);
+      if (/^BEGIN\b/i.test(sql)) matched = false;
+      const first = parameters[0];
+      const scalar =
+        typeof first === 'number' && Number.isSafeInteger(first)
+          ? first
+          : typeof first === 'string' && /^(?:0|[1-9][0-9]*)$/.test(first)
+            ? Number(first)
+            : undefined;
       const nativePartition =
-        boundary === 'install' ||
-        boundary === 'ack' ||
-        boundary === 'hold' ||
-        boundary === 'withdraw' ||
-        boundary === 'claim-release'
-          ? Math.floor(Number(parameters?.[0]) / 16)
-          : parameters?.[0];
+        scalar !== undefined &&
+        (boundary === 'install' ||
+          boundary === 'ack' ||
+          boundary === 'hold' ||
+          boundary === 'withdraw' ||
+          boundary === 'claim-release')
+          ? Math.floor(scalar / 16)
+          : scalar;
       const matchesSource =
         (sourcePartition === undefined || nativePartition === sourcePartition) &&
-        (original === undefined || parameters?.includes(original));
-      if (!fired && matchesSource && boundarySQL[boundary].test(sql)) {
-        matched = true;
-        if (when === 'before') {
+        (original === undefined || parameters.includes(original));
+      const before = !fired && matchesSource && boundarySQL[boundary].test(sql) && when === 'before';
+      if (!fired && matchesSource && boundarySQL[boundary].test(sql)) matched = true;
+      const afterCommit = !fired && matched && /^COMMIT\s*;?\s*$/i.test(sql) && when === 'after-commit';
+      if (before) fired = true;
+      const after = async () => {
+        if (afterCommit && !fired) {
           fired = true;
           await action();
         }
+      };
+      if (!before && !afterCommit) return Reflect.apply(query, client, args);
+      const callback = args.at(-1);
+      if (typeof callback === 'function') {
+        const nativeArgs = [...args];
+        nativeArgs[nativeArgs.length - 1] = (...received: unknown[]) => {
+          if (received[0]) return callback(...received);
+          void after().then(
+            () => callback(...received),
+            (error: unknown) => callback(error),
+          );
+        };
+        const dispatch = () => Reflect.apply(query, client, nativeArgs);
+        if (!before) return dispatch();
+        void Promise.resolve().then(action).then(dispatch).catch((error: unknown) => callback(error));
+        return undefined;
       }
-      const result = await Reflect.apply(query, client, args);
-      if (!fired && matched && sql === 'COMMIT' && when === 'after-commit') {
-        fired = true;
-        await action();
-      }
-      return result;
+      return (async () => {
+        if (before) await action();
+        const result = await Reflect.apply(query, client, args);
+        await after();
+        return result;
+      })();
     } as PoolClient['query'];
   };
   db.pool.on('acquire', acquire);
@@ -220,18 +256,38 @@ function statementOf(args: unknown[]): { sql: string; values: unknown[] } {
     if (config.values && typeof config.values === 'object') {
       const named = config.values as Record<string, unknown>;
       const partition = named.partition_no ?? named.partition;
-      return { sql: config.text, values: typeof partition === 'number' ? [partition] : [] };
+      return { sql: config.text, values: typeof partition === 'number' || typeof partition === 'string' ? [partition] : [] };
     }
+    return { sql: config.text, values: [] };
   }
   return { sql: '', values: [] };
 }
 
 function homeOf(values: unknown[]): number {
+  const invalid = () => new Error('Native transaction did not identify its home before protected access');
+  const canonicalHome = (value: unknown): number => {
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 4095) return value;
+    if (typeof value === 'string' && /^(?:0|[1-9][0-9]{0,3})$/.test(value)) {
+      const home = Number(value);
+      if (home <= 4095) return home;
+    }
+    throw invalid();
+  };
   const first = values[0];
-  const partition = Array.isArray(first) ? first[0] : first;
-  if (typeof partition !== 'number' || partition < 0 || partition > 4095)
-    throw new Error('Native transaction did not identify its home before protected access');
-  if (Array.isArray(first)) expect(new Set(first).size).toBe(1);
+  let operands: unknown[];
+  if (Array.isArray(first)) operands = first;
+  else if (typeof first === 'string' && first.startsWith('{')) {
+    // Standard Query encodes integer[] as quoted Postgres array elements; pg also accepts bare integers.
+    if (
+      !/^\{(?:"(?:0|[1-9][0-9]{0,3})"|0|[1-9][0-9]{0,3})(?:,(?:"(?:0|[1-9][0-9]{0,3})"|0|[1-9][0-9]{0,3}))*\}$/.test(first)
+    )
+      throw invalid();
+    operands = first.slice(1, -1).split(',').map((entry) => (entry.startsWith('"') ? entry.slice(1, -1) : entry));
+  } else operands = [first];
+  const homes = operands.map(canonicalHome);
+  const partition = homes[0];
+  if (partition === undefined) throw invalid();
+  expect(new Set(homes).size).toBe(1);
   return partition;
 }
 
@@ -253,6 +309,7 @@ function wrapHomeQuery(
   original: PoolClient['query'],
   role: string,
   onBound: () => void,
+  onBindingError: (error: unknown) => void,
 ): PoolClient['query'] {
   let inTransaction = false;
   let bound = false;
@@ -267,14 +324,26 @@ function wrapHomeQuery(
     }
     const dispatch = () => Reflect.apply(original, client, args);
     if (!inTransaction || bound || !/(?:core\.partition|semantic\.identity_epoch_)/.test(sql)) return dispatch();
-    const partition = homeOf(values);
+    let partition: number;
+    try {
+      partition = homeOf(values);
+    } catch (error) {
+      onBindingError(error);
+      throw error;
+    }
     const callback =
       typeof args.at(-1) === 'function' ? (args.at(-1) as (error: unknown, result?: unknown) => unknown) : undefined;
-    const work = bindHomeQuery(client, original, role, partition).then(() => {
-      bound = true;
-      onBound();
-      return dispatch();
-    });
+    const work = bindHomeQuery(client, original, role, partition).then(
+      () => {
+        bound = true;
+        onBound();
+        return dispatch();
+      },
+      (error: unknown) => {
+        onBindingError(error);
+        throw error;
+      },
+    );
     if (!callback) return work;
     void work.then(
       () => {},
@@ -293,12 +362,23 @@ export async function isolatedDeployment() {
   const tables: { schema: string; name: string; key: string }[] = [];
   const saved = new Map<PoolClient, PoolClient['query']>();
   let enforcedTransactions = 0;
+  let firstBindingError: { error: unknown } | undefined;
   const acquire = (client: PoolClient) => {
-    const query = saved.get(client) ?? client.query;
+    // Install once per physical lease owner so later boundary wrappers remain composed above it.
+    if (saved.has(client)) return;
+    const query = client.query;
     saved.set(client, query);
-    client.query = wrapHomeQuery(client, query, role, () => {
-      enforcedTransactions++;
-    });
+    client.query = wrapHomeQuery(
+      client,
+      query,
+      role,
+      () => {
+        enforcedTransactions++;
+      },
+      (error) => {
+        firstBindingError ??= { error };
+      },
+    );
   };
   return {
     ...db,
@@ -344,20 +424,35 @@ export async function isolatedDeployment() {
     async close() {
       db.pool.off('acquire', acquire);
       for (const [client, query] of saved) client.query = query;
-      try {
-        if (tables.length) {
-          expect(enforcedTransactions).toBeGreaterThan(0);
-          for (const table of tables.reverse()) {
-            await db.admin.query(`DROP POLICY terminal_native_home ON ${table.schema}.${table.name}`);
-            await db.admin.query(`ALTER TABLE ${table.schema}.${table.name} DISABLE ROW LEVEL SECURITY`);
-          }
-          await db.admin.query(`DROP FUNCTION IF EXISTS semantic.terminal_test_home()`);
-          await db.admin.query(`DROP OWNED BY ${role}`);
-          await db.admin.query(`DROP ROLE ${role}`);
+      const failures: unknown[] = [];
+      const attempt = async (cleanup: () => unknown) => {
+        try {
+          await cleanup();
+        } catch (error) {
+          failures.push(error);
         }
-      } finally {
-        await db.close();
+      };
+      if (tables.length) {
+        await attempt(() => {
+          try {
+            expect(enforcedTransactions).toBeGreaterThan(0);
+          } catch (error) {
+            if (firstBindingError)
+              throw new AggregateError([firstBindingError.error, error], 'Native home binding failed before enforcement');
+            throw error;
+          }
+        });
+        for (const table of [...tables].reverse()) {
+          await attempt(() => db.admin.query(`DROP POLICY terminal_native_home ON ${table.schema}.${table.name}`));
+          await attempt(() => db.admin.query(`ALTER TABLE ${table.schema}.${table.name} DISABLE ROW LEVEL SECURITY`));
+        }
+        await attempt(() => db.admin.query(`DROP FUNCTION IF EXISTS semantic.terminal_test_home()`));
+        await attempt(() => db.admin.query(`DROP OWNED BY ${role}`));
+        await attempt(() => db.admin.query(`DROP ROLE ${role}`));
       }
+      await attempt(() => db.close());
+      if (failures.length === 1) throw failures[0];
+      if (failures.length) throw new AggregateError(failures, 'Native home enforcement and cleanup failed');
     },
   };
 }

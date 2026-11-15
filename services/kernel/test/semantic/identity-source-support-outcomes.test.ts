@@ -59,7 +59,7 @@ test('an actual admitted identity job yields complete original support and curre
     };
     const { publicFilterSource } = await nativeProducer();
     const source = publicFilterSource(config);
-    const meaning = { ...release, type: 'schema:Person' };
+    const meaning = release;
     const resolved = await createPublicFilterSourceBinding(f.pool, config.routeKey, f.access).resolve(
       {
         source,
@@ -244,7 +244,7 @@ test('cancelled native preparation never becomes support readiness or an empty c
     const resolved = await createPublicFilterSourceBinding(f.pool, config.routeKey, f.access).resolve(
       {
         source: publicFilterSource(config),
-        meaning: { ...release, type: 'schema:Person' },
+        meaning: release,
         capture: {
           sort: 'id',
           size: 20,

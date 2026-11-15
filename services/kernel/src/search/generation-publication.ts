@@ -186,7 +186,7 @@ function locator(consumer: PublicFilterConsumer) {
 function bindingKey(definition: SearchPublicFilterSourceDefinition) {
   return {
     source: definition.source,
-    meaning: { digest: definition.meaning.digest, type: definition.meaning.type },
+    meaning: { digest: definition.meaning.digest },
     readDefinition: definition.readDefinition,
   };
 }
@@ -400,7 +400,7 @@ export function createSearchGenerationPublication(
       capture.after !== undefined
     )
       throw new Pending('source_pending');
-    if (definition.meaning.digest !== meaning.digest || definition.meaning.type !== meaning.type)
+    if (definition.meaning.digest !== meaning.digest)
       throw new Pending('registration_missing');
   }
   async function adopt(job: Job, context: PublicFilterConsumerContext, meter: Meter, needObservation = false) {

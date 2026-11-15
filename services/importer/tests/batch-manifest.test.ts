@@ -1,6 +1,5 @@
-import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { afterEach, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   BATCH_PREFLIGHT_NOTE,
@@ -13,9 +12,17 @@ import {
 const bangumi = '{"id":1001,"type":2,"name":"Lantern"}\n';
 const openlibrary =
   '/type/work\t/works/OL1W\t1\t2020-01-01T00:00:00Z\t{"type":{"key":"/type/work"},"key":"/works/OL1W","revision":1,"title":"A Catalogue Journey"}\n';
+const temporary = join(import.meta.dir, '../../../.temp');
+const workspaces = new Set<string>();
+afterEach(async () => {
+  await Promise.all([...workspaces].map((directory) => rm(directory, { recursive: true, force: true })));
+  workspaces.clear();
+});
 
 async function workspace() {
-  const directory = await mkdtemp(join(tmpdir(), 'batch-manifest-'));
+  await mkdir(temporary, { recursive: true });
+  const directory = await mkdtemp(join(temporary, 'batch-manifest-'));
+  workspaces.add(directory);
   const bangumiDump = join(directory, 'bangumi.jsonl');
   const libraryDump = join(directory, 'openlibrary.tsv');
   const state = join(directory, 'state.sqlite');

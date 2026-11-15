@@ -2,6 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { sessionQueryKey, signedOutSession } from '../../src/reader/lifetime/contract';
+import { PageVisitBinding } from '../../src/subject/page-visit-binding';
+import { localizeUrl, setLocale } from '../../src/paraglide/runtime.js';
+
+/** Match the real localized address before asking the locale runtime to observe it. */
+export function setAuthoringFixtureLocale(locale: Parameters<typeof setLocale>[0]) {
+  window.history.replaceState(window.history.state, '', localizeUrl(window.location.href, { locale }).href);
+  setLocale(locale, { reload: false });
+}
 
 /** Mounted authoring ports own their I/O; preferences get a private, signed-out query client. */
 export async function mountAuthoringFixture(content: ReactNode, dispose?: () => void) {
@@ -26,7 +34,11 @@ export async function mountAuthoringFixture(content: ReactNode, dispose?: () => 
   };
   const render = async (next: ReactNode) => {
     try {
-      await act(async () => root.render(createElement(QueryClientProvider, { client, children: next })));
+      await act(async () =>
+        root.render(
+          createElement(QueryClientProvider, { client, children: createElement(PageVisitBinding, { children: next }) }),
+        ),
+      );
     } catch (error) {
       try {
         await close();

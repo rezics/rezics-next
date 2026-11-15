@@ -1,6 +1,7 @@
 import { checkDocument, fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { Editor } from '@tiptap/core';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { RichTextEditor } from './rich-text-editor.tsx';
@@ -46,7 +47,14 @@ function demo(profile: 'blocks' | 'text' = 'blocks', delayed = false) {
             }
           />
         ) : null}
-        <button type="button" onClick={() => setShown(false)}>
+        <button
+          type="button"
+          onClick={(event) => {
+            const target = event.currentTarget;
+            setShown(false);
+            requestAnimationFrame(() => target.focus());
+          }}
+        >
           Remove editor
         </button>
         {profile === 'text' ? (
@@ -181,9 +189,11 @@ export const AltText: Story = {
     expect(canvas.getByRole('button', { name: 'Image properties' })).toHaveFocus();
     expect(images(altText.latest.current)[0]?.attrs?.alt).toBe('A ridge above the clouds at dawn');
 
+    const removeEditor = canvas.getByRole('button', { name: 'Remove editor' });
     await userEvent.keyboard('{Enter}');
-    await userEvent.click(canvas.getByRole('button', { name: 'Remove editor' }));
-    expect(canvas.getByRole('button', { name: 'Remove editor' })).toHaveFocus();
+    // A host/controller replacement can arrive while the document is inert behind its properties modal.
+    removeEditor.click();
+    await waitFor(() => expect(removeEditor).toHaveFocus());
     expect(altText.calls).toHaveLength(1);
   },
 };
@@ -397,10 +407,13 @@ async function lifetimeCaret(canvasElement: HTMLElement, offset = 7) {
   const textbox = within(canvasElement).getByRole('textbox', { name: 'Lifetime post' });
   await userEvent.click(textbox);
   const text = textbox.querySelector('p')?.firstChild;
-  if (text?.nodeType === Node.TEXT_NODE) {
-    window.getSelection()?.collapse(text, Math.min(offset, text.textContent?.length ?? 0));
-    document.dispatchEvent(new Event('selectionchange'));
-  }
+  if (text?.nodeType !== Node.TEXT_NODE) throw new Error('The lifetime fixture needs its first paragraph text node');
+  const target = Math.min(offset, text.textContent?.length ?? 0);
+  window.getSelection()?.collapse(text, target);
+  document.dispatchEvent(new Event('selectionchange'));
+  const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+  const position = editor.view.posAtDOM(text, target);
+  await waitFor(() => expect(editor.state.selection.empty && editor.state.selection.from === position).toBe(true));
   return textbox;
 }
 
@@ -408,7 +421,15 @@ async function chooseLifetimeFile(canvasElement: HTMLElement, name: string, alt:
   const canvas = within(canvasElement);
   let textbox = await lifetimeCaret(canvasElement, slash ? Number.MAX_SAFE_INTEGER : 7);
   if (slash) {
-    await userEvent.type(textbox, '/i');
+    // The helper already placed the caret at a valid slash boundary; type() would click the host again.
+    const editor = (textbox as HTMLElement & { editor: Editor }).editor;
+    const position = editor.state.selection.$from;
+    const before = position.parent.textBetween(0, position.parentOffset);
+    expect(
+      before.length === 0 || /\s$/u.test(before),
+      'The fixture must offer slash insertion at its intended text boundary',
+    ).toBe(true);
+    await userEvent.keyboard('/i');
     await canvas.findByRole('option', { name: 'Image' });
     await userEvent.keyboard('{Enter}');
   } else {
@@ -434,18 +455,21 @@ export const UploadImage: Story = {
     uploadLifetime.reset();
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
+    const disableEditor = canvas.getByRole('button', { name: 'Disable editor' });
+    const makeReadOnly = canvas.getByRole('button', { name: 'Make read only' });
 
     await lifetimeCaret(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
     await page.findByRole('dialog', { name: 'Insert image' });
-    await userEvent.click(canvas.getByRole('button', { name: 'Disable editor' }));
-    expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull();
+    // Invoke the host/controller, rather than querying an intentionally inert background while modal.
+    disableEditor.click();
+    await waitFor(() => expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull());
     await userEvent.click(canvas.getByRole('button', { name: 'Enable editor' }));
     await lifetimeCaret(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
     await page.findByRole('dialog', { name: 'Insert image' });
-    await userEvent.click(canvas.getByRole('button', { name: 'Make read only' }));
-    expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull();
+    makeReadOnly.click();
+    await waitFor(() => expect(page.queryByRole('dialog', { name: 'Insert image' })).toBeNull());
     await userEvent.click(canvas.getByRole('button', { name: 'Allow editing' }));
 
     let textbox = await chooseLifetimeFile(canvasElement, 'button.png', 'Button description');

@@ -1,6 +1,7 @@
 import type { CompositionDocument } from '@rezics/composition';
 import seriesStarter from '../../../../../packages/definitions/presentation/series/zone.json';
 import type { ZonePageResponse, ZonePublic } from '../appearance';
+import { copyStarterIntro } from './starter-document';
 
 export const SERIES_CANDIDATE_IDS = {
   preview: '0193c000-0007-7000-8000-000000000000',
@@ -37,28 +38,12 @@ function starterDocument(route: SeriesCandidateRoute, notice?: string): Composit
   if (!page) throw new Error(`The Series starter is missing its ${route || 'home'} page.`);
   if (!notice) return page.document as CompositionDocument;
 
-  const source = page.document as unknown as {
-    root: CompositionDocument['root'];
-    content: unknown[];
-  };
-  const content = [...source.content];
-  const intro = content.findIndex(
-    (node) =>
-      typeof node === 'object' &&
-      node !== null &&
-      'type' in node &&
-      node.type === 'Text' &&
-      'props' in node &&
-      typeof node.props === 'object' &&
-      node.props !== null &&
-      'id' in node.props &&
-      node.props.id === 'intro',
-  );
-  content.splice(intro + 1, 0, {
+  const authored = copyStarterIntro(page.document as CompositionDocument, 'Series');
+  authored.siblings.splice(authored.siblings.indexOf(authored.intro) + 1, 0, {
     type: 'Text',
     props: { id: 'series-preview-note', text: notice },
   });
-  return { root: source.root, content } as CompositionDocument;
+  return authored.document;
 }
 
 const homeNotices = {

@@ -49,7 +49,7 @@ const negative = (author: string): PublicFilterConsumerCaptureInput => ({
   },
 });
 
-async function setup(type = 'schema:Book', configure?: (f: Awaited<ReturnType<typeof fixture>>) => Promise<void>) {
+async function setup(configure?: (f: Awaited<ReturnType<typeof fixture>>) => Promise<void>) {
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
   try {
@@ -65,7 +65,7 @@ async function setup(type = 'schema:Book', configure?: (f: Awaited<ReturnType<ty
       search,
       clock: systemClock,
       context: context(),
-      meaning: { ...f.meaning, type },
+      meaning: f.meaning,
     });
     return {
       f,
@@ -307,7 +307,7 @@ test('native tuple and consent reductions repair their dependent source keys bef
     await n.close();
   }
 
-  const consent = await setup('schema:Organization');
+  const consent = await setup();
   try {
     const agent = await ensureAccountAgent(consent.f.db.pool, {
       account: consent.f.accounts.editor,
@@ -650,7 +650,7 @@ test('native irrelevant key narrowing never suppresses own-row or excluded negat
 test('native capture retains the expanded shared query meaning before deriving its physical plan and complete dependency keys', async () => {
   let author!: string;
   let book!: string;
-  const n = await setup('schema:Book', async (f) => {
+  const n = await setup(async (f) => {
     author = await f.create();
     book = await f.create('schema:Book', { 'schema:author': [statement('schema:author', author)] });
     const release = structuredClone(f.meaning.release);

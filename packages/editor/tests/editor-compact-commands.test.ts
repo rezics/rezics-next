@@ -132,90 +132,106 @@ test('indexed native removal emits the exact maintained collector steps for mixe
   }
 });
 
-test('real many-run mark commands and clear formatting dispatch native steps with bounded prefix materialization and undo', async () =>
-  editorDOM(() => {
-    let changed: Transaction | undefined;
-    const count = 6_000;
-    const editor = new Editor({
-      extensions: [History, ...editorExtensions('blocks')],
-      injectCSS: false,
-      coreExtensionOptions: { delete: { filterTransaction: skipProvenTextReplay } },
-      content: {
-        type: 'doc',
-        content: Array.from({ length: count }, (_, index) => ({
-          type: 'paragraph',
-          attrs: { id: `p${index}`, lang: 'ja', textAlign: 'right' },
-          content: [
-            {
-              type: 'text',
-              text: 'sample',
-              marks: [{ type: 'textStyle', attrs: { color: `color-${index}` } }, { type: 'italic' }],
-            },
-          ],
-        })),
-      },
-      onTransaction: ({ transaction, appendedTransactions }) => {
-        recordTextReplayBatch(transaction, appendedTransactions);
-        if (transaction.docChanged) changed = transaction;
-      },
-      editorProps: { handleScrollToSelection: () => true },
-    });
-    try {
-      const before = editor.state.doc;
-      editor.commands.setTextSelection({ from: 1, to: before.content.size - 1 });
-      const started = performance.now();
-      markCommands.find((command) => command.id === 'bold')!.run(editor, () => undefined);
-      const marked = performance.now();
-      const bold = editor.state.doc;
-      const boldStats = compactTransactionMetrics(changed!)!;
-      expect(boldStats.fastSteps).toBe(count);
-      expect(boldStats.materializations).toBeLessThanOrEqual(2);
-      expect(boldStats.ordinarySteps).toBe(0);
-      expect(skipProvenTextReplay(changed!)).toBe(true);
-      bold.forEach((node, _position, index) => {
-        expect(node.attrs).toEqual(before.child(index).attrs);
-        expect(node.firstChild!.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+// This is a fixture + six real EditorView dispatches, not a five-second product latency SLA. Phase costs stay reported.
+test(
+  'real many-run mark commands and clear formatting dispatch native steps with bounded prefix materialization and undo',
+  async () =>
+    editorDOM(() => {
+      const setupStarted = performance.now();
+      let changed: Transaction | undefined;
+      const count = 6_000;
+      const editor = new Editor({
+        extensions: [History, ...editorExtensions('blocks')],
+        injectCSS: false,
+        coreExtensionOptions: { delete: { filterTransaction: skipProvenTextReplay } },
+        content: {
+          type: 'doc',
+          content: Array.from({ length: count }, (_, index) => ({
+            type: 'paragraph',
+            attrs: { id: `p${index}`, lang: 'ja', textAlign: 'right' },
+            content: [
+              {
+                type: 'text',
+                text: 'sample',
+                marks: [{ type: 'textStyle', attrs: { color: `color-${index}` } }, { type: 'italic' }],
+              },
+            ],
+          })),
+        },
+        onTransaction: ({ transaction, appendedTransactions }) => {
+          recordTextReplayBatch(transaction, appendedTransactions);
+          if (transaction.docChanged) changed = transaction;
+        },
+        editorProps: { handleScrollToSelection: () => true },
       });
-      const boldHistoryStart = performance.now();
-      expect(undoCommand.run(editor, () => undefined)).toBe(true);
-      expect(editor.state.doc.eq(before)).toBe(true);
-      expect(redoCommand.run(editor, () => undefined)).toBe(true);
-      expect(editor.state.doc.eq(bold)).toBe(true);
-      const boldHistoryEnd = performance.now();
-      editor.view.dispatch(closeHistory(editor.state.tr));
-      const clearStart = performance.now();
-      markCommands.find((command) => command.id === 'clearFormatting')!.run(editor, () => undefined);
-      const cleared = performance.now();
-      const clearStats = compactTransactionMetrics(changed!)!;
-      expect(clearStats.materializations).toBeLessThanOrEqual(3);
-      // The uniform bold/italic runs each span multiple paragraphs: two ordinary native steps,
-      // rather than one retained document per differently styled text run.
-      expect(clearStats.ordinarySteps).toBe(2);
-      expect(skipProvenTextReplay(changed!)).toBe(true);
-      editor.state.doc.forEach((node, _position, index) => {
-        expect(node.attrs).toEqual(before.child(index).attrs);
-        expect(node.firstChild!.marks).toHaveLength(0);
-      });
-      const clearHistoryStart = performance.now();
-      expect(undoCommand.run(editor, () => undefined)).toBe(true);
-      expect(editor.state.doc.eq(bold)).toBe(true);
-      expect(redoCommand.run(editor, () => undefined)).toBe(true);
-      expect(editor.state.doc.firstChild!.firstChild!.marks).toHaveLength(0);
-      console.info(
-        JSON.stringify({
-          nativeMarkCommands: true,
-          paragraphs: count,
-          boldSteps: boldStats.fastSteps,
-          boldMaterializations: boldStats.materializations,
-          boldDispatchMs: Math.round(marked - started),
-          boldUndoRedoMs: Math.round(boldHistoryEnd - boldHistoryStart),
-          clearSteps: clearStats.fastSteps,
-          clearMaterializations: clearStats.materializations,
-          clearDispatchMs: Math.round(cleared - clearStart),
-          clearUndoRedoMs: Math.round(performance.now() - clearHistoryStart),
-        }),
-      );
-    } finally {
-      editor.destroy();
-    }
-  }));
+      const setupFinished = performance.now();
+      try {
+        const before = editor.state.doc;
+        editor.commands.setTextSelection({ from: 1, to: before.content.size - 1 });
+        const started = performance.now();
+        markCommands.find((command) => command.id === 'bold')!.run(editor, () => undefined);
+        const marked = performance.now();
+        const bold = editor.state.doc;
+        const boldStats = compactTransactionMetrics(changed!)!;
+        expect(boldStats.fastSteps).toBe(count);
+        expect(boldStats.materializations).toBeLessThanOrEqual(2);
+        expect(boldStats.ordinarySteps).toBe(0);
+        expect(skipProvenTextReplay(changed!)).toBe(true);
+        bold.forEach((node, _position, index) => {
+          expect(node.attrs).toEqual(before.child(index).attrs);
+          expect(node.firstChild!.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+        });
+        const boldHistoryStart = performance.now();
+        expect(undoCommand.run(editor, () => undefined)).toBe(true);
+        expect(editor.state.doc.eq(before)).toBe(true);
+        expect(redoCommand.run(editor, () => undefined)).toBe(true);
+        expect(editor.state.doc.eq(bold)).toBe(true);
+        const boldHistoryEnd = performance.now();
+        editor.view.dispatch(closeHistory(editor.state.tr));
+        const clearStart = performance.now();
+        markCommands.find((command) => command.id === 'clearFormatting')!.run(editor, () => undefined);
+        const cleared = performance.now();
+        const clearStats = compactTransactionMetrics(changed!)!;
+        expect(clearStats.materializations).toBeLessThanOrEqual(3);
+        // The uniform bold/italic runs each span multiple paragraphs: two ordinary native steps,
+        // rather than one retained document per differently styled text run.
+        expect(clearStats.ordinarySteps).toBe(2);
+        expect(skipProvenTextReplay(changed!)).toBe(true);
+        editor.state.doc.forEach((node, _position, index) => {
+          expect(node.attrs).toEqual(before.child(index).attrs);
+          expect(node.firstChild!.marks).toHaveLength(0);
+        });
+        const clearHistoryStart = performance.now();
+        expect(undoCommand.run(editor, () => undefined)).toBe(true);
+        expect(editor.state.doc.eq(bold)).toBe(true);
+        expect(redoCommand.run(editor, () => undefined)).toBe(true);
+        expect(editor.state.doc.firstChild!.firstChild!.marks).toHaveLength(0);
+        console.info(
+          JSON.stringify({
+            nativeMarkCommands: true,
+            paragraphs: count,
+            fixtureAndEditorViewSetupMs: Math.round(setupFinished - setupStarted),
+            boldSteps: boldStats.fastSteps,
+            boldMaterializations: boldStats.materializations,
+            boldDispatchMs: Math.round(marked - started),
+            boldUndoRedoMs: Math.round(boldHistoryEnd - boldHistoryStart),
+            clearSteps: clearStats.fastSteps,
+            clearMaterializations: clearStats.materializations,
+            clearDispatchMs: Math.round(cleared - clearStart),
+            clearUndoRedoMs: Math.round(performance.now() - clearHistoryStart),
+          }),
+        );
+      } finally {
+        const destroyStarted = performance.now();
+        editor.destroy();
+        console.info(
+          JSON.stringify({
+            nativeMarkCommandCleanup: true,
+            editorViewDestroyMs: Math.round(performance.now() - destroyStarted),
+            fixtureThroughDestroyMs: Math.round(performance.now() - setupStarted),
+          }),
+        );
+      }
+    }),
+  10_000,
+);

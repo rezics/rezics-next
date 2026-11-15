@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
+import { bundledDigest } from '@rezics/definitions/bundled';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { retainedPublicFilterProjectionDependenciesCurrent } from '../../src/semantic/public-filter-projection.ts';
 import type { PublicFilterProjectionPage } from '../../src/semantic/public-filter-source-contract.ts';
+import readReplayHead from '../../src/semantic/public-filter-projection-replay-head.sql';
 
 const routes = [0x0101, 0x1212, 0x2323] as const;
 const [subject, terminal, foreign] = routes.map(newId);
@@ -18,7 +20,7 @@ const page: Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete
     terminal: terminal!,
     revision: 4,
     securityRevision: 'security-4',
-    currentRelease: 'release-4',
+    currentRelease: bundledDigest,
   },
   records: [],
   repairLocators: [
@@ -47,7 +49,7 @@ const page: Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete
     frontierWrites: 0,
   },
 };
-const request = { page, meaning: { digest: 'meaning-4', type: 'schema:Book' } };
+const request = { page, meaning: { digest: bundledDigest } };
 const buildRow = {
   build_id: page.frontier.build,
   generation: String(page.frontier.generation),
@@ -80,7 +82,19 @@ function fakeClient(
     query(input: QueryConfig | string, values?: unknown[]) {
       const sql = typeof input === 'string' ? input : input.text;
       const operands = typeof input === 'string' ? (values ?? []) : (input.values ?? []);
-      return Promise.resolve().then(() => query(sql, operands));
+      return Promise.resolve().then(() => query(sql, operands)).then((native) => {
+        if (typeof input !== 'string' && 'rowMode' in input && input.rowMode === 'array')
+          return {
+            ...native,
+            rows: native.rows.map((row) => Object.values(row).map((value) => {
+              if (value === null || typeof value === 'string') return value;
+              if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean')
+                return String(value);
+              throw new TypeError('Lifetime fixture requires scalar PostgreSQL text fields');
+            })),
+          };
+        return native;
+      });
     },
     release,
   } as unknown as PoolClient;
@@ -97,7 +111,12 @@ function fakePool(connect: () => Promise<PoolClient>): Pool {
 
 const isBuild = (sql: string) => sql.includes('FROM semantic.public_filter_projection_build');
 const isHead = (sql: string) => sql.includes('FROM semantic.public_filter_projection_head e');
-const partitionArgument = (values: readonly unknown[]) => values.find((value): value is number => typeof value === 'number');
+const partitionArgument = (values: readonly unknown[]) => {
+  const value = values[readReplayHead.params.indexOf('partition_no')];
+  if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value))
+    throw new TypeError('Expected the generated partition binding in PostgreSQL text form');
+  return Number(value);
+};
 const read = (pool: Pool, deadline = Date.now() + 500) =>
   retainedPublicFilterProjectionDependenciesCurrent(pool, request, { deadline });
 
@@ -124,7 +143,9 @@ test('retained build and unique original heads share one bounded snapshot', asyn
   expect(submitted[0]?.sql).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   expect(submitted[1]?.sql.startsWith('SET LOCAL statement_timeout')).toBe(true);
   expect(submitted.at(-1)?.sql).toBe('COMMIT');
-  expect(submitted.filter(({ sql }) => isBuild(sql))).toHaveLength(1);
+  const builds = submitted.filter(({ sql }) => isBuild(sql));
+  expect(builds).toHaveLength(1);
+  expect(builds[0]?.values).toContain(bundledDigest);
   const heads = submitted.filter(({ sql }) => isHead(sql));
   expect(heads).toHaveLength(3);
   expect(heads.map(({ values }) => partitionArgument(values)).sort()).toEqual([...homes].sort());

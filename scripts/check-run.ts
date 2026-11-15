@@ -831,7 +831,9 @@ function assertExactSnapshotWorktree(record: CheckRunInvocationRecord): void {
     worktree !== snapshot.workspace ||
     basename(tempRoot) !== '.temp' ||
     worktree !== join(scratch, 'workspace') ||
-    !/^check-run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-?$/i.test(basename(scratch))
+    !/^check-run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-[A-Za-z0-9]{6})?$/i.test(
+      basename(scratch),
+    )
   )
     throw new CheckRunUnavailable('check-run: retained snapshot path does not match an exact check-run worktree');
   if (

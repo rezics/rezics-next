@@ -74,6 +74,7 @@ const serverIndependentTests = [
   'tests/knowledge-private.test.tsx',
   'tests/authored-field-family.test.tsx',
   'tests/composer-lifetime.test.tsx',
+  'tests/zone-candidate-intros.test.ts',
   // This journey owns a server with private issuer/client bindings.
   'tests/post-editing.test.ts',
   'tests/root-application-shell.test.tsx',

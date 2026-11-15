@@ -115,6 +115,7 @@ test('the mention menu debounces, aborts stale lookups, inserts account ids, pre
     expect(outcomes).toEqual([
       'Debounce And Cancel: passed',
       'Escape Keeps Text: passed',
+      'Follows Scrolled Caret: passed',
       'Keyboard Choose: passed',
       'No Source: passed',
       'Pointer Choose: passed',

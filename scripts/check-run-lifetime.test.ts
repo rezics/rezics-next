@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import {
   discardRegisteredCheckRunFailedSnapshot,
   prepareCandidateSnapshot,
@@ -867,8 +867,9 @@ test('Original lifetime custody survives lost reference clear rejected evidence 
   });
   expect(recovered.final).toEqual(original);
   expect(recovered.finalCustody?.reconciliation).toBe('settled');
+  expect(recovered.finalCustody?.privateFiles).toBe('settled');
   expect(recovered.finalCustody?.delivery).toBe('pending');
-  expect(recovered.finalCustody?.aggregate).toBe('unknown');
+  expect(recovered.finalCustody?.aggregate).toBe('pending');
   expect(recovered.snapshotCustody).toBe('removed');
   expect(recovered.phase).toBe('unknown');
 
@@ -1512,6 +1513,7 @@ async function failedSnapshotFixture(
   exitCode = 70,
   cleanup: Partial<CheckRunFinalSettlement['cleanup']> = {},
   accept = true,
+  allocatedScratchName?: string,
 ) {
   const root = fixtureRoot();
   const state = privateDirectory(root, 'state');
@@ -1523,7 +1525,9 @@ async function failedSnapshotFixture(
   git(candidate, ['commit', '-m', 'fixture generated source']);
   const sourceRevision = git(candidate, ['rev-parse', 'HEAD']);
   const returns = ['contracts/openapi.json'];
-  const frozen = await prepareCandidateSnapshot(candidate, sourceRevision, undefined, returns);
+  const scratch = allocatedScratchName === undefined ? undefined : join(candidate, '.temp', allocatedScratchName);
+  const allocation = scratch === undefined ? undefined : { scratch, workspace: join(scratch, 'workspace') };
+  const frozen = await prepareCandidateSnapshot(candidate, sourceRevision, undefined, returns, allocation);
   const snapshot = {
     workspace: frozen.workspace,
     scratch: frozen.scratch,
@@ -1575,8 +1579,8 @@ async function failedSnapshotFixture(
         status: 'unavailable',
         sourceSha256: null,
         manifestSha256: null,
-        fileCount: null,
-        totalBytes: null,
+        fileCount: 0,
+        totalBytes: 0,
       },
       returns: {
         status: 'missing',
@@ -1611,6 +1615,9 @@ async function failedSnapshotFixture(
 
 test('explicit failed snapshot discard retains native70, missing returns and immutable non-green final', async () => {
   const f = await failedSnapshotFixture();
+  expect(basename(f.snapshot.scratch)).toMatch(
+    /^check-run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[A-Za-z0-9]{6}$/i,
+  );
   expect(checkRunSnapshotReleaseKind(f.record)).toBeNull();
   const originalFinal = encodeCheckRunFinalSettlement(f.final!);
   const originalNative = f.record.native;
@@ -1778,23 +1785,42 @@ test('a second failed discard waits for the original invocation fence and cannot
     },
     f.options,
   );
-  await entered;
-  const second = discardCheckRunFailedSnapshot(
-    f.registration.invocationId,
-    f.registration.nonce,
-    f.decision,
-    () => {
-      removals++;
-    },
-    f.options,
-  );
-  const rejected = expect(second).rejects.toThrow('retained terminal custody');
-  for (let index = 0; index < 4; index++) await Promise.resolve();
-  expect(removals).toBe(1);
-  release();
-  expect((await first).snapshotCustody).toBe('removed');
-  await rejected;
-  expect(removals).toBe(1);
+  await Promise.race([
+    entered,
+    first.then(() => {
+      throw new Error('first discard completed before entering the owned removal callback');
+    }),
+  ]);
+  let secondOutcome: Promise<PromiseSettledResult<unknown>> | undefined;
+  try {
+    const second = discardCheckRunFailedSnapshot(
+      f.registration.invocationId,
+      f.registration.nonce,
+      f.decision,
+      () => {
+        removals++;
+      },
+      f.options,
+    );
+    // Observe immediately, but consume no pending assertion while the first owner holds the fence.
+    secondOutcome = second.then(
+      (value) => ({ status: 'fulfilled' as const, value }),
+      (reason: unknown) => ({ status: 'rejected' as const, reason }),
+    );
+    expect(removals).toBe(1);
+    release();
+    expect((await first).snapshotCustody).toBe('removed');
+    const outcome = await secondOutcome;
+    expect(outcome.status).toBe('rejected');
+    if (outcome.status !== 'rejected') throw new Error('second discard bypassed changed snapshot custody');
+    expect(outcome.reason).toBeInstanceOf(Error);
+    expect(String(outcome.reason)).toContain('retained terminal custody');
+    expect(removals).toBe(1);
+  } finally {
+    release();
+    await first.catch(() => undefined);
+    await secondOutcome;
+  }
 });
 
 test('failed snapshot CLI requires the original nonce and explicit return abandonment and reports the failed original', async () => {
@@ -1835,4 +1861,38 @@ test('failed snapshot CLI requires the original nonce and explicit return abando
   expect(record.final).toEqual(f.final);
   expect(record.final.returns.status).toBe('missing');
   expect(record.phase).toBe('unknown');
+});
+
+test('failed snapshot discard admits the exact prepared allocation path produced by prepareCandidateSnapshot', async () => {
+  const name = `check-run-${randomUUID()}`;
+  const f = await failedSnapshotFixture(70, {}, true, name);
+  expect(basename(f.snapshot.scratch)).toBe(name);
+  const result = await discardRegisteredCheckRunFailedSnapshot(
+    f.registration.invocationId,
+    f.registration.nonce,
+    true,
+    f.options,
+  );
+  expect(result.snapshotCustody).toBe('removed');
+  expect(existsSync(f.snapshot.workspace)).toBe(false);
+  expect(existsSync(f.snapshot.scratch)).toBe(false);
+  expect(result.final).toEqual(f.final);
+  expect(result.native?.exitCode).toBe(70);
+  expect(result.phase).toBe('unknown');
+});
+
+test('failed snapshot discard rejects unsupported suffixes even for registered source-matching Git worktrees', async () => {
+  const stem = `check-run-${randomUUID()}`;
+  for (const name of [`${stem}-`, `${stem}-abc12`, `${stem}-abc1234`, `${stem}-abc_12`, `${stem}-abc123-extra`]) {
+    const f = await failedSnapshotFixture(70, {}, true, name);
+    expect(git(f.snapshot.workspace, ['rev-parse', 'HEAD'])).toBe(f.record.binding.sourceRevision);
+    await expect(
+      discardRegisteredCheckRunFailedSnapshot(f.registration.invocationId, f.registration.nonce, true, f.options),
+    ).rejects.toThrow('retained snapshot path does not match an exact check-run worktree');
+    expect(existsSync(f.snapshot.workspace)).toBe(true);
+    expect(existsSync(f.snapshot.scratch)).toBe(true);
+    const retained = await getCheckRunStatus(f.registration.invocationId, f.options);
+    expect(retained.snapshotCustody).toBe('owned');
+    expect(retained.final).toEqual(f.final);
+  }
 });

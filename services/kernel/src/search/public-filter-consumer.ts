@@ -1,3 +1,5 @@
+import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
+import { publicFilterCaptureDependencies } from './public-filter-capture-dependencies.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import type { NativePublicFilterPublicationCompletion } from '../semantic/public-filter-source-binding.ts';
@@ -14,7 +16,6 @@ import repairPageSave from './public-filter-custody-repair-page-save.sql';
 import repairPageSql from './public-filter-custody-repair-page.sql';
 import { isDeepStrictEqual } from 'node:util';
 import { installPublicFilterCoveragePage, withPublicFilterCoverageStart } from './public-filter-coverage-page.ts';
-import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, parseFilter, walkFilter } from '@rezics/filter';
 import { routeOf } from '../route/route.ts';
 import type {
@@ -167,8 +168,8 @@ export function compilePublicFilterConsumerCapture(
     throw new TypeError('Capture requires explicit filterDocument and parsed text');
   const copied = structuredClone(input);
   const meaning = structuredClone(acceptedMeaning);
-  if (meaning.digest !== releaseDigest(meaning.release) || !Object.hasOwn(meaning.release.types, meaning.type))
-    throw new TypeError('Capture requires an exact accepted release and type');
+  if (!hasExactPublicFilterMeaning(meaning))
+    throw new TypeError('Capture requires an exact accepted release');
   validateOrder(copied);
 
   let filterDocument;
@@ -186,15 +187,6 @@ export function compilePublicFilterConsumerCapture(
   const text = copied.text === undefined ? undefined : compileText(copied.text, { field: 'search_text', prefix: 't' });
   const properties = [
     ...new Set(filter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
-  ];
-  const dependencyProperties = [
-    ...new Set(
-      filter?.leaves.flatMap((leaf) =>
-        leaf.facet === 'statement'
-          ? [leaf.property, ...(leaf.qualifiers?.map((qualifier) => qualifier.property) ?? [])]
-          : [],
-      ),
-    ),
   ];
   const derived = {
     query: text?.query,
@@ -238,20 +230,7 @@ export function compilePublicFilterConsumerCapture(
     ...(copied.ratingPhase === undefined ? {} : { ratingPhase: copied.ratingPhase }),
   };
 
-  // Containing source properties preserve every qualifier/range/unit association in compiler leaves.
-  // Functional keys name the existing sort declarations, including all text fields and tie breakers.
-  const orders = new Set<PublicFilterConsumerCaptureInput['sort']>(['id', capture.sort]);
-  if (text !== undefined) {
-    orders.add('relevance');
-    orders.add('name');
-  }
-  if (capture.sort === 'collections' || capture.sort === 'rating') orders.add('name');
-  const coverageProperties = [...new Set([...dependencyProperties, ...(overflowProperties ?? [])])];
-  const dependencyKeys: PublicFilterDependencyKey[] = [
-    { kind: 'type' },
-    ...coverageProperties.map((property): PublicFilterDependencyKey => ({ kind: 'property', property })),
-    ...[...orders].map((order): PublicFilterDependencyKey => ({ kind: 'order', order })),
-  ];
+  const dependencyKeys = publicFilterCaptureDependencies(capture, filter?.leaves ?? []);
   return freeze({
     capture,
     meaning,
@@ -807,7 +786,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   if (!config.pool || !config.source || !config.binding || typeof config.clock !== 'function' || !config.search)
     throw new TypeError('Consumer requires its injected native owners');
   const meaning = freeze(structuredClone(config.meaning));
-  if (meaning.digest !== releaseDigest(meaning.release) || !meaning.release.types[meaning.type])
+  if (!hasExactPublicFilterMeaning(meaning))
     throw new TypeError('Consumer requires an exact accepted meaning');
   const target = config.physicalTarget;
   if (!/^[a-z0-9][a-z0-9-]{0,95}$/.test(target)) throw new TypeError('Consumer requires a physical target');

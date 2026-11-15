@@ -15,6 +15,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
+import { catalogueFacetPredicate } from './catalogue-facet-predicate.ts';
 import canonicalize from 'canonicalize';
 import { systemClock } from '../clock.ts';
 import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
@@ -1730,9 +1731,17 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           const languages = validateHitOptions({ languages: scopedRequest.languages }).languages;
           const current = await release();
           if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-          // The native facet population is pinned to schema:Thing by its registered provider meaning.
-          const predicate = normalized.filter ?? { type: { in: ['schema:Thing'] } };
-          const admitted = await admitQuery(normalized.text, predicate, current, false, undefined, true);
+          let universe: ReturnType<typeof catalogueFacetPredicate>;
+          try {
+            universe = catalogueFacetPredicate(current, normalized.filter);
+          } catch (error) {
+            if (error instanceof FilterError) throw new ProblemError(error.problem, { errors: error.errors });
+            throw error;
+          }
+          // A release without concrete types cannot define a projectable Source meaning.
+          if (universe.kind === 'empty')
+            throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+          const admitted = await admitQuery(normalized.text, universe.predicate, current, false, undefined, true);
           if (!admitted) throw indexNotReady();
           const catalogue = catalogueFilter(admitted);
 
@@ -1747,7 +1756,11 @@ export function createSearchExecution(config: SearchServiceOptions, modules: Sea
           };
           if (scopedRequest.scope.kind === 'realm') {
             const prepared = await sourceRequest(() =>
-              scope.realm.prepare(catalogue, scopeWork.remaining(), kindDigest(current)),
+              scope.realm.prepare(
+                { and: [{ realm: { id: scopedRequest.scope.id } }, catalogue] },
+                scopeWork.remaining(),
+                kindDigest(current),
+              ),
             );
             scopeWork.native(prepared.work);
             return {

@@ -96,6 +96,7 @@ type Plan = {
   outputs: Output[];
 };
 type Work = { -readonly [K in keyof NativeStepWork]: NativeStepWork[K] };
+const mappingSourceTargets = new WeakMap<CommandTransaction, Set<string>>();
 const unavailable = (detail = 'Native mapping source, admission or receipt custody is unavailable') =>
   new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 const stale = () =>
@@ -563,7 +564,14 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
         `INSERT INTO semantic.identity_epoch_mapping_effect(partition_no,job_id,unit,job_epoch,scope_digest,plan_digest,transaction_id) VALUES($1,$2,$3,$4,$5,$6,$7)`,
         [proposed.home, job.jobId, head.unit + 1, job.epoch.toString(), saved.scope_digest, digest, transactionId],
       );
-      const result = await apply(tx, job, saved, head, proposed, measured, transactionId);
+      const sources = new Set<string>();
+      mappingSourceTargets.set(tx, sources);
+      let result: Plan;
+      try {
+        result = await apply(tx, job, saved, head, proposed, measured, transactionId);
+      } finally {
+        mappingSourceTargets.delete(tx);
+      }
       await query(
         tx,
         measured,
@@ -571,6 +579,22 @@ export const stepIdentityEpochMapping: IdentityEpochStep = async (pool, job) => 
         [proposed.home, job.jobId, head.unit + 1, json(result)],
       );
       recordIdentityEpochNativeCommit(tx, 'mapping');
+      if (sources.size) {
+        // FIFO callbacks capture the final Source after its writes and the real
+        // native commit row, before the command's receipt and outbox are written.
+        registerCommandCallback(tx, async (frameTransactionId) => {
+          if (frameTransactionId !== transactionId || currentCommand(tx).partition !== proposed.home) throw stale();
+          const captured = await query(
+            tx,
+            measured,
+            `SELECT semantic.capture_identity_epoch_source_image($1,$2,$3,$4,$5,$6) AS digest`,
+            [proposed.home, job.jobId, job.epoch.toString(), head.unit + 1, saved.scope_digest, transactionId],
+          );
+          const image = captured.rows[0]?.digest;
+          if (captured.rowCount !== 1 || !Buffer.isBuffer(image) || image.length !== 32)
+            throw unavailable('Native mapping Source image lacks exact same-frame custody');
+        });
+      }
       return { value: null, events: [wake(job, proposed.home)] };
     });
     local = await receipt(pool, job, proposed.home, head.unit + 1, digest, measured);
@@ -769,8 +793,12 @@ async function effectGate(
   measured: Work,
   transactionId: string,
 ) {
+  const sources = mappingSourceTargets.get(tx);
+  if (!sources || (sources.size > 0 && !sources.has(destination)))
+    throw unavailable('A local mapping plan requires exactly one native Source destination');
   await gate(tx, job, destination, original, previous, saved.scope_digest, measured, transactionId);
   await identityEpochStore().admitHomeEffect(tx, { kind: 'structural', original, destination, job });
+  sources.add(destination);
 }
 async function apply(
   tx: CommandTransaction,

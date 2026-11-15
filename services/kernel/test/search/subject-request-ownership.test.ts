@@ -130,7 +130,7 @@ function provider(release: FilterRelease): FacetDiscoveryProvider {
   };
   return {
     source: 'source',
-    meaning: { digest: 'a'.repeat(64), release, type: 'schema:Book' } as FacetDiscoveryProvider['meaning'],
+    meaning: { digest: 'a'.repeat(64), release } as FacetDiscoveryProvider['meaning'],
     generation: 1,
     operations: {
       async captureFacet() {

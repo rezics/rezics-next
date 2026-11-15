@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createSearchDriver } from './outcome-driver.ts';
+import { createDriverClient } from './support/driver-client.ts';
 import type { SearchDriver, HttpResponse } from '../../../../specs/search-driver.ts';
 import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
 import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
@@ -86,7 +87,8 @@ async function currentSuggestions(driver: SearchDriver, query: string): Promise<
 }
 
 test('the default real Search journey provides useful current-authorized filled or exhausted pages with finite actual preparation and recovery', async () => {
-  const driver = await createSearchDriver();
+  const client = createDriverClient(undefined, { advancedSearch: true });
+  const driver = await client.init();
   const marker = `publicjourney${randomUUID().replaceAll('-', '').replace(/[0-9]/g, 'a')}`;
   const removed: string[] = [];
   const kept: string[] = [];
@@ -147,6 +149,15 @@ test('the default real Search journey provides useful current-authorized filled 
     expect(stale.status).toBe(409);
     expect(stale.body.code).toBe('search_restart_required');
     expect(subjects(await currentPage(driver, { text: marker, sort: 'name', limit: 2 }))).toHaveLength(2);
+  } catch (error) {
+    let output: string;
+    try {
+      const observed = await client.inspect({ preparation: true });
+      output = `Worker state: ${JSON.stringify(observed.workerStats)}\n${observed.workerOutput}`;
+    } catch (inspection) {
+      output = `Failure inspection was unavailable: ${String(inspection).slice(0, 1000)}`;
+    }
+    throw new Error(`Search journey failed. Native Worker output:\n${output}`, { cause: error });
   } finally {
     await driver.close();
   }

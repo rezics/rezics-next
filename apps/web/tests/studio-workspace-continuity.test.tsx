@@ -3,7 +3,7 @@ import { act } from 'react';
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
-const { mountAuthoringFixture } = await import('./helpers/authoring-mount');
+const { mountAuthoringFixture, setAuthoringFixtureLocale } = await import('./helpers/authoring-mount');
 const { default: userEvent } = await import('@testing-library/user-event');
 const { getByRole, getAllByRole, queryByRole, waitFor } = await import('@testing-library/dom');
 const { serializeDocument } = await import('@rezics/document');
@@ -11,22 +11,27 @@ const { StudioWorkbench } = await import('../src/studio/workspace');
 const { studioWorkbenchFixture } = await import('../src/kernel/fake/studio-workbench');
 const { workbenchCopy } = await import('../src/studio/workbench-copy');
 const { m } = await import('../src/paraglide/messages.js');
-const { setLocale } = await import('../src/paraglide/runtime.js');
 
 afterAll(async () => {
-  setLocale('en', { reload: false });
+  setAuthoringFixtureLocale('en');
   await dom.restore();
 });
 
 async function mount(profile: 'book' | 'column', scenario: 'populated' | 'dirty' | 'comparison' = 'populated') {
-  setLocale('en', { reload: false });
+  setAuthoringFixtureLocale('en');
   const fixture = await studioWorkbenchFixture(profile, scenario, 'en');
   const mounted = await mountAuthoringFixture(
     <StudioWorkbench {...fixture.props} controller={fixture.controller} />,
     fixture.dispose,
   );
   const { host } = mounted;
-  const button = (name: string) => getByRole(host, 'button', { name, exact: true }) as HTMLButtonElement;
+  const button = (name: string) => {
+    const scope =
+      name === workbenchCopy.en.closeHistory
+        ? getByRole(host, 'region', { name: m.studio_workspace_versions(), exact: true })
+        : host;
+    return getByRole(scope, 'button', { name, exact: true }) as HTMLButtonElement;
+  };
   return {
     ...fixture,
     host,
@@ -73,7 +78,7 @@ test.each(profiles)(
       });
       await v.click(workbenchCopy.en.newDraft);
       await v.click(m.studio_workspace_save_switch());
-      const form = getByRole(v.host, 'form', { name: workbenchCopy.en.newDraft });
+      const form = await waitFor(() => getByRole(v.host, 'form', { name: workbenchCopy.en.newDraft }));
       expect(v.host.querySelectorAll('.studio-new-draft')).toHaveLength(1);
       expect(v.host.querySelector('.studio-document')?.hasAttribute('inert')).toBe(true);
       const title = getByRole(form, 'textbox', { name: m.studio_workspace_new_title() }) as HTMLInputElement;
@@ -213,7 +218,23 @@ test.each(profiles)(
       await act(async () => {
         editor.focus();
         document.getSelection()!.setBaseAndExtent(text, profile === 'book' ? 7 : 14, text, 7);
+        // HappyDOM emits its first selectionchange before assigning the backward direction.
+        document.dispatchEvent(new window.Event('selectionchange'));
+        expect(document.getSelection()!.anchorOffset).toBe(profile === 'book' ? 7 : 14);
+        expect(document.getSelection()!.focusOffset).toBe(7);
       });
+      const native = (
+        editor as HTMLElement & {
+          editor: {
+            state: { selection: { anchor: number; head: number } };
+            view: { posAtDOM(node: globalThis.Node, offset: number): number };
+          };
+        }
+      ).editor;
+      const expectedAnchor = native.view.posAtDOM(text, profile === 'book' ? 7 : 14);
+      const expectedHead = native.view.posAtDOM(text, 7);
+      expect(native.state.selection.anchor).toBe(expectedAnchor);
+      expect(native.state.selection.head).toBe(expectedHead);
       expect(versions).not.toHaveBeenCalled();
       expect(revision).not.toHaveBeenCalled();
       expect(queryByRole(v.host, 'button', { name: m.studio_workspace_write(), exact: true })).toBeNull();
@@ -230,6 +251,8 @@ test.each(profiles)(
       expect(document.getSelection()!.anchorNode).toBe(text);
       expect(document.getSelection()!.anchorOffset).toBe(profile === 'book' ? 7 : 14);
       expect(document.getSelection()!.focusOffset).toBe(7);
+      expect(native.state.selection.anchor).toBe(expectedAnchor);
+      expect(native.state.selection.head).toBe(expectedHead);
 
       await v.click(m.studio_workspace_versions());
       await waitFor(() => expect(v.controller.snapshot().operation).toBeNull());
@@ -447,9 +470,14 @@ test('Book organization stays central and retained, returns to the same caret, a
     await v.click(m.studio_workspace_keep_changes());
     expect(input.value).toBe('Unsent placement');
     expect(v.controller.snapshot().selected!.source.revision.exact).toEqual(exact);
-    const entry = other.closest('.studio-toc-entry')!;
-    entry.querySelector<HTMLDetailsElement>('details')!.open = true;
-    await act(async () => getByRole(entry, 'button', { name: m.studio_book_move_to(), exact: true }).click());
+    await act(async () =>
+      getByRole(outline, 'button', {
+        name: m.studio_book_organize_title({ title: v.titles.second }),
+        exact: true,
+      }).click(),
+    );
+    const menu = await waitFor(() => getByRole(document.body, 'menu'));
+    await act(async () => getByRole(menu, 'menuitem', { name: m.studio_book_move_to(), exact: true }).click());
     expect(v.host.querySelector('.studio-organization-switch')).toBeTruthy();
     await v.click(m.studio_workspace_discard_switch());
     expect(getByRole(v.host, 'form', { name: m.studio_book_move_to() })).toBeTruthy();

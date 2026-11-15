@@ -167,6 +167,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   let closed = false;
   let closing: Promise<void> | undefined;
   let cleanupFailure: { error: unknown } | undefined;
+  let publicationBindingFailure: string | undefined;
   const track = <T>(operation: () => Promise<T>): Promise<T> => {
     if (closed) return Promise.reject(new ProblemError('index_not_ready'));
     const promise = operation();
@@ -212,7 +213,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       source,
       sourceKeys,
       clock: config.clock,
-      meaning: { digest, release, type: 'schema:Thing' },
+      meaning: { digest, release },
       binding,
       writer: {
         index: consumer.physicalTarget,
@@ -264,7 +265,6 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     registry?: DiscoveryRegistry,
   ): Promise<PublicDiscoveryConsumerOperations> {
     checkDeadline(context);
-    if (!meaning.release.types['schema:Thing']) notReady();
     const operations = await createPublicFilterConsumerOperations({
       pool: config.pool,
       source,
@@ -274,7 +274,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       clock: config.clock,
       context,
       physicalTarget,
-      meaning: { digest: meaning.digest, release: meaning.release, type: 'schema:Thing' },
+      meaning: { digest: meaning.digest, release: meaning.release },
       ...(registry === undefined ? {} : { registry }),
     });
     // Native factory close drains owned observations; shutdown and replacement use this wrapper.
@@ -403,13 +403,32 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const resolved = await binding.resolve(
           {
             source,
-            meaning: { digest: current.digest, release: current.release, type: 'schema:Thing' },
+            meaning: { digest: current.digest, release: current.release },
             capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 1 },
           },
           context,
         );
-        if (resolved.status !== 'resolved')
-          return { status: resolved.status, reason: 'source_pending' as const, cost: resolved.cost };
+        if (resolved.status !== 'resolved') {
+          const failure = `${generation}:${resolved.status}:${resolved.reason}`;
+          if (publicationBindingFailure !== failure) {
+            publicationBindingFailure = failure;
+            console.warn(
+              JSON.stringify({
+                event: 'search.public_preparation.source_binding',
+                prefix: config.prefix,
+                generation,
+                status: resolved.status,
+                reason: resolved.reason,
+              }),
+            );
+          }
+          return {
+            status: resolved.status,
+            reason: resolved.reason === 'deadline' ? ('deadline' as const) : ('source_pending' as const),
+            cost: resolved.cost,
+          };
+        }
+        publicationBindingFailure = undefined;
         const registered = await custody.register(
           {
             definition: resolved.definition,
@@ -481,7 +500,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
           clock: config.clock,
           context,
           physicalTarget: subjectIndexName(config.prefix, state.active),
-          meaning: { digest: release.digest, release: release.release, type: 'schema:Thing' },
+          meaning: { digest: release.digest, release: release.release },
         });
         owned.add(native);
         let draining: Promise<void> | undefined;
@@ -538,9 +557,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const state = await subjectGenerations(requestSearch(acquisition), config.prefix);
         checkDeadline(acquisition);
         const generation = state.active;
-        if (!current || generation === null || !current.release.types['schema:Thing']) return undefined;
+        if (!current || generation === null) return undefined;
         const physicalTarget = subjectIndexName(config.prefix, generation);
-        const meaning = { digest: current.digest, release: current.release, type: 'schema:Thing' };
+        const meaning = { digest: current.digest, release: current.release };
         const provider = {
           source: config.prefix,
           meaning,

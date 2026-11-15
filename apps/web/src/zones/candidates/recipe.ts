@@ -4,6 +4,7 @@ import type { Release } from '@rezics/definitions';
 import definitions from '../../kernel/recorded/definitions-release.json';
 import recipeStarter from '../../../../../packages/definitions/presentation/recipe/zone.json';
 import type { ZonePageResponse, ZonePublic } from '../appearance';
+import { copyStarterIntro } from './starter-document';
 
 const release = definitions.release as Release;
 const properties = release.properties as Record<string, { datatype: string }>;
@@ -127,34 +128,26 @@ const sparseRecipe = recipe(RECIPE_SUBJECT_IDS.sparsePorridge, 'Rain-on-the-Wind
 export const RECIPE_PREVIEW_LABEL =
   'Candidate · development preview, gated and deferred. Fictional recipes; no live catalogue or official-site claim.';
 
-type StarterNode = { type: string; props: Record<string, unknown> };
-type StarterDocument = { root: unknown; content: StarterNode[] };
-
 const starterPage = recipeStarter.pages.find(({ route }) => route === '');
-const starterDocument = starterPage?.document as StarterDocument | undefined;
-const starterStack = starterDocument?.content[0];
-const starterChildren = starterStack?.props.children as StarterNode[] | undefined;
+const starterDocument = starterPage?.document as CompositionDocument | undefined;
 
-function homeDocument(stateCopy: string): StarterDocument {
-  if (!starterDocument || !starterStack || !starterChildren) throw new Error('The Recipe starter home is missing.');
-  const heading = starterChildren.find(({ type, props }) => type === 'Heading' && props.id === 'title');
-  const intro = starterChildren.find(({ type, props }) => type === 'Text' && props.id === 'intro');
-  const list = starterChildren.find(({ type }) => type === 'TypeList');
-  const slots = starterChildren.filter(({ type }) => type === 'Slot');
-  if (!heading || !intro || !list || slots.length !== 4) throw new Error('The Recipe starter home changed shape.');
-
-  return {
-    ...starterDocument,
-    content: [
-      {
-        ...starterStack,
-        props: {
-          ...starterStack.props,
-          children: [heading, { type: 'Text', props: { id: 'preview-note', text: stateCopy } }, intro, list, ...slots],
-        },
-      },
-    ],
-  };
+function homeDocument(stateCopy: string): CompositionDocument {
+  if (!starterDocument) throw new Error('The Recipe starter home is missing.');
+  const authored = copyStarterIntro(starterDocument, 'Recipe');
+  const heading = authored.siblings.find(({ type, props }) => type === 'Heading' && props.id === 'title');
+  const list = authored.siblings.find(({ type }) => type === 'TypeList');
+  const slots = authored.siblings.filter(({ type }) => type === 'Slot');
+  if (!heading || !list || slots.length !== 4) throw new Error('The Recipe starter home changed shape.');
+  authored.siblings.splice(
+    0,
+    authored.siblings.length,
+    heading,
+    { type: 'Text', props: { id: 'preview-note', text: stateCopy } },
+    authored.intro,
+    list,
+    ...slots,
+  );
+  return authored.document;
 }
 
 export const RECIPE_HOME_DOCUMENTS = {

@@ -3,6 +3,7 @@ import { releaseDigest } from '@rezics/definitions';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { readStatementAs } from '../../src/semantic/statement-disclosure.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { retainedPublicFilterProjectionDependenciesCurrent } from '../../src/semantic/public-filter-projection.ts';
 import {
   capturedStep,
   complete,
@@ -224,6 +225,45 @@ test('native complete selected public facet projection retains bounded frontier 
           dependency.kind === 'subject' && dependency.subject === indexed(lastWitness).qualifiers![0]!.value,
       ),
     ).toBe(true);
+  } finally {
+    await f.close();
+  }
+});
+
+
+test('one immutable release projects each native subject type and keeps exact currentness without a meaning type', async () => {
+  const { publicFilterSource } = await nativeProducer();
+  const f = await fixture();
+  try {
+    const source = publicFilterSource(f.config);
+    const person = await f.create('schema:Person');
+    const book = await f.create('schema:Book', {
+      'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
+    });
+    const personProjection = await complete(f, source, person);
+    const bookProjection = await complete({ ...f, meaning: structuredClone(f.meaning) }, source, book);
+    expect(personProjection.records).toEqual([]);
+    expect(bookProjection.records.map((record) => indexed(record))).toContainEqual(
+      expect.objectContaining({ property: 'schema:inLanguage', value: 'ja' }),
+    );
+    const current = (page: typeof bookProjection.page) =>
+      retainedPublicFilterProjectionDependenciesCurrent(
+        f.db.pool,
+        { page, meaning: { digest: f.meaning.digest } },
+        readContext(),
+      );
+    expect(await current(personProjection.page)).toBe(true);
+    expect(await current(bookProjection.page)).toBe(true);
+    const obsoleteMeaning = { ...f.meaning, type: 'schema:Book' };
+    await expect(source.readPublicFilterProjectionPage({
+      subject: book,
+      meaning: obsoleteMeaning,
+      inputLimit: 16,
+      frontier: null,
+      context: readContext(),
+    })).rejects.toBeInstanceOf(TypeError);
+    await f.post(`/v1/subjects/${person}:hide`, { reason: 'Retire the exact native projection' });
+    expect(await current(personProjection.page)).toBe(false);
   } finally {
     await f.close();
   }

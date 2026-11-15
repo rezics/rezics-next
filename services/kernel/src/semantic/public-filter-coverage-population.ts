@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { publicFilterCoverageKeys } from './public-filter-coverage-pending.ts';
+import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import { PUBLIC_FILTER_ACCOUNT_DOMAIN } from './public-filter-coverage-maintenance.ts';
 import type { PublicCanonicalCaptureInput } from '../search/index.ts';
 import type {
@@ -60,7 +61,6 @@ type Row = {
   owner_epoch: number;
   route_digest: string;
   release_digest: string;
-  subject_type: string;
   capture: string;
   dependency_keys: PublicFilterDependencyKey[];
   coverage_keys: string[];
@@ -116,6 +116,8 @@ function validBindings(
     ...('representation' in capture ? [PUBLIC_FILTER_ACCOUNT_DOMAIN] : []),
   ].sort();
   if (
+    !hasPublicFilterMeaningShape(definition.meaning) ||
+    (!('authority' in definition.meaning.release) && Object.keys(definition.meaning.release.types).length === 0) ||
     retained.digest !== createHash('sha256').update(search.encodeState(definition)).digest('hex') ||
     definition.readDefinition !== row.read_definition ||
     !isDeepStrictEqual(definition.source, {
@@ -125,7 +127,6 @@ function validBindings(
       configuration: row.configuration,
     }) ||
     definition.meaning.digest !== row.release_digest ||
-    definition.meaning.type !== row.subject_type ||
     !isDeepStrictEqual(definition.capture, capture) ||
     !isDeepStrictEqual(definition.dependencyKeys, row.dependency_keys) ||
     !isDeepStrictEqual(expectedKeys, row.coverage_keys) ||

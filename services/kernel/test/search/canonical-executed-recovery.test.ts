@@ -114,7 +114,7 @@ function facetProvider(generation: number, values: readonly string[]): () => Pro
   return async () => ({
     source: `subjects-g${generation}`,
     generation,
-    meaning: { digest: 'a'.repeat(64), release, type: 'schema:Book' } as FacetDiscoveryProvider['meaning'],
+    meaning: { digest: 'a'.repeat(64), release } as FacetDiscoveryProvider['meaning'],
     operations: {
       async captureFacet() {
         return { status: 'captured' as const, queried, repair: { consumer: queried.consumer, job: 'job' }, cost };

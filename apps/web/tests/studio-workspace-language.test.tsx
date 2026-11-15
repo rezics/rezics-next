@@ -12,7 +12,7 @@ import type { HostedBookStartBinding } from '../src/studio/hosted-book-start';
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
-const { mountAuthoringFixture } = await import('./helpers/authoring-mount');
+const { mountAuthoringFixture, setAuthoringFixtureLocale } = await import('./helpers/authoring-mount');
 const { getByRole, queryByRole, waitFor } = await import('@testing-library/dom');
 const { fromPlainText } = await import('@rezics/document');
 const { editionDocumentDigest } = await import('../src/content-editions/edition-model');
@@ -20,9 +20,9 @@ const { StudioWorkspace } = await import('../src/studio/workspace');
 const { workbenchCopy } = await import('../src/studio/workbench-copy');
 const language = await import('../src/studio/workspace-language');
 const { m } = await import('../src/paraglide/messages.js');
-const { setLocale, locales } = await import('../src/paraglide/runtime.js');
+const { locales } = await import('../src/paraglide/runtime.js');
 afterAll(async () => {
-  setLocale('en', { reload: false });
+  setAuthoringFixtureLocale('en');
   await dom.restore();
 });
 const ok = <T,>(value: T): StudioResult<T> => ({ ok: true, value });
@@ -208,7 +208,7 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>, input = f.input, bo
 }
 
 test('uncertain Book-start retry remains reachable while document controls are locked', async () => {
-  setLocale('en', { reload: false });
+  setAuthoringFixtureLocale('en');
   const f = await fixture();
   const attempts: Array<Parameters<HostedBookStartBinding['native']['create']>> = [];
   const observation = {
@@ -280,7 +280,7 @@ const cases = locales.flatMap((locale) => (['book', 'articles'] as const).map((k
 test.each(cases)(
   '%s %s: private preview, newer edits, exact uncertain replay and deliberate dirty navigation',
   async (locale, kind) => {
-    setLocale(locale, { reload: false });
+    setAuthoringFixtureLocale(locale);
     const f = await fixture(kind);
     const v = await mount(f);
     try {
@@ -321,7 +321,12 @@ test.each(cases)(
       expect(getByRole(v.host, 'region', { name: m.studio_workspace_preview_region() }).textContent).toContain(
         m.studio_workspace_preview_unsaved(),
       );
-      expect(getByRole(v.host, 'heading', { name: 'Newer <working>', exact: true })).toBeTruthy();
+      expect(
+        getByRole(getByRole(v.host, 'region', { name: m.studio_workspace_preview_region() }), 'heading', {
+          name: 'Newer <working>',
+          exact: true,
+        }),
+      ).toBeTruthy();
       await v.click(m.studio_workspace_write());
       f.saveFailure('uncertain');
       await v.click(m.studio_workspace_save());
@@ -392,7 +397,7 @@ test.each(cases)(
 test.each(locales)(
   '%s: empty creation, read-only state and native failure guidance retain supplied facts',
   async (locale) => {
-    setLocale(locale, { reload: false });
+    setAuthoringFixtureLocale(locale);
     const f = await fixture('articles', false);
     const v = await mount(f);
     try {
@@ -439,7 +444,7 @@ test.each(locales)(
 );
 
 test('German publication progress locks the default editor independently of its displayed wording', async () => {
-  setLocale('de', { reload: false });
+  setAuthoringFixtureLocale('de');
   const f = await fixture();
   const release = f.holdPublish();
   const v = await mount(f);
@@ -466,7 +471,7 @@ test('German publication progress locks the default editor independently of its 
 });
 
 test('native composer completion clears operands even when completion wording differs', async () => {
-  setLocale('ja', { reload: false });
+  setAuthoringFixtureLocale('ja');
   const f = await fixture();
   const feedback = spyOn(language, 'workspaceFeedbackMessage').mockReturnValue('Different safe receipt text');
   const v = await mount(f, { ...f.input, initialSelection: undefined, nativeDrafts: true, canCreateDraft: true });

@@ -77,8 +77,9 @@ export type PublicFilterProjectionMeaning = Readonly<{
     /** Exact stored release digest, validated against releaseDigest(release). */
     digest: string;
     release: Release;
-    type: string;
 }>;
+/** Exact descriptor shape only; the native reader still verifies its stored release and digest. */
+export declare function hasPublicFilterMeaningShape(value: unknown): boolean;
 export type PublicFilterProjectionRecord = Readonly<{
     subject: string;
     terminal: string;

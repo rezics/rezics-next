@@ -3,7 +3,6 @@ import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { editionDocumentDigest } from '../src/content-editions/edition-model';
-import { StudioController } from '../src/studio/controller';
 import type {
   ArticleReviewSnapshot,
   NativeDraftCreate,
@@ -19,16 +18,16 @@ import type {
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
-const { mountAuthoringFixture } = await import('./helpers/authoring-mount');
+const { StudioController } = await import('../src/studio/controller');
+const { mountAuthoringFixture, setAuthoringFixtureLocale } = await import('./helpers/authoring-mount');
 const { getByRole, getByText, queryByRole, waitFor } = await import('@testing-library/dom');
 const { StudioWorkspace } = await import('../src/studio/workspace');
 const { m } = await import('../src/paraglide/messages.js');
 const { workbenchCopy } = await import('../src/studio/workbench-copy');
 const { getLocale } = await import('../src/paraglide/runtime.js');
-const { setLocale } = await import('../src/paraglide/runtime.js');
-setLocale('en', { reload: false });
+setAuthoringFixtureLocale('en');
 afterAll(async () => {
-  setLocale('en', { reload: false });
+  setAuthoringFixtureLocale('en');
   await dom.restore();
 });
 
@@ -343,6 +342,15 @@ async function mountComposer(fixture = port(), initialInput = input()) {
     paste,
     insertText,
     risks,
+    history: async (kind: 'historyUndo' | 'historyRedo') => {
+      await act(async () => {
+        const editor = field(m.studio_account_body());
+        editor.focus();
+        editor.dispatchEvent(
+          new dom.window.InputEvent('beforeinput', { inputType: kind, bubbles: true, cancelable: true }),
+        );
+      });
+    },
     click: async (name: string) => {
       await act(async () => {
         const control = button(name);
@@ -379,9 +387,11 @@ test('native unsent preview, metadata and undo survive return to the same saved 
     await v.fill();
     const editor = v.field(m.studio_account_body());
     await v.click(m.studio_workspace_preview());
+    const returnToDocument = getByRole(v.host, 'button', { name: workbenchCopy.en.returnToDocument });
     await v.click(m.wide_document_code_inspect());
     expect(getByRole(document.body, 'dialog')).toBeTruthy();
-    await act(async () => getByRole(v.host, 'button', { name: workbenchCopy.en.returnToDocument }).click());
+    // The host can retire a visit while its inspector makes surrounding controls inert.
+    await act(async () => returnToDocument.click());
     await waitFor(() => expect(queryByRole(document.body, 'dialog')).toBeNull());
     expect(v.host.querySelector('.studio-document .tiptap')).toBe(selectedEditor);
     expect(getByRole(v.host, 'textbox', { name: m.studio_workspace_article_document() })).toBe(selectedEditor);
@@ -395,9 +405,9 @@ test('native unsent preview, metadata and undo survive return to the same saved 
     expect((v.field(m.studio_account_title()) as HTMLInputElement).value).toBe('Structured before save');
     await v.click(m.studio_workspace_write());
     expect(v.field(m.studio_account_body())).toBe(editor);
-    await v.click(m.editor_undo());
+    await v.history('historyUndo');
     expect(editor.querySelector('table')).toBeNull();
-    await v.click(m.editor_redo());
+    await v.history('historyRedo');
     await waitFor(() => expect(v.button(m.studio_account_create()).disabled).toBe(false));
     expect(editor.querySelector('table')).not.toBeNull();
   } finally {
@@ -428,9 +438,9 @@ test('real initial composer previews and creates one structured snapshot with al
     expect(preview.querySelector('[data-slot="post-reading-body"]')).toBe(reader);
     await v.click(m.studio_workspace_write());
     expect(v.field(m.studio_account_body())).toBe(editor);
-    await v.click(m.editor_undo());
+    await v.history('historyUndo');
     expect(editor.querySelector('table')).toBeNull();
-    await v.click(m.editor_redo());
+    await v.history('historyRedo');
     await waitFor(() => expect(v.button(m.studio_account_create()).disabled).toBe(false));
     await act(async () => getByText(v.form(), m.studio_native_metadata()).click());
     await v.change(m.own_drafts_licence(), licence);
@@ -484,7 +494,7 @@ test('pending and invalid editor snapshots cannot preview or submit a stale body
     expect(v.button(m.studio_account_create()).disabled).toBe(true);
     expect(editor.textContent).toContain('xxxx');
     await v.click(m.studio_workspace_write());
-    await v.click(m.editor_undo());
+    await v.history('historyUndo');
     await v.paste('<p>Recovered working text</p>');
     await waitFor(() => expect(v.button(m.studio_account_create()).disabled).toBe(false));
     expect((v.field(m.studio_account_title()) as HTMLInputElement).value).toBe('Structured before save');
@@ -535,7 +545,7 @@ test.each(['references', 'code'] as const)(
           if (departure === 'write') await act(async () => write.click());
           else if (departure === 'body') await v.paste('<p>A newer working snapshot</p>', editor);
           else {
-            if (departure === 'locale') setLocale('ja', { reload: false });
+            if (departure === 'locale') setAuthoringFixtureLocale('ja');
             await v.replace({ ...input(), visitKey: departure });
           }
           await waitFor(() => expect(queryByRole(document.body, 'dialog')).toBeNull());
@@ -547,7 +557,7 @@ test.each(['references', 'code'] as const)(
           expect(f.createCalls).toHaveLength(0);
         } finally {
           await v.close();
-          setLocale('en', { reload: false });
+          setAuthoringFixtureLocale('en');
         }
       }
     } finally {
@@ -639,7 +649,7 @@ test('visit and locale replacement retire the unsent editor, old creation result
     try {
       await v.fill();
       await v.click(m.studio_account_create());
-      if (replacement === 'locale') setLocale('ja', { reload: false });
+      if (replacement === 'locale') setAuthoringFixtureLocale('ja');
       await v.replace({ ...input(), visitKey: replacement === 'locale' ? input().visitKey : 'replacement-visit' });
       expect(signal?.aborted).toBe(true);
       const destination = v.field(m.studio_account_board());
@@ -654,7 +664,7 @@ test('visit and locale replacement retire the unsent editor, old creation result
     } finally {
       release();
       await v.close();
-      setLocale('en', { reload: false });
+      setAuthoringFixtureLocale('en');
     }
   }
 });

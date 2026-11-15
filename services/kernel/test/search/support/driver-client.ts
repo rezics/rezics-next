@@ -46,7 +46,7 @@ export interface DriverClient {
   loseActivationResponse(): Promise<void>;
   nativeCoverage(): Promise<{ nativeKeys: number; engineKeys: number; homes: number; sourceRevision: string }>;
   init(): Promise<SearchDriver>;
-  inspect(): Promise<SupervisorObservation>;
+  inspect(options?: { preparation: true }): Promise<SupervisorObservation>;
   ledger(): DriverLedger;
   close(): Promise<void>;
 }
@@ -343,7 +343,7 @@ export function createDriverClient(
     close,
     ledger: () => structuredClone(ledger),
     importReleasedBook: (input) => admit<ReleasedBookReceipt>('importReleasedBook', input),
-    inspect: () => admit<SupervisorObservation>('inspect'),
+    inspect: (options) => admit<SupervisorObservation>('inspect', options),
     nativeVoter: (name) => admit<NativeVoter>('nativeVoter', { name }),
     async nativeVote(voter, targetId, units, options) {
       // JSON IPC must never turn a non-finite number into the DELETE sentinel null.

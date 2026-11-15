@@ -97,7 +97,7 @@ async function setup(ids: readonly string[], visibility: 'public' | 'private' = 
   const resolved = await createPublicFilterSourceBinding(f.pool, c.routeKey, c.access).resolve(
     {
       source,
-      meaning: { digest: f.originalDigest, release, type: 'ex:Child' },
+      meaning: { digest: f.originalDigest, release },
       capture: { sort: 'id', size: 20, filterDocument: undefined, text: undefined },
     },
     { deadline: Date.now() + 30000 },
