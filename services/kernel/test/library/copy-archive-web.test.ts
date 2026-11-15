@@ -391,6 +391,7 @@ test('effect-before-checkpoint and response loss replay original routes/keys; ca
   await j.review(body(sessions[0]!));
   interrupt = true;
   await j.confirm(j.snapshot().review!.reviewId);
+  expect(interrupt).toBe(false);
   expect(j.snapshot().pending).toBe(true);
   const uploadId = j.snapshot().upload!.uploadId,
     reviewId = j.snapshot().review!.reviewId;
@@ -410,6 +411,7 @@ test('effect-before-checkpoint and response loss replay original routes/keys; ca
   await second.review(body(sessions[1]!));
   loseResponse = true;
   await second.confirm(second.snapshot().review!.reviewId);
+  expect(loseResponse).toBe(false);
   expect(second.snapshot().pending).toBe(true);
   await second.retry();
   expect(second.snapshot().result!.progressSession!.state).toBe('completed');
