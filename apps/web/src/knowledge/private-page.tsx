@@ -100,8 +100,7 @@ import { KnowledgeHistoryPanel } from './history-panel';
 import type { KnowledgeHistoryOperations } from './history';
 
 const controlClass = knowledgeControl;
-const inputClass =
-  'min-w-0 max-w-full text-foreground';
+const inputClass = 'min-w-0 max-w-full text-foreground';
 const linkClass = knowledgeLink;
 const defaultLicence = 'LicenseRef-rezics-terms';
 const operationSources = new WeakMap<object, number>();
@@ -555,6 +554,10 @@ function receiptStatus<T extends object>(
   return result.state === 'acknowledged' && sameReceipt<T>(result.receipt, fields);
 }
 
+function mayHaveCommitted(state: PrivateOperationResult<unknown>['state']): boolean {
+  return state === 'acknowledged' || state === 'uncertain' || state === 'unavailable';
+}
+
 function bindingFromPreparation(
   result: KnowledgePrivatePreparation,
   access: Extract<KnowledgePrivatePageAccess, { state: 'ready' }>,
@@ -612,34 +615,51 @@ function PrivateKnowledgeEditor({
   const [notebookIntent, setNotebookIntent] = useState<NotebookIntent | null>(null);
   const [notebookState, setNotebookState] = useState('idle');
   const [notebookReceipt, setNotebookReceipt] = useState<KnowledgeNotebookReceipt | null>(null);
-  const [documentDraft, setDocumentDraft] = useState<DocumentDraft>(() => ({
+  const [documentDraft, renderDocumentDraft] = useState<DocumentDraft>(() => ({
     title: copy.documentTitle,
     language: locale,
     body: fromPlainText('', 'blocks'),
     references: [],
     licence: defaultLicence,
   }));
+  const documentDraftRef = useRef(documentDraft);
+  const setDocumentDraft = (next: DocumentDraft) => {
+    documentDraftRef.current = next;
+    renderDocumentDraft(next);
+  };
   const [documentIntent, setDocumentIntent] = useState<DocumentIntent | null>(null);
   const [documentCreateState, setDocumentCreateState] = useState('idle');
   const [documentReceipt, setDocumentReceipt] = useState<KnowledgeDocumentReceipt | null>(null);
   const [head, setHead] = useState<KnowledgePrivateHead | null>(null);
   const [headLifecycleRevision, setHeadLifecycleRevision] = useState(0);
-  const [editorPending, setEditorPending] = useState(false);
-  const [draft, setDraft] = useState<DocumentDraft | null>(null);
+  const [editorPending, renderEditorPending] = useState(false);
+  const editorPendingRef = useRef(false);
+  const setEditorPending = (next: boolean) => {
+    editorPendingRef.current = next;
+    renderEditorPending(next);
+  };
+  const [editorGeneration, setEditorGeneration] = useState(0);
+  const [draft, renderDraft] = useState<DocumentDraft | null>(null);
   const draftRef = useRef(draft);
-  draftRef.current = draft;
+  const setDraft = (next: DocumentDraft | null) => {
+    draftRef.current = next;
+    renderDraft(next);
+  };
   const [readState, setReadState] = useState('preparing');
   const [readBusy, setReadBusy] = useState(false);
+  const readBusyRef = useRef(false);
   const [revisionIntent, setRevisionIntent] = useState<RevisionIntent | null>(null);
   const [revisionState, setRevisionState] = useState('idle');
   const [revisionReceipt, setRevisionReceipt] = useState<KnowledgeRevisionReceipt | null>(null);
   const [acknowledgedDraft, setAcknowledgedDraft] = useState<DocumentDraft | null>(null);
   const [readbackState, setReadbackState] = useState('idle');
+  const [conflictReadFailure, setConflictReadFailure] = useState<string | null>(null);
   const [reviewHead, setReviewHead] = useState<KnowledgePrivateHead | null>(null);
   const [requiresHeadReview, setRequiresHeadReview] = useState(false);
   const [retired, setRetired] = useState(false);
   const [unresolved, setUnresolved] = useState(false);
   const [pending, setPending] = useState(false);
+  const commandInFlight = useRef(false);
   const [publicationBusy, setPublicationBusy] = useState(false);
   const [retirementState, setRetirementState] = useState<'retired' | 'denied' | 'signed-out'>('retired');
   const [placementChoice, setPlacementChoice] = useState<KnowledgePlacementChoice>('new-notebook');
@@ -895,11 +915,17 @@ function PrivateKnowledgeEditor({
     submittedDraft?: DocumentDraft,
   ) {
     const currentAddress = resumeAddress();
-    if (!currentAddress || !active.current || access.read !== 'available' || readBusy || !lifecycle.editing) return;
+    if (!currentAddress || !active.current || access.read !== 'available' || readBusyRef.current || !lifecycle.editing)
+      return;
+    const expected = expectedRevisionId ?? revisionReceipt?.revisionId;
+    const submitted = submittedDraft ?? acknowledgedDraft;
+    if (purpose === 'readback' && !expected) return;
     const sequence = ++readSequence.current;
+    readBusyRef.current = true;
     setReadBusy(true);
     if (purpose === 'initial') setReadState('preparing');
     if (purpose === 'readback') setReadbackState('preparing');
+    if (purpose === 'conflict') setConflictReadFailure(null);
     try {
       const result = await operations.read(currentAddress, { viewer: access.viewer, csrfToken: access.csrfToken });
       if (!active.current || readSequence.current !== sequence) return;
@@ -916,9 +942,9 @@ function PrivateKnowledgeEditor({
           setRequiresHeadReview(true);
           setReadState('ready');
         } else {
-          if (expectedRevisionId === result.head.revisionId) {
+          if (expected === result.head.revisionId) {
             setHead(result.head);
-            if (sameDraft(draftRef.current, submittedDraft ?? null)) setDraft(copyDraft(result.head));
+            if (!editorPendingRef.current && sameDraft(draftRef.current, submitted)) setDraft(copyDraft(result.head));
             setReviewHead(null);
             setRequiresHeadReview(false);
             setAcknowledgedDraft(null);
@@ -930,18 +956,25 @@ function PrivateKnowledgeEditor({
           }
         }
       } else {
-        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
+        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied') {
           retire(result.state);
-        if (purpose === 'initial' || purpose === 'conflict') setReadState(result.state);
+          return;
+        }
+        if (purpose === 'initial' || result.state === 'not-found') setReadState(result.state);
+        else if (purpose === 'conflict') setConflictReadFailure(result.state);
         else setReadbackState(result.state);
       }
     } catch {
       if (active.current && readSequence.current === sequence) {
-        if (purpose === 'initial' || purpose === 'conflict') setReadState('unavailable');
+        if (purpose === 'initial') setReadState('unavailable');
+        else if (purpose === 'conflict') setConflictReadFailure('unavailable');
         else setReadbackState('unavailable');
       }
     } finally {
-      if (active.current && readSequence.current === sequence) setReadBusy(false);
+      if (active.current && readSequence.current === sequence) {
+        readBusyRef.current = false;
+        setReadBusy(false);
+      }
     }
   }
 
@@ -1086,7 +1119,7 @@ function PrivateKnowledgeEditor({
   }
 
   function applyTemplate(kind: KnowledgeTemplateKind) {
-    if (documentIntent || documentReceipt) return;
+    if (documentIntentRef.current || documentReceipt || editorPendingRef.current) return;
     setTemplateKind(kind);
     setDocumentDraft({
       ...knowledgeAuthoringTemplateDraft(knowledgeTemplateCopy(kind, locale), locale),
@@ -1097,6 +1130,7 @@ function PrivateKnowledgeEditor({
   async function readCreated(addressToRead: KnowledgePrivateAddress) {
     if (!active.current || access.read !== 'available') return;
     const sequence = ++readSequence.current;
+    readBusyRef.current = true;
     setReadBusy(true);
     setReadState('preparing');
     try {
@@ -1106,6 +1140,7 @@ function PrivateKnowledgeEditor({
       if (result.state === 'ready' && nextBinding) {
         setBinding(nextBinding);
         setHead(result.head);
+        setHeadLifecycleRevision(lifecycle.revision);
         setDraft(copyDraft(result.head));
         setReadState('ready');
       } else {
@@ -1116,7 +1151,10 @@ function PrivateKnowledgeEditor({
     } catch {
       if (active.current && readSequence.current === sequence) setReadState('unavailable');
     } finally {
-      if (active.current && readSequence.current === sequence) setReadBusy(false);
+      if (active.current && readSequence.current === sequence) {
+        readBusyRef.current = false;
+        setReadBusy(false);
+      }
     }
   }
 
@@ -1136,9 +1174,10 @@ function PrivateKnowledgeEditor({
 
   async function submitNotebook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || notebookReceipt || !active.current) return;
+    if (commandInFlight.current || notebookReceipt || !active.current) return;
     const intent = startNotebookIntent();
     if (!intent) return;
+    commandInFlight.current = true;
     setPending(true);
     setUnresolved(true);
     setNotebookState('pending');
@@ -1154,8 +1193,13 @@ function PrivateKnowledgeEditor({
       } else {
         if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
           retire(result.state);
-        setNotebookState(result.state);
-        setUnresolved(result.state === 'uncertain' || result.state === 'unavailable');
+        const unresolved = mayHaveCommitted(result.state);
+        if (!unresolved) {
+          setNotebookIntent(null);
+          notebookIntentRef.current = null;
+        }
+        setNotebookState(result.state === 'acknowledged' ? 'uncertain' : result.state);
+        setUnresolved(unresolved);
       }
     } catch {
       if (active.current) {
@@ -1163,25 +1207,28 @@ function PrivateKnowledgeEditor({
         setUnresolved(true);
       }
     } finally {
+      commandInFlight.current = false;
       if (active.current) setPending(false);
     }
   }
 
   function startDocumentIntent(): DocumentIntent | null {
     if (documentIntentRef.current) return documentIntentRef.current;
+    const writing = documentDraftRef.current;
     if (
       address.kind !== 'create' ||
       !binding ||
       access.createDocument !== 'available' ||
-      editorPending ||
-      referenceIssues(documentDraft).length
+      editorPendingRef.current ||
+      !writing.title.trim() ||
+      referenceIssues(writing).length
     )
       return null;
     const existing = placementChoice === 'existing-notebook';
     if (!existing && !notebookReceipt) return null;
     if (existing && (!destination || !destinationReviewed)) return null;
     const next = immutable({
-      ...structuredClone(documentDraft),
+      ...structuredClone(writing),
       notebookId: existing ? destination!.notebookId : notebookReceipt!.notebookId,
       structureRevisionId: existing ? destination!.structureRevisionId : notebookReceipt!.structureRevisionId,
       parentPlacementId: existing ? destination!.parentPlacementId : null,
@@ -1194,11 +1241,12 @@ function PrivateKnowledgeEditor({
     return next;
   }
 
-  async function submitDocument(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (pending || documentReceipt || !active.current) return;
+  async function submitDocument(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (commandInFlight.current || documentReceipt || !active.current) return;
     const intent = startDocumentIntent();
     if (!intent) return;
+    commandInFlight.current = true;
     setPending(true);
     setUnresolved(true);
     setDocumentCreateState('pending');
@@ -1233,8 +1281,13 @@ function PrivateKnowledgeEditor({
       } else {
         if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
           retire(result.state);
-        setDocumentCreateState(result.state);
-        setUnresolved(result.state === 'uncertain' || result.state === 'unavailable');
+        const unresolved = mayHaveCommitted(result.state);
+        if (!unresolved) {
+          setDocumentIntent(null);
+          documentIntentRef.current = null;
+        }
+        setDocumentCreateState(result.state === 'acknowledged' ? 'uncertain' : result.state);
+        setUnresolved(unresolved);
       }
     } catch {
       if (active.current) {
@@ -1242,27 +1295,31 @@ function PrivateKnowledgeEditor({
         setUnresolved(true);
       }
     } finally {
+      commandInFlight.current = false;
       if (active.current) setPending(false);
     }
   }
 
   function startRevisionIntent(): RevisionIntent | null {
-    if (revisionIntentRef.current) return revisionIntentRef.current;
     const currentAddress = resumeAddress();
+    const writing = draftRef.current;
     if (
       !currentAddress ||
       !head ||
-      !draft ||
-      editorPending ||
-      referenceIssues(draft).length > 0 ||
+      !writing ||
+      !writing.title.trim() ||
+      editorPendingRef.current ||
+      sameDraft(writing, copyDraft(head)) ||
+      referenceIssues(writing).length > 0 ||
       !binding ||
       access.revise !== 'available' ||
       requiresHeadReview ||
-      lifecycle.locked
+      lifecycle.locked ||
+      (revisionReceipt !== null && readbackState !== 'ready')
     )
       return null;
     const next = immutable({
-      ...structuredClone(draft),
+      ...structuredClone(writing),
       documentId: currentAddress.documentId,
       expectedHeadRevisionId: head.revisionId,
       subjectIds: [...head.subjectIds],
@@ -1274,60 +1331,27 @@ function PrivateKnowledgeEditor({
     return next;
   }
 
-  async function submitRevision(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (pending || publicationBusy || !active.current) return;
+  async function submitRevision(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (commandInFlight.current || publicationBusy || !active.current || revisionIntentRef.current) return;
     const intent = startRevisionIntent();
     if (!intent) return;
-    setPending(true);
-    setUnresolved(true);
-    setRevisionState('pending');
     setRevisionReceipt(null);
     setAcknowledgedDraft(null);
     setReadbackState('idle');
-    try {
-      const result = await operations.revise(intent);
-      if (!active.current) return;
-      if (
-        receiptStatus<KnowledgeRevisionReceipt>(result, ['documentId', 'revisionId']) &&
-        result.receipt.documentId === intent.documentId
-      ) {
-        setRevisionReceipt(result.receipt);
-        setAcknowledgedDraft(intentDraft(intent));
-        setRevisionIntent(null);
-        revisionIntentRef.current = null;
-        setRevisionState('acknowledged');
-        setUnresolved(false);
-        void readCurrent('readback', result.receipt.revisionId, intentDraft(intent));
-      } else {
-        if (result.state === 'conflict') {
-          setRevisionIntent(null);
-          revisionIntentRef.current = null;
-          setRevisionState('conflict');
-          setRequiresHeadReview(true);
-          setReadbackState('idle');
-          setUnresolved(false);
-        } else {
-          if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
-            retire(result.state);
-          setRevisionState(result.state);
-          setUnresolved(result.state === 'uncertain' || result.state === 'unavailable');
-        }
-      }
-    } catch {
-      if (active.current) {
-        setRevisionState('uncertain');
-        setUnresolved(true);
-      }
-    } finally {
-      if (active.current) setPending(false);
-    }
+    await sendRevision(intent);
   }
 
   async function replayRevision() {
     const intent = revisionIntentRef.current;
-    if (!intent || pending || publicationBusy || !active.current) return;
+    if (!intent || commandInFlight.current || publicationBusy || lifecycle.locked || !active.current) return;
+    await sendRevision(intent);
+  }
+
+  async function sendRevision(intent: RevisionIntent) {
+    commandInFlight.current = true;
     setPending(true);
+    setUnresolved(true);
     setRevisionState('pending');
     try {
       const result = await operations.revise(intent);
@@ -1337,25 +1361,30 @@ function PrivateKnowledgeEditor({
         result.receipt.documentId === intent.documentId
       ) {
         setRevisionReceipt(result.receipt);
-        setAcknowledgedDraft(intentDraft(intent));
+        const submitted = intentDraft(intent);
+        setAcknowledgedDraft(submitted);
         setRevisionIntent(null);
         revisionIntentRef.current = null;
         setRevisionState('acknowledged');
         setUnresolved(false);
-        void readCurrent('readback', result.receipt.revisionId, intentDraft(intent));
+        void readCurrent('readback', result.receipt.revisionId, submitted);
       } else {
-        if (result.state === 'conflict') {
+        if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied') {
+          retire(result.state);
+          return;
+        }
+        const unresolved = mayHaveCommitted(result.state);
+        if (!unresolved) {
           setRevisionIntent(null);
           revisionIntentRef.current = null;
-          setRevisionState('conflict');
-          setRequiresHeadReview(true);
-          setUnresolved(false);
-        } else {
-          if (result.state === 'retired' || result.state === 'signed-out' || result.state === 'denied')
-            retire(result.state);
-          setRevisionState(result.state);
-          setUnresolved(result.state === 'uncertain' || result.state === 'unavailable');
         }
+        if (result.state === 'conflict') {
+          setRequiresHeadReview(true);
+          setConflictReadFailure(null);
+          setReadbackState('idle');
+        }
+        setRevisionState(result.state === 'acknowledged' ? 'uncertain' : result.state);
+        setUnresolved(unresolved);
       }
     } catch {
       if (active.current) {
@@ -1363,6 +1392,7 @@ function PrivateKnowledgeEditor({
         setUnresolved(true);
       }
     } finally {
+      commandInFlight.current = false;
       if (active.current) setPending(false);
     }
   }
@@ -1379,6 +1409,8 @@ function PrivateKnowledgeEditor({
   }
 
   function discardDraft() {
+    setEditorPending(false);
+    setEditorGeneration((version) => version + 1);
     setNotebookIntent(null);
     notebookIntentRef.current = null;
     setDocumentIntent(null);
@@ -1464,16 +1496,18 @@ function PrivateKnowledgeEditor({
         <KnowledgeTemplatePicker
           locale={locale}
           selected={templateKind}
-          disabled={documentFrozen || !!documentReceipt}
+          disabled={documentFrozen || !!documentReceipt || editorPending}
           onSelect={applyTemplate}
         />
         <DocumentDraftFields
+          key={editorGeneration}
           ids={ids}
           locale={locale}
           draft={documentDraft}
           disabled={documentFrozen || !!documentReceipt}
           onChange={setDocumentDraft}
           onPendingChange={setEditorPending}
+          onSave={documentFrozen || !!documentReceipt ? undefined : () => void submitDocument()}
           inspect={
             binding && operations.inspectReference ? (input) => operations.inspectReference!(input, binding) : undefined
           }
@@ -1781,6 +1815,7 @@ function PrivateKnowledgeEditor({
     access.revise === 'available' &&
     !editorPending &&
     referenceIssues(draft).length === 0 &&
+    !!draft.title.trim() &&
     dirty &&
     !pending &&
     !publicationBusy &&
@@ -1789,7 +1824,7 @@ function PrivateKnowledgeEditor({
     (!revisionReceipt || readbackState === 'ready');
   const canReplay = !!revisionIntent && !pending && !publicationBusy && !lifecycle.locked;
   const showRevisionFailure = !['idle', 'pending', 'acknowledged'].includes(revisionState);
-  const formLocked = !!revisionIntent || revisionBusy || lifecycle.locked;
+  const formLocked = !!revisionIntent || revisionBusy || lifecycle.locked || access.revise !== 'available';
   return (
     <PrivatePageFrame
       title={head.title}
@@ -1834,12 +1869,14 @@ function PrivateKnowledgeEditor({
         </KnowledgeDetails>
         <form className="min-w-0 space-y-5" onSubmit={(event) => void submitRevision(event)}>
           <DocumentDraftFields
+            key={editorGeneration}
             ids={ids}
             locale={locale}
             draft={draft}
             disabled={formLocked}
             onChange={setDraft}
             onPendingChange={setEditorPending}
+            onSave={() => void submitRevision()}
             inspect={operations.inspectReference ? (input) => operations.inspectReference!(input, binding) : undefined}
             subjectIds={head.subjectIds}
             mediaSelection={knowledgePrivateMediaSelection(head)}
@@ -1862,6 +1899,7 @@ function PrivateKnowledgeEditor({
             </p>
           ) : null}
           {revisionState === 'conflict' ? <FailureNotice state="conflict" locale={locale} /> : null}
+          {conflictReadFailure ? <FailureNotice state={conflictReadFailure} locale={locale} /> : null}
           {showRevisionFailure && revisionState !== 'conflict' ? (
             <FailureNotice state={revisionState} locale={locale} />
           ) : null}
@@ -2044,6 +2082,7 @@ function DocumentDraftFields({
   subjectIds,
   inspect,
   onPendingChange,
+  onSave,
   uploadBinding = null,
   mediaSelection = null,
 }: {
@@ -2056,6 +2095,7 @@ function DocumentDraftFields({
   onChange: (draft: DocumentDraft) => void;
   inspect?: ReferenceInspector | undefined;
   onPendingChange: (pending: boolean) => void;
+  onSave?: (() => void) | undefined;
   subjectIds: readonly string[];
 }) {
   const options = localeOptions(locale);
@@ -2064,8 +2104,13 @@ function DocumentDraftFields({
   const [referencePending, setReferencePending] = useState(false);
   const [snapshotError, setSnapshotError] = useState(false);
   const [editorVersion, setEditorVersion] = useState(0);
-  const imagePending = useRef(false);
   const [imageBusy, setImageBusy] = useState(false);
+  const pending = useRef({ snapshot: false, reference: false, image: false });
+  function updatePending(kind: keyof typeof pending.current, busy: boolean) {
+    pending.current[kind] = busy;
+    const { snapshot, reference, image } = pending.current;
+    onPendingChange(snapshot || reference || image);
+  }
   const media = useKnowledgeImageUploader(draft.body, uploadBinding);
   const renderImage = useKnowledgeImageRenderer(draft.body, mediaSelection, locale, media.ownedOriginal);
   return (
@@ -2089,28 +2134,30 @@ function DocumentDraftFields({
           value={draft.body}
           onSnapshotPending={() => {
             setPendingSnapshot(true);
-            onPendingChange(true);
+            updatePending('snapshot', true);
           }}
           onSnapshotError={() => {
             setSnapshotError(true);
             setPendingSnapshot(true);
-            onPendingChange(true);
+            updatePending('snapshot', true);
           }}
           onChange={(body) => {
             setSnapshotError(false);
             setPendingSnapshot(false);
-            onPendingChange(referencePending || imagePending.current);
             onChange({ ...draft, body });
+            updatePending('snapshot', false);
           }}
           label={m.knowledge_private_body({}, options)}
           labels={labels}
           {...(media.upload ? { upload: media.upload } : {})}
           renderImage={renderImage}
+          mediaVisitKey={uploadBinding?.lifetime}
           onUploadState={(state, _count, attachments) => {
-            imagePending.current = state === 'pending' || (attachments ?? 0) > 0;
-            setImageBusy(imagePending.current);
-            onPendingChange(imagePending.current || pendingSnapshot || referencePending);
+            const busy = state !== 'ready' || (attachments ?? 0) > 0;
+            setImageBusy(busy);
+            updatePending('image', busy);
           }}
+          {...(onSave ? { onSave } : {})}
           {...(draft.language ? { lang: draft.language } : {})}
           toolbar="always"
           disabled={disabled || referencePending}
@@ -2131,7 +2178,7 @@ function DocumentDraftFields({
               setEditorVersion(editorVersion + 1);
               setSnapshotError(false);
               setPendingSnapshot(false);
-              onPendingChange(referencePending || imagePending.current);
+              updatePending('snapshot', false);
             }}
           >
             {m.knowledge_reference_restore({}, options)}
@@ -2172,7 +2219,7 @@ function DocumentDraftFields({
       <KnowledgeReferenceAuthoring
         onEditingChange={(editing) => {
           setReferencePending(editing);
-          onPendingChange(editing || pendingSnapshot || imagePending.current);
+          updatePending('reference', editing);
         }}
         draft={draft}
         locale={locale}
