@@ -50,6 +50,10 @@ const gameActionClass =
   'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
 const gameDisclosureSummaryClass =
   'max-w-full cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:py-3';
+const gameReturnClass =
+  'inline-flex min-h-11 min-w-0 max-w-full items-center whitespace-normal break-words [overflow-wrap:anywhere] underline';
+const gameSummaryActionsClass =
+  'flex min-w-0 max-w-full flex-wrap items-start gap-2 [overflow-wrap:anywhere] [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1';
 
 export type GameProfileTransport = {
   load: () => Promise<GameRead>;
@@ -281,7 +285,7 @@ function GameProfileLive({
     return (
       <CatalogueCurrentReading visible={!!admitted} ready={!!admitted} revision={`${id}:${readingRevision}`}>
         {!admitted && (
-          <article className="mx-auto min-w-0 max-w-4xl space-y-5">
+          <article className="mx-auto min-w-0 w-full max-w-4xl space-y-5 [overflow-wrap:anywhere]">
             <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
             {query.isPending ? (
               <p role="status">{m.catalogue_create_loading({}, o)}</p>
@@ -310,7 +314,7 @@ function GameProfileLive({
                   {m.game_profile_refresh({}, o)}
                 </Button>
                 {visit?.source && (
-                  <a className="inline-flex min-h-11 items-center underline" href={visit.source}>
+                  <a className={gameReturnClass} href={visit.source}>
                     {m.game_visit_return({}, o)}
                   </a>
                 )}
@@ -350,7 +354,7 @@ function GameProfileLive({
     );
   if (!read || !read.ok || creationPending)
     return (
-      <article className="mx-auto min-w-0 max-w-4xl space-y-5">
+      <article className="mx-auto min-w-0 w-full max-w-4xl space-y-5 [overflow-wrap:anywhere]">
         <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
         {query.isPending || query.isFetching || creationPending ? (
           <p role="status">{m.catalogue_create_loading({}, o)}</p>
@@ -578,9 +582,9 @@ function GameCorrection({
     [read.public, read.release, fields],
   );
   return (
-    <article ref={focusResult} className="mx-auto min-w-0 w-full max-w-4xl space-y-8">
+    <article ref={focusResult} className="mx-auto min-w-0 w-full max-w-4xl space-y-8 [overflow-wrap:anywhere]">
       {visible && (
-        <header className="space-y-4">
+        <header className="min-w-0 space-y-4">
           <ViewHeading label={m.game_profile_title({}, o)} headingClassName="font-sans" />
           <h2 className="min-w-0 font-sans text-2xl font-semibold [overflow-wrap:anywhere]">
             <a
@@ -592,30 +596,23 @@ function GameCorrection({
             </a>
           </h2>
           <p
-            className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+            className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
             lang={type.lang ?? undefined}
           >
             {type.text || m.guide_missing({}, o)}
           </p>
           <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
           {visit && (
-            <p className="text-sm">
+            <p className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm">
               {m.game_visit_context({ context: visit.context }, o)}
               {visit.realm ? ` · ${m.game_visit_realm({ realm: visit.realm }, o)}` : ''}
             </p>
           )}
-          <a
-            className="inline-flex min-h-11 items-center underline"
-            href={selectedReturnHref}
-            onClick={correctionReturn}
-          >
+          <a className={gameReturnClass} href={selectedReturnHref} onClick={correctionReturn}>
             {m.game_visit_return({}, o)}
           </a>
           <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
-          <nav
-            className="flex min-w-0 max-w-full flex-wrap gap-2 [overflow-wrap:anywhere]"
-            aria-label={m.facts_other_editors({}, o)}
-          >
+          <nav className={gameSummaryActionsClass} aria-label={m.facts_other_editors({}, o)}>
             <a className={`${buttonVariants({ variant: 'outline' })} ${gameActionClass}`} href={href}>
               {m.candidate_view_public({}, o)}
             </a>
@@ -630,6 +627,7 @@ function GameCorrection({
               type="button"
               variant="outline"
               disabled={refreshing}
+              aria-busy={refreshing}
               onClick={(event) => lifetime.active() && void refresh(event)}
             >
               {m.game_profile_refresh({}, o)}

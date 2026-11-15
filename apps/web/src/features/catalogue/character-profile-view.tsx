@@ -77,6 +77,8 @@ function CharacterProfileLive({
   const o = { locale: locale as never };
   const createActionClass =
     'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8';
+  const identityActionsClass =
+    'flex min-w-0 max-w-full flex-wrap items-start gap-2 [&>a]:h-auto [&>a]:min-h-11 [&>a]:min-w-11 [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:py-2 [&>a]:[overflow-wrap:anywhere] md:pointer-fine:[&>a]:min-h-8 md:pointer-fine:[&>a]:py-1';
   const [id, setId] = useState(initialId);
   const [work, setWork] = useState(initialWork);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
@@ -224,22 +226,26 @@ function CharacterProfileLive({
         <p className="text-sm text-muted-foreground">{m.character_visit_context({ context: current.context }, o)}</p>
       )}
       {currentRead && character && !globalMutation && (
-        <div role="status" className="space-y-2 rounded-lg border border-border p-4">
+        <div role="status" className="min-w-0 space-y-2 rounded-lg border border-border p-4">
           <p>{m.character_visit_unsupported({}, o)}</p>
           {globalHref && (
-            <a className={buttonVariants({ variant: 'outline' })} href={globalHref}>
-              {m.character_visit_global({}, o)}
-            </a>
+            <div className={identityActionsClass}>
+              <a className={buttonVariants({ variant: 'outline' })} href={globalHref}>
+                {m.character_visit_global({}, o)}
+              </a>
+            </div>
           )}
         </div>
       )}
       {query.data && !query.data.ok && query.data.selection === 'unsupported' && (
-        <div role="status" className="space-y-2 rounded-lg border border-border p-4">
+        <div role="status" className="min-w-0 space-y-2 rounded-lg border border-border p-4">
           <p>{m.character_visit_unsupported({}, o)}</p>
           {globalHref && (
-            <a className={buttonVariants({ variant: 'outline' })} href={globalHref}>
-              {m.character_visit_global({}, o)}
-            </a>
+            <div className={identityActionsClass}>
+              <a className={buttonVariants({ variant: 'outline' })} href={globalHref}>
+                {m.character_visit_global({}, o)}
+              </a>
+            </div>
           )}
         </div>
       )}
@@ -253,6 +259,7 @@ function CharacterProfileLive({
       )}
       <Button
         ref={reloadButton}
+        className={createActionClass}
         variant="outline"
         aria-busy={reloadPending}
         aria-disabled={reloadPending || query.isFetching}
@@ -284,31 +291,39 @@ function CharacterProfileLive({
       )}
       {current && (
         <div ref={reloadResult} hidden={!currentRead} tabIndex={-1} className="space-y-8">
-          <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
-            <h2 className="text-xl font-semibold">{m.character_identity({}, o)}</h2>
-            <p lang={pageText(current.release.types[characterType]!.labels, locale).lang}>
+          <section className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+            <h2 className="min-w-0 max-w-full text-xl font-semibold [overflow-wrap:anywhere]">
+              {m.character_identity({}, o)}
+            </h2>
+            <p
+              className="min-w-0 max-w-full [overflow-wrap:anywhere]"
+              lang={pageText(current.release.types[characterType]!.labels, locale).lang}
+            >
               {pageText(current.release.types[characterType]!.labels, locale).text}
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="min-w-0 max-w-full text-sm text-muted-foreground [overflow-wrap:anywhere]">
               <DefinitionMeaning values={current.release.types[characterType]!.descriptions} locale={locale} />
             </p>
             {character ? (
               <>
-                <p className="text-lg font-medium" lang={label.lang}>
+                <p
+                  className="min-w-0 max-w-full text-lg font-medium [overflow-wrap:anywhere]"
+                  lang={label.lang}
+                >
                   {label.text || m.subject_value_unlabelled({}, o)}
                 </p>
                 {Object.entries(character.subject.descriptions).map(([language, text]) => (
-                  <p key={language} lang={language}>
+                  <p key={language} lang={language} className="min-w-0 max-w-full [overflow-wrap:anywhere]">
                     {text}
                   </p>
                 ))}
-                <div className="flex flex-wrap gap-2">
+                <nav className={identityActionsClass} aria-label={m.facts_other_editors({}, o)}>
                   <SubjectTermsEntry id={character.subject.id} label={label.text} locale={locale} />
                   {current.release.types[characterType]!.properties.includes('schema:abstract') &&
                     current.release.properties['schema:abstract']?.datatype === 'document' && (
                       <AuthoredFieldEntry id={character.subject.id} title={label.text} locale={locale} />
                     )}
-                </div>
+                </nav>
                 <p className="text-sm text-muted-foreground">{m.character_terms_help({}, o)}</p>
               </>
             ) : created ? (
