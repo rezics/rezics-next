@@ -17,7 +17,7 @@ test('a 65-type catalogue uses bounded existing OR and type leaves without trunc
   const types = Array.from({ length: 65 }, (_, index) => `ex:Type${String(index).padStart(3, '0')}`);
   const result = catalogueFacetPredicate(release([...types].reverse()), undefined);
   if (result.kind !== 'predicate') throw new Error('Expected a complete type predicate');
-  const leaves = walkFilter(result.predicate).filter((node) => 'type' in node);
+  const leaves = [...walkFilter(result.predicate)].filter((node) => 'type' in node);
   expect(leaves).toHaveLength(2);
   expect(leaves.flatMap((node) => 'type' in node ? node.type.in : [])).toEqual(types);
   expect(leaves.every((node) => 'type' in node && node.type.in.length <= FILTER_LIMITS.in)).toBe(true);

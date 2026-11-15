@@ -1,4 +1,4 @@
-import { admitFilter, FilterError, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
+import { admitFilter, parseFilter, FilterError, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import type { SearchFilterDocument } from './service-contract.ts';
 
 export type CatalogueFacetPredicate =
@@ -26,5 +26,10 @@ export function catalogueFacetPredicate(
     }
     nodes = level;
   }
-  return { kind: 'predicate', predicate: admitFilter(nodes[0]!, release) };
+  try {
+    return { kind: 'predicate', predicate: admitFilter(parseFilter(nodes[0]!), release) };
+  } catch (error) {
+    if (error instanceof FilterError) throw new FilterError('unsupported_query', '/filter', 'out_of_range');
+    throw error;
+  }
 }
