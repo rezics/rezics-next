@@ -63,6 +63,10 @@ parent/order index. The first outline page selects the current structure revisio
 the owner, notebook, parent and selection, and returns `409 stale_cursor` after a structure change. Each outline
 request examines at most 128 indexed candidates and advances past sparse ineligible rows.
 
+A signed-in Subject visit can read the same owned-notebook directory with `subjectId`. That filter selects the
+original Subject association by an account-local index and binds the encrypted continuation to the filter. The
+private section reads only after browser session and exposure admission. The public contribution read is independent.
+
 Web's native outline admission, twenty-row request bound, in-place branch browsing and ephemeral document-return
 contract are owned by the [Knowledge interface](../apps/web/src/knowledge/README.md#in-place-notebook-outline).
 The owned-notebook directory remains bounded and replacing. Native cursors bind owner, notebook, parent and structure;
@@ -81,6 +85,8 @@ writing, which is never labeled a saved revision. Reading changes neither public
 The existing adopt-current-head action admits that basis, followed by deliberate Save; uncertain retries keep their
 original intent, key and sealed credential. Session, CSRF, exposure, locale, document and source retirement discard
 history, selections, callbacks and late work. No history/body enters public SSR, shared caches, URLs or persistence.
+An explicitly compared revision can be copied into a clean working draft with its body and references. The current
+head and publication stay selected until a separate conditional save or publication command.
 Consumer work is O(P + B + R), for P ≤ 20 metadata rows, two bodies of at most 2 MiB each and at most 64 supplied
 references per body; block comparison uses a linear identity map, not edit-distance alignment. Content owns native
 query and authorization cost. Five History stories illustrate these states; native two-editor/history, accessibility and visual proof remain required.
@@ -132,6 +138,8 @@ receipted no-effect command.
 Decision: Knowledge route metadata comes from the public Content adapter; imported schemas are memoized when routes mount.
 
 Decision: Web’s first public consumer is the localized `/knowledge/documents/$id` reader, with optional `revisionId`, over `knowledge_document.public_read`. Live and exact addresses stay distinct; null `authorId` is deidentified attribution; the primary Subject link uses the supplied id without a label lookup. Acceptance includes live/exact states, malformed HTTP, one-read/no-store, retry, replacement and copy feedback.
+An exact citation link also carries the immutable source digest and its optional block ID. The reader checks them
+against the disclosed exact response before rendering and opens the selected block in context.
 
 Decision: Web creates a private notebook only after the writer reviews and submits its title, then holds the acknowledged notebook receipt separately while creating a root document. Private bodies, drafts, command intents and receipts live only in the current page visit; exact private heads are read directly by the prepared viewer and revision writes compare against that observed head.
 

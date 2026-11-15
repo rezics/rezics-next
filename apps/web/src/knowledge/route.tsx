@@ -10,6 +10,7 @@ import { KnowledgeDocumentPage } from './page';
 import {
   knowledgeId,
   knowledgeRevisionQuery,
+  parseKnowledgeExactCitation,
   readKnowledgeDocument,
   sameKnowledgeRequest,
   type KnowledgeReadRequest,
@@ -40,24 +41,34 @@ function retireVisit(visit: KnowledgeDocumentVisit) {
   visit.page = { state: 'preparing' };
 }
 
-export function knowledgeDocumentSearch(search: Record<string, unknown>): { revisionId?: string; returnTo?: string } {
+type KnowledgeDocumentSearch = { revisionId?: string; returnTo?: string; sha256?: string; blockId?: string };
+
+export function knowledgeDocumentSearch(search: Record<string, unknown>): KnowledgeDocumentSearch {
   const returning = knowledgeDiscoverySearch(search);
-  if (!('revisionId' in search) || search.revisionId === undefined || search.revisionId === '') return returning;
+  const pinned = search.sha256 !== undefined || search.blockId !== undefined;
+  if (!pinned && (search.revisionId === undefined || search.revisionId === '')) return returning;
   const revisionId = knowledgeRevisionQuery(search.revisionId);
   if (!revisionId) throw notFound();
-  return { revisionId, ...returning };
+  if (!pinned) return { revisionId, ...returning };
+  const citation = parseKnowledgeExactCitation(search.sha256, search.blockId);
+  if (!citation) throw notFound();
+  return { revisionId, ...citation, ...returning };
 }
 
 export function knowledgeDocumentRequest(
   documentId: string,
   revisionId: string | undefined,
   locale: string,
+  search?: Pick<KnowledgeDocumentSearch, 'sha256' | 'blockId'>,
 ): KnowledgeReadRequest | null {
   const id = knowledgeId(documentId);
   if (!id) return null;
-  if (revisionId === undefined) return { documentId: id, revisionId: null, locale };
+  const pinned = search?.sha256 !== undefined || search?.blockId !== undefined;
+  const citation = pinned ? parseKnowledgeExactCitation(search?.sha256, search?.blockId) : null;
+  if (pinned && !citation) return null;
+  if (revisionId === undefined) return pinned ? null : { documentId: id, revisionId: null, locale };
   const exact = knowledgeId(revisionId);
-  return exact ? { documentId: id, revisionId: exact, locale } : null;
+  return exact ? { documentId: id, revisionId: exact, locale, ...(citation ? { citation } : {}) } : null;
 }
 
 export async function openKnowledgeDocumentVisit(
@@ -100,7 +111,7 @@ export function KnowledgeDocumentRoute() {
   const router = useRouter();
   const loading = useRouterState({ select: (state) => state.isLoading });
   const locale = getLocale();
-  const request = knowledgeDocumentRequest(documentId, search.revisionId, locale) ?? visit.request;
+  const request = knowledgeDocumentRequest(documentId, search.revisionId, locale, search) ?? visit.request;
   return (
     <KnowledgeDocumentCaller
       visit={visit}
@@ -118,7 +129,7 @@ export function KnowledgeDocumentPending() {
   const documentId = useParams({ from: '/knowledge/documents/$id' }).id;
   const search = useSearch({ from: '/knowledge/documents/$id' });
   const locale = getLocale();
-  const request = knowledgeDocumentRequest(documentId, search.revisionId, locale) ?? {
+  const request = knowledgeDocumentRequest(documentId, search.revisionId, locale, search) ?? {
     documentId,
     revisionId: search.revisionId ?? null,
     locale,

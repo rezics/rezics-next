@@ -12,10 +12,8 @@ import { referenceLabel, type KnowledgeReference, type KnowledgeReferenceTarget 
 import type { ReferenceInspection, ReferenceInspector } from './reference-read';
 import { inspectKnowledgePublicReferenceRequest } from './reference-server';
 
-export const referenceControl =
-  'h-auto min-h-7 max-w-full whitespace-normal break-words text-start leading-snug';
-export const referenceInput =
-  'min-w-0 w-full max-w-full text-foreground';
+export const referenceControl = 'h-auto min-h-7 max-w-full whitespace-normal break-words text-start leading-snug';
+export const referenceInput = 'min-w-0 w-full max-w-full text-foreground';
 const publicInspector: ReferenceInspector = (input) => inspectKnowledgePublicReferenceRequest({ data: input });
 type InspectionContext = {
   reference: KnowledgeReference;
@@ -87,8 +85,7 @@ export function referenceHref(reference: KnowledgeReference, locale: string): st
   if (!target) return null;
   if (target.kind === 'subject') return subjectHref({ id: target.subjectId, label: '' }, locale).href;
   if (target.kind === 'document') return knowledgeLiveHref(locale, target.documentId);
-  // The citation's digest and block remain in the review. The full visit still selects only this exact revision.
-  return knowledgeExactHref(locale, target.documentId, target.revisionId);
+  return knowledgeExactHref(locale, target.documentId, target.revisionId, target);
 }
 
 /** One selected target at a time. Body rendering intentionally has no reference expansion controls. */

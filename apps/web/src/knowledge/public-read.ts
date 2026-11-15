@@ -1,4 +1,4 @@
-import { admitReferenceManifest, type KnowledgeReference } from './reference-model';
+import { admitReferenceManifest, referenceBlock, type KnowledgeReference } from './reference-model';
 import type { KernelClient } from '@rezics/client';
 import { parseDocument, type DocumentSnapshot } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
@@ -17,7 +17,9 @@ export type KnowledgeReadRequest = {
   documentId: string;
   revisionId: string | null;
   locale: string;
+  citation?: KnowledgeExactCitation;
 };
+export type KnowledgeExactCitation = Readonly<{ sha256: string; blockId?: string }>;
 
 export type KnowledgePublicDocument = {
   documentId: string;
@@ -79,8 +81,18 @@ export function knowledgeLiveHref(locale: string, documentId: string): string {
   return `/${encodeURIComponent(locale)}/knowledge/documents/${encodeURIComponent(documentId)}`;
 }
 
-export function knowledgeExactHref(locale: string, documentId: string, revisionId: string): string {
-  return `${knowledgeLiveHref(locale, documentId)}?revisionId=${encodeURIComponent(revisionId)}`;
+export function knowledgeExactHref(
+  locale: string,
+  documentId: string,
+  revisionId: string,
+  citation?: KnowledgeExactCitation,
+): string {
+  const search = new URLSearchParams({ revisionId });
+  if (citation) {
+    search.set('sha256', citation.sha256);
+    if (citation.blockId !== undefined) search.set('blockId', citation.blockId);
+  }
+  return `${knowledgeLiveHref(locale, documentId)}?${search}`;
 }
 
 export function knowledgeCitationHref(
@@ -91,7 +103,19 @@ export function knowledgeCitationHref(
 }
 
 export function sameKnowledgeRequest(left: KnowledgeReadRequest, right: KnowledgeReadRequest): boolean {
-  return left.documentId === right.documentId && left.revisionId === right.revisionId && left.locale === right.locale;
+  return (
+    left.documentId === right.documentId &&
+    left.revisionId === right.revisionId &&
+    left.locale === right.locale &&
+    left.citation?.sha256 === right.citation?.sha256 &&
+    left.citation?.blockId === right.citation?.blockId
+  );
+}
+
+export function parseKnowledgeExactCitation(sha256: unknown, blockId: unknown): KnowledgeExactCitation | null {
+  if (typeof sha256 !== 'string' || !sha256Pattern.test(sha256)) return null;
+  if (blockId === undefined) return { sha256 };
+  return typeof blockId === 'string' && blockId.length > 0 && blockId.length <= 256 ? { sha256, blockId } : null;
 }
 
 export function parseKnowledgeReadRequest(input: unknown): KnowledgeReadRequest | null {
@@ -99,9 +123,12 @@ export function parseKnowledgeReadRequest(input: unknown): KnowledgeReadRequest 
   const documentId = knowledgeId(input.documentId);
   const locale = input.locale;
   if (!documentId || typeof locale !== 'string' || locale.length < 1 || locale.length > 64) return null;
-  if (!('revisionId' in input) || input.revisionId === null) return { documentId, revisionId: null, locale };
-  const revisionId = knowledgeId(input.revisionId);
-  return revisionId ? { documentId, revisionId, locale } : null;
+  const revisionId = input.revisionId == null ? null : knowledgeId(input.revisionId);
+  if (input.revisionId != null && !revisionId) return null;
+  if (input.citation === undefined) return { documentId, revisionId, locale };
+  if (!revisionId || !isRecord(input.citation)) return null;
+  const citation = parseKnowledgeExactCitation(input.citation.sha256, input.citation.blockId);
+  return citation ? { documentId, revisionId, locale, citation } : null;
 }
 
 function outcomeForStatus(status: number): KnowledgeReadState {
@@ -203,6 +230,12 @@ export function admitKnowledgePublicResponse(
   const parsed = decodeCanonicalDocument(document.canonicalBytes);
   const references = parsed ? admitReferenceManifest(parsed, document.references) : null;
   if (!parsed || !references) return { state: 'unavailable', status: 502 };
+  if (
+    request.citation &&
+    (sourceSha256 !== request.citation.sha256 ||
+      (request.citation.blockId !== undefined && !referenceBlock(parsed, request.citation.blockId)))
+  )
+    return { state: 'not-found', status: 404 };
   return {
     state: 'ready',
     document: {
