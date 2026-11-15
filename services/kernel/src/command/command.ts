@@ -19,6 +19,7 @@ import readReceipt from './read-receipt.sql';
 import readOwnCompletion from './read-own-completion.sql';
 import readTime from './time.sql';
 import { discardConnection, withBoundedCommandConnection, withBoundedReadConnection, withConnection } from '../database/pool.ts';
+import { isPostgresTransactionAbort } from '../database/bounded-read-lifetime.ts';
 import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
 import { readPartition } from '../partition/partition.ts';
 import { commandPhase, countContentionRetry, measureCommandPhase } from './timing.ts';
@@ -715,10 +716,14 @@ async function executeCommand<T>(
         return ordinary
           ? withBoundedCommandConnection(pool, deadline, run, {
               deadlineError: () => new CommandUnavailableError('deadline', partition),
-              mapError: (error) =>
-                commitPending && !(error instanceof CommandCommitUncertainError)
-                  ? new CommandCommitUncertainError(partition, error)
-                  : error,
+              mapError: (error) => {
+                if (!commitPending || error instanceof CommandCommitUncertainError) return error;
+                if (isPostgresTransactionAbort(error)) {
+                  commitPending = false;
+                  return error;
+                }
+                return new CommandCommitUncertainError(partition, error);
+              },
               isUncertainWorkError: (error) => error instanceof CommandCommitUncertainError,
               isUncertainSettledQueryError: (error) => error instanceof CommandCommitUncertainError,
               onRetire: () => {
@@ -752,6 +757,10 @@ async function executeCommand<T>(
             commitPending = false;
             return result;
           } catch (error) {
+            if (isPostgresTransactionAbort(error)) {
+              commitPending = false;
+              throw error;
+            }
             if (ordinary)
               throw error instanceof CommandCommitUncertainError
                 ? error

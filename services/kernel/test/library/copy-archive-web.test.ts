@@ -69,6 +69,7 @@ beforeAll(async () => {
     'progress_session:update',
     'collection:read',
   ]);
+  await f.grantLibraryGate(owner.actor.accountId);
   const profile = libraryProfile('fixture.archive-web', 'chapter');
   profile.progress.allowed[0]!.units.push(unitData('page'), unitData('old.page'));
   profile.progress.allowed.push({ mode: 'completed_units', units: [unitData('episode', 'completed_units')] });
@@ -81,7 +82,7 @@ beforeAll(async () => {
     isPartOf: {
       slot_uri: 'schema:isPartOf',
       range: 'Child',
-      annotations: { datatype: 'wikibase-item', relation_group: 'membership' },
+      annotations: { datatype: 'wikibase-item', relation_group: 'membership', inverse: 'none' },
     },
   };
   sources.schemas['fixture.yaml'] = JSON.stringify(schema);

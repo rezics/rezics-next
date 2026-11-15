@@ -7,7 +7,7 @@ import type { ArchiveRecord } from '../../src/library/library-archive.ts';
 import { exportSections, libraryExportManifest } from '../../src/library/library-export-format.ts';
 import { newId } from '../../src/route/route.ts';
 import type { Actor } from '../../src/request/access.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -42,6 +42,7 @@ beforeAll(async () => {
     'progress_session:read',
   ];
   const fixture = await createRealAccess(db.admin, { owner }, scopes);
+  await fixture.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
   await db.admin.query(
     `INSERT INTO access.exposure_opening("group",valid,transaction_id)
     SELECT g,tstzrange('2000-01-01',NULL,'[)'),$1 FROM unnest($2::text[]) g`,
