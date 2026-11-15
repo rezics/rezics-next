@@ -1,5 +1,4 @@
 import { isDeepStrictEqual } from 'node:util';
-import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, walkFilter } from '@rezics/filter';
 import type { PublicFilterSearchBindingPort, SourceBindingCaptureInput } from '../semantic/index.ts';
 import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-contract.ts';
@@ -19,9 +18,10 @@ import { publicFilterCoverageStart } from './public-filter-coverage-page.ts';
 import { validateSearchAfter } from './query-payload.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { compileText } from './text.ts';
+import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
 
 function captureKeys(meaning: PublicFilterProjectionMeaning, input: SourceBindingCaptureInput) {
-  if (meaning.digest !== releaseDigest(meaning.release) || !meaning.release.types[meaning.type])
+  if (!hasExactPublicFilterMeaning(meaning))
     throw new TypeError('Unknown projection meaning');
   if ('purpose' in input) return suggestionKeys(input);
   if ('representation' in input) return discoveryKeys(meaning, input);

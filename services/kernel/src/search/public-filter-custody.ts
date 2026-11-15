@@ -1,4 +1,5 @@
 import { tree, encode, decode, requireValue } from './public-filter-codec.ts';
+import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
 import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import repairTransaction from './public-filter-custody-repair-transaction.sql';
@@ -27,7 +28,6 @@ import {
 } from './writer-guard.ts';
 import { subjectPartition } from './source.ts';
 import { validateRefreshResponse } from './write-actions.ts';
-import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, walkFilter } from '@rezics/filter';
 import releaseExists from '../semantic/definitions-exists.sql';
 import compositeReference from '../semantic/composite-read.sql';
@@ -356,7 +356,6 @@ async function retainedDefinition(
       ...definition,
       meaning: {
         digest: definition.meaning.digest,
-        type: definition.meaning.type,
         release: { authority: 'semantic.readRelease', digest: definition.meaning.digest },
       },
     };
@@ -410,7 +409,7 @@ function validateDefinition(definition: CustodyDefinition<PublicCanonicalCapture
   text(definition.source.id);
   text(definition.source.configuration);
   text(definition.readDefinition);
-  requireValue(definition.meaning.digest === releaseDigest(definition.meaning.release));
+  requireValue(hasExactPublicFilterMeaning(definition.meaning));
   const input = definition.capture;
   requireValue(Object.hasOwn(input, 'filterDocument') && Object.hasOwn(input, 'text'));
   if ('purpose' in input) {

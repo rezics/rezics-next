@@ -58,7 +58,7 @@ async function publishedSourceDefinition(
   const resolved = await createPublicFilterSourceBinding(pool, configuration.routeKey, configuration.access).resolve(
     {
       source: publicFilterSource(configuration),
-      meaning: { digest: releaseDigest, release, type: 'schema:Thing' },
+      meaning: { digest: releaseDigest, release },
       capture: { sort: 'id', size: 20, filterDocument: undefined, text: undefined },
     },
     { deadline },

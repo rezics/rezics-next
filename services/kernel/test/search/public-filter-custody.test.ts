@@ -40,7 +40,7 @@ function definition(): CustodyDefinition {
   return {
     source: { id: crypto.randomUUID(), partition: 7, epoch: 1, configuration: 'native-boundary-fixture' },
     readDefinition: crypto.randomUUID(),
-    meaning: { digest: releaseDigest(release), release, type: 'fixture' },
+    meaning: { digest: releaseDigest(release), release },
     capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 20, after: [null, 'key'] },
     dependencyKeys: [{ kind: 'order', order: 'id' }],
   };
@@ -887,7 +887,7 @@ test('accepted native wide release capture and cold keyed recovery retain full i
   const physical = await target();
   const d = definition();
   const subject = crypto.randomUUID();
-  const meaning = { release, digest: identity.digest, type: 'schema:Book' };
+  const meaning = { release, digest: identity.digest };
   const filterDocument = {
     and: [
       { type: { in: ['schema:Book'] } },

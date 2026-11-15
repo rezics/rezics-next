@@ -1,3 +1,4 @@
+import { hasExactPublicFilterMeaning } from './public-filter-meaning.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import type { NativePublicFilterPublicationCompletion } from '../semantic/public-filter-source-binding.ts';
@@ -14,7 +15,6 @@ import repairPageSave from './public-filter-custody-repair-page-save.sql';
 import repairPageSql from './public-filter-custody-repair-page.sql';
 import { isDeepStrictEqual } from 'node:util';
 import { installPublicFilterCoveragePage, withPublicFilterCoverageStart } from './public-filter-coverage-page.ts';
-import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, parseFilter, walkFilter } from '@rezics/filter';
 import { routeOf } from '../route/route.ts';
 import type {
@@ -167,8 +167,8 @@ export function compilePublicFilterConsumerCapture(
     throw new TypeError('Capture requires explicit filterDocument and parsed text');
   const copied = structuredClone(input);
   const meaning = structuredClone(acceptedMeaning);
-  if (meaning.digest !== releaseDigest(meaning.release) || !Object.hasOwn(meaning.release.types, meaning.type))
-    throw new TypeError('Capture requires an exact accepted release and type');
+  if (!hasExactPublicFilterMeaning(meaning))
+    throw new TypeError('Capture requires an exact accepted release');
   validateOrder(copied);
 
   let filterDocument;
@@ -807,7 +807,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
   if (!config.pool || !config.source || !config.binding || typeof config.clock !== 'function' || !config.search)
     throw new TypeError('Consumer requires its injected native owners');
   const meaning = freeze(structuredClone(config.meaning));
-  if (meaning.digest !== releaseDigest(meaning.release) || !meaning.release.types[meaning.type])
+  if (!hasExactPublicFilterMeaning(meaning))
     throw new TypeError('Consumer requires an exact accepted meaning');
   const target = config.physicalTarget;
   if (!/^[a-z0-9][a-z0-9-]{0,95}$/.test(target)) throw new TypeError('Consumer requires a physical target');

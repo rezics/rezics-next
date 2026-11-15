@@ -13,6 +13,11 @@ and population observation. This specification adds no engine, ACK store, worker
 permission certificate or simulated successful adapter. Native tests are deliberately red on missing producers.
 A native protocol pass later will still be distinct from public API/default-worker capability acceptance.
 
+The Source meaning pins the exact accepted release. Type restrictions belong to the captured, admitted
+`filterDocument`; they are not a separate projection-meaning parameter. Every capture retains the implicit
+type dependency, including an unfiltered catalogue population. Projection and membership still use each
+Subject's actual released type.
+
 ## Exact exports and missing production entry point
 
 The adjacent module exports `PublicFilterQueriedObservation`, `PublicFilterConsumerContext`,

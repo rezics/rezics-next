@@ -151,7 +151,7 @@ export type ScopePrepareOptions = Readonly<{
   allowance?: WorkAllowance;
   /** Read an already published scope without retaining, preparing or saving reader progress. */
   readOnly?: boolean;
-  /** Exact released projection type, when the source requires a selected catalogue profile. */
+  /** Concrete catalogue type used by a private-owner branch's public metadata capture. */
   type?: string;
   /** Current Library Collection to seed through the verified reader before preparing its predicate. */
   collectionId?: string;
@@ -1032,17 +1032,9 @@ export function createSearchScopeSource({
         };
       } else {
         if (hasOwner || !compiled) unavailable();
-        const types = new Set(
-          plan.leaves.flatMap((leaf) =>
-            leaf.kind === 'catalogue' && leaf.clause.facet === 'type' ? leaf.clause.values : [],
-          ),
-        );
-        const type = options?.type ?? (types.size === 1 ? [...types][0] : undefined);
-        if (!type || !Object.hasOwn(nativeRelease.types, type)) unavailable();
         const meaning = {
           digest: selected.digest,
           release: nativeRelease,
-          type,
         };
         const resolved = await resolvePublicFilterCapture(
           meaning,
@@ -1056,7 +1048,7 @@ export function createSearchScopeSource({
           work,
         );
         orderedPublicDefinition = resolved.definition;
-        profile = digest([resolved.definition.readDefinition, resolved.definition.meaning.digest, type]);
+        profile = digest([resolved.definition.readDefinition, resolved.definition.meaning.digest]);
         const { release: _body, ...meaningReference } = resolved.definition.meaning;
         definition = {
           kind: 'public',
@@ -1099,7 +1091,7 @@ export function createSearchScopeSource({
             ? { or: [{ type: { in: [type] } }, ...catalogueLeaves] }
             : { type: { in: [type] } };
         const resolved = await resolvePublicFilterCapture(
-          { digest: selected.digest, release: nativeRelease, type },
+          { digest: selected.digest, release: nativeRelease },
           {
             filterDocument: publicFilter,
             sort: options?.nativeOrder ?? 'id',

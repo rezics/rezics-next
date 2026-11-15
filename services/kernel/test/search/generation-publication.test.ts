@@ -70,7 +70,7 @@ async function fixture(keyPages?: SubjectSourceKeyPages, released?: CustodyDefin
   const definition: CustodyDefinition = {
     source: { id: crypto.randomUUID(), partition: 0, epoch: 1, configuration: 'boundary' },
     readDefinition: crypto.randomUUID(),
-    meaning: { digest: releaseDigest(release), release, type: 'boundary' },
+    meaning: { digest: releaseDigest(release), release },
     capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 20 },
     dependencyKeys: [{ kind: 'order', order: 'id' }],
   };

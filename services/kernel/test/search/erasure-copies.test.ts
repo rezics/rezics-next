@@ -38,7 +38,7 @@ async function fixture() {
       definition: {
         source: { id: crypto.randomUUID(), partition: 7, epoch: 1, configuration: 'native-boundary-fixture' },
         readDefinition: crypto.randomUUID(),
-        meaning: { digest: releaseDigest(release), release, type: 'fixture' },
+        meaning: { digest: releaseDigest(release), release },
         capture: { filterDocument: undefined, text: undefined, sort: 'id', size: 20 },
         dependencyKeys: [{ kind: 'order', order: 'id' }],
       },
