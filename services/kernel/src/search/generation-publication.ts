@@ -682,6 +682,66 @@ export function createSearchGenerationPublication(
       claim_revision: (witness?.claimRevision ?? 0n).toString(),
     };
   }
+  /** Occupied ID-key homes only. Empty complete pages must not consume a workflow turn each. */
+  async function nextVisibleSubjectHome(after: number, context: PublicFilterConsumerContext): Promise<number> {
+    check(context);
+    const {
+      rows: [row],
+    } = await withBoundedReadConnection(
+      pool,
+      context.deadline,
+      (client) =>
+        client.query<{ partition: number }>(
+          `SELECT partition_no AS partition FROM semantic.partition_subjects
+           WHERE visible>0 AND partition_no>$1 AND partition_no<4096
+           ORDER BY partition_no LIMIT 1`,
+          [after],
+        ),
+      publicationLifetime,
+    );
+    return row?.partition ?? 4096;
+  }
+  async function rememberEmptyHomes(
+    job: Job,
+    fromExclusive: number,
+    toExclusive: number,
+    client: PoolClient,
+    context: PublicFilterConsumerContext,
+    meter: Meter,
+  ) {
+    if (registry || job.family !== 'subjects') throw new Pending('registration_missing');
+    if (toExclusive <= fromExclusive + 1) return;
+    check(context);
+    const expected = toExclusive - fromExclusive - 1;
+    // One statement snapshot: epoch/position, active owner, and visible=0 emptiness.
+    // Occupied, moved, or missing homes drop the count; insert nothing and stay pending.
+    const inserted = await client.query(
+      `WITH homes AS (
+         SELECT generate_series($3::integer + 1, $4::integer - 1) AS partition_no
+       ),
+       observed AS (
+         SELECT p.partition_no, p.epoch, p.position, p.write_state, coalesce(s.visible, 0) AS visible
+         FROM homes h
+         JOIN core.partition p ON p.partition_no = h.partition_no
+         LEFT JOIN semantic.partition_subjects s ON s.partition_no = p.partition_no
+       ),
+       certified AS (
+         SELECT partition_no, epoch, position
+         FROM observed
+         WHERE (SELECT COUNT(*) FROM observed) = $5::integer
+           AND (SELECT BOOL_AND(write_state = 'active' AND visible = 0) FROM observed)
+       )
+       INSERT INTO search.generation_publication_home
+         (partition_no,job,epoch,position,account_revision,claim_revision,pass)
+       SELECT partition_no,$1,epoch,position,0,0,$2 FROM certified
+       ON CONFLICT(partition_no,job) DO UPDATE SET epoch=EXCLUDED.epoch,position=EXCLUDED.position,
+         account_revision=EXCLUDED.account_revision,claim_revision=EXCLUDED.claim_revision,pass=EXCLUDED.pass
+       RETURNING partition_no`,
+      [job.job, job.pass, fromExclusive, toExclusive, expected],
+    );
+    meter.frontierWrites += inserted.rowCount ?? 0;
+    if (inserted.rowCount !== expected) throw new Pending('source_pending');
+  }
   async function remember(job: Job, before: Home, client: PoolClient) {
     const {
       rows: [old],
@@ -816,66 +876,90 @@ export function createSearchGenerationPublication(
     if (job.phase === 'reconciled' || job.phase === 'fencing' || job.phase === 'intent' || job.phase === 'active')
       return;
     if (job.phase === 'subject' || job.phase === 'account') {
-      if (job.home === 4096) {
-        job.phase = 'engine';
-        job.home = 0;
-        await save(client, job, meter);
-        return;
-      }
-      const before = await head(job.home, context);
-      await remember(job, before, client);
-      const after = cursor(job);
-      let ids: readonly string[],
-        next: SearchPublicFilterSourceKeyCursor | null,
-        complete: boolean,
-        keys: DiscoveryKey[] | undefined;
-      if (job.phase === 'subject') {
-        const page = await sourceKeys.read({ partition: job.home, after, inputLimit: PAGE }, context);
-        add(meter, page.cost);
-        if (page.status !== 'eligible') {
+      let emptySeeks = 0;
+      for (;;) {
+        if (job.home === 4096) {
+          job.phase = 'engine';
+          job.home = 0;
+          await save(client, job, meter);
+          return;
+        }
+        const before = await head(job.home, context);
+        await remember(job, before, client);
+        const after = cursor(job);
+        let ids: readonly string[],
+          next: SearchPublicFilterSourceKeyCursor | null,
+          complete: boolean,
+          keys: DiscoveryKey[] | undefined;
+        if (job.phase === 'subject') {
+          const page = await sourceKeys.read({ partition: job.home, after, inputLimit: PAGE }, context);
+          add(meter, page.cost);
+          if (page.status !== 'eligible') {
+            job.after_route = null;
+            job.after_id = null;
+            await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
+              job.home,
+              job.job,
+            ]);
+            await save(client, job, meter);
+            throw new Pending(
+              page.status === 'unavailable' && page.reason === 'deadline' ? 'deadline' : 'source_pending',
+            );
+          }
+          if (page.partition !== job.home || page.epoch !== before.epoch || page.position !== BigInt(before.position))
+            throw new Pending('source_pending');
+          ids = page.ids;
+          next = page.after;
+          complete = page.complete;
+
+          keys = job.family === 'discovery' ? await keysFor(job.home, ids) : undefined;
+          if (job.family === 'discovery') ids = keys!.map(({ id }) => id);
+          // Native complete empty pages advance. Identity-pending/moved homes stay pending.
+          // Seek occupied visible homes so one turn can reach a real key frontier.
+          if (
+            !registry &&
+            job.family === 'subjects' &&
+            complete &&
+            ids.length === 0 &&
+            after === null
+          ) {
+            const nextHome = await nextVisibleSubjectHome(job.home, context);
+            await rememberEmptyHomes(job, job.home, nextHome, client, context, meter);
+            job.after_route = null;
+            job.after_id = null;
+            job.home = nextHome;
+            if (++emptySeeks >= PAGE) {
+              await save(client, job, meter);
+              return;
+            }
+            continue;
+          }
+        } else {
+          const entry = registry!.get('account');
+          if (entry.owner !== 'accounts') throw new Pending('registration_missing');
+          const page = validateAccountPage(await entry.source.page(job.home, after, PAGE), job.home, after, PAGE);
+          if (page.position !== BigInt(before.position)) throw new Pending('source_pending');
+          ids = page.accounts.map(({ id }) => id);
+          next = page.next;
+          complete = next === null;
+          meter.inputKeys += ids.length;
+
+          keys = ids.map((id) => ({ owner: 'accounts', kind: 'account', id, route: routeOf(id)! }));
+        }
+        await reconcile(job, job.home, ids, keys, BigInt(before.position), context, meter);
+        if (!same(before, await head(job.home, context))) throw new Pending('source_pending');
+        job.after_route = next?.route ?? null;
+        job.after_id = next?.id ?? null;
+        if (complete) {
           job.after_route = null;
           job.after_id = null;
-          await client.query('DELETE FROM search.generation_publication_home WHERE partition_no=$1 AND job=$2', [
-            job.home,
-            job.job,
-          ]);
-          await save(client, job, meter);
-          throw new Pending(
-            page.status === 'unavailable' && page.reason === 'deadline' ? 'deadline' : 'source_pending',
-          );
+          if (job.phase === 'subject' && job.family === 'discovery') job.phase = 'account';
+          else {
+            job.phase = 'subject';
+            job.home++;
+          }
         }
-        if (page.partition !== job.home || page.epoch !== before.epoch || page.position !== BigInt(before.position))
-          throw new Pending('source_pending');
-        ids = page.ids;
-        next = page.after;
-        complete = page.complete;
-
-        keys = job.family === 'discovery' ? await keysFor(job.home, ids) : undefined;
-        if (job.family === 'discovery') ids = keys!.map(({ id }) => id);
-      } else {
-        const entry = registry!.get('account');
-        if (entry.owner !== 'accounts') throw new Pending('registration_missing');
-        const page = validateAccountPage(await entry.source.page(job.home, after, PAGE), job.home, after, PAGE);
-        if (page.position !== BigInt(before.position)) throw new Pending('source_pending');
-        ids = page.accounts.map(({ id }) => id);
-        next = page.next;
-        complete = next === null;
-        meter.inputKeys += ids.length;
-
-        keys = ids.map((id) => ({ owner: 'accounts', kind: 'account', id, route: routeOf(id)! }));
-      }
-      await reconcile(job, job.home, ids, keys, BigInt(before.position), context, meter);
-      if (!same(before, await head(job.home, context))) throw new Pending('source_pending');
-      job.after_route = next?.route ?? null;
-      job.after_id = next?.id ?? null;
-      if (complete) {
-        job.after_route = null;
-        job.after_id = null;
-        if (job.phase === 'subject' && job.family === 'discovery') job.phase = 'account';
-        else {
-          job.phase = 'subject';
-          job.home++;
-        }
+        break;
       }
     } else if (job.phase === 'engine') {
       if (!job.pit) {
