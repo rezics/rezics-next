@@ -677,7 +677,6 @@ export function createIdentityAdmissionOperations(
         });
       }
       await cmd().runCommand(pool, command, async (tx) => {
-        bindSemanticProducerRoles(tx, roles);
         await measuredQuery(tx, selectControl.sql, [home], measured);
         // Acquire always checks the irreversible local fence, even after an earlier successful receipt.
         if (stage !== 'closed')
@@ -691,6 +690,7 @@ export function createIdentityAdmissionOperations(
           await measuredQuery(tx, receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage], measured)
         ).rows[0];
         if (duplicate) return cmd().noEffect(null);
+        bindSemanticProducerRoles(tx, roles);
         if (stage === 'closed')
           await measuredQuery(tx, close.sql, [home, ref.jobId, ref.epoch.toString(), scope], measured);
         bindingOps.recordIdentityEpochNativeCommit(tx, 'admission');

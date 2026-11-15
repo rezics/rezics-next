@@ -247,7 +247,9 @@ async function readCreatedSubject(
     throw new Error(`GET /v1/subjects/${expected.id} returned a different fixture identity`);
   if (expected.type === 'bf:Instance') {
     if (subject.descriptions.en !== expected.text || subject.statements['schema:abstract']?.length)
-      throw new Error(`GET /v1/subjects/${expected.id} did not preserve its Edition description without a work synopsis`);
+      throw new Error(
+        `GET /v1/subjects/${expected.id} did not preserve its Edition description without a work synopsis`,
+      );
   } else {
     const synopsis = subject.statements['schema:abstract']?.find((statement) => {
       const content = statement.value.content;
@@ -382,8 +384,19 @@ async function waitForNativeSearch(
     }
     await Bun.sleep(250);
   }
+  let workerOutput: string;
+  try {
+    workerOutput = await currentNativeLifecycle().run(
+      'read catalogue Search worker diagnostics',
+      5_000,
+      () => stack.workerLogs(),
+      false,
+    );
+  } catch (error) {
+    workerOutput = `Worker diagnostics unavailable: ${error instanceof Error ? error.message : String(error)}`;
+  }
   throw new Error(
-    `POST /v1/subjects:search did not return every fixture identity through the installed default Search response within 90000ms; last response ${last}`,
+    `POST /v1/subjects:search did not return every fixture identity through the installed default Search response within 90000ms; last response ${last}\nDurable Search worker output:\n${workerOutput}`,
   );
 }
 

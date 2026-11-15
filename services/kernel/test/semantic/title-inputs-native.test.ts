@@ -349,7 +349,7 @@ test('an unrequested Semantic visibility write retires the basis while empty-she
 test('integrated title preparation receives more than one chunk without retiring its source basis', async () => {
   await driver.fixtures.openFeatures(['personal_library']);
   const shelfOwner = await driver.fixtures.person('title-input-chunks', {
-    scopes: ['library_entry:list', 'library_entry:update'],
+    scopes: ['library_entry:list', 'library_entry:update', 'subject:read'],
   });
   const subjectIds: string[] = [];
   for (let index = 0; index < 101; index++) {
