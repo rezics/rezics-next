@@ -819,11 +819,11 @@ export function createSearchGenerationPublication(
           if (!(error instanceof GenerationReconciliationMismatch)) throw error;
         }
       }
-      // Ordinary write() settles identity_writer. Subject population consumes that
-      // settlement; dual enroll fails writer_token IS NULL and kills the relay.
-      if (job.fenced_pass || job.phase === 'subject') throw new Pending('source_pending');
-      // Engine extras still repair through the ordinary writer. Enrollment advances the
-      // native head; replay the home before adopting a new frontier or witness.
+      // Subject population first waits for ordinary settlement to avoid competing for its initial write.
+      // A settled copy can still lag a native projection that finished preparing after that write.
+      // Repair the mismatch through the ordinary writer while the generation remains open.
+      if (job.fenced_pass || (job.phase === 'subject' && !actions)) throw new Pending('source_pending');
+      // Enrollment advances the native head. Replay the home before adopting a frontier or witness.
       try {
         await writerGuard.write(partition, ids, position);
       } catch (error) {
