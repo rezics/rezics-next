@@ -227,24 +227,38 @@ async function createSubject(
   return { id: body.subject.id, type, label, text };
 }
 
-async function readCreatedSubject(
-  stack: NativeWebStack,
+export async function readCreatedSubject(
+  stack: Pick<NativeWebStack, 'kernel'>,
   expected: BookCatalogueIdentity,
   relation?: { property: string; target: string },
 ): Promise<void> {
-  const response = await stack.kernel(`/v1/subjects/${encodeURIComponent(expected.id)}`);
-  const body = await responseJson<{
-    subject: {
-      id: string;
-      type: string;
-      labels: Record<string, string>;
-      descriptions: Record<string, string>;
-      statements: Record<string, { id: string; value: { type: string; content: unknown } }[]>;
-    };
-  }>(response, 200, `GET /v1/subjects/${expected.id}`);
-  const subject = body.subject;
-  if (subject.id !== expected.id || subject.type !== expected.type || subject.labels.en !== expected.label)
-    throw new Error(`GET /v1/subjects/${expected.id} returned a different fixture identity`);
+  const path = `/v1/subjects/${encodeURIComponent(expected.id)}`;
+  const relationDeadline = performance.now() + 60_000;
+  let subject;
+  for (;;) {
+    ({ subject } = await responseJson<{
+      subject: {
+        id: string;
+        type: string;
+        labels: Record<string, string>;
+        descriptions: Record<string, string>;
+        statements: Record<string, { id: string; value: { type: string; content: unknown } }[]>;
+      };
+    }>(await stack.kernel(path), 200, `GET ${path}`));
+    if (subject.id !== expected.id || subject.type !== expected.type || subject.labels.en !== expected.label)
+      throw new Error(`GET ${path} returned a different fixture identity`);
+    if (
+      !relation ||
+      subject.statements[relation.property]?.some(
+        (statement) => statement.value.type === 'value' && statement.value.content === relation.target,
+      )
+    )
+      break;
+    // A new Subject can be public before the durable worker has projected its relations.
+    if (performance.now() >= relationDeadline)
+      throw new Error(`GET ${path} omitted ${relation.property} to ${relation.target} after waiting 60000ms`);
+    await Bun.sleep(250);
+  }
   if (expected.type === 'bf:Instance') {
     if (subject.descriptions.en !== expected.text || subject.statements['schema:abstract']?.length)
       throw new Error(
@@ -284,11 +298,6 @@ async function readCreatedSubject(
     )
       throw new Error(`GET /v1/documents/${content.document} did not preserve the selected original fixture synopsis`);
   }
-  if (
-    relation &&
-    !subject.statements[relation.property]?.some((statement) => statement.value.content === relation.target)
-  )
-    throw new Error(`GET /v1/subjects/${expected.id} omitted ${relation.property} to ${relation.target}`);
 }
 
 function releasedState(
@@ -455,6 +464,16 @@ export async function startBookCatalogueJourneyFixture(): Promise<BookCatalogueJ
     await readCreatedSubject(stack, series);
     await readCreatedSubject(stack, book, { property: 'wdt:P179', target: series.id });
     await readCreatedSubject(stack, edition, { property: 'schema:exampleOfWork', target: book.id });
+    console.info(
+      'book-catalogue-journey-fixture',
+      JSON.stringify({
+        stage: 'anonymous Subject readback',
+        series: series.id,
+        book: book.id,
+        edition: edition.id,
+        relations: ['wdt:P179', 'schema:exampleOfWork'],
+      }),
+    );
 
     const bookPlanned = releasedState(release, book.type, 'planned', true)!;
     const bookCompleted = releasedState(release, book.type, 'completed', true)!;
