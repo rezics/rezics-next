@@ -98,7 +98,7 @@ async function makeUpload(person: Identity, value: unknown = artifact) {
 }
 
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  f = await createProfileEntryFixture({ gameUnits: ['page'] });
   for (const group of ['personal_library', 'reading_progress', 'collections'])
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   source = await f.identity(exportScopes);
