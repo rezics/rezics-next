@@ -8,6 +8,7 @@ import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lif
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { purgeOwnedGraphPage as purge } from '../../src/library/erasure-owned-graph.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import type { Access } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
@@ -24,6 +25,7 @@ import { createLibraryArchiveCollectionRecovery } from '../../src/library/librar
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { bindNativeLibraryFixture } from './support/native-library-fixture-binding.ts';
 let restoreLibraryBinding: (() => void) | undefined;
+let nativeAccess: Access;
 let workClient: WorkClient;
 let db: GrowthDatabase, app: ReturnType<typeof createKernel>;
 let fixture: Awaited<ReturnType<typeof createRealAccess<{ owner: string; other: string }>>>;
@@ -123,6 +125,7 @@ beforeAll(async () => {
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     access: fixture.access,
     onAccessReady(access) {
+      nativeAccess = access;
       restoreLibraryBinding = bindNativeLibraryFixture({ pool: db.pool, access, routeKey, clock: () => new Date(now) });
     },
     writeRate: createWriteRateLimiter({
@@ -409,9 +412,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
     404,
   );
 
-  const recoveryAccess = fixture.access({
-    actions: new Map([...scopes.map((action) => [action, { anonymous: false }] as const), ...LIFECYCLE_ACTIONS]),
-  });
+  const recoveryAccess = nativeAccess;
   const ownerActor = await recoveryAccess.authenticate(fixture.bearer('owner'), {
     pool: db.pool,
     deadline: Date.now() + 10_000,
