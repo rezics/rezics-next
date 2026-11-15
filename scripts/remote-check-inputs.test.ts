@@ -16,6 +16,7 @@ import { dirname, join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import {
   preparedInputEvidenceProgram,
+  dependencyPreparationProgram,
   REMOTE_CHECK_PRODUCER_CONTROL_FILES,
   REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES,
   runScript,
@@ -247,8 +248,10 @@ test('direct Kernel client emission is source-pinned before producer launch', as
       pinned.expectedSourceSha256,
     );
     const receipt = generated.indexOf('prepared input evidence unavailable');
+    const commandStart = generated.search(/^[ \t]*touch [^\n]*\/command-started'[ \t]*$/m);
     expect(receipt).toBeGreaterThanOrEqual(0);
-    expect(receipt).toBeLessThan(generated.indexOf('command-started'));
+    expect(commandStart).toBeGreaterThanOrEqual(0);
+    expect(receipt).toBeLessThan(commandStart);
   } finally {
     cleanup(fixture);
   }
@@ -279,6 +282,8 @@ function addPreparedControls(fixture: Fixture, cacheState: 'hit' | 'miss' = 'mis
       key: 'c'.repeat(64),
       packages: [],
       nativeChecks: [],
+      installerSeconds: cacheState === 'hit' ? null : 1.113,
+      phaseSeconds: { 'cache-io-pressure-wait': 260.388 },
     }) + '\n',
   );
   const cache = join(fixture.root, 'bun-runtime-transpiler-cache');
@@ -314,6 +319,37 @@ function receiptAt(root: string, fixture: Fixture) {
 function cleanup(fixture: Fixture): void {
   rmSync(fixture.root, { recursive: true, force: true });
 }
+
+test('current install producer receipts roundtrip through prepared input verification for cache hit and miss', () => {
+  for (const state of ['hit', 'miss'] as const) {
+    const fixture = createFixture();
+    try {
+      addPreparedControls(fixture, state);
+      const producer = spawnSync('python3', ['-c', String.raw`
+import json,sys
+namespace={}
+exec(sys.stdin.read().split('attempt_started = time.monotonic()',1)[0],namespace)
+host,run,state=sys.argv[1:4]
+print(json.dumps(namespace['make_install_receipt'](host,run,state,None if state=='hit' else 'miss',
+    'c'*64,[],[],None if state=='hit' else 1.113,{'cache-io-pressure-wait':260.388,'artifact-restore':6.432})))
+`, fixture.host, fixture.run, state], { input: dependencyPreparationProgram, encoding: 'utf8' });
+      expect(producer.status, producer.stderr).toBe(0);
+      const produced = JSON.parse(producer.stdout);
+      expect(produced.installerSeconds).toBe(state === 'hit' ? null : 1.113);
+      expect(produced.phaseSeconds['cache-io-pressure-wait']).toBe(260.388);
+      writeOwned(fixture.root, 'preparation-install.json', producer.stdout);
+      const receiptRoot = join(fixture.root, '.temp', 'producer-roundtrip');
+      const accepted = runPrepared(fixture, receiptRoot);
+      expect(accepted.status, accepted.stderr).toBe(0);
+      expect(receiptAt(receiptRoot, fixture).fileCount).toBe(fixture.manifest.entries.length);
+      produced.phaseSeconds['cache-io-pressure-wait'] = -1;
+      writeOwned(fixture.root, 'preparation-install.json', JSON.stringify(produced));
+      const malformed = runPrepared(fixture, join(fixture.root, '.temp', 'malformed-timing'));
+      expect(malformed.status).not.toBe(0);
+      expect(malformed.stderr).toContain('producer install receipt timing is malformed');
+    } finally { cleanup(fixture); }
+  }
+});
 
 test('the generated source verifier accepts producer controls after the frozen source set mismatch is demonstrated', () => {
   const fixture = createFixture();
@@ -649,6 +685,8 @@ test('prepared input evidence ignores only validated controls and keeps generate
         key: 'c'.repeat(64),
         packages: [],
         nativeChecks: [],
+        installerSeconds: null,
+        phaseSeconds: { 'artifact-restore': 6.432 },
       }) + '\n',
     );
     writeFileSync(join(fixture.root, 'bun-runtime-transpiler-cache', 'runtime.bin'), 'changed producer cache\n');
