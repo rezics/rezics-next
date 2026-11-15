@@ -144,9 +144,9 @@ export const DomainAnnotations: Story = {
       }),
     );
     await selectEditorText(textbox, 'outside');
-    const formatting = within(await canvas.findByRole('toolbar', { name: 'Format text' }));
-    await userEvent.click(formatting.getByRole('button', { name: 'More formatting' }));
-    await userEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Spoiler' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Commands' }));
+    const commands = within(await screen.findByRole('dialog', { name: 'Commands' }));
+    await userEvent.click(commands.getByRole('option', { name: 'Spoiler' }));
     await waitFor(() =>
       expect(
         within(canvas.getByRole('region', { name: 'Reading preview' })).getByRole('button', { name: 'Reveal spoiler' }),

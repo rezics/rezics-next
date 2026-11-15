@@ -293,7 +293,7 @@ export const UndoRedo: Story = {
       [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(
         (button) => button.tabIndex === 0,
       );
-    const runToolbar = async (name: string) => {
+    const runToolbar = async (name: string | RegExp) => {
       await userEvent.keyboard('{Alt>}{F10}{/Alt}{Home}');
       const target = toolbar.getByRole('button', { name });
       const enabled = [...toolbarElement.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
@@ -331,7 +331,7 @@ export const UndoRedo: Story = {
       expect(checked(history.latest.current)?.content?.[0]?.marks?.some((mark) => mark.type === 'bold')).toBe(true),
     );
     expect(plainText(history.latest.current)).toBe('History');
-    await runToolbar('Blocks');
+    await runToolbar(/^Blocks\b/);
     const page = within(canvasElement.ownerDocument.body);
     const dialog = within(await page.findByRole('dialog', { name: 'Blocks' }));
     const query = dialog.getByRole('combobox', { name: 'Find a block' });
