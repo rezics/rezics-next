@@ -35,68 +35,90 @@ async function mountedFamily() {
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  mock.module('cloudflare:workers', () => ({ env: {} }));
-  const { createRoot } = await import('react-dom/client');
-  const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
-  const { within } = await import(Bun.resolveSync('@testing-library/dom', storybook));
-  const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
-  const { AuthoredField } = await import('../src/features/catalogue/authored-field-view');
-  const { authoredFixture, authoredProperty } = await import('../src/kernel/fake/authored-field');
-  const { m } = await import('../src/paraglide/messages.js');
-  const host = window.document.createElement('div') as unknown as HTMLElement;
-  window.document.body.append(host);
-  const root = createRoot(host);
-  const user = userEvent.setup({ document: window.document });
-  const render = async (children: React.ReactNode) => act(async () => root.render(children));
-  const click = async (scope: HTMLElement, name: string) =>
-    act(async () => user.click(within(scope).getByRole('button', { name })));
-  const input = (scope: HTMLElement, name: string) => within(scope).getByRole('textbox', { name }) as HTMLInputElement;
-  const replace = async (control: HTMLElement, value: string) =>
-    act(async () => {
-      await user.clear(control);
-      if (value) await user.type(control, value);
-    });
-  const editor = async (scope: HTMLElement, text: string) =>
-    act(async () => {
-      const editor = scope.querySelector('[contenteditable="true"]')!;
-      editor.innerHTML = `<p>${text}</p>`;
-      editor.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText' }));
-      await Bun.sleep(180);
-      editor.dispatchEvent(new window.FocusEvent('blur'));
-    });
-  const compose = async (scope: HTMLElement, text = 'A separate original draft.') => {
-    await editor(scope, text);
-    await replace(input(scope, m.authored_language()), 'en');
-    await replace(input(scope, m.authored_licence()), 'CC-BY-4.0');
-    await replace(input(scope, m.authored_citation()), 'https://example.org/original-notes');
-    await act(async () => user.click(within(scope).getByRole('checkbox', { name: m.authored_original() })));
-  };
-  return {
-    window,
-    host,
-    root,
-    render,
-    user,
-    within,
-    AuthoredField,
-    authoredFixture,
-    authoredProperty,
-    m,
-    click,
-    input,
-    replace,
-    editor,
-    compose,
-    close: async () => {
-      await act(async () => root.unmount());
-      mock.restore();
-      await window.happyDOM.close();
-      for (const [key, descriptor] of previous) {
-        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-        else Reflect.deleteProperty(globalThis, key);
+  let closeMounted: (() => Promise<void>) | undefined;
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    try {
+      await closeMounted?.();
+    } finally {
+      try {
+        mock.restore();
+      } finally {
+        try {
+          await window.happyDOM.close();
+        } finally {
+          for (const [key, descriptor] of previous) {
+            if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+            else Reflect.deleteProperty(globalThis, key);
+          }
+        }
       }
-    },
+    }
   };
+  try {
+    mock.module('cloudflare:workers', () => ({ env: {} }));
+    const { mountAuthoringFixture } = await import('./helpers/authoring-mount');
+    const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
+    const { within } = await import(Bun.resolveSync('@testing-library/dom', storybook));
+    const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
+    const { AuthoredField } = await import('../src/features/catalogue/authored-field-view');
+    const { authoredFixture, authoredProperty } = await import('../src/kernel/fake/authored-field');
+    const { m } = await import('../src/paraglide/messages.js');
+    const mounted = await mountAuthoringFixture(null);
+    closeMounted = mounted.close;
+    const { host, root, render } = mounted;
+    const user = userEvent.setup({ document: window.document });
+    const click = async (scope: HTMLElement, name: string) =>
+      act(async () => user.click(within(scope).getByRole('button', { name })));
+    const input = (scope: HTMLElement, name: string) =>
+      within(scope).getByRole('textbox', { name }) as HTMLInputElement;
+    const replace = async (control: HTMLElement, value: string) =>
+      act(async () => {
+        await user.clear(control);
+        if (value) await user.type(control, value);
+      });
+    const editor = async (scope: HTMLElement, text: string) =>
+      act(async () => {
+        const editor = scope.querySelector('[contenteditable="true"]')!;
+        editor.innerHTML = `<p>${text}</p>`;
+        editor.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+        await Bun.sleep(180);
+        editor.dispatchEvent(new window.FocusEvent('blur'));
+      });
+    const compose = async (scope: HTMLElement, text = 'A separate original draft.') => {
+      await editor(scope, text);
+      await replace(input(scope, m.authored_language()), 'en');
+      await replace(input(scope, m.authored_licence()), 'CC-BY-4.0');
+      await replace(input(scope, m.authored_citation()), 'https://example.org/original-notes');
+      await act(async () => user.click(within(scope).getByRole('checkbox', { name: m.authored_original() })));
+    };
+    return {
+      window,
+      host,
+      root,
+      render,
+      user,
+      within,
+      AuthoredField,
+      authoredFixture,
+      authoredProperty,
+      m,
+      click,
+      input,
+      replace,
+      editor,
+      compose,
+      close,
+    };
+  } catch (error) {
+    try {
+      await close();
+    } finally {
+      throw error;
+    }
+  }
 }
 
 test('Authored forms have stable independent labels, local error destinations and isolated original drafts without native I/O', async () => {

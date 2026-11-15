@@ -3,7 +3,7 @@ import { act } from 'react';
 import { installPostReadingDom } from './post-reading-dom';
 
 const dom = installPostReadingDom();
-const { createRoot } = await import('react-dom/client');
+const { mountAuthoringFixture } = await import('./helpers/authoring-mount');
 const { default: userEvent } = await import('@testing-library/user-event');
 const { getByRole, getAllByRole, queryByRole, waitFor } = await import('@testing-library/dom');
 const { serializeDocument } = await import('@rezics/document');
@@ -21,9 +21,11 @@ afterAll(async () => {
 async function mount(profile: 'book' | 'column', scenario: 'populated' | 'dirty' | 'comparison' = 'populated') {
   setLocale('en', { reload: false });
   const fixture = await studioWorkbenchFixture(profile, scenario, 'en');
-  const host = document.body.appendChild(document.createElement('div'));
-  const root = createRoot(host);
-  await act(async () => root.render(<StudioWorkbench {...fixture.props} controller={fixture.controller} />));
+  const mounted = await mountAuthoringFixture(
+    <StudioWorkbench {...fixture.props} controller={fixture.controller} />,
+    fixture.dispose,
+  );
+  const { host } = mounted;
   const button = (name: string) => getByRole(host, 'button', { name, exact: true }) as HTMLButtonElement;
   return {
     ...fixture,
@@ -36,11 +38,7 @@ async function mount(profile: 'book' | 'column', scenario: 'populated' | 'dirty'
         control.click();
       });
     },
-    close: async () => {
-      await act(async () => root.unmount());
-      fixture.dispose();
-      host.remove();
-    },
+    close: mounted.close,
   };
 }
 

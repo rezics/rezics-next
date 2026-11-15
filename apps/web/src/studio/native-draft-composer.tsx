@@ -9,7 +9,7 @@ import {
   type FormEvent,
 } from 'react';
 import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
-import { RichTextEditor } from '@rezics/editor';
+import { PreferredRichTextEditor as RichTextEditor } from '../editor/preferred-rich-text-editor';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
