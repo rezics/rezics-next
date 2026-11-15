@@ -222,6 +222,7 @@ function statementOf(args: unknown[]): { sql: string; values: unknown[] } {
       const partition = named.partition_no ?? named.partition;
       return { sql: config.text, values: typeof partition === 'number' || typeof partition === 'string' ? [partition] : [] };
     }
+    return { sql: config.text, values: [] };
   }
   return { sql: '', values: [] };
 }
