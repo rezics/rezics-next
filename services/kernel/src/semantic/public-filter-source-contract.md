@@ -56,7 +56,30 @@ The selected native public Source binding declarations now live in
 `public-filter-source-binding.ts`: `NativePublicSource`, `PublicFilterSourceDefinition`,
 `PublicFilterSourceBinding` and `createPublicFilterSourceBinding(pool, routing, access)`.
 `resolve({source, meaning, capture}, context)` must resolve the actual Source instance and full immutable
-compiler input to a native definition. `join({queried, execution?}, context)` resolves native queried observation,
+compiler input to a native definition. Meaning has exactly the own fields `{digest, release}` and pins the full
+accepted Definitions release. Candidate type membership comes from `capture.filterDocument`; each projection uses
+the actual Subject type to select that release's facet declarations. Extra descriptor fields reject. Native
+read-definition, projection-build and replay identity retain the release digest plus their existing Source,
+Subject, capture and frame keys. Prior populated derivatives require the controlled owner drain before the
+release-only schema migration; no legacy descriptor is read as the new shape.
+
+The current release-only migration admits only an empty derivative state. It locks and checks the retained
+read-definition, projection-build, replay, bootstrap, bootstrap-account, repair-step, repair-advance and
+population-start relations before changing immutable identity keys. Any retained row refuses the migration;
+no ID, capture, digest or row is rewritten, reconstructed or deleted. Fresh canonical schemas may proceed.
+
+Populated operator cutover remains blocked until native retirement authority exists for every old derivative.
+The bounded plan is to quiesce old definition/bootstrap/projection writers and Search consumers, finish or
+close their exact original executions through their native APIs, then verify keyset-bounded custody disposition
+and absence under that quiescence. Search separately owns registrations, observations, scope/prepared/facet/
+suggestion derivatives, references, PITs, executions and coverage pages; Semantic absence proves none of them.
+`closeObservation` and registration retirement do not remove Source definitions; bootstrap abort does not
+remove its immutable graph; projection dependency retirement leaves the build header. Original repair pages
+and published bootstrap custody have deletion guards. These APIs do not establish the required empty state.
+There is no authorized populated-data deletion/conversion procedure in this change. Do not reset a shared
+database, disable a guard, substitute another type or add an old/new runtime reader to force cutover.
+
+`join({queried, execution?}, context)` resolves native queried observation,
 covered cut and retained execution. Source-owned configuration/read-definition rows are persisted and independently
 validated; matching strings or constructor identity alone never become registration or Source coverage. Existing
 `PublicFilterNativeSource` and `JoinedPopulationRequest` declarations in that module remain intact. The adjacent
@@ -168,7 +191,7 @@ They do not independently establish receiver settlement or eligibility of an old
 
 ## Complete bounded selected facets
 
-`readPublicFilterProjectionPage` receives an actual original subject, immutable `meaning.digest/release/type`, input limit and
+`readPublicFilterProjectionPage` receives an actual original subject, immutable `meaning.digest/release`, input limit and
 nullable retained frontier. Verify the digest and accepted meaning against stored releases; active release changes
 must not substitute another meaning. Facet declarations come from that accepted release. Preserve the selected
 statement's own release and datatype/unit meaning independently of the request pin. Include selected descriptive
@@ -313,7 +336,7 @@ unselected candidate, successful replay and genuine noEffect. Whole-query safety
 reverse routing. `affected` preserves bounded cause/provenance; it is not copied facts. Both arrays share the
 append's 1000-key input ceiling. Index subject-wide scope and affected source inputs, never translated labels.
 
-The canonical Search capture retains the actual admitted `FilterDocument`, `TextNode`, accepted release/type,
+The canonical Search capture retains the actual admitted `FilterDocument`, `TextNode`, accepted release,
 Source binding, order, size and typed keyset. Derive its FULL key closure through the SAME `admitFilter`,
 `compileFilter`, `compileText` and sort compilers, not a second interpreter or requirements AST/ABI. Saved
 expansion is retained against the immutable accepted release; remaining saved nodes reject. OwnerLeaf anywhere
@@ -324,7 +347,9 @@ Do not use only `matched_queries`, positive leaves, returned candidates or a rel
 
 Closure is the union over the FULL admitted trees, regardless of Boolean truth or engine matches:
 
-- Include the configured implicit subject type even without an explicit type leaf. `and` and `or`: union every child; `not`: recurse unchanged. `type`: include `type`; `statement.in` and
+- Always include the implicit `{kind: 'type'}` dependency, including catalogue-wide captures without an explicit
+  type leaf. This dependency tracks actual Subject type changes; the admitted `FilterDocument` supplies type
+  membership. `and` and `or`: union every child; `not`: recurse unchanged. `type`: include `type`; `statement.in` and
   `statement.range`: include the containing `property`, including every same-statement qualifier dependency.
   Qualifier changes map to the containing source property, not only their own qualifier property. Saved expansion
   contributes every expanded branch and retains the accepted release/read-definition binding.

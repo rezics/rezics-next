@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { bundledDigest } from '@rezics/definitions/bundled';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
@@ -18,7 +19,7 @@ const page: Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete
     terminal: terminal!,
     revision: 4,
     securityRevision: 'security-4',
-    currentRelease: 'release-4',
+    currentRelease: bundledDigest,
   },
   records: [],
   repairLocators: [
@@ -47,7 +48,7 @@ const page: Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete
     frontierWrites: 0,
   },
 };
-const request = { page, meaning: { digest: 'meaning-4', type: 'schema:Book' } };
+const request = { page, meaning: { digest: bundledDigest } };
 const buildRow = {
   build_id: page.frontier.build,
   generation: String(page.frontier.generation),
@@ -124,7 +125,9 @@ test('retained build and unique original heads share one bounded snapshot', asyn
   expect(submitted[0]?.sql).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   expect(submitted[1]?.sql.startsWith('SET LOCAL statement_timeout')).toBe(true);
   expect(submitted.at(-1)?.sql).toBe('COMMIT');
-  expect(submitted.filter(({ sql }) => isBuild(sql))).toHaveLength(1);
+  const builds = submitted.filter(({ sql }) => isBuild(sql));
+  expect(builds).toHaveLength(1);
+  expect(builds[0]?.values).toContain(bundledDigest);
   const heads = submitted.filter(({ sql }) => isHead(sql));
   expect(heads).toHaveLength(3);
   expect(heads.map(({ values }) => partitionArgument(values)).sort()).toEqual([...homes].sort());

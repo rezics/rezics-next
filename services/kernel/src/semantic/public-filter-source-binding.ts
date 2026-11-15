@@ -88,6 +88,7 @@ import type {
   SourceBindingFailureReason,
 } from './source-binding-port.ts';
 import { sourceBindingApplication } from './source-binding-application.ts';
+import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 /** Internal native receipt, resolved from the original independently verified
  * home/window chain. Never accepted by a public callable or a caller ACK setter.
  */
@@ -773,13 +774,12 @@ export async function readNativePublicFilterSourceDefinition(
   const bytes = Number(row.definition_bytes);
   if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > maxBytes) throw new BindingError('binding_mismatch');
   const release = await readRelease(db, row.release_digest);
-  if (!release || !release.types[row.subject_type]) throw new BindingError('definition_missing');
+  if (!release) throw new BindingError('definition_missing');
   let capture: PublicSourceCaptureInput;
   let keys: readonly PublicFilterDependencyKey[];
   const meaning = {
     digest: row.release_digest,
     release,
-    type: row.subject_type,
   };
   try {
     capture = decode<PublicSourceCaptureInput>(row.capture);
@@ -907,10 +907,11 @@ export function createNativePublicFilterSourceBinding(
   }
   function requireSameDefinition(own: PublicFilterSourceDefinition, retained: SourceBindingRetainedDefinition): void {
     if (
+      !hasPublicFilterMeaningShape(own.meaning) ||
+      !hasPublicFilterMeaningShape(retained.meaning) ||
       encode(own.source) !== encode(retained.source) ||
       own.readDefinition !== retained.readDefinition ||
       own.meaning.digest !== retained.meaning.digest ||
-      own.meaning.type !== retained.meaning.type ||
       encode(own.capture) !== encode(retained.capture) ||
       encode(own.dependencyKeys) !== encode(retained.dependencyKeys)
     )
@@ -2077,8 +2078,10 @@ export function createNativePublicFilterSourceBinding(
       if (!origin || origin.pool !== pool || origin.access !== access || hash(origin.routeKey) !== routeDigest)
         return fail('source_missing');
       try {
+        if (!hasPublicFilterMeaningShape(request.meaning)) return fail('binding_mismatch');
         meaning = structuredClone(request.meaning);
         capture = structuredClone(request.capture);
+        if (!hasPublicFilterMeaningShape(meaning)) return fail('binding_mismatch');
       } catch {
         return fail('binding_mismatch');
       }
@@ -2088,7 +2091,7 @@ export function createNativePublicFilterSourceBinding(
         if (Buffer.byteLength(encoded) > 1048576) throw new BindingError('binding_mismatch');
         // Caller digest equality is checked again against the actual immutable release owner.
         const release = await readRelease(db, meaning.digest);
-        if (!release || !isDeepStrictEqual(release, meaning.release) || !release.types[meaning.type])
+        if (!release || !isDeepStrictEqual(release, meaning.release))
           throw new BindingError('definition_missing');
         const source = (await nativeSourceQuery(db, registerSource, { route_digest: routeDigest }))[0];
         if (!source) throw new BindingError('owner_unavailable');
@@ -2098,7 +2101,6 @@ export function createNativePublicFilterSourceBinding(
             configuration: source.configuration,
             route_digest: routeDigest,
             release_digest: meaning.digest,
-            subject_type: meaning.type,
             capture_digest: hash(encoded),
             capture: encoded,
             dependency_keys: [...keys],
@@ -2586,7 +2588,7 @@ export function createNativePublicFilterSourceBinding(
                 predecessor: input.predecessor,
               },
               subject: record.input.subject,
-              meaning: cut.definition.meaning,
+              meaning: { digest: cut.definition.meaning.digest },
               inputLimit: row.input_limit,
               frontier: record.input.projection,
             },
@@ -2612,7 +2614,7 @@ export function createNativePublicFilterSourceBinding(
               db,
               {
                 page,
-                meaning: cut.definition.meaning,
+                meaning: { digest: cut.definition.meaning.digest },
               },
               { deadline },
             ))
@@ -2882,7 +2884,7 @@ export function createNativePublicFilterSourceBinding(
               predecessor: row.predecessor,
             },
             subject: record.input.subject!,
-            meaning: cut.definition.meaning,
+            meaning: { digest: cut.definition.meaning.digest },
             inputLimit: row.input_limit,
             frontier: record.input.projection,
           },
@@ -2912,7 +2914,7 @@ export function createNativePublicFilterSourceBinding(
             db,
             {
               page,
-              meaning: cut.definition.meaning,
+              meaning: { digest: cut.definition.meaning.digest },
             },
             { deadline },
           ))

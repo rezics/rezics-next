@@ -6,7 +6,7 @@ binding AS MATERIALIZED (
     t.incarnation,b.bootstrap,b.read_definition,b.consumer AS bootstrap_consumer,
     b.snapshot_kind,b.coverage_generation AS covered_generation,b.coverage_root,
     s.source_id,s.configuration,s.owner_epoch,s.route_digest,
-    d.release_digest,d.subject_type,d.capture,d.dependency_keys,d.coverage_keys,
+    d.release_digest,d.capture,d.dependency_keys,d.coverage_keys,
     e.execution,e.consumer_window,st.id AS start_id,st.start_generation,st.deadline AS start_deadline,
     pg.id AS page_id,pg.state AS page_state,pg.rounds AS page_rounds,pg.boundary,pg.boundary_consumed,pg.boundary_window,
     pg.charged AS page_charged,pg.ceiling AS page_ceiling,pg.tail AS page_tail,pg.tail_consumed

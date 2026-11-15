@@ -19,6 +19,7 @@ import type {
 import { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
 import { publicFilterSource } from './public-filter-source.ts';
 import type { PublicFilterCost, PublicFilterProjectionFrontier } from './public-filter-source-contract.ts';
+import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import { readIdentitySourceProjection } from './search-source.ts';
 import inputsStatement from './identity-source-support-inputs.sql';
 import originalsStatement from './identity-source-support-originals.sql';
@@ -102,9 +103,8 @@ function validate(request: IdentitySourceSupportRequest): void {
     !definition.source.configuration ||
     typeof definition.readDefinition !== 'string' ||
     !definition.readDefinition ||
-    !definition.meaning ||
-    releaseDigest(definition.meaning.release) !== definition.meaning.digest ||
-    !Object.hasOwn(definition.meaning.release.types, definition.meaning.type)
+    !hasPublicFilterMeaningShape(definition.meaning) ||
+    releaseDigest(definition.meaning.release) !== definition.meaning.digest
   )
     throw new TypeError('Invalid native Source definition');
 }

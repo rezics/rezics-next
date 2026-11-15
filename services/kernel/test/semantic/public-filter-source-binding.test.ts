@@ -73,6 +73,21 @@ test('native public Source configuration and immutable meaning/read definition r
     expect(result.definition.source.epoch).toBeGreaterThan(0);
     expect(result.definition.source.configuration.length).toBeGreaterThan(0);
     expect(result.definition.readDefinition.length).toBeGreaterThan(0);
+    expect(result.definition.meaning).toEqual({ digest: f.meaning.digest, release: f.meaning.release });
+    expect(Object.keys(result.definition.meaning).sort()).toEqual(['digest', 'release']);
+    expect(result.definition.dependencyKeys).toContainEqual({ kind: 'type' });
+    const reused = await binding.resolve(
+      { source, meaning: structuredClone(f.meaning), capture: structuredClone(capture) },
+      readContext(),
+    );
+    expect(reused.status).toBe('resolved');
+    if (reused.status !== 'resolved') throw new Error(`Native Source reuse ${reused.reason}`);
+    expect(reused.definition.readDefinition).toBe(result.definition.readDefinition);
+    const obsoleteMeaning = { ...f.meaning, type: 'schema:Book' };
+    expect(await binding.resolve({ source, meaning: obsoleteMeaning, capture }, readContext())).toMatchObject({
+      status: 'unavailable',
+      reason: 'binding_mismatch',
+    });
     expect(result.definition.dependencyKeys).toContainEqual({
       kind: 'field',
       field: 'id',
@@ -125,6 +140,7 @@ test('canonical retained observation execution joins preserve complete compiler 
     expect(resolved.status).toBe('resolved');
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
     for (const key of [
+      { kind: 'type' },
       { kind: 'property', property: 'schema:author' },
       { kind: 'property', property: 'ex:left' },
       { kind: 'order', order: 'name' },

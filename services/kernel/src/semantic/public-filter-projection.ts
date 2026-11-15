@@ -26,6 +26,7 @@ import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-val
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { indexedStatement } from './search-source.ts';
 import { readRelease } from './definition-release-read.ts';
+import { hasPublicFilterMeaningShape } from './public-filter-source-contract.ts';
 import type {
   PrivacyReductionHead,
   PublicFilterCost,
@@ -109,7 +110,7 @@ export type PublicFilterProjectionReplayIdentity = Readonly<{
 export type RetainedPublicFilterProjectionRequest = Readonly<{
   identity: PublicFilterProjectionReplayIdentity;
   subject: string;
-  meaning: Pick<PublicFilterProjectionMeaning, 'digest' | 'type'>;
+  meaning: Pick<PublicFilterProjectionMeaning, 'digest'>;
   inputLimit: number;
   frontier: PublicFilterProjectionFrontier | null;
 }>;
@@ -123,7 +124,7 @@ function originalProjectionRequestDigest(request: RetainedPublicFilterProjection
         predecessor: request.identity.predecessor,
       },
       subject: request.subject,
-      meaning: { digest: request.meaning.digest, type: request.meaning.type },
+      meaning: { digest: request.meaning.digest },
       inputLimit: request.inputLimit,
       frontier: request.frontier,
     }),
@@ -144,6 +145,7 @@ export async function readRetainedPublicFilterProjectionPage(
   const routed = routePartition(request.subject);
   if (
     !routed ||
+    !validRetainedMeaning(request.meaning) ||
     !UUID.test(request.identity.bootstrap) ||
     !request.identity.execution ||
     request.identity.execution.length > 4096 ||
@@ -190,7 +192,7 @@ export async function retainedPublicFilterProjectionDependenciesCurrent(
   pool: Pool,
   request: Readonly<{
     page: Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete' }>;
-    meaning: Pick<PublicFilterProjectionMeaning, 'digest' | 'type'>;
+    meaning: Pick<PublicFilterProjectionMeaning, 'digest'>;
   }>,
   context: Readonly<{ deadline: number }>,
 ): Promise<boolean> {
@@ -198,7 +200,7 @@ export async function retainedPublicFilterProjectionDependenciesCurrent(
   const deadline = context.deadline;
   requireAccessDeadline(deadline);
   const routed = routePartition(page.source.subject);
-  if (!routed) return false;
+  if (!routed || !validRetainedMeaning(meaning)) return false;
   return inSnapshot(pool, deadline, async (client) => {
     const build = rows(
       await readBuild.run(client, {
@@ -206,7 +208,6 @@ export async function retainedPublicFilterProjectionDependenciesCurrent(
         route: routed.route,
         subject_id: page.source.subject,
         meaning_digest: meaning.digest,
-        meaning_type: meaning.type,
       }),
     )[0];
     if (
@@ -317,13 +318,17 @@ const unavailable = (
   cost = emptyCost(),
 ): PublicFilterProjectionPage => ({ status: 'unavailable', reason, cost });
 
+function validRetainedMeaning(meaning: unknown): boolean {
+  return typeof meaning === 'object' && meaning !== null && !Array.isArray(meaning)
+    && Reflect.ownKeys(meaning).length === 1 && 'digest' in meaning
+    && typeof meaning.digest === 'string' && /^sha256:[0-9a-f]{64}$/.test(meaning.digest);
+}
+
 function validMeaning(meaning: PublicFilterProjectionMeaning): boolean {
   return (
-    !!meaning &&
+    hasPublicFilterMeaningShape(meaning) &&
     typeof meaning.digest === 'string' &&
-    releaseDigest(meaning.release) === meaning.digest &&
-    typeof meaning.type === 'string' &&
-    Object.hasOwn(meaning.release.types, meaning.type)
+    releaseDigest(meaning.release) === meaning.digest
   );
 }
 
@@ -756,7 +761,6 @@ async function saveBuild(
           route,
           subject_id: subject,
           meaning_digest: meaning.digest,
-          meaning_type: meaning.type,
           build_id: build,
           owner_epoch: observation.epoch,
           source_position: observation.position.toString(),
@@ -893,7 +897,6 @@ export async function readPublicFilterProjectionPage(
                 route,
                 subject_id: request.subject,
                 meaning_digest: meaning.digest,
-                meaning_type: meaning.type,
               }),
             )
           : [];
@@ -1364,7 +1367,7 @@ export async function readOriginalPublicFilterProjectionPage(
   const requestKey = originalProjectionRequestDigest({
     identity,
     subject: request.subject,
-    meaning: { digest: request.meaning.digest, type: request.meaning.type },
+    meaning: { digest: request.meaning.digest },
     inputLimit: request.inputLimit,
     frontier: request.frontier,
   });
@@ -1398,7 +1401,7 @@ export async function readOriginalPublicFilterProjectionPage(
       {
         identity,
         subject: request.subject,
-        meaning: { digest: request.meaning.digest, type: request.meaning.type },
+        meaning: { digest: request.meaning.digest },
         inputLimit: request.inputLimit,
         frontier: request.frontier,
       },

@@ -220,7 +220,7 @@ export async function fixture() {
     clock: systemClock,
     access: real.access({ actions: actionCatalogue(kernel), clock: systemClock }),
   };
-  const meaning: PublicFilterProjectionMeaning = { digest, release, type: 'schema:Book' };
+  const meaning: PublicFilterProjectionMeaning = { digest, release };
   return { db, real, accounts, config, meaning, create, propose, post, call, close: () => db.close() };
 }
 export type Fixture = Awaited<ReturnType<typeof fixture>>;
