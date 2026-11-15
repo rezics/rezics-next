@@ -53,12 +53,8 @@ function DiscoveryNotice({
   action?: ReactNode | undefined;
 }) {
   return (
-    <div
-      role={alert ? 'alert' : 'status'}
-      className="min-w-0 space-y-3 text-sm text-muted-foreground"
-      aria-live="polite"
-    >
-      <p id={descriptionId} className="min-w-0 break-words">
+    <div role={alert ? 'alert' : 'status'} className="min-w-0 space-y-3 text-sm text-muted-foreground">
+      <p id={descriptionId} className="min-w-0 break-words [overflow-wrap:anywhere]">
         {message}
       </p>
       {action}
@@ -82,26 +78,26 @@ function DiscoveryRow({
         href={knowledgeDiscoveryExactHref(locale, document, returnTo)}
         className={`${linkClass} font-medium text-foreground`}
       >
-        {document.title}
+        <span className="min-w-0 [overflow-wrap:anywhere]">{document.title}</span>
       </a>
       <dl className="grid min-w-0 gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-        <div>
+        <div className="min-w-0">
           <dt className="font-medium text-foreground">{m.knowledge_published({}, options)}</dt>
           <dd>
             <time dateTime={document.publishedAt}>{publicationTime(document.publishedAt, locale)}</time>
           </dd>
         </div>
         {document.language ? (
-          <div>
+          <div className="min-w-0">
             <dt className="font-medium text-foreground">{m.knowledge_language({}, options)}</dt>
             <dd>
               <bdi dir="ltr">{document.language}</bdi>
             </dd>
           </div>
         ) : null}
-        <div className={document.language ? 'sm:col-span-2' : undefined}>
+        <div className={`min-w-0 ${document.language ? 'sm:col-span-2' : ''}`}>
           <dt className="font-medium text-foreground">{m.knowledge_licence({}, options)}</dt>
-          <dd>{document.licence}</dd>
+          <dd className="[overflow-wrap:anywhere]">{document.licence}</dd>
         </div>
       </dl>
     </li>
@@ -190,6 +186,7 @@ export function KnowledgeDiscoveryPanel({
     action: (() => void) | undefined,
     label: string,
     expectedCursor: string | null,
+    describedBy?: string,
   ) {
     if (!action) return null;
     return (
@@ -198,6 +195,7 @@ export function KnowledgeDiscoveryPanel({
         variant="outline"
         className={controlClass}
         disabled={snapshot.busy}
+        {...(describedBy ? { 'aria-describedby': describedBy } : {})}
         onKeyDown={(event) => {
           if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
             keyboardActivation.current = { kind, key: event.key, button: event.currentTarget };
@@ -330,7 +328,7 @@ export function KnowledgeDiscoveryPanel({
         </p>
       </header>
       {initialPreparing ? (
-        <p id={descriptionId} role="status" className="text-sm text-muted-foreground" aria-live="polite">
+        <p id={descriptionId} role="status" className="text-sm text-muted-foreground">
           {m.knowledge_discovery_preparing({}, options)}
         </p>
       ) : null}
@@ -338,7 +336,13 @@ export function KnowledgeDiscoveryPanel({
         <DiscoveryNotice
           message={m.knowledge_discovery_denied({}, options)}
           descriptionId={descriptionId}
-          action={actionButton('retry', onRetry, m.knowledge_discovery_retry({}, options), snapshot.cursor)}
+          action={actionButton(
+            'retry',
+            onRetry,
+            m.knowledge_discovery_retry({}, options),
+            snapshot.cursor,
+            descriptionId,
+          )}
         />
       ) : null}
       {snapshot.state === 'unavailable' ? (
@@ -346,7 +350,13 @@ export function KnowledgeDiscoveryPanel({
           message={m.knowledge_discovery_unavailable({}, options)}
           descriptionId={descriptionId}
           alert
-          action={actionButton('retry', onRetry, m.knowledge_discovery_retry({}, options), snapshot.cursor)}
+          action={actionButton(
+            'retry',
+            onRetry,
+            m.knowledge_discovery_retry({}, options),
+            snapshot.cursor,
+            descriptionId,
+          )}
         />
       ) : null}
       {snapshot.state === 'restart' ? (
@@ -354,7 +364,13 @@ export function KnowledgeDiscoveryPanel({
           message={m.knowledge_discovery_restart_needed({}, options)}
           descriptionId={descriptionId}
           alert
-          action={actionButton('restart', onRestart, m.knowledge_discovery_restart({}, options), null)}
+          action={actionButton(
+            'restart',
+            onRestart,
+            m.knowledge_discovery_restart({}, options),
+            null,
+            descriptionId,
+          )}
         />
       ) : null}
       {preparingContinuation ? (
@@ -366,26 +382,33 @@ export function KnowledgeDiscoveryPanel({
             onContinue,
             m.knowledge_discovery_continue({}, options),
             snapshot.frontier ?? null,
+            descriptionId,
           )}
         />
       ) : null}
       {empty ? (
-        <p id={descriptionId} role="status" className="text-sm text-muted-foreground" aria-live="polite">
+        <p id={descriptionId} role="status" className="text-sm text-muted-foreground">
           {m.knowledge_discovery_empty({}, options)}
         </p>
       ) : null}
       {sparse ? (
-        <p id={descriptionId} role="status" className="text-sm text-muted-foreground" aria-live="polite">
+        <p id={descriptionId} role="status" className="text-sm text-muted-foreground">
           {m.knowledge_discovery_sparse({}, options)}
         </p>
       ) : null}
       {exhausted && documents.length > 0 ? (
-        <p id={descriptionId} role="status" className="text-sm text-muted-foreground" aria-live="polite">
+        <p id={descriptionId} role="status" className="text-sm text-muted-foreground">
           {m.knowledge_discovery_end({}, options)}
         </p>
       ) : null}
       {next
-        ? actionButton('more', onMore, m.knowledge_discovery_more({}, options), next)
+        ? actionButton(
+            'more',
+            onMore,
+            m.knowledge_discovery_more({}, options),
+            next,
+            sparse ? descriptionId : undefined,
+          )
         : null}
       {documents.length > 0 ? (
         <ul className="min-w-0 space-y-1">
