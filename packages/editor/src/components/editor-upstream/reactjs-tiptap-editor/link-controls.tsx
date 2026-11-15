@@ -2,13 +2,16 @@
 
 // Adapted from src/extensions/Link/components/{LinkEditBlock,LinkViewBlock}.tsx; see README.md and LICENSE.
 import { Button } from '@rezics/ui/shadcn/button';
-import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
+import { Field, FieldError, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@rezics/ui/shadcn/input-group';
 import { TooltipProvider } from '@rezics/ui/shadcn/tooltip';
 import { ExternalLink, Link, Pencil, Unlink } from 'lucide-react';
 import { useId, useRef, type Ref } from 'react';
 import type { RichTextEditorLabels } from '../../editor-labels.ts';
 import { ActionButton } from './action-button.tsx';
+
+const wrappingAction = 'h-auto min-h-8 max-w-full min-w-0 shrink whitespace-normal text-start';
+const wrappingViewAction = 'h-auto max-w-full shrink whitespace-normal text-start';
 
 /** The URL form edits a captured range. Annotated document text stays with the schema owner. */
 export function LinkEditBlock({
@@ -36,7 +39,7 @@ export function LinkEditBlock({
   const composing = useRef(false);
   return (
     <form
-      className="grid min-w-0 gap-3 p-1"
+      className="min-w-0 w-full p-1"
       onSubmit={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -57,43 +60,50 @@ export function LinkEditBlock({
         }
       }}
     >
-      <Field>
-        <FieldLabel htmlFor={`${id}-url`}>{labels.url}</FieldLabel>
-        <div dir="ltr" className="relative min-w-0">
-          <Link
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted-foreground"
-          />
-          <Input
-            id={`${id}-url`}
-            ref={inputRef}
-            dir="ltr"
-            inputMode="url"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            className="w-full min-w-0 ps-9 text-foreground"
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? `${id}-error` : undefined}
-            value={url}
-            onChange={(event) => onChange(event.target.value)}
-          />
-        </div>
-        {error ? <FieldError id={`${id}-error`}>{error}</FieldError> : null}
-      </Field>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {linked ? (
-          <Button type="button" variant="ghost" onClick={onClear}>
-            {labels.unlink}
+      <FieldGroup className="gap-3">
+        <Field data-invalid={Boolean(error)}>
+          <FieldLabel htmlFor={`${id}-url`} className="max-w-full min-w-0 flex-wrap text-wrap">
+            {labels.url}
+          </FieldLabel>
+          <InputGroup dir="ltr" className="min-w-0">
+            <InputGroupAddon align="inline-start">
+              <Link aria-hidden="true" />
+            </InputGroupAddon>
+            <InputGroupInput
+              id={`${id}-url`}
+              ref={inputRef}
+              dir="ltr"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="min-w-0 text-foreground"
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? `${id}-error` : undefined}
+              value={url}
+              onChange={(event) => onChange(event.target.value)}
+            />
+          </InputGroup>
+          {error ? (
+            <FieldError id={`${id}-error`} className="min-w-0 text-wrap break-words">
+              {error}
+            </FieldError>
+          ) : null}
+        </Field>
+        <Field orientation="horizontal" className="flex-wrap justify-end">
+          {linked ? (
+            <Button type="button" variant="ghost" className={wrappingAction} onClick={onClear}>
+              {labels.unlink}
+            </Button>
+          ) : null}
+          <Button type="button" variant="ghost" className={wrappingAction} onClick={onCancel}>
+            {labels.cancel}
           </Button>
-        ) : null}
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          {labels.cancel}
-        </Button>
-        <Button type="submit" variant="secondary">
-          {labels.apply}
-        </Button>
-      </div>
+          <Button type="submit" variant="secondary" className={wrappingAction}>
+            {labels.apply}
+          </Button>
+        </Field>
+      </FieldGroup>
     </form>
   );
 }
@@ -114,7 +124,7 @@ export function LinkViewBlock({
 }) {
   return (
     <TooltipProvider delay={600}>
-      <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 w-full flex-col gap-2">
         {href ? (
           <a
             href={href}
@@ -127,7 +137,7 @@ export function LinkViewBlock({
               if (!isCurrent()) event.preventDefault();
             }}
             aria-label={`${labels.openLink}: ${href}`}
-            className="flex min-h-11 items-start gap-2 rounded-lg p-2 text-sm text-primary underline underline-offset-2"
+            className="flex min-h-11 min-w-0 items-start gap-2 rounded-lg p-2 text-sm text-primary underline underline-offset-2"
           >
             <ExternalLink aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
             <span className="min-w-0 break-all" dir="ltr">
@@ -135,11 +145,21 @@ export function LinkViewBlock({
             </span>
           </a>
         ) : null}
-        <div className="flex flex-wrap gap-1">
-          <ActionButton label={labels.editLink} icon={<Pencil aria-hidden="true" />} action={onEdit}>
+        <div className="flex min-w-0 w-full flex-wrap gap-1">
+          <ActionButton
+            label={labels.editLink}
+            icon={<Pencil aria-hidden="true" />}
+            action={onEdit}
+            className={wrappingViewAction}
+          >
             {labels.editLink}
           </ActionButton>
-          <ActionButton label={labels.unlink} icon={<Unlink aria-hidden="true" />} action={onClear}>
+          <ActionButton
+            label={labels.unlink}
+            icon={<Unlink aria-hidden="true" />}
+            action={onClear}
+            className={wrappingViewAction}
+          >
             {labels.unlink}
           </ActionButton>
         </div>
